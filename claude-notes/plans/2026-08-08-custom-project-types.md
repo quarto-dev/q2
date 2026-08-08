@@ -460,14 +460,56 @@ $ grep -o '<title>[^<]*</title>' <tmp>/_site/index.html
 
 Full workspace suite: 11,094 passed (1 ignored pending bd-43lc07w1).
 
-### Phase 4 — path rebasing + real-world verification
-- [ ] Tests: item 4 (per-key rebasing), SCSS import resolution
-- [ ] Rebase implementation (D4); verify/fix layer-2 `theme` gap,
-      filing discovered-from strand if it's a pre-existing bug
-- [ ] End-to-end: fixture + q2-connect-docs render, evidence recorded
-      here
-- [ ] Full workspace verify (`cargo xtask verify` — quarto-core touched,
-      so full WASM leg)
+### Phase 4 — path rebasing + real-world verification ✅ 2026-08-08
+- [x] Tests: 5 new rebasing tests in `custom_project_type.rs` (written
+      first, observed failing) — favicon/logo, theme map form with
+      builtin-name passthrough, css exists/missing/URL, user entries
+      untouched, pre-render script paths vs command lines
+- [x] Rebase implementation: `FRAGMENT_PATH_PATTERNS` +
+      `rebase_fragment_paths` in `project/mod.rs`. Key-path table
+      narrows *where*; an existence check under the extension dir
+      decides *whether* (builtin theme names, command lines, and
+      project-relative refs pass through). Rebased values become
+      `Path` kind so per-document merging keeps adjusting them.
+      Layer-2 gap confirmed real and pre-existing: format-extension
+      `contributes.formats.html.theme` silently drops bundled SCSS →
+      **bd-of20unsb** (P2, discovered-from).
+- [x] End-to-end (evidence below): fixture render with SCSS `@import`;
+      **real q2-connect-docs render** on a scratch copy
+- [ ] Full `cargo xtask verify` (WASM leg) — deferred to end of
+      session, before push
+
+Phase 4 end-to-end evidence (2026-08-08, output inspected):
+
+Fixture (`type: fancy-docs`, theme.scss with `@import "colors"`):
+banner `type: fancy-docs (website)`; compiled site CSS contains
+`.fancy-e2e-marker{color:#ab34cd}` (import resolved relative to the
+extension theme); `<meta name="fancy-e2e" content="from-extension">`
+inlined from the extension's include-in-header; favicon rebased to
+`_extensions/acme/fancy-docs/assets/favicon.svg`, referenced in HTML
+and copied into `_site`.
+
+Real Connect docs (`~/repos/github/cscheid/q2-connect-docs`,
+`--no-render-scripts`):
+- Direct render: `type: posit-docs (website)` resolves; all 351 files
+  then fail on **Q-14-1** because the extension uses the light/dark
+  **map** theme form (`theme: {light: […], dark: […]}`), which Q2's
+  theme stage doesn't support → filed **bd-o76p01wb** (P1,
+  discovered-from). Same gap class for `highlight-style` maps.
+- Scratch copy with the extension's theme flattened to a plain list:
+  **`Rendered 351 of 351 files`** (378 warnings, mostly Q-12-7
+  cookbook EJS `template:` — separate testbed concern). Verified in
+  output: extension navbar Help menu ("Posit Support") present;
+  extension theme compiled (`posit-footer-logo{margin-right:-10px}`
+  from `theme.scss` + `_posit-colors.scss` import); Google Tag
+  Manager `_analytics.html` inlined; user's `images/favicon.ico`
+  **wins** the favicon collision with the extension (user-wins
+  precedence on real data).
+
+Upstream: quarto-yaml tag bug filed as
+https://github.com/posit-dev/quarto-yaml/issues/14 (bd-43lc07w1).
+
+Full workspace suite: 11,099 passed.
 
 ### Phase 5 — `contributes.metadata` (absorbed bd-zb2tod5f)
 - [ ] Tests: project-level `contributes.metadata.project` merge

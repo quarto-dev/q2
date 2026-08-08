@@ -409,3 +409,200 @@ contributes:
     assert_eq!(warnings.len(), 1, "must warn about the missing base type");
     assert_eq!(warnings[0].kind, DiagnosticKind::Warning);
 }
+
+// ── Path rebasing (Phase 4) ─────────────────────────────────────────
+
+/// Like `discover_with_extensions`, but also writes asset files
+/// (paths relative to the extension dir) so the existence-driven
+/// rebase has something to find.
+fn discover_with_extension_assets(
+    quarto_yml: &str,
+    ext_rel_dir: &str,
+    manifest: &str,
+    assets: &[&str],
+) -> (quarto_core::error::Result<ProjectContext>, TempDir) {
+    let tmp = TempDir::new().unwrap();
+    std::fs::write(tmp.path().join("_quarto.yml"), quarto_yml).unwrap();
+    std::fs::write(tmp.path().join("index.qmd"), "# Hello\n").unwrap();
+    let ext_dir = tmp.path().join("_extensions").join(ext_rel_dir);
+    std::fs::create_dir_all(&ext_dir).unwrap();
+    std::fs::write(ext_dir.join("_extension.yml"), manifest).unwrap();
+    for asset in assets {
+        let p = ext_dir.join(asset);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(&p, "/* asset */\n").unwrap();
+    }
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = ProjectContext::discover(tmp.path(), runtime.as_ref());
+    (result, tmp)
+}
+
+const THEMED: &str = r#"
+contributes:
+  project:
+    project:
+      type: website
+      pre-render:
+        - scripts/generate.ts
+        - echo hello
+    website:
+      favicon: assets/favicon.svg
+      navbar:
+        logo: assets/logo.svg
+    format:
+      html:
+        theme:
+          light: [cosmo, theme.scss]
+          dark: [theme-dark.scss]
+        css:
+          - style.css
+          - ghost.css
+          - https://example.com/remote.css
+        include-in-header:
+          - assets/header.html
+"#;
+
+const THEMED_ASSETS: &[&str] = &[
+    "assets/favicon.svg",
+    "assets/logo.svg",
+    "theme.scss",
+    "theme-dark.scss",
+    "style.css",
+    "assets/header.html",
+    "scripts/generate.ts",
+];
+
+fn themed_project() -> (ProjectContext, TempDir) {
+    let (result, tmp) = discover_with_extension_assets(
+        "project:\n  type: fancysite\nformat:\n  html:\n    include-in-header:\n      - user-header.html\n",
+        "acme/fancysite",
+        THEMED,
+        THEMED_ASSETS,
+    );
+    (result.expect("themed custom type must resolve"), tmp)
+}
+
+fn meta_at<'a>(
+    project: &'a ProjectContext,
+    path: &[&str],
+) -> Option<&'a quarto_pandoc_types::ConfigValue> {
+    let mut current = project.config.metadata.as_ref()?;
+    for key in path {
+        current = current.get(key)?;
+    }
+    Some(current)
+}
+
+#[test]
+fn extension_favicon_and_logo_rebased_to_project_root() {
+    let (project, _tmp) = themed_project();
+    assert_eq!(
+        meta_at(&project, &["website", "favicon"]).and_then(|v| v.as_str()),
+        Some("_extensions/acme/fancysite/assets/favicon.svg")
+    );
+    assert_eq!(
+        meta_at(&project, &["website", "navbar", "logo"]).and_then(|v| v.as_str()),
+        Some("_extensions/acme/fancysite/assets/logo.svg")
+    );
+    // Rebased values carry Path kind so downstream document-dir
+    // rebasing (metadata_merge layer 1) keeps adjusting them.
+    assert!(matches!(
+        meta_at(&project, &["website", "favicon"]).unwrap().value,
+        quarto_pandoc_types::config_value::ConfigValueKind::Path(_)
+    ));
+}
+
+#[test]
+fn theme_entries_rebase_files_but_not_builtin_names() {
+    let (project, _tmp) = themed_project();
+    let light: Vec<String> = meta_at(&project, &["format", "html", "theme", "light"])
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|i| i.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        light,
+        vec![
+            "cosmo".to_string(),
+            "_extensions/acme/fancysite/theme.scss".to_string()
+        ],
+        "builtin theme names stay; bundled files rebase"
+    );
+    let dark: Vec<String> = meta_at(&project, &["format", "html", "theme", "dark"])
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|i| i.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        dark,
+        vec!["_extensions/acme/fancysite/theme-dark.scss".to_string()]
+    );
+}
+
+#[test]
+fn css_rebases_existing_files_leaves_missing_and_urls() {
+    let (project, _tmp) = themed_project();
+    let css: Vec<String> = meta_at(&project, &["format", "html", "css"])
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|i| i.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        css,
+        vec![
+            "_extensions/acme/fancysite/style.css".to_string(),
+            "ghost.css".to_string(),
+            "https://example.com/remote.css".to_string(),
+        ],
+        "existing bundled files rebase; missing files and URLs stay verbatim"
+    );
+}
+
+#[test]
+fn include_in_header_rebases_extension_entry_not_users() {
+    let (project, _tmp) = themed_project();
+    let items: Vec<String> = meta_at(&project, &["format", "html", "include-in-header"])
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|i| i.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        items,
+        vec![
+            "_extensions/acme/fancysite/assets/header.html".to_string(),
+            "user-header.html".to_string(),
+        ],
+        "extension entry rebases; the user's own entry is untouched"
+    );
+}
+
+#[test]
+fn pre_render_script_paths_rebase_commands_do_not() {
+    let (project, _tmp) = themed_project();
+    let scripts: Vec<&str> = project
+        .config
+        .pre_render_scripts
+        .iter()
+        .map(|s| s.command.as_str())
+        .collect();
+    assert_eq!(
+        scripts,
+        vec![
+            "_extensions/acme/fancysite/scripts/generate.ts",
+            "echo hello"
+        ],
+        "bundled script paths rebase; command lines stay verbatim"
+    );
+}

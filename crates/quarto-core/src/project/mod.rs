@@ -560,6 +560,12 @@ fn resolve_custom_project_type(
         entries.retain(|e| e.key != "detect");
     }
 
+    // Rebase extension-bundled file references (theme SCSS, includes,
+    // favicon, …) from extension-dir-relative to project-root-relative
+    // so the merged config behaves as if the user had written the
+    // paths in `_quarto.yml`.
+    rebase_fragment_paths(&mut fragment, &ext.path, project_dir, runtime);
+
     // Merge: extension fragment is the lower-priority layer; the
     // user's `_quarto.yml` wins conflicts under standard Q2 semantics.
     let merged = MergedConfig::new(vec![&fragment, metadata])
@@ -589,6 +595,155 @@ fn resolve_custom_project_type(
         }),
         diagnostics,
     })
+}
+
+/// Key paths within a `contributes.project` fragment whose string
+/// values may name files bundled with the extension (bd-ad7i1pc6 D4).
+///
+/// `*` matches any map key; arrays are transparent (a pattern position
+/// applies to every item). When a pattern is exhausted at a node,
+/// every string leaf underneath is a rebase candidate — this is what
+/// makes the `theme: {light: […], dark: […]}` and plain-list forms
+/// work from one `["format", "*", "theme"]` entry.
+///
+/// The table narrows *where* rebasing may happen; the existence check
+/// in [`rebase_candidate`] decides *whether* an individual string is a
+/// bundled file (builtin theme names like `cosmo`, command lines, and
+/// project-relative references simply don't exist under the extension
+/// dir and pass through verbatim).
+const FRAGMENT_PATH_PATTERNS: &[&[&str]] = &[
+    &["format", "*", "theme"],
+    &["format", "*", "css"],
+    &["format", "*", "include-in-header"],
+    &["format", "*", "include-before-body"],
+    &["format", "*", "include-after-body"],
+    &["format", "*", "format-resources"],
+    &["format", "*", "template"],
+    &["format", "*", "template-partials"],
+    &["website", "favicon"],
+    &["website", "navbar", "logo"],
+    &["website", "sidebar", "logo"],
+    &["project", "pre-render"],
+    &["project", "post-render"],
+    &["project", "resources"],
+    &["brand"],
+];
+
+/// Rebase extension-bundled file references in a `contributes.project`
+/// fragment from extension-dir-relative to project-root-relative.
+///
+/// Rebased values become [`ConfigValueKind::Path`] so the per-document
+/// metadata merge keeps adjusting them (project root → document dir)
+/// for documents in subdirectories.
+fn rebase_fragment_paths(
+    fragment: &mut ConfigValue,
+    ext_dir: &Path,
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) {
+    fn walk(
+        value: &mut ConfigValue,
+        active: &[&[&str]],
+        ext_dir: &Path,
+        project_dir: &Path,
+        runtime: &dyn SystemRuntime,
+    ) {
+        if active.iter().any(|p| p.is_empty()) {
+            rebase_leaves(value, ext_dir, project_dir, runtime);
+            return;
+        }
+        match &mut value.value {
+            ConfigValueKind::Map(entries) => {
+                for entry in entries {
+                    let next: Vec<&[&str]> = active
+                        .iter()
+                        .filter(|p| p[0] == "*" || p[0] == entry.key)
+                        .map(|p| &p[1..])
+                        .collect();
+                    if !next.is_empty() {
+                        walk(&mut entry.value, &next, ext_dir, project_dir, runtime);
+                    }
+                }
+            }
+            // Arrays are transparent: items share the pattern position.
+            ConfigValueKind::Array(items) => {
+                for item in items {
+                    walk(item, active, ext_dir, project_dir, runtime);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn rebase_leaves(
+        value: &mut ConfigValue,
+        ext_dir: &Path,
+        project_dir: &Path,
+        runtime: &dyn SystemRuntime,
+    ) {
+        match &mut value.value {
+            ConfigValueKind::Map(entries) => {
+                for entry in entries {
+                    rebase_leaves(&mut entry.value, ext_dir, project_dir, runtime);
+                }
+            }
+            ConfigValueKind::Array(items) => {
+                for item in items {
+                    rebase_leaves(item, ext_dir, project_dir, runtime);
+                }
+            }
+            ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) | ConfigValueKind::Path(s) => {
+                if let Some(rebased) = rebase_candidate(s, ext_dir, project_dir, runtime) {
+                    value.value = ConfigValueKind::Path(rebased);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    walk(
+        fragment,
+        FRAGMENT_PATH_PATTERNS,
+        ext_dir,
+        project_dir,
+        runtime,
+    );
+}
+
+/// Decide whether `s` names a file bundled with the extension, and if
+/// so return its rebased (forward-slash) form.
+///
+/// Rooted paths and URLs pass through. Otherwise the string is a
+/// bundled file exactly when it exists under the extension dir; the
+/// rebased form is project-root-relative when the extension lives
+/// inside the project (`_extensions/…`), absolute otherwise (embedded
+/// built-in extensions extracted to a temp dir).
+fn rebase_candidate(
+    s: &str,
+    ext_dir: &Path,
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) -> Option<String> {
+    if quarto_util::is_rooted(Path::new(s)) || s.starts_with("http://") || s.starts_with("https://")
+    {
+        return None;
+    }
+    let abs = ext_dir.join(s);
+    if !runtime.path_exists(&abs, None).unwrap_or(false) {
+        return None;
+    }
+    let rebased = match pathdiff::diff_paths(&abs, project_dir) {
+        Some(rel)
+            if !matches!(
+                rel.components().next(),
+                Some(std::path::Component::ParentDir)
+            ) =>
+        {
+            quarto_util::to_forward_slashes(&rel)
+        }
+        _ => quarto_util::to_forward_slashes(&abs),
+    };
+    Some(rebased)
 }
 
 /// Select the extension backing a custom project type name.
