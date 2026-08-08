@@ -315,6 +315,7 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
         .chain(quarto_core::project::project_kind_diagnostics(
             &project.config,
         ))
+        .chain(project.config.config_diagnostics.iter().cloned())
     {
         eprintln!("{}", diagnostic.to_text(None));
     }

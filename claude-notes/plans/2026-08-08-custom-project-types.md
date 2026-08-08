@@ -411,18 +411,54 @@ Rendered 1 of 1 files (exit 0)
 Full workspace suite: 11,077 passed. `cargo xtask lint` clean; clippy
 clean on quarto-core/quarto/quarto-preview.
 
-### Phase 2 — project-scoped extension discovery (shared substrate)
-- [ ] Tests: discovery from project root `_extensions/` + embedded
-      built-ins at project-config time; org/name resolution rules
-- [ ] Reusable `discover_project_extensions(project_root)` consumed by
-      both Phase 3 (`contributes.project`) and Phase 5
-      (`contributes.metadata`); no change to per-document discovery
+### Phase 2 — project-scoped extension discovery (shared substrate) ✅ 2026-08-08
+- [x] Tests: discovery from project root `_extensions/` + embedded
+      built-ins at project-config time (4 unit tests in
+      `extension::discover`; subdirectory `_extensions/` deliberately
+      excluded at project scope)
+- [x] Reusable `discover_project_extensions(project_dir, builtin_dir,
+      runtime)`; `builtin_extensions_path` hoisted from
+      `stage/context.rs` to `extension::`; no change to per-document
+      discovery (commit e15f173c)
 
-### Phase 3 — resolution + merge (the core)
-- [ ] Tests: items 1-3, 5-6 of the test plan
-- [ ] `CustomProjectType` on `ProjectConfig`; resolution in
-      `parse_config` per D2/D3
-- [ ] Fragment validation (empty/missing `project.type` handling)
+### Phase 3 — resolution + merge (the core) ✅ 2026-08-08
+- [x] Tests: `tests/integration/custom_project_type.rs` (14 tests,
+      written first, observed failing) — resolution, user-wins /
+      concat merge, `!prefer`, render-glob concat, `detect` stripping,
+      Q-5-17 candidate listing, Q-16-7 base-type errors, Q-16-8
+      ambiguity, Q-16-9 missing base
+- [x] `CustomProjectType` + `config_diagnostics` on `ProjectConfig`;
+      `resolve_project_type` / `resolve_custom_project_type` in
+      `parse_config`; `project_type_label()` drives the render banner
+      (`type: fancy-docs (website)`); config diagnostics printed at
+      the render + preview sites; catalog entries Q-16-7/8/9 and
+      updated Q-5-17
+- [x] Fragment validation: non-map fragment and non-string/chained/
+      book/manuscript base → Q-16-7 error; missing base → Q-16-9
+      warning + `default`
+
+**Discovered (bd-43lc07w1, P1):** `quarto-yaml` 0.1.1 only captures
+YAML tags on *scalars* — `Event::SequenceStart`/`MappingStart` discard
+theirs — so `!prefer`/`!concat` written on an array or map in any YAML
+file never reaches the merge machinery. This blocks the sanctioned
+"replace an extension-contributed list with `!prefer`" pattern. Fix is
+upstream (posit-dev/quarto-yaml) + a version bump here. The pinning
+test `user_prefer_replaces_extension_array` is `#[ignore]`d with the
+strand id until the fix ships.
+
+Phase 3 end-to-end evidence (2026-08-08, output inspected):
+
+```
+$ cargo run --bin q2 -- render <tmp>   # type: fancy-docs; navbar only in extension
+Rendering project: <tmp> (type: fancy-docs (website))
+Rendered 2 of 2 files to <tmp>/_site
+$ grep -o '<nav[^>]*>' <tmp>/_site/index.html
+<nav class="navbar navbar-expand-lg">      # extension-contributed navbar rendered
+$ grep -o '<title>[^<]*</title>' <tmp>/_site/index.html
+<title>E2E Site</title>                    # user's website.title wins
+```
+
+Full workspace suite: 11,094 passed (1 ignored pending bd-43lc07w1).
 
 ### Phase 4 — path rebasing + real-world verification
 - [ ] Tests: item 4 (per-key rebasing), SCSS import resolution

@@ -797,12 +797,15 @@ fn execute_project(
     // bd-w348iu63: warn about the likely `pre_render` / `post_render`
     // misspellings (Q2 has no schema layer; unknown keys are
     // otherwise silently ignored). bd-ad7i1pc6: also warn when the
-    // project kind (book/manuscript) renders with default behavior.
+    // project kind (book/manuscript) renders with default behavior,
+    // and surface config-parse diagnostics (ambiguous / incomplete
+    // project-type extensions) once per run.
     for diagnostic in render_scripts::underscore_typo_diagnostics(&project.config)
         .into_iter()
         .chain(quarto_core::project::project_kind_diagnostics(
             &project.config,
         ))
+        .chain(project.config.config_diagnostics.iter().cloned())
     {
         eprintln!("{}", diagnostic.to_text(None));
     }
@@ -849,7 +852,7 @@ fn execute_project(
         args.quiet,
         "Rendering project: {} (type: {})",
         project.dir.display(),
-        project.project_kind().as_str()
+        project.project_type_label()
     );
 
     let project_type = project_type_for(&project);

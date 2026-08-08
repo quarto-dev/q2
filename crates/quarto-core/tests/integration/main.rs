@@ -15,6 +15,7 @@ pub mod bootstrap_js_pipeline;
 pub mod brand_render;
 pub mod capture_splice_engines;
 pub mod crossref_fixtures;
+pub mod custom_project_type;
 pub mod document_profile_pipeline;
 pub mod engine_error_policy;
 pub mod engine_merge;
