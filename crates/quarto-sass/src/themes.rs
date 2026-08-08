@@ -586,6 +586,7 @@ pub fn load_custom_theme(
     if !exists {
         return Err(SassError::CustomThemeNotFound {
             path: resolved_path,
+            location: None,
         });
     }
 
@@ -1109,7 +1110,7 @@ mod tests {
 
         assert!(result.is_err());
         match result {
-            Err(SassError::CustomThemeNotFound { path }) => {
+            Err(SassError::CustomThemeNotFound { path, .. }) => {
                 assert!(path.ends_with("missing.scss"));
             }
             _ => panic!("Expected CustomThemeNotFound error"),

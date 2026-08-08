@@ -60,6 +60,18 @@ pub struct ThemeConfig {
     /// Empty means use default Bootstrap theme (no Bootswatch customization).
     pub themes: Vec<ThemeSpec>,
 
+    /// Source location of each entry in `themes`, parallel by index
+    /// (`theme_locations[i]` locates `themes[i]`; consumers should
+    /// index with `.get(i)` rather than assume equal length).
+    ///
+    /// Populated by [`ThemeConfig::from_config_value`] from the YAML
+    /// values; `None` for entries without a source (programmatic
+    /// construction, the auto-injected `brand` token). Kept as a
+    /// parallel field — rather than inside [`ThemeSpec`] — so the
+    /// spec stays a pure value type ([`Eq`], [`std::fmt::Display`],
+    /// cache-key identity) unpolluted by provenance (bd-of20unsb).
+    pub theme_locations: Vec<Option<SourceInfo>>,
+
     /// Whether to produce minified CSS.
     ///
     /// Defaults to `true` for consistency with TypeScript Quarto.
@@ -125,8 +137,10 @@ pub struct ResolvedThemeConfig {
 impl ThemeConfig {
     /// Create a new ThemeConfig with the given themes.
     pub fn new(themes: Vec<ThemeSpec>, minified: bool) -> Self {
+        let theme_locations = vec![None; themes.len()];
         Self {
             themes,
+            theme_locations,
             minified,
             suppress_bootstrap: false,
             title_block_layer: true,
@@ -142,6 +156,7 @@ impl ThemeConfig {
     pub fn default_bootstrap() -> Self {
         Self {
             themes: Vec::new(),
+            theme_locations: Vec::new(),
             minified: true,
             suppress_bootstrap: false,
             title_block_layer: true,
@@ -235,6 +250,7 @@ impl ThemeConfig {
                 // Auto-inject brand at the end of the theme list.
                 result.brand_ref = Some(br);
                 result.themes.push(ThemeSpec::Brand);
+                result.theme_locations.push(None);
             }
             (Some(br), true) => {
                 // Token already present at user-specified position.
@@ -269,6 +285,7 @@ impl ThemeConfig {
             // `theme: none` sentinel: suppress Bootstrap entirely.
             return Ok(Self {
                 themes: Vec::new(),
+                theme_locations: Vec::new(),
                 minified: true,
                 suppress_bootstrap: true,
                 title_block_layer: true,
@@ -276,9 +293,14 @@ impl ThemeConfig {
                 dark_theme_ignored: None,
             });
         }
-        let themes = extract_theme_specs(value)?;
+        let located = extract_theme_specs(value)?;
+        let (themes, theme_locations) = located
+            .into_iter()
+            .map(|(spec, loc)| (spec, Some(loc)))
+            .unzip();
         Ok(Self {
             themes,
+            theme_locations,
             minified: true,
             suppress_bootstrap: false,
             title_block_layer: true,
@@ -386,6 +408,7 @@ pub fn resolve_brand(
     // Reuse ThemeConfig's brand resolution (path/inline → typed Brand).
     let resolved = ThemeConfig {
         themes: Vec::new(),
+        theme_locations: Vec::new(),
         minified: true,
         suppress_bootstrap: false,
         title_block_layer: true,
@@ -630,11 +653,11 @@ fn light_dark_pair(value: &ConfigValue) -> Option<LightDarkPair<'_>> {
 /// frontmatter may arrive as PandocInlines (parsed as markdown by pampa),
 /// while values from `_quarto.yml` / `_metadata.yml` arrive as Scalar strings.
 /// Both are handled transparently.
-fn extract_theme_specs(value: &ConfigValue) -> Result<Vec<ThemeSpec>, SassError> {
+fn extract_theme_specs(value: &ConfigValue) -> Result<Vec<(ThemeSpec, SourceInfo)>, SassError> {
     // Handle string value (single theme) — covers both Scalar and PandocInlines
     if let Some(s) = config_value_as_text(value) {
         let spec = ThemeSpec::parse(&s).map_err(|e| e.with_location(value.source_info.clone()))?;
-        return Ok(vec![spec]);
+        return Ok(vec![(spec, value.source_info.clone())]);
     }
 
     // Handle array value (multiple themes)
@@ -642,9 +665,10 @@ fn extract_theme_specs(value: &ConfigValue) -> Result<Vec<ThemeSpec>, SassError>
         let mut specs = Vec::with_capacity(items.len());
         for item in items {
             if let Some(s) = config_value_as_text(item) {
-                specs.push(
+                specs.push((
                     ThemeSpec::parse(&s).map_err(|e| e.with_location(item.source_info.clone()))?,
-                );
+                    item.source_info.clone(),
+                ));
             } else {
                 return Err(SassError::InvalidThemeConfig {
                     message: "theme array must contain only strings".to_string(),

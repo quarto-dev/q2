@@ -1,0 +1,8 @@
+---
+title: Format extension theme repro
+format: fancyfmt-html
+---
+
+# Hello
+
+Body text with a [span]{.fmt-theme-marker}.

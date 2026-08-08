@@ -1,0 +1,7 @@
+title: Fancy Format
+author: Investigation
+version: 0.0.1
+contributes:
+  formats:
+    html:
+      theme: [cosmo, fmt-theme.scss]

@@ -16,6 +16,7 @@
 //! same name take priority (last-match-wins in `find_extension`).
 
 pub mod discover;
+pub(crate) mod paths;
 pub mod read;
 pub mod types;
 
