@@ -1136,7 +1136,7 @@
   "Q-5-17": {
     "subsystem": "project",
     "title": "Unknown Project Type",
-    "message_template": "`_quarto.yml` sets a `project.type` that is not a string, is not a built-in project type (`default`, `website`, `book`, `manuscript`), and does not match any extension contributing a project type (`contributes: project:` in an `_extensions/` manifest), so the project cannot be rendered. Earlier Quarto 2 versions silently rendered such projects with default-project behavior; that fallback was removed because it hides a broken site build. Check the type name for typos; the hints list the project-contributing extensions that were found, and any manifest that failed to load is reported alongside as Q-16-1 (a broken manifest is a common root cause).",
+    "message_template": "`_quarto.yml` sets a `project.type` that is not a string, is not a built-in project type (`default`, `website`, `book`, `manuscript`), and does not match any extension contributing a project type (`contributes: project:` in an `_extensions/` manifest), so the project cannot be rendered. The render stops before any document is processed — earlier Quarto 2 versions silently continued with default-project behavior, which hides a broken site build and scatters per-document copies of shared JS/CSS next to every source file. Check the type name for typos; the hints list the project-contributing extensions that were found, and any manifest that failed to load is reported alongside as Q-16-1 (a broken manifest is a common root cause).",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-17",
     "since_version": "99.9.9"
   },
