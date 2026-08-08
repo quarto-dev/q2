@@ -114,6 +114,36 @@ fn unknown_project_type_fails_before_rendering() {
     );
 }
 
+/// bd-y56u1gl7: the structured Q-5-17 diagnostic must arrive bare —
+/// exactly one `Error:` header, no `Project discovery failed:`
+/// wrapper. Before the fix, classify_inputs flattened the rendered
+/// diagnostic into `DispatchError::Discover(String)` and anyhow
+/// re-prefixed it: `Error: Project discovery failed: Error: [Q-5-17] …`.
+#[test]
+fn unknown_project_type_diagnostic_is_not_double_wrapped() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_project(&dir, "posit-docs");
+
+    let output = run_q2_render(&dir);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(!output.status.success());
+    assert!(
+        !stderr.contains("Project discovery failed"),
+        "the generic discovery wrapper must not swallow a structured diagnostic; got:\n{stderr}"
+    );
+    let error_headers = stderr.matches("Error:").count();
+    assert_eq!(
+        error_headers, 1,
+        "expected exactly one `Error:` header, got {error_headers}; stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("Q-5-17"),
+        "the real diagnostic must still print; got:\n{stderr}"
+    );
+}
+
 /// Control: the identical project with `type: website` renders
 /// cleanly — shared libs deduplicated in `_site/site_libs/`, source
 /// tree untouched.
