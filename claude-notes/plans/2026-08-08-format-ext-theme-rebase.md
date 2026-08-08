@@ -3,8 +3,10 @@
 **Date:** 2026-08-08
 **Braid:** bd-of20unsb (P2, bug)
 **Checkout:** main worktree at `main` @ `e5fc4ffb` (post-merge of PR #474)
-**Status:** Design aligned 2026-08-08 (all five questions resolved — see Design
-decisions). **Awaiting user go-ahead to execute.**
+**Status:** Implemented 2026-08-08, all phases complete on local `main`
+(commits `e2cda047` → docs). Full `cargo xtask verify` green (incl. WASM
+leg). **Not pushed — awaiting user review + push approval.** Follow-up
+filed: bd-qmpygp02 (`InvalidScssFile` silent fallback).
 
 ## Triage verdict
 
@@ -217,10 +219,32 @@ precedent). Per design decision 2, these **fail the render** (hard error).
       `rebase_fragment_paths` refactored onto it; existence-driven marking
       wired into `parse_formats`. Commit `84f88c9f`; full workspace suite
       green; smoke fixture passes.
-- [ ] Phase 2: Q-14-x registered in `quarto-error-catalog`; hard error wired;
-      fallback retained for internal compile failures only
-- [ ] Phase 3: e2e verified via real binary; full `cargo xtask verify` green
-- [ ] Phase 4: docs checked/updated
+- [x] Phase 2: Q-14-3 registered in `quarto-error-catalog`; up-front
+      validation in `compile_theme_css` (before cache-key computation) hard-
+      errors on dangling custom theme entries with an ariadne span at the
+      offending `theme:` entry; DEFAULT_CSS fallback retained for internal
+      compile failures only. `ThemeConfig.theme_locations` (parallel field,
+      deliberately not inside `ThemeSpec` — keeps the spec a pure value type
+      for Eq/Display/cache-key identity);
+      `SassError::CustomThemeNotFound.location`. Scope note:
+      `InvalidScssFile` (file exists, content lacks boundary markers) still
+      falls back silently — it only surfaces inside the compile call, whose
+      error is stringified; filed as bd-qmpygp02 (discovered-from this
+      strand) rather than widening this change untested. Commit follows
+      `84f88c9f`; full workspace suite green.
+- [x] Phase 3: e2e verified via real binary. (1) Original repro
+      (`claude-notes/plans/format-ext-theme-rebase-investigation/repro/`):
+      `cargo run --bin q2 -- render doc.qmd` → exit 0, `doc_files/styles.css`
+      is 321 KB with `.fmt-theme-marker` present (was 7 KB DEFAULT_CSS with
+      0 hits). (2) Dangling entry (`theme: [cosmo, nope.scss]`): exit 1,
+      Q-14-3 ariadne diagnostic with span pinned at `nope.scss` (line 5 col
+      20) and resolved path in the message; output inspected in both cases.
+      Full `cargo xtask verify` (WASM leg included): **passed** (exit 0,
+      2026-08-08).
+- [x] Phase 4: docs — new `docs/errors/theme/Q-14-3.qmd` (listing index
+      auto-globs it) + format-extension paragraph in the extensions guide's
+      "Bundled files" section; verified via `q2 render docs/` (189/189,
+      page renders, cross-link resolves).
 
 ## Risks / tradeoffs (draft)
 
