@@ -96,6 +96,114 @@ fn unclosed_tag_parses_as_str_lt_plus_text() {
 }
 
 #[test]
+fn lt_gt_with_inner_whitespace_does_not_swallow_emphasis_closer() {
+    // bd-ly83qewg: `< b text.* a >` used to lex as one html_element token,
+    // swallowing the closing `*` and failing with Q-2-12 Unclosed Star
+    // Emphasis. Whitespace immediately after `<` disqualifies the HTML
+    // construct, so both brackets are literal Strs (pandoc-compatible).
+    let pandoc = parse_qmd("*a < b text.* a > b\n");
+    let inlines = first_paragraph_inlines(&pandoc);
+    match &inlines[0] {
+        Inline::Emph(e) => assert_str_texts(
+            &e.content,
+            &[
+                r#"Str("a")"#,
+                "Space",
+                r#"Str("<")"#,
+                "Space",
+                r#"Str("b")"#,
+                "Space",
+                r#"Str("text.")"#,
+            ],
+        ),
+        other => panic!("expected Emph, got {:?}", other),
+    }
+    assert_str_texts(
+        &inlines[1..],
+        &[
+            "Space",
+            r#"Str("a")"#,
+            "Space",
+            r#"Str(">")"#,
+            "Space",
+            r#"Str("b")"#,
+        ],
+    );
+}
+
+#[test]
+fn lt_gt_with_inner_whitespace_in_plain_text_parses_as_strs() {
+    // bd-ly83qewg: `a < b > c` used to lex `< b >` as html_element.
+    let pandoc = parse_qmd("a < b > c\n");
+    let inlines = first_paragraph_inlines(&pandoc);
+    assert_str_texts(
+        inlines,
+        &[
+            r#"Str("a")"#,
+            "Space",
+            r#"Str("<")"#,
+            "Space",
+            r#"Str("b")"#,
+            "Space",
+            r#"Str(">")"#,
+            "Space",
+            r#"Str("c")"#,
+        ],
+    );
+}
+
+#[test]
+fn lt_at_end_of_line_with_gt_on_next_line_parses_as_str() {
+    // bd-ly83qewg: the html_element scan crosses newlines, so a `>` on a
+    // later line used to produce an html_element spanning the soft break.
+    // A newline immediately after `<` disqualifies it like any whitespace.
+    let pandoc = parse_qmd("foo <\nbar > baz\n");
+    let inlines = first_paragraph_inlines(&pandoc);
+    assert_str_texts(
+        inlines,
+        &[
+            r#"Str("foo")"#,
+            "Space",
+            r#"Str("<")"#,
+            "SoftBreak",
+            r#"Str("bar")"#,
+            "Space",
+            r#"Str(">")"#,
+            "Space",
+            r#"Str("baz")"#,
+        ],
+    );
+}
+
+#[test]
+fn html_element_with_whitespace_before_gt_still_parses_as_raw_html() {
+    // Regression guard for bd-ly83qewg: `<div >` is a valid open tag
+    // (whitespace before `>` is allowed by the HTML spec); only whitespace
+    // immediately after `<` disqualifies.
+    let pandoc = parse_qmd("<div >\n");
+    let inlines = first_paragraph_inlines(&pandoc);
+    assert!(
+        matches!(inlines[0], Inline::RawInline(_)),
+        "expected RawInline, got: {:?}",
+        inlines
+    );
+}
+
+#[test]
+fn html_element_with_interior_whitespace_still_parses_as_raw_html() {
+    // Regression guard for bd-ly83qewg: interior-only whitespace
+    // (`<not a tag>`) keeps the best-effort html_element lexing; this class
+    // of ambiguity is out of scope.
+    let pandoc = parse_qmd("<not a tag>\n");
+    let inlines = first_paragraph_inlines(&pandoc);
+    assert!(
+        matches!(inlines[0], Inline::RawInline(_)),
+        "expected RawInline, got: {:?}",
+        inlines
+    );
+}
+
+#[test]
 fn html_element_still_parses_as_raw_html() {
     // Regression: `<b>` is still recognized as an HTML element (raw HTML),
     // not split into `<`, `b`, `>` strings. The existing Q-2-9 warning path
