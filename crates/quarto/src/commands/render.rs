@@ -151,9 +151,29 @@ pub enum DispatchError {
     /// A directory or glob argument expanded to zero renderable files
     /// after the project's render list is applied.
     NoRenderableMatches { path: PathBuf },
-    /// Project discovery failed for unrelated reasons (parse error in
-    /// `_quarto.yml`, I/O error, etc.).
+    /// Project discovery failed with a structured parse diagnostic
+    /// (e.g. an invalid `_quarto.yml`, or Q-5-17 unknown
+    /// `project.type`). Kept structured (bd-y56u1gl7) so the text
+    /// path can print the rendered diagnostic bare and the
+    /// `--json-errors` path can emit the real per-diagnostic codes
+    /// and locations instead of a stringified Q-7-8 envelope.
+    DiscoverParse(quarto_core::ParseError),
+    /// Project discovery failed for unrelated, unstructured reasons
+    /// (I/O error, etc.).
     Discover(String),
+}
+
+/// Convert a discovery-stage [`QuartoError`] into a
+/// [`DispatchError`], preserving structured diagnostics
+/// (bd-y56u1gl7). Used at the `ProjectContext::discover` call
+/// sites; runtime-level errors (`path_exists`, `canonicalize`,
+/// `is_dir`) are not `QuartoError`s and keep the plain
+/// `Discover(String)` mapping.
+fn discover_error(e: QuartoError) -> DispatchError {
+    match e {
+        QuartoError::Parse(pe) => DispatchError::DiscoverParse(pe),
+        other => DispatchError::Discover(other.to_string()),
+    }
 }
 
 impl std::fmt::Display for DispatchError {
@@ -189,6 +209,9 @@ impl std::fmt::Display for DispatchError {
             DispatchError::NoRenderableMatches { path } => {
                 write!(f, "No renderable source files matched: {}", path.display())
             }
+            // The rendered ParseError is self-describing (it opens
+            // with its own `Error: [Q-N-M]` header) — no prefix.
+            DispatchError::DiscoverParse(pe) => write!(f, "{pe}"),
             DispatchError::Discover(msg) => write!(f, "Project discovery failed: {msg}"),
         }
     }
@@ -254,8 +277,7 @@ pub fn classify_inputs(
     let mut shared_project: Option<PathBuf> = None;
     let mut any_outside_project = false;
     for r in &resolved {
-        let ctx = ProjectContext::discover(r, runtime)
-            .map_err(|e| DispatchError::Discover(e.to_string()))?;
+        let ctx = ProjectContext::discover(r, runtime).map_err(discover_error)?;
         // `is_single_file` only fires for *file* inputs with no
         // surrounding `_quarto.yml`. A *directory* input never trips
         // it, even when no config exists — so we re-check the
@@ -313,8 +335,7 @@ pub fn classify_inputs(
     // Re-discover from the project root to get the full
     // render-list-filtered file list. (Per-input `discover` only fills
     // `files` with that one input.)
-    let project = ProjectContext::discover(&project_dir, runtime)
-        .map_err(|e| DispatchError::Discover(e.to_string()))?;
+    let project = ProjectContext::discover(&project_dir, runtime).map_err(discover_error)?;
     let project_files: Vec<PathBuf> = project.files.iter().map(|f| f.input.clone()).collect();
 
     // Step 3: expand each input into the set of project files it
@@ -399,8 +420,7 @@ fn classify_no_inputs(
         return Err(DispatchError::NoInputAndNoProject(cwd_canon));
     };
 
-    let project = ProjectContext::discover(&project_root, runtime)
-        .map_err(|e| DispatchError::Discover(e.to_string()))?;
+    let project = ProjectContext::discover(&project_root, runtime).map_err(discover_error)?;
     Ok(RenderTarget::FullProject {
         project_dir: project.dir,
     })
@@ -663,6 +683,15 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         Err(e) => {
             if args.json_errors {
                 emit_dispatch_error_json(&e);
+                std::process::exit(1);
+            }
+            // A structured parse diagnostic prints bare — it carries
+            // its own `Error: [Q-N-M]` header and source snippet.
+            // Routing it through anyhow would stack a second
+            // `Error:` prefix on top (bd-y56u1gl7). Mirrors the
+            // `QuartoError::Parse` arm in `execute_single_doc`.
+            if let DispatchError::DiscoverParse(pe) = &e {
+                eprintln!("{pe}");
                 std::process::exit(1);
             }
             return Err(anyhow::anyhow!("{}", e));
@@ -1337,6 +1366,13 @@ fn emit_parse_error_json(parse_error: &quarto_core::ParseError, input: Option<&P
 /// `crates/quarto-error-catalog/error_catalog.json` — keep them
 /// in sync.
 fn emit_dispatch_error_json(e: &DispatchError) {
+    // Structured parse diagnostics emit their real per-diagnostic
+    // codes and source locations (bd-y56u1gl7); everything else gets
+    // its Q-7-N classification.
+    if let DispatchError::DiscoverParse(pe) = e {
+        emit_parse_error_json(pe, None);
+        return;
+    }
     emit_json_line(&diagnostic_to_json(
         &dispatch_error_to_diagnostic(e),
         &SourceContext::new(),
@@ -1401,6 +1437,17 @@ fn dispatch_error_to_diagnostic(e: &DispatchError) -> DiagnosticMessage {
                 ))
                 .build()
         }
+        // Normally unreachable through `emit_dispatch_error_json`
+        // (which routes DiscoverParse to `emit_parse_error_json` for
+        // multi-diagnostic + source-context fidelity); kept total so
+        // direct callers still get the leading real diagnostic
+        // rather than a stringified wrapper.
+        DispatchError::DiscoverParse(pe) => pe.diagnostics.first().cloned().unwrap_or_else(|| {
+            DiagnosticMessageBuilder::error("Project Discovery Failed")
+                .with_code("Q-7-8")
+                .problem(format!("Project discovery failed: {pe}"))
+                .build()
+        }),
         DispatchError::Discover(msg) => DiagnosticMessageBuilder::error("Project Discovery Failed")
             .with_code("Q-7-8")
             .problem(format!("Project discovery failed: {msg}"))
@@ -1665,6 +1712,25 @@ mod tests {
                 project_dir: project.clone()
             }
         );
+    }
+
+    /// bd-y56u1gl7: a structured parse error from project discovery
+    /// (here: Q-5-17 unknown `project.type`) must survive
+    /// classification as a `ParseError`, not be flattened into the
+    /// `Discover(String)` variant.
+    #[test]
+    fn classify_project_with_unknown_type_yields_structured_parse_error() {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("_quarto.yml"), "project:\n  type: posit-docs\n");
+        write_file(&dir.join("index.qmd"), "---\ntitle: x\n---\n");
+        let runtime = NativeRuntime::new();
+        let err = classify_inputs(&[], &dir, &runtime).unwrap_err();
+        let DispatchError::DiscoverParse(pe) = err else {
+            panic!("expected DiscoverParse, got {err:?}");
+        };
+        assert_eq!(pe.diagnostics.len(), 1);
+        assert_eq!(pe.diagnostics[0].code.as_deref(), Some("Q-5-17"));
     }
 
     #[test]

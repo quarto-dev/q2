@@ -647,13 +647,29 @@ impl ProjectContext {
         let metadata =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
 
-        // Extract project-specific settings from metadata
-        let project_kind = metadata
-            .get("project")
-            .and_then(|p| p.get("type"))
-            .and_then(|t| t.as_str())
-            .and_then(|s| ProjectKind::try_from(s).ok())
-            .unwrap_or_default();
+        // Extract project-specific settings from metadata.
+        //
+        // An unrecognized (or non-string) `project.type` is a hard
+        // error (bd-sekn481x). Q2 has no extension project types, so
+        // a Quarto 1 extension type like `posit-docs` used to fall
+        // back silently to `default` — which renders in place and
+        // strews per-document copies of the shared JS/CSS through
+        // the source tree of what the user meant as a website.
+        // Quarto 1 also errors here ("Unsupported project type").
+        let project_kind = match metadata.get("project").and_then(|p| p.get("type")) {
+            None => ProjectKind::default(),
+            Some(type_value) => {
+                let type_str = type_value.as_str();
+                match type_str.map(ProjectKind::try_from) {
+                    Some(Ok(kind)) => kind,
+                    Some(Err(_)) | None => {
+                        return Err(unknown_project_type_error(
+                            type_str, type_value, path, &content,
+                        ));
+                    }
+                }
+            }
+        };
 
         let output_dir = metadata
             .get("project")
@@ -722,6 +738,57 @@ impl ProjectContext {
                 ProjectKind::Website | ProjectKind::Book | ProjectKind::Manuscript
             )
     }
+}
+
+/// Build the Q-5-17 hard error for an unrecognized or non-string
+/// `project.type` (bd-sekn481x).
+///
+/// `type_str` is `Some` when the value was a string but not a known
+/// kind, `None` when it wasn't a string at all. The `ConfigValue`'s
+/// `source_info` carries the FileId `quarto_yaml::parse_file`
+/// computed for the config file; registering `content` under that
+/// exact id lets the diagnostic render an Ariadne snippet pointing
+/// at the offending scalar (same technique as
+/// `resource_error_to_parse_error`).
+fn unknown_project_type_error(
+    type_str: Option<&str>,
+    type_value: &ConfigValue,
+    config_path: &Path,
+    content: &str,
+) -> QuartoError {
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+    use quarto_source_map::{FileId, SourceContext};
+
+    let mut source_context = SourceContext::new();
+    if let Some((fid_usize, _, _)) = type_value.source_info.resolve_byte_range() {
+        source_context.add_file_with_id(
+            FileId(fid_usize),
+            config_path.to_string_lossy().into_owned(),
+            Some(content.to_string()),
+        );
+    }
+
+    let builder = match type_str {
+        Some(s) => DiagnosticMessageBuilder::error(format!("Unknown project type `{s}`"))
+            .problem("`project.type` must be one of `default`, `website`, `book`, or `manuscript`.")
+            .add_info(format!(
+                "Quarto 1 extension project types (from `_extensions/`) are not yet \
+                 supported in Quarto 2. If `{s}` comes from an extension, set \
+                 `project.type` to the base type that extension extends (often `website`)."
+            )),
+        None => DiagnosticMessageBuilder::error("Invalid `project.type`").problem(
+            "`project.type` must be a string — one of `default`, `website`, `book`, or \
+             `manuscript`.",
+        ),
+    };
+    let diagnostic = builder
+        .with_code("Q-5-17")
+        .with_location(type_value.source_info.clone())
+        .build();
+    QuartoError::Parse(crate::error::ParseError::new(
+        vec![diagnostic],
+        source_context,
+    ))
 }
 
 #[cfg(test)]
@@ -1060,6 +1127,124 @@ mod tests {
             // Config should be default with no metadata
             assert_eq!(ctx.config.project_kind, ProjectKind::Default);
             assert!(ctx.config.metadata.is_none());
+        }
+    }
+
+    // === project.type config parsing tests (bd-sekn481x) ===
+
+    mod project_type_config_tests {
+        use super::*;
+        use quarto_system_runtime::NativeRuntime;
+        use std::fs;
+        use tempfile::TempDir;
+
+        fn discover_with_config(config: &str) -> Result<ProjectContext> {
+            let temp = TempDir::new().unwrap();
+            fs::write(temp.path().join("_quarto.yml"), config).unwrap();
+            fs::write(temp.path().join("index.qmd"), "---\ntitle: x\n---\n\nhi\n").unwrap();
+            let runtime = NativeRuntime::new();
+            ProjectContext::discover(temp.path(), &runtime)
+        }
+
+        /// An unrecognized `project.type` (e.g. a Quarto 1 extension
+        /// project type) must be a hard error, not a silent fallback
+        /// to `default` — the fallback strews per-document lib copies
+        /// into the source tree of what the user meant to be a
+        /// website (bd-sekn481x).
+        #[test]
+        fn unknown_project_type_is_hard_error() {
+            let err = discover_with_config("project:\n  type: posit-docs\n")
+                .expect_err("unknown project.type must fail discovery");
+            let QuartoError::Parse(parse_err) = err else {
+                panic!("expected QuartoError::Parse, got: {err:?}");
+            };
+            assert_eq!(parse_err.diagnostics.len(), 1);
+            let d = &parse_err.diagnostics[0];
+            assert_eq!(d.code.as_deref(), Some("Q-5-17"));
+            assert!(
+                d.location.is_some(),
+                "diagnostic must point at the `type:` scalar in _quarto.yml"
+            );
+            let rendered = parse_err.render();
+            assert!(
+                rendered.contains("posit-docs"),
+                "diagnostic must name the offending type; got:\n{rendered}"
+            );
+            for valid in ["default", "website", "book", "manuscript"] {
+                assert!(
+                    rendered.contains(valid),
+                    "diagnostic must list valid type `{valid}`; got:\n{rendered}"
+                );
+            }
+            assert!(
+                rendered.contains("_quarto.yml"),
+                "diagnostic must render a source snippet naming the file; got:\n{rendered}"
+            );
+        }
+
+        /// A non-string `project.type` gets the same hard error
+        /// rather than silently becoming `default` via `as_str() ->
+        /// None`.
+        #[test]
+        fn non_string_project_type_is_hard_error() {
+            let err = discover_with_config("project:\n  type:\n    nested: map\n")
+                .expect_err("non-string project.type must fail discovery");
+            let QuartoError::Parse(parse_err) = err else {
+                panic!("expected QuartoError::Parse, got: {err:?}");
+            };
+            assert_eq!(parse_err.diagnostics.len(), 1);
+            let d = &parse_err.diagnostics[0];
+            assert_eq!(d.code.as_deref(), Some("Q-5-17"));
+            let rendered = parse_err.render();
+            assert!(
+                rendered.contains("string"),
+                "diagnostic must say the value should be a string; got:\n{rendered}"
+            );
+        }
+
+        /// Absent `project.type` keeps defaulting to `default` — the
+        /// documented behavior for bare projects.
+        #[test]
+        fn absent_project_type_still_defaults() {
+            let ctx = discover_with_config("project:\n  render:\n    - \"*.qmd\"\n").unwrap();
+            assert_eq!(ctx.config.project_kind, ProjectKind::Default);
+        }
+
+        /// Recognized types (including case-insensitive spellings)
+        /// keep parsing.
+        #[test]
+        fn valid_project_types_still_parse() {
+            for (spelling, kind) in [
+                ("default", ProjectKind::Default),
+                ("website", ProjectKind::Website),
+                ("book", ProjectKind::Book),
+                ("manuscript", ProjectKind::Manuscript),
+                ("WEBSITE", ProjectKind::Website),
+            ] {
+                let ctx = discover_with_config(&format!("project:\n  type: {spelling}\n")).unwrap();
+                assert_eq!(ctx.config.project_kind, kind, "spelling: {spelling}");
+            }
+        }
+
+        /// Belt-and-braces: the code this module emits must exist in
+        /// the shared catalog, under the 'project' subsystem (mirrors
+        /// `theme_diagnostic_code_is_registered_in_catalog`).
+        #[test]
+        fn unknown_project_type_code_is_registered_in_catalog() {
+            let info = quarto_error_catalog::ERROR_CATALOG.get("Q-5-17");
+            assert!(
+                info.is_some(),
+                "Q-5-17 is not registered in error_catalog.json"
+            );
+            let info = info.unwrap();
+            assert_eq!(info.subsystem, "project");
+            assert!(
+                info.docs_url
+                    .as_deref()
+                    .is_some_and(|u| u.ends_with("Q-5-17")),
+                "Q-5-17 docs_url must end with the code; got: {:?}",
+                info.docs_url
+            );
         }
     }
 
