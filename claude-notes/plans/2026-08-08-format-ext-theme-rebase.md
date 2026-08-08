@@ -3,7 +3,8 @@
 **Date:** 2026-08-08
 **Braid:** bd-of20unsb (P2, bug)
 **Checkout:** main worktree at `main` @ `e5fc4ffb` (post-merge of PR #474)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design aligned 2026-08-08 (all five questions resolved — see Design
+decisions). **Awaiting user go-ahead to execute.**
 
 ## Triage verdict
 
@@ -141,14 +142,35 @@ internal compiler failures: config-shaped errors get a structured ariadne
 diagnostic via the existing `theme_diagnostic` infrastructure (new Q-14-x code
 in `quarto-error-catalog`, pointing at the offending `theme:` entry — the
 `from_config_value` error path at `compile_theme_css.rs:368-388` is the
-precedent). Whether they *fail the render* or *warn-and-fallback* is design
-question 2 below.
+precedent). Per design decision 2, these **fail the render** (hard error).
 
-## Proposed phases (draft)
+## Design decisions (aligned with user, 2026-08-08)
 
-Skeleton only — contents wait on the design discussion.
+1. **Key set: the full `format.*` subset of `FRAGMENT_PATH_PATTERNS`** —
+   `theme`, `css`, `include-in-header`, `include-before-body`,
+   `include-after-body`, `format-resources`.
+2. **Dangling theme entry → hard error** with an ariadne span. Rationale
+   (user): Q1 guessed at user intent because it lacked source-mapping infra;
+   Q2 is deliberately stricter because it can produce precise, idiomatic
+   errors. This intentionally changes behavior for configs that are already
+   broken-but-silent today (they currently get DEFAULT_CSS).
+3. **"One bad entry nukes valid entries" is moot** under hard-error; nothing
+   further to file.
+4. **Legacy keys (`template`/`template-partials`/`shortcodes`) stay
+   unconditionally marked.** Their values are always paths semantically (no
+   builtin-name ambiguity), and existence-driven marking there would convert
+   a clear missing-file error into silent document-dir fallback. No
+   overengineering now: the schema may eventually signal path entries in-band
+   (`file: …` object keys), which would obsolete sniffing entirely.
+5. **Shared helper, extracted** — pattern-walk + existence-check core moves to
+   a shared module (e.g. `crates/quarto-core/src/extension/paths.rs`);
+   `project/mod.rs` imports it. The pattern tables are the part that must not
+   drift; the unconditional-vs-existence-driven distinction is expressed and
+   documented there.
 
-- **Phase 0 — Test plan (TDD).**
+## Phases
+
+- **Phase 0 — Test plan (TDD; tests written and failing before any fix).**
   - `extension/read.rs` unit tests: bundled `theme: [cosmo, fmt-theme.scss]` →
     `cosmo` stays Scalar, `fmt-theme.scss` becomes Path; non-existent file
     stays Scalar; `css:`/`include-in-header:` marking; nested
@@ -157,45 +179,39 @@ Skeleton only — contents wait on the design discussion.
   - End-to-end integration test (per the repro shape, via the real render
     path): compiled `styles.css` contains the extension rule AND the builtin
     theme.
-  - Diagnostic test: `theme:` naming a file that exists nowhere → Q-14-x
-    surfaced (not silence, not bare DEFAULT_CSS).
-- **Phase 1 — Half A** (shared walk helper + read-time marking).
-- **Phase 2 — Half B** (Q-14-x diagnostic; register in catalog; snapshot).
-- **Phase 3 — E2E verification** (repro fixture through `cargo run --bin q2 --
-  render`, inspect `styles.css`; full `cargo xtask verify` — quarto-core is in
-  the WASM closure).
-- **Phase 4 — Docs**, if user-facing docs mention format extensions bundling
-  assets.
+  - Diagnostic test: `theme:` naming a file that exists nowhere → Q-14-x hard
+    error with a span at the offending entry (not silence, not DEFAULT_CSS).
+  - One `css:` case end-to-end (downstream Path-kind handling in the HTML
+    writer link-emission path was not audited during investigation).
+- **Phase 1 — Half A: shared helper + read-time marking.** Extract the
+  pattern-walk/existence-check core from `project/mod.rs` into
+  `extension/paths.rs`; refactor `rebase_fragment_paths` onto it (no behavior
+  change there); add existence-driven marking of the decision-1 key set in
+  `parse_formats` (thread `runtime` into `parse_contributes`).
+- **Phase 2 — Half B: Q-14-x hard error.** In `compile_theme_css.rs:560-568`,
+  split config-shaped errors (`CustomThemeNotFound`, `InvalidScssFile`) from
+  internal compiler failures; route the former through `theme_diagnostic`
+  as a new Q-14-x catalog code (following the `from_config_value` precedent
+  at `compile_theme_css.rs:368-388`); keep the DEFAULT_CSS fallback only for
+  internal failures.
+- **Phase 3 — E2E verification.** Repro fixture through
+  `cargo run --bin q2 -- render doc.qmd`; inspect `styles.css` for the marker
+  rule + cosmo; full `cargo xtask verify` (quarto-core is in the WASM
+  closure).
+- **Phase 4 — Docs.** Check whether `docs/` mentions format extensions
+  bundling assets; document the bundled-asset behavior if there's a natural
+  home.
 
-## Open design questions for the user
+## Work items
 
-1. **Scope of Half A's key set.** Mirror the `format.*` subset of
-   `FRAGMENT_PATH_PATTERNS` exactly (`theme`, `css`, `include-in-header`,
-   `include-before-body`, `include-after-body`, `format-resources`), or start
-   narrower (`theme` + `css` only, per the strand title) and let the rest ride
-   along? Mirroring exactly keeps the two tables unifiable in the shared
-   helper; I lean toward the full subset.
-2. **Severity of a dangling theme entry (Half B).** When `theme:` names a
-   `.scss`/`.css` that resolves to no file: hard error (consistent with the
-   `from_config_value` precedent at `compile_theme_css.rs:368`, and with
-   "reveal theme unresolvable → error rather than wrong theme"), or visible
-   warning + compile the remaining entries (more forgiving, but partial
-   themes are their own confusion)? I lean toward hard error with a precise
-   ariadne span; note it changes behavior for *pre-existing* broken configs
-   that today silently get DEFAULT_CSS.
-3. **Also fix "one bad entry nukes valid entries"?** Under warn-and-continue
-   (Q2 option B) this needs per-entry error recovery inside
-   `process_theme_specs`; under hard-error it's moot. If hard-error, I'd file
-   nothing further.
-4. **Unconditional vs existence-driven for the legacy keys.** Should
-   `template`/`template-partials`/`shortcodes` stay unconditionally marked
-   (current behavior, they're always paths), or unify on existence-driven
-   marking? I lean strongly toward leaving them alone in this strand —
-   behavior change there is out of scope.
-5. **Where the shared helper lives.** `crates/quarto-core/src/extension/`
-   (new module, e.g. `extension/paths.rs`) with `project/mod.rs` importing it,
-   or keep two small copies? I lean toward extracting — the tables are the
-   part that must not drift.
+- [ ] Phase 0: failing tests (read-time marking, e2e theme, Q-14-x
+      diagnostic, css case)
+- [ ] Phase 1: shared helper extracted; `rebase_fragment_paths` refactored;
+      existence-driven marking wired into `parse_formats`
+- [ ] Phase 2: Q-14-x registered in `quarto-error-catalog`; hard error wired;
+      fallback retained for internal compile failures only
+- [ ] Phase 3: e2e verified via real binary; full `cargo xtask verify` green
+- [ ] Phase 4: docs checked/updated
 
 ## Risks / tradeoffs (draft)
 
