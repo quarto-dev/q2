@@ -794,27 +794,4 @@ fn load_project_variables(
     }
 }
 
-fn builtin_extensions_path(
-    _runtime: &dyn quarto_system_runtime::SystemRuntime,
-) -> Option<std::path::PathBuf> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        crate::extension::BUILTIN_EXTENSIONS
-            .path()
-            .ok()
-            .map(|p| p.to_path_buf())
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    {
-        let vfs_path = std::path::PathBuf::from("/__quarto_resources__/extensions");
-        if _runtime
-            .path_exists(&vfs_path, Some(quarto_system_runtime::PathKind::Directory))
-            .unwrap_or(false)
-        {
-            Some(vfs_path)
-        } else {
-            None
-        }
-    }
-}
+use crate::extension::builtin_extensions_path;

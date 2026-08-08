@@ -79,6 +79,51 @@ pub fn discover_extensions(
     (extensions, diagnostics)
 }
 
+/// Discover extensions visible at **project-config** time (bd-ad7i1pc6).
+///
+/// Project-scoped counterpart to [`discover_extensions`]: scans the
+/// embedded built-in extensions (lowest priority, when provided) and
+/// the **project root's** `_extensions/` only. Per-directory
+/// `_extensions/` in subdirectories are deliberately not consulted —
+/// this discovery feeds project-level concerns (resolving a custom
+/// `project.type` via `contributes.project`, and merging
+/// `contributes.metadata.project`), which must not vary per document.
+///
+/// Runs during `ProjectContext::parse_config`, i.e. *before* the
+/// per-document discovery in `StageContext::new`; the two are
+/// independent (per-document discovery re-scans and additionally sees
+/// subdirectory extensions).
+///
+/// Same ordering contract as [`discover_extensions`]: built-ins first,
+/// user extensions later, so [`find_extension`]'s last-match-wins gives
+/// user extensions priority.
+pub fn discover_project_extensions(
+    project_dir: &Path,
+    builtin_extensions_dir: Option<&Path>,
+    runtime: &dyn SystemRuntime,
+) -> (Vec<Extension>, Vec<DiagnosticMessage>) {
+    let mut extensions = Vec::new();
+    let mut diagnostics = Vec::new();
+
+    if let Some(builtin_dir) = builtin_extensions_dir
+        && runtime
+            .path_exists(builtin_dir, Some(PathKind::Directory))
+            .unwrap_or(false)
+    {
+        scan_extensions_dir(builtin_dir, runtime, &mut extensions, &mut diagnostics);
+    }
+
+    let ext_dir = project_dir.join("_extensions");
+    if runtime
+        .path_exists(&ext_dir, Some(PathKind::Directory))
+        .unwrap_or(false)
+    {
+        scan_extensions_dir(&ext_dir, runtime, &mut extensions, &mut diagnostics);
+    }
+
+    (extensions, diagnostics)
+}
+
 /// Scan all entries in an extensions directory.
 fn scan_extensions_dir(
     ext_dir: &Path,
@@ -393,6 +438,108 @@ contributes:
         let rendered = format!("{:?}", diags[0]);
         assert!(rendered.contains("Q-16-1"), "diagnostic: {rendered}");
         assert!(rendered.contains("bad-ext"), "diagnostic: {rendered}");
+    }
+
+    // === discover_project_extensions tests (bd-ad7i1pc6 Phase 2) ===
+
+    #[test]
+    fn project_discovery_finds_root_extensions_org_and_orgless() {
+        let tmp = TempDir::new().unwrap();
+        write_extension(
+            &tmp.path().join("_extensions/plain-ext"),
+            "contributes:\n  shortcodes:\n    - hello.lua\n",
+        );
+        write_extension(
+            &tmp.path().join("_extensions/acme/fancy"),
+            "contributes:\n  project:\n    project:\n      type: website\n",
+        );
+
+        let runtime = make_runtime();
+        let (extensions, diags) = discover_project_extensions(tmp.path(), None, &runtime);
+
+        assert_eq!(diags.len(), 0, "diags: {diags:?}");
+        assert_eq!(extensions.len(), 2);
+        let mut ids: Vec<(Option<&str>, &str)> = extensions
+            .iter()
+            .map(|e| (e.id.organization.as_deref(), e.id.name.as_str()))
+            .collect();
+        ids.sort();
+        assert_eq!(ids, vec![(None, "plain-ext"), (Some("acme"), "fancy")]);
+    }
+
+    #[test]
+    fn project_discovery_ignores_subdirectory_extensions() {
+        // Project-scoped discovery feeds project-level concerns
+        // (`contributes.project` / `contributes.metadata.project`),
+        // which must not vary per document — so `_extensions/` dirs in
+        // subdirectories are deliberately not consulted, unlike the
+        // per-document walk in `discover_extensions`.
+        let tmp = TempDir::new().unwrap();
+        write_extension(
+            &tmp.path().join("_extensions/root-ext"),
+            "contributes:\n  shortcodes:\n    - a.lua\n",
+        );
+        write_extension(
+            &tmp.path().join("subdir/_extensions/sub-ext"),
+            "contributes:\n  shortcodes:\n    - b.lua\n",
+        );
+
+        let runtime = make_runtime();
+        let (extensions, _diags) = discover_project_extensions(tmp.path(), None, &runtime);
+
+        assert_eq!(extensions.len(), 1);
+        assert_eq!(extensions[0].id.name, "root-ext");
+    }
+
+    #[test]
+    fn project_discovery_scans_builtins_first() {
+        // Built-ins come first in the vec (lowest priority), so a user
+        // extension with the same name wins under last-match-wins.
+        let builtin_tmp = TempDir::new().unwrap();
+        write_extension(
+            &builtin_tmp.path().join("quarto/lipsum"),
+            "contributes:\n  shortcodes:\n    - lipsum.lua\n",
+        );
+        let tmp = TempDir::new().unwrap();
+        write_extension(
+            &tmp.path().join("_extensions/lipsum"),
+            "contributes:\n  shortcodes:\n    - lipsum.lua\n",
+        );
+
+        let runtime = make_runtime();
+        let (extensions, _diags) =
+            discover_project_extensions(tmp.path(), Some(builtin_tmp.path()), &runtime);
+
+        assert_eq!(extensions.len(), 2);
+        assert_eq!(extensions[0].id.organization.as_deref(), Some("quarto"));
+        assert_eq!(extensions[0].id.name, "lipsum");
+        assert_eq!(extensions[1].id.organization, None);
+        assert_eq!(extensions[1].id.name, "lipsum");
+        assert_eq!(
+            find_extension("lipsum", &extensions)
+                .unwrap()
+                .id
+                .organization,
+            None,
+            "user extension must win over the built-in"
+        );
+    }
+
+    #[test]
+    fn project_discovery_reports_broken_manifests() {
+        let tmp = TempDir::new().unwrap();
+        write_extension(
+            &tmp.path().join("_extensions/bad-ext"),
+            "contributes: [unclosed\n  nonsense: {{{{",
+        );
+
+        let runtime = make_runtime();
+        let (extensions, diags) = discover_project_extensions(tmp.path(), None, &runtime);
+
+        assert!(extensions.is_empty());
+        assert_eq!(diags.len(), 1);
+        let rendered = format!("{:?}", diags[0]);
+        assert!(rendered.contains("Q-16-1"), "diagnostic: {rendered}");
     }
 
     // === find_extension tests ===
