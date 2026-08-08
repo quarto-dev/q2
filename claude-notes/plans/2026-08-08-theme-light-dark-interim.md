@@ -263,11 +263,12 @@ is already filed.
 - [x] Work committed as 29ed786d on
       `braid/bd-o76p01wb-light-dark-theme-map`; completion note on
       bd-o76p01wb (c-gfv7ojsc)
-- [ ] Open the PR (against `main` once #474 merges; branch currently
-      contains #474's commits — the PR diff must be only this strand's
-      commit), then close bd-o76p01wb (decided: close upon opening the PR).
-      **Blocked on #474 merging** (still OPEN as of 2026-08-08); pushing
-      needs user approval per repo policy.
+- [x] #474 merged; rebased onto `main` (single commit fc422255), re-ran
+      the full gates on the rebased tree (11,135 workspace tests + full
+      `cargo xtask verify`, both green), pushed as
+      `origin/feature/bd-o76p01wb-light-dark-theme-map`, opened
+      **PR #475** (https://github.com/quarto-dev/q2/pull/475), and closed
+      bd-o76p01wb.
 
 ## Resolved questions (review with Carlos, 2026-08-08)
 
