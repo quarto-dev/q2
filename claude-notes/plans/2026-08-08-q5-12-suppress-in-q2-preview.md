@@ -216,9 +216,14 @@ consumer.
 
 - [x] Record the end-to-end invocation + observed output in this plan
       (see Phase 3 items and the Reproduction section).
-- [ ] Commit (staged; awaiting Carlos's approval per
-      `claude-notes/instructions/review.md`).
-- [ ] `braid close bd-pq72bplh`.
+- [x] Committed as `87393d27` on
+      `bugfix/bd-pq72bplh-q5-12-preview-warning`; PR
+      https://github.com/quarto-dev/q2/pull/472 (changelog entry
+      skipped per Carlos — test-only hub-client change).
+- [x] CI green on the PR: all 8 checks pass (test suites on
+      ubuntu/macos across both workflows, WASM Tests, Hub-Client E2E,
+      Snyk license/security), 2026-08-08.
+- [ ] `braid close bd-pq72bplh` (after merge).
 
 ## Open questions for review
 
