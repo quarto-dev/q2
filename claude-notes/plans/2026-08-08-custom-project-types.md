@@ -476,8 +476,8 @@ Full workspace suite: 11,094 passed (1 ignored pending bd-43lc07w1).
       **bd-of20unsb** (P2, discovered-from).
 - [x] End-to-end (evidence below): fixture render with SCSS `@import`;
       **real q2-connect-docs render** on a scratch copy
-- [ ] Full `cargo xtask verify` (WASM leg) — deferred to end of
-      session, before push
+- [ ] Full `cargo xtask verify` (WASM leg) — running at end of
+      session; result recorded below when complete
 
 Phase 4 end-to-end evidence (2026-08-08, output inspected):
 
@@ -535,14 +535,18 @@ Full workspace suite: 11,099 passed.
 
 Full workspace suite: 11,109 passed.
 
-### Phase 6 — docs + follow-ups
-- [ ] `docs/guides/authoring/extensions.qmd`: replace `TBD.` with at
-      least the `contributes.project` + `contributes.metadata` sections
-      (user-facing usage, not internals); render docs/ with q2 to
-      verify
-- [ ] File follow-up strands: `detect` bootstrap, `preview.serve`,
-      custom book/manuscript (blocked on base types), array-dedup
-      parity decision if the testbed surfaces duplicates
+### Phase 6 — docs + follow-ups ✅ 2026-08-08
+- [x] `docs/guides/authoring/extensions.qmd`: replaced `TBD.` with
+      user-facing sections on custom project types (usage, merge
+      rules incl. `!prefer`, bundled files, Q-5-17/Q-16-7 errors) and
+      metadata contributions. Verified: `q2 render docs/` — 188/188
+      files, no warnings attributed to the page.
+- [x] Follow-up strands filed: **bd-0dtv2nhe** (`detect` bootstrap,
+      P4), **bd-nmawh9vj** (`preview.serve`, P4), **bd-m1fzvpov**
+      (book/manuscript bases, P4, conceptually blocked on those base
+      types existing). Array-dedup parity: not filed — the Connect
+      docs testbed surfaced no duplicate-entry problems; revisit only
+      if one appears.
 
 ## Design decisions (resolved 2026-08-08 with Carlos)
 

@@ -2,4 +2,116 @@
 title: Using Quarto extensions
 ---
 
-TBD.
+## Overview
+
+Extensions add capabilities to Quarto projects and documents. An extension lives in a directory under `_extensions/` at your project root, described by an `_extension.yml` manifest:
+
+``` {.default}
+my-project/
+  _quarto.yml
+  _extensions/
+    acme/                  # optional organization directory
+      fancy-docs/
+        _extension.yml     # the extension manifest
+        theme.scss         # files bundled with the extension
+        assets/...
+```
+
+The manifest declares what the extension contributes:
+
+``` {.yaml filename="_extension.yml"}
+title: Fancy Docs
+author: Acme
+version: 1.0.0
+contributes:
+  # one or more of:
+  shortcodes: [...]
+  filters: [...]
+  formats: {...}
+  project: {...}
+  metadata: {...}
+```
+
+This page covers project types and metadata contributions. Shortcodes and filters have their own pages ([Shortcodes](shortcodes.qmd), [Lua filters](lua-filters.qmd)).
+
+## Custom project types
+
+An extension can define a **custom project type**: a named bundle of configuration that projects opt into by setting `project.type`. This is how a team ships a house style — theme, navigation defaults, analytics — as one reusable package.
+
+In your project:
+
+``` {.yaml filename="_quarto.yml"}
+project:
+  type: fancy-docs
+website:
+  title: "My Site"
+```
+
+In the extension:
+
+``` {.yaml filename="_extensions/acme/fancy-docs/_extension.yml"}
+title: Fancy Docs
+contributes:
+  project:
+    project:
+      type: website        # the built-in base type
+    website:
+      bread-crumbs: true
+      navbar:
+        logo: assets/logo.svg
+    format:
+      html:
+        theme: [cosmo, theme.scss]
+        include-in-header:
+          - assets/analytics.html
+```
+
+Everything under `contributes: project:` is an ordinary `_quarto.yml` fragment. When Quarto sees `type: fancy-docs`, it:
+
+1. finds the extension by name (use the full `acme/fancy-docs` form in `type:` if two extensions share a name);
+2. reads the **base type** from the fragment's `project.type` — the built-in type the project actually renders as (`website` or `default`);
+3. merges the fragment *underneath* your `_quarto.yml`.
+
+The project then behaves exactly as if you had written the combined configuration yourself.
+
+### Merge rules
+
+Quarto's standard configuration merging applies, uniformly:
+
+- **Your value wins** wherever both you and the extension set the same option.
+- **Lists combine**: the extension's entries come first, then yours. In the example above, a project-level `include-in-header` is appended after the extension's analytics include.
+- To **replace** an extension-provided list instead of appending, tag your value with `!prefer`:
+
+  ``` {.yaml filename="_quarto.yml"}
+  format:
+    html:
+      include-in-header: !prefer
+        - only-mine.html
+  ```
+
+### Bundled files
+
+Files the extension ships next to its manifest — SCSS themes, CSS, header includes, favicons, logos, scripts — are referenced with paths relative to the extension directory, as in the example above. Quarto resolves them automatically; your project does not need to spell out `_extensions/acme/fancy-docs/theme.scss`.
+
+### Errors you might see
+
+- **Unknown project type (Q-5-17)**: `project.type` is neither built-in nor provided by any extension in `_extensions/`. The message lists the project-type extensions that were found — check for typos, and check whether the extension failed to load.
+- **Invalid project type contribution (Q-16-7)**: the extension declares a base type that is not available. Custom types must use a built-in base (`website` or `default`); `book` and `manuscript` bases are not supported yet, and custom types cannot chain to other custom types.
+
+## Metadata contributions
+
+An extension can also contribute configuration *unconditionally* — applied whenever the extension is installed, without being named in `project.type`. This is `contributes: metadata:`:
+
+``` {.yaml filename="_extensions/posit-dev/quarto-openapi/_extension.yml"}
+title: quarto-openapi
+contributes:
+  metadata:
+    project:
+      pre-render:
+        - openapi-to-markdown.ts
+```
+
+- Keys under `metadata.project` merge into your project configuration — the example adds a pre-render script that runs before every project render.
+- Other keys under `metadata` merge into every document's metadata.
+
+The same merge rules apply: your own configuration always wins over extension contributions, and lists combine with the extension's entries first.
