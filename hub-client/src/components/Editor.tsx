@@ -34,6 +34,7 @@ import { useReplayMode } from '../hooks/useReplayMode';
 import { useAutomergeSync } from '../hooks/useAutomergeSync';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
+import EphemeralSessionBanner from './EphemeralSessionBanner';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import NewAssetDialog from './NewAssetDialog';
@@ -999,15 +1000,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         </div>
       )}
 
-      {!isFullscreenPreview && sessionEphemeral && (
-        <div
-          className="ephemeral-session-banner"
-          role="status"
-          title="Started without --allow-edit: edits sync live to everyone connected but are never written to the project's files. Restart the preview with --allow-edit to persist them."
-        >
-          Ephemeral session — edits won't be saved to disk
-        </div>
-      )}
+      {!isFullscreenPreview && sessionEphemeral && <EphemeralSessionBanner />}
 
       {!isFullscreenPreview && unlocatedErrors.length > 0 && (
         <div className="diagnostics-banner">

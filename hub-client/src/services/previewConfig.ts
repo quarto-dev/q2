@@ -23,22 +23,44 @@ export interface PreviewSessionConfig {
   allowEdit: boolean;
 }
 
+/** Delay before the single retry of a transport-failed config fetch. */
+const RETRY_DELAY_MS = 750;
+
 /**
  * Fetch the preview session config, or null when the serving server is
  * not a `q2 preview` session (standalone hub, dev server) or the fetch
  * fails. Only a response carrying an explicit boolean `allowEdit`
  * counts — SPA-fallback HTML and older servers both yield null.
+ *
+ * A transport-level failure (fetch rejects) is retried once: for a
+ * `--join` guest the boot fetch can race the tunnel's connection
+ * handshake, and the config is fetched only once per boot — a dropped
+ * request would hide the ephemeral-session banner for the whole
+ * session. Definitive answers (non-ok status, non-JSON or malformed
+ * body) are not retried: on a standalone hub they are the expected
+ * "not a preview session" signal.
  */
 export async function fetchPreviewSessionConfig(): Promise<PreviewSessionConfig | null> {
-  try {
-    const res = await fetch(hubPath('/api/preview/config'), { credentials: 'same-origin' });
+  for (let attempt = 0; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(hubPath('/api/preview/config'), { credentials: 'same-origin' });
+    } catch {
+      if (attempt === 0) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        continue;
+      }
+      return null;
+    }
     if (!res.ok) return null;
-    const data: unknown = await res.json();
-    if (typeof data !== 'object' || data === null) return null;
-    const { allowEdit } = data as { allowEdit?: unknown };
-    if (typeof allowEdit !== 'boolean') return null;
-    return { allowEdit };
-  } catch {
-    return null;
+    try {
+      const data: unknown = await res.json();
+      if (typeof data !== 'object' || data === null) return null;
+      const { allowEdit } = data as { allowEdit?: unknown };
+      if (typeof allowEdit !== 'boolean') return null;
+      return { allowEdit };
+    } catch {
+      return null;
+    }
   }
 }

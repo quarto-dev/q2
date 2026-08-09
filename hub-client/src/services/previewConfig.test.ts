@@ -62,6 +62,8 @@ describe('fetchPreviewSessionConfig', () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({}, { ok: false, status: 404 }));
 
     await expect(fetchPreviewSessionConfig()).resolves.toBeNull();
+    // A definitive answer is not retried.
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('returns null when the body is SPA-fallback HTML (json() throws)', async () => {
@@ -72,6 +74,8 @@ describe('fetchPreviewSessionConfig', () => {
     } as unknown as Response);
 
     await expect(fetchPreviewSessionConfig()).resolves.toBeNull();
+    // SPA-fallback HTML is a definitive answer: not retried.
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it.each([{}, { allowEdit: 'false' }, { allowEdit: 0 }, null, 'allowEdit'])(
@@ -83,10 +87,36 @@ describe('fetchPreviewSessionConfig', () => {
     },
   );
 
-  it('returns null on network error', async () => {
-    vi.mocked(fetch).mockRejectedValue(new TypeError('fetch failed'));
+  it('retries a transport failure once and returns the retried config', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetch)
+        .mockRejectedValueOnce(new TypeError('fetch failed'))
+        .mockResolvedValueOnce(jsonResponse({ allowEdit: false }));
 
-    await expect(fetchPreviewSessionConfig()).resolves.toBeNull();
+      const pending = fetchPreviewSessionConfig();
+      // Advance well past the retry delay (RETRY_DELAY_MS, 750ms).
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(pending).resolves.toEqual({ allowEdit: false });
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns null when the fetch and its single retry both fail', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetch).mockRejectedValue(new TypeError('fetch failed'));
+
+      const pending = fetchPreviewSessionConfig();
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(pending).resolves.toBeNull();
+      // One retry, not a loop: exactly two attempts.
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('prefixes the path with VITE_HUB_BASE_PATH when set', async () => {
