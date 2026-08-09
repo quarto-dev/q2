@@ -3,74 +3,94 @@
 **Date:** 2026-08-09
 **Braid:** bd-listing-table-fields-peg1w3b3 (bug, P1, label `listings`)
 **Branch:** `main` (investigated in place; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled with user (2026-08-09) — implementation in progress.
+**Follow-up:** bd-bl1e00r6 (sort-ui/filter-ui/table-hover interactive parity, discovered-from this strand)
 
-## Triage verdict
+## Problem
 
-**Ready to design.** The symptom reproduces at HEAD, the root cause is unambiguous (static built-in table templates cannot express a dynamic column set), the config and binding layers already carry everything the fix needs, and Q1's reference implementation pins the target semantics. The remaining work is choosing the mechanism (pre-rendered binding keys vs. dynamically generated template source) and pinning per-field cell rendering rules.
+The built-in table listing templates are static: `listing-table.template` hardcodes `| Title | Date | Author |` and `item-table.template` hardcodes `| [$title$]($path$){.no-external} | $date$ | $author$ |`. Consequences:
 
-## Issue context
+- `fields:` is ignored — a `fields: [title]` listing still renders three columns.
+- `field-display-names:` is ignored for headers.
+- Items missing `date`/`author` produce "Undefined variable" doctemplate diagnostics, surfaced as one Q-12-10 warning per listing (the binding deliberately omits absent optional fields so `$if(field)$` works).
 
-Filed 2026-08-09 by Carlos (same day as this investigation — no staleness risk). A `type: table` listing with `fields: [title]` still renders three columns (Title | Date | Author); `field-display-names:` is ignored for headers; items missing `date`/`author` produce per-item "Undefined variable" doctemplate diagnostics surfaced as one Q-12-10 warning per listing.
+Reproduced at HEAD (`main` @ 4bb32844) with the committed repro under `claude-notes/plans/listing-table-fields-investigation/repro/` — rendered output was inspected: `<th>Title</th><th>Date</th><th>Author</th>` + `Q-12-10 … Undefined variable: date`.
 
-Real-world hit: Posit Connect docs `how-to/index.md` (`type: table, fields: [title], field-display-names: {title: "How To"}`) renders three columns (two empty) + 8 diagnostics vs. Q1's single "How To" column.
+doctemplate is Pandoc-style/logic-less (no `item[field]` indexing), so no static template can render an author-chosen column set — the dynamism must come from Rust.
 
-## Dependency graph
+## Settled design (user-aligned 2026-08-09)
 
-**Empty.** `braid dep tree` / `dep list` show no edges in this skein. The origin strand (`br-listing-table-fields-hes1dsib`) lives in the *connect-docs porting* skein, not this one — the description carries its context forward. No incoming `blocks` pressure here, but the P1 + real-world-docs hit sets the urgency.
+1. **Mechanism (A): pre-rendered binding keys.** The binding computes `listing.table-header` (markdown header + separator rows) and a per-item `table-row` markdown string; the two table templates shrink to interpolating those. Additive to the L8 binding contract; follows the `image-html`/`category-html` pre-rendered-helper precedent. Templates stay static/readable; L8 shadowing untouched.
+2. **Header names: Q1 parity.** Built-in default display-name map overlaid with the author's `field-display-names`; unknown fields fall back to the **raw field name**. Q1's defaults (from `_language.yml`, English hardcoded for now — Q2 has no format.language yet): `image → " "`, `date → "Date"`, `title → "Title"`, `description → "Description"`, `author → "Author"`, `filename → "File Name"`, `date-modified → "Modified"`, `file-modified → "Modified"`, `subtitle → "Subtitle"`, `reading-time → "Reading Time"`, `word-count → "Word Count"`, `categories → "Categories"`.
+3. **Cell rendering: Q1 parity** (from `listing-table.ejs.md` `readField`/`outputValue`/`outputLink` + `website-listing-read.ts`):
+   - `image` → the existing `image-html` helper output.
+   - Curated fields read from the item struct: `title`, `subtitle`, `description`, `author`, `authors` (join `", "`), `date`/`date-modified` (pre-formatted, as the binding already does), `categories` (join `", "`), `reading-time` (`"N min read"`), `word-count`, `filename`.
+   - Unknown fields → dotted-path lookup into the item's `extra` map (`a.b` walks nested maps, Q1 `readField` parity); array values join `", "`.
+   - Missing value → **empty cell** (Q1 emits `&nbsp;`; empty cell is the markdown-table equivalent).
+   - **`field-links`**: new config option, Q1 default for table listings is `[title, filename]` (empty for other types). A linked field's cell becomes `[<value>](<path>){.no-external}` when the item has a path and the value is non-empty. (Q1's extra `listing-<field>` classes exist to serve list.js — deferred to bd-bl1e00r6.)
+4. **Cell escaping:** escape `|` → `\|` and flatten newlines to spaces inside cell values; accept that some documents need markdown changes for Quarto 2. Values otherwise pass through as markdown (consistent with the other templates' `$title$` interpolation).
+5. **Interactive parity (sort-ui anchors, filter-ui, table-hover onclick, list.js classes) is out of scope** → filed as bd-bl1e00r6.
 
-## What the code looks like today
+### Additional Q1-parity findings from the source study
 
-Reproduced at HEAD (`main` @ 4bb32844) with the repro under
-`claude-notes/plans/listing-table-fields-investigation/repro/` (copied from the
-connect-docs repro, build artifacts stripped, extended with
-`field-display-names: {title: "How To"}`):
+- **Default table field order is `[date, title, author]`** (`kDefaultTableFields`) — Q2's `apply_type_defaults` already matches, but the hardcoded template header order (Title|Date|Author) doesn't. Post-fix, default tables render **Date | Title | Author**. This is a deliberate parity change; expect snapshot churn (must be documented per snapshot policy).
+- **Q1 filters *default* (not author-explicit) fields by presence in items** (`website-listing-read.ts:578` — keep `image` always; if the filter empties the list, fall back to all item fields). Author-explicit `fields:` is used verbatim. This is what prevents an all-empty Author column on default tables. Q2 applies type defaults at config-parse time with no item knowledge, so implementing this needs an explicit-fields flag on `Listing` and a presence-filter at render time (items are known in `render_one`).
 
-```
-$ cargo run --bin q2 -- render .   # in the repro dir
-Warning [Q-12-10]: Listing `guides` doctemplate produced 4 diagnostic(s); first: Undefined variable: date
-```
+## Implementation notes
 
-Rendered `_site/index.html` has `<th>Title</th><th>Date</th><th>Author</th>` — `fields:` and `field-display-names:` both ignored. Output was inspected directly.
+- Config: `crates/quarto-core/src/project/listing/config.rs` — parse `field-links` (string list) into `Listing::field_links`; add `fields_explicit: bool` set when the author supplied `fields:`; `apply_type_defaults` fills `field_links` (`[title, filename]` for Table, `[]` otherwise).
+- Binding: `crates/quarto-core/src/project/listing/binding.rs` (+ possibly `helpers.rs`) — display-name resolution, cell rendering, `table-header` on the listing map, `table-row` on the item map. Computed unconditionally (cheap; custom templates may use them).
+- Presence filter: `crates/quarto-core/src/transforms/listing_render.rs::render_one` (or just before `build_listing_context`) — when `!fields_explicit`, filter `listing.fields` to fields present in ≥1 item (keeping `image`), Q1 fallback semantics.
+- Templates: `templates/listing-table.template` → wrapper + `$listing.table-header$` + items loop; `templates/item-table.template` → `$table-row$`. Keep the `item-table` partial so L8 shadowing still works.
+- The re-parse path means pre-rendered markdown strings in the binding "just work" (template output is parsed as qmd).
 
-Where each piece lives:
+## Work items
 
-- **Config already parses everything.** `crates/quarto-core/src/project/listing/config.rs` parses `fields` (line 466) and `field-display-names` (line 469, into `Listing::field_display_names: BTreeMap<String, String>`, with Q-12-5 on non-string values). Table-type default fields are `[date, title, author]` (line ~887).
-- **The binding carries `fields` but nothing table-shaped.** `binding.rs::build_listing_map` exposes `listing.fields` as a list and `build_item_map` computes per-item `show.*` flags from `listing.fields`; optional item fields are *omitted* when absent (deliberately, so `$if(field)$` works) — which is exactly why the hardcoded `$date$` reference produces "Undefined variable" for date-less items.
-- **The templates are static.** `templates/listing-table.template` hardcodes the `| Title | Date | Author |` header; `templates/item-table.template` hardcodes the three cells. Both are `include_str!`-embedded and served via `MemoryResolver` (`templates.rs`), so L8 custom templates can shadow them by name.
-- **The template language can't fix this alone.** doctemplate is Pandoc-style/logic-less: there is no dynamic map indexing (`item[field]`), so no static template can render an author-chosen column set. The dynamism has to come from Rust — either in the binding or in generated template source.
-- **Render path:** `transforms/listing_render.rs::render_one` → `render_builtin` compiles the embedded source, renders against the binding, re-parses the output as qmd markdown, splices into the AST. Template output being *markdown* (re-parsed) means pre-rendered markdown strings in the binding work naturally.
+### Phase 0 — Tests (TDD: written first, verified failing)
 
-### Q1 reference semantics (external-sources/quarto-cli)
+- [ ] Survey existing listing test layout (binding unit tests, listing_render tests, any project-render integration fixtures) and decide where each new test lives.
+- [ ] e2e/regression: `fields: [title]` + `field-display-names: {title: "How To"}` table listing renders exactly one `How To` column and **zero** Q-12-10 warnings (drive the real render path per end-to-end verification policy).
+- [ ] Missing-value tolerance: `fields: [title, date]` where one item lacks `date` → empty cell, no diagnostic.
+- [ ] Default table (no `fields:`): Date | Title | Author order; and with items lacking `author`, the Author column is dropped (presence filter); author-explicit `fields:` is never presence-filtered.
+- [ ] Binding unit tests: `table-header` (display-name overlay, raw-name fallback, `image → " "` header), `table-row` (curated fields, dotted-path `extra` lookup, array join, empty cell for missing, `\|` escaping, newline flattening), `field-links` linking behavior (title linked by default; non-linked field plain; `field-links: []` unlinks title).
+- [ ] Config unit tests: `field-links` parsing, table default `[title, filename]`, `fields_explicit` flag.
+- [ ] Run new tests, confirm they fail for the expected reason before implementing.
 
-`src/resources/projects/website/listing/listing-table.ejs.md` loops `listing.fields` for both `<th>` headers and `<td>` cells:
+### Phase 1 — Config
 
-- **Headers:** `utilities.fieldName(field)` = merged display-name map — built-in localized defaults (`_language.yml`: Title, Date, Author, Description, File Name, Modified, Subtitle, Reading Time, Word Count, Categories) overlaid with the author's `field-display-names`; unknown fields fall back to the **raw field name** (not title-case).
-- **Cells:** `outputValue` special-cases `image` (img/placeholder), joins array values with `", "`, supports dotted-path field access, and wraps linked fields via `outputLink` (default `field-links` includes `title`; missing values render `&nbsp;`).
-- Q1 emits a raw **HTML** table (with sort-ui anchor headers, `table-hover` row onclick, `metadataAttrs` per row); Q2's current template emits a markdown pipe table.
+- [ ] Parse `field-links` into `Listing::field_links: Vec<String>` (Q-12-5-style diagnostic on wrong type, consistent with neighbors).
+- [ ] Add `fields_explicit: bool` (set in the `"fields"` parse arm).
+- [ ] `apply_type_defaults`: default `field_links` per type.
+- [ ] Phase-1 unit tests pass.
 
-## Proposed phases (draft)
+### Phase 2 — Binding
 
-Skeleton only — actual phase contents wait on the design discussion.
+- [ ] Display-name resolution helper (defaults map + author overlay + raw fallback).
+- [ ] Cell renderer: per-field value lookup (curated → struct, unknown → dotted-path `extra`), image special-case, join rules, escaping, `field-links` wrapping.
+- [ ] `listing.table-header` + per-item `table-row` keys wired into `build_listing_map`/`build_item_map`.
+- [ ] Phase-2 unit tests pass.
 
-- **Phase 0 — Test plan (TDD).** Failing tests first: (a) end-to-end project render fixture (`type: table, fields: [title], field-display-names`) asserting a single "How To" column and zero Q-12-10 warnings; (b) binding unit tests for whatever new keys the design settles on; (c) missing-value tolerance (item without `date` in a `fields: [title, date]` listing → empty cell, no diagnostic); (d) default-fields table still renders Title | Date | Author unchanged (snapshot parity).
-- **Phase 1 — Binding/mechanism.** Compute the dynamic column set from `listing.fields` + `field_display_names` (mechanism per design question 1).
-- **Phase 2 — Templates.** Rewrite `listing-table.template` / `item-table.template` to consume the new mechanism; confirm L8 shadowing story still holds.
-- **Phase 3 — End-to-end verification + docs.** Re-run the committed repro through `q2 render`, inspect output, update `docs/` listing documentation if it describes table columns.
+### Phase 3 — Templates + presence filter
 
-## Open design questions for the user
+- [ ] Rewrite `listing-table.template` / `item-table.template` to consume the new keys.
+- [ ] Presence-filter default fields in the render transform (author-explicit fields verbatim).
+- [ ] Full workspace test run; review + document every changed `.snap` (expect table-column-order churn).
 
-1. **Mechanism.** Two candidates:
-   - **(A) Pre-rendered binding keys** — the binding computes e.g. `listing.table-header` (header + separator rows) and a per-item `table-row` (or per-item `table-cells`) markdown string; the templates shrink to interpolating those. Keeps templates static, is purely *additive* to the L8 binding contract (non-breaking per binding.rs's contract note), and follows the existing precedent of pre-rendered helpers (`image-html`, `category-html`, `metadata-attrs`).
-   - **(B) Dynamically generated template source** — `top_level_template_source` becomes listing-aware and emits per-listing template text. More invasive: it breaks the "templates are readable canonical reference files" property and complicates L8 partial shadowing of `item-table`.
-   I lean (A); confirm?
-2. **Header fallback for fields without a display name.** Q1 parity = port the built-in default display-name map (Title, Date, Author, Reading Time, …) and fall back to the **raw field name** for unknown/extra fields. The strand suggests title-case fallback instead. Which do we want — Q1 parity, or title-case as a deliberate Q2 improvement?
-3. **Per-field cell rendering rules.** Proposed: `title` → `[$title$]($path$){.no-external}` link (as today); `image` → `image-html`; `date`/`date-modified` → pre-formatted strings (already in the binding); `categories`/`authors` → comma-joined; unknown fields → `extra.*` lookup; missing value → empty cell. Q1 also supports dotted-path fields (`a.b`) and a `field-links` option (which fields become links) — in scope now, or deferred to a follow-up strand?
-4. **Cell escaping.** A markdown pipe table breaks on cell values containing `|` (or block content). Escape `|` as `\|` and accept the limitation, or switch the table listing to raw-HTML emission like Q1 (bigger change, but sidesteps the whole class)?
-5. **Sort-ui/hover parity.** Q1 table headers are sortable anchors and `table-hover` adds row onclick. The current Q2 template has neither, so this bug's scope could stay "columns only" with sort-ui parity as a separate filed strand. Agree?
+### Phase 4 — End-to-end verification + docs
 
-## Risks / tradeoffs (draft)
+- [ ] `cargo run --bin q2 -- render` on the committed repro; inspect `_site/index.html` for the single `How To` column and absence of Q-12-10; record invocation + output snippet here.
+- [ ] Render `docs/` with q2 and spot-check any table listings.
+- [ ] Update `docs/` listing documentation if it describes table columns / `field-display-names` / `field-links`.
+- [ ] `cargo xtask verify` (full — quarto-core changes affect the WASM leg).
 
-- The binding is the **load-bearing public contract for L8 custom templates** (binding.rs header comment): adding keys is safe, but if we *change* what `item-table` receives or how the built-in table templates are structured, custom templates that shadow `item-table`/`listing-table` by name will see the new call shape. Worth a call-out in the commit either way.
-- Option (B) would interact with `builtins_resolver()`'s six static names and the `Custom`-type fallback path; option (A) leaves both untouched.
-- Snapshot churn: default table listings (no `fields:` override) must render byte-identically or the change needs snapshot review per the CLAUDE.md snapshot policy.
+## Risks / tradeoffs
+
+- The binding is the **load-bearing L8 public contract**: `table-header`/`table-row` are additive (safe), but custom templates that shadow `item-table` keep receiving the full item map — unchanged shape, no break expected. Call out the new keys in the commit.
+- Default-table column order changes to Date | Title | Author (Q1 parity). Snapshot churn must be reviewed and documented per CLAUDE.md snapshot policy.
+- Presence filtering changes `show.*` flags for default/grid listings whose items lack curated fields — aligns with Q1, but worth watching in snapshot review.
+- English-hardcoded default display names; revisit when Q2 grows language/i18n support.
+
+## Investigation record (2026-08-09)
+
+- Repro: `claude-notes/plans/listing-table-fields-investigation/repro/` — `cargo run --bin q2 -- render .` → `Warning [Q-12-10]: Listing 'guides' doctemplate produced 4 diagnostic(s); first: Undefined variable: date`; `_site/index.html` shows `<th>Title</th><th>Date</th><th>Author</th>` despite `fields: [title]` + `field-display-names`. Output inspected directly.
+- Q1 references: `external-sources/quarto-cli/src/resources/projects/website/listing/listing-table.ejs.md` (template loop, readField/outputValue), `src/project/types/website/listing/website-listing-template.ts` (fieldName/outputLink utilities), `src/project/types/website/listing/website-listing-read.ts` (defaultFieldDisplayNames, kDefaultFieldLinks, kDefaultTableFields, suggested-field presence filter), `src/resources/language/_language.yml` (listing-page-field-* strings).
