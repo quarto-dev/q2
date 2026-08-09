@@ -3,6 +3,7 @@
 //! This module provides lint checks that catch issues standard Rust linters miss.
 //! Each lint rule is implemented as a separate submodule.
 
+mod add_file_with_id;
 mod external_sources;
 mod metadata_as_str;
 
@@ -200,6 +201,7 @@ fn check_file(path: &Path) -> Result<Vec<Violation>> {
     let mut violations = Vec::new();
 
     // Run each lint rule
+    violations.extend(add_file_with_id::check(path, &content)?);
     violations.extend(external_sources::check(path, &content)?);
     violations.extend(metadata_as_str::check(path, &content)?);
 

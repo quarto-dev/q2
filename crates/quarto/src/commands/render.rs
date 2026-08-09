@@ -1075,6 +1075,9 @@ fn config_source_context(config_path: Option<&Path>) -> Option<SourceContext> {
     let config_str = config_path.to_string_lossy();
     let content = std::fs::read_to_string(config_path).ok()?;
     let mut ctx = SourceContext::new();
+    // The id is derived from the registered path itself, so the triple
+    // cannot mis-pair.
+    // lint:allow(add-file-with-id) — id from file_id_for_filename(path)
     ctx.add_file_with_id(
         quarto_yaml::file_id_for_filename(&config_str),
         config_str.into_owned(),
@@ -1114,6 +1117,9 @@ fn attach_config_source(group: &mut CoalescedDiagnostic, config_path: Option<&Pa
     group
         .source_context
         .get_or_insert_with(SourceContext::new)
+        // Guarded above: registers only when
+        // file_id_for_filename(config_str) == FileId(fid).
+        // lint:allow(add-file-with-id) — hash-equality guarded
         .add_file_with_id(FileId(fid), config_str.into_owned(), Some(content));
 }
 
