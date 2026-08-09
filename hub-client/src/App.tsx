@@ -42,6 +42,7 @@ import { useAuth } from './hooks/useAuth';
 import { useAuthProbe } from './hooks/useAuthProbe';
 import { useSessionKeepAlive } from './hooks/useSessionKeepAlive';
 import { useExecutionChannel } from './hooks/useExecutionChannel';
+import { usePreviewSession } from './hooks/usePreviewSession';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
 import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
 import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER, parseHashRoute } from './utils/routing';
@@ -197,6 +198,14 @@ function App() {
     const bootRoute = parseHashRoute(window.location.hash);
     return bootRoute.type === 'share' && bootRoute.ephemeral === true;
   });
+
+  // `q2 preview` session config (bd-ov4gqk3m): when the serving server
+  // is a preview started without --allow-edit, the editor shows an
+  // ephemeral-session banner. Null on a standalone hub (no such
+  // endpoint), which never shows the banner. Unlike the boot-URL flag
+  // above this survives reloads and works for --join guests, whose
+  // proxy splices every connection through to the host.
+  const previewSession = usePreviewSession();
 
   // Load screen name from IndexedDB (for identity mapping in Automerge docs).
   // When auth is enabled, wait for it to resolve so we can upgrade anonymous
@@ -889,6 +898,7 @@ function App() {
               executorsOnline={liveExecutors.length > 0}
               onRequestExecution={requestExecution}
               isOnline={isOnline}
+              sessionEphemeral={previewSession?.allowEdit === false}
             />
           </ErrorBoundary>
         </ViewModeProvider>

@@ -77,6 +77,12 @@ interface Props {
   onRequestExecution?: (path: string) => string | null;
   /** Whether the project is connected to the sync server */
   isOnline: boolean;
+  /**
+   * `q2 preview --ui editor` without `--allow-edit` (bd-ov4gqk3m): edits
+   * sync live to everyone connected but are never written to disk.
+   * Drives the ephemeral-session banner. Absent/false on a real hub.
+   */
+  sessionEphemeral?: boolean;
 }
 
 // Map file extension to Monaco language ID
@@ -165,7 +171,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline }: Props) {
+export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
   const { effectiveTheme } = useTheme();
@@ -990,6 +996,16 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           {replayState.isActive && (
             <div className="replay-mode-banner">REPLAY MODE</div>
           )}
+        </div>
+      )}
+
+      {!isFullscreenPreview && sessionEphemeral && (
+        <div
+          className="ephemeral-session-banner"
+          role="status"
+          title="Started without --allow-edit: edits sync live to everyone connected but are never written to the project's files. Restart the preview with --allow-edit to persist them."
+        >
+          Ephemeral session — edits won't be saved to disk
         </div>
       )}
 
