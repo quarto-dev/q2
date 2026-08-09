@@ -149,7 +149,7 @@ async fn guest_syncs_project_through_tunnel() {
         .expect("index document found through tunnel");
 
     // The files map converges to the fixture's two pages.
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + Duration::from_secs(30);
     let files = loop {
         let files = index.get_all_files();
         if files.contains_key("index.qmd") && files.contains_key("about.qmd") {

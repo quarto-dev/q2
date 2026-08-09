@@ -8,8 +8,12 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 /// Generous cap for individual awaits so a broken tunnel fails the test
-/// instead of hanging it.
-pub const STEP_TIMEOUT: Duration = Duration::from_secs(20);
+/// instead of hanging it. Sized for CI, not for the happy path: iroh
+/// endpoint operations inflate 5-10x under full-suite load (every
+/// endpoint bind pays for netmon setup + handshake crypto on contended
+/// cores), and ubuntu runners are the slowest we have. Never binds on a
+/// healthy run — the uncontended cost of a step is milliseconds.
+pub const STEP_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub fn hermetic_host_cfg() -> TunnelHostConfig {
     TunnelHostConfig {

@@ -10,8 +10,12 @@ use quarto_p2p::{EndpointPreset, TunnelClient, TunnelClientConfig, TunnelHostCon
 use quarto_preview::share::{format_share_banner, spawn_share_task, start_share_session};
 
 /// Generous cap for individual awaits so a broken tunnel fails the test
-/// instead of hanging it.
-const STEP_TIMEOUT: Duration = Duration::from_secs(20);
+/// instead of hanging it. Sized for CI, not for the happy path: iroh
+/// endpoint operations inflate 5-10x under full-suite load (every
+/// endpoint bind pays for netmon setup + handshake crypto on contended
+/// cores), and ubuntu runners are the slowest we have. Never binds on a
+/// healthy run — the uncontended cost of a step is milliseconds.
+const STEP_TIMEOUT: Duration = Duration::from_secs(60);
 
 fn hermetic_host_cfg() -> TunnelHostConfig {
     TunnelHostConfig {
@@ -23,7 +27,13 @@ fn hermetic_host_cfg() -> TunnelHostConfig {
 /// The core Phase 2 unit: the share glue spawns a tunnel whose target is
 /// `127.0.0.1:{port}` (the pre-resolved preview port), and the join
 /// banner goes through the injected callback — no stdout scraping.
-#[tokio::test]
+///
+/// multi_thread like every other test that runs an iroh endpoint
+/// (tunnel.rs, join_tunnel.rs): on a current-thread runtime the endpoint
+/// actors, the axum stand-in, and reqwest all share one thread, and
+/// under CI load the 20s step caps below get exceeded (ubuntu CI
+/// failure, 2026-08-09).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn share_glue_tunnels_to_preview_port_and_announces_join_string() {
     // Tiny axum server standing in for the preview hub on the loopback
     // port the CLI would have pre-resolved.
@@ -118,7 +128,8 @@ async fn share_glue_tunnels_to_preview_port_and_announces_join_string() {
 /// print after the boot URL. Nothing may start before the gate fires —
 /// with the hermetic preset an ungated spawn would finish in
 /// milliseconds, so an early banner proves the gate is broken.
-#[tokio::test]
+/// multi_thread: see `share_glue_tunnels_to_preview_port_and_announces_join_string`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn share_task_waits_for_server_ready_gate() {
     // Stand-in for the preview hub, as in the glue test above.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
