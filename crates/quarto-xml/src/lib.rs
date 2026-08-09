@@ -82,6 +82,8 @@ pub mod types;
 // Re-export main types
 pub use context::XmlParseContext;
 pub use error::{Error, ParseResult, Result};
-pub use parser::{ANONYMOUS_FILE_ID, parse, parse_with_context, parse_with_file_id, parse_with_parent};
+pub use parser::{
+    ANONYMOUS_FILE_ID, parse, parse_with_context, parse_with_file_id, parse_with_parent,
+};
 pub use quarto_source_map::SourceInfo;
 pub use types::{XmlAttribute, XmlChild, XmlChildren, XmlElement, XmlWithSourceInfo};
