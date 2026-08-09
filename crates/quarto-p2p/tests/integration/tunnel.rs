@@ -272,15 +272,32 @@ async fn client_redials_after_connection_loss() {
     .expect("status channel closed");
 
     // Restart the host: same identity, token, target, and UDP port.
-    let cfg = TunnelHostConfig {
-        preset: EndpointPreset::HermeticLoopback,
-        secret_key: Some(secret_key),
-        token: Some(token),
-        bind_addr: Some(udp_addr),
+    // `shutdown()` is graceful but not synchronous with the UDP socket's
+    // release — iroh gives endpoint tasks a grace window to finish after
+    // it returns, and on a loaded CI runner an immediate rebind can race
+    // the teardown (EADDRINUSE, ubuntu CI 2026-08-09). Poll until the
+    // port is free. (A real host restart can't hit this: process exit
+    // releases the socket.)
+    let respawn_deadline = Instant::now() + Duration::from_secs(10);
+    let (restart_ticket, second_host) = loop {
+        let cfg = TunnelHostConfig {
+            preset: EndpointPreset::HermeticLoopback,
+            secret_key: Some(secret_key.clone()),
+            token: Some(token),
+            bind_addr: Some(udp_addr),
+        };
+        match TunnelHost::spawn(cfg, target).await {
+            Ok(pair) => break pair,
+            Err(e @ quarto_p2p::TunnelError::Bind(_)) => {
+                assert!(
+                    Instant::now() < respawn_deadline,
+                    "respawn host on the same udp addr: still failing after 10s: {e}"
+                );
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            Err(e) => panic!("respawn host on the same udp addr: {e}"),
+        }
     };
-    let (restart_ticket, second_host) = TunnelHost::spawn(cfg, target)
-        .await
-        .expect("respawn host on the same udp addr");
     assert_eq!(restart_ticket.addr.id, ticket.addr.id);
 
     // The next local TCP connections succeed once the client re-dialed.
