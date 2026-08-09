@@ -18024,6 +18024,36 @@
     "name": "Q-2-38/multi-line-eof-two-kvs"
   },
   {
+    "column": 30,
+    "row": 0,
+    "state": 2613,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/prose"
+  },
+  {
+    "column": 10,
+    "row": 0,
+    "state": 2589,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/link-text"
+  },
+  {
     "column": 17,
     "row": 0,
     "state": 1771,

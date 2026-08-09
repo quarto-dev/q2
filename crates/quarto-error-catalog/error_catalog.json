@@ -426,6 +426,13 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-40",
     "since_version": "99.9.9"
   },
+  "Q-2-41": {
+    "subsystem": "markdown",
+    "title": "Curly braces are reserved for attribute syntax",
+    "message_template": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-41",
+    "since_version": "99.9.9"
+  },
   "Q-3-1": {
     "subsystem": "writer",
     "title": "IO Error During Write",

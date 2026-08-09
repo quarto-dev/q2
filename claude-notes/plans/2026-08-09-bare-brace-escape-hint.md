@@ -3,7 +3,24 @@
 **Date:** 2026-08-09
 **Braid:** bd-brace-escape-hint-0tmemkyt (feature, p2, label `diagnostics`)
 **Branch:** `main` @ `ec8a35f9` (investigation committed in place; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled with user (2026-08-09) — implementation in progress.
+
+## Settled design decisions (user-confirmed 2026-08-09)
+
+1. **Wording:** approved as drafted (see Phase 1 below for the exact strings).
+2. **Scope:** narrow — only the two `_language_specifier_token` states
+   (bare-paragraph and link-text brace runs). The unclosed `{guid` EOL form
+   (`(2613, shortcode_name)`) is deliberately left out: that lookahead
+   likely also fires for shortcode typos, and we have overdesigned
+   diagnostics before and had to trim them back.
+3. **Highlight:** keep the default narrow token highlight; no
+   `widen_diagnostic_to_line` enrollment.
+4. **Code:** Q-2-41, registered in `crates/quarto-error-catalog/error_catalog.json`
+   from the start. The Q-2-36/37/38 catalog+docs lapses are filed as
+   **bd-cx1det1y** (chore, discovered-from this strand).
+5. **Docs:** write a draft docs page (`docs/errors/markdown/Q-2-41.qmd`)
+   per the `docs/errors/README.md` template — do not repeat the Q-2-36
+   skip.
 
 ## Triage verdict
 
@@ -73,64 +90,85 @@ All paths in the strand description check out at HEAD:
   entry; Q-2-40 has a catalog entry) — registration is a design question
   below.
 
-## Proposed phases (draft)
+## Work items
 
-Skeleton only — contents wait on the design discussion.
+### Phase 0 — TDD baseline (failing-test artifact)
 
-- **Phase 0 — Test plan (TDD).** Add `Q-2-41.json` corpus entry with the
-  agreed cases; regenerate the table; confirm the new case-file snapshots
-  under `crates/pampa/snapshots/error-corpus/` show the targeted message
-  (before regeneration, running the case inputs shows the generic fallback
-  — that asymmetry is the failing-test artifact, same shape as Q-2-36
-  Phase 0b).
-- **Phase 1 — Corpus + table regeneration.** Land the corpus entry, the
-  regenerated `_autogen-table.json`, and generated `case-files/Q-2-41-*.qmd`.
-- **Phase 2 — Highlight treatment (if any).** Depending on design answer:
-  nothing (keep narrow token highlight), or enroll Q-2-41 in
-  `widen_diagnostic_to_line` (`crates/pampa/src/readers/qmd_error_messages.rs`),
-  or new brace-run widening (probably over-engineering — flag if we get here).
-- **Phase 3 — End-to-end verification.** `cargo run --bin pampa --` on the
-  fixtures + `cargo run --bin q2 -- render` on a copy of the repro
-  (single-file and project-render forms, since the project form is where
-  the page-drop symptom shows); full workspace nextest; snapshot-change
-  report per CLAUDE.md.
-- **Phase 4 — Docs + catalog (per design answers).** Possibly register
-  Q-2-41 in `quarto-error-catalog`; possibly a line in docs/ about escaping
-  literal braces.
+- [x] Confirmed at HEAD (`ec8a35f9`) that both case inputs produce the
+  generic fallback "Parse error: unexpected character or token here"
+  (prose case via `repro.qmd`, states captured in
+  `bare-brace-escape-hint-investigation/error-states.md`). The corpus
+  mechanism's failing-test artifact is this asymmetry: before table
+  regeneration the case inputs show the fallback; after, they must show
+  `[Q-2-41]` (same shape as Q-2-36 Phase 0b).
 
-## Open design questions for the user
+### Phase 1 — Corpus entry + table regeneration
 
-1. **Message wording.** `(2613, _language_specifier_token)` fires for both
-   prose braces (`task {guid}`) and attribute-intent typos
-   (`[text]{guid}`), so the message should serve both readers, like
-   Q-2-36's either/or wording. Draft:
-   *"Curly braces are reserved for attribute syntax in Quarto markdown.
-   To write literal braces, escape them as `\{...\}`. If you meant to
-   attach an attribute, use `.class` / `#id` / `key="value"` syntax, e.g.
-   `[text]{.class}`."* — Adjust title/message/hint split? (Corpus entries
-   render the `message` as the inline span label, as Q-2-36 does.)
-2. **Case scope.** Definitely: bare-paragraph brace run + brace run inside
-   link text (the two states from the strand). Also include the unclosed
-   `trailing {guid` EOL form, which is a *different* pair
-   `(2613, shortcode_name)`? Risk: that lookahead may also fire for broken
-   shortcode syntax (`{{< ... >}}` typos) — mapping it to a brace-escape
-   message could mislead shortcode authors. My lean: leave it out, note it
-   as a possible follow-up.
-3. **Highlight treatment.** Today the fallback highlights the word inside
-   the braces (`guid`), excluding the braces themselves. Options:
-   (a) accept the default narrow highlight — the message text carries the
-   meaning; (b) enroll Q-2-41 in `widen_diagnostic_to_line` like
-   Q-2-35/Q-2-36 — but prose lines can be long, and line-wide underlines
-   on a paragraph feel worse than on a code-block header. My lean: (a).
-4. **Error code + catalog registration.** Use Q-2-41? And should it be
-   registered in `crates/quarto-error-catalog/error_catalog.json` (Q-2-40
-   is registered; Q-2-36 never was)? If the catalog is meant to be the
-   authoritative code registry, this is also a chance to backfill Q-2-36 —
-   or file that as a separate chore strand.
-5. **Docs.** Q-2-36 deliberately added no docs page. Is there an existing
-   docs/ page on qmd syntax differences where "braces are reserved; escape
-   literal braces as `\{...\}`" belongs, or skip docs entirely and let the
-   diagnostic carry it?
+- [x] Add `crates/pampa/resources/error-corpus/Q-2-41.json`:
+  - code `Q-2-41`, title **"Curly braces are reserved for attribute syntax"**
+  - message: *"Curly braces are reserved for attribute syntax in Quarto
+    markdown. To write literal braces, escape them as `\{...\}`. If you
+    meant to attach an attribute, use `.class` / `#id` / `key="value"`
+    syntax, e.g. `[text]{.class}`."*
+  - cases: `prose` (`the request returns the task {guid} immediately.`)
+    and `link-text` (`see [the {guid} link](https://example.com) here.`);
+    `captures: []`, no notes (narrow highlight by design).
+- [x] Run `./crates/pampa/scripts/build_error_table.ts` (deno, from
+  `crates/pampa/`); confirmed `case-files/Q-2-41-{prose,link-text}.qmd`
+  generated and exactly two new `_autogen-table.json` entries at
+  `(2613, _language_specifier_token)` and `(2589, _language_specifier_token)`
+  (diff purely additive: +30 lines, 0 deletions — no state renumbering).
+  Duplicate-pair warnings unchanged (pre-existing Q-2-10/Q-2-11/… ones
+  only, none for Q-2-41). Stray `deno.lock` created by the deno run was
+  removed (deleted deliberately in a258b2ae).
+- [x] `cargo run --bin pampa --` on both case files → `[Q-2-41]` with the
+  approved message; narrow highlight on the word inside the braces.
+  Controls verified: `\{guid\}` → literal text, `[text]{.cls}` → Span,
+  `[text]{guid}` → Q-2-41 (either/or wording serves it).
+- [x] pampa test suite: **4300/4300 pass, 2 skipped.** Zero snapshot
+  changes (matches Q-2-36 experience: corpus snapshot tests glob
+  top-level `error-corpus/*.qmd`, which is empty; the `case-files/`
+  iterating tests assert diagnostics are produced).
+
+### Phase 2 — Catalog + docs
+
+- [x] Registered Q-2-41 in `crates/quarto-error-catalog/error_catalog.json`
+  (subsystem `markdown`, `docs_url`
+  `https://quarto.org/docs/errors/markdown/Q-2-41`, `since_version`
+  `99.9.9` placeholder, matching Q-2-40's shape).
+- [x] Added `docs/errors/markdown/Q-2-41.qmd` per the README template
+  (front matter matching the catalog; status `stub`; What this means /
+  Why this happens / How to fix, escaped-brace + attribute-syntax fix
+  examples; `Q-2-38` cross-ref left as a code span per convention since
+  that page doesn't exist yet).
+- [x] `cargo run --bin q2 -- render docs/` — **190/190 files rendered**;
+  page appears at `_site/errors/markdown/Q-2-41.html` and in the errors
+  index listing. The 25 warnings are pre-existing missing-image warnings
+  in `guides/authoring/figures.qmd`, unrelated.
+
+### Phase 3 — End-to-end verification
+
+- [x] Single-file: `cargo run --bin q2 -- render repro.qmd` → output
+  carries `[Q-2-41] Curly braces are reserved for attribute syntax` with
+  the full hint text pointing at the brace run (observed output recorded
+  in "Verification output" below).
+- [x] Project render (page-drop symptom): fixture website with `index.qmd`
+  (good) + `bad.qmd` (bare braces) → `warning: profile-pass skipped
+  …/bad.qmd: Error: [Q-2-41] Curly braces are reserved for attribute
+  syntax`, `Rendered 1 of 2 files … — 1 error`. The skip warning now
+  names the targeted diagnostic instead of the generic parse error.
+- [x] `cargo nextest run -p pampa`: 4300/4300. Workspace build + tests +
+  hub legs via full `cargo xtask verify` — **all steps passed** (see
+  Phase 4).
+- [x] Snapshot changes: **zero** `.snap` files added or modified.
+
+### Phase 4 — Commit / wrap-up
+
+- [x] Full `cargo xtask verify` (all 14 steps, including hub-client
+  TypeScript + Vite + WASM build and hub tests): **all passed.**
+- [x] Committed on `main`; **not pushed** (awaiting explicit approval).
+- [ ] Close bd-brace-escape-hint-0tmemkyt after user sign-off.
+- [ ] bd-cx1det1y (Q-2-36/37/38 backfill) stays open for a separate session.
 
 ## Risks / tradeoffs (draft)
 
@@ -150,3 +188,52 @@ Skeleton only — contents wait on the design discussion.
   parse error) is pre-existing reader/render architecture, not part of this
   strand. If the user wants that loudness improved, it should be its own
   strand.
+
+## Verification output (end-to-end, output inspected)
+
+### Single-file render (the strand's verbatim example)
+
+```
+$ cargo run --bin q2 -- render <scratch>/repro.qmd
+Rendering single file: <scratch>/repro.qmd
+warning: profile-pass skipped <scratch>/repro.qmd: Error: [Q-2-41] Curly braces are reserved for attribute syntax
+   ╭─[ <scratch>/repro.qmd:1:31 ]
+   │
+ 1 │ the request returns the task {guid} immediately.
+   │                               ──┬─
+   │                                 ╰─── Curly braces are reserved for attribute syntax in Quarto markdown.
+   │                                      To write literal braces, escape them as `\{...\}`. If you meant to
+   │                                      attach an attribute, use `.class` / `#id` / `key="value"` syntax,
+   │                                      e.g. `[text]{.class}`.
+───╯
+
+1 error
+```
+
+(ANSI + hyperlink escapes stripped; the message renders as one long span
+label in the terminal.)
+
+### Project render (page-drop form)
+
+```
+$ cargo run --bin q2 -- render <scratch>/brace-proj      # index.qmd good, bad.qmd has bare braces
+warning: profile-pass skipped <scratch>/brace-proj/bad.qmd: Error: [Q-2-41] Curly braces are reserved for attribute syntax
+Rendered 1 of 2 files to <scratch>/brace-proj/_site — 1 error
+```
+
+### Controls (pampa)
+
+```
+$ printf 'escaped \{guid\} braces.\n' | cargo run --bin pampa --
+[ Para [Str "escaped", Space, Str "{guid}", Space, Str "braces."] ]      # escaped braces → literal text
+$ printf 'attr [text]{.cls} span.\n' | cargo run --bin pampa --
+[ Para [… Span ( "" , ["cls"] , [] ) [Str "text"] …] ]                   # valid attribute → clean parse
+$ printf 'typo [text]{guid} span.\n' | cargo run --bin pampa --
+Error: [Q-2-41] Curly braces are reserved for attribute syntax           # attr typo → same either/or hint
+```
+
+### Docs render
+
+`cargo run --bin q2 -- render docs/` → 190/190 files;
+`_site/errors/markdown/Q-2-41.html` exists and the errors index lists
+"Curly braces are reserved for attribute syntax".
