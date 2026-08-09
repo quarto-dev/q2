@@ -1752,3 +1752,119 @@ fn incremental_write_never_panics_on_pampa_corpus() {
         "scanned no qmd files — corpus enumeration broken"
     );
 }
+
+// =============================================================================
+// bd-f6h40a9r: foreign-file / no-preimage provenance must never be sliced
+// out of `original_qmd`
+//
+// An inline (or block) whose `source_info` resolves into a DIFFERENT file —
+// the include-expansion shape — has no preimage in the target file.
+// `preimage_in` correctly returns `None` for it, but the assembly code used
+// to fall back to raw `start_offset()..end_offset()`, slicing `original_qmd`
+// at the *foreign file's* offsets: wrong bytes copied into the output when
+// the range fits, a panic when it doesn't. The correct degradation is a
+// whole-block Rewrite (re-serialization), which the coarsen layer already
+// supports via `assemble_inline_splice`'s `Ok(None)`.
+// =============================================================================
+
+/// Point `si` at a foreign file (simulating an include-spliced node).
+fn foreign_si(start: usize, end: usize) -> quarto_source_map::SourceInfo {
+    quarto_source_map::SourceInfo::original(quarto_source_map::FileId(7), start, end)
+}
+
+#[test]
+fn foreign_mid_inline_is_not_sliced_from_original() {
+    // `bbb` is a middle inline (edge inlines are already guarded), kept by
+    // the plan; its doctored span 0..3 lands in-range in original_qmd,
+    // where the bytes are "aaa" — the buggy fallback copies those.
+    let original_qmd = "aaa bbb ccc\n";
+    let mut orig = parse_qmd(original_qmd);
+    let new = parse_qmd("aaa bbb ddd\n");
+
+    if let pampa::pandoc::Block::Paragraph(p) = &mut orig.blocks[0] {
+        *p.content[2].source_info_mut() = foreign_si(0, 3);
+    } else {
+        panic!("expected paragraph");
+    }
+
+    let plan = compute_reconciliation(&orig, &new);
+    let out = writers::incremental::incremental_write(original_qmd, &orig, &new, &plan)
+        .expect("incremental_write failed");
+
+    assert!(
+        out.contains("aaa bbb ddd"),
+        "kept inline must contribute its own content, got: {out:?}"
+    );
+    assert!(
+        !out.contains("aaa aaa"),
+        "foreign offsets must not be sliced out of original_qmd, got: {out:?}"
+    );
+}
+
+#[test]
+fn foreign_mid_inline_out_of_range_does_not_panic() {
+    // Same shape, but the foreign span exceeds original_qmd — the buggy
+    // fallback panics on the out-of-range slice.
+    let original_qmd = "aaa bbb ccc\n";
+    let mut orig = parse_qmd(original_qmd);
+    let new = parse_qmd("aaa bbb ddd\n");
+
+    if let pampa::pandoc::Block::Paragraph(p) = &mut orig.blocks[0] {
+        *p.content[2].source_info_mut() = foreign_si(5000, 5010);
+    } else {
+        panic!("expected paragraph");
+    }
+
+    let plan = compute_reconciliation(&orig, &new);
+    let out = writers::incremental::incremental_write(original_qmd, &orig, &new, &plan)
+        .expect("incremental_write failed");
+    assert!(out.contains("bbb"), "kept inline content survives: {out:?}");
+}
+
+#[test]
+fn foreign_container_inline_is_not_sliced_from_original() {
+    // The recursed-container path derived opening/closing delimiters from
+    // raw offsets with no file check at all.
+    let original_qmd = "pre *bold text* post\n";
+    let mut orig = parse_qmd(original_qmd);
+    let new = parse_qmd("pre *bold texts* post\n");
+
+    if let pampa::pandoc::Block::Paragraph(p) = &mut orig.blocks[0] {
+        // content: Str(pre) Space Emph[...] Space Str(post)
+        *p.content[2].source_info_mut() = foreign_si(0, 4);
+    } else {
+        panic!("expected paragraph");
+    }
+
+    let plan = compute_reconciliation(&orig, &new);
+    let out = writers::incremental::incremental_write(original_qmd, &orig, &new, &plan)
+        .expect("incremental_write failed");
+    assert!(
+        out.contains("*bold texts*"),
+        "container content must be assembled from the right bytes, got: {out:?}"
+    );
+}
+
+#[test]
+fn foreign_kept_block_is_not_sliced_from_original() {
+    // Block-level Verbatim entries have the same exposure: a kept block
+    // whose provenance is a foreign file must be re-serialized, not sliced
+    // out of original_qmd at the foreign offsets.
+    let original_qmd = "first para\n\nsecond para\n";
+    let mut orig = parse_qmd(original_qmd);
+    let new = parse_qmd("first edited\n\nsecond para\n");
+
+    *orig.blocks[1].source_info_mut() = foreign_si(0, 5);
+
+    let plan = compute_reconciliation(&orig, &new);
+    let out = writers::incremental::incremental_write(original_qmd, &orig, &new, &plan)
+        .expect("incremental_write failed");
+    assert!(
+        out.contains("second para"),
+        "kept block must contribute its own content, got: {out:?}"
+    );
+    assert!(
+        !out.contains("first\n"),
+        "foreign offsets must not be sliced out of original_qmd, got: {out:?}"
+    );
+}

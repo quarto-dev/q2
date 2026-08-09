@@ -44,10 +44,14 @@ Working conventions for this phase:
       `_metadata.yml`, assert Q-5-1 snippet names the `_metadata.yml`. Fix:
       route through `bind_config_source` with candidates
       `[doc path, config_path] ++ extension_manifest_paths ++ dir-layer paths`.
-- [ ] **P2 / bd-f6h40a9r (p2):** `writers/incremental.rs:704-708` + `:747-766`
+- [x] **P2 / bd-f6h40a9r (p2):** `writers/incremental.rs:704-708` + `:747-766`
       foreign-offset fallback. Fix: `preimage_in` miss ⇒ re-serialize the
       inline (no `inline_source_span` fallback into foreign coordinates);
       audit `assemble_recursed_container` the same way.
+      *Done 2026-08-09, commit 978dba6b. Scope grew to two more raw-offset
+      sites found during TDD: block-level Verbatim coarsening and
+      compute_separator (a foreign kept block panicked there on the red
+      run). All bail to Rewrite/standard separator on preimage miss.*
 - [ ] **P3 / bd-t3enk8gq (p2):** `section.rs:126-139` + `pipe_table.rs:253-261`
       caption hulls. Fix: route through `hull_source_infos` (same-file
       checked, `preimage_in`-based); kill the `unwrap_or(FileId(0))`.
