@@ -86,11 +86,14 @@ Working conventions for this phase:
 
 ### Guardrails
 
-- [ ] **Lint / bd-jrq4hroi (p2):** xtask lint rule — `add_file_with_id` allowed
+- [x] **Lint / bd-jrq4hroi (p2):** xtask lint rule — `add_file_with_id` allowed
       only in blessed modules (`config_sources.rs`,
       `stage/stages/metadata_merge.rs`, `span_assert.rs`, test code);
       everything else must use `bind_config_source`. Suppression comment
       convention consistent with `metadata-as-str`.
+      *Done 2026-08-09. render_scripts.rs + project_resources.rs
+      temporarily blessed (PR #478 conflict avoidance) — remove from
+      BLESSED_SUFFIXES when #478 and bd-x113wg9v land.*
 - [ ] **quarto-xml / bd-y5gpc8yv (p3):** replace hardcoded `FileId(0)`
       (`quarto-xml/src/parser.rs:27,43,83`) — in-tree; can ride any strand
       or the upstream version bump (UNKNOWN sentinel arrives with Option B).
