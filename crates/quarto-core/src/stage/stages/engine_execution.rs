@@ -330,8 +330,12 @@ impl PipelineStage for EngineExecutionStage {
 
         // Thread the AST, the merged (multi-slot) ASTContext, and warnings
         // through the sequence. Slot 0 is the original `.qmd`; each engine
-        // appends one intermediate slot. `merged_context.filenames.len()`
-        // is the next FileId (files are added in lock-step with filenames).
+        // appends one intermediate slot. Note `filenames` and
+        // `source_context.files` are NOT in lock-step: MetadataMergeStage
+        // registers config files into `source_context` only (sparse hash
+        // ids), so intermediate FileIds must come from the source context's
+        // own `add_file*` return value, never from `filenames.len()`
+        // (bd-itj2mjkr).
         let DocumentAst {
             path,
             ast,
@@ -492,11 +496,15 @@ impl PipelineStage for EngineExecutionStage {
                     PipelineError::stage_error_with_diagnostics(self.name(), diagnostics)
                 })?;
 
-            // Register this engine's intermediate as a new file slot. The
-            // next FileId is the current file count; `filenames` grows in
-            // lock-step with the source context.
-            let new_slot = quarto_source_map::FileId(merged_context.filenames.len());
-            if let Some(intermediate_file) = executed_ast_context
+            // Register this engine's intermediate as a new file slot, using
+            // the FileId the source context actually assigns. Deriving it
+            // from `filenames.len()` is wrong: sparse registrations —
+            // MetadataMergeStage's config files, added via
+            // `add_file_with_id` — grow `source_context.files` without
+            // growing `ast_context.filenames`, so in a project render the
+            // two counts diverge and the derived id lands on `_quarto.yml`'s
+            // dense slot (bd-itj2mjkr).
+            let new_slot = if let Some(intermediate_file) = executed_ast_context
                 .source_context
                 .get_file(quarto_source_map::FileId(0))
                 .cloned()
@@ -504,17 +512,17 @@ impl PipelineStage for EngineExecutionStage {
                 if let Some(info) = intermediate_file.file_info {
                     merged_context
                         .source_context
-                        .add_file_with_info(intermediate_name.clone(), info);
+                        .add_file_with_info(intermediate_name.clone(), info)
                 } else {
                     merged_context
                         .source_context
-                        .add_file(intermediate_name.clone(), None);
+                        .add_file(intermediate_name.clone(), None)
                 }
             } else {
                 merged_context
                     .source_context
-                    .add_file(intermediate_name.clone(), None);
-            }
+                    .add_file(intermediate_name.clone(), None)
+            };
             merged_context.filenames.push(intermediate_name);
             // Carry the executed parse's example-list counter forward; the
             // last engine's value wins so downstream numbering is coherent.
@@ -523,10 +531,18 @@ impl PipelineStage for EngineExecutionStage {
                 .set(executed_ast_context.example_list_counter.get());
 
             // Remap the executed AST's `FileId(0)` to this engine's slot.
-            // Kept original blocks keep their (lower) FileIds; new blocks
-            // reference `new_slot`.
+            // Kept original blocks keep their FileIds; new blocks reference
+            // `new_slot`. The remap is conditional (not additive): the
+            // executed AST is a fresh single-file parse, so `FileId(0)` is
+            // the only id it can legitimately contain — any other id (e.g. a
+            // quarto-yaml hash id that leaked in) must pass through
+            // untouched rather than be shifted into garbage.
             quarto_ast_reconcile::remap_file_ids(&mut executed_ast, &|id| {
-                quarto_source_map::FileId(id.0 + new_slot.0)
+                if id == quarto_source_map::FileId(0) {
+                    new_slot
+                } else {
+                    id
+                }
             });
 
             // Reconcile: keep unchanged content's source locations, take
@@ -957,6 +973,103 @@ mod tests {
         stage.run(input, &mut ctx).await.unwrap();
         assert_eq!(ctx.diagnostics.len(), 1, "{:?}", ctx.diagnostics);
         assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-2-40"));
+    }
+
+    // bd-itj2mjkr: engine-produced blocks must attribute to the engine
+    // intermediate's slot even when `MetadataMergeStage` has already
+    // registered config files into the SourceContext. Those hash-id
+    // registrations grow `source_context.files` without growing
+    // `ast_context.filenames`, so deriving the intermediate's FileId from
+    // `filenames.len()` points the remapped executed AST at whatever file
+    // occupies that dense slot (in a project render: `_quarto.yml`).
+    #[tokio::test]
+    async fn engine_blocks_attribute_to_intermediate_after_config_registration() {
+        use crate::engine::{EngineRegistry, ExecuteResult, ExecutionContext, ExecutionEngine};
+        use std::sync::Arc;
+
+        struct StubEngine;
+        impl ExecutionEngine for StubEngine {
+            fn name(&self) -> &str {
+                "stub"
+            }
+            fn execute(
+                &self,
+                input: &str,
+                _ctx: &ExecutionContext,
+            ) -> std::result::Result<ExecuteResult, crate::engine::ExecutionError> {
+                // Append a paragraph so reconcile yields engine-attributed
+                // blocks alongside kept originals.
+                Ok(ExecuteResult::new(format!(
+                    "{input}\n\nEngineProducedParagraph\n"
+                )))
+            }
+            fn is_available(&self) -> bool {
+                true
+            }
+        }
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(StubEngine));
+        let stage = EngineExecutionStage::with_registry(registry);
+        let mut ctx = make_test_context();
+
+        let content = b"---\ntitle: Test\nengine: stub\n---\n\n# Hello\n\nWorld";
+        let mut doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        // Simulate MetadataMergeStage's project-config registration: a
+        // quarto-yaml hash FileId bound via add_file_with_id. This is the
+        // state every project render is in when the engine stage runs.
+        let config_path = "/project/_quarto.yml";
+        let config_id = quarto_yaml::file_id_for_filename(config_path);
+        doc_ast.ast_context.source_context.add_file_with_id(
+            config_id,
+            config_path.to_string(),
+            Some("project:\n  type: default\n".to_string()),
+        );
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().expect("Should be DocumentAst");
+
+        let engine_block = result
+            .ast
+            .blocks
+            .iter()
+            .find(|b| format!("{b:?}").contains("EngineProducedParagraph"))
+            .expect("engine-produced paragraph must be present");
+        let fid = engine_block
+            .source_info()
+            .root_file_id()
+            .expect("engine block must carry a resolvable FileId");
+        let file = result
+            .ast_context
+            .source_context
+            .get_file(fid)
+            .expect("engine block FileId must resolve in the source context");
+        assert!(
+            file.path.contains(".stub.rmarkdown"),
+            "engine-produced block must attribute to the engine intermediate, \
+             not `{}`",
+            file.path
+        );
+
+        // Control: a kept original block still attributes to the document.
+        let kept_block = result
+            .ast
+            .blocks
+            .iter()
+            .find(|b| format!("{b:?}").contains("Hello"))
+            .expect("original heading must be kept");
+        let kept_fid = kept_block.source_info().root_file_id().unwrap();
+        let kept_file = result
+            .ast_context
+            .source_context
+            .get_file(kept_fid)
+            .unwrap();
+        assert_eq!(
+            kept_file.path, "/project/test.qmd",
+            "kept original block must still attribute to the document"
+        );
     }
 
     #[tokio::test]
