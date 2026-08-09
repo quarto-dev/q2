@@ -52,9 +52,12 @@ Working conventions for this phase:
       sites found during TDD: block-level Verbatim coarsening and
       compute_separator (a foreign kept block panicked there on the red
       run). All bail to Rewrite/standard separator on preimage miss.*
-- [ ] **P3 / bd-t3enk8gq (p2):** `section.rs:126-139` + `pipe_table.rs:253-261`
+- [x] **P3 / bd-t3enk8gq (p2):** `section.rs:126-139` + `pipe_table.rs:253-261`
       caption hulls. Fix: route through `hull_source_infos` (same-file
       checked, `preimage_in`-based); kill the `unwrap_or(FileId(0))`.
+      *Done 2026-08-09. TDD found a third defect at both sites: raw
+      Substring offsets stamped as file-absolute, reachable via
+      qmd::read's public parent_source_info parameter.*
 - [ ] **P5 / bd-vmlhw7nx (p3):** `transforms/attribution_render.rs:176-181` gate
       on literal fid `0`. Fix: thread the blamed file's `FileId` onto
       `AttributionData` and compare against it.
