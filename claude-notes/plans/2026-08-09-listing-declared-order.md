@@ -148,28 +148,39 @@ listings.
 
 ## Work items
 
-### Phase 0 — Tests (TDD: write first, verify failures)
+### Phase 0 — Tests (TDD: write first, verify failures) — DONE 2026-08-09
 
-- [ ] `sort: false` + explicit two-entry `contents:` preserves declared
-  order (unit, `listing_generate.rs` harness)
-- [ ] Mixed literal + glob `contents:` orders by first-matching-pattern
-  index; within a glob, index order (unit)
-- [ ] Item matching multiple patterns counts for its **first** pattern only
-  (dedup / no duplicate items) (unit)
-- [ ] Q-12-19 still fires for a pattern whose only matches were claimed by
-  an earlier pattern? — NO: it must NOT fire (every matching pattern gets
-  credit); regression test (unit)
-- [ ] `sort: true` behaves like absent `sort:` (default sort) (unit)
-- [ ] Default sort (absent `sort:`) is `order asc, title asc` — items with
-  `order:` first (numeric asc), missing-order items after, title asc
-  tie-break (unit)
-- [ ] Table listings get the same default sort (unit)
-- [ ] Explicit `sort: date desc` still works (existing test keeps passing)
-- [ ] `sort: order` works as an explicit known field (unit, sort.rs)
-- [ ] Working `extra`-field sort emits **no** Q-12-3 (unit)
-- [ ] Typo'd sort field (no item has it) still emits Q-12-3 (unit)
-- [ ] End-to-end: repro fixture renders bravo-then-alpha
-  (smoke-all fixture or integration test + manual `q2 render` verification)
+- [x] `sort: false` + explicit two-entry `contents:` preserves declared
+  order (unit, `listing_generate.rs` harness) — fails as expected
+- [x] Mixed literal + glob `contents:` orders by first-matching-pattern
+  index; within a glob, index order (unit) — fails as expected
+- [x] Item matching multiple patterns counts for its **first** pattern only
+  (dedup / no duplicate items) (unit) — fails as expected
+- [x] Q-12-19 must NOT fire when a pattern's matches were claimed by an
+  earlier pattern (regression guard — passes today, pins semantics for the
+  reimplementation)
+- [x] `sort: true` behaves like absent `sort:` (default sort) (unit) —
+  fails as expected
+- [x] Default sort (absent `sort:`) is `order asc, title asc` (unit) —
+  fails as expected (fixture made date-discriminating after a first
+  version passed coincidentally; see missing-desc bug below)
+- [x] Table listings get the same default sort (unit) — fails as expected
+- [x] Explicit `sort: date desc` still works (existing tests unchanged)
+- [ ] `sort: order` works as an explicit known field (unit, sort.rs) —
+  deferred to Phase 2: needs `ListingItem.order` to exist to compile
+- [x] Working `extra`-field sort emits **no** Q-12-3 (unit) — fails as
+  expected
+- [x] Typo'd sort field (no item has it) still emits Q-12-3 (existing test
+  unchanged)
+- [x] End-to-end: `listing_pipeline::declared_contents_order_preserved_with_sort_false`
+  + updated `default_listing_renders_three_posts_in_default_order` — both
+  fail as expected
+- [x] **Discovered latent bug** (found because the first default-sort test
+  fixture passed coincidentally): `compare_items` applies the `Desc` flip
+  to the *whole* comparison, so missing-value items float to the TOP of
+  desc sorts — contradicting `compare_values`' documented "missing sorts
+  last regardless of direction" rule. Pinned by failing test
+  `missing_dates_sort_to_end_in_desc_too`; fix folded into Phase 2.
 
 ### Phase 1 — Order-preserving item collection
 

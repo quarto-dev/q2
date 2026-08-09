@@ -308,6 +308,21 @@ mod tests {
         p
     }
 
+    fn make_profile_with_order(
+        source: &str,
+        output_href: &str,
+        title: &str,
+        order: i32,
+    ) -> DocumentProfile {
+        let mut p = make_profile(source, output_href, title);
+        p.order = Some(order);
+        p
+    }
+
+    fn titles(resolved: &[ResolvedListing]) -> Vec<&str> {
+        resolved[0].items.iter().map(|i| i.title.as_str()).collect()
+    }
+
     fn make_project(
         host: &str,
         profiles: Vec<DocumentProfile>,
@@ -529,22 +544,174 @@ mod tests {
         assert_eq!(resolved[0].items[1].title, "B");
     }
 
+    // Q1 parity (bd-listing-declared-order-3ixcvc4o): absent `sort:`
+    // applies `order asc, title asc` — NOT date desc. Every item
+    // carries a date, and the dates contradict both the order: values
+    // and the titles, so a date-driven default cannot produce the
+    // expected sequence.
     #[tokio::test]
-    async fn default_sort_is_date_desc_for_default_type() {
+    async fn default_sort_is_order_asc_then_title_asc() {
+        let with_order = |source: &str, href: &str, title: &str, date: &str, order: i32| {
+            let mut p = make_profile_with_date(source, href, title, date);
+            p.order = Some(order);
+            p
+        };
         let (resolved, _) = run_transform(
             map(vec![("listing", s("default"))]),
             "posts/index.qmd",
             vec![
-                make_profile_with_date("posts/a.qmd", "posts/a.html", "A", "2026-01-01"),
-                make_profile_with_date("posts/b.qmd", "posts/b.html", "B", "2026-03-01"),
-                make_profile_with_date("posts/c.qmd", "posts/c.html", "C", "2026-02-01"),
+                make_profile_with_date("posts/a.qmd", "posts/a.html", "Delta", "2026-04-01"),
+                with_order("posts/b.qmd", "posts/b.html", "Zulu", "2026-01-01", 1),
+                make_profile_with_date("posts/c.qmd", "posts/c.html", "Alpha", "2026-02-01"),
+                with_order("posts/d.qmd", "posts/d.html", "Mike", "2026-03-01", 2),
             ],
         )
         .await;
-        // No explicit sort → default = date desc.
-        assert_eq!(resolved[0].items[0].title, "B");
-        assert_eq!(resolved[0].items[1].title, "C");
-        assert_eq!(resolved[0].items[2].title, "A");
+        // order: 1 first, order: 2 second, then order-less items by
+        // title asc (missing order values sort last).
+        assert_eq!(titles(&resolved), ["Zulu", "Mike", "Alpha", "Delta"]);
+    }
+
+    // The default sort is uniform across listing types (Q1 applies it
+    // whenever `title` is among the hydrated fields, which holds for
+    // every built-in type — including table).
+    #[tokio::test]
+    async fn table_type_gets_default_sort_too() {
+        let (resolved, _) = run_transform(
+            map(vec![("listing", map(vec![("type", s("table"))]))]),
+            "posts/index.qmd",
+            vec![
+                make_profile_with_order("posts/a.qmd", "posts/a.html", "Second", 2),
+                make_profile_with_order("posts/b.qmd", "posts/b.html", "First", 1),
+            ],
+        )
+        .await;
+        assert_eq!(titles(&resolved), ["First", "Second"]);
+    }
+
+    // `sort: true` is Q1's "apply the default sort" — identical to an
+    // absent `sort:` key, and NOT a sort by a field named "true".
+    #[tokio::test]
+    async fn sort_true_behaves_like_absent_sort() {
+        let (resolved, diags) = run_transform(
+            map(vec![(
+                "listing",
+                map(vec![("type", s("default")), ("sort", b(true))]),
+            )]),
+            "posts/index.qmd",
+            vec![
+                make_profile_with_order("posts/a.qmd", "posts/a.html", "Second", 2),
+                make_profile_with_order("posts/b.qmd", "posts/b.html", "First", 1),
+            ],
+        )
+        .await;
+        assert!(
+            !diags.iter().any(|d| d.code.as_deref() == Some("Q-12-3")),
+            "sort: true must not diagnose; got {:?}",
+            diags
+        );
+        assert_eq!(titles(&resolved), ["First", "Second"]);
+    }
+
+    // bd-listing-declared-order-3ixcvc4o: with `sort: false`, explicit
+    // `contents:` entries render in declared order (Q1 semantics), not
+    // in project-index order.
+    #[tokio::test]
+    async fn sort_false_preserves_declared_contents_order() {
+        let (resolved, _) = run_transform(
+            map(vec![(
+                "listing",
+                map(vec![
+                    ("type", s("default")),
+                    ("sort", b(false)),
+                    ("contents", arr(vec![s("bravo.qmd"), s("alpha.qmd")])),
+                ]),
+            )]),
+            "index.qmd",
+            vec![
+                // Index order is alphabetical — the opposite of the
+                // declared order — to prove the reordering happens.
+                make_profile("alpha.qmd", "alpha.html", "Alpha"),
+                make_profile("bravo.qmd", "bravo.html", "Bravo"),
+            ],
+        )
+        .await;
+        assert_eq!(titles(&resolved), ["Bravo", "Alpha"]);
+    }
+
+    // Q1's rule generalizes to wildcard patterns: items are ordered by
+    // the index of the first pattern that matches them; within one
+    // pattern, project-index order.
+    #[tokio::test]
+    async fn contents_ordered_by_first_matching_pattern_index() {
+        let (resolved, _) = run_transform(
+            map(vec![(
+                "listing",
+                map(vec![
+                    ("type", s("default")),
+                    ("sort", b(false)),
+                    ("contents", arr(vec![s("z.qmd"), s("a*.qmd")])),
+                ]),
+            )]),
+            "index.qmd",
+            vec![
+                make_profile("a1.qmd", "a1.html", "A1"),
+                make_profile("a2.qmd", "a2.html", "A2"),
+                make_profile("z.qmd", "z.html", "Zed"),
+            ],
+        )
+        .await;
+        assert_eq!(titles(&resolved), ["Zed", "A1", "A2"]);
+    }
+
+    // An item matched by several patterns belongs to the FIRST one and
+    // appears exactly once.
+    #[tokio::test]
+    async fn item_matching_multiple_patterns_appears_once_at_first_pattern() {
+        let (resolved, _) = run_transform(
+            map(vec![(
+                "listing",
+                map(vec![
+                    ("type", s("default")),
+                    ("sort", b(false)),
+                    ("contents", arr(vec![s("b.qmd"), s("*.qmd")])),
+                ]),
+            )]),
+            "index.qmd",
+            vec![
+                make_profile("a.qmd", "a.html", "Aye"),
+                make_profile("b.qmd", "b.html", "Bee"),
+            ],
+        )
+        .await;
+        assert_eq!(titles(&resolved), ["Bee", "Aye"]);
+    }
+
+    // Q-12-19 ("matched nothing") must credit EVERY pattern an item
+    // matches, not just the first-match winner: `b*.qmd`'s only match
+    // is claimed by `b.qmd` for ordering purposes, but it still
+    // matched something.
+    #[tokio::test]
+    async fn q_12_19_silent_when_matches_claimed_by_earlier_pattern() {
+        let (resolved, diags) = run_transform(
+            map(vec![(
+                "listing",
+                map(vec![
+                    ("type", s("default")),
+                    ("sort", b(false)),
+                    ("contents", arr(vec![s("b.qmd"), s("b*.qmd")])),
+                ]),
+            )]),
+            "index.qmd",
+            vec![make_profile("b.qmd", "b.html", "Bee")],
+        )
+        .await;
+        assert_eq!(titles(&resolved), ["Bee"]);
+        assert!(
+            !diags.iter().any(|d| d.code.as_deref() == Some("Q-12-19")),
+            "no matched-nothing diag expected; got {:?}",
+            diags
+        );
     }
 
     #[tokio::test]

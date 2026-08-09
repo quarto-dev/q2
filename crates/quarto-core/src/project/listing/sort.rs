@@ -242,6 +242,31 @@ mod tests {
         assert!(items[1].title == "a" || items[1].title == "c");
     }
 
+    // The documented rule is "missing values sort after present
+    // values regardless of direction" — the Desc flip must apply to
+    // the value comparison only, not to the missing-value rule.
+    // (Latent bug found during bd-listing-declared-order-3ixcvc4o:
+    // the flip was applied to the whole comparison, floating
+    // missing-value items to the top of desc sorts.)
+    #[test]
+    fn missing_dates_sort_to_end_in_desc_too() {
+        let mut items = vec![
+            make_item("a", None),
+            make_item("b", Some("2026-01-01")),
+            make_item("c", None),
+        ];
+        let sort = vec![ListingSort {
+            field: "date".to_string(),
+            direction: SortDirection::Desc,
+        }];
+        let mut diags = Vec::new();
+        apply_sort(&mut items, &sort, &mut diags);
+        assert_eq!(items[0].title, "b");
+        // Stable among the missing-value items.
+        assert_eq!(items[1].title, "a");
+        assert_eq!(items[2].title, "c");
+    }
+
     #[test]
     fn unknown_sort_field_emits_q_12_3() {
         let mut items = vec![make_item("a", None)];
@@ -253,5 +278,67 @@ mod tests {
         apply_sort(&mut items, &sort, &mut diags);
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].code.as_deref(), Some("Q-12-3"));
+    }
+
+    fn make_item_with_extra(title: &str, key: &str, value: &str) -> ListingItem {
+        use quarto_pandoc_types::ConfigValue;
+        use quarto_source_map::SourceInfo;
+
+        let mut item = make_item(title, None);
+        item.extra.insert(
+            key.to_string(),
+            ConfigValue::new_string(value, SourceInfo::for_test()),
+        );
+        item
+    }
+
+    // bd-listing-declared-order-3ixcvc4o: a custom-field sort that
+    // works via the `extra` fallthrough must not be diagnosed as an
+    // unknown field — warn only when no item carries a value for it.
+    #[test]
+    fn extra_field_sort_sorts_and_emits_no_q_12_3() {
+        let mut items = vec![
+            make_item_with_extra("b", "difficulty", "2"),
+            make_item_with_extra("c", "difficulty", "10"),
+            make_item_with_extra("a", "difficulty", "1"),
+        ];
+        let sort = vec![ListingSort {
+            field: "difficulty".to_string(),
+            direction: SortDirection::Asc,
+        }];
+        let mut diags = Vec::new();
+        apply_sort(&mut items, &sort, &mut diags);
+        assert!(
+            diags.is_empty(),
+            "working extra-field sort must not warn; got {:?}",
+            diags
+        );
+        // Numeric comparison via natural_compare: 1, 2, 10.
+        assert_eq!(items[0].title, "a");
+        assert_eq!(items[1].title, "b");
+        assert_eq!(items[2].title, "c");
+    }
+
+    // The suppression is any-item: a field present on only SOME items
+    // still sorts meaningfully (missing values last), so no warning.
+    #[test]
+    fn sparse_extra_field_sort_emits_no_q_12_3() {
+        let mut items = vec![
+            make_item("plain", None),
+            make_item_with_extra("tagged", "difficulty", "1"),
+        ];
+        let sort = vec![ListingSort {
+            field: "difficulty".to_string(),
+            direction: SortDirection::Asc,
+        }];
+        let mut diags = Vec::new();
+        apply_sort(&mut items, &sort, &mut diags);
+        assert!(
+            diags.is_empty(),
+            "sparse field must not warn; got {:?}",
+            diags
+        );
+        assert_eq!(items[0].title, "tagged");
+        assert_eq!(items[1].title, "plain");
     }
 }
