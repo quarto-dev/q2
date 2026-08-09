@@ -63,9 +63,13 @@ Working conventions for this phase:
       `AttributionData` and compare against it.
       *Done 2026-08-09 (staged red: field threaded with literal-0 gate
       kept, tests red, then gate fixed).*
-- [ ] **P6 / bd-thagcbfq (p3):** `pampa/src/lua/types.rs` `byte_range()` drops the
+- [x] **P6 / bd-thagcbfq (p3):** `pampa/src/lua/types.rs` `byte_range()` drops the
       fid. Fix: return the fid (third field / table entry) and make
       `quarto.attribution.lookup_range` refuse non-primary ranges.
+      *Done 2026-08-09. lookup_range's file check is an optional third
+      arg compared Rust-side against AttributionLookup::blamed_file_id
+      (fed by bd-vmlhw7nx's AttributionData.file_id); two-arg calls keep
+      the historical contract.*
 - [ ] **D4 / bd-h5rfw3ao (p3):** harden `project_type_error`
       (`project/mod.rs:903`) — route through `bind_config_source` (or add the
       hash-equality guard) + a test pinning the invariant.

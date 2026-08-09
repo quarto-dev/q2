@@ -47,6 +47,10 @@ impl AttributionLookup for AttributionLookupHandle {
         })
     }
 
+    fn blamed_file_id(&self) -> usize {
+        self.0.file_id.0
+    }
+
     fn identities(&self) -> Vec<IdentityEntry> {
         self.0
             .identities
