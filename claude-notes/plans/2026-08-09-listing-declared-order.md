@@ -141,7 +141,24 @@ Skeleton only — actual phase contents wait on the design discussion.
 - **Phase 4 — Docs.** Note contents-order semantics in the listings docs
   (overlaps bd-2nb6i1qv, the listings-guide docs strand).
 
-## Open design questions for the user
+## Design decisions (user, 2026-08-09)
+
+1. **Ordering rule scope:** first-matching-pattern index for **all** patterns
+   (literal and wildcard alike), Q1-style. ✅ decided
+2. **Tie-break churn under sorts:** accepted — stable sorts over
+   first-pattern order; snapshot churn from ties only. ✅ decided
+3. **Default-sort parity:** default **can change** to Q1's
+   (`order asc, title asc`), provided the old behavior stays configurable.
+   *Pending clarification:* is per-listing `sort: date desc` (already works)
+   sufficient, or is a project-level default-sort knob wanted?
+4. **Q-12-3 shape:** *pending* — user asked to see the message
+   ("Unknown sort field `X`; values will compare as equal."); recommendation
+   on the table is any-item suppression (skip warning when at least one
+   item's `extra` has the field).
+5. **Description-preview regression fixture:** minimal repro is enough; no
+   connect-docs fixture. ✅ decided
+
+## Open design questions for the user (original)
 
 1. **Ordering rule scope.** Order by first-matching-pattern index for *all*
    patterns (literal and wildcard alike — this is exactly Q1's rule), or only
