@@ -58,9 +58,11 @@ Working conventions for this phase:
       *Done 2026-08-09. TDD found a third defect at both sites: raw
       Substring offsets stamped as file-absolute, reachable via
       qmd::read's public parent_source_info parameter.*
-- [ ] **P5 / bd-vmlhw7nx (p3):** `transforms/attribution_render.rs:176-181` gate
+- [x] **P5 / bd-vmlhw7nx (p3):** `transforms/attribution_render.rs:176-181` gate
       on literal fid `0`. Fix: thread the blamed file's `FileId` onto
       `AttributionData` and compare against it.
+      *Done 2026-08-09 (staged red: field threaded with literal-0 gate
+      kept, tests red, then gate fixed).*
 - [ ] **P6 / bd-thagcbfq (p3):** `pampa/src/lua/types.rs` `byte_range()` drops the
       fid. Fix: return the fid (third field / table entry) and make
       `quarto.attribution.lookup_range` refuse non-primary ranges.
