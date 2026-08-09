@@ -66,6 +66,10 @@ pub fn sass_error_to_parse_error(
         // re-read from disk at render time and panic on absence —
         // which would mask the diagnostic with a noisier error.
         // No content ⇒ span-less render, same as no location.
+        // *file_id comes from the caller-supplied candidate list entry
+        // whose id equals the diagnostic's resolved id (the
+        // bind_config_source precedent).
+        // lint:allow(add-file-with-id) — candidate-matched above
         source_context.add_file_with_id(
             *file_id,
             source_file.to_string_lossy().into_owned(),
