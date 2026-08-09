@@ -41,7 +41,7 @@ use crate::glob::{GlobOptions, PatternSet, path_to_forward_slashes};
 use crate::project::listing::filter::apply_filters;
 use crate::project::listing::glob_resolve::resolve_content_globs;
 use crate::project::listing::sort::apply_sort;
-use crate::project::listing::{ResolvedListing, hydrate_item, parse_listings};
+use crate::project::listing::{ListingItem, ResolvedListing, hydrate_item, parse_listings};
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::is_feature_disabled;
@@ -135,13 +135,28 @@ impl AstTransform for ListingGenerateTransform {
                 );
             }
 
-            // Compile once per listing, then match every candidate.
-            // Resolution already validated these patterns, so the
-            // compile cannot fail; an empty set on the impossible
-            // path simply matches nothing.
+            // Compile the full set once for the global negation
+            // check, and each positive pattern individually: item
+            // collection orders by the FIRST pattern that matches a
+            // candidate (Q1's glob-major semantics,
+            // bd-listing-declared-order-3ixcvc4o), and the Q-12-19
+            // matched-nothing diagnostic credits EVERY pattern a
+            // candidate matches. Resolution already validated these
+            // patterns, so the compiles cannot fail; an empty set on
+            // the impossible path simply matches nothing.
+            let empty_set = || PatternSet::compile(&[], &GlobOptions::LISTING).unwrap();
             let patterns = resolution
                 .compile(&GlobOptions::LISTING)
-                .unwrap_or_else(|_| PatternSet::compile(&[], &GlobOptions::LISTING).unwrap());
+                .unwrap_or_else(|_| empty_set());
+            let positives: Vec<_> = resolution.positives().collect();
+            let positive_sets: Vec<PatternSet> = positives
+                .iter()
+                .map(|(glob, _)| {
+                    PatternSet::compile(std::slice::from_ref(*glob), &GlobOptions::LISTING)
+                        .unwrap_or_else(|_| empty_set())
+                })
+                .collect();
+            let mut matched_any = vec![false; positive_sets.len()];
 
             // Patterns the glob engine rejected (bd-mt7a6uc4).
             // Before, these matched nothing in silence — the same
@@ -159,30 +174,43 @@ impl AstTransform for ListingGenerateTransform {
                 );
             }
 
-            let mut items = Vec::new();
+            // Candidate-major collection, pattern-major order: tag
+            // each item with the index of its first matching
+            // pattern, then stable-sort by that index. Exclusions
+            // stay global — a `!` entry excludes a candidate no
+            // matter where it appears in `contents:`.
+            let mut ordered: Vec<(usize, ListingItem)> = Vec::new();
             if let Some(index) = ctx.project_index.as_deref() {
                 for profile in index.profiles() {
                     let candidate_path_str = path_to_forward_slashes(&profile.source_path);
                     if candidate_path_str == host_path_str {
                         continue;
                     }
-                    if patterns.matches(&candidate_path_str) {
-                        items.push(hydrate_item(profile));
+                    if patterns.excluded(&candidate_path_str) {
+                        continue;
+                    }
+                    let mut first_match: Option<usize> = None;
+                    for (i, set) in positive_sets.iter().enumerate() {
+                        if set.matches(&candidate_path_str) {
+                            matched_any[i] = true;
+                            first_match.get_or_insert(i);
+                        }
+                    }
+                    if let Some(pattern_idx) = first_match {
+                        ordered.push((pattern_idx, hydrate_item(profile)));
                     }
                 }
             }
+            ordered.sort_by_key(|(pattern_idx, _)| *pattern_idx);
+            let mut items: Vec<ListingItem> = ordered.into_iter().map(|(_, item)| item).collect();
 
             // A pattern that compiled, stayed in the project, and
             // still matched no document is almost always a Q1
             // assumption about `*` (D5/D7). Checked before
             // `include:`/`exclude:` filters run, so this reports on
             // the *glob*, not on a filter that emptied the set.
-            for (glob, source) in resolution.positives() {
-                let matched = items.iter().any(|item| {
-                    PatternSet::compile(std::slice::from_ref(glob), &GlobOptions::LISTING)
-                        .is_ok_and(|set| set.matches_path(&item.source_path))
-                });
-                if !matched {
+            for (i, (glob, source)) in positives.iter().enumerate() {
+                if !matched_any[i] {
                     diags.push(
                         crate::glob::diagnostics::matched_nothing(
                             "Q-12-19",
@@ -202,19 +230,30 @@ impl AstTransform for ListingGenerateTransform {
             apply_filters(&mut items, &listing.include, &listing.exclude);
 
             if let Some(sort) = listing.sort.as_ref() {
+                // `sort: false` parses to an empty spec, which
+                // `apply_sort` treats as a no-op — declared
+                // `contents:` order flows through untouched.
                 apply_sort(&mut items, sort, &mut diags);
             } else {
-                // Default sort: date descending. Matches Q1 default
-                // for the `default` and `grid` types; `table` keeps
-                // insertion order unless the author overrides.
-                use crate::project::listing::config::{ListingSort, ListingType, SortDirection};
-                if !matches!(listing.kind, ListingType::Table) {
-                    let default_sort = vec![ListingSort {
-                        field: "date".to_string(),
-                        direction: SortDirection::Desc,
-                    }];
-                    apply_sort(&mut items, &default_sort, &mut diags);
-                }
+                // Default sort (Q1 parity): `order asc, title asc`,
+                // uniformly across listing types — Q1 applies its
+                // default whenever `title` is among the hydrated
+                // fields, which holds for every built-in type
+                // (table included). Items without `order:` sort
+                // after curated ones, in title order
+                // (bd-listing-declared-order-3ixcvc4o).
+                use crate::project::listing::config::{ListingSort, SortDirection};
+                let default_sort = vec![
+                    ListingSort {
+                        field: "order".to_string(),
+                        direction: SortDirection::Asc,
+                    },
+                    ListingSort {
+                        field: "title".to_string(),
+                        direction: SortDirection::Asc,
+                    },
+                ];
+                apply_sort(&mut items, &default_sort, &mut diags);
             }
 
             if let Some(max) = listing.max_items {
@@ -306,6 +345,21 @@ mod tests {
         let mut p = make_profile(source, output_href, title);
         p.date = Some(date.to_string());
         p
+    }
+
+    fn make_profile_with_order(
+        source: &str,
+        output_href: &str,
+        title: &str,
+        order: i32,
+    ) -> DocumentProfile {
+        let mut p = make_profile(source, output_href, title);
+        p.order = Some(order);
+        p
+    }
+
+    fn titles(resolved: &[ResolvedListing]) -> Vec<&str> {
+        resolved[0].items.iter().map(|i| i.title.as_str()).collect()
     }
 
     fn make_project(
@@ -529,22 +583,174 @@ mod tests {
         assert_eq!(resolved[0].items[1].title, "B");
     }
 
+    // Q1 parity (bd-listing-declared-order-3ixcvc4o): absent `sort:`
+    // applies `order asc, title asc` — NOT date desc. Every item
+    // carries a date, and the dates contradict both the order: values
+    // and the titles, so a date-driven default cannot produce the
+    // expected sequence.
     #[tokio::test]
-    async fn default_sort_is_date_desc_for_default_type() {
+    async fn default_sort_is_order_asc_then_title_asc() {
+        let with_order = |source: &str, href: &str, title: &str, date: &str, order: i32| {
+            let mut p = make_profile_with_date(source, href, title, date);
+            p.order = Some(order);
+            p
+        };
         let (resolved, _) = run_transform(
             map(vec![("listing", s("default"))]),
             "posts/index.qmd",
             vec![
-                make_profile_with_date("posts/a.qmd", "posts/a.html", "A", "2026-01-01"),
-                make_profile_with_date("posts/b.qmd", "posts/b.html", "B", "2026-03-01"),
-                make_profile_with_date("posts/c.qmd", "posts/c.html", "C", "2026-02-01"),
+                make_profile_with_date("posts/a.qmd", "posts/a.html", "Delta", "2026-04-01"),
+                with_order("posts/b.qmd", "posts/b.html", "Zulu", "2026-01-01", 1),
+                make_profile_with_date("posts/c.qmd", "posts/c.html", "Alpha", "2026-02-01"),
+                with_order("posts/d.qmd", "posts/d.html", "Mike", "2026-03-01", 2),
             ],
         )
         .await;
-        // No explicit sort → default = date desc.
-        assert_eq!(resolved[0].items[0].title, "B");
-        assert_eq!(resolved[0].items[1].title, "C");
-        assert_eq!(resolved[0].items[2].title, "A");
+        // order: 1 first, order: 2 second, then order-less items by
+        // title asc (missing order values sort last).
+        assert_eq!(titles(&resolved), ["Zulu", "Mike", "Alpha", "Delta"]);
+    }
+
+    // The default sort is uniform across listing types (Q1 applies it
+    // whenever `title` is among the hydrated fields, which holds for
+    // every built-in type — including table).
+    #[tokio::test]
+    async fn table_type_gets_default_sort_too() {
+        let (resolved, _) = run_transform(
+            map(vec![("listing", map(vec![("type", s("table"))]))]),
+            "posts/index.qmd",
+            vec![
+                make_profile_with_order("posts/a.qmd", "posts/a.html", "Second", 2),
+                make_profile_with_order("posts/b.qmd", "posts/b.html", "First", 1),
+            ],
+        )
+        .await;
+        assert_eq!(titles(&resolved), ["First", "Second"]);
+    }
+
+    // `sort: true` is Q1's "apply the default sort" — identical to an
+    // absent `sort:` key, and NOT a sort by a field named "true".
+    #[tokio::test]
+    async fn sort_true_behaves_like_absent_sort() {
+        let (resolved, diags) = run_transform(
+            map(vec![(
+                "listing",
+                map(vec![("type", s("default")), ("sort", b(true))]),
+            )]),
+            "posts/index.qmd",
+            vec![
+                make_profile_with_order("posts/a.qmd", "posts/a.html", "Second", 2),
+                make_profile_with_order("posts/b.qmd", "posts/b.html", "First", 1),
+            ],
+        )
+        .await;
+        assert!(
+            !diags.iter().any(|d| d.code.as_deref() == Some("Q-12-3")),
+            "sort: true must not diagnose; got {:?}",
+            diags
+        );
+        assert_eq!(titles(&resolved), ["First", "Second"]);
+    }
+
+    // bd-listing-declared-order-3ixcvc4o: with `sort: false`, explicit
+    // `contents:` entries render in declared order (Q1 semantics), not
+    // in project-index order.
+    #[tokio::test]
+    async fn sort_false_preserves_declared_contents_order() {
+        let (resolved, _) = run_transform(
+            map(vec![(
+                "listing",
+                map(vec![
+                    ("type", s("default")),
+                    ("sort", b(false)),
+                    ("contents", arr(vec![s("bravo.qmd"), s("alpha.qmd")])),
+                ]),
+            )]),
+            "index.qmd",
+            vec![
+                // Index order is alphabetical — the opposite of the
+                // declared order — to prove the reordering happens.
+                make_profile("alpha.qmd", "alpha.html", "Alpha"),
+                make_profile("bravo.qmd", "bravo.html", "Bravo"),
+            ],
+        )
+        .await;
+        assert_eq!(titles(&resolved), ["Bravo", "Alpha"]);
+    }
+
+    // Q1's rule generalizes to wildcard patterns: items are ordered by
+    // the index of the first pattern that matches them; within one
+    // pattern, project-index order.
+    #[tokio::test]
+    async fn contents_ordered_by_first_matching_pattern_index() {
+        let (resolved, _) = run_transform(
+            map(vec![(
+                "listing",
+                map(vec![
+                    ("type", s("default")),
+                    ("sort", b(false)),
+                    ("contents", arr(vec![s("z.qmd"), s("a*.qmd")])),
+                ]),
+            )]),
+            "index.qmd",
+            vec![
+                make_profile("a1.qmd", "a1.html", "A1"),
+                make_profile("a2.qmd", "a2.html", "A2"),
+                make_profile("z.qmd", "z.html", "Zed"),
+            ],
+        )
+        .await;
+        assert_eq!(titles(&resolved), ["Zed", "A1", "A2"]);
+    }
+
+    // An item matched by several patterns belongs to the FIRST one and
+    // appears exactly once.
+    #[tokio::test]
+    async fn item_matching_multiple_patterns_appears_once_at_first_pattern() {
+        let (resolved, _) = run_transform(
+            map(vec![(
+                "listing",
+                map(vec![
+                    ("type", s("default")),
+                    ("sort", b(false)),
+                    ("contents", arr(vec![s("b.qmd"), s("*.qmd")])),
+                ]),
+            )]),
+            "index.qmd",
+            vec![
+                make_profile("a.qmd", "a.html", "Aye"),
+                make_profile("b.qmd", "b.html", "Bee"),
+            ],
+        )
+        .await;
+        assert_eq!(titles(&resolved), ["Bee", "Aye"]);
+    }
+
+    // Q-12-19 ("matched nothing") must credit EVERY pattern an item
+    // matches, not just the first-match winner: `b*.qmd`'s only match
+    // is claimed by `b.qmd` for ordering purposes, but it still
+    // matched something.
+    #[tokio::test]
+    async fn q_12_19_silent_when_matches_claimed_by_earlier_pattern() {
+        let (resolved, diags) = run_transform(
+            map(vec![(
+                "listing",
+                map(vec![
+                    ("type", s("default")),
+                    ("sort", b(false)),
+                    ("contents", arr(vec![s("b.qmd"), s("b*.qmd")])),
+                ]),
+            )]),
+            "index.qmd",
+            vec![make_profile("b.qmd", "b.html", "Bee")],
+        )
+        .await;
+        assert_eq!(titles(&resolved), ["Bee"]);
+        assert!(
+            !diags.iter().any(|d| d.code.as_deref() == Some("Q-12-19")),
+            "no matched-nothing diag expected; got {:?}",
+            diags
+        );
     }
 
     #[tokio::test]

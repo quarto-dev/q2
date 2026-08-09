@@ -1021,6 +1021,26 @@ pub struct ProjectConfig {
     /// Ariadne can render a source snippet for the offending scalar.
     pub config_path: Option<PathBuf>,
 
+    /// Manifest paths (`…/_extension.yml`) of every extension
+    /// discovered at config-parse time, whose
+    /// `contributes.metadata.project` / `contributes.project`
+    /// fragments may have merged entries into this config
+    /// (bd-m6wmztln).
+    ///
+    /// Together with [`config_path`](Self::config_path) these are the
+    /// candidate source files for
+    /// [`crate::config_sources::bind_config_source`]: a merged
+    /// value's `SourceInfo` keeps the filename-hash FileId of the
+    /// file it was written in, so config-anchored diagnostics must
+    /// pick the matching file instead of assuming `_quarto.yml`.
+    ///
+    /// Reconstructed as `ext.path.join("_extension.yml")`, which is
+    /// exact because extension discovery only accepts that manifest
+    /// name and `ext.path` is the manifest's parent directory.
+    /// bd-xh1v98d9 tracks storing the actual manifest path on
+    /// [`crate::extension::Extension`] instead.
+    pub extension_manifest_paths: Vec<PathBuf>,
+
     /// The **project-level** brand named by `_quarto.yml`'s `brand:`
     /// key, resolved once at config-parse time (`bd-97yc`).
     ///
@@ -1375,6 +1395,13 @@ impl ProjectContext {
             .ok()
             .flatten();
 
+        // See the field docs: candidate source files for
+        // config-anchored diagnostics (bd-m6wmztln).
+        let extension_manifest_paths = extensions
+            .iter()
+            .map(|ext| ext.path.join("_extension.yml"))
+            .collect();
+
         Ok(ProjectConfig {
             project_kind,
             custom_project_type: resolved.custom,
@@ -1386,6 +1413,7 @@ impl ProjectContext {
             post_render_scripts,
             metadata: Some(metadata),
             config_path: Some(path.to_path_buf()),
+            extension_manifest_paths,
             brand,
         })
     }

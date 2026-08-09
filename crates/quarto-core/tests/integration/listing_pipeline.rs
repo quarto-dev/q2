@@ -109,9 +109,13 @@ fn html_for<'a>(outputs: &'a [(String, String)], stem: &str) -> &'a str {
 }
 
 /// L3 phase 6 §"e2e CLI verification" — exact-fixture render on
-/// the standard four-file blog setup.
+/// the standard four-file blog setup. Default sort is Q1's
+/// `order asc, title asc` (bd-listing-declared-order-3ixcvc4o):
+/// Third carries `order: 1` so it leads; First and Second have no
+/// `order:` and follow in title-asc order. (Dates are set so the
+/// pre-fix date-desc default would produce a different order.)
 #[test]
-fn default_listing_renders_three_posts_in_date_desc_order() {
+fn default_listing_renders_three_posts_in_default_order() {
     let (_dir, outputs) = render_project(|p| {
         write(
             &p.join("_quarto.yml"),
@@ -131,7 +135,7 @@ fn default_listing_renders_three_posts_in_date_desc_order() {
         );
         write(
             &p.join("posts/c.qmd"),
-            "---\ntitle: Third\ndate: 2026-03-05\nauthor: Carol\ndescription: Third desc.\nformat: html\n---\n\nThird body.\n",
+            "---\ntitle: Third\ndate: 2026-03-05\nauthor: Carol\ndescription: Third desc.\norder: 1\nformat: html\n---\n\nThird body.\n",
         );
     });
 
@@ -161,18 +165,18 @@ fn default_listing_renders_three_posts_in_date_desc_order() {
     assert!(host.contains("Second"));
     assert!(host.contains("Third"));
 
-    // Default sort = date desc → Third (Mar) before Second (Feb)
-    // before First (Jan). Find the three title positions and
-    // assert the ordering.
+    // Default sort = order asc, title asc → Third (order: 1) leads;
+    // First and Second (no order:) follow in title-asc order. Find
+    // the three title positions and assert the ordering.
     let p_third = host.find("Third").expect("Third missing");
     let p_second = host.find("Second").expect("Second missing");
     let p_first = host.find("First").expect("First missing");
     assert!(
-        p_third < p_second && p_second < p_first,
-        "expected date-desc ordering (Third, Second, First); positions: third={}, second={}, first={}",
+        p_third < p_first && p_first < p_second,
+        "expected default ordering (Third, First, Second); positions: third={}, first={}, second={}",
         p_third,
-        p_second,
-        p_first
+        p_first,
+        p_second
     );
 
     // L7 ran during `WebsiteProjectType::post_render`: the
@@ -203,6 +207,46 @@ fn default_listing_renders_three_posts_in_date_desc_order() {
     // Dates are pre-formatted at record-build with the `medium`
     // default (bd-13f821l5).
     assert!(host.contains("Jan 15, 2026"));
+}
+
+/// bd-listing-declared-order-3ixcvc4o: a curated `contents:` list
+/// with `sort: false` renders in declared order (Q1 semantics).
+/// Same shape as the committed minimal repro at
+/// `claude-notes/plans/listing-declared-order-investigation/repro/`:
+/// bravo is declared first but sorts after alpha both alphabetically
+/// and by project-index order, so only declaration-order handling
+/// can put it first. (Item files have distinct stems because the
+/// harness keys outputs by file stem.)
+#[test]
+fn declared_contents_order_preserved_with_sort_false() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Home\nlisting:\n  id: things\n  type: default\n  sort: false\n  contents:\n    - bravo.qmd\n    - alpha.qmd\nformat: html\n---\n\n::: {#things}\n:::\n",
+        );
+        write(
+            &p.join("alpha.qmd"),
+            "---\ntitle: Alpha Page\nformat: html\n---\n\nAlpha body.\n",
+        );
+        write(
+            &p.join("bravo.qmd"),
+            "---\ntitle: Bravo Page\nformat: html\n---\n\nBravo body.\n",
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    let p_bravo = host.find("Bravo Page").expect("Bravo Page missing");
+    let p_alpha = host.find("Alpha Page").expect("Alpha Page missing");
+    assert!(
+        p_bravo < p_alpha,
+        "declared order (Bravo, Alpha) must be preserved; positions: bravo={}, alpha={}",
+        p_bravo,
+        p_alpha
+    );
 }
 
 /// Listing item links must travel through `LinkRewriteTransform`.
@@ -315,6 +359,128 @@ fn table_type_emits_listing_table_wrapper() {
     // Dates are pre-formatted at record-build with the `medium`
     // default (bd-13f821l5).
     assert!(host.contains("Jan 15, 2026"));
+}
+
+/// bd-listing-table-fields-peg1w3b3 e2e: `fields:` selects the
+/// column set and `field-display-names:` renames headers (the
+/// Posit Connect docs "How To" case). Items lacking date/author
+/// must not produce extra columns.
+#[test]
+fn table_fields_and_display_names_render_single_column() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("posts/index.qmd"),
+            "---\ntitle: Guides\nlisting:\n  id: guides\n  type: table\n  fields: [title]\n  field-display-names:\n    title: \"How To\"\nformat: html\n---\n\n::: {#guides}\n:::\n",
+        );
+        // Neither item has date or author.
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: First guide\nformat: html\n---\n\nBody A.\n",
+        );
+        write(
+            &p.join("posts/b.qmd"),
+            "---\ntitle: Second guide\nformat: html\n---\n\nBody B.\n",
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    assert!(host.contains("quarto-listing-table-wrapper"));
+    // Exactly one column, renamed via field-display-names.
+    assert_eq!(
+        host.matches("<th>").count(),
+        1,
+        "expected exactly one table header cell; got:\n{}",
+        host
+    );
+    assert!(
+        host.contains("How To"),
+        "expected `How To` display-name header; got:\n{}",
+        host
+    );
+    assert!(
+        !host.contains("<th>Title") && !host.contains("<th>Date") && !host.contains("<th>Author"),
+        "hardcoded Title/Date/Author headers leaked; got:\n{}",
+        host
+    );
+    // Both items link to their pages.
+    assert!(host.contains("First guide") && host.contains("Second guide"));
+    assert!(host.contains(r#"href="a.html""#) && host.contains(r#"href="b.html""#));
+    // Each item is its own table row: 1 header + 2 body rows. (The
+    // doctemplate resolver chomps a partial's final newline, so a
+    // naive `$items:item-table()$` merges all rows into one — the
+    // listing template must iterate with per-row separation.)
+    assert_eq!(
+        host.matches("<tr").count(),
+        3,
+        "expected one header row + one row per item; got:\n{}",
+        host
+    );
+    assert!(
+        !host.contains("<td>|"),
+        "leaked pipe chars indicate merged table rows; got:\n{}",
+        host
+    );
+}
+
+/// bd-listing-table-fields-peg1w3b3 e2e: with no author-supplied
+/// `fields:`, the table default set `[date, title, author]` is
+/// presence-filtered against the items (Q1 parity) — items with no
+/// author ⇒ no Author column — and keeps Q1's Date-before-Title
+/// column order.
+#[test]
+fn table_default_fields_presence_filtered_and_ordered() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("posts/index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  type: table\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\nformat: html\n---\n\nBody.\n",
+        );
+        write(
+            &p.join("posts/b.qmd"),
+            "---\ntitle: Second\ndate: 2026-02-20\nformat: html\n---\n\nBody.\n",
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    assert_eq!(
+        host.matches("<th>").count(),
+        2,
+        "expected Date + Title columns only; got:\n{}",
+        host
+    );
+    assert!(
+        !host.contains("<th>Author"),
+        "Author column must be presence-filtered out; got:\n{}",
+        host
+    );
+    let p_date = host.find("<th>Date").expect("Date header missing");
+    let p_title = host.find("<th>Title").expect("Title header missing");
+    assert!(
+        p_date < p_title,
+        "expected Q1 column order Date | Title; positions: date={p_date}, title={p_title}"
+    );
+    // Cell data flows through: formatted date + linked titles.
+    assert!(host.contains("Jan 15, 2026") && host.contains("Feb 20, 2026"));
+    assert!(host.contains(r#"href="a.html""#) && host.contains(r#"href="b.html""#));
+    // One header row + one row per item (see the row-separation
+    // note in table_fields_and_display_names_render_single_column).
+    assert_eq!(
+        host.matches("<tr").count(),
+        3,
+        "expected one header row + one row per item; got:\n{}",
+        host
+    );
 }
 
 #[test]
