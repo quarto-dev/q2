@@ -4,8 +4,10 @@
 **Discovered-from strands:** bd-p86nlm92 (project_resources, same pattern — folded into this PR),
 bd-2x0tmd7v (doc-level span-less gap, unverified), bd-xh1v98d9 (store manifest
 path on `Extension`), bd-nv4p0eb1 (systematic span/FileId audit + API hardening)
-**Status:** approved 2026-08-09 — in progress on branch
-`braid/bd-m6wmztln-q58-extension-script-span`.
+**Status:** done — PR #478 merged as `4bb32844` (2026-08-09); bd-m6wmztln
+and bd-p86nlm92 closed. Remaining follow-ups live in their own strands:
+bd-nv4p0eb1 (systematic audit + API hardening), bd-xh1v98d9 (manifest
+path on `Extension`), bd-2x0tmd7v (doc-level span-less gap).
 
 ## Review decisions (2026-08-09)
 
@@ -61,7 +63,8 @@ path on `Extension`), bd-nv4p0eb1 (systematic span/FileId audit + API hardening)
       steps passed 2026-08-09
 - [x] E2E: repro fixture renders corrected span; q2-connect-docs testbed
       renders corrected span; outputs recorded below
-- [ ] Close bd-m6wmztln + bd-p86nlm92 with evidence (after PR review/merge)
+- [x] Close bd-m6wmztln + bd-p86nlm92 with evidence (PR #478 merged as
+      `4bb32844`, strands closed 2026-08-09)
 
 ## Overview
 
