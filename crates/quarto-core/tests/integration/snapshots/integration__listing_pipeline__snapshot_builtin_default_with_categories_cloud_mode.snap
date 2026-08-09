@@ -1,14 +1,13 @@
 ---
-source: crates/quarto-core/tests/listing_pipeline.rs
-assertion_line: 776
+source: crates/quarto-core/tests/integration/listing_pipeline.rs
 expression: l5_owned_slice(host)
 ---
 === chip blocks ===
-<div class="listing-categories"><div class="listing-category" onclick="window.quartoListingCategory('ZWxt'); return false;">elm</div><div class="listing-category" onclick="window.quartoListingCategory('cnVzdA=='); return false;">rust</div></div>
+<div class="listing-categories"><div class="listing-category" onclick="window.quartoListingCategory('cnVzdA=='); return false;">rust</div><div class="listing-category" onclick="window.quartoListingCategory('ZGVzaWdu'); return false;">design</div></div>
 
 <div class="listing-categories"><div class="listing-category" onclick="window.quartoListingCategory('cnVzdA=='); return false;">rust</div></div>
 
-<div class="listing-categories"><div class="listing-category" onclick="window.quartoListingCategory('cnVzdA=='); return false;">rust</div><div class="listing-category" onclick="window.quartoListingCategory('ZGVzaWdu'); return false;">design</div></div>
+<div class="listing-categories"><div class="listing-category" onclick="window.quartoListingCategory('ZWxt'); return false;">elm</div><div class="listing-category" onclick="window.quartoListingCategory('cnVzdA=='); return false;">rust</div></div>
 
 === sidebar ===
 <h5 class="quarto-listing-category-title">Categories</h5>

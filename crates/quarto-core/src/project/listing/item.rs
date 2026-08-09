@@ -39,6 +39,11 @@ pub struct ListingItem {
     pub image_lazy_loading: Option<bool>,
     pub reading_time_minutes: Option<u32>,
     pub word_count: Option<u32>,
+    /// Author-curated position from top-level `order:` front matter
+    /// (via `DocumentProfile::order`). Primary key of the default
+    /// listing sort (`order asc, title asc`, Q1 parity —
+    /// bd-listing-declared-order-3ixcvc4o).
+    pub order: Option<i32>,
     /// Project-relative source path of the input file (forward-slash
     /// separated, matching `DocumentProfile::source_path`).
     pub source_path: PathBuf,
@@ -115,6 +120,7 @@ pub fn hydrate_item(profile: &DocumentProfile) -> ListingItem {
         image_lazy_loading: None,
         reading_time_minutes: li.reading_time_minutes,
         word_count: li.word_count,
+        order: profile.order,
         source_path: profile.source_path.clone(),
         output_href: profile.output_href.clone(),
         extra: li.extra.clone(),

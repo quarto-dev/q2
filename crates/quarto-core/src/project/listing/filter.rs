@@ -161,6 +161,7 @@ mod tests {
             image_lazy_loading: None,
             reading_time_minutes: None,
             word_count: None,
+            order: None,
             source_path: PathBuf::from("posts/foo.qmd"),
             output_href: "posts/foo.html".to_string(),
             extra: extra_map,

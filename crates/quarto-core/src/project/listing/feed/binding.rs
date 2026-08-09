@@ -583,6 +583,7 @@ mod tests {
             image_lazy_loading: None,
             reading_time_minutes: None,
             word_count: None,
+            order: None,
             source_path: PathBuf::new(),
             output_href: String::new(),
             extra: BTreeMap::new(),

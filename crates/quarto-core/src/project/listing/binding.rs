@@ -341,6 +341,9 @@ fn build_item_map(
             TemplateValue::String(n.to_string()),
         );
     }
+    if let Some(n) = item.order {
+        m.insert("order".to_string(), TemplateValue::String(n.to_string()));
+    }
 
     // Path bookkeeping.
     //
@@ -737,6 +740,7 @@ mod tests {
             image_lazy_loading: None,
             reading_time_minutes: Some(5),
             word_count: None,
+            order: None,
             source_path: PathBuf::from("posts/foo.qmd"),
             output_href: "posts/foo.html".to_string(),
             extra: BTreeMap::new(),

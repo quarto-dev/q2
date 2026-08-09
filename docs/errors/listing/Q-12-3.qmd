@@ -11,40 +11,56 @@ categories:
 
 # `Q-12-3` — Unknown Sort Field
 
-> A listing `sort:` value refers to a field the listing does not
-> know how to sort on, or `sort:` has the wrong overall shape.
+> A listing `sort:` value refers to a field no listing item
+> defines, or `sort:` has the wrong overall shape.
 
 ## What this means
 
 The `sort:` key on a listing tells Quarto how to order the items.
 It accepts a single sort key as a string (`date desc`), an array
-of such keys, or `false` to disable sorting. This error fires
-in two related cases:
+of such keys, or a boolean — `false` disables sorting (items keep
+the order of your `contents:` entries), `true` explicitly asks
+for the default sort (`order asc, title asc`, the same as leaving
+`sort:` out). This warning fires in two related cases:
 
-- The named field is not one of the listing's known fields.
+- The named field is neither a built-in listing field nor a field
+  that any of the listing's items defines — so there is no
+  information to sort on, and all items compare as equal.
 - `sort:` is given a value that is neither string, array, nor
-  `false` — typically a map.
+  boolean — typically a map.
 
-The listing renders, but the unrecognized sort key is dropped
-(or sorting is disabled altogether).
+The listing still renders; the unusable sort key just has no
+effect.
+
+Sorting by a custom field does **not** trigger this warning as
+long as at least one item carries the field: values declared in a
+document's `listing-item: extra:` front matter are found by the
+sort, and items missing the field sort after the ones that have
+it.
 
 ## Why this happens
 
 Common causes:
 
 - **A typo in the field name** (`titel` instead of `title`).
-- **A field that exists on individual items but is not exposed
-  as a sortable column** (a custom front-matter field not
-  declared in `field-types:`).
+- **A custom field no item actually defines** — for example,
+  sorting on `difficulty` when no document declares it under
+  `listing-item: extra:`.
 - **A wrong shape for `sort:`** — for example, passing a map
-  where a string or array was expected.
+  where a string, array, or boolean was expected.
 
 ## How to fix
 
-Confirm the field name matches one of the listing's known
-fields. If you are sorting by a custom field, declare it under
-the listing's `field-types:` so the parser knows how to compare
-its values.
+Confirm the field name matches a built-in listing field (`title`,
+`date`, `author`, `order`, …) or a custom field your documents
+declare. To sort by a custom field, add it to each participating
+document's front matter:
+
+```yaml
+listing-item:
+  extra:
+    difficulty: 2
+```
 
 ## Related
 
