@@ -1,0 +1,182 @@
+# Listings lose declared order of explicit `contents:` entries (bd-listing-declared-order-3ixcvc4o)
+
+**Date:** 2026-08-09
+**Braid:** bd-listing-declared-order-3ixcvc4o (origin: `br-listing-declared-order-qodof0f6` in the connect-docs porting skein)
+**Checkout:** main worktree (`/Users/cscheid/rooms/room-1/q2`, branch `main`)
+**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+
+## Triage verdict
+
+**Ready to design.** The mechanism is fully understood, Q1's target semantics are pinned from source, the fix site is localized to `ListingGenerateTransform`'s item-collection loop, and a minimal repro exists (copied into `listing-declared-order-investigation/repro/`). A handful of scope questions below need answers before implementation.
+
+## Issue context
+
+P1 bug, filed 2026-08-09 (today) by Carlos, label `listings`. A listing whose
+`contents:` is a list of explicit paths renders items in project-index order
+(effectively path-alphabetical) regardless of declaration order, even with
+`sort: false`. Q1 preserves declared order; all 15 Posit Connect cookbook
+listing pages rely on it ("Getting Started" renders 4th instead of 1st).
+Second-order effect: post-render description previews extracted from
+listing-only section pages pick up the wrong first item.
+
+Related quirk to fix in the same pass: sorting by a `listing-item.extra`
+custom field *works* (`sort.rs::field_value` falls through to the extra map)
+but `is_known_sort_field` doesn't know extra fields, so a working
+custom-field sort emits a misleading Q-12-3 "values will compare as equal"
+warning.
+
+## Dependency graph
+
+**Empty** — no edges in the q2 skein. The strand was filed today from external
+repro work (connect-docs porting), so the "why" lives in its description and in
+the origin repro, not in graph context. There is an open **Listings feature
+epic (bd-61cd)** this strand is *not* linked to; linking it (`parent-child` or
+`related`) is cheap incidental hygiene — see incidental work below.
+
+## What the code looks like today
+
+All paths in the description exist at HEAD and the mechanism is confirmed by
+reading source:
+
+1. **Resolution** (`crates/quarto-core/src/project/listing/glob_resolve.rs`):
+   `contents:` entries become `GlobPattern`s via the shared
+   `crate::glob::resolve_patterns`. Order of the *patterns* is preserved in
+   `GlobResolution.globs`.
+2. **Matching** (`crates/quarto-core/src/transforms/listing_generate.rs`
+   ~lines 162–173): items are collected by iterating
+   `ctx.project_index.profiles()` (Pass-1 insertion order — project input
+   enumeration order) and testing each candidate against the compiled
+   `PatternSet::matches`. **This is where declaration order is lost**: the
+   loop is candidate-major, so item order = index order, never pattern order.
+3. **Sort** (`crates/quarto-core/src/project/listing/config.rs::parse_sort` +
+   `sort.rs::apply_sort`): `sort: false` → `Some(vec![])` → `apply_sort`
+   returns immediately (correct no-op), so the index order leaks through.
+
+Precedent already in-tree: `PatternSet::excluded` (`glob/matcher.rs` ~line
+171) exists precisely so `project.render` can walk its positive patterns in
+the author's listed order while keeping exclusions global. The listing fix
+can follow the same shape.
+
+Bonus per-pattern machinery already present: the Q-12-19 "matched nothing"
+diagnostic loop (`listing_generate.rs` ~lines 180–200) already compiles each
+positive pattern individually — first-matching-pattern-index computation can
+reuse (or share hoisted compiles with) that loop.
+
+### Q1 target semantics (pinned from `external-sources/quarto-cli`)
+
+- `src/core/path.ts::filterPaths`/`resolvePathGlobs`: **glob-major
+  iteration** — for each glob in declared order, append its matching files;
+  `ld.uniq` dedups keeping *first* occurrence. Net effect: items ordered by
+  first-matching-pattern index; within one pattern, candidate-set order.
+- `website-listing-read.ts::computeListingSort`: `sort: false` → `[]` (no
+  sorting, contents order preserved); `sort: true`/absent → `undefined` →
+  default sort.
+- **Q1's default sort is NOT date-desc**: when `sort:` is absent, title is a
+  hydrated field, and sources include document items, Q1 applies
+  `[{field: "order", asc}, {field: "title", asc}]` (`website-listing-read.ts`
+  ~line 637). `order` is a front-matter field (`kFieldOrder`) authors use for
+  curated ordering. q2's `listing_generate.rs` ~line 207 applies **date
+  desc** with a comment claiming it "Matches Q1 default" — that claim looks
+  wrong against current Q1 source. Scope question below.
+- q2's `is_known_sort_field` also doesn't include `order` (nor does
+  `hydrate_item` obviously surface it other than via `extra`).
+
+### Repro at HEAD (end-to-end, confirmed)
+
+Minimal repro copied to
+`claude-notes/plans/listing-declared-order-investigation/repro/` (declares
+`contents: [./bravo/index.md, ./alpha/index.md]` with `sort: false`).
+Rendered with the HEAD binary (2026-08-09, `main` @ 2f2f4be3, v0.14.0):
+
+```
+$ cd claude-notes/plans/listing-declared-order-investigation/repro
+$ cargo run --quiet --bin q2 -- render .
+Rendering project: .../repro (type: website)
+Rendered 3 of 3 files to .../repro/_site
+$ grep -n -o 'alpha/\|bravo/' _site/index.html
+36:alpha/
+39:alpha/
+45:bravo/
+48:bravo/
+```
+
+Output inspected: Alpha renders before Bravo despite the declared
+bravo-first order — **bug confirmed at HEAD**. (`_site/` is gitignored in
+the repro dir; regenerate with the command above.)
+
+### Pre-flight verify note
+
+`cargo xtask verify --skip-hub-build` at HEAD failed on one test:
+`quarto-hub::integration admin_collect_lifecycle::collect_reverification_skips_rereferenced_candidate`
+(assertion diff `2xPD…` vs `2XPD…` — a single case-flip in a doc id). This
+is the known macOS case-insensitive-filesystem flake tracked as
+**bd-eb2wnxkp** (this worktree's other in-flight strand; plan
+`claude-notes/plans/2026-07-28-doc-id-identity-from-paths.md` awaiting
+review). All 9,697 other tests that ran passed; the failure is unrelated to
+listings.
+
+## Proposed phases (draft)
+
+Skeleton only — actual phase contents wait on the design discussion.
+
+- **Phase 0 — Test plan (TDD).**
+  - Failing integration test: explicit two-entry `contents:` with
+    `sort: false` renders in declared order (drive through the listing
+    pipeline test harness in `tests/integration/listing_pipeline.rs`, plus
+    an end-to-end `q2 render` check on the repro fixture).
+  - Failing test: mixed literal + glob `contents:` orders by
+    first-matching-pattern index.
+  - Failing test: a working `extra`-field sort emits no Q-12-3.
+- **Phase 1 — Order-preserving item collection.** In
+  `ListingGenerateTransform`: order collected items by index of first
+  matching positive pattern (hoist per-pattern compiles, shared with the
+  Q-12-19 loop); negations stay global via `PatternSet::excluded`-style
+  logic. Stable within a pattern (keep index order).
+- **Phase 2 — Q-12-3 false positive.** Only warn on unknown sort fields when
+  the field is also absent from every item's `extra` map (or equivalent
+  design per user answer to Q4).
+- **Phase 3 — (scope-dependent) default-sort parity.** If Q3 below says yes:
+  align q2's absent-`sort:` default with Q1 (`order asc, title asc` vs
+  current `date desc`), or file as a separate strand.
+- **Phase 4 — Docs.** Note contents-order semantics in the listings docs
+  (overlaps bd-2nb6i1qv, the listings-guide docs strand).
+
+## Open design questions for the user
+
+1. **Ordering rule scope.** Order by first-matching-pattern index for *all*
+   patterns (literal and wildcard alike — this is exactly Q1's rule), or only
+   when every entry is a literal path? Recommendation: all patterns,
+   Q1-style; it's simpler and strictly more compatible.
+2. **Does the fix change ordering under an explicit sort or the default
+   sort?** With a stable sort applied afterwards, first-pattern order becomes
+   the tie-break order (Q1 gets the same effect for free). Any snapshot
+   churn would come from ties only. OK to accept that?
+3. **Default-sort parity.** q2's absent-`sort:` default is `date desc`,
+   commented as "Matches Q1 default", but current Q1 source applies
+   `order asc, title asc`. Fix here, file separately, or leave (perhaps q2
+   deliberately chose date-desc as the saner blog default)? This also decides
+   whether `order` should join `is_known_sort_field` / hydrated fields.
+4. **Q-12-3 fix shape.** Suppress the warning when *any* item's `extra` has
+   the field? When *all* items have it? Or downgrade the message to mention
+   the extra-field fallback? (Any-item suppression is the least chatty and
+   matches "the sort visibly works".)
+5. **Second-order description-preview effect.** The strand notes listing-only
+   section pages get wrong first-item previews. That should fall out of the
+   ordering fix automatically — is there a connect-docs page worth adding as
+   a regression fixture, or is the minimal repro enough?
+
+## Risks / tradeoffs (draft)
+
+- **Snapshot churn**: any existing listing snapshot whose item order depended
+  on index order under `sort: false` (or on tie order under sorts) may
+  change. Expected small; must be called out per snapshot policy.
+- **Per-pattern matching cost**: first-match-index needs per-pattern
+  `PatternSet`s; the Q-12-19 loop already pays this per listing, so hoisting
+  the compiles is likely a net wash or a win.
+- **Default-sort parity (Q3)** is behavior-visible for every listing without
+  an explicit `sort:` — riskier than the core fix; that's why it's split
+  into its own phase / possibly its own strand.
+- `ProjectDependencyGraph::build` also consumes `resolve_content_globs` —
+  the ordering fix must live in the *consumer* (listing generate), not in
+  shared glob resolution, to avoid perturbing the dependency-graph edge set
+  or other glob consumers (`project.render`, `resources:`, `sidebar.auto:`).
