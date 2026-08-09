@@ -281,7 +281,7 @@ enum Commands {
         /// the host-mode flags (a path, --share, --no-project,
         /// --allow-edit, --ui, --data-dir, --preview-dir) don't combine
         /// with it. --port/--host pick where the local proxy listens;
-        /// --no-browser still applies.
+        /// --no-browser and --browser still apply.
         #[arg(
             long,
             value_name = "TICKET",
