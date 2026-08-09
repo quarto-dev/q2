@@ -366,6 +366,67 @@ fn failing_pre_render_script_aborts() {
         !project.join("_site/index.html").exists(),
         "pre-render failure must abort before any rendering"
     );
+    // bd-m6wmztln control: the Q-5-8 snippet anchors in the file that
+    // declared the script (`path:line:col` in the ariadne header).
+    assert!(
+        stderr.contains("_quarto.yml:"),
+        "snippet should anchor in _quarto.yml for a directly-declared script; got: {stderr}"
+    );
+}
+
+/// bd-m6wmztln: a failing pre-render script *contributed by an
+/// extension* (`contributes.metadata.project.pre-render`) must anchor
+/// its Q-5-8 snippet in the extension's `_extension.yml`. The script's
+/// `SourceInfo` carries the manifest's filename-hash FileId; binding
+/// `_quarto.yml`'s content to it (the old behavior) rendered the
+/// manifest's byte offsets against the wrong file — a misleading span
+/// when the offsets fit, a silently dropped snippet when they didn't.
+#[test]
+fn failing_extension_contributed_script_snippet_names_extension_yml() {
+    require_python!();
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+    // Enough `_quarto.yml` content that the manifest's byte offsets
+    // land inside it: on a regression this reproduces the worse
+    // misleading-span variant, not just a dropped snippet.
+    write_minimal_project(
+        &project,
+        "project:\n  type: website\n  output-dir: _site\n  render:\n    - \"**/*.qmd\"\n    - \"!drafts/\"\n",
+    );
+    write_file(
+        &project.join("_extensions/acme/failing/_extension.yml"),
+        "title: failing\nauthor: Acme\nversion: 0.0.1\ncontributes:\n  metadata:\n    project:\n      pre-render:\n        - fail.py\n",
+    );
+    // Lives in the extension dir, so the contributed entry is rebased
+    // to `_extensions/acme/failing/fail.py` — rebasing must preserve
+    // the manifest anchor.
+    write_file(
+        &project.join("_extensions/acme/failing/fail.py"),
+        "import sys\nsys.exit(3)\n",
+    );
+
+    let out = run_q2(&project, &[]);
+    assert!(
+        !out.status.success(),
+        "failing extension-contributed pre-render script must abort the render"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("[Q-5-8]"),
+        "diagnostic should carry the Q-5-8 code; got: {stderr}"
+    );
+    assert!(
+        stderr.contains("_extension.yml:"),
+        "snippet should anchor in the extension manifest; got: {stderr}"
+    );
+    assert!(
+        !stderr.contains("_quarto.yml:"),
+        "snippet must not anchor in _quarto.yml (the script is not declared there); got: {stderr}"
+    );
+    assert!(
+        stderr.contains("extension manifest"),
+        "diagnostic should attribute the entry to the extension manifest; got: {stderr}"
+    );
 }
 
 /// A pre-render script that changes `project.output-dir` in

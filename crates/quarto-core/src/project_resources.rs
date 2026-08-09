@@ -845,40 +845,17 @@ pub fn collect_static_resources(
 // Diagnostic-aware variants (bd-c1et2)
 // ─────────────────────────────────────────────────────────────────────
 
-/// Build a [`crate::error::ParseError`] from a [`ResourceError`],
-/// loading `source_file` so the resulting diagnostic can render an
-/// Ariadne snippet pointing at the offending YAML scalar.
-///
-/// The [`SourceInfo`] inside `err` already carries a [`FileId`] —
-/// the same `hash(filename)` that `quarto_yaml::parse_file` computes
-/// when it produces source-tracked YAML. We register `source_file`
-/// in a fresh [`SourceContext`] under that exact FileId so the
-/// renderer can resolve offsets back to line/column in the file's
-/// content.
-///
-/// If `source_file` cannot be read (rare; the YAML *was* read once
-/// already during parse) or the [`SourceInfo`] has no resolvable
-/// FileId (Concat / FilterProvenance), the diagnostic degrades to a
-/// span-less message — still tidyverse-shaped, still better than
-/// `Error: …` plain text.
-pub fn resource_error_to_parse_error(
-    err: ResourceError,
-    source_file: &Path,
-) -> crate::error::ParseError {
+/// The shared diagnostic body for a [`ResourceError`]: title, code,
+/// location, and problem statement — everything except the
+/// [`SourceContext`] binding, which differs by provenance (see
+/// [`resource_error_to_parse_error`] vs.
+/// [`resource_error_to_config_parse_error`]).
+fn resource_error_diagnostic(
+    err: &ResourceError,
+) -> quarto_error_reporting::DiagnosticMessageBuilder {
     use quarto_error_reporting::DiagnosticMessageBuilder;
-    use quarto_source_map::{FileId, SourceContext};
 
-    let mut source_context = SourceContext::new();
-    if let Some((fid_usize, _, _)) = err.source_info().resolve_byte_range() {
-        let content = std::fs::read_to_string(source_file).ok();
-        source_context.add_file_with_id(
-            FileId(fid_usize),
-            source_file.to_string_lossy().into_owned(),
-            content,
-        );
-    }
-
-    let diagnostic = match &err {
+    match err {
         ResourceError::OutOfProject {
             pattern,
             project_root,
@@ -896,8 +873,7 @@ pub fn resource_error_to_parse_error(
         .add_info(
             "A leading `/` is project-root-relative — e.g. `/docs/foo.json` means `<project>/docs/foo.json`. \
              To reference files outside the project, copy them in or use `copy:` (Q1: not yet supported).",
-        )
-        .build(),
+        ),
 
         ResourceError::InvalidGlob {
             pattern,
@@ -906,8 +882,7 @@ pub fn resource_error_to_parse_error(
         } => DiagnosticMessageBuilder::error("Invalid glob pattern in `resources:`")
             .with_code("Q-5-2")
             .with_location(source_info.clone())
-            .problem(format!("`{}` is not a valid glob: {}", pattern, message))
-            .build(),
+            .problem(format!("`{}` is not a valid glob: {}", pattern, message)),
 
         ResourceError::GlobWalk {
             pattern,
@@ -916,11 +891,96 @@ pub fn resource_error_to_parse_error(
         } => DiagnosticMessageBuilder::error("Failed walking glob matches for `resources:`")
             .with_code("Q-5-3")
             .with_location(source_info.clone())
-            .problem(format!("Walking `{}` failed: {}", pattern, message))
-            .build(),
-    };
+            .problem(format!("Walking `{}` failed: {}", pattern, message)),
+    }
+}
 
-    crate::error::ParseError::new(vec![diagnostic], source_context)
+/// Build a [`crate::error::ParseError`] from a [`ResourceError`],
+/// loading `source_file` so the resulting diagnostic can render an
+/// Ariadne snippet pointing at the offending YAML scalar.
+///
+/// The [`SourceInfo`] inside `err` already carries a [`FileId`] —
+/// the same `hash(filename)` that `quarto_yaml::parse_file` computes
+/// when it produces source-tracked YAML. We register `source_file`
+/// in a fresh [`SourceContext`] under that exact FileId so the
+/// renderer can resolve offsets back to line/column in the file's
+/// content.
+///
+/// **Provenance contract:** the caller guarantees the error's
+/// SourceInfo actually originates from `source_file` — true for the
+/// per-document call sites, whose patterns come from the declaring
+/// document. For *project-level* patterns, which an extension may
+/// have contributed from its `_extension.yml`, use
+/// [`resource_error_to_config_parse_error`] instead (bd-p86nlm92);
+/// binding the wrong file here renders the right offsets against the
+/// wrong text. (Per-document patterns merged in from
+/// `_metadata.yml`-style layers can still mis-bind under this
+/// contract — tracked as part of the systematic audit, bd-nv4p0eb1.)
+///
+/// If `source_file` cannot be read (rare; the YAML *was* read once
+/// already during parse) or the [`SourceInfo`] has no resolvable
+/// FileId (Concat / FilterProvenance), the diagnostic degrades to a
+/// span-less message — still tidyverse-shaped, still better than
+/// `Error: …` plain text.
+pub fn resource_error_to_parse_error(
+    err: ResourceError,
+    source_file: &Path,
+) -> crate::error::ParseError {
+    use quarto_source_map::{FileId, SourceContext};
+
+    let mut source_context = SourceContext::new();
+    if let Some((fid_usize, _, _)) = err.source_info().resolve_byte_range() {
+        let content = std::fs::read_to_string(source_file).ok();
+        source_context.add_file_with_id(
+            FileId(fid_usize),
+            source_file.to_string_lossy().into_owned(),
+            content,
+        );
+    }
+
+    crate::error::ParseError::new(
+        vec![resource_error_diagnostic(&err).build()],
+        source_context,
+    )
+}
+
+/// Project-level variant of [`resource_error_to_parse_error`]
+/// (bd-p86nlm92): `project.resources` entries can be contributed by
+/// an extension (`contributes.metadata.project.resources`), so the
+/// error's SourceInfo may point into an `_extension.yml` rather than
+/// the project's `_quarto.yml`. The right file is chosen by FileId
+/// match via [`crate::config_sources::bind_config_source`]; when the
+/// pattern comes from an extension manifest, an info line says so.
+/// No match ⇒ span-less degradation, never a wrong span.
+pub fn resource_error_to_config_parse_error(
+    err: ResourceError,
+    config: &crate::project::ProjectConfig,
+) -> crate::error::ParseError {
+    use quarto_source_map::SourceContext;
+
+    let mut source_context = SourceContext::new();
+    let candidates = config
+        .config_path
+        .as_deref()
+        .into_iter()
+        .chain(config.extension_manifest_paths.iter().map(PathBuf::as_path));
+    let matched = crate::config_sources::bind_config_source(
+        &mut source_context,
+        err.source_info(),
+        candidates,
+    );
+
+    let mut builder = resource_error_diagnostic(&err);
+    if let Some(path) = matched
+        && config.config_path.as_deref() != Some(path)
+    {
+        builder = builder.add_info(format!(
+            "This `resources` entry is contributed by the extension manifest `{}` \
+             (`contributes.metadata.project`), not by your project configuration file.",
+            path.display()
+        ));
+    }
+    crate::error::ParseError::new(vec![builder.build()], source_context)
 }
 
 /// Diagnostic-aware variant of [`collect_static_resources`]. Same
@@ -939,13 +999,9 @@ pub fn collect_static_resources_with_diagnostics(
     let project_root = &project.dir;
     let mut out = Vec::new();
 
-    // Project-level. Errors point into `_quarto.yml` (or `.yaml`).
-    let project_yaml = project
-        .config
-        .config_path
-        .clone()
-        .unwrap_or_else(|| project_root.join("_quarto.yml"));
-
+    // Project-level. Errors point into the config file that declared
+    // the pattern — `_quarto.yml` or a contributing extension's
+    // `_extension.yml` (bd-p86nlm92).
     if let Err(e) = (|| -> Result<(), ResourceError> {
         let resolution =
             resolve_resource_patterns(project_root, project_root, &project.config.resources)?;
@@ -960,7 +1016,7 @@ pub fn collect_static_resources_with_diagnostics(
         )?);
         Ok(())
     })() {
-        return Err(resource_error_to_parse_error(e, &project_yaml));
+        return Err(resource_error_to_config_parse_error(e, &project.config));
     }
 
     // Document-level. Errors point into the doc that declared the

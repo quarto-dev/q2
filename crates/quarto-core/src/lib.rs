@@ -40,6 +40,7 @@ pub mod artifact;
 pub mod artifact_flush;
 pub mod attribution;
 pub mod cell_options;
+pub mod config_sources;
 pub mod crossref;
 pub mod dates;
 pub mod dependency;

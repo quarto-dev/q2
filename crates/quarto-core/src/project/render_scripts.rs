@@ -207,7 +207,7 @@ mod exec {
     use std::sync::OnceLock;
 
     use quarto_error_reporting::DiagnosticMessageBuilder;
-    use quarto_source_map::{FileId, SourceContext, SourceInfo};
+    use quarto_source_map::{SourceContext, SourceInfo};
 
     use super::RenderScript;
     use crate::error::ParseError;
@@ -263,6 +263,14 @@ mod exec {
         /// Path of the `_quarto.yml` the scripts came from, used to
         /// attach source snippets to diagnostics.
         pub config_path: Option<&'a Path>,
+        /// Manifest paths of the discovered extensions
+        /// ([`crate::project::ProjectConfig::extension_manifest_paths`]):
+        /// a script entry contributed via
+        /// `contributes.metadata.project` carries a `SourceInfo`
+        /// anchored in its `_extension.yml`, and diagnostics must
+        /// bind that file — not `_quarto.yml` — to the resolved
+        /// FileId (bd-m6wmztln).
+        pub extension_manifest_paths: &'a [PathBuf],
         /// True iff the whole project is being rendered. Exported as
         /// `QUARTO_PROJECT_RENDER_ALL=1`; the variable is *absent*
         /// otherwise (not `"0"`), matching Q1.
@@ -534,9 +542,13 @@ mod exec {
     }
 
     /// Assemble a [`ParseError`] for a script problem, attaching the
-    /// `_quarto.yml` snippet for the offending entry when the source
-    /// info resolves (same degradation contract as
-    /// [`crate::project_resources::resource_error_to_parse_error`]).
+    /// snippet of the config file the offending entry was *written
+    /// in* — the project's `_quarto.yml` or a contributing
+    /// extension's `_extension.yml` — chosen by FileId match via
+    /// [`crate::config_sources::bind_config_source`] (bd-m6wmztln).
+    /// When the entry comes from an extension manifest, an info line
+    /// says so; when no candidate matches, the diagnostic degrades to
+    /// a span-less render.
     fn script_error(
         ctx: &RenderScriptsContext,
         source_info: Option<&SourceInfo>,
@@ -545,21 +557,29 @@ mod exec {
         problem: String,
     ) -> ParseError {
         let mut source_context = SourceContext::new();
-        let mut builder = DiagnosticMessageBuilder::error(title).with_code(code);
+        let mut builder = DiagnosticMessageBuilder::error(title)
+            .with_code(code)
+            .problem(problem);
         if let Some(info) = source_info {
-            if let (Some((fid_usize, _, _)), Some(config_path)) =
-                (info.resolve_byte_range(), ctx.config_path)
+            let candidates = ctx
+                .config_path
+                .into_iter()
+                .chain(ctx.extension_manifest_paths.iter().map(PathBuf::as_path));
+            let matched =
+                crate::config_sources::bind_config_source(&mut source_context, info, candidates);
+            if let Some(path) = matched
+                && ctx.config_path != Some(path)
             {
-                let content = std::fs::read_to_string(config_path).ok();
-                source_context.add_file_with_id(
-                    FileId(fid_usize),
-                    config_path.to_string_lossy().into_owned(),
-                    content,
-                );
+                builder = builder.add_info(format!(
+                    "This entry is contributed by the extension manifest `{}` \
+                     (`contributes.metadata.project`), not by your project \
+                     configuration file.",
+                    path.display()
+                ));
             }
             builder = builder.with_location(info.clone());
         }
-        ParseError::new(vec![builder.problem(problem).build()], source_context)
+        ParseError::new(vec![builder.build()], source_context)
     }
 
     /// Q1-compatible mutation guard: a pre-render script may not
