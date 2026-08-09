@@ -234,13 +234,19 @@ listings.
 
   Output inspected: bravo (declared first) now renders first. Pre-fix
   output (recorded above in "Repro at HEAD") had alpha first.
-- [ ] Sweep existing listing snapshots/fixtures for ordering churn; report
+- [x] Sweep existing listing snapshots/fixtures for ordering churn: full
+  workspace suite green means no snapshot beyond the 3 reported above was
+  affected; `cargo xtask lint` clean
 - [x] docs: no listings guide exists yet (bd-2nb6i1qv's scope — the new
   semantics belong in that guide when it's written). Updated
   `docs/errors/listing/Q-12-3.qmd` for the changed warning semantics
   (booleans accepted, `true` = default sort, warning only when no item
   defines the field, `listing-item: extra:` custom-field sorting).
-- [ ] `braid` bookkeeping: comment + close after user sign-off
+- [x] Full `cargo xtask verify` (Rust + WASM + hub-client legs): all
+  steps passed (2026-08-09)
+- [ ] `braid` bookkeeping: progress comment left (c-kj2wdi8p); close after
+  user sign-off
+- [ ] Push (awaiting user approval) → PR
 
 ## Design decisions (user, 2026-08-09)
 
