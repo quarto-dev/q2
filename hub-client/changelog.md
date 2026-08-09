@@ -27,6 +27,13 @@ WASM rebuild is needed for a changelog-only edit.
 
 - [`e5769e5b`](https://github.com/quarto-dev/q2/commits/e5769e5b): Bump the samod sync library to 0.13.0 and the JS automerge package to 3.4.1.
 
+### 2026-08-09
+
+- [`6ffe5211`](https://github.com/quarto-dev/q2/commits/6ffe5211): The ephemeral-session banner's config fetch now retries once on a transient network failure, so a dropped first request (for example a `--join` guest's tunnel mid-handshake) no longer hides the banner for the whole session.
+- [`4111452f`](https://github.com/quarto-dev/q2/commits/4111452f): The editor shows a persistent "Ephemeral session — edits won't be saved to disk" banner when the serving `q2 preview` was started without `--allow-edit`; guests of a shared session see it too.
+- [`bcfbb47f`](https://github.com/quarto-dev/q2/commits/bcfbb47f): `q2 preview --ui editor` boots skip the project-set setup and migration screens and land straight in the previewed document.
+- [`9dfce50e`](https://github.com/quarto-dev/q2/commits/9dfce50e): `q2 preview --ui editor` serves the full collaborative editor (Monaco, file sidebar, live preview pane) from the preview server, to the host and any `--join` guests alike.
+
 ### 2026-08-07
 
 - [`279d7e5e`](https://github.com/quarto-dev/q2/commits/279d7e5e): `.md` files are now first-class source files: they sync into hub projects, get live preview, outline, folding, diagnostics, and qmd highlighting in the editor, and cross-document links into `.md` pages navigate like `.qmd` ones.
