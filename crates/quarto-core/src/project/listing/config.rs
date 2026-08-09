@@ -494,7 +494,7 @@ fn parse_one_listing(
                 l.image_placeholder = entry.value.as_plain_text();
             }
             "sort" => {
-                l.sort = Some(parse_sort(&entry.value, diagnostics));
+                l.sort = parse_sort(&entry.value, diagnostics);
             }
             "template" => {
                 template_source = Some(&entry.value);
@@ -750,30 +750,40 @@ fn parse_field_types(
     out
 }
 
-fn parse_sort(value: &ConfigValue, diagnostics: &mut Vec<DiagnosticMessage>) -> Vec<ListingSort> {
-    if let ConfigValueKind::Scalar(Yaml::Boolean(false)) = &value.value {
-        return Vec::new();
+/// Parse the `sort:` value. `None` means "apply the default sort" —
+/// `sort: true` is Q1's explicit spelling of the default, so it
+/// parses the same as an absent key. `Some(vec![])` means sorting is
+/// explicitly disabled (`sort: false`); `Some(keys)` is an author
+/// sort spec.
+fn parse_sort(
+    value: &ConfigValue,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Option<Vec<ListingSort>> {
+    if let ConfigValueKind::Scalar(Yaml::Boolean(b)) = &value.value {
+        return if *b { None } else { Some(Vec::new()) };
     }
     // String-shaped values (including the routine PandocInlines
     // wrapping of front-matter strings) flatten via `as_plain_text`,
     // mirroring `parse_contents` — see bd-2qjnd / bd-nwyp.
     if let Some(s) = value.as_plain_text() {
-        return vec![parse_one_sort_key(&s)];
+        return Some(vec![parse_one_sort_key(&s)]);
     }
     match &value.value {
-        ConfigValueKind::Array(items) => items
-            .iter()
-            .filter_map(|v| v.as_plain_text())
-            .map(|s| parse_one_sort_key(&s))
-            .collect(),
+        ConfigValueKind::Array(items) => Some(
+            items
+                .iter()
+                .filter_map(|v| v.as_plain_text())
+                .map(|s| parse_one_sort_key(&s))
+                .collect(),
+        ),
         _ => {
             push_diag(
                 diagnostics,
                 "Q-12-3",
-                "`sort:` must be a string, array of strings, or `false`.",
+                "`sort:` must be a string, array of strings, or a boolean.",
                 value,
             );
-            Vec::new()
+            Some(Vec::new())
         }
     }
 }
@@ -1384,6 +1394,25 @@ listing:
         assert_eq!(sort.len(), 1);
         assert_eq!(sort[0].field, "date");
         assert_eq!(sort[0].direction, SortDirection::Asc);
+    }
+
+    // 8b. sort: false → Some([]) — sorting explicitly disabled,
+    // declared contents order preserved downstream.
+    #[test]
+    fn sort_false_parses_to_empty_spec() {
+        let (listings, diags) = parse(map(vec![("sort", b(false))]));
+        assert_eq!(listings[0].sort.as_deref(), Some(&[][..]));
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    }
+
+    // 8c. sort: true → None — Q1's explicit spelling of "apply the
+    // default sort"; same as an absent key, and NOT a field named
+    // "true".
+    #[test]
+    fn sort_true_parses_like_absent() {
+        let (listings, diags) = parse(map(vec![("sort", b(true))]));
+        assert_eq!(listings[0].sort, None);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
     }
 
     // 9. sort: ["date desc"] → Desc

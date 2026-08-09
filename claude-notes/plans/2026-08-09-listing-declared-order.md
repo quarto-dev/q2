@@ -182,37 +182,64 @@ listings.
   last regardless of direction" rule. Pinned by failing test
   `missing_dates_sort_to_end_in_desc_too`; fix folded into Phase 2.
 
-### Phase 1 — Order-preserving item collection
+### Phase 1 — Order-preserving item collection — DONE 2026-08-09
 
-- [ ] `listing_generate.rs`: per-positive-pattern `PatternSet`s hoisted;
+- [x] `listing_generate.rs`: per-positive-pattern `PatternSet`s hoisted;
   candidate loop records first-match index + per-pattern `matched_any`
-- [ ] Stable-sort collected items by first-match pattern index
-- [ ] Q-12-19 loop consumes `matched_any` (drop per-item recompiles)
-- [ ] Phase-0 ordering tests pass; full workspace suite green
+- [x] Stable-sort collected items by first-match pattern index
+- [x] Q-12-19 loop consumes `matched_any` (drop per-item recompiles)
+- [x] Phase-0 ordering tests pass (4/4)
 
-### Phase 2 — Sort semantics
+### Phase 2 — Sort semantics — DONE 2026-08-09
 
-- [ ] `parse_sort` → `Option<Vec<ListingSort>>` (`true`/absent → `None`,
-  `false` → `Some([])`); config plumbing updated
-- [ ] `ListingItem.order: Option<i32>` hydrated from `profile.order`;
-  exposed in template binding (`order` key) for Q1-compatible templates
-- [ ] `field_value("order")` → item.order (extra fallback preserved);
-  `order` added to `is_known_sort_field`
-- [ ] Default sort → `[order asc, title asc]`, all listing types (replaces
-  date-desc + table special case); update `default_sort_is_date_desc_*`
-  test per decision Q3
-- [ ] Q-12-3: warn only when field is unknown AND no item has a value
-  (`apply_sort` gains access to items — it already has them)
-- [ ] Full workspace suite green; snapshot changes reported per policy
+- [x] `parse_sort` → `Option<Vec<ListingSort>>` (`true` → `None` = use
+  default, `false` → `Some([])` = no sorting); caller updated; malformed
+  message now says "or a boolean"; config tests 8b/8c added
+- [x] `ListingItem.order: Option<i32>` hydrated from `profile.order`;
+  exposed in template binding as `order`; 11 test-helper struct literals
+  updated mechanically
+- [x] `field_value("order")` → item.order (numeric via natural_compare);
+  `order` added to `is_known_sort_field`; unit test added (the deferred
+  Phase-0 item)
+- [x] Default sort → `[order asc, title asc]`, all listing types (replaces
+  date-desc + the table no-default special case)
+- [x] Q-12-3: warn only when the field is unknown AND no item has a value
+- [x] Missing-value desc fix: direction flip now applies only to the
+  value-to-value comparison; missing sorts last in both directions
+- [x] All 351 quarto-core listing tests green
+- [x] **Snapshot changes: 3 files** —
+  `integration__listing_pipeline__snapshot_builtin_default_with_categories_{default,cloud,unnumbered}_mode.snap`.
+  Cause: default-sort change; each diff is exactly the first and third
+  items swapping (old date-desc Third/Second/First → new title-asc
+  First/Second/Third) plus insta refreshing a stale `source:` header path
+  from the pre-`tests/integration/` layout. No markup changes.
+- [x] Full workspace suite green: 11,166 tests run, 11,166 passed
+  (2026-08-09; includes the quarto-hub suite — the bd-eb2wnxkp macOS
+  flake did not fire this run)
 
 ### Phase 3 — End-to-end verification + docs
 
-- [ ] `q2 render` on the committed repro fixture: bravo before alpha in
-  `_site/index.html`; output inspected and recorded in this plan
+- [x] `q2 render` on the committed repro fixture, post-fix (2026-08-09):
+
+  ```
+  $ cd claude-notes/plans/listing-declared-order-investigation/repro
+  $ rm -rf _site && cargo run --quiet --bin q2 -- render .
+  Rendered 3 of 3 files to .../repro/_site
+  $ grep -n -o 'alpha/\|bravo/' _site/index.html
+  36:bravo/
+  39:bravo/
+  45:alpha/
+  48:alpha/
+  ```
+
+  Output inspected: bravo (declared first) now renders first. Pre-fix
+  output (recorded above in "Repro at HEAD") had alpha first.
 - [ ] Sweep existing listing snapshots/fixtures for ordering churn; report
-- [ ] docs/ listings page: document declared-order semantics, `order:`
-  front matter, default sort, `sort: false`/`true` (coordinate with
-  bd-2nb6i1qv scope — keep this entry minimal)
+- [x] docs: no listings guide exists yet (bd-2nb6i1qv's scope — the new
+  semantics belong in that guide when it's written). Updated
+  `docs/errors/listing/Q-12-3.qmd` for the changed warning semantics
+  (booleans accepted, `true` = default sort, warning only when no item
+  defines the field, `listing-item: extra:` custom-field sorting).
 - [ ] `braid` bookkeeping: comment + close after user sign-off
 
 ## Design decisions (user, 2026-08-09)

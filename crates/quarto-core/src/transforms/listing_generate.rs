@@ -41,7 +41,7 @@ use crate::glob::{GlobOptions, PatternSet, path_to_forward_slashes};
 use crate::project::listing::filter::apply_filters;
 use crate::project::listing::glob_resolve::resolve_content_globs;
 use crate::project::listing::sort::apply_sort;
-use crate::project::listing::{ResolvedListing, hydrate_item, parse_listings};
+use crate::project::listing::{ListingItem, ResolvedListing, hydrate_item, parse_listings};
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::is_feature_disabled;
@@ -135,13 +135,28 @@ impl AstTransform for ListingGenerateTransform {
                 );
             }
 
-            // Compile once per listing, then match every candidate.
-            // Resolution already validated these patterns, so the
-            // compile cannot fail; an empty set on the impossible
-            // path simply matches nothing.
+            // Compile the full set once for the global negation
+            // check, and each positive pattern individually: item
+            // collection orders by the FIRST pattern that matches a
+            // candidate (Q1's glob-major semantics,
+            // bd-listing-declared-order-3ixcvc4o), and the Q-12-19
+            // matched-nothing diagnostic credits EVERY pattern a
+            // candidate matches. Resolution already validated these
+            // patterns, so the compiles cannot fail; an empty set on
+            // the impossible path simply matches nothing.
+            let empty_set = || PatternSet::compile(&[], &GlobOptions::LISTING).unwrap();
             let patterns = resolution
                 .compile(&GlobOptions::LISTING)
-                .unwrap_or_else(|_| PatternSet::compile(&[], &GlobOptions::LISTING).unwrap());
+                .unwrap_or_else(|_| empty_set());
+            let positives: Vec<_> = resolution.positives().collect();
+            let positive_sets: Vec<PatternSet> = positives
+                .iter()
+                .map(|(glob, _)| {
+                    PatternSet::compile(std::slice::from_ref(*glob), &GlobOptions::LISTING)
+                        .unwrap_or_else(|_| empty_set())
+                })
+                .collect();
+            let mut matched_any = vec![false; positive_sets.len()];
 
             // Patterns the glob engine rejected (bd-mt7a6uc4).
             // Before, these matched nothing in silence — the same
@@ -159,30 +174,43 @@ impl AstTransform for ListingGenerateTransform {
                 );
             }
 
-            let mut items = Vec::new();
+            // Candidate-major collection, pattern-major order: tag
+            // each item with the index of its first matching
+            // pattern, then stable-sort by that index. Exclusions
+            // stay global — a `!` entry excludes a candidate no
+            // matter where it appears in `contents:`.
+            let mut ordered: Vec<(usize, ListingItem)> = Vec::new();
             if let Some(index) = ctx.project_index.as_deref() {
                 for profile in index.profiles() {
                     let candidate_path_str = path_to_forward_slashes(&profile.source_path);
                     if candidate_path_str == host_path_str {
                         continue;
                     }
-                    if patterns.matches(&candidate_path_str) {
-                        items.push(hydrate_item(profile));
+                    if patterns.excluded(&candidate_path_str) {
+                        continue;
+                    }
+                    let mut first_match: Option<usize> = None;
+                    for (i, set) in positive_sets.iter().enumerate() {
+                        if set.matches(&candidate_path_str) {
+                            matched_any[i] = true;
+                            first_match.get_or_insert(i);
+                        }
+                    }
+                    if let Some(pattern_idx) = first_match {
+                        ordered.push((pattern_idx, hydrate_item(profile)));
                     }
                 }
             }
+            ordered.sort_by_key(|(pattern_idx, _)| *pattern_idx);
+            let mut items: Vec<ListingItem> = ordered.into_iter().map(|(_, item)| item).collect();
 
             // A pattern that compiled, stayed in the project, and
             // still matched no document is almost always a Q1
             // assumption about `*` (D5/D7). Checked before
             // `include:`/`exclude:` filters run, so this reports on
             // the *glob*, not on a filter that emptied the set.
-            for (glob, source) in resolution.positives() {
-                let matched = items.iter().any(|item| {
-                    PatternSet::compile(std::slice::from_ref(glob), &GlobOptions::LISTING)
-                        .is_ok_and(|set| set.matches_path(&item.source_path))
-                });
-                if !matched {
+            for (i, (glob, source)) in positives.iter().enumerate() {
+                if !matched_any[i] {
                     diags.push(
                         crate::glob::diagnostics::matched_nothing(
                             "Q-12-19",
@@ -202,19 +230,30 @@ impl AstTransform for ListingGenerateTransform {
             apply_filters(&mut items, &listing.include, &listing.exclude);
 
             if let Some(sort) = listing.sort.as_ref() {
+                // `sort: false` parses to an empty spec, which
+                // `apply_sort` treats as a no-op — declared
+                // `contents:` order flows through untouched.
                 apply_sort(&mut items, sort, &mut diags);
             } else {
-                // Default sort: date descending. Matches Q1 default
-                // for the `default` and `grid` types; `table` keeps
-                // insertion order unless the author overrides.
-                use crate::project::listing::config::{ListingSort, ListingType, SortDirection};
-                if !matches!(listing.kind, ListingType::Table) {
-                    let default_sort = vec![ListingSort {
-                        field: "date".to_string(),
-                        direction: SortDirection::Desc,
-                    }];
-                    apply_sort(&mut items, &default_sort, &mut diags);
-                }
+                // Default sort (Q1 parity): `order asc, title asc`,
+                // uniformly across listing types — Q1 applies its
+                // default whenever `title` is among the hydrated
+                // fields, which holds for every built-in type
+                // (table included). Items without `order:` sort
+                // after curated ones, in title order
+                // (bd-listing-declared-order-3ixcvc4o).
+                use crate::project::listing::config::{ListingSort, SortDirection};
+                let default_sort = vec![
+                    ListingSort {
+                        field: "order".to_string(),
+                        direction: SortDirection::Asc,
+                    },
+                    ListingSort {
+                        field: "title".to_string(),
+                        direction: SortDirection::Asc,
+                    },
+                ];
+                apply_sort(&mut items, &default_sort, &mut diags);
             }
 
             if let Some(max) = listing.max_items {
