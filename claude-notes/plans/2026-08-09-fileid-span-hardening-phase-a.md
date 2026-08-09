@@ -100,9 +100,14 @@ Working conventions for this phase:
       *Done 2026-08-09. render_scripts.rs + project_resources.rs
       temporarily blessed (PR #478 conflict avoidance) — remove from
       BLESSED_SUFFIXES when #478 and bd-x113wg9v land.*
-- [ ] **quarto-xml / bd-y5gpc8yv (p3):** replace hardcoded `FileId(0)`
+- [x] **quarto-xml / bd-y5gpc8yv (p3):** replace hardcoded `FileId(0)`
       (`quarto-xml/src/parser.rs:27,43,83`) — in-tree; can ride any strand
       or the upstream version bump (UNKNOWN sentinel arrives with Option B).
+      *Done 2026-08-09: exported ANONYMOUS_FILE_ID = FileId(usize::MAX)
+      used by all three anonymous entry points; migrate to the upstream
+      reserved id when Option B lands. Follow-up idea recorded on the
+      strand: citeproc's load_csl_style knows config.csl and can use
+      parse_with_file_id once CSL spans start rendering.*
 
 ### External communication
 
