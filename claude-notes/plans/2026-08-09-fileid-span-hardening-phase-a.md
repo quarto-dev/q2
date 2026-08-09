@@ -28,13 +28,17 @@ Working conventions for this phase:
 
 ### Bug fixes (verified in audit)
 
-- [ ] **P1 / bd-itj2mjkr (p1):** engine intermediate FileId slot desync.
+- [x] **P1 / bd-itj2mjkr (p1):** engine intermediate FileId slot desync.
       Fixture: project (`_quarto.yml`) + doc with executable cell; red test
       asserts engine-produced block FileIds resolve to the intermediate
       slot, not `_quarto.yml`. Fix: use the id actually returned by
       `add_file`/`add_file_with_info` in `engine_execution.rs` (drop the
       `filenames.len()` derivation); `debug_assert!` documenting the
       files/filenames relationship; fix the false lock-step comment.
+      *Done 2026-08-09, commit 9d1c2581 on
+      braid/bd-itj2mjkr-engine-slot-desync (remap made conditional, not
+      additive; debug_assert judged unnecessary once the id comes from
+      the add_file return). Awaiting PR/merge before strand close.*
 - [ ] **D3 / bd-x113wg9v (p2):** doc-level `resource_error_to_parse_error`
       mis-bind. Depends on PR #478. Fixture: `resources:` pattern declared in
       `_metadata.yml`, assert Q-5-1 snippet names the `_metadata.yml`. Fix:
