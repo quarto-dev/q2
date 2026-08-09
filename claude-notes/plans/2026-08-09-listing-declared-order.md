@@ -149,12 +149,15 @@ Skeleton only — actual phase contents wait on the design discussion.
    first-pattern order; snapshot churn from ties only. ✅ decided
 3. **Default-sort parity:** default **can change** to Q1's
    (`order asc, title asc`), provided the old behavior stays configurable.
-   *Pending clarification:* is per-listing `sort: date desc` (already works)
-   sufficient, or is a project-level default-sort knob wanted?
-4. **Q-12-3 shape:** *pending* — user asked to see the message
-   ("Unknown sort field `X`; values will compare as equal."); recommendation
-   on the table is any-item suppression (skip warning when at least one
-   item's `extra` has the field).
+   **Working assumption** (flagged to user, overridable): per-listing
+   `sort: date desc` — which already works — satisfies "configurable"; no
+   new project-level default-sort knob in this pass. Consequence: `order`
+   joins `is_known_sort_field` and sorts via the front-matter `order` field
+   (through `extra` or hydrated explicitly).
+4. **Q-12-3 shape:** any-item suppression — "we only want the warning if
+   there's no information that can be used to determine an appropriate
+   sort." I.e. skip the warning when at least one item has a value for the
+   field (built-in or `extra`); keep it when no item does. ✅ decided
 5. **Description-preview regression fixture:** minimal repro is enough; no
    connect-docs fixture. ✅ decided
 
