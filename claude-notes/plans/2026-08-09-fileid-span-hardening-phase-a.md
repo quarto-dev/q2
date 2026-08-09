@@ -125,6 +125,23 @@ Working conventions for this phase:
       — separate plan doc, linked from bd-nv4p0eb1
 - [ ] Update bd-nv4p0eb1 with phase-A completion evidence
 
+## Session log
+
+- **2026-08-09 (session 1, audit + start):** research doc + this plan;
+  strands filed; posit-dev/quarto-yaml#17 filed; bd-itj2mjkr done.
+- **2026-08-09 (session 1, cont.):** bd-f6h40a9r, bd-t3enk8gq,
+  bd-jrq4hroi, bd-vmlhw7nx, bd-thagcbfq, bd-y5gpc8yv done — 7 of 11
+  q2-side items. All merged to `feature/bd-nv4p0eb1-span-hardening`
+  (`--no-ff`, one merge per strand). Full `cargo xtask verify` green at
+  the P1+P2 point and re-run at branch head at session end. Discovered:
+  bd-u0tldu4z (flaky quarto-hub admin_collect_lifecycle test, unrelated
+  to this work — no quarto-xml dep edge, green in isolation and on
+  rerun). NOT pushed — awaiting user approval.
+- **Next session:** bd-fc3mf161 (D9, may defer) is the only unblocked
+  code item; bd-x113wg9v / bd-h5rfw3ao / bd-r64mj1aa wait on PR #478's
+  merge (then also remove the two temporary BLESSED_SUFFIXES entries in
+  the lint). Then the step-2 quarto-source-map memo (phase exit).
+
 ## Details / decisions
 
 - Pin-parse-time-content semantics confirmed (research doc §7.2); Option C
