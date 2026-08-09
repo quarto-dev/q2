@@ -217,6 +217,15 @@ enum Commands {
         #[arg(long)]
         no_browser: bool,
 
+        /// Open the preview in a specific browser instead of the
+        /// system default — e.g. `--browser firefox` or `--browser
+        /// "Google Chrome"`. The value is handed to the OS opener
+        /// (`open -a` on macOS), so use a command on PATH or an
+        /// installed application name. Incompatible with
+        /// --no-browser.
+        #[arg(long, value_name = "BROWSER", conflicts_with = "no_browser")]
+        browser: Option<String>,
+
         /// Override the directory the preview uses for ephemeral
         /// per-session state. Default: a fresh tempdir that is
         /// deleted when `q2 preview` exits.
@@ -1009,6 +1018,38 @@ mod cli_parse_tests {
         assert_eq!(host.as_deref(), Some("127.0.0.1"));
         assert!(no_browser);
     }
+
+    #[test]
+    fn preview_browser_parses_and_composes_with_share() {
+        let Commands::Preview { browser, share, .. } =
+            parse_preview(&["preview", "--share", "--browser", "firefox"])
+        else {
+            unreachable!()
+        };
+        assert!(share);
+        assert_eq!(browser.as_deref(), Some("firefox"));
+    }
+
+    #[test]
+    fn preview_browser_composes_with_join() {
+        // Guests pick the browser for the local proxy URL too.
+        let Commands::Preview { join, browser, .. } =
+            parse_preview(&["preview", "--join", "q2previewabc", "--browser", "safari"])
+        else {
+            unreachable!()
+        };
+        assert_eq!(join.as_deref(), Some("q2previewabc"));
+        assert_eq!(browser.as_deref(), Some("safari"));
+    }
+
+    #[test]
+    fn preview_browser_conflicts_with_no_browser() {
+        let err = match try_parse(&["preview", "--browser", "firefox", "--no-browser"]) {
+            Ok(_) => panic!("--browser and --no-browser must conflict"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
 }
 
 fn main() -> Result<()> {
@@ -1072,6 +1113,7 @@ fn main() -> Result<()> {
             port,
             host,
             no_browser,
+            browser,
             data_dir,
             preview_dir,
             no_project,
@@ -1088,6 +1130,7 @@ fn main() -> Result<()> {
                     port,
                     host,
                     no_browser,
+                    browser,
                 })
             } else {
                 commands::preview::execute(commands::preview::PreviewArgs {
@@ -1095,6 +1138,7 @@ fn main() -> Result<()> {
                     port,
                     host,
                     no_browser,
+                    browser,
                     data_dir,
                     preview_dir,
                     no_project,

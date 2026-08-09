@@ -34,6 +34,10 @@ pub struct PreviewArgs {
     pub host: Option<String>,
     /// Skip the browser-open step.
     pub no_browser: bool,
+    /// Open the preview in this browser instead of the system
+    /// default (`--browser <name>`). clap makes it conflict with
+    /// `--no-browser`, so the two never both reach here.
+    pub browser: Option<String>,
     /// Override the ephemeral samod storage dir. Default: a fresh
     /// `tempfile::TempDir` that's deleted on shutdown.
     pub data_dir: Option<PathBuf>,
@@ -81,6 +85,9 @@ pub struct JoinArgs {
     pub host: Option<String>,
     /// Skip the browser-open step.
     pub no_browser: bool,
+    /// Open the session in this browser instead of the system
+    /// default (`--browser <name>`).
+    pub browser: Option<String>,
 }
 
 pub fn execute_join(args: JoinArgs) -> Result<()> {
@@ -200,6 +207,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
             if !args.no_browser {
                 let url_for_open = url.clone();
                 let host_for_open = host.clone();
+                let browser_for_open = args.browser.clone();
                 tokio::spawn(async move {
                     const READY_TIMEOUT: Duration = Duration::from_secs(10);
                     if wait_until_accepting(&host_for_open, port, READY_TIMEOUT).await {
@@ -217,7 +225,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
                              opening the browser anyway (it may need a manual reload)"
                         );
                     }
-                    open_browser_or_log(&url_for_open, false);
+                    open_browser_or_log(&url_for_open, browser_for_open.as_deref(), false);
                 });
             }
         }
@@ -293,6 +301,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
                     |n| n.to_string_lossy().into_owned(),
                 );
             let no_browser = args.no_browser;
+            let browser = args.browser.clone();
             quarto_preview::run_with_on_ready(config, move |ctx| {
                 let paths: Vec<String> = ctx.index().get_all_files().into_keys().collect();
                 let url = match pick_editor_file(initial_page.as_deref(), &paths) {
@@ -331,6 +340,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
                 println!();
                 if !no_browser {
                     let host_for_open = host_for_ready.clone();
+                    let browser_for_open = browser.clone();
                     tokio::spawn(async move {
                         const READY_TIMEOUT: Duration = Duration::from_secs(10);
                         if !wait_until_accepting(&host_for_open, port, READY_TIMEOUT).await {
@@ -343,7 +353,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
                                  reload)"
                             );
                         }
-                        open_browser_or_log(&url, false);
+                        open_browser_or_log(&url, browser_for_open.as_deref(), false);
                     });
                 }
             })
@@ -431,7 +441,7 @@ async fn run_join(args: JoinArgs) -> Result<()> {
     println!();
 
     if !args.no_browser {
-        open_browser_or_log(&url, false);
+        open_browser_or_log(&url, args.browser.as_deref(), false);
     }
 
     // Report status transitions ("connected via relay", "reconnecting…")
@@ -622,18 +632,33 @@ fn validate_explicit_port(host: &str, port: u16) -> Result<()> {
     }
 }
 
-/// Phase D.1: open the boot URL in the user's default browser unless
-/// `--no-browser` was passed. Failure is logged + non-fatal — the
-/// URL was already printed for copy-paste before this fires.
-fn open_browser_or_log(url: &str, suppress: bool) {
+/// Phase D.1: open the boot URL in the user's browser unless
+/// `--no-browser` was passed. `browser` is the `--browser <name>`
+/// value: `Some` opens that specific application (via `open::with`,
+/// i.e. `open -a` on macOS), `None` the system default. Failure is
+/// logged + non-fatal — the URL was already printed for copy-paste
+/// before this fires.
+fn open_browser_or_log(url: &str, browser: Option<&str>, suppress: bool) {
     if suppress {
         return;
     }
-    if let Err(e) = open::that(url) {
-        tracing::warn!(
-            error = %e,
-            "could not auto-open browser; the URL is printed above"
-        );
+    let result = match browser {
+        Some(app) => open::with(url, app),
+        None => open::that(url),
+    };
+    if let Err(e) = result {
+        if let Some(app) = browser {
+            tracing::warn!(
+                error = %e,
+                browser = app,
+                "could not open the preview in the requested browser; the URL is printed above"
+            );
+        } else {
+            tracing::warn!(
+                error = %e,
+                "could not auto-open browser; the URL is printed above"
+            );
+        }
     }
 }
 
@@ -970,7 +995,14 @@ mod tests {
         // The `suppress` branch must return without touching the
         // OS — we never want a test run to fork a browser. Asserting
         // "doesn't panic, returns" is the contract.
-        open_browser_or_log("https://invalid.example.invalid/", true);
+        open_browser_or_log("https://invalid.example.invalid/", None, true);
+        // Suppression wins over an explicit --browser too: still no
+        // OS touch even though the browser name is bogus.
+        open_browser_or_log(
+            "https://invalid.example.invalid/",
+            Some("not-a-real-browser-q2-test"),
+            true,
+        );
     }
 
     // ──────────────────────────────────────────────────────────────

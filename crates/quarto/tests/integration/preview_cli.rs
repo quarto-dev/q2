@@ -41,11 +41,13 @@ fn preview_help_advertises_phase_a_args() {
     let help = String::from_utf8(output.stdout).expect("help is UTF-8");
 
     // Each Phase A flag — see claude-notes/plans/2026-05-13-q2-preview-
-    // phase-a.md §A.1. If one disappears or gets renamed, the user-
-    // facing contract changes; fail noisily.
+    // phase-a.md §A.1 — plus later additions like `--browser`. If one
+    // disappears or gets renamed, the user-facing contract changes;
+    // fail noisily.
     for flag in [
         "--port",
         "--no-browser",
+        "--browser",
         "--data-dir",
         "--preview-dir",
         "--no-project",
