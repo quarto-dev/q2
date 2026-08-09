@@ -115,31 +115,94 @@ is the known macOS case-insensitive-filesystem flake tracked as
 review). All 9,697 other tests that ran passed; the failure is unrelated to
 listings.
 
-## Proposed phases (draft)
+## Implementation notes (pre-work investigation, 2026-08-09)
 
-Skeleton only — actual phase contents wait on the design discussion.
+- `DocumentProfile` **already extracts top-level `order:`** front matter
+  (`order: Option<i32>`, `document_profile.rs:699`) — no profile_version
+  bump needed; only `hydrate_item`/`ListingItem`/`field_value` must surface
+  it.
+- Q1's default-sort condition (`hydratedFields.includes(title)` + document
+  sources) is satisfied by **all** built-in types — `kDefaultTableFields`
+  includes title — so the Q1-parity default `order asc, title asc` applies
+  uniformly, replacing both q2's `date desc` default *and* the table-type
+  "no default sort" special case.
+- Q1 `computeListingSort`: `sort: true` → default sort (same as absent).
+  q2's `parse_sort` currently sends `Boolean(true)` through
+  `as_plain_text`, which would produce a bogus `true` sort field —
+  fold the `sort: true` fix into this pass (parse_sort → `Option<Vec<_>>`,
+  `None` = use default).
+- Q-12-3 stays scoped to **unknown** fields only (per-user rule "warn only
+  when no information can determine a sort"): warn iff the field is not
+  built-in AND no item's `field_value` yields a value. Not extended to
+  built-in fields with all-absent values, because the internally-generated
+  default sort (`order asc`) would then warn on every listing whose items
+  lack `order:`.
+- Ordering fix lives in the **consumer** (`ListingGenerateTransform`), not
+  in shared glob resolution: track, per candidate, the index of the first
+  matching positive pattern (candidates iterate positive `PatternSet`s
+  individually, exclusions stay global), then stable-sort collected items
+  by that index. The per-positive compiles replace the Q-12-19 loop's
+  existing per-pattern recompiles (track `matched_any` per pattern —
+  every matching pattern gets credit, not just the first, preserving
+  current Q-12-19 semantics).
 
-- **Phase 0 — Test plan (TDD).**
-  - Failing integration test: explicit two-entry `contents:` with
-    `sort: false` renders in declared order (drive through the listing
-    pipeline test harness in `tests/integration/listing_pipeline.rs`, plus
-    an end-to-end `q2 render` check on the repro fixture).
-  - Failing test: mixed literal + glob `contents:` orders by
-    first-matching-pattern index.
-  - Failing test: a working `extra`-field sort emits no Q-12-3.
-- **Phase 1 — Order-preserving item collection.** In
-  `ListingGenerateTransform`: order collected items by index of first
-  matching positive pattern (hoist per-pattern compiles, shared with the
-  Q-12-19 loop); negations stay global via `PatternSet::excluded`-style
-  logic. Stable within a pattern (keep index order).
-- **Phase 2 — Q-12-3 false positive.** Only warn on unknown sort fields when
-  the field is also absent from every item's `extra` map (or equivalent
-  design per user answer to Q4).
-- **Phase 3 — (scope-dependent) default-sort parity.** If Q3 below says yes:
-  align q2's absent-`sort:` default with Q1 (`order asc, title asc` vs
-  current `date desc`), or file as a separate strand.
-- **Phase 4 — Docs.** Note contents-order semantics in the listings docs
-  (overlaps bd-2nb6i1qv, the listings-guide docs strand).
+## Work items
+
+### Phase 0 — Tests (TDD: write first, verify failures)
+
+- [ ] `sort: false` + explicit two-entry `contents:` preserves declared
+  order (unit, `listing_generate.rs` harness)
+- [ ] Mixed literal + glob `contents:` orders by first-matching-pattern
+  index; within a glob, index order (unit)
+- [ ] Item matching multiple patterns counts for its **first** pattern only
+  (dedup / no duplicate items) (unit)
+- [ ] Q-12-19 still fires for a pattern whose only matches were claimed by
+  an earlier pattern? — NO: it must NOT fire (every matching pattern gets
+  credit); regression test (unit)
+- [ ] `sort: true` behaves like absent `sort:` (default sort) (unit)
+- [ ] Default sort (absent `sort:`) is `order asc, title asc` — items with
+  `order:` first (numeric asc), missing-order items after, title asc
+  tie-break (unit)
+- [ ] Table listings get the same default sort (unit)
+- [ ] Explicit `sort: date desc` still works (existing test keeps passing)
+- [ ] `sort: order` works as an explicit known field (unit, sort.rs)
+- [ ] Working `extra`-field sort emits **no** Q-12-3 (unit)
+- [ ] Typo'd sort field (no item has it) still emits Q-12-3 (unit)
+- [ ] End-to-end: repro fixture renders bravo-then-alpha
+  (smoke-all fixture or integration test + manual `q2 render` verification)
+
+### Phase 1 — Order-preserving item collection
+
+- [ ] `listing_generate.rs`: per-positive-pattern `PatternSet`s hoisted;
+  candidate loop records first-match index + per-pattern `matched_any`
+- [ ] Stable-sort collected items by first-match pattern index
+- [ ] Q-12-19 loop consumes `matched_any` (drop per-item recompiles)
+- [ ] Phase-0 ordering tests pass; full workspace suite green
+
+### Phase 2 — Sort semantics
+
+- [ ] `parse_sort` → `Option<Vec<ListingSort>>` (`true`/absent → `None`,
+  `false` → `Some([])`); config plumbing updated
+- [ ] `ListingItem.order: Option<i32>` hydrated from `profile.order`;
+  exposed in template binding (`order` key) for Q1-compatible templates
+- [ ] `field_value("order")` → item.order (extra fallback preserved);
+  `order` added to `is_known_sort_field`
+- [ ] Default sort → `[order asc, title asc]`, all listing types (replaces
+  date-desc + table special case); update `default_sort_is_date_desc_*`
+  test per decision Q3
+- [ ] Q-12-3: warn only when field is unknown AND no item has a value
+  (`apply_sort` gains access to items — it already has them)
+- [ ] Full workspace suite green; snapshot changes reported per policy
+
+### Phase 3 — End-to-end verification + docs
+
+- [ ] `q2 render` on the committed repro fixture: bravo before alpha in
+  `_site/index.html`; output inspected and recorded in this plan
+- [ ] Sweep existing listing snapshots/fixtures for ordering churn; report
+- [ ] docs/ listings page: document declared-order semantics, `order:`
+  front matter, default sort, `sort: false`/`true` (coordinate with
+  bd-2nb6i1qv scope — keep this entry minimal)
+- [ ] `braid` bookkeeping: comment + close after user sign-off
 
 ## Design decisions (user, 2026-08-09)
 
