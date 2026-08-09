@@ -7,7 +7,7 @@
 use std::time::Duration;
 
 use quarto_p2p::{EndpointPreset, TunnelClient, TunnelClientConfig, TunnelHostConfig};
-use quarto_preview::share::{format_share_banner, start_share_session};
+use quarto_preview::share::{format_share_banner, spawn_share_task, start_share_session};
 
 /// Generous cap for individual awaits so a broken tunnel fails the test
 /// instead of hanging it.
@@ -111,6 +111,115 @@ async fn share_glue_tunnels_to_preview_port_and_announces_join_string() {
 
     client.shutdown().await.expect("client shutdown");
     session.shutdown().await.expect("session shutdown");
+}
+
+/// The share task is gated on the server's ready signal: the tunnel's
+/// relay wait must never delay server startup, and the banner must
+/// print after the boot URL. Nothing may start before the gate fires —
+/// with the hermetic preset an ungated spawn would finish in
+/// milliseconds, so an early banner proves the gate is broken.
+#[tokio::test]
+async fn share_task_waits_for_server_ready_gate() {
+    // Stand-in for the preview hub, as in the glue test above.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind stand-in preview server");
+    let port = listener.local_addr().expect("local_addr").port();
+    let app = axum::Router::new().route("/health", axum::routing::get(|| async { "GATE-MARKER" }));
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("axum serve");
+    });
+
+    let announced = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let (ready_tx, ready_rx) = tokio::sync::watch::channel(false);
+    let task = {
+        let announced = announced.clone();
+        spawn_share_task(
+            hermetic_host_cfg(),
+            "127.0.0.1".to_string(),
+            port,
+            false,
+            ready_rx,
+            move |banner| announced.lock().unwrap().push(banner.to_string()),
+        )
+    };
+
+    // Before the gate: no banner, no finished task.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        announced.lock().unwrap().is_empty(),
+        "the banner must wait for the server-ready gate"
+    );
+    assert!(
+        !task.is_finished(),
+        "the share task must park on the ready gate"
+    );
+
+    // Fire the gate: the tunnel starts and the banner prints.
+    ready_tx.send(true).expect("send ready");
+    let session = tokio::time::timeout(STEP_TIMEOUT, task)
+        .await
+        .expect("share task should finish once gated")
+        .expect("share task panicked")
+        .expect("tunnel starts once the gate fires");
+    assert_eq!(announced.lock().unwrap().len(), 1, "banner printed once");
+
+    // And the tunnel actually works.
+    let (local, client) = tokio::time::timeout(
+        STEP_TIMEOUT,
+        TunnelClient::bind(
+            TunnelClientConfig {
+                preset: EndpointPreset::HermeticLoopback,
+            },
+            session.ticket.clone(),
+            "127.0.0.1:0".parse().unwrap(),
+        ),
+    )
+    .await
+    .expect("client bind should not hang")
+    .expect("tunnel client binds");
+    let body = tokio::time::timeout(STEP_TIMEOUT, reqwest::get(format!("http://{local}/health")))
+        .await
+        .expect("GET through tunnel should not hang")
+        .expect("GET through tunnel succeeds")
+        .text()
+        .await
+        .expect("response body");
+    assert_eq!(body, "GATE-MARKER");
+
+    client.shutdown().await.expect("client shutdown");
+    session.shutdown().await.expect("session shutdown");
+}
+
+/// A server that dies before `on_ready` (the gate drops without ever
+/// firing) must end the share task quietly: no banner, no session, no
+/// lingering task for the caller to reap.
+#[tokio::test]
+async fn share_task_exits_quietly_when_server_dies_before_ready() {
+    let announced = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let (ready_tx, ready_rx) = tokio::sync::watch::channel(false);
+    let task = {
+        let announced = announced.clone();
+        spawn_share_task(
+            hermetic_host_cfg(),
+            "127.0.0.1".to_string(),
+            1, // never dialed: the gate drops before the tunnel starts
+            false,
+            ready_rx,
+            move |banner| announced.lock().unwrap().push(banner.to_string()),
+        )
+    };
+
+    drop(ready_tx);
+    let out = tokio::time::timeout(STEP_TIMEOUT, task)
+        .await
+        .expect("the share task must end when the gate drops")
+        .expect("share task panicked");
+    assert!(out.is_none(), "no session when the server never readied");
+    assert!(
+        announced.lock().unwrap().is_empty(),
+        "no banner when the server never readied"
+    );
 }
 
 /// Banner wording: what the token grants must be printed at share time

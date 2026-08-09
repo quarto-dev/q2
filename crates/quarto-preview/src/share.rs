@@ -10,6 +10,8 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use quarto_p2p::{PreviewShareTicket, TunnelError, TunnelHost, TunnelHostConfig, TunnelHostHandle};
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
 
 /// A live share session: the join ticket plus the running tunnel host.
 pub struct ShareSession {
@@ -51,6 +53,49 @@ pub async fn start_share_session(
     let banner = format_share_banner(&ticket.to_string(), allow_edit, ticket.has_relay_addr());
     announce(&banner);
     Ok(ShareSession { ticket, handle })
+}
+
+/// Spawn the share session on a background task, starting the tunnel
+/// only once `ready` flips to `true` (wired to the server's `on_ready`).
+///
+/// The gate exists for two reasons:
+///
+/// - The production preset's relay wait (up to ~10 s when no relay is
+///   reachable) runs on this task, so the host's own preview server
+///   binds and serves immediately instead of waiting for the tunnel.
+/// - The banner prints after the server's boot URL in every UI mode,
+///   keeping the join line the last thing on the terminal (the
+///   copy-paste contract [`format_share_banner`] documents).
+///
+/// A start failure is reported on stderr and yields `None` — the local
+/// preview keeps serving without sharing rather than failing outright.
+/// A `ready` channel that closes without ever flipping (the server
+/// died before `on_ready`) also yields `None`, quietly.
+pub fn spawn_share_task(
+    cfg: TunnelHostConfig,
+    host: String,
+    port: u16,
+    allow_edit: bool,
+    mut ready: watch::Receiver<bool>,
+    announce: impl FnOnce(&str) + Send + 'static,
+) -> JoinHandle<Option<ShareSession>> {
+    tokio::spawn(async move {
+        // Park until the server readies; a closed gate (server died
+        // before on_ready) means there is nothing to share.
+        if ready.wait_for(|&r| r).await.is_err() {
+            return None;
+        }
+        match start_share_session(cfg, &host, port, allow_edit, announce).await {
+            Ok(session) => Some(session),
+            Err(e) => {
+                eprintln!(
+                    "\n  could not start the live-share tunnel: {e}\n  \
+                     the local preview continues without sharing.\n"
+                );
+                None
+            }
+        }
+    })
 }
 
 /// Render the share banner: capability warning + the bare

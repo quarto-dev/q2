@@ -192,12 +192,15 @@ pub struct PreviewConfig {
     /// written back to the user's files.
     pub allow_edit: bool,
     /// Share this preview session over an end-to-end encrypted iroh
-    /// tunnel (`--share`, bd-jhvkwosw). When set, [`run`] spawns a
-    /// [`share::ShareSession`] targeting `host:port` before the server
-    /// starts and prints the join banner; the tunnel is shut down after
-    /// the server exits (before the CLI drops its ephemeral `TempDir`).
-    /// Requires a pre-resolved (non-zero) `port` — the CLI probes one
-    /// before calling in.
+    /// tunnel (`--share`, bd-jhvkwosw). When set, [`run`] starts a
+    /// [`share::ShareSession`] targeting `host:port` on a background
+    /// task once the server reaches `on_ready` — the tunnel's relay
+    /// wait never delays the host's own preview — and prints the join
+    /// banner when the tunnel is up. A tunnel start failure is
+    /// reported on stderr but does not fail the preview. The tunnel is
+    /// shut down after the server exits (before the CLI drops its
+    /// ephemeral `TempDir`). Requires a pre-resolved (non-zero) `port`
+    /// — the CLI probes one before calling in.
     pub share: bool,
     /// Which embedded frontend to serve (`--ui`, Phase 4 bd-jt1etjbn):
     /// the read-only preview SPA (default) or the full hub-client
@@ -289,6 +292,12 @@ where
         .cache_dir
         .clone()
         .unwrap_or_else(|| config.data_dir.join("captures"));
+    // Live-share gate (bd-jhvkwosw): the share task below starts its
+    // tunnel only once the server reaches `on_ready`, so the production
+    // preset's relay wait never delays the host's own preview, and the
+    // join banner prints after the boot URL in every UI mode.
+    let (share_ready_tx, share_ready_rx) = tokio::sync::watch::channel(false);
+
     let registry_for_on_ready = engine_registry.clone();
     let cache_dir_for_on_ready = cache_dir.clone();
     let project_root_for_scripts = config.project_root.clone();
@@ -322,6 +331,10 @@ where
         // Fire the extra hook after the driver is enqueued so callers
         // can rely on it being either in-flight or already done.
         extra_on_ready(ctx);
+        // Unblock the live-share tunnel task (a no-op send when not
+        // sharing). After `extra_on_ready` so the CLI's editor-mode
+        // boot URL prints before the join banner.
+        let _ = share_ready_tx.send(true);
     });
 
     // Phase C.2 hook: after sync_file updates samod with the new
@@ -368,27 +381,28 @@ where
         });
     });
 
-    // bd-jhvkwosw (live-share Phase 2): when sharing, spawn the tunnel
-    // host *before* the server starts — the ticket's inputs (host, port,
-    // token, endpoint addr) all exist already, and printing ahead of the
-    // listener bind matches the CLI boot-URL print's contract (a
-    // too-fast guest just retries via its health supervisor).
-    let share_session = if config.share {
+    // bd-jhvkwosw (live-share Phase 2): when sharing, the tunnel runs
+    // on a background task gated on the server's `on_ready` (signaled
+    // in the callback above) rather than started inline here. The
+    // ticket's inputs (host, port, token, endpoint addr) all exist
+    // already, but the production preset's relay wait can run to ~10 s
+    // when no relay is reachable — too long to keep the host's own
+    // preview from binding and serving. A tunnel start failure is
+    // reported on stderr by the task and no longer fails the preview.
+    let share_task = if config.share {
         anyhow::ensure!(
             config.port != 0,
             "--share requires a resolved port; the CLI probes a free one before starting \
              the server, library callers must do the same"
         );
-        let session = share::start_share_session(
+        Some(share::spawn_share_task(
             quarto_p2p::TunnelHostConfig::default(),
-            &config.host,
+            config.host.clone(),
             config.port,
             config.allow_edit,
+            share_ready_rx,
             |banner| println!("\n{banner}\n"),
-        )
-        .await
-        .context("starting the live-share tunnel")?;
-        Some(session)
+        ))
     } else {
         None
     };
@@ -403,13 +417,30 @@ where
     .await;
 
     // bd-jhvkwosw: tunnel teardown joins the graceful-shutdown path —
-    // after the server (and its final filesystem sync) exits, before the
-    // CLI drops its ephemeral TempDir. Failure is logged, not fatal;
-    // the process is exiting either way.
-    if let Some(session) = share_session
-        && let Err(e) = session.shutdown().await
-    {
-        tracing::warn!(error = %e, "live-share tunnel shutdown failed");
+    // after the server (and its final filesystem sync) exits, before
+    // the CLI drops its ephemeral TempDir. In normal operation the task
+    // finished long ago (it completes once the tunnel is up) and the
+    // session shuts down gracefully here; a task still parked on the
+    // gate or in its relay wait is aborted instead of awaited, so a
+    // Ctrl-C during startup doesn't hang on the ~10 s timeouts.
+    // Failure is logged, not fatal; the process is exiting either way.
+    if let Some(task) = share_task {
+        if task.is_finished() {
+            match task.await {
+                Ok(Some(session)) => {
+                    if let Err(e) = session.shutdown().await {
+                        tracing::warn!(error = %e, "live-share tunnel shutdown failed");
+                    }
+                }
+                // The gate never fired (the server failed before
+                // on_ready) or the tunnel start failed (already
+                // reported on stderr by the task).
+                Ok(None) => {}
+                Err(e) => tracing::warn!(error = %e, "live-share tunnel task failed"),
+            }
+        } else {
+            task.abort();
+        }
     }
 
     server_result.context("quarto-hub server failed")?;

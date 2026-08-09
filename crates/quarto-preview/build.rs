@@ -116,17 +116,36 @@ fn copy_filtered(root: &Path, dir: &Path, embed: &Path, dedupe_against: Option<&
             copy_filtered(root, &path, embed, dedupe_against);
             continue;
         }
-        let bytes = std::fs::read(&path).expect("read editor dist file");
         if let Some(viewer) = dedupe_against
-            && std::fs::read(viewer.join(rel)).is_ok_and(|v| v == bytes)
+            && files_byte_identical(&path, &viewer.join(rel))
         {
             continue; // shared with the viewer embed; served from there
         }
+        let bytes = std::fs::read(&path).expect("read editor dist file");
         let dest = embed.join(rel);
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent).expect("create embed subdir");
         }
         std::fs::write(&dest, bytes).expect("write embed file");
+    }
+}
+
+/// Byte-equality check with a metadata cheap-reject: a missing viewer
+/// counterpart or a size mismatch means "not identical" without reading
+/// either file. Only same-size pairs pay for the full read-compare —
+/// previously every editor-dist file slurped its viewer counterpart
+/// (and itself, before the comparison was even possible), including
+/// the ~38 MB WASM, whether or not the bytes could ever match.
+fn files_byte_identical(a: &Path, b: &Path) -> bool {
+    let (Ok(a_meta), Ok(b_meta)) = (std::fs::metadata(a), std::fs::metadata(b)) else {
+        return false;
+    };
+    if a_meta.len() != b_meta.len() {
+        return false;
+    }
+    match (std::fs::read(a), std::fs::read(b)) {
+        (Ok(a_bytes), Ok(b_bytes)) => a_bytes == b_bytes,
+        _ => false,
     }
 }
 

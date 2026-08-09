@@ -10,7 +10,7 @@ description = "Local HTTP server hosting the q2-preview SPA. Wraps quarto-hub fo
 anyhow.workspace = true
 tracing.workspace = true
 include_dir.workspace = true
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "fs", "sync"] }
 axum = "0.8"
 flate2.workspace = true
 pollster.workspace = true

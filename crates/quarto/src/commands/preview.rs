@@ -189,44 +189,13 @@ async fn run(args: PreviewArgs) -> Result<()> {
             println!("  → {url}");
             println!();
 
-            // Phase D.1 (bd-kw93.8): actually open a browser tab. Failure to
-            // open is logged + non-fatal (the URL is already printed for
-            // copy-paste). Suppressed by --no-browser.
-            //
-            // bd-a6dvrdg1: open only once the server is actually accepting
-            // connections. The server doesn't start until `quarto_preview::run`
-            // below (which then blocks until shutdown), so the open has to run
-            // on a spawned task that waits for readiness while the main task
-            // goes on to start the server. Opening eagerly here — as we used to
-            // — raced the server's startup: on larger projects the browser
-            // connected before `axum::serve` was live and showed "Unable to
-            // connect" until a manual reload. The probe (`wait_until_accepting`)
-            // closes that race by gating on the real accept condition. The port
-            // is the one we pre-probed; nothing is listening on it until the
-            // server binds, so the probe naturally retries across the gap.
+            // Phase D.1 (bd-kw93.8): actually open a browser tab, gated on
+            // the server accepting connections (bd-a6dvrdg1 — see
+            // `spawn_browser_open_when_ready`). Failure to open is logged +
+            // non-fatal (the URL is already printed for copy-paste).
+            // Suppressed by --no-browser.
             if !args.no_browser {
-                let url_for_open = url.clone();
-                let host_for_open = host.clone();
-                let browser_for_open = args.browser.clone();
-                tokio::spawn(async move {
-                    const READY_TIMEOUT: Duration = Duration::from_secs(10);
-                    if wait_until_accepting(&host_for_open, port, READY_TIMEOUT).await {
-                        info!(host = %host_for_open, port, "preview server accepting connections; opening browser");
-                    } else {
-                        // We still consider a >10s startup a bug; opening anyway
-                        // (rather than never) preserves the old behavior as a
-                        // floor, and the warning gives the slow start visibility
-                        // instead of leaving it silent.
-                        tracing::warn!(
-                            host = %host_for_open,
-                            port,
-                            timeout_secs = READY_TIMEOUT.as_secs(),
-                            "preview server has not accepted a connection within the timeout; \
-                             opening the browser anyway (it may need a manual reload)"
-                        );
-                    }
-                    open_browser_or_log(&url_for_open, browser_for_open.as_deref(), false);
-                });
+                spawn_browser_open_when_ready(host.clone(), port, url, args.browser.clone());
             }
         }
         quarto_preview::PreviewUi::Editor => {
@@ -339,22 +308,12 @@ async fn run(args: PreviewArgs) -> Result<()> {
                 println!("  → {url}");
                 println!();
                 if !no_browser {
-                    let host_for_open = host_for_ready.clone();
-                    let browser_for_open = browser.clone();
-                    tokio::spawn(async move {
-                        const READY_TIMEOUT: Duration = Duration::from_secs(10);
-                        if !wait_until_accepting(&host_for_open, port, READY_TIMEOUT).await {
-                            tracing::warn!(
-                                host = %host_for_open,
-                                port,
-                                timeout_secs = READY_TIMEOUT.as_secs(),
-                                "preview server has not accepted a connection within the \
-                                 timeout; opening the browser anyway (it may need a manual \
-                                 reload)"
-                            );
-                        }
-                        open_browser_or_log(&url, browser_for_open.as_deref(), false);
-                    });
+                    spawn_browser_open_when_ready(
+                        host_for_ready.clone(),
+                        port,
+                        url,
+                        browser.clone(),
+                    );
                 }
             })
             .await
@@ -441,7 +400,7 @@ async fn run_join(args: JoinArgs) -> Result<()> {
     println!();
 
     if !args.no_browser {
-        open_browser_or_log(&url, args.browser.as_deref(), false);
+        open_browser_or_log(&url, args.browser.as_deref());
     }
 
     // Report status transitions ("connected via relay", "reconnecting…")
@@ -632,16 +591,13 @@ fn validate_explicit_port(host: &str, port: u16) -> Result<()> {
     }
 }
 
-/// Phase D.1: open the boot URL in the user's browser unless
-/// `--no-browser` was passed. `browser` is the `--browser <name>`
-/// value: `Some` opens that specific application (via `open::with`,
-/// i.e. `open -a` on macOS), `None` the system default. Failure is
-/// logged + non-fatal — the URL was already printed for copy-paste
-/// before this fires.
-fn open_browser_or_log(url: &str, browser: Option<&str>, suppress: bool) {
-    if suppress {
-        return;
-    }
+/// Phase D.1: open the boot URL in the user's browser. `browser` is
+/// the `--browser <name>` value: `Some` opens that specific application
+/// (via `open::with`, i.e. `open -a` on macOS), `None` the system
+/// default. Failure is logged + non-fatal — the URL was already
+/// printed for copy-paste before this fires. Callers gate on
+/// `--no-browser` before calling.
+fn open_browser_or_log(url: &str, browser: Option<&str>) {
     let result = match browser {
         Some(app) => open::with(url, app),
         None => open::that(url),
@@ -660,6 +616,39 @@ fn open_browser_or_log(url: &str, browser: Option<&str>, suppress: bool) {
             );
         }
     }
+}
+
+/// bd-a6dvrdg1: spawn the "open the browser once the server accepts
+/// connections" task both UI modes share. The server doesn't start
+/// until `quarto_preview::run` below (which then blocks until
+/// shutdown), so the open has to run on a spawned task that waits for
+/// readiness while the main task goes on to start the server. Opening
+/// eagerly — as we used to — raced the server's startup: on larger
+/// projects the browser connected before `axum::serve` was live and
+/// showed "Unable to connect" until a manual reload. The probe
+/// (`wait_until_accepting`) closes that race by gating on the real
+/// accept condition. The port is the pre-probed one; nothing is
+/// listening on it until the server binds, so the probe naturally
+/// retries across the gap. A >10 s startup is still considered a bug,
+/// but opening anyway (rather than never) preserves the old behavior
+/// as a floor, and the warning gives the slow start visibility instead
+/// of leaving it silent.
+fn spawn_browser_open_when_ready(host: String, port: u16, url: String, browser: Option<String>) {
+    tokio::spawn(async move {
+        const READY_TIMEOUT: Duration = Duration::from_secs(10);
+        if wait_until_accepting(&host, port, READY_TIMEOUT).await {
+            info!(host = %host, port, "preview server accepting connections; opening browser");
+        } else {
+            tracing::warn!(
+                host = %host,
+                port,
+                timeout_secs = READY_TIMEOUT.as_secs(),
+                "preview server has not accepted a connection within the timeout; \
+                 opening the browser anyway (it may need a manual reload)"
+            );
+        }
+        open_browser_or_log(&url, browser.as_deref());
+    });
 }
 
 /// bd-a6dvrdg1: poll `host:port` with `TcpStream::connect` until the
@@ -876,21 +865,8 @@ fn percent_encode(s: &str, keep_slash: bool) -> String {
 }
 
 /// Phase 4 (bd-jt1etjbn): build the `--ui editor` boot URL — the
-/// hub-client share route. The three params ride the *hash fragment*
-/// (the SPA router parses `location.hash`, not the URL query;
-/// `hub-client/src/utils/routing.ts`), all three are required by the
-/// client's validation, and `server=%2Fws` is the relative sync
-/// endpoint hub-client resolves against the page origin — which is
-/// this preview server. The doc id travels bare: the client re-adds
-/// the `automerge:` prefix, and `buildShareableUrl` on the TS side
-/// strips it symmetrically.
-///
-/// `ephemeral=true` (bd-zf4ryvuq) marks the serving hub as a throwaway
-/// per-session preview server: the client captures the flag before the
-/// share handler clears the URL, silently establishes a project-set
-/// root against `/ws`, and skips the setup/migration gate so the user
-/// lands straight in the preview. Only preview boot URLs carry it —
-/// `buildShareableUrl` never emits it.
+/// hub-client share route against this host's own origin. See
+/// [`editor_share_route`] for the route shape and param contract.
 pub(crate) fn build_editor_boot_url(
     host: &str,
     port: u16,
@@ -905,12 +881,22 @@ pub(crate) fn build_editor_boot_url(
 }
 
 /// The hub-client share route both editor boot-URL builders emit (host
-/// above, guest below). Single source for the route shape: the client's
-/// validation requires `server` / `file` / `name`, and `ephemeral=true`
-/// (bd-zf4ryvuq) marks the serving hub as a throwaway per-session
-/// preview server so the client skips project-set onboarding. The doc
-/// id travels bare: the client re-adds the `automerge:` prefix, and
-/// `buildShareableUrl` on the TS side strips it symmetrically.
+/// above, guest below). Single source for the route shape: the params
+/// ride the *hash fragment* (the SPA router parses `location.hash`, not
+/// the URL query; `hub-client/src/utils/routing.ts`), the client's
+/// validation requires `server` / `file` / `name`, and `server=%2Fws`
+/// is the relative sync endpoint hub-client resolves against the page
+/// origin — the preview server for the host, the local tunnel proxy
+/// for a `--join` guest. The doc id travels bare: the client re-adds
+/// the `automerge:` prefix, and `buildShareableUrl` on the TS side
+/// strips it symmetrically.
+///
+/// `ephemeral=true` (bd-zf4ryvuq) marks the serving hub as a throwaway
+/// per-session preview server: the client captures the flag before the
+/// share handler clears the URL, silently establishes a project-set
+/// root against `/ws`, and skips the setup/migration gate so the user
+/// lands straight in the preview. Only preview boot URLs carry it —
+/// `buildShareableUrl` never emits it.
 fn editor_share_route(index_doc_id: &str, file: &str, project_name: &str) -> String {
     let doc_id = index_doc_id
         .strip_prefix("automerge:")
@@ -940,16 +926,20 @@ fn build_guest_editor_url(
 }
 
 /// Choose the share route's `file` param: the CLI-resolved initial
-/// page when there is one, else the lexicographically first `.qmd`
-/// known to the index (its files map is unordered; taking the minimum
-/// keeps the boot deterministic). `None` when the project has no
-/// `.qmd` at all.
+/// page when there is one, else a root `index.qmd` when the project
+/// has one (the front door of a website project), else the
+/// lexicographically first `.qmd` known to the index (its files map is
+/// unordered; taking the minimum keeps the boot deterministic). `None`
+/// when the project has no `.qmd` at all.
 pub(crate) fn pick_editor_file(
     initial_page: Option<&str>,
     index_paths: &[String],
 ) -> Option<String> {
     if let Some(page) = initial_page {
         return Some(page.to_string());
+    }
+    if index_paths.iter().any(|p| p == "index.qmd") {
+        return Some("index.qmd".to_string());
     }
     index_paths
         .iter()
@@ -987,21 +977,6 @@ mod tests {
         assert!(
             msg.contains("--port 0"),
             "error should suggest the --port 0 escape hatch; got: {msg}"
-        );
-    }
-
-    #[test]
-    fn open_browser_or_log_is_noop_when_suppressed() {
-        // The `suppress` branch must return without touching the
-        // OS — we never want a test run to fork a browser. Asserting
-        // "doesn't panic, returns" is the contract.
-        open_browser_or_log("https://invalid.example.invalid/", None, true);
-        // Suppression wins over an explicit --browser too: still no
-        // OS touch even though the browser name is bogus.
-        open_browser_or_log(
-            "https://invalid.example.invalid/",
-            Some("not-a-real-browser-q2-test"),
-            true,
         );
     }
 
@@ -1318,6 +1293,18 @@ mod tests {
             Some("posts/intro.qmd"),
             "an initial page resolved by the CLI wins over the index scan"
         );
+    }
+
+    #[test]
+    fn pick_editor_file_prefers_root_index_qmd_over_sorted_first() {
+        // A website project's front door wins over the deterministic
+        // sorted-first fallback even when it isn't alphabetically first.
+        let files = vec!["about.qmd".to_string(), "index.qmd".to_string()];
+        assert_eq!(pick_editor_file(None, &files).as_deref(), Some("index.qmd"));
+        // Only a *root* index.qmd gets the preference — a nested one is
+        // just another page.
+        let files = vec!["about.qmd".to_string(), "posts/index.qmd".to_string()];
+        assert_eq!(pick_editor_file(None, &files).as_deref(), Some("about.qmd"));
     }
 
     #[test]

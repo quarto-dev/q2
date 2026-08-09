@@ -1,8 +1,10 @@
 //! Minimal guest-side driver for `q2 preview --share` sessions.
 //!
-//! Until `q2 preview --join` lands (live-share plan Phase 3,
-//! bd-6y0p1bne), this example is the reference guest: it joins a shared
-//! preview session and serves it on a local loopback port.
+//! `q2 preview --join <ticket>` (live-share plan Phase 3, bd-6y0p1bne)
+//! is the real guest — it adds health gating, editor boot URLs, browser
+//! open, and terminal rejection handling. This example stays as a bare
+//! debugging driver: join a session, serve it on a local loopback port,
+//! and print raw tunnel status transitions.
 //!
 //! ```text
 //! cargo run -p quarto-p2p --example tunnel-client -- <q2preview…> [local-port]
