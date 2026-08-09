@@ -48,40 +48,48 @@ doctemplate is Pandoc-style/logic-less (no `item[field]` indexing), so no static
 
 ### Phase 0 — Tests (TDD: written first, verified failing)
 
-- [ ] Survey existing listing test layout (binding unit tests, listing_render tests, any project-render integration fixtures) and decide where each new test lives.
-- [ ] e2e/regression: `fields: [title]` + `field-display-names: {title: "How To"}` table listing renders exactly one `How To` column and **zero** Q-12-10 warnings (drive the real render path per end-to-end verification policy).
-- [ ] Missing-value tolerance: `fields: [title, date]` where one item lacks `date` → empty cell, no diagnostic.
-- [ ] Default table (no `fields:`): Date | Title | Author order; and with items lacking `author`, the Author column is dropped (presence filter); author-explicit `fields:` is never presence-filtered.
-- [ ] Binding unit tests: `table-header` (display-name overlay, raw-name fallback, `image → " "` header), `table-row` (curated fields, dotted-path `extra` lookup, array join, empty cell for missing, `\|` escaping, newline flattening), `field-links` linking behavior (title linked by default; non-linked field plain; `field-links: []` unlinks title).
-- [ ] Config unit tests: `field-links` parsing, table default `[title, filename]`, `fields_explicit` flag.
-- [ ] Run new tests, confirm they fail for the expected reason before implementing.
+- [x] Survey existing listing test layout — homes chosen: `binding.rs` test mod (unit), `transforms/listing_render.rs` test mod (transform + diags), `tests/integration/listing_pipeline.rs` (e2e via `render_project`). Per-file warnings don't reach `ProjectRenderSummary`, so the no-Q-12-10 assertion lives at the transform level (`run_transform` returns diags).
+- [x] e2e: `table_fields_and_display_names_render_single_column` (+ transform-level `table_fields_subset_renders_single_column_without_diagnostics` for the zero-diagnostics half).
+- [x] Missing-value tolerance: `table_row_missing_value_renders_empty_cell`.
+- [x] Default table order + presence filter: `table_default_fields_presence_filtered_and_ordered` (e2e), `defaulted_table_fields_presence_filtered_when_no_author`, `explicit_fields_never_presence_filtered`, `presence_filter_keeps_image_field` (binding).
+- [x] Binding unit tests: header overlay/raw-fallback/image-blank; row link+date, escaping, newline flattening, dotted-path extra, array join, authors/categories join, reading-time, image cell, field-links unlink/filename.
+- [x] Config unit tests: field-links defaults (table/non-table), explicit-empty survives defaults, explicit list, `fields_explicit` true/false/empty-list.
+- [x] Scaffolding so the batch compiles: `Listing.field_links` → `Option<Vec<String>>` (None = unspecified), new `Listing.fields_explicit: bool` (both behavior-neutral).
+- [x] Ran the batch: 18+ tests fail for the expected reasons (missing `table-header`/`table-row` keys, Q-12-10 diags present, hardcoded columns in HTML); 4 pass as scaffolding-covered regression guards.
 
 ### Phase 1 — Config
 
-- [ ] Parse `field-links` into `Listing::field_links: Vec<String>` (Q-12-5-style diagnostic on wrong type, consistent with neighbors).
-- [ ] Add `fields_explicit: bool` (set in the `"fields"` parse arm).
-- [ ] `apply_type_defaults`: default `field_links` per type.
-- [ ] Phase-1 unit tests pass.
+- [x] `field-links` was already parsed (never consumed); re-typed as `Option<Vec<String>>` so explicit `field-links: []` survives defaulting.
+- [x] `fields_explicit: bool` set in the `"fields"` parse arm (explicit-but-empty list counts as defaulted).
+- [x] `apply_type_defaults` fills `field_links` (`[title, filename]` for Table, `[]` otherwise).
+- [x] Phase-1 unit tests pass.
 
 ### Phase 2 — Binding
 
-- [ ] Display-name resolution helper (defaults map + author overlay + raw fallback).
-- [ ] Cell renderer: per-field value lookup (curated → struct, unknown → dotted-path `extra`), image special-case, join rules, escaping, `field-links` wrapping.
-- [ ] `listing.table-header` + per-item `table-row` keys wired into `build_listing_map`/`build_item_map`.
-- [ ] Phase-2 unit tests pass.
+- [x] `default_display_name` (Q1 `_language.yml` map, English) + `display_name` overlay with raw-name fallback.
+- [x] Cell renderer: `item_field_display_value` (curated → struct fields, unknown → `extra_field_value` literal-then-dotted lookup, arrays join `", "`), image → `image-html`, `escape_table_cell` (`\|`, newline flattening), `field-links` wrapping as `[value](path){.no-external}`.
+- [x] `listing.table-header` + `listing.field-links` + per-item `table-row` wired in; `effective_fields` presence filter lives in `build_listing_context` (binding layer, not the render transform — shared by every consumer incl. WASM) and feeds `listing.fields`, `show.*`, header and rows uniformly.
+- [x] Phase-2 unit tests pass.
 
 ### Phase 3 — Templates + presence filter
 
-- [ ] Rewrite `listing-table.template` / `item-table.template` to consume the new keys.
-- [ ] Presence-filter default fields in the render transform (author-explicit fields verbatim).
-- [ ] Full workspace test run; review + document every changed `.snap` (expect table-column-order churn).
+- [x] `item-table.template` → `$table-row$`; `listing-table.template` → `$listing.table-header$` + a `$for(items)$ $it:item-table()$ $endfor$` loop. The for-loop (not `$items:item-table()$`) is load-bearing: the doctemplate resolver chomps a partial's final newline (Pandoc `removeFinalNl` parity), so bare iterated application merges all rows onto one line. **This was a latent bug in the old template too** — any table listing with ≥2 items merged its rows into a single `<tr>`; the block-based default/grid templates survive the same chomp only by div-fence arity absorption (`:::` + `:::` → a longer valid fence). Row-structure assertions (`<tr` count) added to both e2e tests.
+- [x] Presence filter (implemented in binding, see Phase 2).
+- [x] Full workspace test run: 11179 passed, 197 skipped. **Zero snapshot churn** — no existing `.snap` covered table listing markup.
 
 ### Phase 4 — End-to-end verification + docs
 
-- [ ] `cargo run --bin q2 -- render` on the committed repro; inspect `_site/index.html` for the single `How To` column and absence of Q-12-10; record invocation + output snippet here.
-- [ ] Render `docs/` with q2 and spot-check any table listings.
-- [ ] Update `docs/` listing documentation if it describes table columns / `field-display-names` / `field-links`.
-- [ ] `cargo xtask verify` (full — quarto-core changes affect the WASM leg).
+- [x] Real-binary verification on the committed repro:
+  - Invocation: `cargo run --bin q2 -- render .` in `claude-notes/plans/listing-table-fields-investigation/repro/`
+  - Output inspected (`_site/index.html`): single `<th>How To</th>`, one `<tr>` per item with linked titles (`<a href="one/index.html" class="no-external">First guide</a>`), **zero warnings** (previously: three hardcoded columns + `Q-12-10 … Undefined variable: date`).
+- [x] Rendered `docs/` with q2 (189/189 files). The error-catalog index (`docs/errors/index.qmd`, itself a `type: table` listing with `fields`/`field-display-names`/`field-links`) now renders its four declared columns with correct headers and linked titles. Its `code`/`subsystem`/`status` cells are empty because those are bare top-level frontmatter keys, which Q2's profile contract only routes into `ListingItem.extra` via an explicit `listing-item.extra:` opt-in — a deliberate design boundary (see `document_profile.rs`), **not** regressed by this change (those columns never rendered before either). Filed as **bd-0t4e07jk** (discovered-from) with the design options rather than deciding unilaterally.
+- [x] docs/ prose: no user-facing page documents table listing columns yet beyond Q-12-5's `field-display-names` description, which stays accurate; nothing to update for this fix.
+- [x] `cargo xtask verify` (full incl. WASM/hub-client legs) passed on the final tree. One clippy `-D warnings` finding (`map_unwrap_or`) fixed along the way. Side effect: the WASM crate's standalone `Cargo.lock` picked up the 0.13.0 → 0.14.0 workspace version bumps (leftover from the v0.14.0 release; the excluded-from-workspace lockfile only refreshes when the WASM leg builds).
+- [x] Pre-commit review checklist (`claude-notes/instructions/review.md`): no new HashMap/FxHashMap imports (new maps are `BTreeMap`/ordered slices), no `#[serde(flatten)]`, no TODOs, `cargo fmt --check` clean, clippy clean, 11179 workspace tests + full verify green, zero snapshot changes. Staged; awaiting user approval to commit.
+
+## Session log
+
+- **2026-08-09 (session 1):** investigation, design alignment, full implementation (Phases 0–3 complete, Phase 4 verification done except final `cargo xtask verify` + commit). Discovered + filed: bd-bl1e00r6 (interactive table parity), bd-0t4e07jk (bare-frontmatter listing fields).
 
 ## Risks / tradeoffs
 

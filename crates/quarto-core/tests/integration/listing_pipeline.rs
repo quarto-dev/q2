@@ -317,6 +317,128 @@ fn table_type_emits_listing_table_wrapper() {
     assert!(host.contains("Jan 15, 2026"));
 }
 
+/// bd-listing-table-fields-peg1w3b3 e2e: `fields:` selects the
+/// column set and `field-display-names:` renames headers (the
+/// Posit Connect docs "How To" case). Items lacking date/author
+/// must not produce extra columns.
+#[test]
+fn table_fields_and_display_names_render_single_column() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("posts/index.qmd"),
+            "---\ntitle: Guides\nlisting:\n  id: guides\n  type: table\n  fields: [title]\n  field-display-names:\n    title: \"How To\"\nformat: html\n---\n\n::: {#guides}\n:::\n",
+        );
+        // Neither item has date or author.
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: First guide\nformat: html\n---\n\nBody A.\n",
+        );
+        write(
+            &p.join("posts/b.qmd"),
+            "---\ntitle: Second guide\nformat: html\n---\n\nBody B.\n",
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    assert!(host.contains("quarto-listing-table-wrapper"));
+    // Exactly one column, renamed via field-display-names.
+    assert_eq!(
+        host.matches("<th>").count(),
+        1,
+        "expected exactly one table header cell; got:\n{}",
+        host
+    );
+    assert!(
+        host.contains("How To"),
+        "expected `How To` display-name header; got:\n{}",
+        host
+    );
+    assert!(
+        !host.contains("<th>Title") && !host.contains("<th>Date") && !host.contains("<th>Author"),
+        "hardcoded Title/Date/Author headers leaked; got:\n{}",
+        host
+    );
+    // Both items link to their pages.
+    assert!(host.contains("First guide") && host.contains("Second guide"));
+    assert!(host.contains(r#"href="a.html""#) && host.contains(r#"href="b.html""#));
+    // Each item is its own table row: 1 header + 2 body rows. (The
+    // doctemplate resolver chomps a partial's final newline, so a
+    // naive `$items:item-table()$` merges all rows into one — the
+    // listing template must iterate with per-row separation.)
+    assert_eq!(
+        host.matches("<tr").count(),
+        3,
+        "expected one header row + one row per item; got:\n{}",
+        host
+    );
+    assert!(
+        !host.contains("<td>|"),
+        "leaked pipe chars indicate merged table rows; got:\n{}",
+        host
+    );
+}
+
+/// bd-listing-table-fields-peg1w3b3 e2e: with no author-supplied
+/// `fields:`, the table default set `[date, title, author]` is
+/// presence-filtered against the items (Q1 parity) — items with no
+/// author ⇒ no Author column — and keeps Q1's Date-before-Title
+/// column order.
+#[test]
+fn table_default_fields_presence_filtered_and_ordered() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("posts/index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  type: table\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\nformat: html\n---\n\nBody.\n",
+        );
+        write(
+            &p.join("posts/b.qmd"),
+            "---\ntitle: Second\ndate: 2026-02-20\nformat: html\n---\n\nBody.\n",
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    assert_eq!(
+        host.matches("<th>").count(),
+        2,
+        "expected Date + Title columns only; got:\n{}",
+        host
+    );
+    assert!(
+        !host.contains("<th>Author"),
+        "Author column must be presence-filtered out; got:\n{}",
+        host
+    );
+    let p_date = host.find("<th>Date").expect("Date header missing");
+    let p_title = host.find("<th>Title").expect("Title header missing");
+    assert!(
+        p_date < p_title,
+        "expected Q1 column order Date | Title; positions: date={p_date}, title={p_title}"
+    );
+    // Cell data flows through: formatted date + linked titles.
+    assert!(host.contains("Jan 15, 2026") && host.contains("Feb 20, 2026"));
+    assert!(host.contains(r#"href="a.html""#) && host.contains(r#"href="b.html""#));
+    // One header row + one row per item (see the row-separation
+    // note in table_fields_and_display_names_render_single_column).
+    assert_eq!(
+        host.matches("<tr").count(),
+        3,
+        "expected one header row + one row per item; got:\n{}",
+        host
+    );
+}
+
 #[test]
 fn explicit_slot_div_id_is_filled() {
     // When the host page contains a Div with id matching

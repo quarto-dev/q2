@@ -37,9 +37,19 @@ pub struct Listing {
     pub kind: ListingType,
     pub contents: Vec<ListingContents>,
     pub fields: Vec<String>,
+    /// `true` when the author supplied a non-empty `fields:` list.
+    /// Author-explicit fields are used verbatim; defaulted fields are
+    /// presence-filtered against the hydrated items at render time
+    /// (Q1 parity, bd-listing-table-fields-peg1w3b3).
+    pub fields_explicit: bool,
     pub field_display_names: BTreeMap<String, String>,
     pub field_types: BTreeMap<String, ColumnType>,
-    pub field_links: Vec<String>,
+    /// Fields whose cell/entry value links to the item. `None` means
+    /// the author didn't specify; [`apply_type_defaults`] then fills
+    /// the Q1 default (`[title, filename]` for table listings, empty
+    /// otherwise). An author-explicit `field-links: []` stays `Some`
+    /// and disables linking entirely.
+    pub field_links: Option<Vec<String>>,
     pub field_sort: Vec<String>,
     pub field_filter: Vec<String>,
     pub field_required: Vec<String>,
@@ -85,9 +95,10 @@ impl Default for Listing {
             kind: ListingType::Default,
             contents: Vec::new(),
             fields: Vec::new(),
+            fields_explicit: false,
             field_display_names: BTreeMap::new(),
             field_types: BTreeMap::new(),
-            field_links: Vec::new(),
+            field_links: None,
             field_sort: Vec::new(),
             field_filter: Vec::new(),
             field_required: Vec::new(),
@@ -465,6 +476,9 @@ fn parse_one_listing(
             }
             "fields" => {
                 l.fields = parse_string_list(&entry.value);
+                // Explicit-but-empty `fields: []` falls through to
+                // the type defaults, same as omitting the key.
+                l.fields_explicit = !l.fields.is_empty();
             }
             "field-display-names" => {
                 l.field_display_names = parse_string_string_map(&entry.value, diagnostics);
@@ -472,7 +486,7 @@ fn parse_one_listing(
             "field-types" => {
                 l.field_types = parse_field_types(&entry.value, diagnostics);
             }
-            "field-links" => l.field_links = parse_string_list(&entry.value),
+            "field-links" => l.field_links = Some(parse_string_list(&entry.value)),
             "field-sort" => l.field_sort = parse_string_list(&entry.value),
             "field-filter" => l.field_filter = parse_string_list(&entry.value),
             "field-required" => l.field_required = parse_string_list(&entry.value),
@@ -917,6 +931,16 @@ pub fn apply_type_defaults(l: &mut Listing) {
         .into_iter()
         .map(String::from)
         .collect();
+    }
+    // Q1's `kDefaultFieldLinks`: table listings link title +
+    // filename cells; other types link nothing by default. An
+    // author-explicit `field-links:` (even `[]`) is already `Some`
+    // and wins.
+    if l.field_links.is_none() {
+        l.field_links = Some(match l.kind {
+            ListingType::Table => vec!["title".to_string(), "filename".to_string()],
+            _ => Vec::new(),
+        });
     }
     // Type-specific knobs (only fill None).
     match l.kind {
@@ -1446,6 +1470,76 @@ listing:
         assert!(listings[0].sort_ui);
         assert!(listings[0].filter_ui);
         assert_eq!(listings[0].page_size, 30);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // bd-listing-table-fields-peg1w3b3: field-links defaults +
+    // explicit-fields tracking (Q1 parity for table listings).
+    // ─────────────────────────────────────────────────────────────
+
+    // Q1 `kDefaultFieldLinks` applies to table listings only.
+    #[test]
+    fn field_links_defaults_to_title_filename_for_table() {
+        let (listings, _) = parse(s("table"));
+        assert_eq!(
+            listings[0].field_links,
+            Some(vec!["title".to_string(), "filename".to_string()])
+        );
+    }
+
+    #[test]
+    fn field_links_defaults_to_empty_for_non_table_types() {
+        let (listings, _) = parse(s("default"));
+        assert_eq!(listings[0].field_links, Some(Vec::new()));
+        let (listings, _) = parse(s("grid"));
+        assert_eq!(listings[0].field_links, Some(Vec::new()));
+    }
+
+    // Author-explicit `field-links: []` disables linking; the table
+    // default must not overwrite it.
+    #[test]
+    fn field_links_explicit_empty_survives_table_defaults() {
+        let (listings, _) = parse(map(vec![
+            ("type", s("table")),
+            ("field-links", arr(vec![])),
+        ]));
+        assert_eq!(listings[0].field_links, Some(Vec::new()));
+    }
+
+    #[test]
+    fn field_links_explicit_list_parses() {
+        let (listings, _) = parse(map(vec![
+            ("type", s("table")),
+            ("field-links", arr(vec![s("author")])),
+        ]));
+        assert_eq!(listings[0].field_links, Some(vec!["author".to_string()]));
+    }
+
+    // `fields_explicit` gates render-time presence filtering: only
+    // *defaulted* field sets are filtered against the items.
+    #[test]
+    fn fields_explicit_true_when_author_supplies_fields() {
+        let (listings, _) = parse(map(vec![
+            ("type", s("table")),
+            ("fields", arr(vec![s("title")])),
+        ]));
+        assert!(listings[0].fields_explicit);
+        assert_eq!(listings[0].fields, vec!["title"]);
+    }
+
+    #[test]
+    fn fields_explicit_false_when_fields_defaulted() {
+        let (listings, _) = parse(s("table"));
+        assert!(!listings[0].fields_explicit);
+    }
+
+    // Explicit-but-empty `fields: []` falls back to the type default
+    // set and is treated as non-explicit (same as today).
+    #[test]
+    fn fields_empty_list_treated_as_defaulted() {
+        let (listings, _) = parse(map(vec![("type", s("table")), ("fields", arr(vec![]))]));
+        assert!(!listings[0].fields_explicit);
+        assert_eq!(listings[0].fields, vec!["date", "title", "author"]);
     }
 
     // template + non-custom type → Q-12-7
