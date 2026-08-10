@@ -895,53 +895,60 @@ fn resource_error_diagnostic(
     }
 }
 
-/// Build a [`crate::error::ParseError`] from a [`ResourceError`],
-/// loading `source_file` so the resulting diagnostic can render an
-/// Ariadne snippet pointing at the offending YAML scalar.
-///
-/// The [`SourceInfo`] inside `err` already carries a [`FileId`] —
-/// the same `hash(filename)` that `quarto_yaml::parse_file` computes
-/// when it produces source-tracked YAML. We register `source_file`
-/// in a fresh [`SourceContext`] under that exact FileId so the
-/// renderer can resolve offsets back to line/column in the file's
-/// content.
-///
-/// **Provenance contract:** the caller guarantees the error's
-/// SourceInfo actually originates from `source_file` — true for the
-/// per-document call sites, whose patterns come from the declaring
-/// document. For *project-level* patterns, which an extension may
-/// have contributed from its `_extension.yml`, use
-/// [`resource_error_to_config_parse_error`] instead (bd-p86nlm92);
-/// binding the wrong file here renders the right offsets against the
-/// wrong text. (Per-document patterns merged in from
-/// `_metadata.yml`-style layers can still mis-bind under this
-/// contract — tracked as part of the systematic audit, bd-nv4p0eb1.)
-///
-/// If `source_file` cannot be read (rare; the YAML *was* read once
-/// already during parse) or the [`SourceInfo`] has no resolvable
-/// FileId (Concat / FilterProvenance), the diagnostic degrades to a
-/// span-less message — still tidyverse-shaped, still better than
-/// `Error: …` plain text.
-pub fn resource_error_to_parse_error(
+/// Document-level variant of
+/// [`resource_error_to_config_parse_error`] (bd-x113wg9v): a
+/// document's effective `resources:` list is *merged* metadata, so an
+/// entry can be declared in the document's own front matter (spans
+/// rooted at the doc parse context's dense `FileId(0)`), inherited
+/// from a directory `_metadata.yml` layer or `_quarto.yml`, or
+/// contributed by an extension manifest (all three: quarto-yaml
+/// filename-hash FileIds). The candidate list carries both id schemes
+/// via [`crate::config_sources::bind_source_candidates`]; the first
+/// id match is bound, an inherited match gets an info line naming the
+/// declaring file, and no match degrades span-less — never a wrong
+/// span. (The predecessor bound `doc_source` unconditionally,
+/// rendering a `_metadata.yml` entry's offsets against the `.qmd`'s
+/// text.)
+pub fn resource_error_to_doc_parse_error(
     err: ResourceError,
-    source_file: &Path,
+    doc_source: &Path,
+    project: &crate::project::ProjectContext,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> crate::error::ParseError {
     use quarto_source_map::{FileId, SourceContext};
 
-    let mut source_context = SourceContext::new();
-    if let Some((fid_usize, _, _)) = err.source_info().resolve_byte_range() {
-        let content = std::fs::read_to_string(source_file).ok();
-        source_context.add_file_with_id(
-            FileId(fid_usize),
-            source_file.to_string_lossy().into_owned(),
-            content,
-        );
-    }
+    let config = &project.config;
+    let layer_paths =
+        crate::project::directory_metadata_paths_for_document(project, doc_source, runtime);
+    let hash = |p: &Path| quarto_yaml::file_id_for_filename(&p.to_string_lossy());
 
-    crate::error::ParseError::new(
-        vec![resource_error_diagnostic(&err).build()],
-        source_context,
-    )
+    let mut source_context = SourceContext::new();
+    let candidates = std::iter::once((FileId(0), doc_source))
+        .chain(config.config_path.as_deref().map(|p| (hash(p), p)))
+        .chain(
+            config
+                .extension_manifest_paths
+                .iter()
+                .map(|p| (hash(p), p.as_path())),
+        )
+        .chain(layer_paths.iter().map(|p| (hash(p), p.as_path())));
+    let matched = crate::config_sources::bind_source_candidates(
+        &mut source_context,
+        err.source_info(),
+        candidates,
+    );
+
+    let mut builder = resource_error_diagnostic(&err);
+    if let Some(path) = matched
+        && path != doc_source
+    {
+        builder = builder.add_info(format!(
+            "This `resources` entry is inherited from `{}`, not declared in `{}`.",
+            path.display(),
+            doc_source.display()
+        ));
+    }
+    crate::error::ParseError::new(vec![builder.build()], source_context)
 }
 
 /// Project-level variant of [`resource_error_to_parse_error`]
@@ -1032,9 +1039,11 @@ pub fn collect_static_resources_with_diagnostics(
         // from the profile (cached or not), against the document
         // that declared them.
         if let Some(rejected) = profile.rejected_resources.first() {
-            return Err(resource_error_to_parse_error(
+            return Err(resource_error_to_doc_parse_error(
                 rejected.clone().into_error(project_root),
                 &doc_source_abs,
+                project,
+                runtime,
             ));
         }
         if profile.resource_globs.is_empty() {
@@ -1057,7 +1066,12 @@ pub fn collect_static_resources_with_diagnostics(
             )?);
             Ok(())
         })() {
-            return Err(resource_error_to_parse_error(e, &doc_source_abs));
+            return Err(resource_error_to_doc_parse_error(
+                e,
+                &doc_source_abs,
+                project,
+                runtime,
+            ));
         }
     }
 
@@ -1973,7 +1987,11 @@ mod tests {
         )
         .unwrap_err();
 
-        let parse_err = resource_error_to_parse_error(err, &yaml_path);
+        let config = crate::project::ProjectConfig {
+            config_path: Some(yaml_path.clone()),
+            ..Default::default()
+        };
+        let parse_err = resource_error_to_config_parse_error(err, &config);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-5-1"));
