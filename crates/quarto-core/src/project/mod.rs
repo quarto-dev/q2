@@ -406,13 +406,9 @@ impl ResolvedProjectType {
 /// the previous `.ok().unwrap_or_default()` fallback silently rendered
 /// e.g. a `type: posit-docs` website as a bare default project.
 ///
-/// `content` is the already-read text of `config_path`, registered
-/// into the error's `SourceContext` so diagnostics render a snippet
-/// pointing at the offending `type:` scalar.
 fn resolve_project_type(
     metadata: &mut ConfigValue,
     config_path: &Path,
-    content: &str,
     extensions: &[crate::extension::Extension],
     load_diagnostics: &[quarto_error_reporting::DiagnosticMessage],
     runtime: &dyn SystemRuntime,
@@ -427,7 +423,7 @@ fn resolve_project_type(
             "`project.type` must be a string.".to_string(),
             &type_source,
             config_path,
-            content,
+            extensions,
             Vec::new(),
             Vec::new(),
         ));
@@ -442,7 +438,6 @@ fn resolve_project_type(
         &type_str,
         &type_source,
         config_path,
-        content,
         extensions,
         load_diagnostics,
         runtime,
@@ -465,7 +460,6 @@ fn resolve_custom_project_type(
     type_str: &str,
     type_source: &quarto_source_map::SourceInfo,
     config_path: &Path,
-    content: &str,
     extensions: &[crate::extension::Extension],
     load_diagnostics: &[quarto_error_reporting::DiagnosticMessage],
     runtime: &dyn SystemRuntime,
@@ -502,7 +496,7 @@ fn resolve_custom_project_type(
             format!("`{type_str}` is not a recognized project type."),
             type_source,
             config_path,
-            content,
+            extensions,
             hints,
             load_diagnostics.to_vec(),
         ));
@@ -908,31 +902,44 @@ fn project_type_error(
     problem: String,
     type_source: &quarto_source_map::SourceInfo,
     config_path: &Path,
-    content: &str,
+    extensions: &[crate::extension::Extension],
     extra_hints: Vec<String>,
     extra_diagnostics: Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> QuartoError {
     use quarto_error_reporting::DiagnosticMessageBuilder;
-    use quarto_source_map::{FileId, SourceContext};
+    use quarto_source_map::SourceContext;
 
+    // Candidate-matched binding (bd-h5rfw3ao): today `type_source`
+    // always originates in `config_path` (both call sites run before
+    // any extension-fragment merge), but that was enforced only by
+    // call ordering. Matching by re-derived FileId keeps the anchor
+    // correct even if a merged (extension-contributed) `project.type`
+    // ever reaches this path — and degrades span-less, never
+    // wrong-file, for anything else.
+    let manifest_paths: Vec<std::path::PathBuf> = extensions
+        .iter()
+        .map(|e| e.path.join("_extension.yml"))
+        .collect();
     let mut source_context = SourceContext::new();
-    if let Some((fid_usize, _, _)) = type_source.resolve_byte_range() {
-        // Sound only by call ordering: both project_type_error call sites
-        // run before any extension-fragment merge, so type_source provably
-        // originates in config_path. bd-h5rfw3ao tracks hardening this via
-        // bind_config_source.
-        // lint:allow(add-file-with-id) — pre-merge, single possible source
-        source_context.add_file_with_id(
-            FileId(fid_usize),
-            config_path.to_string_lossy().into_owned(),
-            Some(content.to_string()),
-        );
-    }
+    let matched = crate::config_sources::bind_config_source(
+        &mut source_context,
+        type_source,
+        std::iter::once(config_path).chain(manifest_paths.iter().map(std::path::PathBuf::as_path)),
+    );
 
     let mut builder = DiagnosticMessageBuilder::error("Unknown project type")
         .with_code("Q-5-17")
         .with_location(type_source.clone())
-        .problem(problem)
+        .problem(problem);
+    if let Some(path) = matched
+        && path != config_path
+    {
+        builder = builder.add_info(format!(
+            "The `project.type` value is contributed by the extension manifest `{}`.",
+            path.display()
+        ));
+    }
+    builder = builder
         .add_hint("Built-in project types are `default`, `website`, `book`, and `manuscript`.");
     for hint in extra_hints {
         builder = builder.add_hint(hint);
@@ -1358,7 +1365,6 @@ impl ProjectContext {
         let resolved = resolve_project_type(
             &mut metadata,
             path,
-            &content,
             &extensions,
             &load_diagnostics,
             runtime,

@@ -174,3 +174,34 @@ fn website_type_control_renders_shared_libs() {
         "source tree must stay clean; found: {source_tree_files_dirs:?}"
     );
 }
+
+/// Pin (bd-h5rfw3ao): the Q-5-17 snippet anchors at the `type:` value
+/// in `_quarto.yml`. Guards the candidate-matched binding refactor —
+/// `project_type_error` must keep anchoring correctly in the file the
+/// span actually originates from.
+#[test]
+fn unknown_type_snippet_anchors_in_quarto_yml() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("_quarto.yml"),
+        "project:\n  type: no-such-type-anywhere\n",
+    );
+    write_file(&dir.join("index.qmd"), "---\ntitle: Home\n---\n\nBody.\n");
+
+    let output = run_q2_render(&dir);
+    assert!(!output.status.success(), "unknown type must abort");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[Q-5-17]"),
+        "diagnostic should carry Q-5-17; got: {stderr}"
+    );
+    assert!(
+        stderr.contains("_quarto.yml:2:"),
+        "snippet should anchor at the type: line of _quarto.yml; got: {stderr}"
+    );
+    assert!(
+        stderr.contains("no-such-type-anywhere"),
+        "snippet should show the offending value; got: {stderr}"
+    );
+}
