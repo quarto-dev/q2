@@ -1,0 +1,14 @@
+  stderr ───
+
+    thread 'admin_collect_lifecycle::collect_lifecycle_quarantine_restore_purge' (23621105) panicked at crates/quarto-hub/tests/integration/admin_collect_lifecycle.rs:117:5:
+    assertion `left == right` failed
+      left: "2VuTEjDn18HXaFd3u95EKH7gomnh"
+     right: "2vuTEjDn18HXaFd3u95EKH7gomnh"
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.027s] (2/3) quarto-hub::integration admin_collect_lifecycle::collect_refuses_wrong_data_dir_and_held_lock
+        PASS [   0.032s] (3/3) quarto-hub::integration admin_collect_lifecycle::collect_reverification_skips_rereferenced_candidate
+────────────
+     Summary [   0.033s] 3 tests run: 2 passed, 1 failed, 451 skipped
+        FAIL [   0.025s] (1/3) quarto-hub::integration admin_collect_lifecycle::collect_lifecycle_quarantine_restore_purge
+error: test run failed
