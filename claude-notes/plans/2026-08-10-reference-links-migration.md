@@ -2,8 +2,9 @@
 
 **Date:** 2026-08-10
 **Braid:** `bd-reference-links-unsupported-ddc4skac` (feature, p1, labels: `diagnostics`, `parity`)
-**Branch:** `main` @ `05c2454e` — investigated in place, no worktree created (see *Where this landed*)
-**Status:** All phases complete on `braid/bd-reference-links-unsupported-ddc4skac`; `cargo xtask verify --skip-hub-build` green. Not pushed, no PR opened.
+**Branch:** `braid/bd-reference-links-unsupported-ddc4skac`, rebased onto `main` @ `d05e021e`
+**PR:** [#497](https://github.com/quarto-dev/q2/pull/497)
+**Status:** All phases complete; full `cargo xtask verify` (including the WASM leg) green.
 
 ## Scope, restated
 
@@ -166,9 +167,10 @@ never fires it unasked.
 ## Phase 5 in detail — the diagnostic, and what it does *not* cover
 
 Two high-precision triggers, both keying off shapes that are never
-intentional qmd. Next free code is **Q-2-45** (highest allocated in
-`crates/pampa/resources/error-corpus/` is `Q-2-41`); allocate at
-implementation time.
+intentional qmd. The codes are **Q-2-45** (reference-style use) and
+**Q-2-46** (definition line). They were originally written as 42/43; `main`
+claimed 42, 43 and 44 for conditional content and callout titles while this
+branch was in flight, so they were renumbered during the rebase.
 
 1. **A block-level line matching the link-reference-definition shape** —
    the strand's own proposal. Catches the leaked-definition-paragraph
