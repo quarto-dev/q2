@@ -111,16 +111,51 @@ fn uri_autolink_behavior_unchanged() {
 }
 
 #[test]
-fn mailto_uri_autolink_behavior_unchanged() {
-    // The explicit-scheme form stays a URI autolink: visible text keeps the
-    // mailto: prefix (same in pandoc and Quarto 1).
+fn mailto_uri_autolink_displays_bare_address() {
+    // Deliberate qmd divergence from pandoc/Quarto 1 (which keep the
+    // "mailto:" prefix in the visible text): when the content after
+    // "mailto:" is a valid email address, display the bare address and
+    // use class "email", so <mailto:a@b.com> and <a@b.com> render the
+    // same. The target keeps the explicit scheme.
     let (pandoc, _ctx, warnings) = parse_qmd("<mailto:sales@example.com>\n");
     let inlines = first_paragraph_inlines(&pandoc);
     let link = find_link(inlines);
     assert_eq!(link.target.0, "mailto:sales@example.com");
+    assert_eq!(link.attr.1, vec!["email".to_string()]);
+    match link.content.as_slice() {
+        [Inline::Str(s)] => assert_eq!(s.text, "sales@example.com"),
+        other => panic!("expected [Str], got {:?}", other),
+    }
+    assert!(warnings.is_empty(), "unexpected warnings: {:?}", warnings);
+}
+
+#[test]
+fn mailto_scheme_is_case_insensitive_for_display() {
+    // CommonMark spec example uses <MAILTO:FOO@BAR.BAZ>; scheme matching is
+    // case-insensitive. Target preserves the source spelling.
+    let (pandoc, _ctx, warnings) = parse_qmd("<MAILTO:FOO@BAR.BAZ>\n");
+    let inlines = first_paragraph_inlines(&pandoc);
+    let link = find_link(inlines);
+    assert_eq!(link.target.0, "MAILTO:FOO@BAR.BAZ");
+    assert_eq!(link.attr.1, vec!["email".to_string()]);
+    match link.content.as_slice() {
+        [Inline::Str(s)] => assert_eq!(s.text, "FOO@BAR.BAZ"),
+        other => panic!("expected [Str], got {:?}", other),
+    }
+    assert!(warnings.is_empty(), "unexpected warnings: {:?}", warnings);
+}
+
+#[test]
+fn mailto_with_invalid_address_keeps_uri_behavior() {
+    // If what follows "mailto:" is not a valid email address, leave the
+    // URI-autolink rendering alone (prefix stays visible, class "uri").
+    let (pandoc, _ctx, warnings) = parse_qmd("<mailto:foo@@bar>\n");
+    let inlines = first_paragraph_inlines(&pandoc);
+    let link = find_link(inlines);
+    assert_eq!(link.target.0, "mailto:foo@@bar");
     assert_eq!(link.attr.1, vec!["uri".to_string()]);
     match link.content.as_slice() {
-        [Inline::Str(s)] => assert_eq!(s.text, "mailto:sales@example.com"),
+        [Inline::Str(s)] => assert_eq!(s.text, "mailto:foo@@bar"),
         other => panic!("expected [Str], got {:?}", other),
     }
     assert!(warnings.is_empty(), "unexpected warnings: {:?}", warnings);

@@ -160,11 +160,23 @@ pub fn process_uri_autolink(
 
     // Email autolinks link to mailto: with the bare address as text and
     // class "email"; URI autolinks link to the literal content with class
-    // "uri". Both match pandoc's markdown reader (and Quarto 1).
-    let (target, class) = if is_email {
-        (format!("mailto:{}", url), "email")
+    // "uri". Both match pandoc's markdown reader (and Quarto 1) — except
+    // that an explicit <mailto:addr> with a valid address also displays the
+    // bare address with class "email" (deliberate qmd divergence: pandoc
+    // and Quarto 1 keep the awkward "mailto:" prefix in the visible text).
+    // The scheme match is case-insensitive; the target keeps the source
+    // spelling.
+    let mailto_address = url
+        .get(..7)
+        .filter(|prefix| prefix.eq_ignore_ascii_case("mailto:"))
+        .map(|_| &url[7..])
+        .filter(|addr| email_autolink_regex().is_match(addr));
+    let (target, class, display_text) = if is_email {
+        (format!("mailto:{}", url), "email", url)
+    } else if let Some(addr) = mailto_address {
+        (url.to_string(), "email", addr)
     } else {
-        (url.to_string(), "uri")
+        (url.to_string(), "uri", url)
     };
 
     let mut attr = (String::new(), vec![], LinkedHashMap::new());
@@ -172,7 +184,7 @@ pub fn process_uri_autolink(
 
     result.push(Inline::Link(Link {
         content: vec![Inline::Str(Str {
-            text: url.to_string(),
+            text: display_text.to_string(),
             source_info: quarto_source_map::SourceInfo::from_range(
                 context.current_file_id(),
                 autolink_range.clone(),

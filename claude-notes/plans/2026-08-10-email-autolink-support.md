@@ -148,6 +148,22 @@ that matches pandoc and is part of the fix.
         `<a href="mailto:sales@example.com" class="uri">mailto:sales@example.com</a>`
       Full `cargo xtask verify` (WASM leg included) run before commit.
 
+## Addendum (2026-08-10, user request mid-session): bare display text for `<mailto:...>`
+
+`<mailto:hello@example.com>` used to display `mailto:hello@example.com` —
+awkward. New behavior: when the content after a case-insensitive `mailto:`
+prefix is a valid CommonMark email address, the link displays the bare
+address with class `email` (target keeps the source spelling, scheme
+included), so `<mailto:a@b.com>` and `<a@b.com>` now render identically.
+If the content after `mailto:` is not a valid address, URI behavior is
+unchanged. **This is a deliberate qmd divergence from pandoc/Quarto 1**,
+which keep the `mailto:` prefix in the visible text.
+
+- [x] TDD: `mailto_uri_autolink_displays_bare_address` +
+      `mailto_scheme_is_case_insensitive_for_display` (failed first),
+      `mailto_with_invalid_address_keeps_uri_behavior` (regression guard)
+- [x] Workspace tests + full `cargo xtask verify` + e2e re-render
+
 ## Risks / tradeoffs (draft)
 
 - Scanner changes are the highest-risk part of the tree (bd-ly83qewg's plan
