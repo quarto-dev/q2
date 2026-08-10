@@ -39,11 +39,14 @@ Working conventions for this phase:
       braid/bd-itj2mjkr-engine-slot-desync (remap made conditional, not
       additive; debug_assert judged unnecessary once the id comes from
       the add_file return). Awaiting PR/merge before strand close.*
-- [ ] **D3 / bd-x113wg9v (p2):** doc-level `resource_error_to_parse_error`
+- [x] **D3 / bd-x113wg9v (p2):** doc-level `resource_error_to_parse_error`
       mis-bind. Depends on PR #478. Fixture: `resources:` pattern declared in
       `_metadata.yml`, assert Q-5-1 snippet names the `_metadata.yml`. Fix:
       route through `bind_config_source` with candidates
       `[doc path, config_path] ++ extension_manifest_paths ++ dir-layer paths`.
+      *Done 2026-08-09 via new bind_source_candidates (two-scheme pairs)
+      + directory_metadata_paths_for_document; both temporary lint
+      blessings removed in the same commit.*
 - [x] **P2 / bd-f6h40a9r (p2):** `writers/incremental.rs:704-708` + `:747-766`
       foreign-offset fallback. Fix: `preimage_in` miss ⇒ re-serialize the
       inline (no `inline_source_span` fallback into foreign coordinates);
