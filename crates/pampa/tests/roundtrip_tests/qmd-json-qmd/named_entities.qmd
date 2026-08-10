@@ -1,0 +1,5 @@
+Named: A &gt; B &lt; C &amp; D &quot;E&quot; F&nbsp;G &copy; H.
+
+Numeric: A &#62; B &#60; C.
+
+Numeric quote: A &#34;E&#34; B.
