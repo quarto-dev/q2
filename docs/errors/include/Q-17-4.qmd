@@ -16,7 +16,7 @@ categories:
 
 ## What this means
 
-Quarto expands `{{< include >}}` shortcodes that stand alone: the
+Quarto expands `{{{< include >}}}` shortcodes that stand alone: the
 shortcode must be the sole content of its own paragraph. This
 warning fires when an include shortcode is written somewhere the
 expansion pass does not reach — for example inline, in the middle
@@ -31,7 +31,7 @@ spelling.
 
 Common causes:
 
-- **An inline include** — `some text {{< include _snippet.qmd >}}
+- **An inline include** — `some text {{{< include _snippet.qmd >}}}
   more text`. Include expansion is block-level; it does not splice
   content into the middle of a paragraph.
 - **Missing blank lines** around the shortcode, causing it to be
@@ -47,7 +47,7 @@ position is unsupported.)
 Put the include shortcode in its own paragraph, surrounded by blank
 lines:
 
-```markdown
+```{.markdown shortcodes="false"}
 Some text before the include.
 
 {{< include _snippet.qmd >}}

@@ -16,7 +16,7 @@ categories:
 
 ## What this means
 
-An `{{< include >}}` shortcode names a file that exists and was
+An `{{{< include >}}}` shortcode names a file that exists and was
 read, but the file's content is not valid qmd. The include is
 skipped: its content is omitted from the output.
 

@@ -26,7 +26,7 @@ Quarto requires them to be quoted explicitly.
 A version string, an identifier, or a mixed-format token that
 starts with a digit:
 
-```markdown
+```{.markdown shortcodes="false"}
 {{< a k=1b >}}
 ```
 
@@ -37,13 +37,13 @@ asks the author to disambiguate.
 
 Wrap the value in double quotes:
 
-```markdown
+```{.markdown shortcodes="false"}
 {{< a k="1b" >}}
 ```
 
 ## Example
 
-```markdown
+```{.markdown shortcodes="false"}
 {{< a k=1b >}}
 ```
 

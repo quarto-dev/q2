@@ -4,15 +4,15 @@ title: Shortcodes
 
 Shortcodes are directives you can embed in your documents to insert
 computed values or generated content. They use the syntax
-`{{< name arguments >}}`.
+`{{{< name arguments >}}}`.
 
 ## Built-in shortcodes
 
 | Shortcode | Description |
 |-----------|-------------|
-| `{{< meta key >}}` | Insert a value from document or project metadata (dot notation supported: `{{< meta book.title >}}`) |
-| `{{< env NAME >}}` | Insert the value of an environment variable; an optional second argument supplies a fallback: `{{< env NAME fallback >}}` |
-| `{{< var key >}}` | Insert a value from `_variables.yml` at your project root |
+| `{{{< meta key >}}}` | Insert a value from document or project metadata (dot notation supported: `{{{< meta book.title >}}}`) |
+| `{{{< env NAME >}}}` | Insert the value of an environment variable; an optional second argument supplies a fallback: `{{{< env NAME fallback >}}}` |
+| `{{{< var key >}}}` | Insert a value from `_variables.yml` at your project root |
 
 For example, with this front matter:
 
@@ -23,7 +23,7 @@ version: "12.1"
 ---
 ```
 
-writing `{{< meta version >}}` anywhere in the body inserts `12.1`.
+writing `{{{< meta version >}}}` anywhere in the body inserts `12.1`.
 
 ## Where shortcodes are evaluated
 
@@ -31,7 +31,7 @@ Shortcodes resolve in:
 
 - **Document body text.**
 - **Document metadata** — any front-matter value, e.g. a `subtitle`
-  that interpolates `{{< env PRODUCT_VERSION >}}`.
+  that interpolates `{{{< env PRODUCT_VERSION >}}}`.
 - **Website configuration strings** in `_quarto.yml`:
   `website.title`, the navbar and sidebar titles, and `page-footer`
   text regions. These values are treated as markdown, so inline
@@ -40,23 +40,41 @@ Shortcodes resolve in:
   `include-after-body`, and `{text: …}` entries). Include files get
   *textual* substitution: the shortcode is replaced in place, but the
   surrounding file content is not otherwise interpreted as markdown.
-
-Shortcodes are **not** evaluated inside code blocks or inline code —
-which is how this page displays them literally.
+- **Code and other text contexts** — fenced code blocks, inline
+  code, raw blocks, math, attribute values, link targets, and image
+  sources. Like include files, these get *textual* substitution.
 
 Custom shortcodes provided by [extensions](extensions.qmd) or by
 `shortcodes:` scripts work in all of these contexts as well.
 
+## Opting code out of substitution
+
+Sometimes a code block should *display* shortcode syntax instead of
+evaluating it — this documentation page is full of examples. Set
+`shortcodes="false"` on a code block or inline code span to leave
+its text untouched:
+
+````{.markdown shortcodes="false"}
+```{.markdown shortcodes="false"}
+This block displays {{< meta version >}} literally.
+```
+````
+
+Code produced by executable cells is never substituted: the engine
+already processed that text, so it prints exactly what ran.
+
 ## Escaping
 
-To display a shortcode literally in ordinary text instead of
-evaluating it, use triple braces in place of double braces: writing
+To display a shortcode literally instead of evaluating it, use
+triple braces in place of double braces: writing
 
-``` markdown
+```{.markdown shortcodes="false"}
 {{{< meta version >}}}
 ```
 
 renders as {{{< meta version >}}} rather than inserting the value.
+The escape works in ordinary text and in all the textual contexts
+above (code, attributes, and so on).
 
 ## Unresolved shortcodes
 

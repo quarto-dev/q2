@@ -55,6 +55,7 @@ pub mod replay_engine;
 pub mod revealjs_features;
 pub mod revealjs_format;
 pub mod shortcode_config_pipeline;
+pub mod shortcode_text_contexts;
 pub mod sidebar_pipeline;
 pub mod theme_light_dark;
 pub mod title_block_pipeline;

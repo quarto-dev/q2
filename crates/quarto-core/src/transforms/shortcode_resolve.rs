@@ -29,13 +29,14 @@
 //! - Metadata normalization sees resolved content, not shortcode placeholders
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
+use quarto_pandoc_types::attr::Attr;
 use quarto_pandoc_types::block::{
     Block, BlockQuote, BulletList, DefinitionList, Div, Figure, Header, LineBlock, OrderedList,
     Paragraph, Plain,
 };
 use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind};
 use quarto_pandoc_types::inline::{
-    Cite, Code, Delete, EditComment, Emph, Highlight, Image, Inline, Insert, Link, Note, Quoted,
+    Cite, Delete, EditComment, Emph, Highlight, Image, Inline, Insert, Link, Note, Quoted,
     SmallCaps, Span, Str, Strikeout, Strong, Subscript, Superscript, Underline,
 };
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -1500,6 +1501,64 @@ async fn expand_text_segments(
     out
 }
 
+/// True when a code element opts out of text-level shortcode
+/// substitution (Q1's `code_handler` guards): engine-produced cell
+/// code (`.cell-code` — the engine already processed the text, so it
+/// must print as-is) or an explicit `shortcodes="false"` attribute
+/// (the documented technique for displaying shortcode syntax).
+fn code_shortcode_opt_out(attr: &Attr) -> bool {
+    attr.1.iter().any(|class| class == "cell-code")
+        || attr.2.get("shortcodes").is_some_and(|v| v == "false")
+}
+
+/// Expand `{{< … >}}` occurrences in a plain-text field in place:
+/// code/raw/math text, attribute values, link/image targets
+/// (bd-fz6gwfq0; Q1's `apply_code_shortcode` analog). No-op when the
+/// text contains no shortcode candidates.
+async fn expand_text_in_place(
+    text: &mut String,
+    transform: &ShortcodeResolveTransform,
+    metadata: &ConfigValue,
+    source_info: &SourceInfo,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+    lua_engine: &mut Option<LuaEngineState>,
+) {
+    if let Some(segments) = crate::transforms::parse_text_shortcodes(text, source_info) {
+        *text = expand_text_segments(
+            segments,
+            transform,
+            metadata,
+            source_info,
+            diagnostics,
+            lua_engine,
+        )
+        .await;
+    }
+}
+
+/// Expand shortcodes in attribute *values* (Q1's `attr_handler`
+/// expands values only — never the id or classes).
+async fn expand_attr_value_shortcodes(
+    attr: &mut Attr,
+    transform: &ShortcodeResolveTransform,
+    metadata: &ConfigValue,
+    source_info: &SourceInfo,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+    lua_engine: &mut Option<LuaEngineState>,
+) {
+    for (_key, value) in attr.2.iter_mut() {
+        expand_text_in_place(
+            value,
+            transform,
+            metadata,
+            source_info,
+            diagnostics,
+            lua_engine,
+        )
+        .await;
+    }
+}
+
 /// Resolve shortcodes in a vector of blocks.
 ///
 /// Uses index-based iteration because block-context shortcodes can splice
@@ -1616,7 +1675,21 @@ fn resolve_block<'a>(
                     resolve_inlines(line, transform, metadata, diagnostics, lua_engine).await;
                 }
             }
-            Block::Header(Header { content, .. }) => {
+            Block::Header(Header {
+                attr,
+                content,
+                source_info,
+                ..
+            }) => {
+                expand_attr_value_shortcodes(
+                    attr,
+                    transform,
+                    metadata,
+                    source_info,
+                    diagnostics,
+                    lua_engine,
+                )
+                .await;
                 resolve_inlines(content, transform, metadata, diagnostics, lua_engine).await;
             }
             Block::BlockQuote(BlockQuote { content, .. }) => {
@@ -1651,7 +1724,21 @@ fn resolve_block<'a>(
                     resolve_blocks(long, transform, metadata, diagnostics, lua_engine).await;
                 }
             }
-            Block::Div(Div { content, .. }) => {
+            Block::Div(Div {
+                attr,
+                content,
+                source_info,
+                ..
+            }) => {
+                expand_attr_value_shortcodes(
+                    attr,
+                    transform,
+                    metadata,
+                    source_info,
+                    diagnostics,
+                    lua_engine,
+                )
+                .await;
                 resolve_blocks(content, transform, metadata, diagnostics, lua_engine).await;
             }
             Block::Table(Table {
@@ -1742,10 +1829,34 @@ fn resolve_block<'a>(
                     }
                 }
             }
+            // Text contexts — Q1 substitutes shortcodes textually in
+            // code and raw text (`apply_code_shortcode`; bd-fz6gwfq0).
+            Block::CodeBlock(code_block) => {
+                if !code_shortcode_opt_out(&code_block.attr) {
+                    expand_text_in_place(
+                        &mut code_block.text,
+                        transform,
+                        metadata,
+                        &code_block.source_info,
+                        diagnostics,
+                        lua_engine,
+                    )
+                    .await;
+                }
+            }
+            Block::RawBlock(raw_block) => {
+                expand_text_in_place(
+                    &mut raw_block.text,
+                    transform,
+                    metadata,
+                    &raw_block.source_info,
+                    diagnostics,
+                    lua_engine,
+                )
+                .await;
+            }
             // These blocks don't contain inlines that could have shortcodes
-            Block::CodeBlock(_)
-            | Block::RawBlock(_)
-            | Block::HorizontalRule(_)
+            Block::HorizontalRule(_)
             | Block::BlockMetadata(_)
             | Block::NoteDefinitionPara(_)
             | Block::NoteDefinitionFencedBlock(_)
@@ -1886,13 +1997,59 @@ fn recurse_inline<'a>(
             Inline::Cite(Cite { content, .. }) => {
                 resolve_inlines(content, transform, metadata, diagnostics, lua_engine).await;
             }
-            Inline::Link(Link { content, .. }) | Inline::Image(Image { content, .. }) => {
+            Inline::Link(Link {
+                attr,
+                content,
+                target,
+                source_info,
+                ..
+            })
+            | Inline::Image(Image {
+                attr,
+                content,
+                target,
+                source_info,
+                ..
+            }) => {
+                expand_attr_value_shortcodes(
+                    attr,
+                    transform,
+                    metadata,
+                    source_info,
+                    diagnostics,
+                    lua_engine,
+                )
+                .await;
+                // Q1 expands the link target / image src (not the title).
+                expand_text_in_place(
+                    &mut target.0,
+                    transform,
+                    metadata,
+                    source_info,
+                    diagnostics,
+                    lua_engine,
+                )
+                .await;
                 resolve_inlines(content, transform, metadata, diagnostics, lua_engine).await;
             }
             Inline::Note(Note { content, .. }) => {
                 resolve_blocks(content, transform, metadata, diagnostics, lua_engine).await;
             }
-            Inline::Span(Span { content, .. }) => {
+            Inline::Span(Span {
+                attr,
+                content,
+                source_info,
+                ..
+            }) => {
+                expand_attr_value_shortcodes(
+                    attr,
+                    transform,
+                    metadata,
+                    source_info,
+                    diagnostics,
+                    lua_engine,
+                )
+                .await;
                 resolve_inlines(content, transform, metadata, diagnostics, lua_engine).await;
             }
             Inline::EditComment(EditComment { content, .. }) => {
@@ -1928,14 +2085,49 @@ fn recurse_inline<'a>(
                     }
                 }
             }
+            // Text contexts — Q1 substitutes shortcodes textually in
+            // code, raw, and math text (`apply_code_shortcode`;
+            // bd-fz6gwfq0).
+            Inline::Code(code) => {
+                if !code_shortcode_opt_out(&code.attr) {
+                    expand_text_in_place(
+                        &mut code.text,
+                        transform,
+                        metadata,
+                        &code.source_info,
+                        diagnostics,
+                        lua_engine,
+                    )
+                    .await;
+                }
+            }
+            Inline::RawInline(raw) => {
+                expand_text_in_place(
+                    &mut raw.text,
+                    transform,
+                    metadata,
+                    &raw.source_info,
+                    diagnostics,
+                    lua_engine,
+                )
+                .await;
+            }
+            Inline::Math(math) => {
+                expand_text_in_place(
+                    &mut math.text,
+                    transform,
+                    metadata,
+                    &math.source_info,
+                    diagnostics,
+                    lua_engine,
+                )
+                .await;
+            }
             // These inlines don't contain nested content
             Inline::Str(_)
-            | Inline::Code(Code { .. })
             | Inline::Space(_)
             | Inline::SoftBreak(_)
             | Inline::LineBreak(_)
-            | Inline::Math(_)
-            | Inline::RawInline(_)
             | Inline::Shortcode(_)
             | Inline::NoteReference(_)
             | Inline::Attr(_) => {}
@@ -2937,6 +3129,156 @@ mod tests {
             assert_eq!(
                 include_slot_text(&ast.meta),
                 "<div>{{< meta version >}}</div>"
+            );
+            assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    /// Tests for text-level substitution in code/attr contexts
+    /// (bd-fz6gwfq0): the opt-outs and unresolved policy that the
+    /// integration tests (`shortcode_text_contexts.rs`) can't observe
+    /// directly.
+    mod text_context_walks {
+        use super::*;
+        use crate::format::Format;
+        use crate::render::BinaryDependencies;
+        use quarto_pandoc_types::attr::AttrSourceInfo;
+        use quarto_pandoc_types::block::CodeBlock;
+        use quarto_pandoc_types::config_value::ConfigMapEntry;
+
+        fn meta_with_version() -> ConfigValue {
+            ConfigValue::new_map(
+                vec![ConfigMapEntry {
+                    key: "version".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("9.9.9".to_string(), dummy_source_info()),
+                }],
+                dummy_source_info(),
+            )
+        }
+
+        fn code_block(classes: Vec<&str>, attributes: Vec<(&str, &str)>, text: &str) -> Block {
+            let mut kvs = hashlink::LinkedHashMap::new();
+            for (k, v) in attributes {
+                kvs.insert(k.to_string(), v.to_string());
+            }
+            Block::CodeBlock(CodeBlock {
+                attr: (
+                    String::new(),
+                    classes.into_iter().map(String::from).collect(),
+                    kvs,
+                ),
+                text: text.to_string(),
+                source_info: dummy_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            })
+        }
+
+        fn code_text(block: &Block) -> &str {
+            match block {
+                Block::CodeBlock(cb) => &cb.text,
+                other => panic!("expected CodeBlock, got {:?}", other),
+            }
+        }
+
+        async fn run_transform(ast: &mut Pandoc) -> Vec<DiagnosticMessage> {
+            let transform = ShortcodeResolveTransform::new();
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/doc.qmd");
+            let format = Format::html();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            transform.transform(ast, &mut ctx).await.unwrap();
+            ctx.diagnostics.clone()
+        }
+
+        /// Engine-produced cell code (`.cell-code`) must print as-is —
+        /// the engine already processed the text (Q1 parity).
+        #[tokio::test]
+        async fn cell_code_class_skips_expansion() {
+            let mut ast = Pandoc {
+                meta: meta_with_version(),
+                blocks: vec![code_block(
+                    vec!["python", "cell-code"],
+                    vec![],
+                    "print('{{< meta version >}}')",
+                )],
+            };
+            let diags = run_transform(&mut ast).await;
+            assert_eq!(code_text(&ast.blocks[0]), "print('{{< meta version >}}')");
+            assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
+        }
+
+        /// `shortcodes="false"` opts a block out without diagnostics.
+        #[tokio::test]
+        async fn shortcodes_false_attribute_skips_expansion() {
+            let mut ast = Pandoc {
+                meta: meta_with_version(),
+                blocks: vec![code_block(
+                    vec!["markdown"],
+                    vec![("shortcodes", "false")],
+                    "v: {{< meta version >}}",
+                )],
+            };
+            let diags = run_transform(&mut ast).await;
+            assert_eq!(code_text(&ast.blocks[0]), "v: {{< meta version >}}");
+            assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
+        }
+
+        /// Unresolved shortcodes in code text leave the `?key` marker
+        /// AND warn with Q-16-5 (q2 policy — louder than Q1's silent
+        /// leave-literal, since q2 has source mapping).
+        #[tokio::test]
+        async fn code_block_unresolved_marks_and_warns_q16_5() {
+            let mut ast = Pandoc {
+                meta: meta_with_version(),
+                blocks: vec![code_block(vec![], vec![], "v: {{< meta nope >}}")],
+            };
+            let diags = run_transform(&mut ast).await;
+            assert_eq!(code_text(&ast.blocks[0]), "v: ?meta:nope");
+            assert!(
+                diags.iter().any(|d| format!("{:?}", d).contains("Q-16-5")),
+                "expected a Q-16-5 diagnostic; got: {:?}",
+                diags
+            );
+        }
+
+        /// Attribute expansion touches values only — never id or
+        /// classes (Q1's `attr_handler` walks `el.attributes` alone).
+        #[tokio::test]
+        async fn attr_expansion_leaves_id_and_classes_alone() {
+            let mut kvs = hashlink::LinkedHashMap::new();
+            kvs.insert(
+                "data-version".to_string(),
+                "{{< meta version >}}".to_string(),
+            );
+            let mut ast = Pandoc {
+                meta: meta_with_version(),
+                blocks: vec![Block::Div(Div {
+                    attr: (
+                        "{{< meta version >}}".to_string(),
+                        vec!["{{< meta version >}}".to_string()],
+                        kvs,
+                    ),
+                    content: vec![],
+                    source_info: dummy_source_info(),
+                    attr_source: AttrSourceInfo::empty(),
+                })],
+            };
+            let diags = run_transform(&mut ast).await;
+            let Block::Div(div) = &ast.blocks[0] else {
+                panic!("expected Div");
+            };
+            assert_eq!(div.attr.0, "{{< meta version >}}", "id must not expand");
+            assert_eq!(
+                div.attr.1[0], "{{< meta version >}}",
+                "classes must not expand"
+            );
+            assert_eq!(
+                div.attr.2.get("data-version").map(String::as_str),
+                Some("9.9.9"),
+                "attribute value must expand"
             );
             assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
         }

@@ -15,7 +15,7 @@ categories:
 
 ## What this means
 
-An `{{< include >}}` shortcode names a file that Quarto could not
+An `{{{< include >}}}` shortcode names a file that Quarto could not
 read — most often because no file exists at the resolved path. The
 include is skipped: its content is omitted from the output, and the
 rest of the document renders normally.
