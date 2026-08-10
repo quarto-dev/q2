@@ -1,0 +1,23 @@
+---
+_quarto:
+  tests:
+    html:
+      ensureFileRegexMatches:
+        - ["PROD-VISIBLE", "BETA-VISIBLE", "Production Title"]
+        - ["PROD-HIDDEN", "when-profile"]
+      noErrors: true
+---
+
+# Profile smoke
+
+::: {.content-visible when-profile="prod"}
+PROD-VISIBLE
+:::
+
+::: {.content-hidden when-profile="prod"}
+PROD-HIDDEN
+:::
+
+::: {.content-visible when-meta="features.beta"}
+BETA-VISIBLE
+:::

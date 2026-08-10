@@ -31,6 +31,7 @@ website:
             - guides/projects/render-list.qmd
             - guides/projects/scripts.qmd
             - guides/projects/environment.qmd
+            - guides/projects/profiles.qmd
             - guides/publishing/index.qmd
     - id: Authoring
       collapse-level: 1

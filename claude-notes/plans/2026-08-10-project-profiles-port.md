@@ -400,20 +400,36 @@ waits; nothing else blocks.
 
 ### Phase 5 — docs, fixtures, wrap-up
 
-- [ ] `docs/guides/projects/profiles.qmd` (user-facing; render with
-      `cargo run --bin q2 -- render docs/`); update
-      `environment.qmd` profile section
-- [ ] smoke-all fixture(s) under `crates/quarto/tests/smoke-all/`
-      (investigate how fixtures can carry CLI flags/env; if they
-      cannot, cover via integration tests and say so here)
-- [ ] Divergence table above reviewed & mirrored into docs where
-      user-visible
-- [ ] File deferred-work strands (Lua API, preview watch, gitignore
-      scaffolding); update/close bd-mlj6
-- [ ] Full gates: `cargo build --workspace`, `cargo nextest run
-      --workspace`, `cargo xtask verify` (full — quarto-core is in
-      scope), commit protocol per CLAUDE.md
-- [ ] Write the "feature porting" process doc (session retrospective)
+- [x] `docs/guides/projects/profiles.qmd` written (activation,
+      merging, defaults/groups, conditional content, code
+      visibility, "Differences from Quarto 1" section mirroring the
+      divergence table); `environment.qmd` gained the
+      `_environment-<profile>` file row, precedence entry, and a
+      "Profile environments" section (incl. secrets callout and the
+      no-recursion rule). Rendered with
+      `cargo run --bin q2 -- render docs/` and inspected (titles,
+      literal shortcode escape, cross-links all correct).
+- [x] smoke-all fixture `metadata/project-profiles/`: activation via
+      `profile.default` (no CLI flags needed, so all three runners
+      exercise it — including the WASM runner, our only WASM-path
+      coverage), overlay title + when-profile visible/hidden +
+      when-meta-from-overlay assertions; native runner green, WASM
+      runner exercised by `cargo xtask verify`'s hub leg.
+- [x] Engine E2E (recorded): jupyter cell
+      `os.environ.get("QUARTO_PROFILE")` printed
+      `advanced,production` under
+      `q2 render doc.qmd --profile advanced,production` with a real
+      python kernel.
+- [x] Deferred-work strands filed: bd-pfgc273f (preview --profile
+      threading), bd-spb7mobo (metadata-files decision),
+      bd-ip1lrgra (Lua quarto.project.profile), bd-kzwt3xcu
+      (preview watch/restart on profile-config change),
+      bd-47hhbmaj (auto-gitignore /_*.local). bd-mlj6 and
+      bd-ev8mk1rp closed as implemented.
+- [ ] Full gates: `cargo xtask verify` (full, WASM leg) — running;
+      commit after green
+- [ ] Write the "feature porting" process doc (session
+      retrospective) — on request, per the session brief
 
 ## Open questions for plan iteration
 
