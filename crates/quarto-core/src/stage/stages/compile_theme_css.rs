@@ -633,16 +633,12 @@ impl PipelineStage for CompileThemeCssStage {
 fn theme_error_candidates(
     ctx: &StageContext,
 ) -> Vec<(quarto_source_map::FileId, std::path::PathBuf)> {
-    let hash =
-        |p: &std::path::Path| quarto_yaml::file_id_for_filename(&p.to_string_lossy());
+    let hash = |p: &std::path::Path| quarto_yaml::file_id_for_filename(&p.to_string_lossy());
     let mut candidates: Vec<(quarto_source_map::FileId, std::path::PathBuf)> = Vec::new();
     if let Some(p) = ctx.project.config.config_path.as_deref() {
         candidates.push((hash(p), p.to_path_buf()));
     }
-    candidates.push((
-        quarto_source_map::FileId(0),
-        ctx.document.input.to_path_buf(),
-    ));
+    candidates.push((quarto_source_map::FileId(0), ctx.document.input.clone()));
     for p in &ctx.project.config.extension_manifest_paths {
         candidates.push((hash(p), p.clone()));
     }
