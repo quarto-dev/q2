@@ -720,10 +720,11 @@ fn test_entity_reference_multi_codepoint() {
 
 #[test]
 fn test_entity_reference_unknown_emits_verbatim() {
-    // "&AM;" currently parses as entity_reference (truncated legacy alternative
-    // from the grammar regex, see bd-v8qc9zyc) but is not a valid entity name;
-    // it must survive as literal text. This assertion also holds after the
-    // grammar fix, when it becomes plain text.
+    // "&AM;" is not a valid entity name and must survive as literal text.
+    // Before bd-v8qc9zyc it lexed as entity_reference (a truncated legacy
+    // alternative in the grammar regex) and exercised the converter's
+    // verbatim fallback; since the regex fix it is plain text. The assertion
+    // holds either way, guarding both layers.
     let pandoc = parse_qmd("A &AM; B");
     assert_eq!(para_text(&pandoc, 0), "A &AM; B");
 }

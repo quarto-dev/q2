@@ -174,8 +174,16 @@ function html_entity_regex() {
     // A file with all html entities, should be kept up to date with
     // https://html.spec.whatwg.org/multipage/entities.json
     let html_entities = require("./html_entities.json");
+    // Only semicolon-terminated names: CommonMark recognizes entities in
+    // markdown only with the trailing `;`. The table's 106 legacy keys
+    // without one (`&AMP`, `&AElig`, ...) must not contribute alternatives —
+    // substring() would strip their last *letter* instead of the `;`,
+    // yielding bogus names like `AM` (bd-v8qc9zyc).
     let s = '&(';
-    s += Object.keys(html_entities).map(name => name.substring(1, name.length - 1)).join('|');
+    s += Object.keys(html_entities)
+        .filter(name => name.endsWith(';'))
+        .map(name => name.substring(1, name.length - 1))
+        .join('|');
     s += ');';
     return new RegExp(s);
 }
