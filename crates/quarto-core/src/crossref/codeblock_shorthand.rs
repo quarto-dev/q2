@@ -69,7 +69,7 @@
 //! isn't an option line starts the code. For mermaid this is what keeps a
 //! `%%|` further down the diagram an ordinary comment.
 
-use quarto_error_reporting::DiagnosticMessage;
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Blocks, Div, Figure, Paragraph, Plain};
 use quarto_pandoc_types::caption::Caption;
@@ -139,7 +139,12 @@ fn try_desugar_code_block(
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Option<Block> {
     let language = language_of(cb);
-    let parsed = parse_cell_options(&language, &cb.text, body_source_for(cb, sources));
+    let body_source = body_source_for(cb, sources);
+    let parsed = parse_cell_options(&language, &cb.text, body_source.clone());
+
+    if is_diagram_language(&language) {
+        warn_wrong_marker(&cb.text, &parsed, &body_source, diagnostics);
+    }
 
     // Keys this cell's options let us act on. Everything else stays in
     // the body: an option q2 cannot route is the engine's to interpret,
@@ -186,6 +191,11 @@ fn try_desugar_code_block(
     } else {
         None
     };
+
+    // A diagram cell has no engine to hand the leftovers to (decision 4).
+    if is_diagram_language(&language) {
+        warn_unconsumed_options(&parsed, &consumed, diagnostics);
+    }
 
     if consumed.is_empty() {
         return None;
@@ -272,6 +282,107 @@ enum Wrapper<'a> {
 /// which [`inject_acc_descr`] therefore knows how to carry `fig-alt`.
 fn is_diagram_language(language: &str) -> bool {
     language.eq_ignore_ascii_case("mermaid")
+}
+
+/// Every option key a diagram cell can act on. A key outside this set is
+/// unknown; a key inside it that still went unconsumed had nowhere to go
+/// *in this position* (e.g. `fig-scap` on a numbered float).
+///
+/// **Grow this list when a feature starts honouring a key.** Q1 accepts
+/// `theme` and `mermaid-format` on mermaid cells; q2 does not yet, so
+/// they warn here — correctly, today. The mermaid theming strands
+/// (bd-sehm2rha, bd-nj25kgbu) should add `theme` when they land, or
+/// authors who follow Q1 will get a warning for an option that works.
+const DIAGRAM_OPTION_KEYS: &[&str] = &["label", "fig-cap", "fig-scap", "fig-alt"];
+
+/// Report options a diagram cell carried but nothing acted on
+/// (decision 4).
+///
+/// This is deliberately scoped to diagram cells. On an **executable**
+/// cell an unrecognized key is normally an engine option (`echo`,
+/// `eval`, `warning`, engine-specific keys) that the engine reads from
+/// the body, so warning there would fire on essentially every real
+/// document. A diagram cell has no engine at all — every option is q2's
+/// to interpret, and one q2 does not interpret is a mistake.
+fn warn_unconsumed_options(
+    parsed: &CellOptions,
+    consumed: &std::collections::HashMap<String, &OptionValue>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    // Sorted so a cell with several stray options reports them in a
+    // stable order rather than the hash map's.
+    let mut leftover: Vec<(&String, &OptionValue)> = parsed
+        .values
+        .iter()
+        .filter(|(key, _)| !consumed.contains_key(*key))
+        .collect();
+    leftover.sort_by(|a, b| a.0.cmp(b.0));
+
+    for (key, option) in leftover {
+        let recognized = DIAGRAM_OPTION_KEYS.contains(&key.as_str());
+        let problem = if recognized {
+            format!("`{key}` is a Quarto cell option, but it has no effect on this diagram.")
+        } else {
+            format!("`{key}` is not a cell option a diagram cell understands.")
+        };
+        let hint = if recognized {
+            "Remove it, or move it to a position where it applies."
+        } else {
+            "Diagram cells accept `label`, `fig-cap`, `fig-scap`, and `fig-alt`. \
+             A diagram has no execution engine, so other options have nowhere to go."
+        };
+        diagnostics.push(
+            DiagnosticMessageBuilder::warning("Cell option ignored on a diagram cell")
+                .with_code("Q-2-47")
+                .with_location(option.key_source.clone())
+                .problem(problem)
+                .add_hint(hint)
+                .build(),
+        );
+    }
+}
+
+/// Report a leading run of `#|` lines in a diagram cell (decision 5).
+///
+/// `#|` used to work here, and stopping is deliberate — but `#` is not a
+/// mermaid comment, so the leftover lines become diagram source and
+/// mermaid fails to parse them. Without this the author sees a broken
+/// diagram and no explanation.
+///
+/// Only fires when the cell's own marker found nothing: a cell that
+/// correctly uses `%%|` and happens to contain a `#|` further down is
+/// writing diagram content, not options.
+fn warn_wrong_marker(
+    text: &str,
+    parsed: &CellOptions,
+    body_source: &SourceInfo,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    if !parsed.values.is_empty() {
+        return;
+    }
+    let Some(first) = text.lines().next() else {
+        return;
+    };
+    let Some(rest) = first.strip_prefix('#') else {
+        return;
+    };
+    if !rest.trim_start_matches([' ', '\t']).starts_with('|') {
+        return;
+    }
+
+    diagnostics.push(
+        DiagnosticMessageBuilder::warning("Wrong cell-option marker for a diagram cell")
+            .with_code("Q-2-48")
+            .with_location(SourceInfo::substring(
+                body_source.clone(),
+                0,
+                first.len().min(body_source.length()),
+            ))
+            .problem("`#|` is not a mermaid comment, so these lines are read as diagram source.")
+            .add_hint("Write mermaid cell options as `%%|` — the marker follows the cell language's own comment syntax.")
+            .build(),
+    );
 }
 
 /// Carry `fig-alt` into a mermaid diagram as its native `accDescr:`
@@ -900,6 +1011,104 @@ mod tests {
             cb.text
         );
         assert!(!cb.text.contains("fig-cap"), "got:\n{}", cb.text);
+    }
+
+    fn desugar_collecting(blocks: &mut Blocks, reg: &RefTypeRegistry) -> Vec<DiagnosticMessage> {
+        let mut diagnostics = Vec::new();
+        desugar_blocks(blocks, reg, &sources(), &mut diagnostics);
+        diagnostics
+    }
+
+    /// Decision 4: a diagram cell has no engine to hand leftover options
+    /// to, so an option q2 does not act on is a mistake worth naming —
+    /// and the diagnostic points at the key, not at the block.
+    #[test]
+    fn unknown_option_on_a_diagram_cell_warns() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| fig-cap: A flowchart.\n%%| echo: false\nflowchart LR\n  A --> B\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+
+        assert_eq!(diagnostics.len(), 1, "got {diagnostics:?}");
+        let d = &diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-2-47"));
+        assert!(
+            format!("{d:?}").contains("echo"),
+            "the diagnostic must name the offending key; got {d:?}"
+        );
+        assert!(
+            d.location.is_some(),
+            "the diagnostic must be source-mapped; got {d:?}"
+        );
+    }
+
+    /// The engine path keeps its silence: `echo`/`eval`/engine-specific
+    /// keys are the engine's business, and warning on them would fire on
+    /// essentially every real document.
+    #[test]
+    fn unknown_option_on_an_executable_cell_is_silent() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "{python}",
+            "#| label: fig-p\n#| fig-cap: A plot.\n#| echo: false\n#| warning: false\nplot()\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert!(diagnostics.is_empty(), "got {diagnostics:?}");
+    }
+
+    /// Decision 5's other half: `#|` in a mermaid fence is now inert, so
+    /// say why rather than letting mermaid fail on the leftover lines.
+    #[test]
+    fn hash_marker_in_a_mermaid_cell_warns() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "#| label: fig-hash\n#| fig-cap: Hash-prefixed.\nflowchart LR\n  A --> B\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+
+        assert_eq!(diagnostics.len(), 1, "got {diagnostics:?}");
+        let d = &diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-2-48"));
+        assert!(
+            d.location.is_some(),
+            "the diagnostic must be source-mapped; got {d:?}"
+        );
+    }
+
+    /// A `%%` comment that is not an option line is just a comment.
+    #[test]
+    fn plain_mermaid_comment_does_not_warn() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%% just a comment\nflowchart LR\n  A --> B\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert!(diagnostics.is_empty(), "got {diagnostics:?}");
+    }
+
+    /// A recognized key q2 cannot route *in this position* is still
+    /// reported — `fig-scap` has nowhere to go on a numbered float — but
+    /// the reason differs from an unknown key, so the message says so.
+    #[test]
+    fn recognized_but_unroutable_option_warns_on_a_diagram_cell() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| label: fig-d\n%%| fig-cap: Long.\n%%| fig-scap: Short.\nflowchart LR\n  A --> B\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+
+        assert_eq!(diagnostics.len(), 1, "got {diagnostics:?}");
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-2-47"));
+        assert!(
+            format!("{:?}", diagnostics[0]).contains("fig-scap"),
+            "got {:?}",
+            diagnostics[0]
+        );
     }
 
     /// A brace-form executable cell still resolves to its language's

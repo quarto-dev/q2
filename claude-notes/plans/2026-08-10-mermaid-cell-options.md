@@ -227,19 +227,24 @@ be numbered. This is the strand's most important architectural constraint.
 ## Phases
 
 - [x] **Phase 0 — Investigation** (commit `f44b3a81`): plan + probes.
-- [ ] **Phase 1 — `cell_options` learns mermaid.** Add `"mermaid" => ("%%",
+- [x] **Phase 1 — `cell_options` learns mermaid** (commit `3407e7db`). Add `"mermaid" => ("%%",
       None)` to `comment_syntax_for`, with tests (including that a matlab/tikz
       `%` cell and a mermaid `%%` cell do not cross-talk).
-- [ ] **Phase 2 — Migrate `codeblock_shorthand` onto `cell_options` (fixes
-      D1).** Language-aware prefix selection (language = the block's first
+- [x] **Phase 2 — Migrate `codeblock_shorthand` onto `cell_options` (fixes
+      D1)** (commit `6347b3b3`). Language-aware prefix selection (language = the block's first
       class, brace forms excluded) + real YAML parsing, replacing the
       hard-coded `"#|"` matcher and `split_once(':')`. Makes `%%|` work and
       makes quoted captions come out unquoted.
-- [ ] **Phase 3 — Caption inlines (fixes D2).** Parse `fig-cap` as markdown
-      inlines instead of a single `Str`.
-- [ ] **Phase 4 — `fig-alt` + `fig-scap` (fixes D3).** Stop dropping them;
-      route `fig-alt` into `accDescr:` per decision 2.
-- [ ] **Phase 5 — Unlabelled `fig-cap` → `Block::Figure`** per decision 1.
+- [x] **Phase 3 — Caption inlines (fixes D2)** (commit `d8c01072`). Parse
+      `fig-cap` as markdown inlines instead of a single `Str`.
+- [x] **Phase 4 — Unlabelled `fig-cap` → `Block::Figure`** per decision 1
+      (commit `1adc3ece`); `fig-scap` → `Caption::short`.
+      *Swapped with the original Phase 5*: the unlabelled path had to exist
+      before `fig-alt` could compose with it, otherwise Phase 5 would have
+      built a structure Phase 4 immediately tore down.
+- [x] **Phase 5 — `fig-alt` + `fig-scap` (fixes D3)** (commit `02cfccf4`).
+      Stop consuming what cannot be routed; route `fig-alt` into `accDescr:`
+      per decision 2.
 - [ ] **Phase 6 — Diagnostics.** Unknown-key warning for diagram cells and the
       `#|`-in-mermaid warning, both source-mapped, per decisions 4 and 5.
 - [ ] **Phase 7 — End-to-end + preview verification.** `q2 render` on the

@@ -19,3 +19,6 @@ outputs are not committed.)
 - `probe3.qmd` — the same caption defects on a plain ```python``` cell,
   establishing that they are general `#|`-shorthand bugs and not
   mermaid-specific.
+- `probe4.qmd` — diagnostics (Phase 6): unknown keys on a diagram cell,
+  a recognized-but-unroutable key, and an executable cell that must stay
+  silent.
