@@ -82,14 +82,17 @@ Working conventions for this phase:
 
 ### Coverage completion (correct sites, incomplete candidates)
 
-- [ ] **D5 / bd-r64mj1aa (p2, covers D6/D7):** `commands/render.rs` `attach_config_source` /
+- [x] **D5 / bd-r64mj1aa (p2, covers D6/D7):** `commands/render.rs` `attach_config_source` /
       `config_source_context`: extend candidates with
       `extension_manifest_paths` (+ dir-layer `_metadata.yml` paths for the
       per-page groups). Depends on PR #478.
-- [ ] **D6 (in bd-r64mj1aa):** `theme_error_candidates`
+      *Done 2026-08-09, all three legs; per-page layer coverage comes via
+      D7's metadata_merge registration on the structured path; new shared
+      register_config_source; zero lint allowances left in render.rs.*
+- [x] **D6 (in bd-r64mj1aa):** `theme_error_candidates`
       (`compile_theme_css.rs:633`): add `extension_manifest_paths` and the
       doc's dir-layer paths.
-- [ ] **D7 (in bd-r64mj1aa):** register extension manifests in
+- [x] **D7 (in bd-r64mj1aa):** register extension manifests in
       `MetadataMergeStage` so doc-scoped diagnostics anchored in
       `_extension.yml` get spans.
 - [ ] **D9 / bd-fc3mf161 (p3, may defer):** `pipeline.rs:800/:834/:1006` — thread

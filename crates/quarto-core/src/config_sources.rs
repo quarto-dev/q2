@@ -107,6 +107,27 @@ pub fn bind_source_candidates<'a>(
     None
 }
 
+/// Register `path` in `source_context` under its own derived FileId
+/// (`quarto_yaml::file_id_for_filename` of the path's spelling),
+/// content permitting. The triple cannot mis-pair — id, path, and
+/// content all come from the one `path` — so this is the safe way to
+/// pre-register a *known* config source for later span rendering
+/// (as opposed to [`bind_config_source`], which selects among
+/// candidates by a diagnostic's resolved id). Returns `true` when the
+/// file was registered (or already present).
+pub fn register_config_source(source_context: &mut SourceContext, path: &Path) -> bool {
+    let name = path.to_string_lossy();
+    let fid = quarto_yaml::file_id_for_filename(&name);
+    if source_context.get_file(fid).is_some() {
+        return true;
+    }
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    source_context.add_file_with_id(fid, name.into_owned(), Some(content));
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
