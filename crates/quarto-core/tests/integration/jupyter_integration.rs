@@ -67,6 +67,10 @@ async fn test_kernel_execute_print() {
         return;
     }
 
+    // bd-hxhnnlzs: panic-safety — if an assertion below fails before
+    // the explicit shutdown_session, this scope's drop still tears the
+    // kernel down instead of leaking it to PID 1.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 
@@ -119,6 +123,10 @@ async fn test_kernel_execute_expression() {
         return;
     }
 
+    // bd-hxhnnlzs: panic-safety — if an assertion below fails before
+    // the explicit shutdown_session, this scope's drop still tears the
+    // kernel down instead of leaking it to PID 1.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 
@@ -162,6 +170,10 @@ async fn test_kernel_execute_error() {
         return;
     }
 
+    // bd-hxhnnlzs: panic-safety — if an assertion below fails before
+    // the explicit shutdown_session, this scope's drop still tears the
+    // kernel down instead of leaking it to PID 1.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 
@@ -235,6 +247,10 @@ async fn test_kernel_execute_matplotlib() {
         return;
     }
 
+    // bd-hxhnnlzs: panic-safety — if an assertion below fails before
+    // the explicit shutdown_session, this scope's drop still tears the
+    // kernel down instead of leaking it to PID 1.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 

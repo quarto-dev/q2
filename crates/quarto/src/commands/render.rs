@@ -771,7 +771,15 @@ fn execute_single_doc(
     .with_format_override(args.to.clone())
     .with_fail_fast(args.fail_fast);
 
-    let mut summary = match pollster::block_on(pipeline.run()) {
+    // bd-hxhnnlzs: keep Jupyter kernels warm across the whole pipeline
+    // run. Scoped to the `block_on` (not the surrounding function)
+    // because the error paths below call `std::process::exit`, which
+    // skips destructors — the scope must close before any exit.
+    let run_result = {
+        let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
+        pollster::block_on(pipeline.run())
+    };
+    let mut summary = match run_result {
         Ok(s) => s,
         Err(QuartoError::Parse(parse_error)) => {
             if args.json_errors {
@@ -923,7 +931,15 @@ fn execute_project(
         pipeline = pipeline.with_mode(RenderMode::Subset(set));
     }
 
-    let mut summary = match pollster::block_on(pipeline.run()) {
+    // bd-hxhnnlzs: one kernel scope for the whole project render, so
+    // documents sharing a (kernel, dir) session key reuse one warm
+    // kernel. Scoped to the `block_on` because the error paths below
+    // call `std::process::exit`, which skips destructors.
+    let run_result = {
+        let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
+        pollster::block_on(pipeline.run())
+    };
+    let mut summary = match run_result {
         Ok(s) => s,
         Err(QuartoError::Parse(parse_error)) => {
             if args.json_errors {

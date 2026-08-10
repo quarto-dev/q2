@@ -62,6 +62,12 @@ pub fn execute_qmd(
     // Determine the kernel from the first code block
     let kernel_name = map_language_to_kernel(&blocks[0].language);
 
+    // bd-hxhnnlzs: hold a kernel scope for the duration of this engine
+    // run. If no outer scope (render invocation, preview server) is
+    // open, the kernels spawned below are shut down when this guard
+    // drops — no caller of the jupyter engine can leak a kernel.
+    let _kernel_scope = super::daemon::kernel_scope();
+
     // Execute via async runtime
     let result = execute_blocks_async(input, &blocks, &kernel_name, ctx);
 
@@ -148,13 +154,12 @@ fn execute_blocks_async(
     kernel_name: &str,
     ctx: &ExecutionContext,
 ) -> JupyterResult<ExecuteResult> {
-    // Use tokio runtime to execute async code
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| JupyterError::RuntimeLibError(e.to_string()))?;
-
-    rt.block_on(execute_blocks_inner(input, blocks, kernel_name, ctx))
+    // Drive the execution on the shared engine runtime — NOT a
+    // per-call runtime. Kernel sessions (ZeroMQ sockets, the kernel
+    // Child) are tokio resources bound to the runtime that created
+    // them; a per-call runtime made every cross-call session reuse
+    // fail with "Tokio context ... is being shutdown" (bd-hxhnnlzs).
+    super::daemon::engine_runtime().block_on(execute_blocks_inner(input, blocks, kernel_name, ctx))
 }
 
 /// Inner async function that does the actual execution.

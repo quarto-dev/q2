@@ -8,6 +8,7 @@ pub mod create;
 pub mod extension_config_spans;
 pub mod get_config_cli;
 pub mod json_errors;
+pub mod jupyter_kernel_cleanup_e2e;
 pub mod preview_cli;
 pub mod render_cli_e2e;
 pub mod render_exit_codes;
