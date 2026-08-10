@@ -340,14 +340,40 @@ by `ApplyTemplateStage` are engine output and deliberately not expanded (Q1's
 
 ### Phase 4 — End-to-end verification + docs
 
-- [ ] `cargo run --bin q2 -- render` on the investigation repro: inspect all five
-      contexts in the output; record invocation + snippets here.
-- [ ] Full workspace verification (`cargo build`, `cargo nextest run --workspace`,
-      `cargo xtask verify`).
-- [ ] docs/ update if user-facing behavior warrants it (shortcodes-in-config
-      documentation).
-- [ ] Braid: close strand; re-check discovered strands (bd-1fue1ly5, bd-fz6gwfq0)
-      against the shared expander.
+- [x] End-to-end through the real binary (output inspected 2026-08-10):
+
+      ```bash
+      REPRO_VERSION=2026.08.0 cargo run --bin q2 -- render \
+        claude-notes/plans/shortcodes-website-config-includes-investigation/repro
+      ```
+
+      `_site/index.html` (all five contexts substituted; matches the Q1 reference
+      render exactly on title/navbar/banner/subtitle, footer content identical
+      modulo q2's footer DOM shape):
+
+      ```
+      7:<title>Home – My Site Version 2026.08.0</title>
+      17:    <a class="navbar-brand" href="./">My Site <small>Version 2026.08.0</small></a>
+      29:  You are viewing version <strong>2026.08.0</strong>.
+      39:<p class="subtitle lead">Subtitle version 2026.08.0</p>
+      47:<p>Body-text shortcode (works in q2): version is 2026.08.0.</p>
+      55:    <div class="nav-footer-center">My Product 2026.08.0</div>
+      ```
+
+      Note: the render emits two Q-2-9 warnings ("HTML element converted to raw
+      HTML") for the `<small>` tags in `website.title`, with correct
+      `_quarto.yml` source spans. This is q2's uniform raw-HTML-in-markdown
+      behavior (body text warns identically) — not new noise from this feature;
+      the documented `` `<element>`{=html} `` form silences it.
+- [x] Full workspace verification: `cargo nextest run --workspace` 11250/11250;
+      clippy clean after two collapsible-if fixes; full `cargo xtask verify`
+      (WASM leg included) — see result below.
+- [x] docs/: wrote `docs/guides/authoring/shortcodes.qmd` (was a "TBD" stub) —
+      built-ins, evaluation contexts incl. the new ones, escaping, unresolved
+      markers. Display technique relies on code contexts not substituting;
+      fragility note recorded on bd-fz6gwfq0 (comment c-7cdp80ld).
+- [ ] Braid: close strand after review/merge; re-check discovered strands
+      (bd-1fue1ly5, bd-fz6gwfq0) against the shared expander.
 
 ## Design questions — all resolved
 

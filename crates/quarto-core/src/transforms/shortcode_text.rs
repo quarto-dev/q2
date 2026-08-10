@@ -68,14 +68,14 @@ pub fn parse_text_shortcodes(text: &str, source_info: &SourceInfo) -> Option<Vec
                 literal_start = i;
                 continue;
             }
-        } else if rest.starts_with("{{<") {
-            if let Some((shortcode, end)) = parse_shortcode_at(text, i, source_info) {
-                push_literal(&mut segments, &text[literal_start..i]);
-                segments.push(TextSegment::Shortcode(shortcode));
-                i = end;
-                literal_start = i;
-                continue;
-            }
+        } else if rest.starts_with("{{<")
+            && let Some((shortcode, end)) = parse_shortcode_at(text, i, source_info)
+        {
+            push_literal(&mut segments, &text[literal_start..i]);
+            segments.push(TextSegment::Shortcode(shortcode));
+            i = end;
+            literal_start = i;
+            continue;
         }
         // Advance one full character (not byte) to stay on a char boundary.
         i += text[i..].chars().next().map_or(1, char::len_utf8);

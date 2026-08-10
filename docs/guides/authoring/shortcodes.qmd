@@ -2,4 +2,66 @@
 title: Shortcodes
 ---
 
-TBD.
+Shortcodes are directives you can embed in your documents to insert
+computed values or generated content. They use the syntax
+`{{< name arguments >}}`.
+
+## Built-in shortcodes
+
+| Shortcode | Description |
+|-----------|-------------|
+| `{{< meta key >}}` | Insert a value from document or project metadata (dot notation supported: `{{< meta book.title >}}`) |
+| `{{< env NAME >}}` | Insert the value of an environment variable; an optional second argument supplies a fallback: `{{< env NAME fallback >}}` |
+| `{{< var key >}}` | Insert a value from `_variables.yml` at your project root |
+
+For example, with this front matter:
+
+``` yaml
+---
+title: My Document
+version: "12.1"
+---
+```
+
+writing `{{< meta version >}}` anywhere in the body inserts `12.1`.
+
+## Where shortcodes are evaluated
+
+Shortcodes resolve in:
+
+- **Document body text.**
+- **Document metadata** — any front-matter value, e.g. a `subtitle`
+  that interpolates `{{< env PRODUCT_VERSION >}}`.
+- **Website configuration strings** in `_quarto.yml`:
+  `website.title`, the navbar and sidebar titles, and `page-footer`
+  text regions. These values are treated as markdown, so inline
+  formatting and raw HTML work there too.
+- **Include files** (`include-in-header`, `include-before-body`,
+  `include-after-body`, and `{text: …}` entries). Include files get
+  *textual* substitution: the shortcode is replaced in place, but the
+  surrounding file content is not otherwise interpreted as markdown.
+
+Shortcodes are **not** evaluated inside code blocks or inline code —
+which is how this page displays them literally.
+
+Custom shortcodes provided by [extensions](extensions.qmd) or by
+`shortcodes:` scripts work in all of these contexts as well.
+
+## Escaping
+
+To display a shortcode literally in ordinary text instead of
+evaluating it, use triple braces in place of double braces: writing
+
+``` markdown
+{{{< meta version >}}}
+```
+
+renders as {{{< meta version >}}} rather than inserting the value.
+
+## Unresolved shortcodes
+
+When a shortcode cannot be resolved — an unknown metadata key, an
+unset environment variable with no fallback — Quarto renders a
+visible `?name` marker in the output and emits a warning identifying
+the source location, so problems are noticed rather than silently
+dropped.

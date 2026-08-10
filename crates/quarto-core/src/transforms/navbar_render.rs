@@ -171,10 +171,10 @@ fn rewrite_navigation_item_hrefs(
 /// `title`. `None` means the renderer has nothing to fall back to
 /// (brand anchor will be suppressed if no logo either).
 fn brand_title_fallback(meta: &ConfigValue) -> Option<ConfigValue> {
-    if let Some(site_title) = meta.get_path(&["website", "title"]) {
-        if is_renderable_title(site_title) {
-            return Some(site_title.clone());
-        }
+    if let Some(site_title) = meta.get_path(&["website", "title"])
+        && is_renderable_title(site_title)
+    {
+        return Some(site_title.clone());
     }
     meta.get("title")
         .filter(|v| is_renderable_title(v))
