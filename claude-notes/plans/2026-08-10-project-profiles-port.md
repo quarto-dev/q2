@@ -426,10 +426,15 @@ waits; nothing else blocks.
       (preview watch/restart on profile-config change),
       bd-47hhbmaj (auto-gitignore /_*.local). bd-mlj6 and
       bd-ev8mk1rp closed as implemented.
-- [ ] Full gates: `cargo xtask verify` (full, WASM leg) — running;
-      commit after green
-- [ ] Write the "feature porting" process doc (session
-      retrospective) — on request, per the session brief
+- [x] Full gates: `cargo xtask verify` (full, WASM leg) green;
+      PR #492 opened (label `feature-port`), CI green after one
+      rebase-fallout fix (semantic conflict with a concurrently
+      landed test), merged as 73064984. Strand bd-fu16z22k closed.
+- [x] "Feature porting" process doc written:
+      `claude-notes/instructions/feature-porting.md` (two-phase
+      contract) + `feature-porting-lessons.md` (append-only
+      pitfalls-and-lessons file, 12 entries seeded from this
+      session)
 
 ## Open questions for plan iteration
 
