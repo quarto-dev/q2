@@ -2,7 +2,12 @@
 
 **Read this file and complete the checklist before making any commit. Do not skip items.**
 
-**When checklist is finished, stage your changes, report results to user and wait for approval before making the final commit.**
+**When checklist is finished, stage your changes and report results to the user.** Whether to then commit without waiting depends on the mode of work:
+
+- **Plan-driven execution the user has already approved** (a plan document with phases, user said "go ahead"): **commit-and-continue at clean phase boundaries.** A phase boundary is clean when the checklist passes and the full workspace test suite is green. Report the commit in the running summary; do not stop to ask. (Policy set 2026-08-10, project-profiles session.)
+- **Anything else** (ad-hoc changes, work outside an approved plan, a phase that ended dirty — failing tests, skipped items, surprising snapshot diffs): report and **wait for approval before committing**.
+
+Pushing always requires explicit approval regardless of mode (see CLAUDE.md).
 
 ## Determinism
 
