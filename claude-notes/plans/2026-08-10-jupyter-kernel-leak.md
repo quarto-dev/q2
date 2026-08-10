@@ -121,8 +121,12 @@ Phase 2 — fix the lifecycle:
       pre-existing rot in `#[ignore]`d tests that nested-runtime-panic
       on main too — filed as bd-yaccefzk). Zero new orphans after the
       run (was ~15).
-- [ ] `cargo nextest run --workspace` + `cargo xtask verify` green;
-      zero new orphans across the full workspace run.
+- [x] `cargo nextest run --workspace` green (11273/11273) with zero
+      new orphans across the full run (was ~15); full
+      `cargo xtask verify` (incl. WASM leg) and `cargo xtask lint`
+      green. Manual end-to-end: `q2 render` of a two-python-doc
+      website → correct output, zero orphans, no stale
+      connection files.
 
 Phase 3 — hygiene (optional, decide with user):
 
