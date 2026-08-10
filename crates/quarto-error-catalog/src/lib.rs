@@ -107,6 +107,53 @@ mod tests {
         );
     }
 
+    // bd-cx1det1y: Q-2-36/37/38 catalog presence (backfill — these corpus
+    // codes shipped without catalog entries).
+    #[test]
+    fn error_catalog_has_q_2_36() {
+        let info = ERROR_CATALOG
+            .get("Q-2-36")
+            .expect("Q-2-36 must be in the catalog");
+        assert_eq!(info.subsystem, "markdown");
+        assert_eq!(
+            info.title,
+            "Old-style knitr chunk options are not supported"
+        );
+        assert!(
+            info.message_template.contains("#| key: value"),
+            "Q-2-36 message must point at the body-options syntax; got: {}",
+            info.message_template
+        );
+    }
+
+    #[test]
+    fn error_catalog_has_q_2_37() {
+        let info = ERROR_CATALOG
+            .get("Q-2-37")
+            .expect("Q-2-37 must be in the catalog");
+        assert_eq!(info.subsystem, "markdown");
+        assert_eq!(info.title, "Line break in link destination");
+        assert!(
+            info.message_template.contains("line break"),
+            "Q-2-37 message must name the line-break restriction; got: {}",
+            info.message_template
+        );
+    }
+
+    #[test]
+    fn error_catalog_has_q_2_38() {
+        let info = ERROR_CATALOG
+            .get("Q-2-38")
+            .expect("Q-2-38 must be in the catalog");
+        assert_eq!(info.subsystem, "markdown");
+        assert_eq!(info.title, "Unclosed Attribute Specifier");
+        assert!(
+            info.message_template.contains("closing '}'"),
+            "Q-2-38 message must mention the missing closing brace; got: {}",
+            info.message_template
+        );
+    }
+
     // L8 / bd-rqgx: Q-12-14 catalog presence.
     #[test]
     fn error_catalog_has_q_12_14() {

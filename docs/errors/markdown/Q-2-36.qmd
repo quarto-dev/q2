@@ -1,0 +1,75 @@
+---
+title: "Old-style knitr chunk options are not supported"
+description: "A code block declared knitr-style options in its header instead of Quarto's `#| key: value` body syntax."
+code: Q-2-36
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-36` — Old-style knitr chunk options are not supported
+
+> Quarto Markdown does not support knitr-style chunk options in the
+> header. Move options into the body using `#| key: value` syntax, or
+> use the Pandoc class form `{.r ...}` instead of `{r ...}`.
+
+## What this means
+
+An executable code block declared its options inside the header
+braces, knitr-style:
+
+````markdown
+```{r, echo=FALSE}
+1 + 1
+```
+````
+
+Quarto Markdown reads chunk options from the *body* of the block, not
+the header. Header forms that R Markdown accepted — a bare label
+(`{r test}`), a comma after the language (`{r, echo=FALSE}`), or
+space-separated `key=value` pairs (`{r echo=FALSE}`) — are all
+rejected with this error.
+
+## Why this happens
+
+- **Documents ported from R Markdown / older Quarto.** knitr chunk
+  headers like `{r label, echo=FALSE, fig.width=7}` were the standard
+  way to set options there.
+- **Muscle memory.** Even in new documents, the knitr header form is
+  easy to reach for.
+
+## How to fix
+
+Move each option into the body of the block using `#| key: value`
+syntax:
+
+````markdown
+```{r}
+#| echo: false
+1 + 1
+```
+````
+
+Chunk labels become `#| label:`:
+
+````markdown
+```{r}
+#| label: test
+1 + 1
+```
+````
+
+If you only wanted a Pandoc class on a non-executable block — not
+chunk options — write the language with a leading dot:
+
+````markdown
+```{.r}
+1 + 1
+```
+````
+
+## Related errors
+
+- [`Q-2-8`](Q-2-8.qmd) — the retired warning code this error replaced.
