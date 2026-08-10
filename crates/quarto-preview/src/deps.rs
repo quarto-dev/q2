@@ -141,9 +141,12 @@ pub async fn deps_handler(
 /// then walks every block-list position for the same "is this an
 /// include shortcode?" shape [`IncludeExpansionStage`] uses (via the
 /// shared [`collect_include_paths`] walker, which mirrors the
-/// expander's traversal exactly). Paths are resolved relative to
-/// `page_rel`'s directory and emitted as forward-slash
-/// project-relative strings, deduplicated and sorted.
+/// expander's traversal exactly). That includes the *text* of code
+/// fences, where a lone `{{< include … >}}` line embeds a source file
+/// as a listing (bd-include-in-code-block-f8mvtczn) — those targets are
+/// dependencies too. Paths are resolved relative to `page_rel`'s
+/// directory and emitted as forward-slash project-relative strings,
+/// deduplicated and sorted.
 ///
 /// On parse failure, returns an empty list — see the module-level
 /// fail-open rationale.
@@ -358,13 +361,31 @@ mod tests {
     }
 
     #[test]
-    fn include_inside_code_block_is_not_a_dep() {
-        // Shortcode syntax inside a fenced code block is just text;
-        // the AST walker only sees a `Block::CodeBlock`, no
-        // shortcode inlines. (The regex implementation we replaced
-        // would have incorrectly matched this — that's the bug the
-        // AST-based approach fixes.)
-        let src = "# A\n\n```\n{{< include foo.qmd >}}\n```\n";
+    fn include_inside_code_block_is_a_dep() {
+        // bd-include-in-code-block-f8mvtczn: a lone include inside a
+        // fence splices the target's text into the listing (the Q1
+        // idiom for embedding a source file), so the embedded file is
+        // a real dependency — editing it must rebuild the page that
+        // shows it. This reverses the earlier contract, when a fence
+        // include was inert text.
+        let src = "# A\n\n```{.python}\n{{< include app.py >}}\n```\n";
+        assert_eq!(deps_for(src, "index.qmd"), vec!["app.py"]);
+    }
+
+    #[test]
+    fn include_inside_opted_out_code_block_is_not_a_dep() {
+        // `shortcodes="false"` means the fence displays the syntax
+        // rather than expanding it, so there is nothing to depend on.
+        let src = "# A\n\n```{.markdown shortcodes=\"false\"}\n{{< include app.py >}}\n```\n";
+        assert!(deps_for(src, "index.qmd").is_empty());
+    }
+
+    #[test]
+    fn mid_line_include_inside_code_block_is_not_a_dep() {
+        // Recognition is line-strict (Q1's `isBlockShortcode`), so a
+        // shortcode sharing its line with code is inert text and
+        // contributes no dependency.
+        let src = "# A\n\n```{.python}\nx = 1  {{< include app.py >}}\n```\n";
         assert!(deps_for(src, "index.qmd").is_empty());
     }
 

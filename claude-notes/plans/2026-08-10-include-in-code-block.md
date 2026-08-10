@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-10
 **Braid:** `bd-include-in-code-block-f8mvtczn` (bug, P1, label `parity`)
-**Branch:** `main` @ `bcdbce6b` — investigated in place, no worktree created
-**Status:** Design settled (2026-08-10) — see **Design decisions** below. One decision (D4, trailing newline) carries a recommendation that **reverses the user's initial lean** on new evidence and needs a yes/no before Phase 1. Everything else is pinned.
+**Branch:** `braid/include-in-code-block-f8mvtczn`, off `main` @ `bcdbce6b`
+**Status:** Implemented, fully verified, **awaiting review before commit**. All decisions (D1–D7 plus D3a/D3b/D4a found during implementation) are settled and recorded below.
 
 ## Triage verdict
 
@@ -33,23 +33,63 @@ So "Q1 substitutes textually anywhere in the code text" — as the strand's fram
 
 Note the `^\s*` — Q1 accepts an *indented* include line and splices without re-indenting. We should match that.
 
-### D3 — Recursion: none inside a code fence ✅ settled, and it is a deliberate divergence
+### D3 — Recursion: recurse, matching Q1 ✅ settled (reversed 2026-08-10)
 
-A file included into a fence is code, not qmd; its contents are spliced and not re-scanned.
+**Originally settled as "no recursion"; reversed during implementation** once D3a (below) showed that "no recursion" could not deliver what it promised. Spliced text **is** re-scanned for include lines, exactly as Q1's `standaloneInclude` (`src/core/handlers/include-standalone.ts`) does.
 
-**Q1 does recurse**, so this is a divergence, not parity. `standaloneInclude` (`src/core/handlers/include-standalone.ts`) is the *same* code path for both positions, and its `retrieveInclude` re-scans the included text line-by-line for further block-shortcode includes and recurses.
+Consequences:
 
-Where the divergence is observable: including a `.qmd` into a fence in order to *show* its source. Q1 would expand include lines inside that snippet; we would print them literally. Printing them literally is arguably the better behavior for a listing — but it is a difference, and it should be documented (that is bd-cq0xhxg5).
+- A `.qmd` embedded as a listing shows the same content it would show as a page. Authors who want the *literal* source, shortcodes and all, use `shortcodes="false"` — the documented mechanism for exactly that.
+- Cycles are real and must be caught: a document that embeds itself in a listing carries the same include line in the spliced copy, so it would recurse forever. Handled with the existing `include_stack` (canonicalized paths) and a `Q-17-1` warning; the offending line is dropped.
+- **Nested paths anchor at the including file's directory**, matching how block-position includes nest (bd-1fz3vh99). Q1 anchors nested fence includes at the *document* instead (`standaloneInclude` resolves against `target.source` at every level). Ours is the more consistent rule and the one q2 already documents; a deliberate, narrow divergence.
+- The parity gap this decision used to introduce is gone, which shrinks what bd-cq0xhxg5 has to explain.
 
-For non-qmd targets the divergence is unreachable in practice: a bare `{{< include … >}}` line in a `.py`/`.R`/`.json` file is a syntax error in that language.
+Q1 trivia worth not copying: its cycle detection checks the *resolved* path (`retrievedFiles.indexOf(path)`) but pushes the *raw* filename (`retrievedFiles.push(filename)`), so it only catches cycles when the two coincide. Our `canonicalize`-based `include_stack` is already correct; don't regress toward Q1 here.
 
-**Cycle stack:** with recursion off, a fence include cannot start a cycle, so pushing onto `include_stack` is not needed for correctness. Recommend pushing anyway for uniformity and cheap future-proofing if recursion is ever enabled — decide at implementation time; it is not load-bearing.
+### D3a — Why D3 was reversed ✅ resolved
 
-Q1 trivia worth not copying: its cycle detection checks the *resolved* path (`retrievedFiles.indexOf(path)`) but pushes the *raw* filename (`retrievedFiles.push(filename)`), so it only catches cycles when the two coincide. Our existing `canonicalize`-based `include_stack` is already correct; don't regress toward Q1 here.
+**Found during implementation (2026-08-10), verified end-to-end.** D3 says a file included into a fence has its own include lines "printed literally". That does not happen — and cannot, without an additional change.
 
-### D4 — Trailing newline: ⚠️ recommend trimming exactly one — reverses the initial lean
+The spliced text still contains `{{< include inner.qmd >}}`. That text reaches `ShortcodeResolveTransform` at stage 13, which does exactly what it does today for any unhandled include in code text: emits the `?include` token plus a `Q-17-4` warning. So the strand's own bug reappears one level down.
 
-The initial lean was "splice verbatim". The evidence says trimming exactly one trailing newline is what reproduces Q1's *rendered output*, and that verbatim would regress the entire motivating corpus. Detail:
+Measured, with `outer.qmd` = `top line\n{{< include inner.qmd >}}\nbottom line\n` spliced into a `.markdown` fence:
+
+```html
+<pre class="markdown code-with-copy"><code>top line
+?include
+bottom line</code></pre>
+```
+
+plus a `Q-17-4` whose location points at the *outer* fence — doubly misleading, since the author never wrote an include there.
+
+Three ways out:
+
+1. **Recurse (Q1 parity).** Re-scan spliced content for include lines, using the `include_stack` for cycles. No include survives to stage 13, so the problem vanishes by construction, and the D3 divergence disappears (shrinking bd-cq0xhxg5's scope). Cost: a listing that embeds a `.qmd` shows the *expanded* text, not the file's literal source. Users wanting literal source have `shortcodes="false"` — which is already the documented mechanism for exactly that.
+2. **Preserve unhandled includes in code text.** In the code/raw text arms of `ShortcodeResolveTransform`, treat an `include` shortcode as `Preserve` (emit its source text verbatim) instead of dispatching it to the error branch. The invariant that makes this sound: after stage 3, every *authored* fence include has been expanded, so anything still present must have come from spliced content — and literal is the right rendering for it. Keeps D3's intent and makes it actually true. Cost: a new (small) rule in the transform, and the `?include` token stops existing for fences entirely.
+3. **Escape includes in spliced content.** Rewrite `{{< include … >}}` to the escaped `{{{< … >}}}` form while splicing. Works, but it is a text mutation the author never wrote, and it creates an asymmetry with `{{< meta … >}}` in the same fence. Not recommended.
+
+**Chosen: option 1 (recurse).** It is the Q1-parity answer, needs no new rule in the shortcode transform, and makes the nested `?include` impossible by construction rather than by special-casing. Pinned by `code_fence_include_recurses`, `code_fence_include_cycle_reports_and_drops_line`, `code_fence_include_of_self_reports_cycle` (unit) and `nested_code_fence_include_expands_without_token`, `self_including_code_fence_reports_a_cycle` (full pipeline).
+
+### D3b — Unhandled includes in code text are preserved, not `?include`-ed ✅ settled
+
+**Found by the widened Q1 comparison (2026-08-10).** Line-strict recognition (D2) means a *mid-line* include in a fence is deliberately not expanded — but the leftover shortcode then reached `ShortcodeResolveTransform` and came out as `?include`, corrupting the listing. Same failure mode as D3a, but for authored (not spliced) text, so recursion does not cover it.
+
+Measured before the fix, for `x = 1  {{< include a.py >}}` in a `.python` fence:
+
+| | rendered |
+|---|---|
+| Q1 | `x = 1  {{< include a.py >}}` (untouched, silent) |
+| q2 | `x = 1  ?include` + a `Q-17-4` warning |
+
+Fix: `expand_text_segments` takes an `UnhandledInclude` mode; the two **code** text contexts (`Block::CodeBlock`, `Inline::Code`) pass `Preserve`, which emits the shortcode's source text instead of the error marker and suppresses the diagnostic. Every other text context (raw blocks/inlines, math, attribute values, link targets, `rendered.includes.*` slots) keeps `Report`.
+
+Why `Preserve` is sound rather than a papering-over: after stage 3, every include occupying a whole line of a non-opted-out fence has been expanded. Anything still present in code text is there because the line-strict rule declined it — so the author's literal text *is* the correct output. Q1 reaches the same result by never matching the line in the first place.
+
+The check keys off the dispatch *result* (`Error` whose key is `include`), not the shortcode name, so a user-supplied Lua handler named `include` still takes precedence.
+
+### D4 — Trailing newline: trim exactly one ✅ settled
+
+The initial lean was "splice verbatim"; the evidence below reversed it, and the user accepted the reversal. **Trim exactly one trailing `\n`, plus the `\r` of a preceding `\r\n`.** Detail:
 
 **What Q1's source does.** `standaloneInclude` appends a newline fragment after the content:
 
@@ -77,7 +117,18 @@ Either branch ends the spliced text with `\n\n`. So Q1 *adds* a blank line.
 
 **On the "users can't force an intentional trailing newline" concern.** They can, symmetrically with how the parser already treats fences: end the file with two newlines — one is consumed by the trim, one remains. That is the same affordance a hand-written fence has.
 
-**Recommendation:** trim exactly one trailing `\n` (and the `\r` of a preceding `\r\n`) from the spliced bytes. Equivalent framing, possibly cleaner to implement: splice verbatim, then normalize the resulting `code_block.text` to the parser's own convention. Needs a yes/no before Phase 1.
+**Decision:** trim exactly one trailing `\n` (and the `\r` of a preceding `\r\n`) from the spliced bytes.
+
+### D4a — Consecutive includes in one fence: no blank separator (divergence) ✅ settled
+
+Two include lines in one fence:
+
+| | rendered |
+|---|---|
+| Q1 | `AAA\n\nBBB` |
+| q2 | `AAA\nBBB` |
+
+Q1's blank line is the same `standaloneInclude` artifact D4 documents — it appends `"\n"` after each spliced file because in *markdown* a blank line separates blocks. Inside a fence it is noise, and at the end of a fence Pandoc's re-read deletes it (which is why the single-include case shows none). Applying D4's endorsed principle uniformly — normalize to the parser's convention rather than inherit markdown-separator artifacts — means no separator here either. Pinned by `code_fence_include_expands_multiple_targets`.
 
 ### D5 — `.cell-code` timing: accept the splice-before-execution semantics ✅ settled
 
@@ -213,31 +264,66 @@ The predicate itself is private to `shortcode_resolve.rs`; sharing it (rather th
 
 No snapshot anywhere currently pins the literal string `?include`.
 
-## Proposed phases
+## Work items
 
-Now grounded in the settled decisions. Contents are still draft at the work-item level.
+Branch: `braid/include-in-code-block-f8mvtczn`. D4 settled 2026-08-10: **trim exactly one trailing `\n`** (plus a preceding `\r`).
 
-- **Phase 0 — Test plan (TDD, failing first).**
-  - Unit: a line-strict code-fence include is recognized; mid-line and multi-per-line occurrences are **not** (D2).
-  - Unit: target resolution matches `resolve_include_target` — relative to the declaring file, leading `/` project-root-relative.
-  - Unit: an indented include line splices without re-indentation (D2).
-  - Unit: `shortcodes="false"` opts out (D5).
-  - Unit: trailing-newline handling per D4, once decided.
-  - Integration: the fence body equals the file's content; no `Q-17-4` (D6).
-  - Integration: dependency recorded — the target appears in `DocumentProfile.includes` and in the preview dep set.
-  - Integration: an included `.qmd` inside a fence shows its own include lines **literally** (D3, the deliberate divergence).
-  - Smoke-all fixture `includes/in-code-fence/` — note `includes/code-cell/` already exists and is a *different* shape (a file containing a cell, included at top level); do not conflate.
-  - Rewrite (do not delete) `extract_include_path_from_non_paragraph` so the new contract stays pinned.
-- **Phase 1 — Line-strict recognizer + textual splice in `IncludeExpansionStage`** (D1, D2): scan `code_block.text` line-wise, splice the target's content in place, no parsing, no re-indentation, per-D4 trailing-newline handling.
-- **Phase 2 — Dependency tracking**: `record_include` for the fence target; extend `collect_include_paths` through a **shared helper** so the preview dep-graph cannot drift (see Risks).
-- **Phase 3 — Opt-out + recursion**: `shortcodes="false"` wins (D5); no recursion (D3); decide the `include_stack` push at implementation time.
-- **Phase 4 — Diagnostics**: confirm `Q-17-4` no longer fires for this shape (should fall out of D1 with no diagnostic change); update the four test sites that assert today's behavior.
-- **Phase 5 — Docs**: edit `docs/errors/include/Q-17-4.qmd` ("sole content of its own paragraph" is no longer the whole story). The larger authoring-docs gap is tracked separately as **bd-cq0xhxg5**.
-- **Phase 6 — Verify against the real corpus**: re-render the Connect-docs set and confirm the ~44 listings come back; diff against a `quarto render` of the same tree.
+### Phase 0 — Test plan (TDD: written and failing first)
 
-## Remaining question for the user
+- [x] Unit: line-strict recognizer accepts a lone `{{< include x >}}` line (leading/trailing whitespace ok)
+- [x] Unit: recognizer rejects mid-line, two-per-line, and non-`include` shortcodes (D2)
+- [x] Unit: recognizer rejects the escaped form `{{{< include x >}}}`
+- [x] Unit: trailing-newline trim — exactly one `\n`, and `\r\n` → nothing (D4)
+- [x] Unit: `shortcodes="false"` opts out (D5)
+- [x] Unit: indented include line splices without re-indentation (D2)
+- [x] Integration: fence body equals the target's content; no `Q-17-4` (D6)
+- [x] Integration: missing target → `Q-17-2`, no `?include` leakage
+- [x] Integration: dependency recorded in `DocumentProfile.includes`
+- [x] Integration: `.qmd` included into a fence expands recursively, no `?include` (D3, revised)
+- [x] Smoke-all fixture `includes/in-code-fence/` (note: `includes/code-cell/` is a *different* shape — do not conflate)
+- [x] Rewrite (do not delete) `extract_include_path_from_non_paragraph` so the new contract stays pinned
 
-**D4 only** — trailing newline. Everything else is settled. The recommendation (trim exactly one) reverses the initial lean toward verbatim, on the evidence recorded in D4: Q1's rendered output has no trailing blank line, q2 has no normalizing re-read, and a verbatim splice would add a spurious blank final line to essentially every listing.
+### Phase 1 — Recognizer + textual splice in `IncludeExpansionStage` (D1, D2)
+
+- [x] Share `code_shortcode_opt_out` out of `shortcode_resolve.rs` (make `pub(crate)`)
+- [x] Add the shared recognition helper (single source of truth, mirroring `child_block_lists_mut`'s role)
+- [x] Splice in `expand_blocks`: read target, replace the line, no parsing, no re-indentation, D4 trim
+- [x] Diagnostics on read failure, consistent with the block-position arms
+
+### Phase 2 — Dependency tracking
+
+- [x] `record_include` for each fence target
+- [x] Extend `collect_include_paths` through the *same* helper so the preview dep-graph cannot drift
+- [x] Confirm `quarto-preview`'s `extract_include_deps` picks it up
+
+### Phase 3 — Opt-out + recursion
+
+- [x] `shortcodes="false"` wins (D5)
+- [x] Recursion with `include_stack` cycle detection + `Q-17-1` (D3, revised)
+
+### Phase 4 — Diagnostics
+
+- [x] Confirm `Q-17-4` no longer fires for the fence shape (should fall out of D1)
+- [x] Update the four existing test sites that assert today's behavior
+
+### Phase 5 — Docs
+
+- [x] `docs/errors/include/Q-17-4.qmd` — "sole content of its own paragraph" is no longer the whole story
+- [ ] (separate strand **bd-cq0xhxg5**) authoring-docs gap
+
+### Phase 6 — Verification
+
+- [x] `cargo nextest run --workspace`
+- [x] `cargo xtask verify` (WASM leg: `quarto-core` is in hub-client's dependency closure) — all 14 steps green
+- [x] End-to-end through the binary on the repro, output inspected (CLAUDE.md requirement)
+- [x] Widen the Q1 comparison: multi-include fences, indented includes, `.qmd`-into-fence, mid-line
+- [x] Re-render the Connect-docs corpus and confirm the ~44 listings come back
+
+**Result (2026-08-10).** 44 fence includes across 20 files, matching the strand's count. Full render: `352 of 352 files`. Corpus-wide `?include` count in the rendered HTML dropped to **1**, and that one is *not* a fence — it is the raw-HTML shape the strand itself calls docs-fixable (`licenses/index.md`: an include directly under an HTML comment with no blank line, swallowed into a `RawBlock`). It still reports `Q-17-4`, and there the existing hint — "put the include in its own paragraph, surrounded by blank lines" — is exactly right. The worst-case page, `cookbook/content/integrations/databricks/viewer/python/index.qmd`, now renders all its listings including a 92-line `app.py`, with zero `?include`.
+
+## Open questions
+
+None. D1–D7 are settled; implementation is underway.
 
 ## Follow-ups filed
 

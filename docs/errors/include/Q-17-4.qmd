@@ -17,11 +17,11 @@ categories:
 ## What this means
 
 Quarto expands `{{{< include >}}}` shortcodes that stand alone: the
-shortcode must be the sole content of its own paragraph. This
-warning fires when an include shortcode is written somewhere the
-expansion pass does not reach — for example inline, in the middle
-of a sentence. The shortcode is not expanded and contributes no
-content to the output.
+shortcode must be the sole content of its own paragraph, or of its
+own line inside a fenced code block. This warning fires when an
+include shortcode is written somewhere the expansion pass does not
+reach — for example inline, in the middle of a sentence. The
+shortcode is not expanded and contributes no content to the output.
 
 Note the difference from `Q-16-3` "Unknown Shortcode": the name
 `include` is recognized; the problem is the position, not the
@@ -37,10 +37,23 @@ Common causes:
 - **Missing blank lines** around the shortcode, causing it to be
   parsed as part of an adjacent paragraph instead of standing
   alone.
+- **An include sharing its line with code**, inside a fenced code
+  block — `x = 1  {{{< include app.py >}}}`. Inside a fence the
+  shortcode must occupy a line of its own.
 
-(Includes nested inside containers — fenced divs, callouts,
-blockquotes, list items, tables — *are* expanded; only the inline
-position is unsupported.)
+Includes nested inside containers — fenced divs, callouts,
+blockquotes, list items, tables — *are* expanded. So is an include
+alone on its own line inside a fenced code block, which embeds the
+target file's text as a listing:
+
+````{.markdown shortcodes="false"}
+```{.python filename="app.py"}
+{{< include app.py >}}
+```
+````
+
+Only the inline position, and a shortcode sharing its line with
+other content, are unsupported.
 
 ## How to fix
 
