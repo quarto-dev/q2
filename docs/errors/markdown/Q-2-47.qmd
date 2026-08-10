@@ -1,0 +1,83 @@
+---
+title: "Cell option ignored on a diagram cell"
+description: "A diagram cell has no execution engine, so an option Quarto cannot act on has nowhere to go."
+code: Q-2-47
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-47` — Cell option ignored on a diagram cell
+
+> A diagram cell has no execution engine to pass unrecognized options
+> to, so this option has no effect.
+
+## What this means
+
+A ```` ```mermaid ```` block can carry cell options, written after a
+`%%|` marker at the top of the block:
+
+```` markdown
+```mermaid
+%%| label: fig-review
+%%| fig-cap: The review cycle.
+flowchart LR
+  Draft --> Review
+```
+````
+
+Diagram cells accept exactly four: `label`, `fig-cap`, `fig-scap`, and
+`fig-alt`. Anything else raises this warning, and the option is
+dropped.
+
+## Why this happens
+
+The warning covers two different mistakes, and the message tells you
+which one you have.
+
+**The option is not one Quarto knows.** Usually an execution option
+carried over from a code cell:
+
+```` markdown
+```mermaid
+%%| echo: false
+flowchart LR
+  A --> B
+```
+````
+
+`echo` is meaningful for a ```` ```{python} ```` cell because an engine
+runs it and decides whether to show the source. A diagram is not
+executed — the source is sent to the browser and drawn — so there is no
+engine to interpret the option and nothing sensible for Quarto to do
+with it.
+
+This is also what you see for Quarto 1's `theme` and `mermaid-format`,
+which Quarto 2 does not yet support.
+
+**The option is a real Quarto option that does not apply here.** The
+clearest case is `fig-scap` on a numbered diagram: a short caption has
+somewhere to go on an unnumbered figure but not on a numbered float, so
+it is reported rather than silently discarded.
+
+## Why the warning is specific to diagrams
+
+Executable cells are deliberately *not* warned about. There, an
+unrecognized key is normally an engine option — `echo`, `eval`,
+`warning`, or something engine-specific — that the engine reads
+directly. Warning about those would fire on nearly every real document.
+
+## How to fix
+
+Delete the option. If it was doing something in a Quarto 1 document,
+check whether Quarto 2 supports the feature yet — diagram sizing
+(`fig-width`, `fig-height`), pre-rendered output (`mermaid-format`) and
+theming are all listed as not-yet-available in the
+[Diagrams guide](../../guides/authoring/diagrams.qmd).
+
+## Related
+
+- [`Q-2-48`](Q-2-48.qmd) — the option marker itself is wrong: `#|`
+  where a mermaid diagram expects `%%|`.
