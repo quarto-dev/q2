@@ -187,6 +187,34 @@ adjacency runs are already computed to find `[label][ref]` pairs, so "run
 length ≥ 3 → decline and report" is a length check on data in hand, not new
 machinery.
 
+## 8. What q2 actually accepts on the *output* side (probed before writing tests)
+
+The rewrite target is an inline link, so the rules may only emit inline-link
+syntax q2 can parse. `mini5.qmd` / `mini6.qmd`:
+
+| emitted form | q2 @ `05c2454e` |
+| --- | --- |
+| `[a](url "title")` | ✅ `<a href="url" title="title">` |
+| `[e](url "ti\"tle")` | ✅ `title="ti&quot;tle"` — backslash-escaped `"` works |
+| `[f](url "with (parens)")` | ✅ parens inside a title are fine |
+| `[b](url 'single')` | ❌ **parse error** — single-quoted titles are not qmd |
+| `[d](<u v>)` | ❌ **Q-2-33** — no angle-bracket url form |
+| `[c](u\ v)` | ⚠️ parses, but emits `href="u\ v"` — the backslash **leaks into the href** |
+| `[g](u%20v "t")` | ✅ `href="u%20v"` |
+
+Consequences for the emitter, all forced rather than chosen:
+
+- **Titles are always double-quoted**, with embedded `"` written as `\"`.
+  A definition carrying a `'…'` or `(…)` title must be re-quoted, not
+  copied through — copying would produce a parse error.
+- **URLs are percent-encoded, never backslash-escaped.** Backslash escapes
+  survive into the `href` and silently produce a broken link, which is worse
+  than the bug being fixed. This matches the existing `q_2_33.rs` converter,
+  whose whole job is `![](image file.png)` → `![](image%20file.png)`.
+- The grammar's url token is `/[^ {\t)]|(\\.)+/`, so the characters that
+  must be encoded are space, tab, `)` and `{` — `%20`, `%09`, `%29`, `%7B`.
+  A bare `(` is fine (`[c](u(v)` parses).
+
 ## Files here
 
 - `repro.qmd` — copy of the strand's repro (the source repo is local-only).

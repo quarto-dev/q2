@@ -3,7 +3,7 @@
 **Date:** 2026-08-10
 **Braid:** `bd-reference-links-unsupported-ddc4skac` (feature, p1, labels: `diagnostics`, `parity`)
 **Branch:** `main` @ `05c2454e` — investigated in place, no worktree created (see *Where this landed*)
-**Status:** Designed — approved by Carlos 2026-08-10. Ready to implement; **start at Phase 0 (tests first).**
+**Status:** In progress on `braid/bd-reference-links-unsupported-ddc4skac`. Phases 0–4 landed and green; Phase 5 (diagnostic) and Phase 6 (end-to-end) remain.
 
 ## Scope, restated
 
@@ -135,7 +135,7 @@ never fires it unasked.
 
 ## Phases
 
-- [ ] **Phase 0 — Test plan (TDD, failing first).** Fixtures under
+- [x] **Phase 0 — Test plan (TDD, failing first).** Fixtures under
       `crates/qmd-syntax-helper/tests/fixtures/` covering: full / collapsed /
       shortcut references; definitions with and without titles; unmatched
       brackets; genuine `[x]{.cls}`; inline link; code span; multi-line
@@ -146,16 +146,16 @@ never fires it unasked.
       (`.claude/rules/integration-tests.md`). Include tests that assert the
       *detector* sees each shape, not only that the rewrite is correct (see
       Risks).
-- [ ] **Phase 1 — Shared detection.** AST walk collecting bare spans and
+- [x] **Phase 1 — Shared detection.** AST walk collecting bare spans and
       empty-url images with byte ranges; adjacency runs; definition-line
       recognition; use↔definition matching with case-insensitive,
       whitespace-normalized labels. Runs ≥3 are flagged `Ambiguous` here.
-- [ ] **Phase 2 — `reference-links` rewrite.** Uses with definitions →
+- [x] **Phase 2 — `reference-links` rewrite.** Uses with definitions →
       inline form; drop each definition at last use. Span and image forms
       together.
-- [ ] **Phase 3 — `literal-brackets` rewrite.** Escaping arm, span and image
+- [x] **Phase 3 — `literal-brackets` rewrite.** Escaping arm, span and image
       forms. Reverse-offset edits.
-- [ ] **Phase 4 — Registration + CLI.** Both rules into `RuleRegistry`;
+- [x] **Phase 4 — Registration + CLI.** Both rules into `RuleRegistry`;
       README's *Future Converters* entry moves to shipped and gains the
       two-rule explanation plus the `check`-before-`convert` guidance.
 - [ ] **Phase 5 — Diagnostic.** See below.
