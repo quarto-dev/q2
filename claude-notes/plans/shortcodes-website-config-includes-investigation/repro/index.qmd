@@ -1,0 +1,6 @@
+---
+title: Home
+subtitle: "Subtitle version {{< env REPRO_VERSION >}}"
+---
+
+Body-text shortcode (works in q2): version is {{< env REPRO_VERSION >}}.
