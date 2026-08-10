@@ -1,0 +1,26 @@
+---
+title: Callout title attribute
+format: html
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - ["div.callout-note.callout-titled", "div.callout-title-container span.screen-reader-only"]
+      ensureFileRegexMatches:
+        - ['<span class="screen-reader-only">Note</span>Off-Host Execution', "<code>renv</code>"]
+        - ["callout-title-container flex-fill\">\\s*Note\\s*</div>"]
+      noErrors: true
+---
+
+The author-supplied `title=` must appear in the header, with the callout
+type kept for screen readers only (Q1 parity).
+
+::: {.callout-note title="Off-Host Execution"}
+Body text.
+:::
+
+Markdown inside the attribute is parsed, so this renders a code span.
+
+::: {.callout-tip title="Use `renv` today"}
+Body text.
+:::

@@ -8,8 +8,8 @@ q2-side strand above is the one to work.
 **Branch:** `braid/callout-title-attribute`, off `origin/main` @ `b2b6100c`.
 (Investigated on `docs/feature-porting-process`; cherry-picked across once main
 was current.)
-**Status:** Design settled — see "Decisions" below. Ready to implement,
-starting with Phase 0 tests.
+**Status:** Implemented. All phases complete; workspace suite green
+(11471/11471). Verified end to end — see `observed-output.md`, "After".
 
 ## Triage verdict
 
@@ -266,26 +266,70 @@ the ipynb design both need.
 
 ## Phases
 
-- **Phase 0 — Tests first (TDD).** Failing tests for: attribute only; heading
-  only; both (warning + one consumed); markdown in the attribute (code span in
-  the header); block-syntax value (warning, content ignored); empty attribute
-  (falls back to heading); H1 heading as title; and the `screen-reader-only`
-  span appearing for an attribute title. Plus a span assertion pinning the
-  exact-mapping cases.
-- **Phase 1 — Title source selection in `convert_div_to_callout`.**
-  Attribute-first with heading fallback; move the header removal into the
-  fallback branch; drop the `level >= 2` check; warn when both are present.
-- **Phase 2 — Parse + source mapping.** `parse_config_string_as_markdown` with
-  the length-derived parent above; `PandocInlines` straight through,
-  single-paragraph `PandocBlocks` unwrapped, everything else warned and
-  dropped. Use the guarded `theorem.rs:336-360` pattern for the index lookup.
-- **Phase 3 — Diagnostics.** Register the new warning(s) in
-  `quarto-error-catalog` if they need codes; confirm wording and spans against
-  the fixture.
-- **Phase 4 — End-to-end verification.** `q2 render` the fixture, inspect the
-  emitted `callout-title-container`, record invocation + output snippet per the
-  repo's end-to-end rule.
-- **Phase 5 — Docs**, if callout titles are documented under `docs/`.
+Error codes claimed: **Q-2-43** (title given twice) and **Q-2-44** (title
+attribute is not inline content). Highest existing is Q-2-42.
+
+### Phase 0 — Tests first (TDD)
+
+- [x] Real-source test helper (`parse_and_transform`) — parses qmd and returns
+      the parse's own `SourceContext`, so span assertions are meaningful
+- [x] Unit test: attribute-only title populates the title slot
+- [x] Unit test: heading-only title still works (regression — passes today)
+- [x] Unit test: both present → Q-2-43 warning, exactly one consumed
+- [x] Unit test: markdown in the attribute → code span in the title slot
+- [x] Unit test: block-syntax value → Q-2-44 warning, content ignored
+- [x] Unit test: `title=""` falls back to the heading (passes today)
+- [x] Unit test: H1 heading supplies the title (level check removed)
+- [x] Span test: exact mapping for a quoted, escape-free value
+- [x] Span test: exact mapping for a bare, unquoted value
+- [x] Span test: escaped value takes the bounded fallback, stays inside the
+      attribute extent
+- [x] Confirm every new test fails for the expected reason — 8 fail (empty
+      title slot / H1 ignored / no warning), 2 pass as intended regressions.
+      No compile or setup artifacts.
+- [x] HTML fixture: attribute title renders with the `screen-reader-only` span
+      (`crates/quarto/tests/smoke-all/quarto-test/callout-title-attribute.qmd`)
+
+### Phase 1 — Title source selection
+
+- [x] Read `title` first in `convert_div_to_callout`, heading as fallback
+- [x] Move the header removal into the fallback branch only
+- [x] Drop the `level >= 2` check
+- [x] Emit Q-2-43 when both are present (plus diagnostics threading through
+      `transform_blocks`/`transform_block`, which had no sink before)
+
+### Phase 2 — Parse + source mapping
+
+- [x] Length-derived parent `SourceInfo` (exact / exact / bounded-fallback) —
+      `attribute_value_source`
+- [x] `parse_config_string_as_markdown`; `PandocInlines` through,
+      single-paragraph `PandocBlocks` unwrapped, else Q-2-44
+- [x] Guarded `theorem.rs:336-360` index lookup for the value span
+
+### Phase 3 — Diagnostics
+
+- [x] Register Q-2-43 and Q-2-44 in `quarto-error-catalog`
+- [x] Verify wording and spans against the fixture — Q-2-43 renders with a
+      caret on the offending callout (repro.qmd:38)
+
+### Phase 4 — Verification
+
+- [x] `cargo nextest run --workspace` green — 11471/11471 passed (exit 0).
+      A first fail-fast run tripped `quarto-hub …collect_lifecycle_quarantine_restore_purge`;
+      that is the known flake bd-u0tldu4z (passes in isolation, green on the
+      complete rerun of the identical tree). Recurrence recorded on the strand.
+- [ ] `cargo xtask verify` (WASM leg — quarto-core is in hub-client's closure)
+- [x] End-to-end `q2 render` of the fixture; record invocation + output
+      (see `observed-output.md`, "After" section)
+- [ ] Review snapshot churn; count and summarize in the commit message
+
+### Phase 5 — Docs
+
+- [x] Error pages `docs/errors/markdown/Q-2-43.qmd` and `Q-2-44.qmd` (the
+      catalog's `docs_url` points at them; note Q-2-42 shipped without one, so
+      the convention is manual and unenforced)
+- [ ] No callouts *feature* page exists under `docs/` at all — `title=` has no
+      home to be documented in. Out of scope here; worth its own strand.
 
 ## Risks / tradeoffs
 
@@ -308,5 +352,42 @@ the ipynb design both need.
   parse are wrong regardless. Only matters if a re-parsed title itself contains
   an attribute; noted, not addressed here.
 - **`theorem.rs:317-319` documents the value span incorrectly** (claims it
-  excludes the quotes; the grammar includes them). Worth correcting while we
-  are here.
+  excludes the quotes; the grammar includes them). Filed as bd-bhxeoqoj.
+- **Shared-helper wart, accepted.** On an unparseable value
+  `parse_config_string_as_markdown` emits a Q-1-20 warning and wraps the text
+  in a span classed `yaml-markdown-syntax-error` (`meta.rs:87-115`) — YAML
+  wording on a div attribute. Reaching it requires markdown that fails to parse
+  as inline content, which is close to unreachable here, so this is noted
+  rather than worked around; fixing it belongs in the helper, not in callouts.
+
+## Discovered during implementation: two escaping layers
+
+Escaping a `#` in a callout title needs **two** backslashes, not one, and
+the reason is worth recording because it will surprise authors.
+
+Two independent unescape steps run in sequence:
+
+1. **The attribute layer** — `unescape_punctuation` collapses `\X` → `X`
+   for any ASCII punctuation, before anything markdown-related happens.
+2. **The markdown parser**, which has its own backslash-escape rules.
+
+Verified by render, not reasoned:
+
+| written | attribute layer stores | markdown reads | result |
+|---|---|---|---|
+| `title="\# Overview"` | `# Overview` | a heading | Q-2-44; title ignored |
+| `title="\\# Overview"` | `\# Overview` | escaped `#` | renders `# Overview` |
+
+The single-backslash form is the intuitive one and is exactly wrong: the
+attribute layer eats the backslash, handing the parser a bare `#`, which
+is the block content the author was trying to avoid.
+
+Pinned by `double_backslash_escapes_a_leading_hash` and
+`single_backslash_hash_is_still_a_heading`, and documented in
+`docs/errors/markdown/Q-2-44.qmd`.
+
+This is a *consequence* of the same two-representation split that causes
+the span drift (bd-mxa44voa) — the value the parser sees is not the text
+the author wrote. It is not a bug introduced here; it is pre-existing
+attribute behavior that only becomes reachable once attribute values are
+parsed as markdown.
