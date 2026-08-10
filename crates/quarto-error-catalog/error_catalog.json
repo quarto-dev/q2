@@ -1335,5 +1335,19 @@
     "message_template": "An `{{< include >}}` shortcode appears in a position where include expansion does not apply, so it was not expanded. Includes are only expanded when the shortcode is the sole content of its own paragraph. Put the shortcode on its own line, surrounded by blank lines.",
     "docs_url": "https://quarto.org/docs/errors/include/Q-17-4",
     "since_version": "99.9.9"
+  },
+  "Q-2-43": {
+    "subsystem": "markdown",
+    "title": "Callout Title Given Twice",
+    "message_template": "A callout carries both a `title=` attribute and a leading heading. Only one title can be shown, so the `title=` attribute is used and the heading is dropped. Quarto 1 silently prefers the attribute and leaves the heading in the callout body, where it reads as a duplicate title; Quarto 2 reports it instead, because carrying both is almost always an authoring mistake. Remove whichever of the two you did not intend.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-43",
+    "since_version": "99.9.9"
+  },
+  "Q-2-44": {
+    "subsystem": "markdown",
+    "title": "Callout Title Is Not Inline Content",
+    "message_template": "A callout's `title=` attribute is parsed as markdown, but it must reduce to a single line of inline content. This value parses to block content (for example it begins with `#`, or contains a blank line), so it cannot fill the callout's title and is ignored. Write the title as plain inline markdown, or move the block content into the callout body.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-44",
+    "since_version": "99.9.9"
   }
 }

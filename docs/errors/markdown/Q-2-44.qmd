@@ -1,0 +1,86 @@
+---
+title: "Callout title is not inline content"
+description: "A callout's `title=` attribute parses to block content, so it cannot fill the title and is ignored."
+code: Q-2-44
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-44` — Callout title is not inline content
+
+> A callout title must be a single line of inline markdown. This value
+> parses to block content, so it is ignored.
+
+## What this means
+
+A callout's `title=` attribute is parsed as markdown, so inline markup
+works and renders in the callout header:
+
+```markdown
+::: {.callout-tip title="Use `renv` for reproducibility"}
+Body.
+:::
+```
+
+The header shows *Use `renv` for reproducibility* with a real code span.
+
+A callout header can only hold **inline** content, though. If the value
+parses to block content — because it begins with a block marker such as
+`#`, or contains a blank line — there is nothing sensible to put in the
+header, so the attribute is ignored. The callout still renders, falling
+back to a leading heading if there is one, or to the callout type's name.
+
+## Why this happens
+
+- **A `#` at the start of the value.** `title="# Overview"` parses as a
+  heading, not as text beginning with a `#` character.
+- **A blank line inside the value**, which splits it into two paragraphs.
+- **Other leading block markers** — `>`, `-`, `1.`, or an indented code
+  block.
+
+## How to fix
+
+Write the title as plain inline markdown:
+
+```markdown
+::: {.callout-note title="Overview"}
+Body.
+:::
+```
+
+To show a literal `#` at the start of a title, escape it with **two**
+backslashes:
+
+```markdown
+::: {.callout-note title="\\# Overview"}
+Body.
+:::
+```
+
+Two escaping layers apply in sequence here, and one backslash is not
+enough. Attribute values are unescaped first, which turns `\#` into a
+plain `#` — and the markdown parser then reads that as a heading, which
+is the very error you were trying to avoid. Writing `\\#` survives the
+first layer as `\#`, which the markdown parser reads as an escaped,
+literal `#`.
+
+If you meant to add block content, put it in the callout body rather than
+the title:
+
+```markdown
+::: {.callout-note title="Overview"}
+## A heading in the body
+
+Body.
+:::
+```
+
+Note that a heading as the callout's *first* block is treated as its
+title — see [`Q-2-43`](Q-2-43.qmd).
+
+## Related errors
+
+- [`Q-2-43`](Q-2-43.qmd) — a callout title given both ways at once.
