@@ -5,7 +5,8 @@
 **Branch:** `feature/bd-mermaid-cell-options-9wo3crl0` (no worktree; the
 investigation commit `f44b3a81` moved onto this branch and `main` was rewound to
 `a217ab5a`, so the whole strand lands as one PR)
-**Status:** Design settled 2026-08-10 — implementing. See "Resolved decisions".
+**Status:** Implemented 2026-08-10, pending review. `cargo xtask verify` (full)
+passes. See "Resolved decisions" and the verification record.
 
 ## Triage verdict
 
@@ -245,19 +246,91 @@ be numbered. This is the strand's most important architectural constraint.
 - [x] **Phase 5 — `fig-alt` + `fig-scap` (fixes D3)** (commit `02cfccf4`).
       Stop consuming what cannot be routed; route `fig-alt` into `accDescr:`
       per decision 2.
-- [ ] **Phase 6 — Diagnostics.** Unknown-key warning for diagram cells and the
-      `#|`-in-mermaid warning, both source-mapped, per decisions 4 and 5.
-- [ ] **Phase 7 — End-to-end + preview verification.** `q2 render` on the
-      probes with output inspected and recorded here; confirm the React preview
-      path shows the same structure (`MermaidCodeBlock.tsx` touched only if the
-      parity check demands it).
-- [ ] **Phase 8 — Docs.** `docs/guides/authoring/diagrams.qmd` gains a captions
-      and alt-text section.
-- [ ] **Phase 9 (separate strand) — `qmd-syntax-helper` rule** rewriting
-      ```` ```{mermaid} ```` → ```` ```mermaid ````. With decision 5 this rule
-      should also rewrite the option marker to `%%|`. File before this PR
-      merges; rule surface is `crates/qmd-syntax-helper/src/rule.rs`,
-      conversions in `src/conversions/`.
+- [x] **Phase 6 — Diagnostics** (commit `0233f3cc`). Q-2-42 (option ignored on
+      a diagram cell, distinguishing unknown from recognized-but-unroutable)
+      and Q-2-43 (`#|` where `%%|` is expected), both source-mapped to the
+      offending key.
+- [x] **Phase 7 — End-to-end + preview verification.** See below.
+- [x] **Phase 8 — Docs.** `docs/guides/authoring/diagrams.qmd` gains a
+      "Captions, cross-references, and alt text" section, and the
+      "Differences from Quarto 1" list drops captions/labels/cross-references.
+      New worked example `examples/diagrams/03-mermaid-captions` registered in
+      `examples/manifest.yml`.
+- [x] **Phase 9 — filed as its own strand, bd-vg8p5yoj**: `qmd-syntax-helper`
+      rule rewriting ```` ```{mermaid} ```` → ```` ```mermaid ````. Cell
+      options need no rewrite — Q1 documents already write `%%|`, which is
+      exactly what this strand made q2 accept.
+
+## Verification record (Phase 7)
+
+**`cargo xtask verify` (full, including the hub/WASM leg): all steps passed.**
+
+### `q2 render`
+
+`cargo run --bin q2 -- render claude-notes/plans/mermaid-cell-options-investigation/probe.qmd`,
+output inspected:
+
+- **B1** (`%%| fig-cap` + `%%| fig-alt`, no label) →
+  `<div class="quarto-figure quarto-figure-center"><figure><pre class="mermaid">`
+  whose second line is `accDescr: Two nodes connected by an arrow.`, followed by
+  `<figcaption>A tiny flowchart.</figcaption>`.
+- **B2** (`%%| label: fig-diagram` + `%%| fig-cap`) → the numbered float,
+  `<figcaption id="fig-diagram-caption">Figure 1: A labelled flowchart.</figcaption>`,
+  and `@fig-diagram` resolving to a live `Figure 1` link (it previously emitted
+  `?fig-diagram?` plus an unresolved-crossref warning).
+- **B3** (`#|` in a mermaid fence) → left inert, with Q-2-43 reported at
+  `probe.qmd:28:1` — the exact line of the `#|` run.
+- **B4** (a `%%|` below the first code line) → left as an ordinary comment.
+
+`…/probe4.qmd` exercises the diagnostics: Q-2-42 at `9:5` (`echo`) and `10:5`
+(`theme`) with the caret on the key, Q-2-42 at `20:5` naming `fig-scap` as
+recognized-but-ineffective, and **no** diagnostics from the ```` ```{python} ````
+cell in the same document.
+
+### The accessibility claim, verified against real mermaid
+
+Both browser routes were unavailable in this session (the claude-in-chrome
+extension was not connected; the chrome-devtools MCP profile was locked by an
+already-running Chrome). Instead the claim was verified **headlessly against
+real mermaid 11.12.0** — the version `MERMAID_VERSION` pins — under jsdom, with
+the exact text `inject_acc_descr` emits:
+
+```
+desc text        : "Two nodes connected by an arrow."
+aria-describedby : chart-desc-probe
+desc id          : chart-desc-probe
+ids match        : true
+placement-before : REJECTED — UnknownDiagramError: No diagram type detected …
+```
+
+So the injected line becomes `<desc>` inside the SVG with the SVG's
+`aria-describedby` pointing at it, and the negative control confirms the
+placement constraint is real: `accDescr:` *before* the diagram-type line is
+rejected outright, which is why the directive is inserted after the first
+declaration line rather than at the top.
+
+**Not verified:** how the result presents in an actual screen reader, and the
+`q2 preview` UI in a live browser session.
+
+### Preview parity
+
+Pinned by `pipeline::tests::render_qmd_to_preview_ast_processes_mermaid_cell_options`:
+the preview AST carries the `Figure` wrapper, the caption inlines, the injected
+`accDescr:`, and no `%%|` — while the diagram still arrives as a `CodeBlock` for
+`MermaidCodeBlock.tsx` (`mermaid-render` stays on
+`Q2_PREVIEW_TRANSFORM_EXCLUDED`). That is the intended difference between the
+surfaces, and the test pins it so neither list can drift silently.
+
+Reading that AST surfaced an unrelated pre-existing issue, filed as
+**bd-e3m3rkik**: because `mermaid-render` is excluded from preview,
+`CodeBlockRenderTransform` *does* see mermaid blocks there and wraps them in
+copy-button chrome that `q2 render` suppresses by transform ordering.
+
+### Docs
+
+`cargo run --bin q2 -- render docs/` → 194 of 194 files, no errors. The
+diagrams page carries the new section and the `Demo 3` cross-reference to the
+embedded example.
 
 ## Risks / tradeoffs (draft)
 

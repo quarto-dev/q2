@@ -100,6 +100,94 @@ Diagrams render on their slides at natural size — including slides that
 are not visible when the deck first loads. [View source](https://github.com/quarto-dev/q2/tree/main/examples/diagrams/02-mermaid-revealjs)
 ::::
 
+## Captions, cross-references, and alt text
+
+A diagram can carry options, written at the top of the block, one per
+line, after a `%%|` marker. The marker is Mermaid's own comment syntax —
+each language uses its own, the way `#|` serves Python and R — so a
+diagram with options is still valid Mermaid.
+
+`fig-cap` gives the diagram a caption:
+
+````markdown
+```mermaid
+%%| fig-cap: The path a change takes from commit to production.
+flowchart LR
+  commit --> build
+  build --> test
+  test --> deploy
+```
+````
+
+Add a `label` beginning with `fig-` and the diagram becomes a numbered
+figure you can cross-reference with `@fig-…`, exactly like any other
+Quarto figure:
+
+````markdown
+```mermaid
+%%| label: fig-review
+%%| fig-cap: The review cycle, which repeats until a draft is approved.
+%%| fig-alt: A draft moves to review; review either publishes it or sends it back to draft.
+flowchart LR
+  Draft --> Review
+  Review --> Published
+  Review --> Draft
+```
+
+@fig-review shows the loop a draft goes through.
+````
+
+`fig-alt` is the description assistive technology reads. Because a
+diagram is drawn as an SVG rather than an image, the description is
+carried into the diagram itself as Mermaid's `accDescr:` directive,
+which becomes the drawing's accessible description. **A diagram that
+conveys information the surrounding text does not should always have a
+`fig-alt`** — the caption names the diagram, the alt text describes it.
+
+@demo-mermaid-captions shows both forms in one document:
+
+:::: {#demo-mermaid-captions .embed-example-iframe file="/examples/diagrams/03-mermaid-captions/document.html"}
+````markdown
+---
+title: "Diagram captions and alt text"
+---
+
+A `fig-cap` gives the diagram a caption:
+
+```mermaid
+%%| fig-cap: The path a change takes from commit to production.
+flowchart LR
+  commit --> build
+  build --> test
+  test --> deploy
+```
+
+Add a `label` beginning with `fig-` and the diagram becomes numbered and
+cross-referenceable. `fig-alt` supplies the description assistive
+technology reads:
+
+```mermaid
+%%| label: fig-review
+%%| fig-cap: The review cycle, which repeats until a draft is approved.
+%%| fig-alt: A draft moves to review; review either publishes it or sends it back to draft.
+flowchart LR
+  Draft --> Review
+  Review --> Published
+  Review --> Draft
+```
+
+@fig-review shows the loop a draft goes through.
+````
+
+An uncaptioned diagram, a captioned one, and a numbered one that body
+text refers to. [View source](https://github.com/quarto-dev/q2/tree/main/examples/diagrams/03-mermaid-captions)
+::::
+
+Diagram blocks accept `label`, `fig-cap`, `fig-scap`, and `fig-alt`. A
+diagram has no execution engine to interpret anything else, so Quarto
+warns about an option it cannot act on rather than passing it silently
+into the drawing.
+
 ## How diagrams render
 
 Quarto draws diagrams in the browser: the rendered page keeps your
@@ -120,12 +208,13 @@ with the diagram source, in place of the drawing.
 ## Differences from Quarto 1
 
 Quarto 1 embeds diagrams through executable cells — ```` ```{mermaid} ````
-with `%%|` cell options — and Quarto 2 does not yet recognize that
-form: only the plain ```` ```mermaid ```` fence renders. The following
-Quarto 1 diagram features are also not yet available:
+— and Quarto 2 does not recognize that form: only the plain
+fence ```` ```mermaid ```` renders. To move a Quarto 1 document over, drop
+the braces; the diagram body and its `%%|` options need no other change.
+
+The following Quarto 1 diagram features are not yet available:
 
 - Graphviz (`{dot}`) diagrams
-- Figure captions, labels, and cross-references on diagrams
 - Sizing options (`fig-width`, `fig-height`, `fig-responsive`)
 - Pre-rendered PNG/SVG output for print formats (`mermaid-format`)
 - Theming (Mermaid currently renders with its default theme regardless

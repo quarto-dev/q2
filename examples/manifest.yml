@@ -33,3 +33,4 @@ projects:
   - presentations/11-auto-stretch
   - diagrams/01-mermaid-basic
   - diagrams/02-mermaid-revealjs
+  - diagrams/03-mermaid-captions
