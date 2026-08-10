@@ -39,6 +39,13 @@ pub const INJECTION_QUERY: &str = include_str!("../../tree-sitter-markdown/queri
 /// [`node-types.json`]: https://tree-sitter.github.io/tree-sitter/using-parsers#static-node-types
 pub const NODE_TYPES: &str = include_str!("../../tree-sitter-markdown/src/node-types.json");
 
+/// The WHATWG HTML entities table (`name → {codepoints, characters}`) that the
+/// grammar's `entity_reference` regex is generated from (see
+/// `common/common.js` `html_entity_regex()`). Exposed so consumers resolving
+/// `entity_reference` nodes decode against the same table the grammar matched
+/// with. Source: <https://html.spec.whatwg.org/multipage/entities.json>.
+pub const HTML_ENTITIES_JSON: &str = include_str!("../../common/html_entities.json");
+
 mod parser;
 
 pub use parser::*;

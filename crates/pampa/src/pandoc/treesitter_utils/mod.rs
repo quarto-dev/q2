@@ -12,6 +12,7 @@ pub mod code_span_helpers;
 pub mod commonmark_attribute;
 pub mod document;
 pub mod editorial_marks;
+pub mod entity_reference;
 pub mod fenced_code_block;
 pub mod fenced_div_block;
 pub mod info_string;

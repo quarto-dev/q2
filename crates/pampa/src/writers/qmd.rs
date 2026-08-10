@@ -1512,6 +1512,11 @@ fn escape_markdown(text: &str, start_prev_is_alnum: bool) -> String {
             '{' => result.push_str("\\{"), // Attribute span open: bare { in
             '}' => result.push_str("\\}"), // a Str body is always a parse
             // error in qmd. Always escape.
+            '"' => result.push_str("\\\""), // A bare " in a Str body would be
+            // re-read as a smart quote (Quoted DoubleQuote); `\"` re-reads as
+            // the literal straight quote. Str bodies only contain " via
+            // character references (&quot;, &#34;) or programmatic ASTs —
+            // parsed quotation marks become Quoted nodes instead.
 
             // Smart typography → ASCII source spelling, emitted UNescaped so the
             // reader re-converts it back to the Unicode character.
@@ -1569,7 +1574,7 @@ fn escape_markdown(text: &str, start_prev_is_alnum: bool) -> String {
             }
 
             // Characters that don't need escaping in most contexts:
-            // , + ! ? = : ; / ( ) % & "
+            // , + ! ? = : ; / ( ) % &
             // These are only special in very specific contexts and escaping them
             // everywhere would make output unnecessarily verbose.
             _ => result.push(ch),
