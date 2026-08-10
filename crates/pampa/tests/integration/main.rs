@@ -40,6 +40,7 @@ pub mod test_code_span;
 pub mod test_diagnostic_determinism;
 pub mod test_diagnostic_path_normalization;
 pub mod test_editorial_mark_spacing;
+pub mod test_email_autolink;
 pub mod test_emphasis_opening_mark;
 pub mod test_error_corpus;
 pub mod test_figure_figcaption_synthesis;

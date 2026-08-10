@@ -847,7 +847,7 @@ fn native_visitor<T: Write>(
             process_numeric_character_reference(node, input_bytes, context)
         }
         "entity_reference" => process_entity_reference(node, input_bytes, context),
-        "autolink" => process_uri_autolink(node, input_bytes, context),
+        "autolink" => process_uri_autolink(node, input_bytes, context, error_collector),
         "pandoc_space" => PandocNativeIntermediate::IntermediateInline(Inline::Space(Space {
             source_info: node_source_info_with_context(node, context),
         })),

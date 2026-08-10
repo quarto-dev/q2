@@ -3,7 +3,7 @@
 **Date:** 2026-08-10
 **Braid:** bd-email-autolink-dropped-2jj38iiv (bug, P2, labels: pampa, parity)
 **Checkout:** invoked on `main` @ `46cacc88` (no new worktree/branch created; user decides where implementation lands)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled 2026-08-10 (user answered all questions); implementation in progress.
 
 ## Triage verdict
 
@@ -100,29 +100,53 @@ Skeleton only — actual phase contents wait on the design discussion.
   `cargo xtask verify` (WASM leg — pampa is in hub-client's closure), re-render
   repro end-to-end, note in docs/ if user-facing syntax docs mention autolinks.
 
-## Open design questions for the user
+## Design decisions (user-confirmed 2026-08-10)
 
-1. **Link class — `email` (Q1/pandoc-`markdown` parity) or none
-   (pandoc-`commonmark`)?** q2 already emits `class="uri"` for URI autolinks,
-   matching the `markdown` reader, so `class="email"` is the consistent
-   choice — confirm.
-2. **Fallback for `@`-bearing angle-bracket content that is *not* a valid
-   email autolink** (e.g. `<foo@@bar>`, `<a@b,c>`). Once the scanner emits
-   AUTOLINK for these, pampa must decide: (a) preserve today's behavior —
-   raw HTML + Q-2-9 warning (conservative, no behavior change outside the
-   email fix), or (b) CommonMark-correct literal text (these strings are not
-   valid HTML tags, so raw HTML is arguably wrong today). I lean (a) for this
-   strand and file (b) separately if desired.
-3. **Scanner precision.** Is over-approximation in C + precise validation in
-   Rust acceptable (matches existing `:`/`%` over-approximation), or do you
-   want the full email regex in the scanner? I see no benefit to the latter
-   given Q2's fallback keeps invalid cases well-behaved.
-4. **GFM-style bare autolinking of `sales@example.com` *without* brackets is
-   out of scope**, correct? (The strand only claims the bracketed form.)
-5. **Diagnostic on the fallback path**: should the (a)-fallback for
-   email-*shaped-but-invalid* content get a more specific hint than generic
-   Q-2-9 (e.g. "this looks like an email autolink but is not valid — did you
-   mean ...?"), or is that gold-plating?
+1. **Link class:** `email` (Q1/pandoc-`markdown` parity; consistent with the
+   existing `uri` class on URI autolinks).
+2. **Invalid `@`-content fallback:** conservative — preserve today's raw HTML
+   + Q-2-9 behavior. (CommonMark-correct literal text can be filed separately
+   later.)
+3. **Scanner precision:** over-approximate in C (`saw_at`), precise
+   CommonMark email-production validation in Rust.
+4. **Scope:** bracketed form only. GFM-style bare `sales@example.com`
+   autolinking is out of scope.
+5. **Diagnostics:** minimal fix; no new email-specific diagnostic for the
+   fallback path (may be considered later).
+
+Classification order in pampa (consequence of 1–3): a token that lexed as
+AUTOLINK is (a) a valid CommonMark email autolink → `mailto:` Link with class
+`email` and bare address text; else (b) contains `:` or `%` (i.e. would have
+lexed as AUTOLINK before this change) → existing URI-autolink behavior,
+unchanged; else (c) newly-captured invalid content (e.g. `<foo@@bar>`) → raw
+HTML + Q-2-9, byte-identical to its pre-change html_element treatment. Note
+(a) before (b) means `<a%b@c.com>` (valid email whose local part contains
+`%`) upgrades from a schemeless `uri` link to a proper `mailto:` email link —
+that matches pandoc and is part of the fix.
+
+## Work items
+
+- [x] Phase 0 — failing tests first: 3 corpus tests in
+      `test/corpus/link.txt` (all failed pre-fix) + 8 integration tests in
+      `crates/pampa/tests/integration/test_email_autolink.rs` (4 failed
+      pre-fix; the uri-unchanged and raw-HTML-fallback tests passed pre-fix
+      by design — they are regression guards)
+- [x] Phase 1 — scanner `had_at_sign` over-approximation in
+      `parse_open_angle_brace` (scanner.c); grammar rebuilt, all 557
+      `tree-sitter test` cases green (no parser.c diff — grammar.js
+      untouched)
+- [x] Phase 2 — classification in `process_uri_autolink` (email →
+      `mailto:` + class `email`; `:`/`%` → existing uri behavior;
+      else raw-HTML fallback reproducing the html_element arm, Q-2-9
+      included). All 4332 pampa tests pass.
+- [x] Phase 3 — 11469/11469 workspace tests pass; end-to-end verified
+      (`cargo run --bin q2 -- render` on the repro fixture; output HTML
+      inspected):
+      - `<sales@example.com>` →
+        `<a href="mailto:sales@example.com" class="email">sales@example.com</a>`
+      - `<mailto:sales@example.com>` → unchanged
+        `<a href="mailto:sales@example.com" class="uri">mailto:sales@example.com</a>`
+      Full `cargo xtask verify` (WASM leg included) run before commit.
 
 ## Risks / tradeoffs (draft)
 

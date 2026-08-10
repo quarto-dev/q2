@@ -1874,15 +1874,26 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
 
     bool could_be_autolink = lexer->lookahead != '/'; // very first character can't be '/' in autolinks.
     bool had_url_like_character = false;
+    // bd-email-autolink-dropped-2jj38iiv: '@' qualifies the token as a
+    // candidate email autolink (over-approximation — a real HTML open tag
+    // with attributes contains whitespace, which falsifies
+    // could_be_autolink, and a bare tag name cannot contain '@'). Precise
+    // CommonMark email validation happens in pampa's autolink processing;
+    // non-email content falls back there to the raw-HTML treatment it got
+    // when it lexed as HTML_ELEMENT.
+    bool had_at_sign = false;
     while (!lexer->eof(lexer)) {
         if (lexer->lookahead == ':' || lexer->lookahead == '%') {
             had_url_like_character = true;
+        } else if (lexer->lookahead == '@') {
+            had_at_sign = true;
         } else if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
             could_be_autolink = false;
         } else if (valid_symbols[RAW_SPECIFIER] && lexer->lookahead == '}') {
             lexer->mark_end(lexer);
             EMIT_TOKEN(RAW_SPECIFIER);
-        } else if (valid_symbols[AUTOLINK] && could_be_autolink && had_url_like_character && lexer->lookahead == '>') {
+        } else if (valid_symbols[AUTOLINK] && could_be_autolink &&
+                   (had_url_like_character || had_at_sign) && lexer->lookahead == '>') {
             lexer->advance(lexer, false); // we want to consume '>' for autolinks
             lexer->mark_end(lexer);
             EMIT_TOKEN(AUTOLINK);
