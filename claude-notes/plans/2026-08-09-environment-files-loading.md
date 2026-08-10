@@ -268,7 +268,9 @@ Q1 accepts them).
     (real environment beats the file in subprocesses too).
   - **Render scripts** — covered by the spawning unit test
     `scripts_receive_project_env` (real `sh` child reads the variable).
-- [ ] review.md checklist; commit (await user approval per review.md).
+- [x] review.md checklist done; committed as adc2281f and opened as PR #486
+  (https://github.com/quarto-dev/q2/pull/486, branch
+  feature/bd-environment-files-372u9qbs-load-environment-files).
 
 ## Risks / tradeoffs (draft)
 
