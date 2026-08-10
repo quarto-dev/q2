@@ -167,7 +167,9 @@ async fn execute_blocks_inner(
     let daemon = daemon();
 
     // Start or get existing kernel session
-    let key: SessionKey = daemon.get_or_start_session(kernel_name, &ctx.cwd).await?;
+    let key: SessionKey = daemon
+        .get_or_start_session(kernel_name, &ctx.cwd, &ctx.project_env)
+        .await?;
 
     // Document-level defaults for cell options (bd-ohvl879u): the
     // input's front matter is the pipeline's fully merged metadata

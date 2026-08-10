@@ -864,6 +864,10 @@ fn execute_project(
             Some(t) => paths_relative_to(t.iter(), &project.dir),
             None => paths_relative_to(project.files.iter().map(|f| &f.input), &project.dir),
         };
+        let script_env = quarto_core::project::environment::subprocess_env_for_project(
+            runtime_arc.as_ref(),
+            &project,
+        );
         let ctx = render_scripts::RenderScriptsContext {
             project_dir: &project.dir,
             output_dir: &project.output_dir,
@@ -872,6 +876,7 @@ fn execute_project(
             render_all,
             quiet: args.quiet,
             file_count: input_files.len(),
+            project_env: &script_env,
         };
         if let Err(parse_error) = render_scripts::run_render_scripts(
             render_scripts::ScriptPhase::PreRender,
@@ -964,6 +969,10 @@ fn execute_project(
     if run_scripts && !project.config.post_render_scripts.is_empty() {
         let output_files =
             paths_relative_to(summary.outputs.iter().map(|o| &o.output_path), &project.dir);
+        let script_env = quarto_core::project::environment::subprocess_env_for_project(
+            runtime_arc.as_ref(),
+            &project,
+        );
         let ctx = render_scripts::RenderScriptsContext {
             project_dir: &project.dir,
             output_dir: &project.output_dir,
@@ -972,6 +981,7 @@ fn execute_project(
             render_all,
             quiet: args.quiet,
             file_count: total_files,
+            project_env: &script_env,
         };
         if let Err(parse_error) = render_scripts::run_render_scripts(
             render_scripts::ScriptPhase::PostRender,

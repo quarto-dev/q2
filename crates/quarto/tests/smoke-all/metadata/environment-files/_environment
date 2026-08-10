@@ -1,0 +1,2 @@
+Q2_TEST_ENVFILE_VAR=value-from-environment-file
+Q2_TEST_ENVFILE_LOCAL=base-value-should-lose

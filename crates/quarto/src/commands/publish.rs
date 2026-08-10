@@ -222,6 +222,10 @@ impl PublishRenderer for ProjectPublishRenderer {
             if !project.config.pre_render_scripts.is_empty() {
                 let input_files =
                     publish_relative_paths(project.files.iter().map(|f| &f.input), &project.dir);
+                let script_env = quarto_core::project::environment::subprocess_env_for_project(
+                    runtime.as_ref(),
+                    &project,
+                );
                 let ctx = render_scripts::RenderScriptsContext {
                     project_dir: &project.dir,
                     output_dir: &project.output_dir,
@@ -230,6 +234,7 @@ impl PublishRenderer for ProjectPublishRenderer {
                     render_all: true,
                     quiet: false,
                     file_count: input_files.len(),
+                    project_env: &script_env,
                 };
                 render_scripts::run_render_scripts(
                     render_scripts::ScriptPhase::PreRender,
@@ -274,6 +279,10 @@ impl PublishRenderer for ProjectPublishRenderer {
                     summary.outputs.iter().map(|o| &o.output_path),
                     &project.dir,
                 );
+                let script_env = quarto_core::project::environment::subprocess_env_for_project(
+                    runtime.as_ref(),
+                    &project,
+                );
                 let ctx = render_scripts::RenderScriptsContext {
                     project_dir: &project.dir,
                     output_dir: &project.output_dir,
@@ -282,6 +291,7 @@ impl PublishRenderer for ProjectPublishRenderer {
                     render_all: true,
                     quiet: false,
                     file_count: summary.outputs.len(),
+                    project_env: &script_env,
                 };
                 render_scripts::run_render_scripts(
                     render_scripts::ScriptPhase::PostRender,

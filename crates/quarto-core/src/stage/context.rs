@@ -86,6 +86,15 @@ pub struct StageContext {
     /// file does not exist.
     pub variables: Option<quarto_pandoc_types::ConfigValue>,
 
+    /// Project environment variables from `_environment` files
+    /// (`_environment` + `_environment.local`; profile variants once
+    /// bd-ev8mk1rp lands). File-defined values only — q2 never mutates
+    /// the process environment, and consumers must check the real
+    /// environment first so it always wins (see
+    /// [`crate::project::environment`]). Empty for single-file renders
+    /// (Q1 parity: env files are project-scoped).
+    pub project_env: hashlink::LinkedHashMap<String, String>,
+
     // === Mutable state ===
     /// Artifact store for dependencies and intermediates
     pub artifacts: ArtifactStore,
@@ -245,6 +254,15 @@ impl StageContext {
         let variables =
             load_project_variables(runtime.as_ref(), &project, &mut startup_diagnostics);
 
+        // Active profiles are always empty until bd-ev8mk1rp lands
+        // render-profile support.
+        let project_env = crate::project::environment::load_project_environment(
+            runtime.as_ref(),
+            &project,
+            &[],
+            &mut startup_diagnostics,
+        );
+
         Ok(Self {
             runtime,
             format,
@@ -253,6 +271,7 @@ impl StageContext {
             temp_dir: std::sync::OnceLock::new(),
             extensions,
             variables,
+            project_env,
             artifacts: ArtifactStore::new(),
             includes: PandocIncludes::default(),
             diagnostics: startup_diagnostics,

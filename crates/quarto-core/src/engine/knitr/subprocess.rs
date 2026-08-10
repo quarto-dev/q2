@@ -228,6 +228,12 @@ pub struct CallROptions {
     /// Optional callback to filter/transform stderr output on error.
     /// Receives the stderr content and returns the filtered version.
     pub stderr_filter: Option<fn(&str) -> String>,
+
+    /// Project `_environment` pairs to set on the Rscript child,
+    /// pre-filtered to keys the real environment does not define
+    /// (`crate::project::environment::env_for_subprocess`). The real
+    /// environment is inherited on spawn and always wins.
+    pub project_env: Vec<(String, String)>,
 }
 
 impl CallROptions {
@@ -358,6 +364,7 @@ where
     cmd.args(&args)
         .arg(&rmd_script)
         .current_dir(working_dir)
+        .envs(options.project_env.iter().map(|(k, v)| (k, v)))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped());
 
