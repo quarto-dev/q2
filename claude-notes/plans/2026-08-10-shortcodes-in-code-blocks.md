@@ -5,7 +5,8 @@
 **Branch:** `braid/bd-fz6gwfq0-shortcode-text-contexts`, based on PR #487's head
 (`feature/bd-shortcodes-in-metadata-bp06aub8` @ `c3856cb7`) so it reuses
 `expand_text_segments` / `parse_text_shortcodes`; merges after #487.
-**Status:** Design settled with user 2026-08-10 — implementing.
+**Status:** Implemented; PR [#490](https://github.com/quarto-dev/q2/pull/490)
+(stacked on #487, retargets to `main` when it merges).
 
 ## Design decisions (user, 2026-08-10)
 
