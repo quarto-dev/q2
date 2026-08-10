@@ -1,0 +1,74 @@
+---
+title: "Link reference definitions are not supported"
+description: "A `[ref]: https://example.com` line is not collected; it renders as a visible paragraph."
+code: Q-2-46
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-46` — Link reference definitions are not supported
+
+> A line of the form `[ref]: https://example.com` is a link reference
+> definition, which quarto-markdown does not collect. It renders as a
+> visible paragraph.
+
+## What this means
+
+In Pandoc and CommonMark, a line like
+
+```markdown
+[gcc-toolset]: https://docs.redhat.com/...
+```
+
+is a *link reference definition*. It is consumed while parsing and
+never appears in the output — its only job is to supply a URL to
+`[label][gcc-toolset]` somewhere else in the document.
+
+quarto-markdown does not collect these. The line is parsed as ordinary
+paragraph text: a span, a colon, and a URL. So it renders, visibly, at
+whatever point in the document it appears — usually as a stray block of
+URLs at the bottom of the page:
+
+```html
+<p><span>gcc-toolset</span>: https://docs.redhat.com/...
+<span>noexec</span>: https://man7.org/...</p>
+```
+
+## Why this happens
+
+Reference-style links are a readability convention — they keep long
+URLs out of the prose and collect them at the end of the file. A
+document written that way for Pandoc carries its definition block along
+when it is moved to quarto-markdown.
+
+Note that a definition is only a definition at the **start of a line**.
+A colon after a span mid-sentence — `text [label]: more` — is ordinary
+prose and does not produce this warning.
+
+## How to fix
+
+Move each URL into an inline link at its use site, then delete the
+definition line:
+
+```markdown
+See [the RedHat documentation](https://docs.redhat.com/...).
+```
+
+If a definition has no remaining uses, delete it outright. Quarto 1
+consumed unused definitions and rendered nothing, so removing them is
+what restores the output you expect.
+
+`qmd-syntax-helper` does all of this:
+
+```bash
+qmd-syntax-helper check   -r reference-links "docs/**/*.qmd"
+qmd-syntax-helper convert -r reference-links --in-place "docs/**/*.qmd"
+```
+
+## Related
+
+- [`Q-2-45`](Q-2-45.qmd) — the reference-style *use* this definition
+  was written for.

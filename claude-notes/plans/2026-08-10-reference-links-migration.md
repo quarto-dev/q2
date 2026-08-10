@@ -3,7 +3,7 @@
 **Date:** 2026-08-10
 **Braid:** `bd-reference-links-unsupported-ddc4skac` (feature, p1, labels: `diagnostics`, `parity`)
 **Branch:** `main` @ `05c2454e` — investigated in place, no worktree created (see *Where this landed*)
-**Status:** In progress on `braid/bd-reference-links-unsupported-ddc4skac`. Phases 0–4 and 6 landed and green. **Phase 5 (diagnostic) remains** — see the placement question below.
+**Status:** All phases complete on `braid/bd-reference-links-unsupported-ddc4skac`; `cargo xtask verify --skip-hub-build` green. Not pushed, no PR opened.
 
 ## Scope, restated
 
@@ -158,7 +158,7 @@ never fires it unasked.
 - [x] **Phase 4 — Registration + CLI.** Both rules into `RuleRegistry`;
       README's *Future Converters* entry moves to shipped and gains the
       two-rule explanation plus the `check`-before-`convert` guidance.
-- [ ] **Phase 5 — Diagnostic.** See below.
+- [x] **Phase 5 — Diagnostic.** See below.
 - [x] **Phase 6 — End-to-end verification** per CLAUDE.md: run the real
       binary against the Connect docs, inspect output, record the exact
       invocation and a snippet here.
@@ -166,7 +166,7 @@ never fires it unasked.
 ## Phase 5 in detail — the diagnostic, and what it does *not* cover
 
 Two high-precision triggers, both keying off shapes that are never
-intentional qmd. Next free code is **Q-2-42** (highest allocated in
+intentional qmd. Next free code is **Q-2-45** (highest allocated in
 `crates/pampa/resources/error-corpus/` is `Q-2-41`); allocate at
 implementation time.
 
@@ -187,8 +187,28 @@ something that can ride on a diagnostic. The three meaning-changing Connect
 pages (`admin/security`, `branding`, `email`) are all lone-bracket cases and
 would **not** be caught by this diagnostic.
 
-Per `crates/pampa/CLAUDE.md`, adding a code means a `Q-2-42.json` in
-`resources/error-corpus/` with cases, then `./scripts/build_error_table.ts`.
+**Implemented as a render-pipeline transform, not a parse error.** The
+error-corpus / `build_error_table.ts` machinery in `crates/pampa/CLAUDE.md`
+maps *parse states* to messages — but these documents parse fine, so there is
+no error state to key off. The in-tree precedent for a shape-detected,
+non-parse-error code is **Q-2-30**, which has a catalog entry and no
+error-corpus file.
+
+Q-2-30 is detected only in `qmd-syntax-helper`, which would leave `q2 render`
+silent — the exact gap the strand complains about. So detection instead lives
+in `crates/quarto-core/src/transforms/reference_link_diagnostics.rs`, a
+read-only `Normalization`-phase transform that pushes
+`DiagnosticMessage::warning(...).with_code(...)` onto `ctx.diagnostics` —
+the same channel `crossref_resolve` uses for unresolved `@ref`s. It runs
+first in the phase so it sees the document as the author wrote it.
+
+Detection there is **AST-only** and needs no source text: `[a][b]` is simply
+two consecutive bare-`Span` siblings in one `Inlines` list (a space between
+them would insert a `Space` node), and a definition line is a line-initial
+bare `Span` followed by a `Str` starting with `:`. That meant no new pampa
+API and no shared-crate surgery — the only thing borrowed from pampa is the
+one-line `is_empty_attr` predicate, which is where drift would actually
+hurt.
 
 ## Phase 6 — end-to-end verification (done 2026-08-10)
 
