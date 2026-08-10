@@ -1189,6 +1189,34 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-18",
     "since_version": "99.9.9"
   },
+  "Q-5-19": {
+    "subsystem": "project",
+    "title": "Unknown Project Profile",
+    "message_template": "An active project profile matches nothing in the project: there is no `_quarto-<name>.yml` overlay, no `_environment-<name>` file, and the name is not declared under `profile:` in `_quarto.yml`. This is usually a typo in `--profile`, `QUARTO_PROFILE`, or `profile.default`. If the profile exists only for conditional content (`when-profile`), declare it under `profile.group` or `profile.default` to silence this warning.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-19",
+    "since_version": "99.9.9"
+  },
+  "Q-5-20": {
+    "subsystem": "project",
+    "title": "Invalid Profile Configuration",
+    "message_template": "The `profile:` key must be a mapping with the keys `default` (a profile name or list of profile names) and `group` (a list of profile names, or a list of such lists). Quarto 1 silently ignores malformed `profile:` configuration; Quarto 2 reports it so a mistyped configuration cannot silently select the wrong profiles.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-20",
+    "since_version": "99.9.9"
+  },
+  "Q-5-21": {
+    "subsystem": "project",
+    "title": "Invalid Profile Name",
+    "message_template": "Project profile names must start with an ASCII letter or digit and contain only ASCII letters, digits, `.`, `_`, and `-` (they name files such as `_quarto-<name>.yml`). An explicitly given but empty selection (for example `--profile \"\"` or `QUARTO_PROFILE=\" , \"`) is also an error: use no flag at all to select no profiles.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-21",
+    "since_version": "99.9.9"
+  },
+  "Q-5-22": {
+    "subsystem": "project",
+    "title": "Profile Key Has No Effect Here",
+    "message_template": "A `profile:` key appears in a file where it has no effect and is ignored: profile overlay files (`_quarto-<name>.yml`) never contribute profile configuration, and `_quarto.yml.local` contributes only `profile.default` (profile groups are read from `_quarto.yml` only).",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-22",
+    "since_version": "99.9.9"
+  },
   "Q-5-13": {
     "subsystem": "project",
     "title": "`project.render` Pattern Matched No Files",

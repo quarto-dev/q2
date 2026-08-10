@@ -32,6 +32,7 @@ pub mod listing;
 pub mod orchestrator;
 pub mod pass2_renderer;
 pub mod profile_cache;
+pub mod project_profile;
 pub mod render_scripts;
 pub mod sidebar_membership;
 pub mod website_config;
