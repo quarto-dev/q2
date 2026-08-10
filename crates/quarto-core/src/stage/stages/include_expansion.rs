@@ -30,6 +30,7 @@ use async_trait::async_trait;
 use quarto_pandoc_types::block::Blocks;
 use quarto_pandoc_types::shortcode::ShortcodeArg;
 use quarto_pandoc_types::{Block, Inline};
+use quarto_source_map::SourceInfo;
 
 use crate::document_profile::IncludeEntry;
 use crate::stage::data::DocumentAst;
@@ -146,6 +147,13 @@ impl IncludeExpander<'_> {
         let mut i = 0;
         while i < blocks.len() {
             let Some(include_path) = extract_include_path(&blocks[i]) else {
+                // A code fence is a leaf with no child block list, but
+                // its *text* can carry includes (the Q1 listing idiom
+                // — bd-include-in-code-block-f8mvtczn). Those splice
+                // textually and in place; the block itself stays.
+                if let Block::CodeBlock(code_block) = &mut blocks[i] {
+                    self.expand_code_fence(code_block, current_file);
+                }
                 for list in child_block_lists_mut(&mut blocks[i]) {
                     self.expand_blocks(list, current_file)?;
                 }
@@ -356,6 +364,148 @@ impl IncludeExpander<'_> {
         }
         Ok(())
     }
+
+    /// Splice code-fence includes into `code_block.text`
+    /// (bd-include-in-code-block-f8mvtczn).
+    ///
+    /// This is the one include position where Q1's *textual* model is
+    /// the right model rather than a legacy quirk: the destination is
+    /// raw text, not a block list, so the fence-corruption hazards that
+    /// motivated the AST approach elsewhere do not apply. The target's
+    /// bytes go in verbatim — no parsing, no re-indentation (Q1 does
+    /// neither), one trailing newline trimmed (see
+    /// [`trim_one_trailing_newline`]).
+    ///
+    /// **Recursive**, matching Q1: spliced text is itself re-scanned for
+    /// include lines, so a `.qmd` embedded as a listing shows the same
+    /// content it would show as a page. Q1's `standaloneInclude`
+    /// (`src/core/handlers/include-standalone.ts`) does the same, with
+    /// the same cycle guard. Recursion is also what keeps a nested
+    /// include from surviving to `ShortcodeResolveTransform`, which
+    /// renders any unhandled include as the `?include` token this whole
+    /// change exists to remove.
+    ///
+    /// Nested paths anchor at the *including file's* directory, matching
+    /// how block-position includes nest (bd-1fz3vh99). Q1 anchors nested
+    /// fence includes at the document instead; ours is the more
+    /// consistent rule and the one q2 already documents.
+    ///
+    /// Runs before the engine, so an authored executable cell has its
+    /// include spliced into the cell source *before* execution — again
+    /// matching Q1's text-level model. The `.cell-code` half of the
+    /// opt-out cannot fire here (the engine writes that class later),
+    /// but `shortcodes="false"` is authored and does.
+    ///
+    /// Errors are non-fatal: a diagnostic is pushed and the offending
+    /// line is dropped. Dropping rather than leaving it matters for the
+    /// same `?include` reason.
+    fn expand_code_fence(
+        &mut self,
+        code_block: &mut quarto_pandoc_types::block::CodeBlock,
+        current_file: &Path,
+    ) {
+        let includes = code_fence_includes(code_block);
+        if includes.is_empty() {
+            return;
+        }
+        code_block.text = self.splice_fence_text(
+            &code_block.text,
+            includes,
+            current_file,
+            &code_block.source_info,
+        );
+    }
+
+    /// Replace each include line in `text` with its target's content,
+    /// recursively. `location` anchors any diagnostic at the originating
+    /// fence — nested text has no source span of its own.
+    fn splice_fence_text(
+        &mut self,
+        text: &str,
+        includes: Vec<(usize, String)>,
+        current_file: &Path,
+        location: &SourceInfo,
+    ) -> String {
+        let base_dir = current_file.parent().unwrap_or(Path::new("."));
+        // `(line index, replacement)` in ascending line order, mirroring
+        // `code_fence_includes`. `None` means the line is dropped.
+        let mut replacements: Vec<(usize, Option<String>)> = Vec::with_capacity(includes.len());
+
+        for (line_idx, raw_path) in includes {
+            let resolved = resolve_include_target(base_dir, &self.ctx.project.dir, &raw_path);
+            let canonical = resolved.canonicalize().unwrap_or_else(|_| resolved.clone());
+
+            // A file that embeds itself as a listing would recurse
+            // forever: the spliced copy carries the same include line.
+            if self.include_stack.contains(&canonical) {
+                self.ctx.diagnostics.push(
+                    quarto_error_reporting::DiagnosticMessageBuilder::warning("Circular include")
+                        .with_code("Q-17-1")
+                        .with_location(location.clone())
+                        .problem(format!(
+                            "Circular include detected: '{}' is already being included",
+                            resolved.display()
+                        ))
+                        .add_hint("Check for files that include each other, directly or indirectly")
+                        .build(),
+                );
+                replacements.push((line_idx, None));
+                continue;
+            }
+
+            match self.ctx.runtime.file_read(&resolved) {
+                Ok(bytes) => {
+                    // Record before trimming: the render depends on the
+                    // file's real bytes, so the cache-invalidation hash
+                    // must cover them all (bd-r82e).
+                    record_include(self.recorded_includes, &canonical, &bytes);
+                    let content = String::from_utf8_lossy(trim_one_trailing_newline(&bytes));
+
+                    let nested = code_fence_include_lines(&content, location);
+                    let spliced = if nested.is_empty() {
+                        content.into_owned()
+                    } else {
+                        self.include_stack.insert(canonical.clone());
+                        let out = self.splice_fence_text(&content, nested, &resolved, location);
+                        self.include_stack.remove(&canonical);
+                        out
+                    };
+                    replacements.push((line_idx, Some(spliced)));
+                }
+                Err(e) => {
+                    self.ctx.diagnostics.push(
+                        quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                            "Include file not found",
+                        )
+                        .with_code("Q-17-2")
+                        .with_location(location.clone())
+                        .problem(format!(
+                            "Could not read included file '{}': {}",
+                            resolved.display(),
+                            e
+                        ))
+                        .build(),
+                    );
+                    replacements.push((line_idx, None));
+                }
+            }
+        }
+
+        // Sequential merge — both sequences run in ascending line
+        // order, so one pass with a cursor suffices.
+        let mut pending = replacements.into_iter().peekable();
+        let rebuilt: Vec<String> = text
+            .split('\n')
+            .enumerate()
+            .filter_map(|(idx, line)| match pending.peek() {
+                // `Some(text)` splices the file in; `None` drops a line
+                // whose include could not be read.
+                Some((at, _)) if *at == idx => pending.next().and_then(|(_, text)| text),
+                _ => Some(line.to_string()),
+            })
+            .collect();
+        rebuilt.join("\n")
+    }
 }
 
 /// Remap the `FileId`s in a diagnostic's primary location and every
@@ -441,6 +591,12 @@ pub fn collect_include_paths(blocks: &mut Blocks) -> Vec<String> {
                 out.push(path);
                 continue;
             }
+            // Code-fence includes are dependencies too: without them,
+            // editing the embedded source file never rebuilds the page
+            // that shows it (bd-include-in-code-block-f8mvtczn).
+            if let Block::CodeBlock(code_block) = block {
+                out.extend(code_fence_includes(code_block).into_iter().map(|(_, p)| p));
+            }
             for list in child_block_lists_mut(block) {
                 walk(list, out);
             }
@@ -489,6 +645,104 @@ fn resolve_include_target(base_dir: &Path, project_dir: &Path, raw: &str) -> Pat
     } else {
         base_dir.join(raw)
     }
+}
+
+/// Recognize a `{{< include … >}}` occupying a whole line of code-fence
+/// text, returning its raw path argument.
+///
+/// **Line-strict** (bd-include-in-code-block-f8mvtczn): the shortcode
+/// must be the sole content of the line, modulo surrounding whitespace
+/// — which is exactly Q1's rule (`isBlockShortcode` anchors
+/// `/^\s*{{< … >}}\s*$/` in `src/core/lib/parse-shortcode.ts`). A
+/// shortcode sharing its line with code is left alone, so the rule can
+/// be widened later without invalidating documents; it could not be
+/// narrowed again.
+///
+/// Parsing goes through [`parse_text_shortcodes`], the same text-level
+/// parser `ShortcodeResolveTransform` uses, rather than a second
+/// hand-rolled matcher. That is what makes the escaped form
+/// (`{{{< include … >}}}`, which arrives as a literal segment) fall out
+/// correctly instead of needing its own special case.
+///
+/// [`parse_text_shortcodes`]: crate::transforms::parse_text_shortcodes
+fn code_fence_include_line(line: &str, source_info: &SourceInfo) -> Option<String> {
+    let segments = crate::transforms::parse_text_shortcodes(line, source_info)?;
+
+    // Exactly one shortcode, and every other segment blank.
+    let mut shortcode = None;
+    for segment in &segments {
+        match segment {
+            crate::transforms::TextSegment::Literal(text) => {
+                if !text.trim().is_empty() {
+                    return None;
+                }
+            }
+            crate::transforms::TextSegment::Shortcode(s) => {
+                if shortcode.is_some() {
+                    return None;
+                }
+                shortcode = Some(s);
+            }
+        }
+    }
+
+    let shortcode = shortcode?;
+    if shortcode.name != "include" {
+        return None;
+    }
+    shortcode.positional_args.first().and_then(|arg| match arg {
+        ShortcodeArg::String(s) => Some(s.clone()),
+        _ => None,
+    })
+}
+
+/// Every include a code fence's text contributes, as
+/// `(line index, raw path)` in document order.
+///
+/// This is the **single source of truth** for "does this fence contain
+/// an include", in the same way [`child_block_lists_mut`] is for
+/// block-list positions: the expander
+/// ([`IncludeExpander::expand_code_fence`]) and the path collector
+/// ([`collect_include_paths`], which feeds the preview dep-graph) both
+/// go through it, so neither can drift from the other. It also owns the
+/// opt-out check, so "which fences are off-limits" is answered in one
+/// place too.
+fn code_fence_includes(code_block: &quarto_pandoc_types::block::CodeBlock) -> Vec<(usize, String)> {
+    if crate::transforms::code_shortcode_opt_out(&code_block.attr) {
+        return Vec::new();
+    }
+    code_fence_include_lines(&code_block.text, &code_block.source_info)
+}
+
+/// The include lines in a block of fence text, as `(line index, raw
+/// path)`.
+///
+/// Split out from [`code_fence_includes`] because recursion re-scans
+/// *spliced* text, which has no `CodeBlock` of its own — the opt-out is
+/// a property of the originating fence and is checked once, there.
+fn code_fence_include_lines(text: &str, source_info: &SourceInfo) -> Vec<(usize, String)> {
+    text.split('\n')
+        .enumerate()
+        .filter_map(|(idx, line)| code_fence_include_line(line, source_info).map(|p| (idx, p)))
+        .collect()
+}
+
+/// Drop exactly one trailing newline (and the `\r` of a `\r\n`).
+///
+/// The qmd parser's convention for a fence whose last line has content
+/// is text *without* a trailing newline, and the HTML writer emits that
+/// text verbatim — so splicing a POSIX source file's bytes as-is would
+/// give every listing a blank final line. Q1's rendered output has
+/// none: it appends newlines when splicing, but Pandoc's markdown
+/// re-read absorbs them. q2 emits HTML straight from the AST with no
+/// such re-read, so the normalization has to happen here.
+///
+/// Exactly one, not all: a file ending in two newlines is how an author
+/// asks for a blank final line, the same affordance a hand-written
+/// fence has.
+fn trim_one_trailing_newline(bytes: &[u8]) -> &[u8] {
+    let bytes = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+    bytes.strip_suffix(b"\r").unwrap_or(bytes)
 }
 
 /// Check if a block is a paragraph (or plain block) containing only an
@@ -644,14 +898,185 @@ mod tests {
 
     #[test]
     fn extract_include_path_from_non_paragraph() {
-        // Code blocks are never includes
-        let block = Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
-            attr: quarto_pandoc_types::attr::empty_attr(),
-            text: "{{< include file.qmd >}}".to_string(),
+        // `extract_include_path` recognizes *block-position* includes
+        // only. A code fence is not one: its include lives in the
+        // fence's text and is recognized by `code_fence_includes`
+        // instead (bd-include-in-code-block-f8mvtczn). The two
+        // recognizers are disjoint by design — this test pins both
+        // halves so neither silently grows into the other's territory.
+        let block = make_code_block("{{< include file.qmd >}}", &[], &[]);
+        assert_eq!(extract_include_path(&block), None);
+
+        let Block::CodeBlock(code_block) = &block else {
+            unreachable!()
+        };
+        assert_eq!(
+            code_fence_includes(code_block),
+            vec![(0, "file.qmd".to_string())]
+        );
+    }
+
+    // === Code-fence includes (bd-include-in-code-block-f8mvtczn) ===
+
+    fn make_code_block(text: &str, classes: &[&str], kvs: &[(&str, &str)]) -> Block {
+        let mut attrs = hashlink::LinkedHashMap::new();
+        for (k, v) in kvs {
+            attrs.insert(k.to_string(), v.to_string());
+        }
+        Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
+            attr: (
+                String::new(),
+                classes.iter().map(|c| c.to_string()).collect(),
+                attrs,
+            ),
+            text: text.to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        });
-        assert_eq!(extract_include_path(&block), None);
+        })
+    }
+
+    /// Recognize on one line, for the strictness tests.
+    fn recognize(line: &str) -> Option<String> {
+        code_fence_include_line(line, &SourceInfo::for_test())
+    }
+
+    #[test]
+    fn code_fence_line_accepts_lone_include() {
+        assert_eq!(recognize("{{< include app.py >}}"), Some("app.py".into()));
+    }
+
+    #[test]
+    fn code_fence_line_accepts_surrounding_whitespace() {
+        // Q1's `isBlockShortcode` anchors with `^\s*…\s*$`, so an
+        // indented include line is still an include (and splices
+        // without re-indentation).
+        assert_eq!(
+            recognize("    {{< include app.py >}}"),
+            Some("app.py".into())
+        );
+        assert_eq!(
+            recognize("\t{{< include app.py >}}  "),
+            Some("app.py".into())
+        );
+        // A trailing `\r` from CRLF input counts as whitespace.
+        assert_eq!(recognize("{{< include app.py >}}\r"), Some("app.py".into()));
+    }
+
+    #[test]
+    fn code_fence_line_accepts_quoted_path() {
+        assert_eq!(
+            recognize(r#"{{< include "my file.py" >}}"#),
+            Some("my file.py".into())
+        );
+    }
+
+    #[test]
+    fn code_fence_line_rejects_mid_line() {
+        // D2: strict — the shortcode must be the sole content of its
+        // line. Relaxing this later is possible; tightening is not.
+        assert_eq!(recognize("x = 1  {{< include app.py >}}"), None);
+        assert_eq!(recognize("{{< include app.py >}} # trailing"), None);
+    }
+
+    #[test]
+    fn code_fence_line_rejects_two_per_line() {
+        assert_eq!(recognize("{{< include a.py >}}{{< include b.py >}}"), None);
+    }
+
+    #[test]
+    fn code_fence_line_rejects_other_shortcodes() {
+        // `{{< meta … >}}` in a fence keeps its existing text-level
+        // behavior via ShortcodeResolveTransform; include expansion
+        // must not claim it.
+        assert_eq!(recognize("{{< meta version >}}"), None);
+        assert_eq!(recognize("{{< var key >}}"), None);
+    }
+
+    #[test]
+    fn code_fence_line_rejects_escaped_include() {
+        // `{{{< … >}}}` is the documented "render literally" form.
+        assert_eq!(recognize("{{{< include app.py >}}}"), None);
+    }
+
+    #[test]
+    fn code_fence_line_rejects_include_without_path() {
+        assert_eq!(recognize("{{< include >}}"), None);
+    }
+
+    #[test]
+    fn code_fence_line_rejects_plain_code() {
+        assert_eq!(recognize("import os"), None);
+        assert_eq!(recognize(""), None);
+    }
+
+    #[test]
+    fn code_fence_includes_reports_every_line_in_order() {
+        let block = make_code_block(
+            "before\n{{< include a.py >}}\nmiddle\n{{< include b.py >}}",
+            &["python"],
+            &[],
+        );
+        let Block::CodeBlock(cb) = &block else {
+            unreachable!()
+        };
+        assert_eq!(
+            code_fence_includes(cb),
+            vec![(1, "a.py".to_string()), (3, "b.py".to_string())]
+        );
+    }
+
+    #[test]
+    fn code_fence_includes_respects_shortcodes_false() {
+        // D5: the authored opt-out must keep winning. This is how the
+        // docs show include syntax without expanding it.
+        let block = make_code_block(
+            "{{< include app.py >}}",
+            &["markdown"],
+            &[("shortcodes", "false")],
+        );
+        let Block::CodeBlock(cb) = &block else {
+            unreachable!()
+        };
+        assert_eq!(code_fence_includes(cb), vec![]);
+    }
+
+    #[test]
+    fn code_fence_includes_respects_cell_code_class() {
+        // `.cell-code` is engine-produced and cannot carry an authored
+        // include at this stage, but the opt-out predicate is shared
+        // with ShortcodeResolveTransform and must behave identically.
+        let block = make_code_block("{{< include app.py >}}", &["python", "cell-code"], &[]);
+        let Block::CodeBlock(cb) = &block else {
+            unreachable!()
+        };
+        assert_eq!(code_fence_includes(cb), vec![]);
+    }
+
+    // === Trailing-newline normalization (D4) ===
+
+    #[test]
+    fn trim_one_trailing_newline_removes_exactly_one() {
+        // q2's parser yields fence text WITHOUT a trailing newline for
+        // a content-final line, and the HTML writer emits the text
+        // verbatim — so splicing a POSIX file's bytes as-is would add a
+        // blank final line to every listing. Q1's rendered output has
+        // none (Pandoc's markdown re-read absorbs it); q2 has no such
+        // re-read, so the trim happens here.
+        assert_eq!(trim_one_trailing_newline(b"import os\n"), b"import os");
+        assert_eq!(trim_one_trailing_newline(b"import os\r\n"), b"import os");
+    }
+
+    #[test]
+    fn trim_one_trailing_newline_keeps_the_rest() {
+        // Two trailing newlines is how an author asks for a blank final
+        // line — the same affordance a hand-written fence has.
+        assert_eq!(trim_one_trailing_newline(b"import os\n\n"), b"import os\n");
+    }
+
+    #[test]
+    fn trim_one_trailing_newline_is_a_noop_without_one() {
+        assert_eq!(trim_one_trailing_newline(b"import os"), b"import os");
+        assert_eq!(trim_one_trailing_newline(b""), b"");
     }
 
     #[test]
@@ -1546,6 +1971,247 @@ mod tests {
         assert!(
             has_code_block,
             "Expected a CodeBlock from included file in the AST"
+        );
+    }
+
+    // === Includes inside a fenced code block ===
+    // (bd-include-in-code-block-f8mvtczn; the Q1 listing idiom)
+
+    /// The text of the first code block anywhere in `blocks`.
+    fn first_code_text(blocks: &[Block]) -> String {
+        fn walk(blocks: &[Block]) -> Option<String> {
+            for block in blocks {
+                if let Block::CodeBlock(cb) = block {
+                    return Some(cb.text.clone());
+                }
+                if let Block::Div(div) = block
+                    && let Some(found) = walk(&div.content)
+                {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        walk(blocks).expect("expected a code block")
+    }
+
+    const APP_PY: &str = "import os\n\nprint(\"hello\")\n";
+
+    #[test]
+    fn code_fence_include_splices_file_text() {
+        let (doc, ctx) = expand(
+            "```{.python filename=\"app.py\"}\n{{< include app.py >}}\n```",
+            vec![("/project/app.py", APP_PY)],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        // Exactly the file's content, with the one trailing newline
+        // trimmed (D4) so the listing has no blank final line.
+        assert_eq!(
+            first_code_text(&doc.ast.blocks),
+            "import os\n\nprint(\"hello\")"
+        );
+    }
+
+    #[test]
+    fn code_fence_include_keeps_surrounding_lines() {
+        let (doc, ctx) = expand(
+            "```{.python}\n# header\n{{< include app.py >}}\n# footer\n```",
+            vec![("/project/app.py", "body\n")],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(first_code_text(&doc.ast.blocks), "# header\nbody\n# footer");
+    }
+
+    #[test]
+    fn code_fence_include_does_not_reindent() {
+        // Q1 splices at column 0 regardless of the include line's own
+        // indentation; matching that keeps existing documents stable.
+        let (doc, ctx) = expand(
+            "```{.python}\n    {{< include app.py >}}\n```",
+            vec![("/project/app.py", "a\n  b\n")],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(first_code_text(&doc.ast.blocks), "a\n  b");
+    }
+
+    #[test]
+    fn code_fence_include_expands_multiple_targets() {
+        let (doc, ctx) = expand(
+            "```{.python}\n{{< include a.py >}}\n{{< include b.py >}}\n```",
+            vec![("/project/a.py", "AAA\n"), ("/project/b.py", "BBB\n")],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(first_code_text(&doc.ast.blocks), "AAA\nBBB");
+    }
+
+    #[test]
+    fn code_fence_include_records_dependency() {
+        // Without this the preview never rebuilds the page when the
+        // embedded source file changes.
+        let (doc, _ctx) = expand(
+            "```{.python}\n{{< include app.py >}}\n```",
+            vec![("/project/app.py", APP_PY)],
+        );
+        let recorded: Vec<_> = doc
+            .recorded_includes
+            .iter()
+            .map(|e| e.path.clone())
+            .collect();
+        assert_eq!(recorded, vec![PathBuf::from("/project/app.py")]);
+    }
+
+    #[test]
+    fn code_fence_include_resolves_project_absolute_path() {
+        let (doc, ctx) = expand(
+            "```{.python}\n{{< include /shared/app.py >}}\n```",
+            vec![("/project/shared/app.py", "shared\n")],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(first_code_text(&doc.ast.blocks), "shared");
+    }
+
+    #[test]
+    fn code_fence_include_missing_file_reports_and_drops_line() {
+        let (doc, ctx) = expand("```{.python}\nkept\n{{< include gone.py >}}\n```", vec![]);
+        let codes: Vec<_> = ctx
+            .diagnostics
+            .iter()
+            .filter_map(|d| d.code.clone())
+            .collect();
+        assert_eq!(codes, vec!["Q-17-2".to_string()]);
+        // The unresolved shortcode must not survive into the fence:
+        // ShortcodeResolveTransform would later render it as the
+        // `?include` token this strand exists to remove.
+        let text = first_code_text(&doc.ast.blocks);
+        assert_eq!(text, "kept");
+        assert!(!text.contains("include"), "got {text:?}");
+    }
+
+    #[test]
+    fn code_fence_include_respects_shortcodes_false() {
+        let (doc, ctx) = expand(
+            "```{.markdown shortcodes=\"false\"}\n{{< include app.py >}}\n```",
+            vec![("/project/app.py", APP_PY)],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(first_code_text(&doc.ast.blocks), "{{< include app.py >}}");
+    }
+
+    #[test]
+    fn code_fence_include_inside_div_expands() {
+        // Fences nest wherever block lists do; the walker must reach
+        // them at every level, not just the top.
+        let (doc, ctx) = expand(
+            "::: {.panel}\n```{.python}\n{{< include app.py >}}\n```\n:::",
+            vec![("/project/app.py", "nested\n")],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(first_code_text(&doc.ast.blocks), "nested");
+    }
+
+    #[test]
+    fn code_fence_include_recurses() {
+        // D3 (revised): spliced text is re-scanned, matching Q1's
+        // `standaloneInclude`. Recursion is also what stops a nested
+        // include from surviving to ShortcodeResolveTransform, which
+        // would render it as `?include` — the very bug being fixed,
+        // one level down.
+        let (doc, ctx) = expand(
+            "```{.markdown}\n{{< include outer.qmd >}}\n```",
+            vec![
+                (
+                    "/project/outer.qmd",
+                    "top\n{{< include inner.qmd >}}\nbot\n",
+                ),
+                ("/project/inner.qmd", "INNER\n"),
+            ],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(first_code_text(&doc.ast.blocks), "top\nINNER\nbot");
+    }
+
+    #[test]
+    fn code_fence_include_recursion_anchors_at_the_including_file() {
+        // Nested paths resolve against the file that declared them, as
+        // block-position includes do (bd-1fz3vh99) — not against the
+        // document. (Q1 anchors at the document here; ours is the
+        // consistent rule.)
+        let (doc, ctx) = expand(
+            "```{.markdown}\n{{< include sub/outer.qmd >}}\n```",
+            vec![
+                ("/project/sub/outer.qmd", "{{< include sibling.qmd >}}\n"),
+                ("/project/sub/sibling.qmd", "FROM-SUBDIR\n"),
+            ],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(first_code_text(&doc.ast.blocks), "FROM-SUBDIR");
+    }
+
+    #[test]
+    fn code_fence_include_cycle_reports_and_drops_line() {
+        // A file that embeds itself as a listing would recurse forever:
+        // the spliced copy carries the same include line.
+        let (doc, ctx) = expand(
+            "```{.markdown}\n{{< include a.qmd >}}\n```",
+            vec![
+                ("/project/a.qmd", "A-TOP\n{{< include b.qmd >}}\n"),
+                ("/project/b.qmd", "B-TOP\n{{< include a.qmd >}}\n"),
+            ],
+        );
+        let codes: Vec<_> = ctx
+            .diagnostics
+            .iter()
+            .filter_map(|d| d.code.clone())
+            .collect();
+        assert_eq!(codes, vec!["Q-17-1".to_string()]);
+        // Expansion stops at the cycle; the offending line is dropped
+        // rather than left to become `?include`.
+        assert_eq!(first_code_text(&doc.ast.blocks), "A-TOP\nB-TOP");
+    }
+
+    #[test]
+    fn code_fence_include_of_self_reports_cycle() {
+        // The document itself is already on the include stack.
+        let (doc, ctx) = expand(
+            "```{.markdown}\n{{< include doc.qmd >}}\n```",
+            vec![("/project/doc.qmd", "anything\n")],
+        );
+        let codes: Vec<_> = ctx
+            .diagnostics
+            .iter()
+            .filter_map(|d| d.code.clone())
+            .collect();
+        assert_eq!(codes, vec!["Q-17-1".to_string()]);
+        assert_eq!(first_code_text(&doc.ast.blocks), "");
+    }
+
+    #[test]
+    fn code_fence_include_leaves_other_shortcodes_alone() {
+        // `{{< meta … >}}` keeps its text-level expansion downstream;
+        // include expansion must not consume or disturb it.
+        let (doc, ctx) = expand(
+            "```{.python}\n{{< meta version >}}\n{{< include app.py >}}\n```",
+            vec![("/project/app.py", "spliced\n")],
+        );
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(
+            first_code_text(&doc.ast.blocks),
+            "{{< meta version >}}\nspliced"
+        );
+    }
+
+    #[test]
+    fn collect_include_paths_finds_code_fence_targets() {
+        // The preview dep-graph shares this walker with the expander;
+        // if it misses fence includes, editing the embedded file never
+        // rebuilds the page that shows it.
+        let mut doc = parse_to_doc_ast(
+            "{{< include block.qmd >}}\n\n```{.python}\n{{< include fence.py >}}\n```",
+            "/project/doc.qmd",
+        );
+        assert_eq!(
+            collect_include_paths(&mut doc.ast.blocks),
+            vec!["block.qmd".to_string(), "fence.py".to_string()]
         );
     }
 }

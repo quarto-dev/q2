@@ -125,6 +125,7 @@ pub use proof::ProofSugarTransform;
 pub use reference_link_diagnostics::ReferenceLinkDiagnosticsTransform;
 pub use resource_collector::{ResourceCollectorTransform, collect_referenced_asset_urls};
 pub use sectionize::SectionizeTransform;
+pub(crate) use shortcode_resolve::code_shortcode_opt_out;
 pub use shortcode_resolve::{ShortcodeResolveTransform, extract_shortcode_paths};
 pub(crate) use shortcode_text::{TextSegment, parse_text_shortcodes};
 pub use sidebar_generate::SidebarGenerateTransform;

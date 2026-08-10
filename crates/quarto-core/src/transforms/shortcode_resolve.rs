@@ -1456,11 +1456,32 @@ async fn expand_include_slot_shortcodes(
                 &item.source_info,
                 diagnostics,
                 lua_engine,
+                UnhandledInclude::Report,
             )
             .await;
             item.value = ConfigValueKind::Scalar(yaml_rust2::Yaml::String(expanded));
         }
     }
+}
+
+/// What a text context does with an `include` shortcode that reached
+/// this transform — i.e. one `IncludeExpansionStage` did not expand.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum UnhandledInclude {
+    /// Emit the `?include` marker and the Q-17-4 diagnostic. Correct
+    /// where the include really was dropped and contributes nothing.
+    Report,
+    /// Emit the shortcode's source text verbatim.
+    ///
+    /// Used for **code text**, where `?include` would corrupt a listing
+    /// (bd-include-in-code-block-f8mvtczn). Every include that occupies
+    /// a whole line of a fence is expanded back at stage 3; one still
+    /// here shares its line with code, which the line-strict rule
+    /// deliberately does not treat as an include — so the author's
+    /// literal text is what belongs in the output. Q1 does the same,
+    /// and silently: its `isBlockShortcode` never matches the line, so
+    /// nothing touches it.
+    Preserve,
 }
 
 /// Stringify a parsed segment list, dispatching each shortcode through
@@ -1472,6 +1493,7 @@ async fn expand_text_segments(
     source_info: &SourceInfo,
     diagnostics: &mut Vec<DiagnosticMessage>,
     lua_engine: &mut Option<LuaEngineState>,
+    unhandled_include: UnhandledInclude,
 ) -> String {
     use crate::transforms::TextSegment;
 
@@ -1504,9 +1526,16 @@ async fn expand_text_segments(
                         );
                     }
                     ShortcodeResult::Error(error) => {
-                        diagnostics.push(error.diagnostic);
-                        out.push('?');
-                        out.push_str(&error.key);
+                        if unhandled_include == UnhandledInclude::Preserve && error.key == "include"
+                        {
+                            // Code text: print what the author wrote.
+                            // See `UnhandledInclude`.
+                            out.push_str(&pampa::writers::qmd::shortcode_source_text(&shortcode));
+                        } else {
+                            diagnostics.push(error.diagnostic);
+                            out.push('?');
+                            out.push_str(&error.key);
+                        }
                     }
                     ShortcodeResult::Preserve => {
                         out.push_str(&pampa::writers::qmd::shortcode_source_text(&shortcode));
@@ -1523,7 +1552,15 @@ async fn expand_text_segments(
 /// code (`.cell-code` — the engine already processed the text, so it
 /// must print as-is) or an explicit `shortcodes="false"` attribute
 /// (the documented technique for displaying shortcode syntax).
-fn code_shortcode_opt_out(attr: &Attr) -> bool {
+///
+/// Shared with `IncludeExpansionStage`, which honors the same opt-out
+/// when splicing a `{{< include … >}}` inside a code fence
+/// (bd-include-in-code-block-f8mvtczn) — one predicate so the two
+/// passes cannot disagree about which fences are off-limits. Note the
+/// `.cell-code` half is unreachable from that earlier stage (the class
+/// is written later, by the engine); it is included anyway so the
+/// definition stays single-sourced.
+pub(crate) fn code_shortcode_opt_out(attr: &Attr) -> bool {
     attr.1.iter().any(|class| class == "cell-code")
         || attr.2.get("shortcodes").is_some_and(|v| v == "false")
 }
@@ -1539,6 +1576,7 @@ async fn expand_text_in_place(
     source_info: &SourceInfo,
     diagnostics: &mut Vec<DiagnosticMessage>,
     lua_engine: &mut Option<LuaEngineState>,
+    unhandled_include: UnhandledInclude,
 ) {
     if let Some(segments) = crate::transforms::parse_text_shortcodes(text, source_info) {
         *text = expand_text_segments(
@@ -1548,6 +1586,7 @@ async fn expand_text_in_place(
             source_info,
             diagnostics,
             lua_engine,
+            unhandled_include,
         )
         .await;
     }
@@ -1571,6 +1610,7 @@ async fn expand_attr_value_shortcodes(
             source_info,
             diagnostics,
             lua_engine,
+            UnhandledInclude::Report,
         )
         .await;
     }
@@ -1857,6 +1897,7 @@ fn resolve_block<'a>(
                         &code_block.source_info,
                         diagnostics,
                         lua_engine,
+                        UnhandledInclude::Preserve,
                     )
                     .await;
                 }
@@ -1869,6 +1910,7 @@ fn resolve_block<'a>(
                     &raw_block.source_info,
                     diagnostics,
                     lua_engine,
+                    UnhandledInclude::Report,
                 )
                 .await;
             }
@@ -2045,6 +2087,7 @@ fn recurse_inline<'a>(
                     source_info,
                     diagnostics,
                     lua_engine,
+                    UnhandledInclude::Report,
                 )
                 .await;
                 resolve_inlines(content, transform, metadata, diagnostics, lua_engine).await;
@@ -2114,6 +2157,7 @@ fn recurse_inline<'a>(
                         &code.source_info,
                         diagnostics,
                         lua_engine,
+                        UnhandledInclude::Preserve,
                     )
                     .await;
                 }
@@ -2126,6 +2170,7 @@ fn recurse_inline<'a>(
                     &raw.source_info,
                     diagnostics,
                     lua_engine,
+                    UnhandledInclude::Report,
                 )
                 .await;
             }
@@ -2137,6 +2182,7 @@ fn recurse_inline<'a>(
                     &math.source_info,
                     diagnostics,
                     lua_engine,
+                    UnhandledInclude::Report,
                 )
                 .await;
             }
