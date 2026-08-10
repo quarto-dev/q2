@@ -666,3 +666,84 @@ fn test_list_item_multiple_blocks_with_paragraph() {
         );
     }
 }
+
+// ============================================================================
+// Named entity reference tests (bd-named-entities-w6xbfftj)
+// ============================================================================
+
+/// Flatten a paragraph's inline sequence to plain text (Str + Space only;
+/// any other inline renders as nothing, which the assertions would catch).
+fn para_text(pandoc: &pampa::pandoc::Pandoc, index: usize) -> String {
+    let Block::Paragraph(para) = &pandoc.blocks[index] else {
+        panic!("Expected paragraph at block {}", index);
+    };
+    inlines_text(&para.content)
+}
+
+fn inlines_text(inlines: &[Inline]) -> String {
+    let mut out = String::new();
+    for inline in inlines {
+        match inline {
+            Inline::Str(s) => out.push_str(&s.text),
+            Inline::Space(_) => out.push(' '),
+            other => panic!("Unexpected inline in entity test: {:?}", other),
+        }
+    }
+    out
+}
+
+#[test]
+fn test_entity_reference_gt_lt_amp() {
+    let pandoc = parse_qmd("A &gt; B &lt; C &amp; D");
+    assert_eq!(para_text(&pandoc, 0), "A > B < C & D");
+}
+
+#[test]
+fn test_entity_reference_nbsp_is_u00a0() {
+    // &nbsp; must decode to U+00A0, not a regular space
+    let pandoc = parse_qmd("F&nbsp;G");
+    assert_eq!(para_text(&pandoc, 0), "F\u{00a0}G");
+}
+
+#[test]
+fn test_entity_reference_copy() {
+    let pandoc = parse_qmd("&copy; 2026");
+    assert_eq!(para_text(&pandoc, 0), "\u{00a9} 2026");
+}
+
+#[test]
+fn test_entity_reference_multi_codepoint() {
+    // &NotEqualTilde; decodes to two codepoints: U+2242 U+0338
+    let pandoc = parse_qmd("x &NotEqualTilde; y");
+    assert_eq!(para_text(&pandoc, 0), "x \u{2242}\u{0338} y");
+}
+
+#[test]
+fn test_entity_reference_unknown_emits_verbatim() {
+    // "&AM;" currently parses as entity_reference (truncated legacy alternative
+    // from the grammar regex, see bd-v8qc9zyc) but is not a valid entity name;
+    // it must survive as literal text. This assertion also holds after the
+    // grammar fix, when it becomes plain text.
+    let pandoc = parse_qmd("A &AM; B");
+    assert_eq!(para_text(&pandoc, 0), "A &AM; B");
+}
+
+#[test]
+fn test_entity_reference_quot_bypasses_smart_typography() {
+    // Decoded entities are literal characters: &quot; stays a straight quote,
+    // it is NOT smart-quoted (matches Pandoc and the numeric-reference handler).
+    let pandoc = parse_qmd("A &quot;B&quot; C");
+    assert_eq!(para_text(&pandoc, 0), "A \u{0022}B\u{0022} C");
+}
+
+#[test]
+fn test_entity_reference_inside_emphasis() {
+    let pandoc = parse_qmd("*A &gt; B*");
+    let Block::Paragraph(para) = &pandoc.blocks[0] else {
+        panic!("Expected paragraph");
+    };
+    let Some(Inline::Emph(emph)) = para.content.first() else {
+        panic!("Expected emphasis as first inline, got {:?}", para.content);
+    };
+    assert_eq!(inlines_text(&emph.content), "A > B");
+}

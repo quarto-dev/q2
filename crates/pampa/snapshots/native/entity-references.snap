@@ -1,0 +1,6 @@
+---
+source: crates/pampa/tests/integration/test.rs
+assertion_line: 550
+expression: output
+---
+[ Para [Str "Named:", Space, Str "A", Space, Str ">", Space, Str "B", Space, Str "<", Space, Str "C", Space, Str "&", Space, Str "D", Space, Str "\"E\"", Space, Str "F G", Space, Str "©", Space, Str "H."], Para [Str "Multi-codepoint:", Space, Str "x", Space, Str "≂̸", Space, Str "y."], Para [Str "Unknown:", Space, Str "A", Space, Str "&AM;", Space, Str "B", Space, Str "stays", Space, Str "literal."], Para [Str "Numeric:", Space, Str "A", Space, Str ">", Space, Str "B", Space, Str "<", Space, Str "C", Space, Str "&", Space, Str "D."] ]

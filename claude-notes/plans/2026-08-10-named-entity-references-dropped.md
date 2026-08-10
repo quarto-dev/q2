@@ -3,7 +3,7 @@
 **Date:** 2026-08-10
 **Braid:** bd-named-entities-w6xbfftj (bug, P1, labels `pampa`, `parity`)
 **Checkout:** main @ `0cb8abce` (investigated in place; no worktree created)
-**Status:** Design settled 2026-08-10 (user answered all design questions; see below). Ready for implementation on go-ahead.
+**Status:** Implemented 2026-08-10; all phases complete, full verify green. Discovered follow-ups: bd-v8qc9zyc (grammar regex), bd-96fswwce (combining-mark parse failure).
 
 ## Triage verdict
 
@@ -73,30 +73,88 @@ markdown), the former is a real but minor grammar bug. Filed as
 **bd-v8qc9zyc** (discovered-from this strand); the converter must handle
 lookup misses gracefully regardless.
 
-## Proposed phases (draft)
+## Work items
 
-Skeleton only — actual phase contents wait on the design discussion.
+### Phase 0 — Tests first (TDD; run and verify each fails before implementing)
 
-- **Phase 0 — Test plan (TDD, failing tests first).**
-  - pampa unit/snapshot tests: `&gt;` → `Str ">"`; `&nbsp;` → U+00A0 (not
-    a plain space); `&copy;` → `©`; multi-codepoint `&NotEqualTilde;` → `≂̸`;
-    lookup-miss fallback (e.g. `&AM;`) → literal text; entity inside emphasis /
-    table cell; numeric refs unchanged.
-  - qmd→json→qmd roundtrip test per pampa CLAUDE.md.
-  - End-to-end: `q2 render` of the repro fixture, inspect HTML output.
-- **Phase 1 — Expose the table.** `pub const HTML_ENTITIES_JSON: &str =
-  include_str!("../../common/html_entities.json")` in
-  `tree-sitter-qmd/bindings/rust/lib.rs` (mirrors `NODE_TYPES`).
-- **Phase 2 — Converter arm.** New `treesitter_utils/entity_reference.rs`
-  mirroring `process_numeric_character_reference`; lazy `OnceLock` map parsed
-  from the shared JSON (name → `characters` string, which already handles
-  multi-codepoint); match arm in `treesitter.rs`; miss → emit original text.
-- **Phase 3 — End-to-end verification.** Repro render + output inspection,
-  `cargo nextest run --workspace`, `cargo xtask verify --skip-hub-build`
-  (grammar untouched ⇒ no tree-sitter regen; WASM leg affected via pampa ⇒
-  consider full verify before push).
-- **Phase 4 — Bookkeeping.** Close strand; grammar-regex cleanup tracked in
-  bd-v8qc9zyc (discovered-from).
+- [x] Coverage tests in
+      `crates/pampa/tests/integration/test_treesitter_coverage.rs` (new
+      "Entity reference tests" section): `&gt;` → `Str ">"`; `&nbsp;` →
+      `Str "\u{00A0}"` (not a plain space); `&copy;` → `©`; multi-codepoint
+      `&NotEqualTilde;` → `"≂̸"`; lookup-miss `&AM;` → literal `"&AM;"`;
+      `&quot;` → straight `"` (no smart typography); entity inside emphasis.
+- [x] Native snapshot fixture
+      `crates/pampa/tests/snapshots/native/entity-references.qmd`
+      (insta snapshot lands in `crates/pampa/snapshots/native/`).
+- [x] Roundtrip fixture
+      `crates/pampa/tests/roundtrip_tests/qmd-json-qmd/named_entities.qmd`
+      (driver is a fixpoint check — JSON-after-reparse equality, so `&gt;`
+      re-emitting as `\>` is fine).
+- [x] Smoke-all fixture under `crates/quarto/tests/smoke-all/` asserting the
+      rendered HTML contains the decoded characters (end-to-end through the
+      real render path).
+- [x] Run the new tests; confirm each fails for the expected reason
+      (entities dropped). Verified 2026-08-10: all 7 coverage tests fail
+      (e.g. got `"A  B"`, want `"A > B"`; `&AM;` confirmed parsing as
+      entity_reference and dropped); native snapshot `.snap.new` showed the
+      dropped-entity AST (deleted, to be accepted post-fix); smoke-all fails
+      all four named-entity patterns and trips the illegal pattern
+      `Named: A  B`; roundtrip consistency also fails pre-fix (doubled
+      Spaces are not reparse-stable). Tests committed together with the fix
+      so main never carries a red suite.
+
+### Phase 1 — Expose the table
+
+- [x] `pub const HTML_ENTITIES_JSON: &str =
+      include_str!("../../common/html_entities.json")` in
+      `crates/tree-sitter-qmd/bindings/rust/lib.rs` (mirrors `NODE_TYPES`).
+
+### Phase 2 — Converter arm
+
+- [x] New `crates/pampa/src/pandoc/treesitter_utils/entity_reference.rs`:
+      lazy `OnceLock<HashMap<String, String>>` parsed from
+      `HTML_ENTITIES_JSON` (key → `characters`); `process_entity_reference`
+      mirroring the numeric handler; miss → emit original text verbatim,
+      no warning.
+- [x] Match arm `"entity_reference"` in
+      `crates/pampa/src/pandoc/treesitter.rs`.
+- [x] New tests pass; snapshot accepted after review
+      (`crates/pampa/snapshots/native/entity-references.snap`, new file —
+      shows decoded entities, straight quotes, `&AM;` verbatim).
+- [x] **Discovered: qmd writer must escape `"`.** The roundtrip fixture
+      exposed that a straight `"` in a `Str` (reachable via `&quot;` /
+      `&#34;` / programmatic ASTs) was written bare and re-read as
+      `Quoted DoubleQuote`. Fixed in `escape_markdown`
+      (`crates/pampa/src/writers/qmd.rs`): `"` → `\"`, which re-reads as
+      the literal straight quote. Fixture extended with a numeric `&#34;`
+      line to pin the pre-existing exposure.
+- [x] **Discovered: parser rejects decomposed Unicode (combining marks) in
+      prose** — filed as **bd-96fswwce**. `x ≂̸ y` (U+2242 U+0338 — exactly
+      what `&NotEqualTilde;` decodes to) and `e` + U+0301 both fail to
+      parse, while precomposed `é` is fine. Entity decoding to the AST works
+      (unit test + native snapshot cover it), but written-out qmd containing
+      the combining sequence is un-reparseable, so the roundtrip fixture
+      deliberately omits multi-codepoint entities; bd-96fswwce's fix should
+      re-add `&NotEqualTilde;` there.
+
+### Phase 3 — Verification
+
+- [x] `cargo nextest run --workspace`: 11231 tests run, 11231 passed
+      (2 leaky), 197 skipped — no regressions.
+- [x] End-to-end: `cargo run --bin q2 -- render
+      claude-notes/plans/named-entity-references-dropped-investigation/repro.qmd`,
+      output inspected. Rendered HTML now reads
+      `Named: A &gt; B &lt; C &amp; D &quot;E&quot; F<NBSP>G © H.` — with
+      the NBSP verified byte-level (`46 c2 a0 47`) and © present; the
+      numeric-reference line unchanged. (Render artifacts deleted after
+      inspection; the fixture stays.)
+- [x] Full `cargo xtask verify` (pampa flows into the WASM leg): all steps passed.
+
+### Phase 4 — Bookkeeping
+
+- [x] Update this plan; commit (document snapshot changes per CLAUDE.md).
+- [x] Close bd-named-entities-w6xbfftj (grammar-regex cleanup stays in
+      bd-v8qc9zyc).
 
 ## Design decisions (settled with user, 2026-08-10)
 

@@ -1,0 +1,21 @@
+---
+title: Named Entities
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["Named: A &gt; B &lt; C &amp; D", "Nbsp: F G", "Copy: © H", "Multi: x ≂̸ y", "Numeric: A &gt; B"]
+        - ["Named: A  B"]
+---
+
+Named: A &gt; B &lt; C &amp; D.
+
+Nbsp: F&nbsp;G.
+
+Copy: &copy; H.
+
+Multi: x &NotEqualTilde; y.
+
+Numeric: A &#62; B.
