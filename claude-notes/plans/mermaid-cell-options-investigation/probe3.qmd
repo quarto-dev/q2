@@ -1,0 +1,10 @@
+---
+title: Probe 3 — is the quoting/markdown gap mermaid-specific?
+---
+
+```python
+#| label: fig-py
+#| fig-cap: "A *quoted and emphasized* caption."
+#| fig-alt: "Alt text here."
+print(1)
+```
