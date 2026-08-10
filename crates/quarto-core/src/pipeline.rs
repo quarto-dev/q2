@@ -2802,6 +2802,72 @@ mod tests {
         );
     }
 
+    /// bd-mermaid-cell-options-9wo3crl0: mermaid `%%|` cell options are
+    /// processed by `PreEngineSugaringStage`, which is a *stage* — while
+    /// `Q2_PREVIEW_TRANSFORM_EXCLUDED` only filters *transforms*. So the
+    /// preview AST must carry the same structure `q2 render` emits: a
+    /// Figure wrapping the diagram, the options gone from the diagram
+    /// source, and `fig-alt` folded into mermaid's `accDescr:`.
+    ///
+    /// The `mermaid-render` transform stays excluded here (the raw
+    /// CodeBlock has to reach `MermaidCodeBlock.tsx`), so the diagram
+    /// arrives as a CodeBlock rather than a `<pre>` RawBlock — that is
+    /// the intended difference, and this test pins it so a future change
+    /// to either list cannot silently diverge the two surfaces.
+    #[test]
+    fn render_qmd_to_preview_ast_processes_mermaid_cell_options() {
+        let content = "---\ntitle: Test\nformat: q2-preview\n---\n\n\
+                        ```mermaid\n\
+                        %%| fig-cap: A tiny flowchart.\n\
+                        %%| fig-alt: Two nodes connected by an arrow.\n\
+                        flowchart LR\n  A --> B\n\
+                        ```\n"
+            .as_bytes();
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            Vec::new(),
+        ))
+        .expect("q2-preview render");
+
+        let json = &output.ast_json;
+        assert!(
+            json.contains("\"Figure\""),
+            "preview AST must carry the Figure wrapper; got:\n{json}"
+        );
+        // The caption is markdown, so it arrives as separate Str/Space
+        // inlines rather than one contiguous string.
+        for word in ["\"tiny\"", "\"flowchart.\""] {
+            assert!(
+                json.contains(word),
+                "preview AST must carry the caption word {word}; got:\n{json}"
+            );
+        }
+        assert!(
+            json.contains("accDescr: Two nodes connected by an arrow."),
+            "preview AST must carry the injected accDescr; got:\n{json}"
+        );
+        assert!(
+            !json.contains("%%|"),
+            "consumed option lines must not reach the preview; got:\n{json}"
+        );
+        assert!(
+            json.contains("\"CodeBlock\""),
+            "the raw CodeBlock must survive for MermaidCodeBlock.tsx; got:\n{json}"
+        );
+    }
+
     /// Phase 1P: the `q2-slides` preview pseudo-format must run the reveal
     /// slide construction (`RevealSlidesTransform`) and return the
     /// section-structured AST — the shared contract the SPA renders with a

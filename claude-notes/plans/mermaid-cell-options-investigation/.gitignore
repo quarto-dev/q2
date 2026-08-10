@@ -1,0 +1,4 @@
+# Render output from the probes; regenerate, never commit.
+*.html
+*_files/
+.quarto/

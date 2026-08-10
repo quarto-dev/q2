@@ -1,0 +1,39 @@
+---
+title: Probe 2 — quoting and fig-alt
+---
+
+## C1: unquoted caption
+
+```mermaid
+#| label: fig-a
+#| fig-cap: Unquoted caption.
+flowchart LR
+  A --> B
+```
+
+## C2: quoted caption + fig-alt
+
+```mermaid
+#| label: fig-b
+#| fig-cap: "Quoted caption."
+#| fig-alt: "Accessible description."
+flowchart LR
+  C --> D
+```
+
+## C3: markdown in caption
+
+```mermaid
+#| label: fig-c
+#| fig-cap: A *emphasized* caption with [a link](https://example.com).
+flowchart LR
+  E --> F
+```
+
+## C4: fig-cap with no label
+
+```mermaid
+#| fig-cap: Caption without a label.
+flowchart LR
+  G --> H
+```

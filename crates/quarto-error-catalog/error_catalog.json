@@ -1363,5 +1363,19 @@
     "message_template": "A line of the form `[ref]: https://example.com` is a link reference definition, which quarto-markdown does not collect. It renders as a visible paragraph instead of disappearing. Move the URL into an inline link — `[text](url)` — at each use site and delete the definition line. `qmd-syntax-helper convert -r reference-links` does both.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-46",
     "since_version": "99.9.9"
+  },
+  "Q-2-47": {
+    "subsystem": "markdown",
+    "title": "Cell option ignored on a diagram cell",
+    "message_template": "A diagram cell has no execution engine to pass unrecognized options to, so this option has no effect. Diagram cells accept `label`, `fig-cap`, `fig-scap`, and `fig-alt`.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-47",
+    "since_version": "99.9.9"
+  },
+  "Q-2-48": {
+    "subsystem": "markdown",
+    "title": "Wrong cell-option marker for a diagram cell",
+    "message_template": "Cell options are written in the cell language's own comment syntax. A mermaid diagram comments with `%%`, so its options are `%%|` — `#|` is not a mermaid comment and becomes part of the diagram, which mermaid then fails to parse.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-48",
+    "since_version": "99.9.9"
   }
 }

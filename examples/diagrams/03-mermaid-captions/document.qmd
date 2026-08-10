@@ -1,0 +1,33 @@
+---
+title: "Diagram captions and alt text"
+---
+
+Diagram options are written at the top of the block, one per line, after
+a `%%|` marker — `%%` is Mermaid's comment syntax, so each language uses
+its own.
+
+A `fig-cap` gives the diagram a caption:
+
+```mermaid
+%%| fig-cap: The path a change takes from commit to production.
+flowchart LR
+  commit --> build
+  build --> test
+  test --> deploy
+```
+
+Add a `label` beginning with `fig-` and the diagram becomes numbered and
+cross-referenceable. `fig-alt` supplies the description assistive
+technology reads:
+
+```mermaid
+%%| label: fig-review
+%%| fig-cap: The review cycle, which repeats until a draft is approved.
+%%| fig-alt: A draft moves to review; review either publishes it or sends it back to draft.
+flowchart LR
+  Draft --> Review
+  Review --> Published
+  Review --> Draft
+```
+
+@fig-review shows the loop a draft goes through.
