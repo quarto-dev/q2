@@ -53,7 +53,11 @@ async fn run_crossref(
     // metadata.
 
     // Step 2: code-block shorthand desugar.
-    quarto_core::crossref::codeblock_shorthand::desugar_blocks(&mut ast.blocks, &registry);
+    quarto_core::crossref::codeblock_shorthand::desugar_blocks(
+        &mut ast.blocks,
+        &registry,
+        &quarto_source_map::SourceContext::new(),
+    );
 
     // Step 3: front-end transforms. We build a minimal RenderContext for
     // the async transform API.
@@ -797,7 +801,11 @@ async fn run_crossref_rendered(
     let extracted = metadata::read(&ast.meta, &mut registry);
     registry.extend_from_promised(&extracted.promised_ids);
 
-    quarto_core::crossref::codeblock_shorthand::desugar_blocks(&mut ast.blocks, &registry);
+    quarto_core::crossref::codeblock_shorthand::desugar_blocks(
+        &mut ast.blocks,
+        &registry,
+        &quarto_source_map::SourceContext::new(),
+    );
 
     use quarto_core::format::Format;
     use quarto_core::project::{DocumentInfo, ProjectConfig, ProjectContext};

@@ -139,7 +139,11 @@ impl PipelineStage for PreEngineSugaringStage {
         // Desugar code-block crossref shorthand into the canonical Div
         // scaffold so engine execution sees plain code blocks. The walk
         // uses the finalized registry so user-declared categories work.
-        codeblock_shorthand::desugar_blocks(&mut doc.ast.blocks, &registry);
+        codeblock_shorthand::desugar_blocks(
+            &mut doc.ast.blocks,
+            &registry,
+            &doc.ast_context.source_context,
+        );
 
         ctx.ref_type_registry = Some(registry);
         // Only seed the index if no prior stage has set one. Idempotent so
