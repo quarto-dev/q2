@@ -36,3 +36,62 @@ Repro fixture: `repro/` (this directory’s sibling). Derived from the external 
 `/Users/cscheid/repos/github/cscheid/q2-connect-docs/llms-info/repros/shortcodes-in-metadata-and-includes/`,
 plus `website.navbar` (needed to exercise the navbar-brand path, which the external
 repro description mentions but its fixture does not trigger).
+
+## Scope correction: doc-metadata shortcodes don't resolve either
+
+Adding `subtitle: "Subtitle version {{< env REPRO_VERSION >}}"` to `index.qmd`
+frontmatter and re-rendering with q2 at HEAD:
+
+```
+39:<p class="subtitle lead">Subtitle version <span class="quarto-unresolved-shortcode">?env</span></p>
+```
+
+`ShortcodeResolveTransform` walks `ast.blocks` only; the `Inline::Shortcode` node in
+the parsed subtitle metadata survives unresolved and the writer renders its fallback
+marker — even though `REPRO_VERSION` was set. The strand's premise that metadata
+shortcodes work in q2 is wrong at HEAD.
+
+## Quarto 1 comparison render (2026-08-10)
+
+Same fixture (paths unquoted with `!path` since that's q2 syntax; subtitle line
+included), rendered with the system Q1 dev binary (`quarto --version` → 99.9.9):
+
+```bash
+REPRO_VERSION=2026.08.0 quarto render .
+```
+
+Output (`grep 'REPRO_VERSION\|2026\.08\.0' _site/index.html`):
+
+```
+10:<title>Home – My Site Version 2026.08.0</title>
+88:    <span class="navbar-title">My Site <small>Version 2026.08.0</small></span>
+116:  You are viewing version <strong>2026.08.0</strong>.
+122:<p class="subtitle lead">Subtitle version 2026.08.0</p>
+139:<p>Body-text shortcode: version is 2026.08.0.</p>
+551:<p>My Product 2026.08.0</p>
+```
+
+All five contexts substitute. `<title>` strips the `<small>` tags (Q1 assigns the
+rendered envelope element's `innerText` — `website-meta.ts`); the navbar keeps them
+as markup.
+
+Include files are substituted but **not** markdown-parsed: appending
+`**md-test** \`code-test\`` to `_banner.html` and re-rendering leaves both literal
+while the shortcode still substitutes. Mechanism: `quarto-init/includes.lua` reads
+include files into metadata as raw blocks; the shortcode filter's jog traversal walks
+meta and applies text-level `apply_code_shortcode` to raw-block text.
+
+## q2 text-context probe (2026-08-10)
+
+Q1 also substitutes shortcodes at text level in code blocks, element attributes,
+image src, and link targets. q2 probe (`probe.qmd` with a code block, link target,
+and span attribute each containing `{{< env REPRO_VERSION >}}`; rendered with
+`REPRO_VERSION` set):
+
+```
+30:<pre class="code-with-copy"><code>code block {{&lt; env REPRO_VERSION &gt;}}</code></pre>
+33:<p><a href="&quot;https://example.com/{{&lt; env REPRO_VERSION &gt;}}/&quot;">link text</a></p>
+34:<p>Span attr: <span data-v="{{&lt; env REPRO_VERSION &gt;}}">text</span></p>
+```
+
+All literal in q2 → filed as bd-fz6gwfq0.
