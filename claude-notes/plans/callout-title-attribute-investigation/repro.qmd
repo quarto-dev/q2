@@ -1,0 +1,57 @@
+---
+title: Callout custom title
+---
+
+Case 1 — attribute-titled callout (the reported bug). Expected header:
+`<span class="screen-reader-only">Note</span>Off-Host Execution`.
+
+::: {.callout-note title="Off-Host Execution"}
+The author-supplied title should appear in the callout header.
+:::
+
+Case 2 — another type, to show it is not note-specific.
+
+::: {.callout-warning title="Data loss on deployment"}
+Same for other callout types.
+:::
+
+Case 3 — control: untitled callout. Header should show the type name
+("Note") with NO screen-reader-only span.
+
+::: {.callout-note}
+No custom title here.
+:::
+
+Case 4 — heading-titled callout (already works today). Header should
+show "Heading title" preceded by the screen-reader-only "Note".
+
+::: {.callout-note}
+## Heading title
+
+Body text.
+:::
+
+Case 5 — BOTH attribute and heading. Per Q1, the attribute wins AND the
+heading stays in the body (Q1 only strips the heading inside
+`resolveHeadingCaption`, which is not called when `title=` is non-empty).
+
+::: {.callout-note title="Attribute wins"}
+## This heading should remain in the body
+
+Body text.
+:::
+
+Case 6 — markdown inside the attribute value. Q1 parses it with
+`string_to_quarto_ast_inlines`, so this should render a code span.
+
+::: {.callout-tip title="Use `renv` for reproducibility"}
+Body text.
+:::
+
+Case 7 — empty attribute value: falls back to the heading branch.
+
+::: {.callout-note title=""}
+## Fallback heading
+
+Body text.
+:::
