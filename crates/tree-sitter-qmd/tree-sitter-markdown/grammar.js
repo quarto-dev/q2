@@ -93,6 +93,16 @@ const regexOr = (...groups) => regexBracket(groups.join("|"));
 const PANDOC_NON_ASCII_WHITESPACE =
     "\\u{00A0}\\u{1680}\\u{2000}-\\u{200A}\\u{2028}\\u{2029}\\u{202F}\\u{205F}\\u{3000}";
 
+// Combining marks (Mn nonspacing, Mc spacing, Me enclosing) plus the join
+// controls ZWNJ (U+200C) and ZWJ (U+200D). Pandoc folds all of these into the
+// surrounding `Str` verbatim: decomposed accents (`cafe` + U+0301), Indic
+// vowel signs (`का` = U+0915 + U+093E), enclosing marks, and ZWNJ/ZWJ between
+// letters (Persian/Indic joining control) are content, not markup. Without
+// this class a bare mark in prose produced a parse ERROR (bd-96fswwce) — the
+// same bug family as bd-6kewx above. ZWJ inside emoji sequences is unaffected:
+// EMOJI_REGEX matches those as a longer token, which wins.
+const PANDOC_COMBINING_MARKS = "\\p{M}\\u{200C}\\u{200D}";
+
 const startStrRegex = regexOr(
     "[" + PANDOC_NON_ASCII_WHITESPACE + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]");
 const afterUnderscoreRegex = "[" + PANDOC_ALPHA_NUM + "]";
@@ -113,10 +123,11 @@ const PANDOC_REGEX_STR =
             "[" + PANDOC_PUNCTUATION + "]",
             "[" + PANDOC_VALID_OTHER_PUNCTUATION + "]",
             "[" + PANDOC_VALID_SYMBOLS + "]",
+            "[" + PANDOC_COMBINING_MARKS + "]",
             "[>.,;!?]",
             startStrRegex +
             regexOr(
-                "[!,.;?" + PANDOC_NON_ASCII_WHITESPACE + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]",
+                "[!,.;?" + PANDOC_NON_ASCII_WHITESPACE + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + PANDOC_COMBINING_MARKS + "-]",
                 // "\\\\.",
                 "['\\u{2018}\\u{2019}][\\p{L}\\p{N}]",
                 regexBracket("[_]" + afterUnderscoreRegex)

@@ -747,3 +747,50 @@ fn test_entity_reference_inside_emphasis() {
     };
     assert_eq!(inlines_text(&emph.content), "A > B");
 }
+
+// ============================================================================
+// Combining marks / join controls in prose (bd-96fswwce)
+// Pandoc folds all of these into Str verbatim; they must not be parse errors.
+// ============================================================================
+
+#[test]
+fn test_combining_mark_after_symbol() {
+    // U+2242 U+0338 — what &NotEqualTilde; decodes to, written literally
+    let pandoc = parse_qmd("x \u{2242}\u{0338} y");
+    assert_eq!(para_text(&pandoc, 0), "x \u{2242}\u{0338} y");
+}
+
+#[test]
+fn test_combining_mark_inside_word() {
+    // Decomposed (NFD) accent: cafe + U+0301
+    let pandoc = parse_qmd("cafe\u{0301} fin");
+    assert_eq!(para_text(&pandoc, 0), "cafe\u{0301} fin");
+}
+
+#[test]
+fn test_spacing_combining_mark_devanagari() {
+    // का = क (U+0915) + ा (U+093E, Mc) — any Hindi text with vowel signs
+    let pandoc = parse_qmd("\u{0915}\u{093E} matra");
+    assert_eq!(para_text(&pandoc, 0), "\u{0915}\u{093E} matra");
+}
+
+#[test]
+fn test_enclosing_combining_mark() {
+    // a + U+20DD (Me, combining enclosing circle)
+    let pandoc = parse_qmd("a\u{20DD} circled");
+    assert_eq!(para_text(&pandoc, 0), "a\u{20DD} circled");
+}
+
+#[test]
+fn test_zero_width_non_joiner_in_word() {
+    // U+200C between letters (Persian/Indic joining control)
+    let pandoc = parse_qmd("ab\u{200C}cd");
+    assert_eq!(para_text(&pandoc, 0), "ab\u{200C}cd");
+}
+
+#[test]
+fn test_zero_width_joiner_in_word() {
+    // U+200D between letters (outside emoji sequences)
+    let pandoc = parse_qmd("ab\u{200D}cd");
+    assert_eq!(para_text(&pandoc, 0), "ab\u{200D}cd");
+}
