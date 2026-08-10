@@ -1,9 +1,77 @@
-# Shortcodes unevaluated inside fenced code blocks (bd-shortcodes-in-code-blocks-hhpus9da)
+# Shortcodes in text contexts: code blocks, attributes, image src, link targets (bd-fz6gwfq0)
 
 **Date:** 2026-08-10
-**Braid:** bd-shortcodes-in-code-blocks-hhpus9da
-**Checkout:** `braid/bd-environment-files-372u9qbs-load-environment-files` (investigation committed in place; note this branch's PR #486 already merged to main, so this commit likely needs a new home — flagged to user)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Braid:** bd-fz6gwfq0 (absorbs duplicate bd-shortcodes-in-code-blocks-hhpus9da, closed)
+**Branch:** `braid/bd-fz6gwfq0-shortcode-text-contexts`, based on PR #487's head
+(`feature/bd-shortcodes-in-metadata-bp06aub8` @ `c3856cb7`) so it reuses
+`expand_text_segments` / `parse_text_shortcodes`; merges after #487.
+**Status:** Design settled with user 2026-08-10 — implementing.
+
+## Design decisions (user, 2026-08-10)
+
+1. **Consolidation:** bd-shortcodes-in-code-blocks-hhpus9da closed as `duplicates`
+   bd-fz6gwfq0; its repro + Connect-docs context folded into that strand.
+2. **Scope:** full Q1 `apply_code_shortcode` set in one pass (see matrix below).
+3. **Sequencing:** branch off PR #487 head; `waits-for` edge added (merge order).
+4. **Unresolved policy:** marker (`?key` plain text, as `expand_text_segments` already
+   does) **plus Q-16-5 diagnostic** — deliberately better than Q1's silent
+   leave-literal, since q2 has source mapping.
+
+## Q1 ground-truth matrix (shortcodes.lua `shortcodes_filter()`)
+
+| Context | What expands | Opt-outs |
+|---|---|---|
+| `CodeBlock`, `Code`, `RawBlock`, `RawInline` | `.text` | class `cell-code` (engine output); attr `shortcodes="false"` |
+| `Math` | `.text` | none (no attrs) |
+| `Header`, `Div`, `Span`, `Image`, `Link` | attribute **values** only (not id/classes) | none |
+| `Image` | additionally `src` | — |
+| `Link` | additionally `target` | — |
+
+Escaped `{{{< … >}}}` in text → literal `{{< … >}}` (handled by
+`parse_text_shortcodes`). Unknown-name shortcodes in Q1 reconstruct literally; q2
+emits marker + Q-16-5 (decision 4). Q1's `default_image_extension` dedup after src
+substitution is a Pandoc-reader artifact q2 doesn't share — not ported.
+
+## Work items
+
+- [x] Phase 0 — failing tests first (TDD):
+  - [x] integration `crates/quarto-core/tests/integration/shortcode_text_contexts.rs`
+        (16 tests, real `render_to_file` renders): CodeBlock text; inline Code text;
+        `{{{< >}}}` escape in code (surrounded AND bare); `shortcodes=false` opt-out;
+        Math; RawBlock; RawInline; Header/Div/Span attr values; Link target; Image
+        src; unresolved → `?key` marker. 14 verified failing before the fix (the
+        opt-out guard trivially held, as designed); all pass after.
+  - [x] unit tests: `text_context_walks` module in `shortcode_resolve.rs` (4 tests:
+        `cell-code` skip, `shortcodes=false` skip, unresolved marker + Q-16-5,
+        id/classes untouched); `bare_escaped_shortcode_still_unescapes` in
+        `shortcode_text.rs` (verified failing first)
+- [x] Phase 1 — implemented in `ShortcodeResolveTransform`: `expand_text_in_place` +
+      `expand_attr_value_shortcodes` + `code_shortcode_opt_out` helpers; leaf arms
+      for CodeBlock/RawBlock (blocks), Code/RawInline/Math (inlines); attr-value
+      expansion on Header/Div/Span/Link/Image; `target.0` expansion on Link/Image.
+      **Also fixed a latent bug in `parse_text_shortcodes`:** a bare escaped
+      shortcode (the entire text being one `{{{< … >}}}`) returned `None` (the
+      single-segment heuristic read it as "nothing parsed"), so it never unescaped;
+      replaced the heuristic with an explicit `parsed_any` flag.
+- [x] Phase 2 — `cargo nextest run --workspace`: green (11327 tests; a handful of
+      network-bound tests — jupyter kernel sockets, hub session auth, source-fetch,
+      preview boot — flaked with `os error 49` machine-wide during one run and all
+      pass on rerun, individually and together). Full `cargo xtask verify` incl.
+      WASM + hub-client legs: **passed** (all 14 steps, 2026-08-10).
+- [x] Phase 3 — E2E (inspected):
+      `cargo run --bin q2 -- render claude-notes/plans/shortcodes-in-code-blocks-investigation/repro/repro.qmd` →
+      `<pre class="ini code-with-copy" data-filename="example.gcfg"><code>[Section &quot;corporate LDAP&quot;]`
+      (body: `<p>Body: vendor is LDAP.</p>`) — matches Q1's reference output.
+- [x] Phase 4 — docs. `shortcodes.qmd`: documented the new contexts, added an
+      "Opting code out of substitution" section, converted its own literal examples
+      to `{{{< >}}}` escapes / `shortcodes="false"` blocks. Audited every docs file
+      containing `{{<` (12 files): fixed 8 error-catalog pages + shortcodes.qmd;
+      `brand.qmd` already carried `shortcodes="false"` blocks and its triple-brace
+      inline codes now display correctly; `environment.qmd` triple-brace inline
+      codes now display `{{< env … >}}` as intended (they showed raw triple braces
+      before — latent docs bug fixed by the escape semantics). Full
+      `q2 render docs/` (194 files): **zero** Q-16 warnings; the remaining 25
+      warnings (Q-13-4/Q-5-6 missing links/resources) are pre-existing.
 
 ## Triage verdict
 
@@ -94,7 +162,7 @@ Reproduction at HEAD: see `../observations.md` in the investigation dir.
   `shortcodes=false` to its literal examples (the bd-fz6gwfq0 heads-up) and document
   code-context substitution + opt-out.
 
-## Open design questions for the user
+## Open design questions for the user (ANSWERED — see "Design decisions" above)
 
 1. **Consolidation.** Agree to mark this strand `duplicates` bd-fz6gwfq0 and carry the
    work there (folding this strand's repro + real-world-hit into a comment)? Or keep

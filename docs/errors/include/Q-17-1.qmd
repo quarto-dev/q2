@@ -16,7 +16,7 @@ categories:
 
 ## What this means
 
-An `{{< include >}}` shortcode names a file that is already part of
+An `{{{< include >}}}` shortcode names a file that is already part of
 the chain of includes being expanded — either the file includes
 itself, or two or more files include each other in a loop. Expanding
 the include would never terminate, so Quarto skips it: the cyclic

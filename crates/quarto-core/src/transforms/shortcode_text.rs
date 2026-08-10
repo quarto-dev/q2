@@ -56,6 +56,7 @@ pub fn parse_text_shortcodes(text: &str, source_info: &SourceInfo) -> Option<Vec
     let mut segments: Vec<TextSegment> = Vec::new();
     let mut literal_start = 0;
     let mut i = 0;
+    let mut parsed_any = false;
 
     while i < bytes.len() {
         let rest = &text[i..];
@@ -64,6 +65,7 @@ pub fn parse_text_shortcodes(text: &str, source_info: &SourceInfo) -> Option<Vec
                 push_literal(&mut segments, &text[literal_start..i]);
                 // Escaped → emit the single-brace form literally.
                 segments.push(TextSegment::Literal(format!("{{{{<{}>}}}}", inner)));
+                parsed_any = true;
                 i = end;
                 literal_start = i;
                 continue;
@@ -73,6 +75,7 @@ pub fn parse_text_shortcodes(text: &str, source_info: &SourceInfo) -> Option<Vec
         {
             push_literal(&mut segments, &text[literal_start..i]);
             segments.push(TextSegment::Shortcode(shortcode));
+            parsed_any = true;
             i = end;
             literal_start = i;
             continue;
@@ -82,11 +85,7 @@ pub fn parse_text_shortcodes(text: &str, source_info: &SourceInfo) -> Option<Vec
     }
     push_literal(&mut segments, &text[literal_start..]);
 
-    if segments
-        .iter()
-        .any(|s| matches!(s, TextSegment::Shortcode(_)))
-        || segments.len() > 1
-    {
+    if parsed_any {
         Some(segments)
     } else {
         // Nothing parsed (only "{{<" lookalikes) — treat as no-op.
@@ -354,6 +353,16 @@ mod tests {
         let segs = parse("X {{{< meta version >}}} Y").unwrap();
         assert_eq!(segs.len(), 3);
         assert_eq!(lit(&segs[1]), "{{< meta version >}}");
+    }
+
+    #[test]
+    fn bare_escaped_shortcode_still_unescapes() {
+        // The whole text is one escaped shortcode — the parse must
+        // still report it (the caller needs the rewritten literal),
+        // even though the result is a single segment.
+        let segs = parse("{{{< meta version >}}}").unwrap();
+        assert_eq!(segs.len(), 1);
+        assert_eq!(lit(&segs[0]), "{{< meta version >}}");
     }
 
     #[test]
