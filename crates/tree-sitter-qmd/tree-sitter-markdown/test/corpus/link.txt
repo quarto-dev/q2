@@ -69,3 +69,33 @@ This is an <http://autolink.com>.
           (pandoc_str)
           (autolink)
           (pandoc_str))))
+================================================================================
+email autolinks (bd-email-autolink-dropped-2jj38iiv)
+================================================================================
+Contact <sales@example.com> now.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (autolink)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+email autolink with single-label domain
+================================================================================
+<a@b>
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (autolink))))
+================================================================================
+invalid email-shaped content also lexes as autolink (over-approximation; pampa classifies precisely)
+================================================================================
+<foo@@bar>
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (autolink))))

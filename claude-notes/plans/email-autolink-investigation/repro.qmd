@@ -1,0 +1,7 @@
+---
+title: Email autolink
+---
+
+Contact <mailto:sales@example.com> for details.
+
+Bare form: <sales@example.com>.
