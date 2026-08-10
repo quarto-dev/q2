@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use jupyter_protocol::{ConnectionInfo, JupyterMessage, KernelInfoRequest};
+use jupyter_protocol::{ConnectionInfo, JupyterMessage, KernelInfoRequest, ShutdownRequest};
 use runtimelib::{ClientIoPubConnection, ClientShellConnection};
 use tokio::process::Child;
 use tokio::time::timeout;
@@ -23,6 +23,17 @@ use super::kernelspec::ResolvedKernel;
 
 /// Default timeout for waiting for kernel to become ready.
 const KERNEL_READY_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Budget for connecting to the control channel and sending
+/// `shutdown_request` during graceful shutdown.
+const SHUTDOWN_REQUEST_TIMEOUT: Duration = Duration::from_secs(1);
+
+/// How long a kernel gets to exit after `shutdown_request` before the
+/// SIGKILL backstop fires.
+const GRACEFUL_EXIT_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// How long to wait for the process to be reaped after a kill signal.
+const KILL_REAP_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Information about a running kernel.
 #[derive(Debug, Clone)]
@@ -63,8 +74,6 @@ pub struct KernelSession {
     pub(crate) session_id: String,
     /// Execution counter for this session.
     pub(crate) execution_count: u32,
-    /// Last activity timestamp.
-    pub(crate) last_used: Instant,
     /// Working directory for this session.
     pub(crate) working_dir: PathBuf,
 }
@@ -198,29 +207,97 @@ impl KernelSession {
         Ok(())
     }
 
-    /// Shutdown the kernel gracefully.
+    /// Shutdown the kernel: graceful `shutdown_request` first (when
+    /// possible), SIGKILL backstop, then connection-file cleanup.
     pub async fn shutdown(&mut self) -> Result<()> {
-        // Kill the process
-        if let Err(e) = self.process.start_kill() {
-            tracing::warn!("Failed to kill kernel process: {}", e);
-        }
-
-        // Wait for it to exit (with timeout)
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), self.process.wait()).await;
-
-        // Clean up connection file
-        if self.connection_file.exists()
-            && let Err(e) = tokio::fs::remove_file(&self.connection_file).await
-        {
-            tracing::warn!("Failed to remove connection file: {}", e);
-        }
-
+        self.shutdown_blocking();
         Ok(())
     }
 
-    /// Update the last-used timestamp.
-    pub(crate) fn touch(&mut self) {
-        self.last_used = Instant::now();
+    /// Runtime-independent shutdown (bd-hxhnnlzs). Deliberately sync so
+    /// it can run from a `Drop` impl, from pollster-driven callers, and
+    /// from inside a tokio runtime alike:
+    ///
+    /// 1. **Graceful**: send `shutdown_request` on the control channel
+    ///    and give the kernel [`GRACEFUL_EXIT_TIMEOUT`] to exit. The
+    ///    send needs a private current-thread tokio runtime, so this
+    ///    step is skipped when already on a tokio runtime thread
+    ///    (building a nested runtime would panic there) — the backstop
+    ///    below still reclaims the process.
+    /// 2. **Backstop**: kill the process and wait (bounded, via
+    ///    `try_wait` polling — tokio's async `wait` is unusable here
+    ///    because the process was spawned on a different, possibly
+    ///    dropped, runtime).
+    /// 3. Remove the connection file.
+    pub(crate) fn shutdown_blocking(&mut self) {
+        if !self.has_exited() && tokio::runtime::Handle::try_current().is_err() {
+            match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => {
+                    // The `timeout` must be constructed inside
+                    // `block_on`: it arms its timer eagerly and
+                    // panics without a current runtime.
+                    let sent = rt.block_on(async {
+                        timeout(SHUTDOWN_REQUEST_TIMEOUT, async {
+                            let mut control = runtimelib::create_client_control_connection(
+                                &self.connection_info,
+                                &self.session_id,
+                            )
+                            .await?;
+                            let message: JupyterMessage = ShutdownRequest { restart: false }.into();
+                            control.send(message).await
+                        })
+                        .await
+                    });
+                    if matches!(sent, Ok(Ok(()))) {
+                        self.wait_for_exit(GRACEFUL_EXIT_TIMEOUT);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("could not build runtime for graceful kernel shutdown: {e}");
+                }
+            }
+        }
+
+        if !self.has_exited() {
+            if let Err(e) = self.process.start_kill() {
+                tracing::warn!("Failed to kill kernel process: {}", e);
+            }
+            if !self.wait_for_exit(KILL_REAP_TIMEOUT) {
+                tracing::warn!(
+                    kernel = %self.kernel.name,
+                    "kernel process did not exit after kill signal"
+                );
+            }
+        }
+
+        if self.connection_file.exists()
+            && let Err(e) = std::fs::remove_file(&self.connection_file)
+        {
+            tracing::warn!("Failed to remove connection file: {}", e);
+        }
+    }
+
+    /// Whether the kernel process has exited (best-effort; errors from
+    /// `try_wait` count as exited, matching [`Self::is_alive`]).
+    fn has_exited(&mut self) -> bool {
+        !matches!(self.process.try_wait(), Ok(None))
+    }
+
+    /// Poll `try_wait` until the process exits or `deadline` elapses.
+    fn wait_for_exit(&mut self, deadline: Duration) -> bool {
+        let start = Instant::now();
+        loop {
+            if self.has_exited() {
+                return true;
+            }
+            if start.elapsed() > deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 
     /// Increment and return the execution count.

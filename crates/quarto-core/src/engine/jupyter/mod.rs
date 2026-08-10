@@ -44,7 +44,7 @@ mod kernelspec;
 mod session;
 mod text_execute;
 
-pub use daemon::{JupyterDaemon, daemon};
+pub use daemon::{JupyterDaemon, KernelScope, daemon, kernel_scope};
 pub use error::{JupyterError, Result};
 pub use execute::{CellOutput, ExecuteResult, ExecuteStatus, MimeBundle};
 pub use kernelspec::{ResolvedKernel, find_kernelspec, is_jupyter_language, list_kernelspecs};
