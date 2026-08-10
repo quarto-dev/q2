@@ -166,8 +166,15 @@ All paths in the strand description check out at HEAD:
 
 - [x] Full `cargo xtask verify` (all 14 steps, including hub-client
   TypeScript + Vite + WASM build and hub tests): **all passed.**
-- [x] Committed on `main`; **not pushed** (awaiting explicit approval).
-- [ ] Close bd-brace-escape-hint-0tmemkyt after user sign-off.
+- [x] Per user direction, moved the two commits to branch
+  `braid/bd-brace-escape-hint-0tmemkyt`, rebased onto the new
+  `origin/main` tip (PR #482 touched no parser/grammar/corpus files, so
+  the captured LR states are unaffected), re-verified with
+  `cargo xtask verify --skip-hub-build` (green), and reset local `main`
+  to `origin/main`.
+- [x] Pushed as `feature/bd-brace-escape-hint-0tmemkyt`; **PR #483**:
+  https://github.com/quarto-dev/q2/pull/483
+- [ ] Close bd-brace-escape-hint-0tmemkyt after the PR merges.
 - [ ] bd-cx1det1y (Q-2-36/37/38 backfill) stays open for a separate session.
 
 ## Risks / tradeoffs (draft)
