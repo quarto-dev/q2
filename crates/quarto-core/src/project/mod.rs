@@ -900,6 +900,11 @@ fn project_type_error(
 
     let mut source_context = SourceContext::new();
     if let Some((fid_usize, _, _)) = type_source.resolve_byte_range() {
+        // Sound only by call ordering: both project_type_error call sites
+        // run before any extension-fragment merge, so type_source provably
+        // originates in config_path. bd-h5rfw3ao tracks hardening this via
+        // bind_config_source.
+        // lint:allow(add-file-with-id) — pre-merge, single possible source
         source_context.add_file_with_id(
             FileId(fid_usize),
             config_path.to_string_lossy().into_owned(),

@@ -1039,12 +1039,17 @@ impl UserData for LuaSourceInfo {
         // `nil` when the SourceInfo chain doesn't resolve to a single
         // contiguous byte range.
         methods.add_method("byte_range", |lua, this, ()| {
-            let Some((_fid, start, end)) = this.0.resolve_byte_range() else {
+            let Some((fid, start, end)) = this.0.resolve_byte_range() else {
                 return Ok(Value::Nil);
             };
             let t = lua.create_table()?;
             t.set("start", start)?;
             t.set("end_", end)?;
+            // The file the offsets index into. Carried on the table so
+            // callers can pass it to `quarto.attribution.lookup_range`
+            // (or gate on it) without re-deriving via `file_id()`
+            // (bd-thagcbfq).
+            t.set("file_id", fid)?;
             // Positional access for callers that prefer it.
             t.set(1, start)?;
             t.set(2, end)?;

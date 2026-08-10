@@ -7750,3 +7750,127 @@ end
     .await;
     assert_eq!(out.meta, expected_meta);
 }
+
+// ============================================================================
+// bd-thagcbfq: byte_range() must expose the FileId; lookup_range must
+// refuse ranges from a file other than the blamed one
+// ============================================================================
+
+#[tokio::test]
+async fn test_source_info_byte_range_exposes_file_id() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("byte_range_fid.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Span(elem)
+    local r = elem.source_info:byte_range()
+    local cls = "fid-" .. tostring(r and r.file_id)
+    return pandoc.Span(elem.content, pandoc.Attr("", {cls}, {}))
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Span(crate::pandoc::Span {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![],
+                source_info: quarto_source_map::SourceInfo::original(
+                    quarto_source_map::FileId(3),
+                    5,
+                    7,
+                ),
+            })],
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = apply_lua_filter(
+        &pandoc,
+        &context,
+        &filter_path,
+        "html",
+        native_runtime(),
+        None,
+    )
+    .await
+    .unwrap()
+    .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Span(s) => assert_eq!(
+                s.attr.1,
+                vec!["fid-3".to_string()],
+                "byte_range() must carry the resolved file id so filters \
+                 don't have to re-derive it (bd-thagcbfq)"
+            ),
+            other => panic!("Expected Span, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_quarto_attribution_lookup_range_refuses_foreign_file_id() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("lookup_range_foreign.lua");
+    // The handle blames file 0 (the default); a range explicitly
+    // declared as belonging to file 3 must not collide into file 0's
+    // runs, even though the raw byte range overlaps them.
+    fs::write(
+        &filter_path,
+        r#"
+function Span(elem)
+    local hit = quarto.attribution.lookup_range(2, 8, 3)
+    if hit then
+        return pandoc.Span(elem.content, pandoc.Attr("", {"hit-" .. hit.actor}, {}))
+    end
+    return pandoc.Span(elem.content, pandoc.Attr("", {"miss"}, {}))
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Span(crate::pandoc::Span {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![],
+                source_info: quarto_source_map::SourceInfo::for_test(),
+            })],
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = crate::lua::apply_lua_filter(
+        &pandoc,
+        &context,
+        &filter_path,
+        "html",
+        native_runtime(),
+        Some(make_test_handle()),
+    )
+    .await
+    .unwrap()
+    .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Span(s) => assert_eq!(
+                s.attr.1,
+                vec!["miss".to_string()],
+                "a range declared as file 3 must not attribute against the \
+                 blamed file's (file 0) runs (bd-thagcbfq)"
+            ),
+            other => panic!("Expected Span, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}

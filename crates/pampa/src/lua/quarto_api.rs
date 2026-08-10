@@ -380,23 +380,37 @@ pub fn register_quarto_attribution(
     let quarto: Table = lua.globals().get("quarto")?;
     let attribution = lua.create_table()?;
 
-    // `quarto.attribution.lookup_range(start, end)` — primitive raw
-    // lookup. Returns `{actor, time}` table on hit, nil otherwise.
+    // `quarto.attribution.lookup_range(start, end[, file_id])` —
+    // primitive raw lookup. Returns `{actor, time}` table on hit, nil
+    // otherwise. The optional third argument declares which file the
+    // byte range indexes into: when given and different from the
+    // handle's blamed file, the call returns nil instead of colliding
+    // into the blamed file's runs (bd-thagcbfq). Omitting it keeps
+    // the historical "caller asserts primary-doc offsets" contract —
+    // pass `r.file_id` from `si:byte_range()` whenever the range came
+    // from a node.
     let h_for_range = handle.clone();
     attribution.set(
         "lookup_range",
-        lua.create_function(move |lua, (start, end_): (usize, usize)| {
-            let Some(h) = h_for_range.as_ref() else {
-                return Ok(Value::Nil);
-            };
-            let Some(hit) = h.lookup_range(start, end_) else {
-                return Ok(Value::Nil);
-            };
-            let t = lua.create_table()?;
-            t.set("actor", hit.actor)?;
-            t.set("time", hit.time)?;
-            Ok(Value::Table(t))
-        })?,
+        lua.create_function(
+            move |lua, (start, end_, file_id): (usize, usize, Option<usize>)| {
+                let Some(h) = h_for_range.as_ref() else {
+                    return Ok(Value::Nil);
+                };
+                if let Some(fid) = file_id
+                    && fid != h.blamed_file_id()
+                {
+                    return Ok(Value::Nil);
+                }
+                let Some(hit) = h.lookup_range(start, end_) else {
+                    return Ok(Value::Nil);
+                };
+                let t = lua.create_table()?;
+                t.set("actor", hit.actor)?;
+                t.set("time", hit.time)?;
+                Ok(Value::Table(t))
+            },
+        )?,
     )?;
 
     // `quarto.attribution.identities()` — read-only snapshot of the
@@ -444,10 +458,10 @@ pub fn register_quarto_attribution(
             if si == nil then return nil end
             local r = si:byte_range()
             if r == nil then return nil end
-            -- v1 single-doc invariant: skip non-primary file.
-            local fid = si:file_id()
-            if fid ~= nil and fid ~= 0 then return nil end
-            local hit = lookup_range(r[1], r[2])
+            -- Single-doc invariant: lookup_range refuses ranges from
+            -- any file other than the blamed one (compared Rust-side
+            -- against the handle's actual blamed file, bd-thagcbfq).
+            local hit = lookup_range(r[1], r[2], r.file_id)
             if hit == nil then return nil end
             local idents = identities()
             local id = idents[hit.actor]

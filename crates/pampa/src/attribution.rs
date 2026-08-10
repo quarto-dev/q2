@@ -45,6 +45,16 @@ pub trait AttributionLookup: Send + Sync {
     /// Identity map snapshot. Cheap clone — internally a `Vec` of
     /// owned strings sized by distinct-actor count.
     fn identities(&self) -> Vec<IdentityEntry>;
+
+    /// Raw `FileId` value of the file the runs' byte ranges index
+    /// into — the file the provider blamed. Callers comparing a
+    /// node's resolved file id must compare against THIS, never a
+    /// literal `0` (bd-thagcbfq / bd-vmlhw7nx). The default is `0`,
+    /// the v1 primary-document slot; `quarto-core`'s handle overrides
+    /// it from `AttributionData::file_id`.
+    fn blamed_file_id(&self) -> usize {
+        0
+    }
 }
 
 /// Raw hit returned by [`AttributionLookup::lookup_range`].

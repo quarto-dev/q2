@@ -296,9 +296,17 @@ fn empty_table_attr() -> Attr {
 
 /// Compute a tight hull `SourceInfo` spanning from `first.start` to `last.end`.
 ///
-/// Used for list-table cell source_info when a cell has multiple content blocks:
-/// the cell must contain all its children (P4 tiling / containment check (b)).
-fn hull_source_infos(first: &SourceInfo, last: &SourceInfo) -> SourceInfo {
+/// Used for list-table cell source_info when a cell has multiple content
+/// blocks (the cell must contain all its children — P4 tiling / containment
+/// check (b)), and for caption-extended table spans in `section.rs` /
+/// `pipe_table.rs` (bd-t3enk8gq).
+///
+/// This is the only correct way to fuse two spans into one `Original`:
+/// same-file check via `root_file_id`, file-absolute offsets via
+/// `preimage_in` (raw `start_offset()`/`end_offset()` are parent-relative
+/// for Substrings and the sentinel 0 for Concat/Generated), and a lossless
+/// `combine()` fallback when the inputs don't share a file.
+pub(crate) fn hull_source_infos(first: &SourceInfo, last: &SourceInfo) -> SourceInfo {
     let fid = first.root_file_id();
     let last_fid = last.root_file_id();
     match (fid, last_fid) {

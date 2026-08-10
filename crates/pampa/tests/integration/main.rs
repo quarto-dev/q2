@@ -26,6 +26,7 @@ pub mod nesting_cursor_roundtrip_tests;
 pub mod node_edit_tests;
 pub mod qmd_writer_source_info;
 pub mod regenerate_nested_buffers_tests;
+pub mod table_caption_provenance;
 pub mod test;
 pub mod test_ansi_writer;
 pub mod test_attr_source_parsing;
