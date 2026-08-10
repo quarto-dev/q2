@@ -3,7 +3,7 @@
 **Date:** 2026-08-10
 **Braid:** bd-shortcodes-in-metadata-bp06aub8
 **Checkout:** `main` @ `0c5d0abe` (investigation committed in place; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design aligned (all questions resolved 2026-08-10). **Awaiting explicit user go-ahead to begin implementation.**
 
 ## Triage verdict
 
@@ -165,76 +165,146 @@ expander (mechanism 3/4's equivalent) at `IncludeResolveStage`. Q1's text-level
 contexts beyond includes (code, attributes, image src, link targets) are a separate
 gap q2 also has (verified with a probe fixture), filed as **bd-fz6gwfq0**.
 
-## Proposed phases (draft)
+## Q1 markdown-processed config entries (survey, 2026-08-10)
 
-Skeleton only — contents wait on the design discussion.
+Full enumeration of what Q1 renders through the envelope (from
+`website-navigation-md.ts`, `website-meta.ts`, `website-about.ts`,
+`website-listing.ts`; books fold `book.*` into `website.*` in `book-config.ts`, so
+they inherit all of it — no separate book pipeline):
 
-- **Phase 0 — Test plan (TDD).** Integration tests driving the real render path
-  (project-render fixture like the repro; assert substituted `<title>`, navbar brand
-  (with un-escaped markup), footer, include file, and doc `subtitle`; assert Q-16-5
-  diagnostics for unresolvable shortcodes in each context). Verify each fails at HEAD.
-- **Phase 1 — Metadata shortcode resolution (mechanism B).** Extend
-  `ShortcodeResolveTransform` to walk `ast.meta`'s `PandocInlines`/`PandocBlocks`
-  values (it already runs before `MetadataNormalizeTransform`, so `pagetitle`
-  derivation then sees resolved text). Likely requires exposing the private
-  `resolve_inlines` walker over `ConfigValue` trees. Fixes subtitle + doc-title.
-- **Phase 2 — Website presentation strings (mechanism A).** Markdown-parse a blessed
-  set of website presentation config values (`website.title`, `navbar.title`,
-  `page-footer` text regions — exact list is design question 2) into `PandocInlines`
-  so Phase 1 resolves them; fix `brand_title_fallback` to pass the `ConfigValue`
-  through to `render_text` (sidebar precedent — also fixes the `<small>` escaping);
-  give `push_inline` a `Shortcode` arm (visible marker + diagnostic instead of silent
-  flatten).
-- **Phase 3 — Include files (mechanism C).** Text-level shortcode expansion of include
-  file contents in `IncludeResolveStage` (Q1 substitutes textually; include files are
-  HTML, not qmd, so markdown-parsing them is wrong). Needs a small text-level
-  shortcode scanner/parser + handler dispatch; emits Q-16-5 on unresolved. Also fix the
-  silent `Shortcode` drop in `inlines_to_html_literal`.
-- **Phase 4 — End-to-end verification + docs.** Re-render the repro and the Connect
-  docs; record invocation + output snippets; docs/ note if user-facing behavior needs
-  documenting.
+**Navigation** (`quarto-navigation-envelope`): `website.sidebar.title` and
+`website.navbar.title` (both falling back to `website.title`, then page `title`) —
+inline, markup kept; `website.sidebar.contents[].text` (all levels; also feeds
+next/prev page text and breadcrumbs); `website.navbar.left/right[].text` incl. nested
+menus; navbar/tools/about `href`s (rendered then **innerText**-extracted so
+`{{< var >}}` works in hrefs); `website.page-footer` regions — bare-string and
+per-region strings as **blocks**, nav-item `text` too; `website.sidebar.header/footer`,
+`website.margin-header/footer` (merged with page frontmatter), `website.body-header/footer`
+— blocks, entries may be *file paths* (`.md`/`.html` read from disk);
+`website.announcement`(.content) — block.
 
-## Design questions answered by the Q1 study (2026-08-10)
+**Meta** (`quarto-meta-markdown`): computed page title → `head > title`
+(**innerText** — markup deliberately dropped); og:/twitter: titles and descriptions
+(with fallback chains through page `description`/`abstract`/`subtitle` and
+`website.description`) → meta tag `content` (**innerText**); `website.title` →
+`og:site_name` + written back into metadata for feeds.
 
-1. **Metadata walk scope: ALL metadata values.** Q1's shortcode filter traverses the
-   whole meta tree (jog walks `element.meta`), no blessed list. Also matches the
-   user's stated direction ("processing the contents of markdown entries in metadata
-   is something we want to do not only for shortcodes"). → Phase 1 walks every
-   `PandocInlines`/`PandocBlocks` value in `ast.meta`.
-2. **`<title>` element: substitute, then strip markup.** Q1 emits
-   `<title>Home – My Site Version 2026.08.0</title>` (innerText of the rendered
-   title). So q2's plain-text flattening for `pagetitle` is the right shape — it must
-   *stringify resolved shortcode output* instead of dropping the node, and continue
-   dropping raw-HTML tags while keeping their text content (Q1-equivalent: `<small>`'s
-   contents survive, the tags don't).
+**About** (`quarto-about-pipeline`): `about.links[].text` (inline) and `.href`
+(innerText).
 
-## Open design questions for the user
+**Listing** (`quarto-listing-pipeline`): the entire EJS-rendered listing markdown
+(block) — relevant to bd-1fue1ly5, not this strand.
 
-1. **Which config keys get markdown-parsed (Phase 2).** Wholesale switching
-   `ProjectConfig` interpretation to markdown-parse strings is off the table (paths,
-   hrefs, ids must stay literal). Q1's envelope set is: navbar title (fallback:
-   website title), sidebar title + sidebar footer, `page-footer` regions, next/prev
-   page text, announcements, margin header/footer, page title, og:/twitter: titles.
-   Minimal for this strand: `website.title`, `website.navbar.title`, `page-footer`
-   text regions, sidebar title. Bless just these now and file follow-ups for the
-   rest? And where should the parse happen — at project-config load (shape change
-   visible to all consumers; needs an `as_str()` audit of the blessed keys) or at the
-   consumption sites (localized, repeated parse)?
-2. **Include-file handler scope (Phase 3).** Q1's text-level path dispatches the FULL
-   handler registry (env/meta/var + extension Lua shortcodes), stringifies results,
-   and leaves unresolved names as literal text. Builtins-only covers the Connect
-   docs; full parity means Lua availability at `IncludeResolveStage` (heavier). Is
-   builtins-first acceptable, with a follow-up strand for Lua-in-text-contexts?
-3. **Unresolved-shortcode behavior in the new contexts.** Q1 leaves unknown
-   shortcodes silently literal in text contexts. q2's body policy is a visible `?env`
-   marker + Q-16-5 warning. Proposal: marker + warning in metadata/navbar/footer
-   (markdown contexts), literal passthrough + warning in include files (text context
-   — injecting marker markup into arbitrary HTML is risky). q2 would be deliberately
-   noisier than Q1 (warnings everywhere). OK?
-4. **Coordination with `bd-environment-files-372u9qbs`.** Both strands modify
-   `shortcode_resolve.rs`; that strand's env map lives on `StageContext`. Preferred
-   order — land env-files first and build on its env plumbing, or proceed in parallel
-   and let whoever lands second rebase?
+Two Q1 quirks we do *not* need to copy: the envelope's brittle re-matching of targets
+by rendered-text comparison (flagged by a TODO in Q1 itself), and the dummy
+`$e=mC^2$` math-dependency forcing. q2's shape-preserving `ConfigValue` approach
+avoids both.
+
+## Design decisions (2026-08-10, aligned with user)
+
+1. **Metadata walk: all metadata values** (Q1 parity; also groundwork for processing
+   markdown entries in metadata beyond shortcodes).
+2. **Config keys to markdown-parse: registry-driven.** A single declarative table in
+   `quarto-core` mapping config key paths → parse flavor (inline vs block), e.g.
+   `website.title` → inline, `website.page-footer.center` → block. Initial entries
+   (this strand): `website.title`, `website.navbar.title`, `website.sidebar.title`,
+   `website.page-footer` (bare-string + `left/center/right` string forms),
+   `website.announcement`(.content). The survey above is the growth path (item
+   `text:` fields, hrefs, margin/body header/footer, about links…) — the table
+   supports array-wildcard paths from day one so those are one-line additions;
+   eventual user-extensibility (e.g. via schema annotation) is a design note, not in
+   scope. Parse happens **at transform time over merged metadata** (a small
+   `Normalization` transform ordered before `ShortcodeResolveTransform`), not at
+   project-config load: one site, provenance-independent (project config, profiles,
+   frontmatter overrides all pass through), no `InterpretationContext` change, and
+   `ConfigValue`'s `SourceInfo` gives the re-parse correct spans (precedent:
+   `listing_render.rs`). Downstream consumers keep using `as_plain_text()` /
+   `render_text`, which already handle both shapes.
+3. **`<title>`: substitute, then flatten to plain text.** Verified against the real
+   Connect docs Q1 render (`docs-quarto-1/_site/index.html:10`):
+   `<title>Posit Connect Documentation – Connect Documentation Version development</title>`
+   — shortcode substituted, `<small>` tags stripped, inner text kept. q2's
+   `inlines_to_plain_text` already drops `RawInline` and keeps `Str`/`Space`, so
+   after shortcode resolution the flattening is Q1-equivalent; the only change is
+   stringifying resolved shortcode output instead of dropping the node.
+4. **Include files: full handler set with lazy Lua.** Pre-scan the include text with
+   the text-level shortcode parser; resolve builtins (`env`/`meta`/`var`) directly;
+   instantiate the Lua engine **only if** a non-builtin shortcode name is present
+   *and* Lua shortcode paths are configured. No engine cost on the common path.
+5. **Unresolved shortcodes: body-text policy everywhere.** Visible marker + Q-16-5
+   diagnostic in metadata, navbar, footer, `<title>` flattening, and include files
+   alike. (Deliberately noisier than Q1, which is silent in text contexts.)
+6. **Env-files strand (`bd-environment-files-372u9qbs`): parallel, expect rebase.**
+   Tests here must be independent of environment-file changes: use `{{< meta >}}`
+   (fully self-contained) as the primary shortcode in tests; the few env-specific
+   tests set process env explicitly (process env wins over `_environment` files in
+   both designs, so they stay valid after the other strand lands).
+
+## Phases
+
+### Phase 0 — Test plan (TDD; write first, verify each fails at HEAD)
+
+- [ ] Project-render integration test (real render path, repro-shaped fixture with
+      navbar): asserts substituted `<title>` (plain text, tags stripped), navbar
+      brand (markup un-escaped, shortcode substituted), page-footer region, include
+      file content, and doc `subtitle` — primary shortcode `{{< meta >}}`, one env
+      case with explicitly set process env.
+- [ ] Unresolved-shortcode tests: marker + Q-16-5 in each new context.
+- [ ] Include lazy-Lua test: builtin-only include file does not instantiate Lua;
+      include with extension shortcode resolves via Lua when configured.
+- [ ] Regression: `!md`-tagged config strings, `{text: …}` smart-includes with
+      shortcodes (currently silently dropped), scalar-only config reads unaffected.
+
+### Phase 1 — Metadata shortcode resolution (mechanism B)
+
+- [ ] Expose the shortcode-resolution walkers over `ConfigValue` trees
+      (`resolve_inlines`/`resolve_blocks` over `PandocInlines`/`PandocBlocks` values).
+- [ ] Extend `ShortcodeResolveTransform::transform` to walk `ast.meta` (all values)
+      before `MetadataNormalizeTransform` derives `pagetitle`.
+- [ ] `inlines_to_plain_text` (`metadata_normalize.rs:184`): stringify resolved
+      shortcode output; unresolved → marker text + diagnostic (not silent drop).
+
+### Phase 2 — Website presentation strings (mechanism A)
+
+- [ ] Add the markdown-parse registry (key path patterns → inline/block flavor) and
+      a small `Normalization` transform applying it to merged metadata, ordered
+      before `ShortcodeResolveTransform`.
+- [ ] Seed registry with the initial entries (decision 2).
+- [ ] `brand_title_fallback` (`navbar_render.rs`): pass the `ConfigValue` through to
+      `render_text` (sidebar precedent) instead of `as_plain_text` + `escape_html`.
+- [ ] `push_inline` (`quarto-navigation/render_html.rs`): add a `Shortcode` arm
+      (marker + diagnostic instead of silent escaped flatten).
+
+### Phase 3 — Include files (mechanism C)
+
+- [ ] Text-level shortcode scanner/expander (parse `{{< … >}}` spans in arbitrary
+      text, dispatch handlers, stringify results) — shared building block, also the
+      natural basis for bd-fz6gwfq0 later.
+- [ ] Apply it to include-file contents in `IncludeResolveStage` (merged metadata is
+      available there), with lazy Lua per decision 4 and Q-16-5 + marker per
+      decision 5.
+- [ ] Fix silent `Shortcode` drop in `inlines_to_html_literal` (`{text: …}`
+      smart-includes).
+
+### Phase 4 — End-to-end verification + docs
+
+- [ ] `cargo run --bin q2 -- render` on the investigation repro: inspect all five
+      contexts in the output; record invocation + snippets here.
+- [ ] Full workspace verification (`cargo build`, `cargo nextest run --workspace`,
+      `cargo xtask verify`).
+- [ ] docs/ update if user-facing behavior warrants it (shortcodes-in-config
+      documentation).
+- [ ] Braid: close strand; re-check discovered strands (bd-1fue1ly5, bd-fz6gwfq0)
+      against the shared expander.
+
+## Design questions — all resolved
+
+All six original design questions are settled; the outcomes are consolidated in
+**Design decisions** above. Resolution history: metadata walk scope and `<title>`
+semantics were answered by the Q1 ground-truth study; the registry approach, lazy-Lua
+compromise, body-text unresolved policy, and parallel-with-rebase coordination were
+decided by the user on 2026-08-10 (session discussion). Implementation awaits
+explicit user go-ahead.
 
 ## Risks / tradeoffs (draft)
 
