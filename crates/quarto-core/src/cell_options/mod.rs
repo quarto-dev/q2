@@ -82,6 +82,13 @@ pub fn comment_syntax_for(language: &str) -> CommentSyntax {
         "scala" | "csharp" | "fsharp" | "cpp" | "cc" | "java" | "groovy" | "kotlin" | "js"
         | "d3" | "node" | "sass" | "scss" | "go" | "asy" | "dot" | "ojs" | "rust" => ("//", None),
         "matlab" | "tikz" => ("%", None),
+        // Not in Q1's kLangCommentChars: mermaid's `%%` lives on the
+        // language handler (`comment: "%%"` in core/handlers/mermaid.ts)
+        // and in filters/modules/constants.lua, which is why the
+        // original port of this table missed it
+        // (bd-mermaid-cell-options-9wo3crl0). Distinct from matlab's
+        // single `%` — see `mermaid_and_matlab_markers_do_not_cross_talk`.
+        "mermaid" => ("%%", None),
         "c" | "css" => ("/*", Some("*/")),
         "sas" => ("*", Some(";")),
         "sql" | "mysql" | "psql" | "lua" | "haskell" => ("--", None),
@@ -333,6 +340,7 @@ mod tests {
             ("java", "//"),
             ("matlab", "%"),
             ("tikz", "%"),
+            ("mermaid", "%%"),
             ("fortran", "!"),
             ("apl", "⍝"),
             ("stata", "*"),
@@ -341,6 +349,63 @@ mod tests {
             assert_eq!(syn.prefix, prefix, "prefix for {lang}");
             assert_eq!(syn.suffix, None, "suffix for {lang}");
         }
+    }
+
+    /// mermaid's `%%` and matlab/tikz's `%` are adjacent but must not
+    /// cross-talk: a mermaid option line read under matlab's syntax
+    /// sees `%| …` after stripping one `%`, which fails the `|` check,
+    /// and a matlab option line under mermaid's syntax fails the
+    /// prefix check. Neither direction silently half-parses
+    /// (bd-mermaid-cell-options-9wo3crl0).
+    #[test]
+    fn mermaid_and_matlab_markers_do_not_cross_talk() {
+        let mermaid = comment_syntax_for("mermaid");
+        let matlab = comment_syntax_for("matlab");
+
+        assert!(
+            option_content_ranges("%%| fig-cap: A caption.\n", &mermaid).is_some(),
+            "`%%|` must be an option line under mermaid syntax"
+        );
+        assert!(
+            option_content_ranges("%%| fig-cap: A caption.\n", &matlab).is_none(),
+            "`%%|` must NOT be an option line under matlab syntax"
+        );
+        assert!(
+            option_content_ranges("%| label: x\n", &matlab).is_some(),
+            "`%|` must be an option line under matlab syntax"
+        );
+        assert!(
+            option_content_ranges("%| label: x\n", &mermaid).is_none(),
+            "`%|` must NOT be an option line under mermaid syntax"
+        );
+    }
+
+    /// End-to-end partition on a mermaid cell: the leading `%%|` run
+    /// becomes the options document, the diagram source is what
+    /// remains, and a `%%|` line *below* the first code line stays in
+    /// the body as an ordinary mermaid comment.
+    #[test]
+    fn partition_mermaid_cell() {
+        let body = "%%| label: fig-x\n%%| fig-cap: A caption.\n\
+                    flowchart LR\n  A --> B\n%%| not an option\n";
+        let cell = partition("mermaid", body);
+        assert_eq!(cell.code, "flowchart LR\n  A --> B\n%%| not an option\n");
+        let options = cell.options.expect("mermaid cell has options");
+        assert!(options.is_hash());
+        assert_eq!(
+            options
+                .get_hash_value("label")
+                .and_then(|v| v.yaml.as_str().map(|s| s.to_string()))
+                .as_deref(),
+            Some("fig-x")
+        );
+        assert_eq!(
+            options
+                .get_hash_value("fig-cap")
+                .and_then(|v| v.yaml.as_str().map(|s| s.to_string()))
+                .as_deref(),
+            Some("A caption.")
+        );
     }
 
     #[test]
