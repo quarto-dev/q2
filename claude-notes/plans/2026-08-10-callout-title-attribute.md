@@ -5,10 +5,11 @@
 **Origin strand:** `br-de85v0a8` — in the **connect-docs porting skein**, a
 *different* braid project. It does not resolve against the q2 skein; the
 q2-side strand above is the one to work.
-**Branch:** investigated on `docs/feature-porting-process` @ `d1a8ac9f` (the
-checkout the skill was invoked in — see "Where this should land" below).
-**Status:** Investigation — pending design alignment with user. **Do not start
-implementation until the user gives the go-ahead.**
+**Branch:** `braid/callout-title-attribute`, off `origin/main` @ `b2b6100c`.
+(Investigated on `docs/feature-porting-process`; cherry-picked across once main
+was current.)
+**Status:** Design settled — see "Decisions" below. Ready to implement,
+starting with Phase 0 tests.
 
 ## Triage verdict
 
@@ -160,65 +161,152 @@ Two smaller observations: `title=` is preserved on the outer div in every case
 literal empty `title=""` attribute (case 7) — Q1's behavior there was not
 checked.
 
-## Proposed phases (draft)
+## Decisions (settled with the user, 2026-08-10)
 
-- **Phase 0 — Reproduce + test plan (TDD).** Run `q2 render` on the fixture and
-  capture actual output. Write failing tests for: attribute only, heading only,
-  both (attribute wins, heading retained in body), markdown in the attribute,
-  empty attribute value (falls back to heading), and the `screen-reader-only`
-  span appearing for an attribute title.
-- **Phase 1 — Read `title` in `convert_div_to_callout`.** Attribute-first with
-  heading fallback; strip the leading header *only* in the fallback branch.
-- **Phase 2 — Title inlines + source attribution.** Whichever of plain-`Str` vs
-  markdown-parse the design questions settle on, with the theorem.rs-style
-  guarded span lookup.
-- **Phase 3 — End-to-end verification.** `q2 render` the fixture, inspect the
-  emitted `callout-title-container`, record the invocation and output snippet
-  per the repo's end-to-end rule.
-- **Phase 4 — Docs**, if callout titles are documented under `docs/`.
+1. **Full markdown parse of the attribute value.** Match Q1. Performance is
+   explicitly deferred — titles are tiny documents, and the fixed cost of
+   spinning up a tree-sitter parse is accepted for now.
+2. **`PandocBlocks` result:** if it is a single block containing a single
+   paragraph, take its inlines. Anything else → emit a **warning diagnostic**
+   and ignore the attribute's content.
+3. **Attribute + heading both present:** emit a **warning** and consume either
+   one (which one does not matter — it is almost certainly an authoring
+   mistake). This is a deliberate, warned divergence from Q1, which silently
+   prefers the attribute and leaves the heading in the body.
+4. **Heading level:** remove the `level >= 2` check at `callout.rs:202` so any
+   `Header` can supply the title, matching Q1's `resolveHeadingCaption`.
+5. **Branch:** `braid/callout-title-attribute`, off `origin/main`. No worktree —
+   this checkout is not shared.
 
-## Open design questions for the user
+## Source-mapping design (the ancillary problem)
 
-1. **Markdown in the attribute value: match Q1, or plain text?** Q1 parses
-   `title=` with `string_to_quarto_ast_inlines`, so `title="Use \`renv\`"`
-   renders a code span. The helper to do this exists and is already used from a
-   transform, so the faithful option is cheap — but it costs a full tree-sitter
-   document parse per attribute-titled callout, and `theorem.rs` sets the
-   opposite in-tree precedent (plain `Inline::Str` for `name=`). Full parity, or
-   plain `Str` now with parity deferred to its own strand?
-2. **If we parse: what to do with a `PandocBlocks` result?** A value containing
-   block syntax (or a blank line) returns `PandocBlocks`, which a title slot
-   cannot hold. Flatten to inlines (there is a `blocks_to_inlines` in
-   `title_block.rs:161`), or fall back to literal text? Q1's helper effectively
-   never produces this, so there is no Q1 answer to copy.
-3. **Both `title=` and a leading heading — match Q1 exactly?** Confirmed by the
-   repro (case 5) that q2 currently does the opposite of Q1 on *both* counts:
-   the heading wins and is consumed. Q1 lets the attribute win and leaves the
-   heading in the body, which renders what looks like a duplicate title. Mirror
-   Q1 exactly, or take the attribute but also consume the heading (arguably
-   nicer output, definite parity break)? And should q2 warn when both are
-   present? Q1 emits none, but this repo's diagnostics culture might justify
-   one.
-4. **Adjacent divergence — heading level.** Q1's `resolveHeadingCaption` accepts
-   *any* `Header`; q2 requires `level >= 2` (`callout.rs:202`), so an H1-led
-   callout takes the title path in Q1 but not in q2. In scope here, out of
-   scope, or file as a separate strand?
-5. **Where should this land?** The skill ran in the main checkout on
-   `docs/feature-porting-process`, which is a docs branch — a poor home for a
-   callout fix. I have committed only the plan + fixture there. Recommend a
-   worktree (`cargo xtask create-worktree bd-callout-custom-title-dropped-9qi1p7iw
-   --base main`) for the implementation; per the skill I have not created one.
+Re-parsing the attribute value is not just "call the parser." The value handed
+to the parser is **not** the text its `SourceInfo` describes, so naive nesting
+produces silently wrong locations.
 
-## Risks / tradeoffs (draft)
+### Why the obvious approach is wrong
 
-- **Low blast radius, high confidence.** The change is confined to the title
-  slot's construction; `callout_resolve.rs` already implements the correct Q1
-  shape and needs no edit. Everything downstream (the `screen-reader-only` span,
-  `callout-titled`) starts working by consequence.
-- **Snapshot churn.** Any existing callout snapshots for attribute-titled
-  callouts will change (title text plus a new `screen-reader-only` span). Per
-  the repo's snapshot rule, count and summarize these in the commit message.
-- **The `AttrSourceInfo` alignment invariant is known-broken** in two parser
-  paths (bd-3aolj, bd-1e6a5). Use the guarded theorem.rs pattern rather than
-  indexing blind; do not treat those bugs as blockers.
-- **Not verified end-to-end yet** — see the repro note above.
+`SourceInfo::substring(parent, start, end)` composes a **purely affine** map:
+`resolve_byte_range` computes `parent_start + start_offset`
+(`quarto-source-map-0.1.0/src/source_info.rs:194-200`, `:388-403`), with no
+validation, no clamping, and no access to any text. The nested reader feeds it
+byte offsets into the *inner* string
+(`crates/pampa/src/pandoc/location.rs:213-218`).
+
+But the two texts differ:
+
+- `Attr.2["title"]` is stored **unescaped and unquoted** —
+  `extract_quoted_text` strips the delimiters and `unescape_punctuation`
+  collapses `\X` → `X` for ASCII punctuation
+  (`crates/pampa/src/pandoc/treesitter_utils/text_helpers.rs:28-59`), called
+  from `treesitter.rs:1207-1212`.
+- `AttrSourceInfo.attributes[i].1` spans the **raw text including both
+  quotes** — the grammar aliases a token containing the delimiters
+  (`crates/tree-sitter-qmd/tree-sitter-markdown/grammar.js:580-585`), and
+  `commonmark_attribute.rs:39-51` records the full node range.
+
+Measured on a real render (`observed-output.md` and the probe below): for
+`title="Say \"hello\" now"` the stored value is 15 bytes while the span covers
+19. Passing the span as `parent_source_info` shifts every inline by +1 (the
+opening quote) and by one more byte per collapsed escape.
+
+Worked example, `` title="Use `renv` today" `` with the value span starting at
+byte 81: the `` `renv` `` code span sits at inner bytes 4..10, which maps to
+85..91, while its true location is 86..92.
+
+This is not merely a diagnostics concern: `SourceInfo::preimage_in` feeds the
+incremental writer's verbatim-copy decision, and a drifted range there can copy
+the wrong bytes.
+
+### Precedent: the mechanism is solved, the mapping is not
+
+- **Mechanism (fine).** `parse_config_string_as_markdown`
+  (`crates/pampa/src/pandoc/meta.rs:34`) is sync, wasm-safe, and already called
+  from an `AstTransform` at
+  `crates/quarto-core/src/transforms/config_markdown.rs:164`.
+- **Mapping (unsolved, tree-wide).** The YAML path has exactly this bug:
+  `quarto-yaml`'s `compute_scalar_len` spans the quotes while the *decoded*
+  scalar is handed to the nested parse, and nothing compensates. The design doc
+  `claude-notes/plans/2026-07-20-ipynb-surface-syntax-design.md:73-92` states
+  the constraint outright — `Substring`/`Concat` compose only affine maps, a
+  `Transformed` variant once existed and was removed as unused, and the YAML
+  analogue "currently punts."
+- **The one exemplary case** is cell options
+  (`crates/quarto-core/src/cell_options/mod.rs:33-43`), which stays exact
+  precisely because it never unescapes — it reassembles a `SourceInfo::concat`
+  of per-line substrings so every byte is a real source byte.
+
+### What we will do
+
+Detect drift **from lengths alone** — the span length is the raw length, and
+the value's length is known, so no source text is required. Let
+`span_len = end - start` of `attributes[i].1` and `n = value.len()`:
+
+| condition | meaning | parent to pass |
+|---|---|---|
+| `span_len == n` | bare, unquoted value | `substring(src, 0, n)` — **exact** |
+| `span_len == n + 2` | quoted, no escapes collapsed | `substring(src, 1, 1 + n)` — **exact** |
+| otherwise | escapes were collapsed | whole-value span — approximate |
+
+This needs no new infrastructure and no access to `SourceContext` (which is
+`Option` on `RenderContext` and can be content-stripped by
+`SourceContext::without_content()`, so depending on it would be fragile).
+
+The fallback is **bounded and safe, not merely tolerable**: unescaping only ever
+shrinks the string, so every mapped offset stays inside the attribute's raw
+extent. The error is at most `1 + #escapes` bytes and can never point at a
+neighbouring attribute. The exact path covers every case in our fixture and all
+~25 affected Connect pages; only a title containing a backslash escape takes
+the approximate path.
+
+Exact non-affine mapping (an offset map through the unescape, emitting
+`SourceInfo::concat` pieces around each escape) is deliberately **out of scope
+here** and filed separately — it is the same infrastructure the YAML path and
+the ipynb design both need.
+
+## Phases
+
+- **Phase 0 — Tests first (TDD).** Failing tests for: attribute only; heading
+  only; both (warning + one consumed); markdown in the attribute (code span in
+  the header); block-syntax value (warning, content ignored); empty attribute
+  (falls back to heading); H1 heading as title; and the `screen-reader-only`
+  span appearing for an attribute title. Plus a span assertion pinning the
+  exact-mapping cases.
+- **Phase 1 — Title source selection in `convert_div_to_callout`.**
+  Attribute-first with heading fallback; move the header removal into the
+  fallback branch; drop the `level >= 2` check; warn when both are present.
+- **Phase 2 — Parse + source mapping.** `parse_config_string_as_markdown` with
+  the length-derived parent above; `PandocInlines` straight through,
+  single-paragraph `PandocBlocks` unwrapped, everything else warned and
+  dropped. Use the guarded `theorem.rs:336-360` pattern for the index lookup.
+- **Phase 3 — Diagnostics.** Register the new warning(s) in
+  `quarto-error-catalog` if they need codes; confirm wording and spans against
+  the fixture.
+- **Phase 4 — End-to-end verification.** `q2 render` the fixture, inspect the
+  emitted `callout-title-container`, record invocation + output snippet per the
+  repo's end-to-end rule.
+- **Phase 5 — Docs**, if callout titles are documented under `docs/`.
+
+## Risks / tradeoffs
+
+- **Low blast radius on the rendering side.** `callout_resolve.rs` already
+  implements the correct Q1 shape and needs no edit; the
+  `screen-reader-only` span and `callout-titled` start working by consequence.
+- **Snapshot churn.** Attribute-titled callout snapshots will change (title
+  text plus a new `screen-reader-only` span). Per the repo's snapshot rule,
+  count and summarize them in the commit message and flag anything surprising.
+- **Warning on attribute+heading is a deliberate parity break** (decision 3).
+  Q1 is silent here. If the Connect docs turn out to use both together at any
+  scale, revisit before shipping.
+- **Removing the `level >= 2` check may change existing documents** where an H1
+  inside a callout was previously left in the body. Grep the corpus and check
+  snapshots.
+- **`AttrSourceInfo` positional alignment is known-broken** on duplicate keys
+  (bd-3aolj, bd-1e6a5) — use the guarded pattern, do not index blind.
+- **`commonmark_attribute.rs:44-49` fabricates `Original { FileId(0) }`**,
+  ignoring `parent_source_info` — so attribute spans produced *inside* a nested
+  parse are wrong regardless. Only matters if a re-parsed title itself contains
+  an attribute; noted, not addressed here.
+- **`theorem.rs:317-319` documents the value span incorrectly** (claims it
+  excludes the quotes; the grammar includes them). Worth correcting while we
+  are here.
