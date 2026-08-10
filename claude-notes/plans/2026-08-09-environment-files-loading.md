@@ -3,7 +3,19 @@
 **Date:** 2026-08-09
 **Braid:** bd-environment-files-372u9qbs (feature, P1, label `parity`)
 **Checkout:** committed on `main` in the bd-eb2wnxkp worktree (the checkout `/investigate-beads` was invoked in; no new branch created — user decides where implementation lands)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design questions answered by user (2026-08-10, recorded below); dotenv-parser research done. Awaiting follow-up on the parser recommendation before implementation.
+**Follow-up strand:** bd-ev8mk1rp (render profiles) — filed 2026-08-10, `discovered-from` this strand.
+
+## Design policy: Quarto 2 does not mutate the process environment
+
+Decided 2026-08-10. Q1 implements `_environment` (and `--profile`) by mutating the
+process env (`Deno.env.set`); that is not UB in Deno, but it still races in some
+scenarios and has caused real Q1 bugs. Rust's edition-2024 `unsafe` on
+`std::env::set_var` is a restriction we *want* to model, not work around: in q2,
+project environment values are **data plumbed to consumers** (shortcode handlers,
+subprocess spawn sites), never writes to the ambient environment — even if some
+rare Quarto projects need slight behavior changes as a result. Reading the real
+env (`std::env::var`) remains fine; it always wins over file-defined values.
 
 ## Triage verdict
 
@@ -42,24 +54,135 @@ Confirmed at HEAD (`8518ac79`); pre-flight `cargo xtask verify --skip-hub-build`
 - `QUARTO_PROFILE` itself may be defined in `_environment`/`_environment.local` (`dotenvQuartoProfile`) — a small bootstrapping wrinkle.
 - `_environment.required` validation is **effectively vestigial** in Q1: the code carries a FIXME noting the dotenv `safe` option it relied on was removed upstream; the current call validates nothing. Q1 in practice parses the file and does not enforce it.
 
-## Proposed phases (draft — contents wait on design answers)
+## Design decisions (answered by user, 2026-08-10)
 
-- Phase 0 — Test plan (TDD): failing tests first. Unit tests for the dotenv-file parser + precedence; an end-to-end test driving the real render path (the repro fixture) asserting `from-env-file` appears in output; a precedence test (exported real env beats file value); WASM-path consideration per `.claude/rules/wasm.md`.
-- Phase 1 — Dotenv file parsing + `load_project_environment` in `StageContext` (modeled on `load_project_variables`), with Q1 precedence.
-- Phase 2 — Consumption by `EnvShortcodeHandler` (real env first, then project env map, then fallback arg; Q-16-5 hint updated to mention `_environment`).
-- Phase 3 — (scope-dependent) propagation to engine subprocess + render-script spawn sites.
-- Phase 4 — (scope-dependent) `_environment.required` behavior; profile variants.
-- Phase 5 — Docs (`docs/` user-facing; render with q2, not Q1).
+1. **Injection mechanism: project env map, no process-env mutation.** See the
+   policy section above. Map lives on `StageContext` (modeled on `variables`),
+   loaded through `SystemRuntime` so WASM/hub-client gets it via the VFS.
+   `EnvShortcodeHandler` consults `std::env::var` first, then the map, then the
+   fallback arg.
+2. **Consumers: all of them, in this strand.** Besides the `env` shortcode, pass
+   the project env at spawn sites: knitr subprocess
+   (`engine/knitr/subprocess.rs`), jupyter (`engine/jupyter/*`, including the
+   daemon), and pre/post render scripts (`project/render_scripts.rs`) — via
+   `Command::envs(project_env)` so the child sees file-defined values but real
+   inherited env still wins (set only keys absent from the real env, preserving
+   the precedence rule).
+3. **Profiles: scoped out.** Filed **bd-ev8mk1rp** (render profiles:
+   `--profile`/`QUARTO_PROFILE` plumbing, `_quarto-<profile>.yml`,
+   `_environment-<profile>`), `discovered-from` this strand. The loader built
+   here should take a (currently always-empty) active-profile list so
+   bd-ev8mk1rp can feed it later without rework.
+4. **`_environment.required`: issue diagnostics.** Real enforcement, not Q1's
+   de-facto no-op: a required variable undefined at load time gets a diagnostic
+   (severity TBD in implementation — start with warning). With the span-carrying
+   parser (below), the diagnostic can point at the requiring line in
+   `_environment.required` and, when applicable, at where a value was defined.
+5. **Parser: hand-rolled, span-annotated via quarto-source-map.** Research
+   below; dotenvy is not event-based and carries no source positions, so we
+   write a small parser that produces `SourceInfo`-annotated entries, following
+   the quarto-yaml technique.
+6. **Single-file mode: project-scoped only**, matching `_variables.yml` and Q1
+   (`is_single_file` → no env files).
+7. **Preview reactivity: out of scope.** Q1's env-file watching is itself a
+   source of races. q2 semantics: environment changes require restarting the
+   process. (Documented behavior, not a gap.)
 
-## Open design questions for the user
+## Parser research (2026-08-10)
 
-1. **Injection mechanism.** Q1 mutates the process env. In Rust that means `std::env::set_var` — `unsafe` in edition 2024 and genuinely thread-unsafe (UB if another thread reads the env concurrently, and q2 renders documents in parallel). The `_variables.yml`-style alternative — a project env map on `StageContext`, consulted by `EnvShortcodeHandler` after `std::env::var` misses — is thread-safe and WASM-friendly (loads through `SystemRuntime`, so hub-client preview gets it via the VFS for free). I'd recommend the map. Agreed, or do you want process-env injection for maximal Q1 fidelity?
-2. **Which consumers, in this strand?** The map alone fixes the `env` shortcode (the filed symptom). Q1's injection also makes the variables visible to executed code (knitr/jupyter subprocesses) and pre/post render scripts. Include `.envs(project_env)` at those spawn sites now, or file it as a follow-up strand?
-3. **Profile variants.** q2 has no active-profile machinery (`--profile` is parsed and dropped). Options: (a) scope `_environment-<profile>` out of this strand and file profiles separately; (b) implement a minimal `QUARTO_PROFILE` env-var + `--profile` plumbing just enough for env files. I'd lean (a) — profiles deserve their own design (they also affect `_quarto-<profile>.yml` config merging, which q2 lacks too).
-4. **`_environment.required`.** Q1's validation is vestigial (broken upstream, FIXME in their source). Implement *actual* enforcement (error or warning when a required variable is undefined — arguably the useful behavior Q1 intended), or match Q1's de-facto no-op and just not choke on the file's presence?
-5. **Parser.** Hand-roll a small KEY=VALUE parser (comments, blank lines, optional quotes) in-tree, or take a dependency (`dotenvy`'s parser handles quoting/escaping/multiline)? The Connect docs file is plain `KEY=value` lines; a small in-tree parser keeps the WASM build lean, but a dependency buys edge-case fidelity with Q1's dotenv dialect.
-6. **Single-file mode.** `_variables.yml` is project-scoped in q2 (`is_single_file` → skipped), matching Q1. Same for `_environment`? (Q1 loads it during *project*-context creation, so project-scoped matches.)
-7. **Preview reactivity.** Q1 watches env files and re-renders on change. In scope here, or follow-up?
+Question: can `dotenvy` give us event-based parsing we could hang
+`quarto-source-map` annotations on (the way `quarto-yaml` builds
+`YamlWithSourceInfo` from `yaml-rust2`'s `MarkedEventReceiver` events, each
+carrying a `Marker`)? Answer: **no — hand-roll.**
+
+**dotenvy** (inspected from git `allan2/dotenvy`, scratchpad clone; released
+0.15.7 is 2023-03-22, git main is an unreleased 0.16 rework):
+
+- The parser (`dotenvy/src/parse.rs`, ~620 lines) is an internal
+  **line-oriented** recursive-descent parser: `parse_line(&str, …) ->
+  Option<(String, String)>`. Not event-based; there is no callback/visitor
+  surface to intercept. The public API is an iterator of `(String, String)`
+  pairs (`Iter`) or whole-file loads.
+- **No source positions on success.** Positions appear only inside
+  `ParseBufError::LineParse(line_contents, char_index)` on *errors* — and even
+  there it's a char offset into a detached line string, no line number, no file
+  offset. Annotating values would mean rewriting the parser, at which point the
+  dependency buys nothing.
+- **Hidden process-env read inside parsing:** `$VAR`/`${VAR}` substitution in
+  values falls back to `std::env::var` (`parse.rs:259`,
+  `apply_substitution`). Parsing output depends on ambient env state — hostile
+  to WASM, to determinism, and to our data-not-ambient policy.
+- Maintenance signal: no release since 2023; main carries an unreleased
+  breaking rework. (That rework, notably, returns a non-mutating `EnvMap` by
+  default and marks the env-mutating loads `unsafe` — independent validation of
+  our no-mutation policy.)
+- Dialect differences from Q1 anyway: e.g. dotenvy expands `$VAR` in unquoted
+  *and* double-quoted values; Q1's dialect expands only unquoted values. So the
+  dependency wouldn't even buy Q1 fidelity.
+
+**Q1's actual dialect** is `@std/dotenv` (JSR; import map pins 0.225.3,
+vendored dev copy 0.224.2 — the vendor tree isn't checked out in
+`external-sources/`, so this was read from `denoland/std` upstream). It is a
+whole-text regex parser with these semantics:
+
+- Optional `export ` prefix; keys must match `[a-zA-Z_][a-zA-Z0-9_]*` (invalid
+  keys are *skipped with a warning*, not fatal).
+- Three value forms: **single-quoted** (literal, may span multiple lines, no
+  escapes/expansion); **double-quoted** (multiline, escape sequences `\n` `\r`
+  `\t` `\"` `\'` `\\` expanded, no `$` expansion); **unquoted** (trimmed,
+  ` #` starts a trailing comment, and `$VAR` / `${VAR}` / `${VAR:-default}`
+  expansion applies).
+- Expansion resolves against earlier entries in the same parse, then the real
+  process env (`Deno.env.get`), then the `:-` default. (Again: env *read*
+  during parse — acceptable for us as a read, resolved at load time against
+  `std::env::var`, which is safe; in WASM the real-env lookup simply finds
+  nothing.)
+- Full-line comments (`#`) and blank lines skipped.
+
+**Plan:** hand-roll a parser targeting the `@std/dotenv` grammar above,
+producing per-entry `SourceInfo` spans (key span, value span) via
+`quarto-source-map`, with a `parse_with_parent`-style entry point like
+`quarto_yaml::parse_file` so diagnostics (Q-16-5, `.required` misses, future
+validation) can point at the defining line. Proposed shape:
+
+```rust
+struct EnvEntry {
+    key: String,
+    value: String,           // after unquoting/escapes/expansion
+    key_span: SourceInfo,
+    value_span: SourceInfo,  // span of the raw value text
+}
+fn parse_env_file(content: &str, filename: &str) -> (Vec<EnvEntry>, Vec<DiagnosticMessage>)
+```
+
+Open sub-questions for implementation (small, can be settled at design
+review): where the parser lives (proposal: a module in `quarto-core`, e.g.
+`crates/quarto-core/src/project/environment.rs`, extractable to its own crate
+later if Posit external consumers want it); and whether multiline quoted
+values are worth supporting in v1 (proposal: yes — the grammar is small and
+Q1 accepts them).
+
+## Proposed phases (draft)
+
+- Phase 0 — Test plan (TDD): failing tests first. Parser unit tests (dialect
+  cases above, span correctness); precedence tests (real env > `.local` >
+  `_environment`; real env never overwritten); `.required` diagnostic tests;
+  an end-to-end test driving the real render path (the repro fixture)
+  asserting `from-env-file` appears in output; WASM-path consideration per
+  `.claude/rules/wasm.md`.
+- Phase 1 — Span-annotated dotenv parser (quarto-source-map), `@std/dotenv`
+  dialect.
+- Phase 2 — `load_project_environment` in `StageContext` (modeled on
+  `load_project_variables`): read `_environment` + `_environment.local` (+
+  profile variants via a for-now-empty profile list), apply precedence, build
+  the project env map; `_environment.required` diagnostics.
+- Phase 3 — `EnvShortcodeHandler` consults the map (real env first, then map,
+  then fallback arg); Q-16-5 hint updated to mention `_environment`.
+- Phase 4 — Subprocess propagation: `Command::envs` for keys absent from the
+  real env at knitr/jupyter/render-script spawn sites.
+- Phase 5 — Docs (`docs/` user-facing; render with q2, not Q1). Document the
+  no-mutation policy's user-visible consequence: env-file changes require
+  restart (no preview re-watch).
 
 ## Risks / tradeoffs (draft)
 
