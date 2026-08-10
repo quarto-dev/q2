@@ -64,6 +64,12 @@ use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
 use quarto_source_map::SourceInfo;
 
+/// The environment variable holding the active project-profile list
+/// (comma/space-separated). Read at activation time; exported to
+/// child processes (engines, render scripts) in Phase 2 — never
+/// written into this process's environment.
+pub const QUARTO_PROFILE_VAR: &str = "QUARTO_PROFILE";
+
 /// Typed contents of a `profile:` config key after strict validation.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProjectProfileConfig {

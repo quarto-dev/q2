@@ -639,6 +639,11 @@ fn theme_error_candidates(
         candidates.push((hash(p), p.to_path_buf()));
     }
     candidates.push((quarto_source_map::FileId(0), ctx.document.input.clone()));
+    // Project-profile overlays / `_quarto.yml.local` (bd-fu16z22k):
+    // a merged `theme:` can be written in any of them.
+    for p in &ctx.project.config.profile_config_paths {
+        candidates.push((hash(p), p.clone()));
+    }
     for p in &ctx.project.config.extension_manifest_paths {
         candidates.push((hash(p), p.clone()));
     }

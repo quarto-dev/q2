@@ -338,6 +338,7 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
         output_dir: &project.output_dir,
         config_path: project.config.config_path.as_deref(),
         extension_manifest_paths: &project.config.extension_manifest_paths,
+        profile_config_paths: &project.config.profile_config_paths,
         render_all: true,
         quiet: false,
         file_count: input_files.len(),

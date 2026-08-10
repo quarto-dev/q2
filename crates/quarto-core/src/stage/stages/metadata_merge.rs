@@ -314,6 +314,14 @@ impl PipelineStage for MetadataMergeStage {
             if let Some(config_path) = ctx.project.config.config_path.as_deref() {
                 register(config_path);
             }
+            // Project-profile overlays (`_quarto-<name>.yml`) and
+            // `_quarto.yml.local` (bd-fu16z22k): values merged from
+            // these layers keep their own filename-hash FileIds, so
+            // the files must be registered like `_quarto.yml` itself
+            // or overlay-anchored diagnostics render span-less.
+            for path in &ctx.project.config.profile_config_paths {
+                register(path);
+            }
             for (path, _) in &dir_layer_entries {
                 register(path);
             }

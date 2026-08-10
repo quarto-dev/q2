@@ -271,20 +271,33 @@ waits; nothing else blocks.
 
 ### Phase 1 — config overlays
 
-- [ ] Failing integration tests (quarto-core `tests/integration/`):
+- [x] Failing integration tests (quarto-core `tests/integration/`):
       overlay merge (scalar override, map deep-merge, array concat,
       `!prefer`), first-listed-wins with two profiles,
       `_quarto.yml.local` over profiles, `.yml` over `.yaml`,
       `profile:`-in-overlay warning, unknown-profile warning,
       span integrity of a diagnostic pointing into an overlay file
-- [ ] Implement overlay discovery + merge in `parse_config` at the
-      mod.rs:1342 seam; `active_config_profiles` +
-      `profile_config_paths` on `ProjectConfig`
-- [ ] `_quarto.yml.local` early parse (profile.default) + final layer
-- [ ] Register overlay files: `bind_config_source` candidates,
-      `MetadataMergeStage` register closure, render.rs:753
-- [ ] Verify: profile-aware `project.type` / `output-dir` /
-      `render:` lists / pre-render scripts via tests
+      *(25 tests in `project_profile_overlays.rs`, written first,
+      observed failing on the delegating stub)*
+- [x] Implement overlay discovery + merge in `parse_config`
+      (`apply_project_profiles`); `active_config_profiles` +
+      `profile_config_paths` on `ProjectConfig`;
+      `discover_with_profile` entry point (`discover` delegates with
+      `None` and reads `QUARTO_PROFILE` via `runtime.env_get`)
+- [x] `_quarto.yml.local` early parse (profile.default) + final layer
+      (`.yml.local` preferred over `.yaml.local`)
+- [x] Register overlay files everywhere merged-value FileIds can
+      surface: `MetadataMergeStage` register closure, render.rs
+      config-sources (×2), `RenderScriptsContext` (+5 construction
+      sites in render/publish/preview), `project_resources` (×2),
+      `compile_theme_css::theme_error_candidates`
+- [x] Verify: profile-aware `output-dir` / `render:` lists /
+      pre-render scripts / resolved `ProjectContext.output_dir` via
+      tests
+- Note: the `QUARTO_PROFILE`-env-var glue through `runtime.env_get`
+  is exercised end-to-end in Phase 2 (real process env through the
+  binary); unit-testing it would need a mock-env `SystemRuntime`
+  wrapper, which no other test needed yet.
 
 ### Phase 2 — CLI + cache + subprocess env var
 

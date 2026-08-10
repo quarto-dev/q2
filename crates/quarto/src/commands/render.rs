@@ -753,6 +753,7 @@ fn execute_single_doc(
     let config_sources: Vec<PathBuf> = config_path
         .iter()
         .cloned()
+        .chain(project.config.profile_config_paths.iter().cloned())
         .chain(project.config.extension_manifest_paths.iter().cloned())
         .collect();
 
@@ -842,6 +843,7 @@ fn execute_project(
     let config_sources: Vec<PathBuf> = config_path
         .iter()
         .cloned()
+        .chain(project.config.profile_config_paths.iter().cloned())
         .chain(project.config.extension_manifest_paths.iter().cloned())
         .collect();
 
@@ -881,6 +883,7 @@ fn execute_project(
             output_dir: &project.output_dir,
             config_path: project.config.config_path.as_deref(),
             extension_manifest_paths: &project.config.extension_manifest_paths,
+            profile_config_paths: &project.config.profile_config_paths,
             render_all,
             quiet: args.quiet,
             file_count: input_files.len(),
@@ -994,6 +997,7 @@ fn execute_project(
             output_dir: &project.output_dir,
             config_path: project.config.config_path.as_deref(),
             extension_manifest_paths: &project.config.extension_manifest_paths,
+            profile_config_paths: &project.config.profile_config_paths,
             render_all,
             quiet: args.quiet,
             file_count: total_files,

@@ -271,6 +271,11 @@ mod exec {
         /// bind that file — not `_quarto.yml` — to the resolved
         /// FileId (bd-m6wmztln).
         pub extension_manifest_paths: &'a [PathBuf],
+        /// Project-profile overlay / `_quarto.yml.local` paths
+        /// ([`crate::project::ProjectConfig::profile_config_paths`],
+        /// bd-fu16z22k): a script entry written in an overlay carries
+        /// that file's FileId, same binding discipline as manifests.
+        pub profile_config_paths: &'a [PathBuf],
         /// True iff the whole project is being rendered. Exported as
         /// `QUARTO_PROJECT_RENDER_ALL=1`; the variable is *absent*
         /// otherwise (not `"0"`), matching Q1.
@@ -573,6 +578,7 @@ mod exec {
             let candidates = ctx
                 .config_path
                 .into_iter()
+                .chain(ctx.profile_config_paths.iter().map(PathBuf::as_path))
                 .chain(ctx.extension_manifest_paths.iter().map(PathBuf::as_path));
             let matched =
                 crate::config_sources::bind_config_source(&mut source_context, info, candidates);
@@ -928,6 +934,7 @@ mod tests {
             output_dir: project_dir,
             config_path: None,
             extension_manifest_paths: &[],
+            profile_config_paths: &[],
             render_all: true,
             quiet: true,
             file_count: 1,
