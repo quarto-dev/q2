@@ -372,6 +372,15 @@ by `ApplyTemplateStage` are engine output and deliberately not expanded (Q1's
       built-ins, evaluation contexts incl. the new ones, escaping, unresolved
       markers. Display technique relies on code contexts not substituting;
       fragility note recorded on bd-fz6gwfq0 (comment c-7cdp80ld).
+- [x] Reconciled with `bd-environment-files-372u9qbs` (landed on main as PR #486
+      while PR #487 was in flight — the anticipated parallel-work rebase).
+      Textual merge was clean; one semantic conflict: `with_lua_support` gained a
+      6th `project_env` parameter, fixed at the one new call site
+      (`test_lua_shortcode_in_include_slot`). Added a compose test
+      (`environment_file_var_resolves_in_include_and_title`) proving
+      `_environment`-sourced variables now resolve in include files and
+      `website.title` through the shared handler plumbing — the two features
+      compose with zero additional glue. Workspace after merge: 11308/11308.
 - [ ] Braid: close strand after review/merge; re-check discovered strands
       (bd-1fue1ly5, bd-fz6gwfq0) against the shared expander.
 

@@ -2994,6 +2994,7 @@ mod tests {
                 runtime,
                 "html".to_string(),
                 None,
+                hashlink::LinkedHashMap::new(),
             );
 
             let entry = |key: &str, value: ConfigValue| ConfigMapEntry {

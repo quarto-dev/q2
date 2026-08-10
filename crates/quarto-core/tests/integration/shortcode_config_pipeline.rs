@@ -367,6 +367,50 @@ fn include_file_env_shortcode_substitutes() {
     );
 }
 
+/// The `env` shortcode composes with `_environment` file loading
+/// (bd-environment-files-372u9qbs): a variable defined only in the
+/// project's `_environment` file resolves in include files and website
+/// config strings through the same handler plumbing.
+#[test]
+fn environment_file_var_resolves_in_include_and_title() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_environment"),
+            "Q2_TEST_COMPOSE_VAR=from-env-file\n",
+        );
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  title: \"T {{< env Q2_TEST_COMPOSE_VAR >}}\"\n\
+             format:\n  html:\n    include-before-body:\n      - !path _c.html\n",
+        );
+        write(
+            &project_dir.join("_c.html"),
+            "<div id=\"cb\">C {{< env Q2_TEST_COMPOSE_VAR >}}</div>\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nBody.\n",
+        );
+        write(
+            &project_dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout.\n",
+        );
+    });
+    let html = find_html(&outputs, "index");
+
+    assert!(
+        html.contains("<div id=\"cb\">C from-env-file</div>"),
+        "expected _environment-sourced env var substituted in include; got: {}",
+        line_containing(html, "id=\"cb\"")
+    );
+    assert!(
+        html.contains("<title>Home – T from-env-file</title>"),
+        "expected _environment-sourced env var substituted in <title>; got: {}",
+        title_line(html)
+    );
+}
+
 // === unresolved shortcodes ================================================
 
 /// An unresolvable shortcode in `website.title` renders the visible
