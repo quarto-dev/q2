@@ -73,9 +73,12 @@ Working conventions for this phase:
       arg compared Rust-side against AttributionLookup::blamed_file_id
       (fed by bd-vmlhw7nx's AttributionData.file_id); two-arg calls keep
       the historical contract.*
-- [ ] **D4 / bd-h5rfw3ao (p3):** harden `project_type_error`
+- [x] **D4 / bd-h5rfw3ao (p3):** harden `project_type_error`
       (`project/mod.rs:903`) — route through `bind_config_source` (or add the
       hash-equality guard) + a test pinning the invariant.
+      *Done 2026-08-09: bind_config_source over config_path ++ manifest
+      paths; dead content params removed; pin test in
+      unknown_project_type.rs.*
 
 ### Coverage completion (correct sites, incomplete candidates)
 
