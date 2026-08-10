@@ -1213,6 +1213,24 @@ impl AstTransform for ShortcodeResolveTransform {
             None
         };
 
+        // Resolve shortcodes in metadata values first (Q1 parity: the
+        // filter traversal walks `doc.meta` — jog.lua:173 — so shortcodes
+        // resolve in ALL metadata values, not a blessed set). Handler
+        // lookups during the meta walk read a pre-walk snapshot: a value
+        // referencing another metadata key sees that key's authored
+        // (unresolved) form, which keeps resolution order-independent.
+        // Running meta before blocks means body-level `{{< meta k >}}`
+        // lookups observe already-resolved metadata values.
+        let meta_snapshot = ast.meta.clone();
+        resolve_config_value(
+            &mut ast.meta,
+            self,
+            &meta_snapshot,
+            &mut diagnostics,
+            &mut lua_engine,
+        )
+        .await;
+
         // Resolve shortcodes in all blocks
         resolve_blocks(
             &mut ast.blocks,
@@ -1291,6 +1309,58 @@ impl AstTransform for ShortcodeResolveTransform {
 
         Ok(())
     }
+}
+
+/// Resolve shortcodes inside a metadata `ConfigValue` tree.
+///
+/// Walks every `PandocInlines` / `PandocBlocks` value (recursing through
+/// maps and arrays) and runs the ordinary inline/block shortcode
+/// resolution on each. Scalars, paths, globs, and exprs are left alone —
+/// plain YAML strings are not shortcode-bearing unless something parsed
+/// them as markdown first (document frontmatter always is; project-config
+/// presentation keys are via `ConfigMarkdownTransform`).
+///
+/// `metadata` is the handler-lookup context — callers pass a pre-walk
+/// snapshot of the full metadata so `{{< meta k >}}` inside a metadata
+/// value resolves against authored values, independent of walk order.
+fn resolve_config_value<'a>(
+    value: &'a mut ConfigValue,
+    transform: &'a ShortcodeResolveTransform,
+    metadata: &'a ConfigValue,
+    diagnostics: &'a mut Vec<DiagnosticMessage>,
+    lua_engine: &'a mut Option<LuaEngineState>,
+) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
+    Box::pin(async move {
+        match &mut value.value {
+            ConfigValueKind::PandocInlines(inlines) => {
+                resolve_inlines(inlines, transform, metadata, diagnostics, lua_engine).await;
+            }
+            ConfigValueKind::PandocBlocks(blocks) => {
+                resolve_blocks(blocks, transform, metadata, diagnostics, lua_engine).await;
+            }
+            ConfigValueKind::Array(items) => {
+                for item in items {
+                    resolve_config_value(item, transform, metadata, diagnostics, lua_engine).await;
+                }
+            }
+            ConfigValueKind::Map(entries) => {
+                for entry in entries {
+                    resolve_config_value(
+                        &mut entry.value,
+                        transform,
+                        metadata,
+                        diagnostics,
+                        lua_engine,
+                    )
+                    .await;
+                }
+            }
+            ConfigValueKind::Scalar(_)
+            | ConfigValueKind::Path(_)
+            | ConfigValueKind::Glob(_)
+            | ConfigValueKind::Expr(_) => {}
+        }
+    })
 }
 
 /// Resolve shortcodes in a vector of blocks.

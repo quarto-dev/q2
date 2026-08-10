@@ -272,14 +272,22 @@ second engine site, no stage-level Lua. Engine-contributed includes appended lat
 by `ApplyTemplateStage` are engine output and deliberately not expanded (Q1's
 `cell-code` opt-out analog).
 
-### Phase 1 — Metadata shortcode resolution (mechanism B)
+### Phase 1 — Metadata shortcode resolution (mechanism B) ✅
 
-- [ ] Expose the shortcode-resolution walkers over `ConfigValue` trees
-      (`resolve_inlines`/`resolve_blocks` over `PandocInlines`/`PandocBlocks` values).
-- [ ] Extend `ShortcodeResolveTransform::transform` to walk `ast.meta` (all values)
-      before `MetadataNormalizeTransform` derives `pagetitle`.
-- [ ] `inlines_to_plain_text` (`metadata_normalize.rs:184`): stringify resolved
-      shortcode output; unresolved → marker text + diagnostic (not silent drop).
+- [x] `resolve_config_value` walker over `ConfigValue` trees (PandocInlines →
+      `resolve_inlines`, PandocBlocks → `resolve_blocks`, recursing maps/arrays;
+      scalars untouched).
+- [x] `ShortcodeResolveTransform::transform` walks `ast.meta` (all values) using a
+      pre-walk snapshot as handler context — meta walk runs BEFORE the blocks walk
+      so body-level `{{< meta k >}}` sees resolved values. Runs before
+      `MetadataNormalizeTransform`, so `pagetitle` derivation sees resolved text.
+- [x] Silent-drop concern in `inlines_to_plain_text` resolved without changing the
+      helper: after the meta walk, unresolved shortcodes are already replaced by
+      `?key` marker Str nodes (`make_error_inline`) + Q-16-5 diagnostics, so the
+      flattener never sees a `Shortcode` node from walked metadata.
+- Result: `doc_subtitle` and `doc_title` (h1 + pagetitle) tests pass; full
+  workspace run 11218 passed / 10 failed — the 10 are exactly the still-open
+  Phase 2/3 tests. No regressions from walking all metadata.
 
 ### Phase 2 — Website presentation strings (mechanism A)
 
