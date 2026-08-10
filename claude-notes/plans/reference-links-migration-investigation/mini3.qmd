@@ -1,0 +1,3 @@
+A ![alt][ref] B ![solo] C ![real](u.png) D ![x][]
+
+[ref]: https://r.example/i.png "T"

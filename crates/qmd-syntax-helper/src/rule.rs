@@ -61,6 +61,20 @@ pub trait Rule {
         check_mode: bool,
         verbose: bool,
     ) -> Result<ConvertResult>;
+
+    /// Whether `convert --rule all` applies this rule.
+    ///
+    /// A rule opts out when its edits cannot afterwards be distinguished
+    /// from the author's own intent, so that a bulk conversion never makes
+    /// such an edit unasked. Opting out affects `convert` only: `check
+    /// --rule all` still reports the rule's findings, and the rule can
+    /// always be applied deliberately with `-r <name>`.
+    ///
+    /// See `literal_brackets.rs`, whose escaping pass is the reason this
+    /// exists (bd-reference-links-unsupported-ddc4skac).
+    fn opt_in_only(&self) -> bool {
+        false
+    }
 }
 
 /// Registry of all available rules
@@ -90,6 +104,12 @@ impl RuleRegistry {
         ));
         registry.register(Arc::new(
             crate::conversions::grid_tables::GridTableConverter::new()?,
+        ));
+        registry.register(Arc::new(
+            crate::conversions::reference_links::ReferenceLinksConverter::new()?,
+        ));
+        registry.register(Arc::new(
+            crate::conversions::literal_brackets::LiteralBracketsConverter::new()?,
         ));
         registry.register(Arc::new(
             crate::conversions::definition_lists::DefinitionListConverter::new()?,
@@ -133,6 +153,16 @@ impl RuleRegistry {
     /// Get all registered rules
     pub fn all(&self) -> Vec<Arc<dyn Rule + Send + Sync>> {
         self.rules.values().cloned().collect()
+    }
+
+    /// Get the rules a bulk `convert --rule all` should apply — every rule
+    /// except those that are [`Rule::opt_in_only`].
+    pub fn all_auto_convertible(&self) -> Vec<Arc<dyn Rule + Send + Sync>> {
+        self.rules
+            .values()
+            .filter(|rule| !rule.opt_in_only())
+            .cloned()
+            .collect()
     }
 
     /// List all rule names

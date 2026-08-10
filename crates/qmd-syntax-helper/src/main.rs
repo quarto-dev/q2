@@ -95,7 +95,7 @@ fn main() -> Result<()> {
         } => {
             let file_paths = expand_globs(&files)?;
             let total_files_checked = file_paths.len();
-            let rules = resolve_rules(&registry, &rule_names)?;
+            let rules = resolve_rules(&registry, &rule_names, RuleUse::Check)?;
 
             let mut all_results = Vec::new();
 
@@ -195,7 +195,7 @@ fn main() -> Result<()> {
             no_iteration,
         } => {
             let file_paths = expand_globs(&files)?;
-            let rules = resolve_rules(&registry, &rule_names)?;
+            let rules = resolve_rules(&registry, &rule_names, RuleUse::Convert)?;
             let max_iter = if no_iteration { 1 } else { max_iterations };
 
             for file_path in file_paths {
@@ -318,28 +318,59 @@ fn main() -> Result<()> {
 
         Commands::ListRules => {
             println!("{}", "Available rules:".bold());
+            let mut any_opt_in = false;
             for name in registry.list_names() {
                 let rule = registry.get(&name)?;
-                println!("  {} - {}", name.cyan(), rule.description());
+                let marker = if rule.opt_in_only() {
+                    any_opt_in = true;
+                    " *"
+                } else {
+                    ""
+                };
+                println!("  {}{} - {}", name.cyan(), marker, rule.description());
+            }
+            if any_opt_in {
+                println!();
+                println!(
+                    "  {} not applied by `convert -r all`; \
+                     name it explicitly with `-r <rule>` to opt in.",
+                    "*".cyan()
+                );
             }
             Ok(())
         }
     }
 }
 
+/// What the resolved rules are going to be used for.
+///
+/// `all` means "every rule" when reporting and "every rule safe to apply
+/// unasked" when editing, because some rules make edits that cannot later be
+/// distinguished from the author's intent (see [`Rule::opt_in_only`]).
+/// Naming such a rule explicitly always applies it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuleUse {
+    Check,
+    Convert,
+}
+
 fn resolve_rules(
     registry: &RuleRegistry,
     names: &[String],
+    rule_use: RuleUse,
 ) -> Result<Vec<std::sync::Arc<dyn Rule + Send + Sync>>> {
     if names.len() == 1 && names[0] == "all" {
-        Ok(registry.all())
-    } else {
-        let mut rules = Vec::new();
-        for name in names {
-            rules.push(registry.get(name)?);
-        }
-        Ok(rules)
+        return Ok(match rule_use {
+            RuleUse::Check => registry.all(),
+            RuleUse::Convert => registry.all_auto_convertible(),
+        });
     }
+
+    let mut rules = Vec::new();
+    for name in names {
+        rules.push(registry.get(name)?);
+    }
+    Ok(rules)
 }
 
 /// Create a temporary copy of a file in the same directory

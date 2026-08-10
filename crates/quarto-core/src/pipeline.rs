@@ -78,11 +78,11 @@ use crate::transforms::{
     ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
     MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
     PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
-    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
-    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
-    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
-    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
-    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    ReferenceLinkDiagnosticsTransform, ResourceCollectorTransform, SectionizeTransform,
+    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
+    TableBootstrapClassTransform, TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform,
+    TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -1201,6 +1201,14 @@ pub fn build_transform_pipeline(
     // warnings from deliberately-excluded content), and long before
     // crossref numbering (bd-fu16z22k Phase 4).
     pipeline.push(Box::new(ConditionalContentTransform::new()));
+    // Reference-link diagnostics (bd-reference-links-unsupported-ddc4skac):
+    // warn about `[label][ref]` and `[ref]: url` lines, which qmd does not
+    // support and which were previously silent. Read-only. Runs immediately
+    // after conditional content — for the same reason shortcodes do, so
+    // deliberately-excluded content cannot raise spurious warnings — but
+    // before any sugaring rewrites spans, so it still sees the document
+    // essentially as the author wrote it.
+    pipeline.push(Box::new(ReferenceLinkDiagnosticsTransform::new()));
     pipeline.push(Box::new(CalloutTransform::new()));
     pipeline.push(Box::new(CalloutResolveTransform::new()));
     // Markdown-parse blessed website presentation config strings

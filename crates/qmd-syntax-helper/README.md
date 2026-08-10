@@ -51,6 +51,67 @@ qmd-syntax-helper ungrid-tables --in-place --verbose input.qmd
 :::
 ```
 
+### Reference-style links and literal brackets
+
+qmd reserves `[...]` for span syntax (`[text]{.class}`), so it has no
+reference-style links. A `[label][ref]` renders as two bare `<span>`s, the
+`[ref]: url` definition line renders as a visible paragraph, and bracketed
+text with no definition — `[Version TBD]`, `[1]`, `[Posit Connect]` — has its
+brackets **silently deleted**. `![alt][ref]` is worse still: it becomes an
+`<img>` with an empty `src`.
+
+Two rules migrate this, split by risk rather than by syntax:
+
+| rule | does | risk |
+| --- | --- | --- |
+| `reference-links` | rewrites uses that have a matching definition to the inline form, then drops the definition | mechanical — every edit is determined by a definition the author already wrote |
+| `literal-brackets` | escapes bracketed text with **no** matching definition, so the brackets survive | destructive if wrong — an escape cannot afterwards be told apart from author intent |
+
+```bash
+# What would change, with a location for every edit
+qmd-syntax-helper check -r reference-links -r literal-brackets "docs/**/*.qmd"
+
+# The safe arm — also included in `convert -r all`
+qmd-syntax-helper convert -r reference-links --in-place "docs/**/*.qmd"
+
+# The destructive arm — never runs unless you name it
+qmd-syntax-helper convert -r literal-brackets --in-place "docs/**/*.qmd"
+```
+
+**`literal-brackets` is opt-in.** `convert -r all` skips it, because it
+rewrites prose in a way nobody can later distinguish from something the
+author typed on purpose. `check -r all` still reports it, so the breakage
+stays visible. Run `check` and read the list before any `--in-place` pass.
+
+Before / after:
+
+```markdown
+See [the RedHat documentation][gcc-toolset].
+Requires Posit Connect [Version TBD] or later.
+
+[gcc-toolset]: https://example.com/gcc-toolset
+```
+```markdown
+See [the RedHat documentation](https://example.com/gcc-toolset).
+Requires Posit Connect \[Version TBD\] or later.
+```
+
+The escaped form renders as literal brackets in **both** q2 and Quarto 1, so
+it is safe for sources that still have to build under both engines, and q2
+produces no span for it at all — which is what makes repeated `convert`
+passes idempotent.
+
+Two things the rules deliberately do *not* do:
+
+- **Three or more adjacent bracketed groups** (`[a][b][c]`) are genuinely
+  ambiguous — `[a][b]` plus a literal `[c]`, or `[a]` plus `[b][c]`? Both
+  rules leave these alone and report them, and `reference-links` keeps any
+  definition such a run might need.
+- **Unused definitions are dropped** by `reference-links`. Quarto 1 consumes
+  them and renders nothing while q2 renders them as a stray paragraph, so
+  removing them is what restores parity — but it does delete a line the
+  author wrote.
+
 ## Installation
 
 From the quarto-markdown repository:
@@ -70,7 +131,6 @@ cargo build --release --bin qmd-syntax-helper
 ## Future Converters
 
 Planned conversions include:
-- Reference-style links → inline links
 - Attribute syntax fixes
 - Shortcode migrations
 - YAML frontmatter fixes

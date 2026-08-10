@@ -1,7 +1,10 @@
 pub mod apostrophe_quotes;
 pub mod attribute_ordering;
+pub mod bracket_analysis;
+pub mod bracket_edit;
 pub mod definition_lists;
 pub mod grid_tables;
+pub mod literal_brackets;
 pub mod q_2_11;
 pub mod q_2_12;
 pub mod q_2_13;
@@ -21,3 +24,4 @@ pub mod q_2_28;
 pub mod q_2_33;
 pub mod q_2_5;
 pub mod q_2_7;
+pub mod reference_links;

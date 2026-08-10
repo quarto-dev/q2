@@ -1,0 +1,3 @@
+Text [Version TBD] and [label][ref] and [x]{.cls} and [link](u).
+
+[ref]: https://example.com/r "T"

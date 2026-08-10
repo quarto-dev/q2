@@ -1349,5 +1349,19 @@
     "message_template": "A callout's `title=` attribute is parsed as markdown, but it must reduce to a single line of inline content. This value parses to block content (for example it begins with `#`, or contains a blank line), so it cannot fill the callout's title and is ignored. Write the title as plain inline markdown, or move the block content into the callout body.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-44",
     "since_version": "99.9.9"
+  },
+  "Q-2-45": {
+    "subsystem": "markdown",
+    "title": "Reference-style links are not supported",
+    "message_template": "`[label][ref]` is reference-style link syntax, which quarto-markdown does not support — `[...]` is reserved for span syntax (`[text]{.class}`). The brackets are discarded and the two halves render as empty spans. Use the inline form `[label](url)`. `qmd-syntax-helper convert -r reference-links` migrates these automatically.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-45",
+    "since_version": "99.9.9"
+  },
+  "Q-2-46": {
+    "subsystem": "markdown",
+    "title": "Link reference definitions are not supported",
+    "message_template": "A line of the form `[ref]: https://example.com` is a link reference definition, which quarto-markdown does not collect. It renders as a visible paragraph instead of disappearing. Move the URL into an inline link — `[text](url)` — at each use site and delete the definition line. `qmd-syntax-helper convert -r reference-links` does both.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-46",
+    "since_version": "99.9.9"
   }
 }
