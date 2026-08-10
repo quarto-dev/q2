@@ -1,0 +1,633 @@
+/*
+ * conditional_content.rs
+ * Copyright (c) 2026 Posit, PBC
+ *
+ * Conditional content: .content-visible / .content-hidden
+ * (bd-fu16z22k, Phase 4).
+ */
+
+//! Conditional content — the Q2 port of Quarto 1's
+//! `content-hidden.lua` custom-node filter.
+//!
+//! Divs, Spans, and CodeBlocks carrying `.content-visible` or
+//! `.content-hidden` are kept or removed based on `when-format` /
+//! `unless-format`, `when-profile` / `unless-profile` (project
+//! profiles, bd-fu16z22k), and `when-meta` / `unless-meta`
+//! attributes:
+//!
+//! - condition kinds **AND** together (`when-format="html"
+//!   when-profile="prod"` needs both);
+//! - comma/space-separated values within one condition **OR** — a q2
+//!   extension; Q1 matches the attribute value literally, so
+//!   `when-profile="a,b"` silently never matched there;
+//! - `unless-*` negates its kind;
+//! - `.content-visible` with no conditions is always visible,
+//!   `.content-hidden` with no conditions always hidden;
+//! - surviving elements keep their classes but lose the condition
+//!   attributes (Q1's `clearHiddenVisibleAttributes`).
+//!
+//! Semantics notes:
+//! - `when-format` uses the same alias table as Lua's
+//!   `quarto.doc.is_format` ([`pampa::lua::quarto_doc::is_format_match`]),
+//!   matched against the canonical Pandoc format
+//!   ([`crate::format::lua_format_for`]) so preview pseudo-formats
+//!   behave like render.
+//! - `when-meta` resolves a dotted path in the document's **merged**
+//!   metadata (the transform runs after `MetadataMergeStage`, so
+//!   profile overlays are visible) with Q1 truthiness: present and
+//!   not `false` ⇒ true.
+//! - The transform runs first in the Normalization phase — before
+//!   shortcode resolution, so hidden content cannot emit spurious
+//!   shortcode warnings, and long before crossref numbering, so a
+//!   hidden float never consumes a number. (Engine cells inside
+//!   hidden blocks still *execute* — engines run in an earlier
+//!   pipeline stage; Q1 behaves the same way.)
+//!
+//! Strictness (divergence from Q1, which is silent): unknown
+//! `when-*` / `unless-*` attributes on a marker element, and elements
+//! carrying *both* marker classes (treated as hidden), warn with
+//! **Q-2-42**.
+
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
+use quarto_pandoc_types::pandoc::Pandoc;
+use quarto_pandoc_types::{Attr, Block, ConfigValue, Inline};
+
+use crate::render::RenderContext;
+use crate::transform::{AstTransform, TransformPhase};
+
+const VISIBLE_CLASS: &str = "content-visible";
+const HIDDEN_CLASS: &str = "content-hidden";
+
+const CONDITION_KEYS: [&str; 6] = [
+    "when-format",
+    "unless-format",
+    "when-profile",
+    "unless-profile",
+    "when-meta",
+    "unless-meta",
+];
+
+/// See the module docs. Registered first in the Normalization phase
+/// of `build_transform_pipeline`.
+pub struct ConditionalContentTransform;
+
+impl ConditionalContentTransform {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for ConditionalContentTransform {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl AstTransform for ConditionalContentTransform {
+    fn name(&self) -> &str {
+        "conditional-content"
+    }
+
+    fn phase(&self) -> TransformPhase {
+        TransformPhase::Normalization
+    }
+
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> crate::Result<()> {
+        let lua_format = crate::format::lua_format_for(&ctx.format.target_format).to_string();
+        let active: Vec<&str> = ctx
+            .project
+            .config
+            .active_config_profiles
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        let mut diagnostics = Vec::new();
+        {
+            let env = ConditionEnv {
+                format: &lua_format,
+                active_profiles: &active,
+                meta: &ast.meta,
+                diagnostics: &mut diagnostics,
+            };
+            let mut walker = Walker { env };
+            walker.filter_blocks(&mut ast.blocks);
+        }
+        ctx.diagnostics.extend(diagnostics);
+        Ok(())
+    }
+}
+
+/// Everything a condition evaluation can see.
+struct ConditionEnv<'a> {
+    /// Canonical Pandoc format (`lua_format_for`), for the alias table.
+    format: &'a str,
+    /// Active project-profile names, activation order.
+    active_profiles: &'a [&'a str],
+    /// The document's merged metadata.
+    meta: &'a ConfigValue,
+    diagnostics: &'a mut Vec<DiagnosticMessage>,
+}
+
+struct Walker<'a> {
+    env: ConditionEnv<'a>,
+}
+
+/// What to do with a marker element.
+enum Verdict {
+    /// Not a conditional element — leave untouched.
+    NotConditional,
+    /// Keep it, after stripping the condition attributes.
+    Keep,
+    /// Remove it entirely.
+    Remove,
+}
+
+impl Walker<'_> {
+    /// Evaluate an element's marker classes + condition attributes.
+    fn verdict(&mut self, attr: &Attr, source_info: &quarto_source_map::SourceInfo) -> Verdict {
+        let visible_marker = attr.1.iter().any(|c| c == VISIBLE_CLASS);
+        let hidden_marker = attr.1.iter().any(|c| c == HIDDEN_CLASS);
+        if !visible_marker && !hidden_marker {
+            return Verdict::NotConditional;
+        }
+        if visible_marker && hidden_marker {
+            self.env.diagnostics.push(
+                DiagnosticMessageBuilder::warning(
+                    "Element is both `.content-visible` and `.content-hidden`",
+                )
+                .with_code("Q-2-42")
+                .problem(
+                    "An element cannot carry both marker classes; it is treated as \
+                     `.content-hidden`.",
+                )
+                .with_location(source_info.clone())
+                .build(),
+            );
+        }
+
+        // Unknown `when-*` / `unless-*` spellings are probably typos.
+        for key in attr.2.keys() {
+            if (key.starts_with("when-") || key.starts_with("unless-"))
+                && !CONDITION_KEYS.contains(&key.as_str())
+            {
+                self.env.diagnostics.push(
+                    DiagnosticMessageBuilder::warning(format!(
+                        "Unknown conditional-content attribute `{key}`"
+                    ))
+                    .with_code("Q-2-42")
+                    .problem(format!(
+                        "`{key}` is not a recognized condition and is ignored. Supported \
+                         conditions: `when-format`, `unless-format`, `when-profile`, \
+                         `unless-profile`, `when-meta`, `unless-meta`."
+                    ))
+                    .with_location(source_info.clone())
+                    .build(),
+                );
+            }
+        }
+
+        let conditions_match = self.conditions_match(attr);
+        // Both markers present ⇒ hidden semantics (the safe reading).
+        let visible = if hidden_marker {
+            !conditions_match
+        } else {
+            conditions_match
+        };
+        if visible {
+            Verdict::Keep
+        } else {
+            Verdict::Remove
+        }
+    }
+
+    /// AND across condition kinds; OR across comma/space-separated
+    /// values within one condition; `unless-*` negates. No condition
+    /// attributes ⇒ vacuously true.
+    fn conditions_match(&self, attr: &Attr) -> bool {
+        #[derive(Clone, Copy)]
+        enum Kind {
+            Format,
+            Profile,
+            Meta,
+        }
+        let mut result = true;
+        for (key, value) in attr.2.iter() {
+            let (invert, kind) = match key.as_str() {
+                "when-format" => (false, Kind::Format),
+                "unless-format" => (true, Kind::Format),
+                "when-profile" => (false, Kind::Profile),
+                "unless-profile" => (true, Kind::Profile),
+                "when-meta" => (false, Kind::Meta),
+                "unless-meta" => (true, Kind::Meta),
+                _ => continue,
+            };
+            let any = value
+                .split([',', ' '])
+                .filter(|v| !v.is_empty())
+                .any(|v| match kind {
+                    Kind::Format => self.check_format(v),
+                    Kind::Profile => self.check_profile(v),
+                    Kind::Meta => self.check_meta(v),
+                });
+            result = result && (invert != any);
+        }
+        result
+    }
+
+    fn check_format(&self, query: &str) -> bool {
+        pampa::lua::quarto_doc::is_format_match(self.env.format, query)
+    }
+
+    fn check_profile(&self, name: &str) -> bool {
+        self.env.active_profiles.contains(&name)
+    }
+
+    /// Q1's `check_meta`: dotted-path lookup in the merged metadata;
+    /// truthy = present and not `false` (null counts as absent).
+    fn check_meta(&self, path: &str) -> bool {
+        let parts: Vec<&str> = path.split('.').collect();
+        match self.env.meta.get_path(&parts) {
+            None => false,
+            Some(value) => {
+                if value.is_null() {
+                    return false;
+                }
+                value.as_bool().unwrap_or(true)
+            }
+        }
+    }
+
+    // ── recursion ───────────────────────────────────────────────────
+
+    fn filter_blocks(&mut self, blocks: &mut Vec<Block>) {
+        blocks.retain_mut(|block| self.keep_block(block));
+    }
+
+    /// Decide whether `block` survives; recurse into whatever content
+    /// it keeps.
+    fn keep_block(&mut self, block: &mut Block) -> bool {
+        match block {
+            Block::Div(div) => {
+                match self.verdict(&div.attr, &div.source_info) {
+                    Verdict::Remove => return false,
+                    Verdict::Keep => strip_condition_attrs(&mut div.attr, &mut div.attr_source),
+                    Verdict::NotConditional => {}
+                }
+                self.filter_blocks(&mut div.content);
+            }
+            Block::CodeBlock(cb) => match self.verdict(&cb.attr, &cb.source_info) {
+                Verdict::Remove => return false,
+                Verdict::Keep => strip_condition_attrs(&mut cb.attr, &mut cb.attr_source),
+                Verdict::NotConditional => {}
+            },
+            Block::Plain(b) => self.filter_inlines(&mut b.content),
+            Block::Paragraph(b) => self.filter_inlines(&mut b.content),
+            Block::Header(h) => self.filter_inlines(&mut h.content),
+            Block::LineBlock(lb) => {
+                for line in &mut lb.content {
+                    self.filter_inlines(line);
+                }
+            }
+            Block::BlockQuote(bq) => self.filter_blocks(&mut bq.content),
+            Block::OrderedList(ol) => {
+                for item in &mut ol.content {
+                    self.filter_blocks(item);
+                }
+            }
+            Block::BulletList(bl) => {
+                for item in &mut bl.content {
+                    self.filter_blocks(item);
+                }
+            }
+            Block::DefinitionList(dl) => {
+                for (term, defs) in &mut dl.content {
+                    self.filter_inlines(term);
+                    for def in defs {
+                        self.filter_blocks(def);
+                    }
+                }
+            }
+            Block::Figure(fig) => {
+                self.filter_blocks(&mut fig.content);
+                if let Some(short) = &mut fig.caption.short {
+                    self.filter_inlines(short);
+                }
+                if let Some(long) = &mut fig.caption.long {
+                    self.filter_blocks(long);
+                }
+            }
+            Block::Table(table) => {
+                if let Some(short) = &mut table.caption.short {
+                    self.filter_inlines(short);
+                }
+                if let Some(long) = &mut table.caption.long {
+                    self.filter_blocks(long);
+                }
+                for row in &mut table.head.rows {
+                    for cell in &mut row.cells {
+                        self.filter_blocks(&mut cell.content);
+                    }
+                }
+                for body in &mut table.bodies {
+                    for row in &mut body.body {
+                        for cell in &mut row.cells {
+                            self.filter_blocks(&mut cell.content);
+                        }
+                    }
+                }
+                for row in &mut table.foot.rows {
+                    for cell in &mut row.cells {
+                        self.filter_blocks(&mut cell.content);
+                    }
+                }
+            }
+            Block::Custom(custom) => {
+                for (_name, slot) in &mut custom.slots {
+                    use quarto_pandoc_types::custom::Slot;
+                    match slot {
+                        Slot::Block(b) => {
+                            // A slot holds exactly one block; removal
+                            // isn't representable, so only recurse.
+                            let _ = self.keep_block(b);
+                        }
+                        Slot::Blocks(bs) => self.filter_blocks(bs),
+                        Slot::Inline(i) => {
+                            let _ = self.keep_inline(i);
+                        }
+                        Slot::Inlines(is) => self.filter_inlines(is),
+                    }
+                }
+            }
+            _ => {}
+        }
+        true
+    }
+
+    fn filter_inlines(&mut self, inlines: &mut Vec<Inline>) {
+        inlines.retain_mut(|inline| self.keep_inline(inline));
+    }
+
+    fn keep_inline(&mut self, inline: &mut Inline) -> bool {
+        match inline {
+            Inline::Span(span) => {
+                match self.verdict(&span.attr, &span.source_info) {
+                    Verdict::Remove => return false,
+                    Verdict::Keep => strip_condition_attrs(&mut span.attr, &mut span.attr_source),
+                    Verdict::NotConditional => {}
+                }
+                self.filter_inlines(&mut span.content);
+            }
+            Inline::Emph(i) => self.filter_inlines(&mut i.content),
+            Inline::Underline(i) => self.filter_inlines(&mut i.content),
+            Inline::Strong(i) => self.filter_inlines(&mut i.content),
+            Inline::Strikeout(i) => self.filter_inlines(&mut i.content),
+            Inline::Superscript(i) => self.filter_inlines(&mut i.content),
+            Inline::Subscript(i) => self.filter_inlines(&mut i.content),
+            Inline::SmallCaps(i) => self.filter_inlines(&mut i.content),
+            Inline::Quoted(i) => self.filter_inlines(&mut i.content),
+            Inline::Cite(i) => self.filter_inlines(&mut i.content),
+            Inline::Link(i) => self.filter_inlines(&mut i.content),
+            Inline::Image(i) => self.filter_inlines(&mut i.content),
+            Inline::Note(note) => self.filter_blocks(&mut note.content),
+            _ => {}
+        }
+        true
+    }
+}
+
+/// Remove the condition attributes from a surviving element, keeping
+/// classes (including the marker class) — Q1's
+/// `clearHiddenVisibleAttributes`. The parallel `AttrSourceInfo`
+/// entries are removed in lockstep to preserve the
+/// positional-alignment invariant (see `attr.rs`); on a preexisting
+/// misalignment the source entries are cleared rather than guessed.
+fn strip_condition_attrs(attr: &mut Attr, attr_source: &mut quarto_pandoc_types::AttrSourceInfo) {
+    let aligned = attr.2.len() == attr_source.attributes.len();
+    if aligned {
+        let keep: Vec<bool> = attr
+            .2
+            .keys()
+            .map(|k| !CONDITION_KEYS.contains(&k.as_str()))
+            .collect();
+        let mut it = keep.iter();
+        attr_source.attributes.retain(|_| *it.next().unwrap());
+    } else {
+        attr_source.attributes.clear();
+    }
+    attr.2.retain(|k, _| !CONDITION_KEYS.contains(&k.as_str()));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quarto_pandoc_types::AttrSourceInfo;
+    use quarto_pandoc_types::block::Div;
+    use quarto_source_map::{By, SourceInfo};
+
+    fn attr(classes: &[&str], kvs: &[(&str, &str)]) -> Attr {
+        (
+            String::new(),
+            classes.iter().map(|c| c.to_string()).collect(),
+            kvs.iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        )
+    }
+
+    fn div(classes: &[&str], kvs: &[(&str, &str)], text: &str) -> Block {
+        Block::Div(Div {
+            attr: attr(classes, kvs),
+            content: vec![Block::Plain(quarto_pandoc_types::block::Plain {
+                content: vec![Inline::Str(quarto_pandoc_types::inline::Str {
+                    text: text.to_string(),
+                    source_info: SourceInfo::generated(By::unknown()),
+                })],
+                source_info: SourceInfo::generated(By::unknown()),
+            })],
+            source_info: SourceInfo::generated(By::unknown()),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    fn run(
+        blocks: &mut Vec<Block>,
+        format: &str,
+        active: &[&str],
+        meta: &ConfigValue,
+    ) -> Vec<DiagnosticMessage> {
+        let mut diagnostics = Vec::new();
+        let env = ConditionEnv {
+            format,
+            active_profiles: active,
+            meta,
+            diagnostics: &mut diagnostics,
+        };
+        let mut walker = Walker { env };
+        walker.filter_blocks(blocks);
+        diagnostics
+    }
+
+    fn empty_meta() -> ConfigValue {
+        ConfigValue::new_map(vec![], SourceInfo::generated(By::unknown()))
+    }
+
+    fn texts(blocks: &[Block]) -> String {
+        // Debug-format is a lazy but reliable way to see which
+        // Str contents survived.
+        format!("{blocks:?}")
+    }
+
+    #[test]
+    fn visible_kept_when_profile_active_removed_otherwise() {
+        let meta = empty_meta();
+        let mut blocks = vec![div(&["content-visible"], &[("when-profile", "adv")], "X")];
+        run(&mut blocks, "html", &["adv"], &meta);
+        assert_eq!(blocks.len(), 1);
+
+        let mut blocks = vec![div(&["content-visible"], &[("when-profile", "adv")], "X")];
+        run(&mut blocks, "html", &[], &meta);
+        assert!(blocks.is_empty());
+    }
+
+    #[test]
+    fn hidden_inverts() {
+        let meta = empty_meta();
+        let mut blocks = vec![div(&["content-hidden"], &[("when-profile", "adv")], "X")];
+        run(&mut blocks, "html", &["adv"], &meta);
+        assert!(blocks.is_empty());
+
+        let mut blocks = vec![div(&["content-hidden"], &[("when-profile", "adv")], "X")];
+        run(&mut blocks, "html", &[], &meta);
+        assert_eq!(blocks.len(), 1);
+    }
+
+    #[test]
+    fn bare_markers() {
+        let meta = empty_meta();
+        let mut blocks = vec![
+            div(&["content-hidden"], &[], "H"),
+            div(&["content-visible"], &[], "V"),
+        ];
+        run(&mut blocks, "html", &[], &meta);
+        assert_eq!(blocks.len(), 1);
+        assert!(texts(&blocks).contains('V'));
+    }
+
+    #[test]
+    fn format_alias_matching() {
+        let meta = empty_meta();
+        // revealjs is html-family: when-format="html" matches.
+        let mut blocks = vec![div(&["content-visible"], &[("when-format", "html")], "X")];
+        run(&mut blocks, "revealjs", &[], &meta);
+        assert_eq!(blocks.len(), 1, "revealjs is an html alias");
+
+        let mut blocks = vec![div(&["content-visible"], &[("when-format", "pdf")], "X")];
+        run(&mut blocks, "html", &[], &meta);
+        assert!(blocks.is_empty());
+    }
+
+    #[test]
+    fn kinds_and_together_values_or_within() {
+        let meta = empty_meta();
+        let kvs = [("when-format", "html"), ("when-profile", "a,b")];
+        let mut blocks = vec![div(&["content-visible"], &kvs, "X")];
+        run(&mut blocks, "html", &["b"], &meta);
+        assert_eq!(blocks.len(), 1, "html AND (a OR b) holds");
+
+        let mut blocks = vec![div(&["content-visible"], &kvs, "X")];
+        run(&mut blocks, "latex", &["b"], &meta);
+        assert!(blocks.is_empty(), "format leg fails");
+
+        let mut blocks = vec![div(&["content-visible"], &kvs, "X")];
+        run(&mut blocks, "html", &["c"], &meta);
+        assert!(blocks.is_empty(), "profile leg fails");
+    }
+
+    #[test]
+    fn meta_truthiness() {
+        let meta = {
+            use pampa::pandoc::yaml_to_config_value;
+            use pampa::utils::diagnostic_collector::DiagnosticCollector;
+            use quarto_config::InterpretationContext;
+            let parsed =
+                quarto_yaml::parse_file("features:\n  beta: true\n  off: false\n", "_quarto.yml")
+                    .expect("valid yaml");
+            let mut diagnostics = DiagnosticCollector::new();
+            yaml_to_config_value(
+                parsed,
+                InterpretationContext::ProjectConfig,
+                &mut diagnostics,
+            )
+        };
+        let case = |path: &str, meta: &ConfigValue| {
+            let mut blocks = vec![div(&["content-visible"], &[("when-meta", path)], "X")];
+            run(&mut blocks, "html", &[], meta);
+            !blocks.is_empty()
+        };
+        assert!(case("features.beta", &meta));
+        assert!(!case("features.off", &meta), "explicit false is falsy");
+        assert!(!case("features.missing", &meta));
+        assert!(case("features", &meta), "a map is truthy");
+    }
+
+    #[test]
+    fn surviving_element_loses_condition_attrs_keeps_class() {
+        let meta = empty_meta();
+        let mut blocks = vec![div(
+            &["content-visible", "keep-me"],
+            &[("when-profile", "adv"), ("data-x", "1")],
+            "X",
+        )];
+        run(&mut blocks, "html", &["adv"], &meta);
+        let Block::Div(d) = &blocks[0] else {
+            panic!("div survives")
+        };
+        assert!(d.attr.1.contains(&"content-visible".to_string()));
+        assert!(d.attr.1.contains(&"keep-me".to_string()));
+        assert!(!d.attr.2.contains_key("when-profile"), "stripped");
+        assert!(d.attr.2.contains_key("data-x"), "unrelated attrs kept");
+    }
+
+    #[test]
+    fn both_markers_warn_and_hide() {
+        let meta = empty_meta();
+        let mut blocks = vec![div(&["content-visible", "content-hidden"], &[], "X")];
+        let diags = run(&mut blocks, "html", &[], &meta);
+        assert!(blocks.is_empty(), "hidden wins");
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].code.as_deref(), Some("Q-2-42"));
+    }
+
+    #[test]
+    fn unknown_condition_attr_warns_once() {
+        let meta = empty_meta();
+        let mut blocks = vec![div(&["content-visible"], &[("when-profil", "x")], "X")];
+        let diags = run(&mut blocks, "html", &[], &meta);
+        assert_eq!(blocks.len(), 1, "unknown condition doesn't hide");
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].code.as_deref(), Some("Q-2-42"));
+        assert!(diags[0].to_text(None).contains("when-profil"));
+    }
+
+    #[test]
+    fn nested_conditionals() {
+        let meta = empty_meta();
+        let inner = div(&["content-visible"], &[("when-profile", "adv")], "INNER");
+        let outer = Block::Div(Div {
+            attr: attr(&["content-visible"], &[("when-format", "html")]),
+            content: vec![inner],
+            source_info: SourceInfo::generated(By::unknown()),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let mut blocks = vec![outer];
+        run(&mut blocks, "html", &[], &meta);
+        assert_eq!(blocks.len(), 1, "outer survives");
+        assert!(!texts(&blocks).contains("INNER"), "inner removed");
+    }
+
+    #[test]
+    fn error_code_is_registered_in_catalog() {
+        assert!(quarto_error_catalog::ERROR_CATALOG.get("Q-2-42").is_some());
+    }
+}

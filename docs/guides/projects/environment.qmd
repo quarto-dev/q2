@@ -13,6 +13,7 @@ of your documents, and to configure the programs your project runs
 |------|---------|
 | `_environment` | Variables shared by everyone; check it into version control. |
 | `_environment.local` | Per-machine overrides (tokens, local paths); add it to `.gitignore`. |
+| `_environment-<profile>` | Variables applied when the named [project profile](profiles.qmd) is active. |
 | `_environment.required` | Names that must be defined for the project to render correctly. |
 
 Each file holds `KEY=value` lines:
@@ -38,7 +39,9 @@ A variable defined in several places resolves in this order:
 1. the **real environment** — a variable exported in your shell (or
    set by CI) always wins; environment files never override it;
 2. `_environment.local`;
-3. `_environment`.
+3. `_environment-<profile>` for each active
+   [project profile](profiles.qmd), first-listed profile first;
+4. `_environment`.
 
 ## Where the variables are visible
 
@@ -55,6 +58,27 @@ A variable defined in several places resolves in this order:
 
 Environment files are project-scoped: a single-file render outside
 any project (no `_quarto.yml`) does not load them.
+
+## Profile environments
+
+With [project profiles](profiles.qmd), a profile named `production`
+also reads `_environment-production`. Define only what varies:
+
+``` {.default filename="_environment-production"}
+OMP_NUM_THREADS=16
+```
+
+You can set `QUARTO_PROFILE` itself in `_environment` or
+`_environment.local` to give the project a default profile; the
+`--profile` option and a `QUARTO_PROFILE` exported in your shell
+both override it. (Profile environment files cannot set
+`QUARTO_PROFILE` — that would activate profiles recursively.)
+
+::: {.callout-important}
+Don't put secrets in `_environment-<profile>` files — they are
+typically checked into version control. Use `_environment.local` or
+your CI system's secret store instead.
+:::
 
 ## Required variables
 

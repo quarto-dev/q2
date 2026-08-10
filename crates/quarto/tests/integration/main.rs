@@ -4,12 +4,14 @@
 pub mod attribution_cli_e2e;
 pub mod bootstrap_sh;
 pub mod coalesced_diagnostics;
+pub mod conditional_content_cli;
 pub mod create;
 pub mod extension_config_spans;
 pub mod get_config_cli;
 pub mod json_errors;
 pub mod jupyter_kernel_cleanup_e2e;
 pub mod preview_cli;
+pub mod project_profile_cli;
 pub mod render_cli_e2e;
 pub mod render_exit_codes;
 pub mod render_integration;

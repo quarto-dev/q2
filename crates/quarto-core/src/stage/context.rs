@@ -254,12 +254,16 @@ impl StageContext {
         let variables =
             load_project_variables(runtime.as_ref(), &project, &mut startup_diagnostics);
 
-        // Active profiles are always empty until bd-ev8mk1rp lands
-        // render-profile support.
+        let active_profile_names: Vec<String> = project
+            .config
+            .active_config_profiles
+            .iter()
+            .map(|p| p.name.clone())
+            .collect();
         let project_env = crate::project::environment::load_project_environment(
             runtime.as_ref(),
             &project,
-            &[],
+            &active_profile_names,
             &mut startup_diagnostics,
         );
 

@@ -927,6 +927,12 @@ pub fn resource_error_to_doc_parse_error(
         .chain(config.config_path.as_deref().map(|p| (hash(p), p)))
         .chain(
             config
+                .profile_config_paths
+                .iter()
+                .map(|p| (hash(p), p.as_path())),
+        )
+        .chain(
+            config
                 .extension_manifest_paths
                 .iter()
                 .map(|p| (hash(p), p.as_path())),
@@ -970,6 +976,7 @@ pub fn resource_error_to_config_parse_error(
         .config_path
         .as_deref()
         .into_iter()
+        .chain(config.profile_config_paths.iter().map(PathBuf::as_path))
         .chain(config.extension_manifest_paths.iter().map(PathBuf::as_path));
     let matched = crate::config_sources::bind_config_source(
         &mut source_context,

@@ -396,6 +396,10 @@ enum Commands {
         #[arg(long = "dry-run", action = clap::ArgAction::SetTrue)]
         dry_run: bool,
 
+        /// Active project profile(s) (comma-separated or repeated).
+        #[arg(long)]
+        profile: Vec<String>,
+
         /// Emit machine-readable output (implies --no-prompt;
         /// final PublishOutcome on stdout, NDJSON events on stderr)
         #[arg(long, action = clap::ArgAction::SetTrue)]
@@ -454,6 +458,10 @@ enum Commands {
         /// Emit compact single-line JSON instead of pretty-printed.
         #[arg(long)]
         compact: bool,
+
+        /// Active project profile(s) (comma-separated or repeated).
+        #[arg(long)]
+        profile: Vec<String>,
     },
 
     /// Inspect pipeline execution traces under `.quarto/trace/`.
@@ -741,7 +749,9 @@ fn main() -> Result<()> {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| quarto_util::verbose_to_filter(cli.verbose).into()),
         )
-        .with(tracing_subscriber::fmt::layer())
+        // Logs go to stderr like every other q2 diagnostic — stdout
+        // stays reserved for command output (`get-config` JSON, etc.).
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
     match cli.command {
@@ -759,6 +769,7 @@ fn main() -> Result<()> {
             fail_fast,
             strict,
             no_render_scripts,
+            profile,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
             inputs,
@@ -774,6 +785,7 @@ fn main() -> Result<()> {
             fail_fast,
             strict,
             no_render_scripts,
+            profile,
         }),
         Commands::Preview {
             path,
@@ -840,10 +852,12 @@ fn main() -> Result<()> {
             no_wait,
             dry_run,
             json,
+            profile,
         } => commands::publish::execute(commands::publish::PublishArgs {
             provider,
             path,
             no_render,
+            profile,
             no_prompt,
             no_browser,
             no_wait,
@@ -860,6 +874,7 @@ fn main() -> Result<()> {
             output,
             strict,
             compact,
+            profile,
         } => commands::get_config::execute(commands::get_config::GetConfigArgs {
             file,
             path,
@@ -867,6 +882,7 @@ fn main() -> Result<()> {
             output,
             strict,
             compact,
+            profile,
         }),
         Commands::Mcp { args } => commands::mcp::run(&args),
 

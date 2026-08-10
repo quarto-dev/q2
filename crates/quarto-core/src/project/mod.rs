@@ -32,6 +32,7 @@ pub mod listing;
 pub mod orchestrator;
 pub mod pass2_renderer;
 pub mod profile_cache;
+pub mod project_profile;
 pub mod render_scripts;
 pub mod sidebar_membership;
 pub mod website_config;
@@ -1089,6 +1090,30 @@ pub struct ProjectConfig {
     /// ([`crate::project::website_config::website_favicon`]); the
     /// navbar brand image is expected to join it (bd-hp3tx).
     pub brand: Option<ResolvedBrand>,
+
+    /// The resolved **project-profile** activation set
+    /// (bd-fu16z22k), in activation order, with per-profile
+    /// provenance for the `-v` echo.
+    ///
+    /// ⚠️ Not related to [`crate::document_profile::DocumentProfile`]
+    /// (the pass-1 summary) — this is the Quarto 1 "project profiles"
+    /// feature (`--profile` / `QUARTO_PROFILE` / `_quarto-<name>.yml`).
+    /// Empty when no profiles are active (including single-file
+    /// pseudo-projects and default-constructed configs).
+    pub active_config_profiles: Vec<project_profile::ActiveProfile>,
+
+    /// Paths of the profile overlay files (`_quarto-<name>.yml`) and
+    /// the local override (`_quarto.yml.local`) that were actually
+    /// read and merged into [`metadata`](Self::metadata), in merge
+    /// order (lowest priority first).
+    ///
+    /// Candidate source files for
+    /// [`crate::config_sources::bind_config_source`], alongside
+    /// [`config_path`](Self::config_path) and
+    /// [`extension_manifest_paths`](Self::extension_manifest_paths):
+    /// merged values keep the filename-hash FileId of the overlay
+    /// they were written in. Also a cache-key input (Phase 2).
+    pub profile_config_paths: Vec<PathBuf>,
 }
 
 impl ProjectConfig {
@@ -1173,6 +1198,49 @@ pub struct ProjectContext {
     pub output_dir: PathBuf,
 }
 
+/// What [`ProjectContext::apply_project_profiles`] resolved: the
+/// activation set and the overlay/local file paths actually merged.
+struct ProfileApplyOutcome {
+    active: Vec<project_profile::ActiveProfile>,
+    paths: Vec<PathBuf>,
+}
+
+/// The file name of a config path, for diagnostics (`_quarto.yml`,
+/// `_quarto-prod.yml`, …). Falls back to the full display string for
+/// pathological paths.
+fn file_label(path: &Path) -> String {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map_or_else(|| path.display().to_string(), str::to_string)
+}
+
+/// Read + parse one profile config layer (`_quarto-<name>.yml` or
+/// `_quarto.yml.local`) into a source-tracked [`ConfigValue`], with
+/// the same interpretation context as the base `_quarto.yml`.
+/// Parse failures abort loudly (Q1 parity: a malformed profile file
+/// stops the render).
+fn read_config_layer(path: &Path, runtime: &dyn SystemRuntime) -> Result<ConfigValue> {
+    use pampa::pandoc::yaml_to_config_value;
+    use pampa::utils::diagnostic_collector::DiagnosticCollector;
+    use quarto_config::InterpretationContext;
+
+    let content = runtime
+        .file_read_string(path)
+        .map_err(|e| QuartoError::Other(format!("Failed to read {}: {}", path.display(), e)))?;
+    let filename = path.to_string_lossy().to_string();
+    let yaml = quarto_yaml::parse_file(&content, &filename)
+        .map_err(|e| QuartoError::Other(format!("Failed to parse {}: {}", path.display(), e)))?;
+    // Like the base-config parse above, tag diagnostics from the
+    // collector are not surfaced here; MetadataMergeStage re-collects
+    // them per document.
+    let mut collector = DiagnosticCollector::new();
+    Ok(yaml_to_config_value(
+        yaml,
+        InterpretationContext::ProjectConfig,
+        &mut collector,
+    ))
+}
+
 impl ProjectContext {
     /// Discover project context from a path.
     ///
@@ -1180,7 +1248,27 @@ impl ProjectContext {
     /// If the path is a directory, looks for `_quarto.yml` in that directory and parents.
     ///
     /// If no `_quarto.yml` is found, creates a single-file pseudo-project.
+    ///
+    /// Project-profile activation (bd-fu16z22k) reads the
+    /// `QUARTO_PROFILE` environment variable through the runtime; to
+    /// pass an explicit `--profile` selection instead, use
+    /// [`Self::discover_with_profile`].
     pub fn discover(path: impl AsRef<Path>, runtime: &dyn SystemRuntime) -> Result<Self> {
+        Self::discover_with_profile(path, runtime, None)
+    }
+
+    /// [`Self::discover`] with an explicit project-profile selection.
+    ///
+    /// `cli_selection` carries `--profile` values (each may itself be
+    /// a comma/space-separated list). `Some` **replaces** the
+    /// `QUARTO_PROFILE` environment variable entirely (Q1 parity);
+    /// `None` falls back to the environment variable and the config
+    /// defaults. See [`project_profile`] for the precedence chain.
+    pub fn discover_with_profile(
+        path: impl AsRef<Path>,
+        runtime: &dyn SystemRuntime,
+        cli_selection: Option<&[String]>,
+    ) -> Result<Self> {
         let path = path.as_ref();
 
         // Canonicalize the path
@@ -1213,7 +1301,7 @@ impl ProjectContext {
         };
 
         // Search for _quarto.yml
-        let (project_dir, config) = Self::find_project_config(&search_dir, runtime)?;
+        let (project_dir, config) = Self::find_project_config(&search_dir, runtime, cli_selection)?;
 
         // Determine if this is a single-file project
         let is_single_file = config.is_none() && input_file.is_some();
@@ -1249,9 +1337,48 @@ impl ProjectContext {
             paths.into_iter().map(DocumentInfo::from_path).collect()
         };
 
+        // Project-less discovery (no `_quarto.yml` found): still
+        // resolve profile activation from the explicit selection /
+        // `QUARTO_PROFILE`, so `--profile bad/name` errors here too
+        // and conditional content (`when-profile`) sees the active
+        // set. There are no overlays, env files, or declarations to
+        // match, so the Q-5-19 unknown-profile warning never fires.
+        let config = match config {
+            Some(config) => config,
+            None => {
+                let mut diagnostics = Vec::new();
+                let env_profile = runtime
+                    .env_get(project_profile::QUARTO_PROFILE_VAR)
+                    .ok()
+                    .flatten();
+                let active = project_profile::resolve_active_profiles(
+                    &project_profile::ProfileResolutionInputs {
+                        cli: cli_selection,
+                        env_var: env_profile.as_deref(),
+                        ..Default::default()
+                    },
+                    &mut diagnostics,
+                );
+                if diagnostics
+                    .iter()
+                    .any(|d| d.kind == quarto_error_reporting::DiagnosticKind::Error)
+                {
+                    return Err(QuartoError::Parse(crate::error::ParseError::new(
+                        diagnostics,
+                        quarto_source_map::SourceContext::new(),
+                    )));
+                }
+                ProjectConfig {
+                    active_config_profiles: active,
+                    config_diagnostics: diagnostics,
+                    ..Default::default()
+                }
+            }
+        };
+
         Ok(Self {
             dir,
-            config: config.unwrap_or_default(),
+            config,
             is_single_file,
             files,
             output_dir,
@@ -1284,6 +1411,7 @@ impl ProjectContext {
     fn find_project_config(
         start_dir: &Path,
         runtime: &dyn SystemRuntime,
+        cli_selection: Option<&[String]>,
     ) -> Result<(Option<PathBuf>, Option<ProjectConfig>)> {
         let mut current = start_dir.to_path_buf();
 
@@ -1294,7 +1422,7 @@ impl ProjectContext {
                 .map_err(|e| QuartoError::Other(format!("Failed to check config path: {}", e)))?;
             if exists {
                 // Found config file - parse it
-                let config = Self::parse_config(&config_path, runtime)?;
+                let config = Self::parse_config(&config_path, runtime, cli_selection)?;
                 return Ok((Some(current), Some(config)));
             }
 
@@ -1304,7 +1432,7 @@ impl ProjectContext {
                 .path_exists(&config_path_yaml, None)
                 .map_err(|e| QuartoError::Other(format!("Failed to check config path: {}", e)))?;
             if exists_yaml {
-                let config = Self::parse_config(&config_path_yaml, runtime)?;
+                let config = Self::parse_config(&config_path_yaml, runtime, cli_selection)?;
                 return Ok((Some(current), Some(config)));
             }
 
@@ -1319,7 +1447,11 @@ impl ProjectContext {
     }
 
     /// Parse a `_quarto.yml` file
-    fn parse_config(path: &Path, runtime: &dyn SystemRuntime) -> Result<ProjectConfig> {
+    fn parse_config(
+        path: &Path,
+        runtime: &dyn SystemRuntime,
+        cli_selection: Option<&[String]>,
+    ) -> Result<ProjectConfig> {
         use pampa::pandoc::yaml_to_config_value;
         use pampa::utils::diagnostic_collector::DiagnosticCollector;
         use quarto_config::InterpretationContext;
@@ -1340,6 +1472,24 @@ impl ProjectContext {
         let mut diagnostics = DiagnosticCollector::new();
         let mut metadata =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+
+        // ── Project profiles (bd-fu16z22k) ──────────────────────────
+        // Resolve the activation set and merge `_quarto-<name>.yml`
+        // overlays plus `_quarto.yml.local` into `metadata` *before*
+        // any field below is extracted, so `project.type`,
+        // `output-dir`, `render`, `resources`, render scripts, and
+        // `brand` are all profile-aware. ("Profiles" here = project
+        // profiles, not DocumentProfile.)
+        let mut profile_diagnostics: Vec<quarto_error_reporting::DiagnosticMessage> = Vec::new();
+        let profile_outcome = Self::apply_project_profiles(
+            &mut metadata,
+            path,
+            runtime,
+            cli_selection,
+            &mut profile_diagnostics,
+        )?;
+        let active_config_profiles = profile_outcome.active;
+        let profile_config_paths = profile_outcome.paths;
 
         // Discover project-scoped extensions once (bd-ad7i1pc6): both
         // custom-type resolution and `contributes.metadata.project`
@@ -1421,10 +1571,15 @@ impl ProjectContext {
             .map(|ext| ext.path.join("_extension.yml"))
             .collect();
 
+        // Profile warnings first (they arose first), then
+        // type-resolution warnings.
+        let mut config_diagnostics = profile_diagnostics;
+        config_diagnostics.extend(resolved.diagnostics);
+
         Ok(ProjectConfig {
             project_kind,
             custom_project_type: resolved.custom,
-            config_diagnostics: resolved.diagnostics,
+            config_diagnostics,
             output_dir,
             render_patterns,
             resources,
@@ -1434,7 +1589,235 @@ impl ProjectContext {
             config_path: Some(path.to_path_buf()),
             extension_manifest_paths,
             brand,
+            active_config_profiles,
+            profile_config_paths,
         })
+    }
+
+    /// Resolve project-profile activation and merge the overlay
+    /// layers into `metadata` (bd-fu16z22k, Phase 1).
+    ///
+    /// Steps, in order:
+    /// 1. extract + strip `profile:` from the base config;
+    /// 2. parse `_quarto.yml.local` (if present) — its
+    ///    `profile.default` feeds activation, its remaining content
+    ///    becomes the highest-priority merge layer;
+    /// 3. resolve the activation set (explicit `cli_selection`
+    ///    replaces `QUARTO_PROFILE` from the runtime environment,
+    ///    which beats the config defaults; then group expansion);
+    /// 4. read `_quarto-<name>.yml` overlays in reverse activation
+    ///    order, so the **first-listed** profile merges last and wins
+    ///    conflicts (Q1 parity);
+    /// 5. warn (Q-5-19) about active profiles that match nothing;
+    /// 6. abort on any error-severity profile diagnostic, with the
+    ///    config files registered so spans render;
+    /// 7. merge `[base, overlays…, local]` and replace `metadata`.
+    ///
+    /// Warnings are left in `diagnostics` for the caller to surface
+    /// via `config_diagnostics`.
+    fn apply_project_profiles(
+        metadata: &mut ConfigValue,
+        path: &Path,
+        runtime: &dyn SystemRuntime,
+        cli_selection: Option<&[String]>,
+        diagnostics: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+    ) -> Result<ProfileApplyOutcome> {
+        use project_profile::{
+            ProfileKeySite, ProfileResolutionInputs, ProfileSource, extract_profile_config,
+            resolve_active_profiles,
+        };
+
+        let config_dir = path.parent().unwrap_or(Path::new("."));
+        let base_label = file_label(path);
+
+        let profile_config = extract_profile_config(
+            metadata,
+            ProfileKeySite::BaseConfig,
+            &base_label,
+            diagnostics,
+        );
+
+        // `_quarto.yml.local` / `_quarto.yaml.local` (Q1's extension
+        // order: `_quarto` + `.yml` + `.local`; `.yml` preferred).
+        let local_path = ["_quarto.yml.local", "_quarto.yaml.local"]
+            .iter()
+            .map(|name| config_dir.join(name))
+            .find(|p| matches!(runtime.path_exists(p, None), Ok(true)));
+        let mut local_default: Vec<String> = Vec::new();
+        let local_layer: Option<(PathBuf, ConfigValue)> = match &local_path {
+            Some(local) => {
+                let mut value = read_config_layer(local, runtime)?;
+                let local_profile = extract_profile_config(
+                    &mut value,
+                    ProfileKeySite::LocalConfig,
+                    &file_label(local),
+                    diagnostics,
+                );
+                local_default = local_profile.default;
+                Some((local.clone(), value))
+            }
+            None => None,
+        };
+
+        // Explicit CLI selection replaces the environment variable
+        // entirely (Q1 parity); the env var is read through the
+        // runtime so WASM/hub runtimes simply report it unset.
+        let env_profile = runtime
+            .env_get(project_profile::QUARTO_PROFILE_VAR)
+            .ok()
+            .flatten();
+        let env_file_profile = environment::dotenv_quarto_profile(runtime, config_dir);
+        let active = resolve_active_profiles(
+            &ProfileResolutionInputs {
+                cli: cli_selection,
+                env_var: env_profile.as_deref(),
+                env_file: env_file_profile.as_deref(),
+                local_default: &local_default,
+                config: &profile_config,
+            },
+            diagnostics,
+        );
+
+        // Overlays in reverse activation order: the first-listed
+        // profile is merged last, so it wins conflicts.
+        let mut overlay_layers: Vec<(PathBuf, ConfigValue)> = Vec::new();
+        let mut matched_names: Vec<&str> = Vec::new();
+        for profile in active.iter().rev() {
+            let overlay = ["yml", "yaml"]
+                .iter()
+                .map(|ext| config_dir.join(format!("_quarto-{}.{ext}", profile.name)))
+                .find(|p| matches!(runtime.path_exists(p, None), Ok(true)));
+            let Some(overlay) = overlay else {
+                continue;
+            };
+            let mut value = read_config_layer(&overlay, runtime)?;
+            // A `profile:` key inside an overlay is inert: Q-5-22.
+            extract_profile_config(
+                &mut value,
+                ProfileKeySite::Overlay,
+                &file_label(&overlay),
+                diagnostics,
+            );
+            overlay_layers.push((overlay, value));
+            matched_names.push(profile.name.as_str());
+        }
+
+        // Q-5-19: an explicitly-selected profile that matches nothing
+        // is probably a typo. Config-sourced profiles are declared by
+        // construction; an `_environment-<name>` file or a
+        // declaration under `profile:` also makes a name known.
+        for profile in &active {
+            let explicit = matches!(
+                profile.source,
+                ProfileSource::CliArg | ProfileSource::EnvVar | ProfileSource::EnvironmentFile
+            );
+            if !explicit || matched_names.contains(&profile.name.as_str()) {
+                continue;
+            }
+            let declared = profile_config.default.iter().any(|n| n == &profile.name)
+                || local_default.iter().any(|n| n == &profile.name)
+                || profile_config
+                    .groups
+                    .iter()
+                    .any(|g| g.iter().any(|n| n == &profile.name));
+            let has_env_file = matches!(
+                runtime.path_exists(
+                    &config_dir.join(format!("_environment-{}", profile.name)),
+                    None
+                ),
+                Ok(true)
+            );
+            if declared || has_env_file {
+                continue;
+            }
+            diagnostics.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::warning(format!(
+                    "Project profile `{}` matches nothing in this project",
+                    profile.name
+                ))
+                .with_code("Q-5-19")
+                .problem(format!(
+                    "`{}` (from {}) selects no configuration: there is no \
+                     `_quarto-{}.yml`, no `_environment-{}`, and the name is not \
+                     declared under `profile:` in `{base_label}`. This is usually \
+                     a typo.",
+                    profile.name,
+                    profile.source.describe(),
+                    profile.name,
+                    profile.name,
+                ))
+                .add_hint(format!(
+                    "If the profile exists only for conditional content, declare \
+                     it under `profile.group` or `profile.default` in \
+                     `{base_label}` to silence this warning.",
+                ))
+                .build(),
+            );
+        }
+
+        // Error-severity diagnostics abort discovery, with every
+        // config file registered so spans render against the right
+        // text (bd-m6wmztln discipline).
+        if diagnostics
+            .iter()
+            .any(|d| d.kind == quarto_error_reporting::DiagnosticKind::Error)
+        {
+            let mut source_context = quarto_source_map::SourceContext::new();
+            crate::config_sources::register_config_source(&mut source_context, path);
+            if let Some(local) = &local_path {
+                crate::config_sources::register_config_source(&mut source_context, local);
+            }
+            for (overlay, _) in &overlay_layers {
+                crate::config_sources::register_config_source(&mut source_context, overlay);
+            }
+            return Err(QuartoError::Parse(crate::error::ParseError::new(
+                std::mem::take(diagnostics),
+                source_context,
+            )));
+        }
+
+        // Merge: base (lowest), overlays (reverse activation order),
+        // `_quarto.yml.local` (highest).
+        let mut paths: Vec<PathBuf> = overlay_layers.iter().map(|(p, _)| p.clone()).collect();
+        if let Some((local, _)) = &local_layer {
+            paths.push(local.clone());
+        }
+        if !overlay_layers.is_empty() || local_layer.is_some() {
+            let mut layers: Vec<&ConfigValue> = vec![metadata];
+            layers.extend(overlay_layers.iter().map(|(_, v)| v));
+            if let Some((_, v)) = &local_layer {
+                layers.push(v);
+            }
+            let merged = quarto_config::merge_with_diagnostics(layers, diagnostics)
+                .map(|m| m.materialize())
+                .and_then(|r| match r {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        diagnostics.push(
+                            quarto_error_reporting::DiagnosticMessageBuilder::error(
+                                "Failed to merge project profile configuration",
+                            )
+                            .with_code("Q-1-23")
+                            .problem(format!(
+                                "Merging the profile configuration layers failed: {e}"
+                            ))
+                            .build(),
+                        );
+                        None
+                    }
+                });
+            match merged {
+                Some(merged) => *metadata = merged,
+                None => {
+                    return Err(QuartoError::Parse(crate::error::ParseError::new(
+                        std::mem::take(diagnostics),
+                        quarto_source_map::SourceContext::new(),
+                    )));
+                }
+            }
+        }
+
+        Ok(ProfileApplyOutcome { active, paths })
     }
 
     /// Get the project kind.

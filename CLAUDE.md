@@ -40,6 +40,8 @@ This applies even at the end of sessions. Prepare the commit but wait for approv
 
 When asked to 'stage and commit everything' or 'commit all changes', stage ALL modified/untracked files (`git add -A`), not just the files Claude edited in the current session.
 
+**Commit-and-continue during approved plan execution:** when executing a plan the user has already approved, commit at each clean phase boundary (pre-commit checklist in `claude-notes/instructions/review.md` passed, full workspace tests green) without stopping to ask, and report the commit in the running summary. Waiting for approval is only required for commits outside approved plan execution, for dirty states, and always for pushing.
+
 ### Snapshot Test Changes
 
 When a commit includes updated or new snapshot files (`.snap` files under `snapshots/`), **always explicitly document these changes** in the commit message and in conversation with the user. Snapshot changes can hide unwanted regressions. Specifically:

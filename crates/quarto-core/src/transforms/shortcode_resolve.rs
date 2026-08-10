@@ -187,11 +187,24 @@ fn positional_arg_to_string(arg: &ShortcodeArg) -> Option<String> {
 /// project env map (loaded through the VFS) and fallbacks apply there.
 pub struct EnvShortcodeHandler {
     project_env: hashlink::LinkedHashMap<String, String>,
+    /// Normalized active project-profile list for `QUARTO_PROFILE`
+    /// lookups (bd-fu16z22k). Checked BEFORE the real environment:
+    /// after `--profile b` replaced `QUARTO_PROFILE=a`, the shortcode
+    /// must resolve `b` — Q1 guaranteed this by writing the
+    /// normalized list back into the env; q2 never mutates its env,
+    /// so the handler carries the value as data instead.
+    quarto_profile: Option<String>,
 }
 
 impl EnvShortcodeHandler {
-    pub fn new(project_env: hashlink::LinkedHashMap<String, String>) -> Self {
-        Self { project_env }
+    pub fn new(
+        project_env: hashlink::LinkedHashMap<String, String>,
+        quarto_profile: Option<String>,
+    ) -> Self {
+        Self {
+            project_env,
+            quarto_profile,
+        }
     }
 }
 
@@ -222,8 +235,10 @@ impl ShortcodeHandler for EnvShortcodeHandler {
             });
         };
 
-        let value = std::env::var(&name)
-            .ok()
+        let value = (name == crate::project::project_profile::QUARTO_PROFILE_VAR)
+            .then(|| self.quarto_profile.clone())
+            .flatten()
+            .or_else(|| std::env::var(&name).ok())
             .or_else(|| self.project_env.get(&name).cloned())
             .or_else(|| {
                 shortcode
@@ -459,7 +474,7 @@ impl ShortcodeResolveTransform {
     /// Used in tests that don't need Lua support.
     pub fn new() -> Self {
         Self {
-            handlers: Self::builtin_handlers(None, hashlink::LinkedHashMap::new()),
+            handlers: Self::builtin_handlers(None, hashlink::LinkedHashMap::new(), None),
             lua_shortcode_paths: Vec::new(),
             extensions: Vec::new(),
             runtime: None,
@@ -473,10 +488,11 @@ impl ShortcodeResolveTransform {
     fn builtin_handlers(
         variables: Option<ConfigValue>,
         project_env: hashlink::LinkedHashMap<String, String>,
+        quarto_profile: Option<String>,
     ) -> Vec<Box<dyn ShortcodeHandler>> {
         vec![
             Box::new(MetaShortcodeHandler),
-            Box::new(EnvShortcodeHandler::new(project_env)),
+            Box::new(EnvShortcodeHandler::new(project_env, quarto_profile)),
             Box::new(VarShortcodeHandler::new(variables)),
         ]
     }
@@ -492,9 +508,10 @@ impl ShortcodeResolveTransform {
         target_format: String,
         variables: Option<ConfigValue>,
         project_env: hashlink::LinkedHashMap<String, String>,
+        quarto_profile: Option<String>,
     ) -> Self {
         Self {
-            handlers: Self::builtin_handlers(variables, project_env),
+            handlers: Self::builtin_handlers(variables, project_env, quarto_profile),
             lua_shortcode_paths,
             extensions,
             runtime: Some(runtime),
@@ -2323,7 +2340,7 @@ mod tests {
 
     #[test]
     fn test_env_shortcode_handler_set_and_fallback() {
-        let handler = EnvShortcodeHandler::new(Default::default());
+        let handler = EnvShortcodeHandler::new(Default::default(), None);
         let meta = ConfigValue::new_map(vec![], dummy_source_info());
 
         // Set variable wins over fallback.
@@ -2377,6 +2394,50 @@ mod tests {
     }
 
     #[test]
+    fn test_env_shortcode_quarto_profile_beats_real_env() {
+        // bd-fu16z22k: `{{< env QUARTO_PROFILE >}}` must resolve the
+        // NORMALIZED active list, even when the real environment
+        // still holds the raw pre-`--profile` value.
+        // SAFETY: test-local; nextest runs each test in its own process.
+        unsafe { std::env::set_var("QUARTO_PROFILE", "stale-raw-value") };
+        let handler =
+            EnvShortcodeHandler::new(Default::default(), Some("advanced,production".to_string()));
+        let meta = ConfigValue::new_map(vec![], dummy_source_info());
+        let shortcode = make_shortcode("env", vec!["QUARTO_PROFILE"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Inlines(inlines) => {
+                let Inline::Str(s) = &inlines[0] else {
+                    panic!("expected Str");
+                };
+                assert_eq!(s.text, "advanced,production");
+            }
+            _ => panic!("Expected Inlines"),
+        }
+
+        // With no active profiles the special case is inert: the
+        // real environment value shows through unchanged.
+        let handler = EnvShortcodeHandler::new(Default::default(), None);
+        let shortcode = make_shortcode("env", vec!["QUARTO_PROFILE"]);
+        let ctx = ShortcodeContext {
+            metadata: &meta,
+            source_info: &shortcode.source_info,
+        };
+        match handler.resolve(&shortcode, &ctx, ResolutionContext::Inline) {
+            ShortcodeResult::Inlines(inlines) => {
+                let Inline::Str(s) = &inlines[0] else {
+                    panic!("expected Str");
+                };
+                assert_eq!(s.text, "stale-raw-value");
+            }
+            _ => panic!("Expected Inlines"),
+        }
+    }
+
+    #[test]
     fn test_env_shortcode_handler_project_env() {
         let mut project_env = hashlink::LinkedHashMap::new();
         project_env.insert(
@@ -2387,7 +2448,7 @@ mod tests {
             "QUARTO_TEST_ENVFILE_SHADOWED".to_string(),
             "from-file".to_string(),
         );
-        let handler = EnvShortcodeHandler::new(project_env);
+        let handler = EnvShortcodeHandler::new(project_env, None);
         let meta = ConfigValue::new_map(vec![], dummy_source_info());
 
         // Defined only in the project env map: map value used (even
@@ -3337,6 +3398,7 @@ mod tests {
                 "html".to_string(),
                 None,
                 hashlink::LinkedHashMap::new(),
+                None,
             );
 
             let entry = |key: &str, value: ConfigValue| ConfigMapEntry {
@@ -3414,6 +3476,7 @@ mod tests {
                 "html".to_string(),
                 None,
                 Default::default(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -3464,6 +3527,7 @@ mod tests {
                 "html".to_string(),
                 None,
                 Default::default(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -3512,6 +3576,7 @@ mod tests {
                 "html".to_string(),
                 None,
                 Default::default(),
+                None,
             );
 
             let meta = ConfigValue::new_map(
@@ -3560,6 +3625,7 @@ mod tests {
                 "html".to_string(),
                 None,
                 Default::default(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -3614,6 +3680,7 @@ mod tests {
                 "html".to_string(),
                 None,
                 Default::default(),
+                None,
             );
 
             // Shortcode alone in Para → block context
@@ -3660,6 +3727,7 @@ mod tests {
                 "html".to_string(),
                 None,
                 Default::default(),
+                None,
             );
 
             let mut ast = Pandoc {
@@ -3716,6 +3784,7 @@ mod tests {
                 "html".to_string(),
                 None,
                 Default::default(),
+                None,
             );
 
             let tok = token_si();

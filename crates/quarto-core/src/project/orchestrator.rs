@@ -1708,6 +1708,30 @@ async fn pass1_profile_with_cache(
     // §Decision 2 footnote for the rationale.
     let extension_contributions: Vec<(String, Vec<u8>)> = Vec::new();
 
+    // Project-profile inputs (bd-fu16z22k): active names plus raw
+    // bytes of every merged overlay / `_quarto.yml.local`, so a
+    // profile switch or overlay edit invalidates cached pass-1
+    // DocumentProfiles. Paths are hashed project-relative for
+    // machine-independence, same policy as `metadata_files`.
+    let active_profile_names: Vec<String> = project
+        .config
+        .active_config_profiles
+        .iter()
+        .map(|p| p.name.clone())
+        .collect();
+    let profile_config_files: Vec<(std::path::PathBuf, Vec<u8>)> = project
+        .config
+        .profile_config_paths
+        .iter()
+        .map(|path| {
+            let rel = path
+                .strip_prefix(&project.dir)
+                .map_or_else(|_| path.clone(), std::path::Path::to_path_buf);
+            let bytes = runtime.file_read(path).unwrap_or_default();
+            (rel, bytes)
+        })
+        .collect();
+
     let key_inputs = crate::project::cache_key::Pass1KeyInputs {
         format_id: &format_id,
         source_path: &source_path,
@@ -1715,6 +1739,8 @@ async fn pass1_profile_with_cache(
         metadata_files: &metadata_files,
         quarto_yml_bytes: &quarto_yml_bytes,
         extension_contributions: &extension_contributions,
+        active_config_profiles: &active_profile_names,
+        profile_config_files: &profile_config_files,
     };
     let key_bytes = crate::project::cache_key::pass1_key(&key_inputs);
     let key_hex = crate::project::cache_key::hex_encode(&key_bytes);

@@ -53,6 +53,8 @@ pub struct GetConfigArgs {
     pub strict: bool,
     /// Emit single-line JSON instead of pretty-printed.
     pub compact: bool,
+    /// `--profile` values; non-empty replaces `QUARTO_PROFILE` (bd-fu16z22k).
+    pub profile: Vec<String>,
 }
 
 /// Compute the JSON value for the requested path.
@@ -69,8 +71,12 @@ pub fn get_config_value(args: &GetConfigArgs) -> Result<Option<Value>> {
         .canonicalize()
         .with_context(|| format!("Cannot read document: {}", args.file.display()))?;
 
-    let project = ProjectContext::discover(&input, runtime.as_ref())
-        .context("Failed to discover project context")?;
+    let project = ProjectContext::discover_with_profile(
+        &input,
+        runtime.as_ref(),
+        quarto_core::project::project_profile::cli_selection(&args.profile),
+    )
+    .context("Failed to discover project context")?;
 
     let format = Format::from_format_string(&args.to)
         .map_err(|e| anyhow::anyhow!("Invalid --to format '{}': {}", args.to, e))?;

@@ -21,7 +21,7 @@ mod os_wasm;
 mod pandoc_doc;
 mod path;
 mod quarto_api;
-mod quarto_doc;
+pub mod quarto_doc;
 mod readwrite;
 pub mod runtime;
 pub mod shortcode;
