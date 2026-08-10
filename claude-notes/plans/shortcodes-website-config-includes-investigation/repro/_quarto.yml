@@ -1,0 +1,17 @@
+project:
+  type: website
+
+website:
+  title: "My Site <small>Version {{< env REPRO_VERSION >}}</small>"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+  page-footer:
+    center: |
+      My Product {{< env REPRO_VERSION >}}
+
+format:
+  html:
+    include-before-body:
+      - !path _banner.html

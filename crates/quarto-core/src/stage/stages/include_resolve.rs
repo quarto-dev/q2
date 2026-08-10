@@ -383,6 +383,14 @@ fn inlines_to_html_literal(inlines: &[quarto_pandoc_types::inline::Inline]) -> S
             Inline::Image(i) => out.push_str(&inlines_to_html_literal(&i.content)),
             Inline::Span(s) => out.push_str(&inlines_to_html_literal(&s.content)),
             Inline::Cite(c) => out.push_str(&inlines_to_html_literal(&c.content)),
+            // Reconstruct shortcode source text (escaped ones keep
+            // their triple braces) so ShortcodeResolveTransform's
+            // text-level pass over `rendered.includes.*` can expand
+            // them later. Previously dropped silently
+            // (bd-shortcodes-in-metadata-bp06aub8).
+            Inline::Shortcode(sc) => {
+                out.push_str(&pampa::writers::qmd::shortcode_source_text(sc));
+            }
             _ => {}
         }
     }

@@ -19,6 +19,29 @@ use std::{io, mem};
 use quarto_config::{ConfigMapEntry, ConfigValue, ConfigValueKind, InterpretationContext, MergeOp};
 use yaml_rust2::Yaml;
 
+/// Parse a config string as qmd markdown, yielding `PandocInlines` (for a
+/// single-paragraph result) or `PandocBlocks`.
+///
+/// Public entry point for consumers that re-interpret specific
+/// project-config strings as markdown after load — e.g. quarto-core's
+/// `ConfigMarkdownTransform`, which applies markdown semantics to website
+/// presentation keys (`website.title`, `page-footer` regions, …) so
+/// shortcodes and inline markup behave as they do in document metadata.
+///
+/// Uses untagged-value semantics: a parse failure emits a Q-1-20 *warning*
+/// into `diagnostics` and falls back to an error-recovery span carrying the
+/// literal text.
+pub fn parse_config_string_as_markdown(
+    value: &str,
+    source_info: &quarto_source_map::SourceInfo,
+    diagnostics: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> ConfigValueKind {
+    let mut collector = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+    let kind = parse_yaml_string_as_markdown_to_config(value, source_info, false, &mut collector);
+    diagnostics.extend(collector.into_diagnostics());
+    kind
+}
+
 /// Parse a YAML string as markdown and return ConfigValue with PandocInlines/PandocBlocks.
 ///
 /// - If `is_explicit_md` is true: This is a !md tagged value, ERROR on parse failure

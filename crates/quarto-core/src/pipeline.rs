@@ -1196,6 +1196,12 @@ pub fn build_transform_pipeline(
     // === NORMALIZATION PHASE ===
     pipeline.push(Box::new(CalloutTransform::new()));
     pipeline.push(Box::new(CalloutResolveTransform::new()));
+    // Markdown-parse blessed website presentation config strings
+    // (website.title, page-footer regions, …) so the shortcode
+    // transform's metadata walk — registered immediately after — sees
+    // live Shortcode/RawInline nodes instead of literal scalars
+    // (bd-shortcodes-in-metadata-bp06aub8).
+    pipeline.push(Box::new(crate::transforms::ConfigMarkdownTransform::new()));
     pipeline.push(Box::new(ShortcodeResolveTransform::with_lua_support(
         shortcode_paths,
         extensions,
