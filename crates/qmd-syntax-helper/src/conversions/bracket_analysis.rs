@@ -296,10 +296,13 @@ fn extract_definitions(source: &str, parts: Vec<Part>) -> (Vec<Definition>, Vec<
             continue;
         };
 
-        let line_end = source[whole.end()..]
-            .starts_with('\n')
-            .then(|| whole.end() + 1)
-            .unwrap_or(whole.end());
+        // Swallow the line's own newline, so deleting the definition does
+        // not leave an empty line behind.
+        let line_end = if source[whole.end()..].starts_with('\n') {
+            whole.end() + 1
+        } else {
+            whole.end()
+        };
 
         consumed.insert(label_start);
         definitions.push(Definition {

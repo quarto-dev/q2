@@ -3,7 +3,7 @@
 **Date:** 2026-08-10
 **Braid:** `bd-reference-links-unsupported-ddc4skac` (feature, p1, labels: `diagnostics`, `parity`)
 **Branch:** `main` @ `05c2454e` — investigated in place, no worktree created (see *Where this landed*)
-**Status:** In progress on `braid/bd-reference-links-unsupported-ddc4skac`. Phases 0–4 landed and green; Phase 5 (diagnostic) and Phase 6 (end-to-end) remain.
+**Status:** In progress on `braid/bd-reference-links-unsupported-ddc4skac`. Phases 0–4 and 6 landed and green. **Phase 5 (diagnostic) remains** — see the placement question below.
 
 ## Scope, restated
 
@@ -159,7 +159,7 @@ never fires it unasked.
       README's *Future Converters* entry moves to shipped and gains the
       two-rule explanation plus the `check`-before-`convert` guidance.
 - [ ] **Phase 5 — Diagnostic.** See below.
-- [ ] **Phase 6 — End-to-end verification** per CLAUDE.md: run the real
+- [x] **Phase 6 — End-to-end verification** per CLAUDE.md: run the real
       binary against the Connect docs, inspect output, record the exact
       invocation and a snippet here.
 
@@ -189,6 +189,41 @@ would **not** be caught by this diagnostic.
 
 Per `crates/pampa/CLAUDE.md`, adding a code means a `Q-2-42.json` in
 `resources/error-corpus/` with cases, then `./scripts/build_error_table.ts`.
+
+## Phase 6 — end-to-end verification (done 2026-08-10)
+
+Run against a **copy of the real Posit Connect docs** (`docs-quarto-2`, 383
+files), not a fixture. Note the corpus is mostly `.md`, not `.qmd` — a first
+pass globbing only `**/*.qmd` matched 206 files and found 1 issue, which
+looked like a clean bill of health and was not.
+
+```bash
+qmd-syntax-helper check   -r reference-links -r literal-brackets "**/*.md" "**/*.qmd"
+qmd-syntax-helper convert -r reference-links -r literal-brackets --in-place "**/*.md" "**/*.qmd"
+```
+
+`check` found **12 issues across exactly the 7 pages the strand named** —
+and three instances the strand had not catalogued: `[3]` and `[4]` in
+`admin/security`, a second `[version TBD]` in `user/quarto`, and
+`[PositConnect]` in `admin/appendix/branding`.
+
+`convert` changed those 7 files and **nothing else** (`diff -ru` against the
+original tree). Re-running `check` on the converted tree reports **0 issues
+in 383 files**, confirming convergence at corpus scale.
+
+Rendered output inspected with `pampa -t html`, before vs. after:
+
+| | before | after |
+| --- | --- | --- |
+| `process-management` link | `the RedHat documentation</span><span>gcc-toolset</span>` | `<a href="https://docs.redhat.com/…">the RedHat documentation</a>` |
+| `process-management` leaked definitions | 2 occurrences of `gcc-toolset</span>` | 0 |
+| `admin/security` CSRF markers | `upon an initial user session <span>1</span>,` | `upon an initial user session [1],` |
+| `admin/email` documented value | `with “<span>Posit Connect</span>.”` | `with “[Posit Connect].”` |
+
+The `admin/email` row is the one worth dwelling on: before the fix the page
+stated the default subject prefix was `Posit Connect`, when the real default
+is `[Posit Connect]`. The docs were *wrong*, not merely ugly, and the render
+now matches the product.
 
 ## Risks / tradeoffs
 
