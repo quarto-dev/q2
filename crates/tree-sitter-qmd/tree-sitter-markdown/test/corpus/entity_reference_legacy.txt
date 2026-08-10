@@ -1,0 +1,41 @@
+================================================================================
+entity_reference_legacy.txt: semicolon-terminated legacy name is an entity
+================================================================================
+A &AMP; B
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (entity_reference)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+entity_reference_legacy.txt: truncated legacy alternative is NOT an entity
+================================================================================
+A &AM; B
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+entity_reference_legacy.txt: bare legacy name without semicolon is NOT an entity
+================================================================================
+A &AMP B
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))

@@ -36,10 +36,11 @@ fn entity_table() -> &'static HashMap<String, String> {
 /// Process named entity references to their character values:
 /// `&gt;` => `>`, `&nbsp;` => U+00A0, `&copy;` => `©`, etc.
 ///
-/// A name missing from the table passes through verbatim. The regex the
-/// grammar matched with is generated from the same table, so misses are only
-/// reachable through its mangled legacy-name alternatives (bd-v8qc9zyc) —
-/// never from well-formed input — hence no diagnostic.
+/// A name missing from the table passes through verbatim, with no diagnostic.
+/// The regex the grammar matched with is generated from the same table
+/// (semicolon-terminated names only, since bd-v8qc9zyc), so a miss is not
+/// reachable from grammar-produced nodes; the fallback is defense-in-depth
+/// against the two data sources drifting apart.
 pub fn process_entity_reference(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
