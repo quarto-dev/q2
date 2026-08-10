@@ -246,9 +246,9 @@ be numbered. This is the strand's most important architectural constraint.
 - [x] **Phase 5 — `fig-alt` + `fig-scap` (fixes D3)** (commit `02cfccf4`).
       Stop consuming what cannot be routed; route `fig-alt` into `accDescr:`
       per decision 2.
-- [x] **Phase 6 — Diagnostics** (commit `0233f3cc`). Q-2-42 (option ignored on
+- [x] **Phase 6 — Diagnostics** (commit `0233f3cc`, renumbered on rebase). Q-2-47 (option ignored on
       a diagram cell, distinguishing unknown from recognized-but-unroutable)
-      and Q-2-43 (`#|` where `%%|` is expected), both source-mapped to the
+      and Q-2-48 (`#|` where `%%|` is expected), both source-mapped to the
       offending key.
 - [x] **Phase 7 — End-to-end + preview verification.** See below.
 - [x] **Phase 8 — Docs.** `docs/guides/authoring/diagrams.qmd` gains a
@@ -260,6 +260,22 @@ be numbered. This is the strand's most important architectural constraint.
       rule rewriting ```` ```{mermaid} ```` → ```` ```mermaid ````. Cell
       options need no rewrite — Q1 documents already write `%%|`, which is
       exactly what this strand made q2 accept.
+
+## Rebase note: error codes renumbered
+
+The branch was rebased onto `origin/main` before opening the PR, and
+`main` had meanwhile claimed **Q-2-42 through Q-2-46** (conditional-content
+attributes, callout titles, reference-style links — PR #497). The two codes
+added here were renumbered **Q-2-42 → Q-2-47** and **Q-2-43 → Q-2-48**; the
+catalog conflict was resolved by keeping `main`'s entries and appending the
+renumbered pair. The Phase 6 commit *message* still names the pre-rebase
+numbers — the code, catalog, tests and this plan all use the final ones.
+
+Worth knowing for the next person: `error_catalog.json` is an append-heavy
+shared file with no reservation mechanism, so two branches adding codes in
+the same window will always collide there. The conflict is mechanical, but
+the renumber has to be chased through every `with_code(...)` call, its
+tests, and any prose that quotes the code.
 
 ## Verification record (Phase 7)
 
@@ -278,12 +294,12 @@ output inspected:
   `<figcaption id="fig-diagram-caption">Figure 1: A labelled flowchart.</figcaption>`,
   and `@fig-diagram` resolving to a live `Figure 1` link (it previously emitted
   `?fig-diagram?` plus an unresolved-crossref warning).
-- **B3** (`#|` in a mermaid fence) → left inert, with Q-2-43 reported at
+- **B3** (`#|` in a mermaid fence) → left inert, with Q-2-48 reported at
   `probe.qmd:28:1` — the exact line of the `#|` run.
 - **B4** (a `%%|` below the first code line) → left as an ordinary comment.
 
-`…/probe4.qmd` exercises the diagnostics: Q-2-42 at `9:5` (`echo`) and `10:5`
-(`theme`) with the caret on the key, Q-2-42 at `20:5` naming `fig-scap` as
+`…/probe4.qmd` exercises the diagnostics: Q-2-47 at `9:5` (`echo`) and `10:5`
+(`theme`) with the caret on the key, Q-2-47 at `20:5` naming `fig-scap` as
 recognized-but-ineffective, and **no** diagnostics from the ```` ```{python} ````
 cell in the same document.
 
