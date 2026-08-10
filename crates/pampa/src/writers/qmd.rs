@@ -2058,10 +2058,20 @@ fn write_notereference(
 ) -> std::io::Result<()> {
     write!(buf, "[^{}]", noteref.id)
 }
+/// Serialize a shortcode back to its qmd source form (`{{< … >}}`;
+/// escaped: `{{{< … >}}}`), including grammar-accurate arg quoting.
+/// Public so non-writer consumers (e.g. quarto-core's include-slot
+/// handling) can reconstruct literal shortcode text for later
+/// text-level expansion.
+pub fn shortcode_source_text(shortcode: &crate::pandoc::Shortcode) -> String {
+    let mut buf = Vec::new();
+    write_shortcode(shortcode, &mut buf).expect("writing to a Vec cannot fail");
+    String::from_utf8(buf).expect("qmd shortcode serialization is UTF-8")
+}
+
 fn write_shortcode(
     shortcode: &crate::pandoc::Shortcode,
     buf: &mut dyn std::io::Write,
-    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     let (open, close) = if shortcode.is_escaped {
         ("{{{<", ">}}}")
@@ -2071,11 +2081,11 @@ fn write_shortcode(
     write!(buf, "{} {}", open, shortcode.name)?;
     for arg in &shortcode.positional_args {
         write!(buf, " ")?;
-        write_shortcode_arg(arg, buf, ctx)?;
+        write_shortcode_arg(arg, buf)?;
     }
     for (key, value) in &shortcode.keyword_args {
         write!(buf, " {}=", key)?;
-        write_shortcode_arg(value, buf, ctx)?;
+        write_shortcode_arg(value, buf)?;
     }
     write!(buf, " {}", close)
 }
@@ -2083,14 +2093,13 @@ fn write_shortcode(
 fn write_shortcode_arg(
     arg: &crate::pandoc::ShortcodeArg,
     buf: &mut dyn std::io::Write,
-    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     use crate::pandoc::ShortcodeArg;
     match arg {
         ShortcodeArg::String(s) => write_shortcode_string_value(s, buf),
         ShortcodeArg::Number(n) => write!(buf, "{}", n),
         ShortcodeArg::Boolean(b) => write!(buf, "{}", b),
-        ShortcodeArg::Shortcode(inner) => write_shortcode(inner, buf, ctx),
+        ShortcodeArg::Shortcode(inner) => write_shortcode(inner, buf),
         ShortcodeArg::KeyValue(map) => {
             // Positional `key=value` pair(s). The qmd parser doesn't currently
             // produce this variant from source — it's reachable only via Lua
@@ -2103,7 +2112,7 @@ fn write_shortcode_arg(
                 }
                 first = false;
                 write!(buf, "{}=", k)?;
-                write_shortcode_arg(v, buf, ctx)?;
+                write_shortcode_arg(v, buf)?;
             }
             Ok(())
         }
@@ -2430,7 +2439,7 @@ fn write_inline(
         crate::pandoc::Inline::Highlight(node) => write_highlight(node, buf, ctx),
         crate::pandoc::Inline::Delete(node) => write_delete(node, buf, ctx),
         crate::pandoc::Inline::Insert(node) => write_insert(node, buf, ctx),
-        crate::pandoc::Inline::Shortcode(node) => write_shortcode(node, buf, ctx),
+        crate::pandoc::Inline::Shortcode(node) => write_shortcode(node, buf),
         crate::pandoc::Inline::Attr(node) => write_attr(&node.attr, buf, ctx),
         crate::pandoc::Inline::NoteReference(node) => write_notereference(node, buf, ctx),
         crate::pandoc::Inline::Note(node) => write_note(node, buf, ctx),

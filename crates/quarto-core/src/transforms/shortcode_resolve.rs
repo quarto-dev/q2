@@ -1241,6 +1241,22 @@ impl AstTransform for ShortcodeResolveTransform {
         )
         .await;
 
+        // Expand shortcodes *textually* in the resolved include slots
+        // (`rendered.includes.*`, written by IncludeResolveStage before
+        // any transform ran). Include files are HTML, not qmd — Q1
+        // substitutes shortcodes in them without markdown parsing, and
+        // so do we. Handler lookups see the fully-resolved metadata
+        // (both walks above have completed).
+        let resolved_meta = ast.meta.clone();
+        expand_include_slot_shortcodes(
+            &mut ast.meta,
+            self,
+            &resolved_meta,
+            &mut diagnostics,
+            &mut lua_engine,
+        )
+        .await;
+
         // Extract Lua-registered data before the engine is dropped
         if let Some(state) = lua_engine.as_mut() {
             let engine = &mut state.engine;
@@ -1361,6 +1377,105 @@ fn resolve_config_value<'a>(
             | ConfigValueKind::Expr(_) => {}
         }
     })
+}
+
+/// Expand shortcodes textually in the `rendered.includes.{header,
+/// before-body, after-body}` string arrays.
+///
+/// Text context (Q1's `apply_code_shortcode` analog): results are
+/// stringified, escaped shortcodes come out in single-brace literal
+/// form, and errors follow the body-text policy — a plain `?key`
+/// marker in the text plus the handler's diagnostic. (No markup in the
+/// marker: these strings land in arbitrary HTML positions.)
+async fn expand_include_slot_shortcodes(
+    meta: &mut ConfigValue,
+    transform: &ShortcodeResolveTransform,
+    handler_meta: &ConfigValue,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+    lua_engine: &mut Option<LuaEngineState>,
+) {
+    for slot in ["header", "before-body", "after-body"] {
+        let Some(slot_value) = meta.get_path_mut(&["rendered", "includes", slot]) else {
+            continue;
+        };
+        let ConfigValueKind::Array(items) = &mut slot_value.value else {
+            continue;
+        };
+        for item in items {
+            let ConfigValueKind::Scalar(yaml_rust2::Yaml::String(text)) = &item.value else {
+                continue;
+            };
+            let Some(segments) = crate::transforms::parse_text_shortcodes(text, &item.source_info)
+            else {
+                continue;
+            };
+            let expanded = expand_text_segments(
+                segments,
+                transform,
+                handler_meta,
+                &item.source_info,
+                diagnostics,
+                lua_engine,
+            )
+            .await;
+            item.value = ConfigValueKind::Scalar(yaml_rust2::Yaml::String(expanded));
+        }
+    }
+}
+
+/// Stringify a parsed segment list, dispatching each shortcode through
+/// the transform's handler registry.
+async fn expand_text_segments(
+    segments: Vec<crate::transforms::TextSegment>,
+    transform: &ShortcodeResolveTransform,
+    handler_meta: &ConfigValue,
+    source_info: &SourceInfo,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+    lua_engine: &mut Option<LuaEngineState>,
+) -> String {
+    use crate::transforms::TextSegment;
+
+    let mut out = String::new();
+    for segment in segments {
+        match segment {
+            TextSegment::Literal(text) => out.push_str(&text),
+            TextSegment::Shortcode(shortcode) => {
+                let ctx = ShortcodeContext {
+                    metadata: handler_meta,
+                    source_info,
+                };
+                let result = transform
+                    .dispatch_shortcode(
+                        &shortcode,
+                        &ctx,
+                        ResolutionContext::Inline,
+                        lua_engine,
+                        diagnostics,
+                    )
+                    .await;
+                match result {
+                    ShortcodeResult::Inlines(inlines) => out.push_str(
+                        &crate::transforms::metadata_normalize::inlines_to_plain_text(&inlines),
+                    ),
+                    ShortcodeResult::Blocks(blocks) => {
+                        let inlines = flatten_blocks_to_inlines(&blocks, source_info);
+                        out.push_str(
+                            &crate::transforms::metadata_normalize::inlines_to_plain_text(&inlines),
+                        );
+                    }
+                    ShortcodeResult::Error(error) => {
+                        diagnostics.push(error.diagnostic);
+                        out.push('?');
+                        out.push_str(&error.key);
+                    }
+                    ShortcodeResult::Preserve => {
+                        out.push_str(&pampa::writers::qmd::shortcode_source_text(&shortcode));
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Resolve shortcodes in a vector of blocks.
@@ -2583,6 +2698,162 @@ mod tests {
     // === Lua integration tests (3.4.6) ===
     // These tests require the native Lua runtime
     #[cfg(not(target_arch = "wasm32"))]
+    /// Tests for the metadata walk and the text-level include-slot
+    /// expansion (bd-shortcodes-in-metadata-bp06aub8).
+    mod meta_and_include_walks {
+        use super::*;
+        use crate::format::Format;
+        use crate::render::BinaryDependencies;
+        use quarto_pandoc_types::ConfigValue;
+
+        fn entry(key: &str, value: ConfigValue) -> ConfigMapEntry {
+            ConfigMapEntry {
+                key: key.to_string(),
+                key_source: dummy_source_info(),
+                value,
+            }
+        }
+
+        fn s(text: &str) -> ConfigValue {
+            ConfigValue::new_string(text.to_string(), dummy_source_info())
+        }
+
+        /// meta = { version: "9.9.9", subtitle: PandocInlines[Str "Sub ", Shortcode(meta <key>)] }
+        fn meta_with_subtitle_shortcode(key: &str) -> ConfigValue {
+            let subtitle = ConfigValue {
+                value: ConfigValueKind::PandocInlines(vec![
+                    Inline::Str(Str {
+                        text: "Sub ".to_string(),
+                        source_info: dummy_source_info(),
+                    }),
+                    Inline::Shortcode(make_shortcode("meta", vec![key])),
+                ]),
+                source_info: dummy_source_info(),
+                merge_op: Default::default(),
+            };
+            ConfigValue::new_map(
+                vec![entry("version", s("9.9.9")), entry("subtitle", subtitle)],
+                dummy_source_info(),
+            )
+        }
+
+        async fn run_transform(ast: &mut Pandoc) -> Vec<DiagnosticMessage> {
+            let transform = ShortcodeResolveTransform::new();
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/doc.qmd");
+            let format = Format::html();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            transform.transform(ast, &mut ctx).await.unwrap();
+            ctx.diagnostics.clone()
+        }
+
+        fn subtitle_text(meta: &ConfigValue) -> String {
+            let ConfigValueKind::PandocInlines(inlines) =
+                &meta.get("subtitle").expect("subtitle").value
+            else {
+                panic!("subtitle should stay PandocInlines");
+            };
+            crate::transforms::metadata_normalize::inlines_to_plain_text(inlines)
+        }
+
+        #[tokio::test]
+        async fn meta_walk_resolves_shortcode_in_metadata_value() {
+            let mut ast = Pandoc {
+                meta: meta_with_subtitle_shortcode("version"),
+                blocks: vec![],
+            };
+            let diags = run_transform(&mut ast).await;
+            assert_eq!(subtitle_text(&ast.meta), "Sub 9.9.9");
+            assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
+        }
+
+        #[tokio::test]
+        async fn meta_walk_unresolved_marks_and_warns_q16_5() {
+            let mut ast = Pandoc {
+                meta: meta_with_subtitle_shortcode("nope"),
+                blocks: vec![],
+            };
+            let diags = run_transform(&mut ast).await;
+            assert_eq!(subtitle_text(&ast.meta), "Sub ?meta:nope");
+            assert!(
+                diags.iter().any(|d| format!("{:?}", d).contains("Q-16-5")),
+                "expected a Q-16-5 diagnostic; got: {:?}",
+                diags
+            );
+        }
+
+        fn meta_with_include_slot(text: &str) -> ConfigValue {
+            let includes = ConfigValue::new_map(
+                vec![entry(
+                    "includes",
+                    ConfigValue::new_map(
+                        vec![entry(
+                            "before-body",
+                            ConfigValue::new_array(vec![s(text)], dummy_source_info()),
+                        )],
+                        dummy_source_info(),
+                    ),
+                )],
+                dummy_source_info(),
+            );
+            ConfigValue::new_map(
+                vec![entry("version", s("9.9.9")), entry("rendered", includes)],
+                dummy_source_info(),
+            )
+        }
+
+        fn include_slot_text(meta: &ConfigValue) -> String {
+            let slot = meta
+                .get_path(&["rendered", "includes", "before-body"])
+                .expect("slot");
+            let ConfigValueKind::Array(items) = &slot.value else {
+                panic!("slot should be an array");
+            };
+            items[0].as_plain_text().expect("string item")
+        }
+
+        #[tokio::test]
+        async fn include_slot_expands_shortcode_textually() {
+            let mut ast = Pandoc {
+                meta: meta_with_include_slot("<div>V {{< meta version >}}</div>"),
+                blocks: vec![],
+            };
+            let diags = run_transform(&mut ast).await;
+            assert_eq!(include_slot_text(&ast.meta), "<div>V 9.9.9</div>");
+            assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
+        }
+
+        #[tokio::test]
+        async fn include_slot_unresolved_marks_and_warns_q16_5() {
+            let mut ast = Pandoc {
+                meta: meta_with_include_slot("<div>{{< meta nope >}}</div>"),
+                blocks: vec![],
+            };
+            let diags = run_transform(&mut ast).await;
+            assert_eq!(include_slot_text(&ast.meta), "<div>?meta:nope</div>");
+            assert!(
+                diags.iter().any(|d| format!("{:?}", d).contains("Q-16-5")),
+                "expected a Q-16-5 diagnostic; got: {:?}",
+                diags
+            );
+        }
+
+        #[tokio::test]
+        async fn include_slot_escaped_shortcode_unescapes_once() {
+            let mut ast = Pandoc {
+                meta: meta_with_include_slot("<div>{{{< meta version >}}}</div>"),
+                blocks: vec![],
+            };
+            let diags = run_transform(&mut ast).await;
+            assert_eq!(
+                include_slot_text(&ast.meta),
+                "<div>{{< meta version >}}</div>"
+            );
+            assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
+        }
+    }
+
     mod lua_integration {
         use super::*;
         use crate::extension::types::{Contributes, Extension, ExtensionId};
@@ -2613,6 +2884,86 @@ mod tests {
                     ..Default::default()
                 },
             }
+        }
+
+        /// A Lua-provided shortcode resolves inside an include slot via
+        /// the transform's existing (conditionally-created) engine —
+        /// the include text-level pass dispatches through the same
+        /// registry as body content.
+        #[tokio::test]
+        async fn test_lua_shortcode_in_include_slot() {
+            let tmp = TempDir::new().unwrap();
+            let script_path = write_lua_script(
+                tmp.path(),
+                "hello.lua",
+                r#"return { hello = function(args) return "Hello from Lua" end }"#,
+            );
+
+            let runtime = make_runtime();
+            let transform = ShortcodeResolveTransform::with_lua_support(
+                vec![script_path],
+                Vec::new(),
+                runtime,
+                "html".to_string(),
+                None,
+            );
+
+            let entry = |key: &str, value: ConfigValue| ConfigMapEntry {
+                key: key.to_string(),
+                key_source: dummy_source_info(),
+                value,
+            };
+            let s = |text: &str| ConfigValue::new_string(text.to_string(), dummy_source_info());
+            let meta = ConfigValue::new_map(
+                vec![entry(
+                    "rendered",
+                    ConfigValue::new_map(
+                        vec![entry(
+                            "includes",
+                            ConfigValue::new_map(
+                                vec![entry(
+                                    "header",
+                                    ConfigValue::new_array(
+                                        vec![s("<div>{{< hello >}}</div>")],
+                                        dummy_source_info(),
+                                    ),
+                                )],
+                                dummy_source_info(),
+                            ),
+                        )],
+                        dummy_source_info(),
+                    ),
+                )],
+                dummy_source_info(),
+            );
+            let mut ast = Pandoc {
+                meta,
+                blocks: vec![],
+            };
+
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/doc.qmd");
+            let format = Format::html();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            transform.transform(&mut ast, &mut ctx).await.unwrap();
+
+            let slot = ast
+                .meta
+                .get_path(&["rendered", "includes", "header"])
+                .expect("slot");
+            let ConfigValueKind::Array(items) = &slot.value else {
+                panic!("slot should be an array");
+            };
+            assert_eq!(
+                items[0].as_plain_text().as_deref(),
+                Some("<div>Hello from Lua</div>")
+            );
+            assert!(
+                ctx.diagnostics.is_empty(),
+                "unexpected diagnostics: {:?}",
+                ctx.diagnostics
+            );
         }
 
         #[tokio::test]

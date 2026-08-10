@@ -317,16 +317,26 @@ by `ApplyTemplateStage` are engine output and deliberately not expanded (Q1's
   footer, unresolved marker). Workspace: 11228 passed / 5 failed — exactly the
   Phase-3 include tests. No regressions.
 
-### Phase 3 — Include files (mechanism C)
+### Phase 3 — Include files (mechanism C) ✅
 
-- [ ] Text-level shortcode scanner/expander (parse `{{< … >}}` spans in arbitrary
-      text, dispatch handlers, stringify results) — shared building block, also the
-      natural basis for bd-fz6gwfq0 later.
-- [ ] Apply it to include-file contents in `IncludeResolveStage` (merged metadata is
-      available there), with lazy Lua per decision 4 and Q-16-5 + marker per
-      decision 5.
-- [ ] Fix silent `Shortcode` drop in `inlines_to_html_literal` (`{text: …}`
-      smart-includes).
+- [x] Text-level shortcode parser (`transforms/shortcode_text.rs`): literal/
+      shortcode segmentation with quoted strings, `key=value` keyword args, nested
+      shortcodes, escaped `{{{< … >}}}` → single-brace literal, malformed →
+      literal passthrough. 11 unit tests. Building block for bd-fz6gwfq0.
+- [x] Expansion wired into `ShortcodeResolveTransform` (per the Phase-0
+      architecture revision — NOT in the stage): after both walks, the transform
+      expands `rendered.includes.{header,before-body,after-body}` strings through
+      its ordinary handler registry against the fully-resolved metadata. Errors:
+      plain `?key` marker (no markup — arbitrary HTML positions) + Q-16-5.
+      Lua: the transform's existing conditionally-created engine is reused —
+      verified by `test_lua_shortcode_in_include_slot`.
+- [x] `inlines_to_html_literal` `Shortcode` arm reconstructs source text via new
+      `pampa::writers::qmd::shortcode_source_text` (escaped keep triple braces),
+      so `{text: …}` smart-includes and `header-includes` values survive to the
+      text-level pass instead of being dropped.
+- [x] Unit tests: meta-walk resolve + Q-16-5, include-slot expand/unresolved/
+      escaped, Lua-in-include-slot (the Phase-0 lazy-Lua item).
+- Result: all 13 integration tests pass; workspace 11250/11250 green.
 
 ### Phase 4 — End-to-end verification + docs
 
