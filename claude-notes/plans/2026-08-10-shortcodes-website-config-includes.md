@@ -3,7 +3,7 @@
 **Date:** 2026-08-10
 **Braid:** bd-shortcodes-in-metadata-bp06aub8
 **Checkout:** `main` @ `0c5d0abe` (investigation committed in place; no worktree created)
-**Status:** Design aligned (all questions resolved 2026-08-10). **Awaiting explicit user go-ahead to begin implementation.**
+**Status:** Complete. Implemented on `braid/bd-shortcodes-in-metadata-bp06aub8`, merged to `main` via PR #487 (2026-08-10); strand closed. Follow-ups: bd-1fue1ly5, bd-fz6gwfq0.
 
 ## Triage verdict
 
@@ -381,7 +381,7 @@ by `ApplyTemplateStage` are engine output and deliberately not expanded (Q1's
       `_environment`-sourced variables now resolve in include files and
       `website.title` through the shared handler plumbing — the two features
       compose with zero additional glue. Workspace after merge: 11308/11308.
-- [ ] Braid: close strand after review/merge; re-check discovered strands
+- [x] Braid: strand closed after PR #487 merged (2026-08-10). Still open: re-check discovered strands
       (bd-1fue1ly5, bd-fz6gwfq0) against the shared expander.
 
 ## Design questions — all resolved
