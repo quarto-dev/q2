@@ -57,6 +57,7 @@ async fn run_crossref(
         &mut ast.blocks,
         &registry,
         &quarto_source_map::SourceContext::new(),
+        &mut Vec::new(),
     );
 
     // Step 3: front-end transforms. We build a minimal RenderContext for
@@ -805,6 +806,7 @@ async fn run_crossref_rendered(
         &mut ast.blocks,
         &registry,
         &quarto_source_map::SourceContext::new(),
+        &mut Vec::new(),
     );
 
     use quarto_core::format::Format;

@@ -143,6 +143,7 @@ impl PipelineStage for PreEngineSugaringStage {
             &mut doc.ast.blocks,
             &registry,
             &doc.ast_context.source_context,
+            &mut ctx.diagnostics,
         );
 
         ctx.ref_type_registry = Some(registry);
