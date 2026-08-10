@@ -1666,13 +1666,12 @@ impl ProjectContext {
             .env_get(project_profile::QUARTO_PROFILE_VAR)
             .ok()
             .flatten();
+        let env_file_profile = environment::dotenv_quarto_profile(runtime, config_dir);
         let active = resolve_active_profiles(
             &ProfileResolutionInputs {
                 cli: cli_selection,
                 env_var: env_profile.as_deref(),
-                // Phase 3 (plan §environment integration) feeds
-                // QUARTO_PROFILE from `_environment{,.local}` here.
-                env_file: None,
+                env_file: env_file_profile.as_deref(),
                 local_default: &local_default,
                 config: &profile_config,
             },

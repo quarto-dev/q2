@@ -271,6 +271,126 @@ fn single_file_render_still_validates_profile_names() {
     assert!(stderr.contains("Q-5-21"), "got: {stderr}");
 }
 
+// ── environment-file integration (Phase 3, needs PR #486) ──────────
+
+/// Render `doc.qmd` in `root` with args/env; return the produced HTML.
+fn render_doc(root: &Path, extra: &[&str], env: &[(&str, &str)]) -> (bool, String, String) {
+    let mut cmd = Command::new(Q2_BIN);
+    cmd.arg("render")
+        .arg(root.join("doc.qmd"))
+        .args(extra)
+        .env_remove("QUARTO_PROFILE");
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    let out = cmd.output().expect("q2 runs");
+    let html = std::fs::read_to_string(root.join("doc.html")).unwrap_or_default();
+    (
+        out.status.success(),
+        html,
+        String::from_utf8_lossy(&out.stderr).to_string(),
+    )
+}
+
+#[test]
+fn quarto_profile_in_environment_file_activates() {
+    // Q1's dotenv bootstrap: QUARTO_PROFILE defined in _environment
+    // selects profiles when neither --profile nor the env var do.
+    let dir = make_fixture();
+    std::fs::write(dir.path().join("_environment"), "QUARTO_PROFILE=prod\n").unwrap();
+    let (ok, stdout, _) = get_winner(dir.path(), &[], &[]);
+    assert!(ok);
+    assert_eq!(stdout, "\"prod\"");
+}
+
+#[test]
+fn environment_local_bootstrap_beats_base() {
+    let dir = make_fixture();
+    std::fs::write(dir.path().join("_environment"), "QUARTO_PROFILE=a\n").unwrap();
+    std::fs::write(dir.path().join("_environment.local"), "QUARTO_PROFILE=b\n").unwrap();
+    let (ok, stdout, _) = get_winner(dir.path(), &[], &[]);
+    assert!(ok);
+    assert_eq!(stdout, "\"from-b\"");
+}
+
+#[test]
+fn real_env_and_cli_beat_environment_file_bootstrap() {
+    let dir = make_fixture();
+    std::fs::write(dir.path().join("_environment"), "QUARTO_PROFILE=prod\n").unwrap();
+    // Real env var wins over the file…
+    let (ok, stdout, _) = get_winner(dir.path(), &[], &[("QUARTO_PROFILE", "a")]);
+    assert!(ok);
+    assert_eq!(stdout, "\"from-a\"");
+    // …and --profile wins over both.
+    let (ok, stdout, _) = get_winner(dir.path(), &["--profile", "b"], &[("QUARTO_PROFILE", "a")]);
+    assert!(ok);
+    assert_eq!(stdout, "\"from-b\"");
+}
+
+#[test]
+fn profile_environment_files_layer_first_listed_wins() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    std::fs::write(root.join("_quarto.yml"), "project:\n  type: default\n").unwrap();
+    std::fs::write(
+        root.join("_environment"),
+        "GREETING=from-base\nBASE_ONLY=base\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("_environment-a"), "GREETING=from-a\n").unwrap();
+    std::fs::write(root.join("_environment-b"), "GREETING=from-b\nB_ONLY=b\n").unwrap();
+    std::fs::write(
+        root.join("doc.qmd"),
+        "G={{< env GREETING none >}} BASE={{< env BASE_ONLY none >}} B={{< env B_ONLY none >}}\n",
+    )
+    .unwrap();
+    let (ok, html, stderr) = render_doc(root, &["--profile", "a,b", "--quiet"], &[]);
+    assert!(ok, "render failed: {stderr}");
+    assert!(
+        html.contains("G=from-a"),
+        "first-listed profile's env file must win: {html}"
+    );
+    assert!(
+        html.contains("BASE=base"),
+        "base _environment still applies: {html}"
+    );
+    assert!(
+        html.contains("B=b"),
+        "later profiles still contribute new keys: {html}"
+    );
+}
+
+#[test]
+fn environment_local_beats_profile_env_files() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    std::fs::write(root.join("_quarto.yml"), "project:\n  type: default\n").unwrap();
+    std::fs::write(root.join("_environment-prod"), "GREETING=from-prod\n").unwrap();
+    std::fs::write(root.join("_environment.local"), "GREETING=from-local\n").unwrap();
+    std::fs::write(root.join("doc.qmd"), "G={{< env GREETING none >}}\n").unwrap();
+    let (ok, html, stderr) = render_doc(root, &["--profile", "prod", "--quiet"], &[]);
+    assert!(ok, "render failed: {stderr}");
+    assert!(
+        html.contains("G=from-local"),
+        "_environment.local wins: {html}"
+    );
+}
+
+#[test]
+fn quarto_profile_in_profile_env_file_does_not_recurse() {
+    // Q1 parity: the bootstrap reads _environment{,.local} only. A
+    // QUARTO_PROFILE inside _environment-<name> must not activate
+    // more profiles.
+    let dir = make_fixture();
+    std::fs::write(dir.path().join("_environment-a"), "QUARTO_PROFILE=b\n").unwrap();
+    let (ok, stdout, _) = get_winner(dir.path(), &["--profile", "a"], &[]);
+    assert!(ok);
+    assert_eq!(
+        stdout, "\"from-a\"",
+        "profile b must NOT have been activated by _environment-a"
+    );
+}
+
 // ── flag presence on sibling commands ───────────────────────────────
 
 #[test]

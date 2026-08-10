@@ -7,8 +7,9 @@
  */
 
 //! Parser for project environment files (`_environment`,
-//! `_environment.local`, `_environment.required`, and — once profiles
-//! exist, bd-ev8mk1rp — `_environment-<profile>`).
+//! `_environment.local`, `_environment.required`, and
+//! `_environment-<profile>` for each active project profile
+//! (bd-fu16z22k).
 //!
 //! Quarto 2 **never mutates the process environment**. Where Quarto 1
 //! loads these files into the ambient env (`Deno.env.set`), q2 parses
@@ -220,11 +221,40 @@ pub fn check_required(
 /// Load a project's environment files into a map, Q1-style.
 ///
 /// Files considered, priority highest first: `_environment.local`,
-/// `_environment-<profile>` per active profile (activation order —
-/// always empty until bd-ev8mk1rp lands render profiles), and
+/// `_environment-<profile>` per active profile (activation order,
+/// from `ProjectConfig::active_config_profiles` — bd-fu16z22k), and
 /// `_environment`. Missing files are normal. `_environment.required`
 /// contributes validation diagnostics only, never values.
 ///
+/// Read `QUARTO_PROFILE` out of `_environment.local` /
+/// `_environment` — Q1's `dotenvQuartoProfile` bootstrap
+/// (bd-fu16z22k, Phase 3). `.local` wins; **profile variants are
+/// deliberately not consulted** (no activation recursion — Q1
+/// parity). Runs *before* profile resolution, so it cannot use the
+/// project env map; parse diagnostics are dropped here and resurface
+/// from the full loader on every document render.
+pub fn dotenv_quarto_profile(
+    runtime: &dyn SystemRuntime,
+    project_dir: &std::path::Path,
+) -> Option<String> {
+    let lookup = |name: &str| std::env::var(name).ok();
+    for name in ["_environment.local", "_environment"] {
+        let path = project_dir.join(name);
+        let Ok(content) = runtime.file_read_string(&path) else {
+            continue;
+        };
+        let parsed = parse_env_file(&content, &path.display().to_string(), &lookup);
+        if let Some(entry) = parsed
+            .entries
+            .into_iter()
+            .find(|e| e.key == crate::project::project_profile::QUARTO_PROFILE_VAR)
+        {
+            return Some(entry.value);
+        }
+    }
+    None
+}
+
 /// Project-scoped like `_variables.yml`: single-file renders get an
 /// empty map (Q1 parity — env files load during project-context
 /// creation there too).
@@ -310,7 +340,13 @@ pub fn subprocess_env_for_project(
     project: &crate::project::ProjectContext,
 ) -> Vec<(String, String)> {
     let mut diagnostics = Vec::new();
-    let map = load_project_environment(runtime, project, &[], &mut diagnostics);
+    let active_profile_names: Vec<String> = project
+        .config
+        .active_config_profiles
+        .iter()
+        .map(|p| p.name.clone())
+        .collect();
+    let map = load_project_environment(runtime, project, &active_profile_names, &mut diagnostics);
     env_for_subprocess(&map)
 }
 

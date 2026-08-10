@@ -349,14 +349,20 @@ waits; nothing else blocks.
 
 ### Phase 3 — environment integration (after PR #486 merges)
 
-- [ ] Rebase over #486; failing tests: `_environment-<p>` layering
-      order (local > first profile > … > `_environment`),
-      `QUARTO_PROFILE` read from `_environment{,.local}` (bootstrap,
-      not from profile variants), bootstrap loses to real env/CLI
-- [ ] Fill the `&[]` seam in `StageContext::new`; implement
-      bootstrap read in activation resolution; close the loop on
-      Q-5-19's "no `_environment-<p>` either" clause
-- [ ] Close bd-ev8mk1rp (superseded/implemented)
+- [x] Rebased over #486 (merged 2026-08-10 15:38). Failing tests
+      first: 6 binary-driven tests (bootstrap activation, `.local`
+      bootstrap wins, real-env/CLI beat bootstrap, `_environment-<p>`
+      layering first-listed-wins via `{{< env >}}` in rendered HTML,
+      `.local` beats profile env files, no bootstrap recursion from
+      `_environment-<p>`) — 3 observed failing pre-implementation
+- [x] `dotenv_quarto_profile` in `project/environment.rs`
+      (`.local` then `_environment`, never profile variants) feeds
+      `ProfileResolutionInputs.env_file`; the `&[]` seam in
+      `StageContext::new` and `subprocess_env_for_project` now pass
+      the active names (Q-5-19's env-file clause was already live
+      since Phase 1)
+- [x] Closed bd-ev8mk1rp (implemented; preview flag split off as
+      bd-pfgc273f)
 
 ### Phase 4 — conditional content (full trio)
 
