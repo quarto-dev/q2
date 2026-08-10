@@ -1,0 +1,61 @@
+---
+title: "Unclosed Attribute Specifier"
+description: "An attribute specifier (`{...}`) was opened but never closed before the end of the block."
+code: Q-2-38
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-38` — Unclosed Attribute Specifier
+
+> I reached the end of the block before finding a closing `}` for the
+> attribute specifier.
+
+## What this means
+
+An attribute specifier — the `{...}` annotation that attaches classes,
+ids, or key-value pairs to a span, link, or image — was opened with
+`{` but the block ended before a matching `}` appeared:
+
+```markdown
+[text]{#my-id
+```
+
+The parser reads everything up to the end of the block looking for
+the closing brace, so the error is reported at the end of the block
+rather than at the opening `{`.
+
+## Why this happens
+
+- **A forgotten closing brace** after an id, class, or key-value pair:
+  `[text]{.important` instead of `[text]{.important}`.
+- **An attribute list spread across lines that never closes:**
+
+  ```markdown
+  [text]{
+    .cls
+    width="200px"
+  ```
+
+- **A deleted or truncated line** that took the `}` with it.
+
+## How to fix
+
+Add the missing `}`:
+
+```markdown
+[text]{#my-id}
+```
+
+If you did not intend an attribute at all and want a literal `{` in
+your text, escape it as `\{` — see
+[`Q-2-41`](Q-2-41.qmd) for the literal-brace rules.
+
+## Related errors
+
+- [`Q-2-41`](Q-2-41.qmd) — curly braces are reserved for attribute
+  syntax (the error for brace runs that are not attribute-shaped).
+- [`Q-2-37`](Q-2-37.qmd) — line break in link destination.
