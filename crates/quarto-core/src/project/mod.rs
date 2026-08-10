@@ -131,73 +131,90 @@ pub fn directory_metadata_for_document(
         return Ok(Vec::new());
     }
 
-    // Canonicalize the document path so strip_prefix works reliably.
-    // project.dir is always canonical (from ProjectContext::discover), but
-    // callers may pass relative paths (e.g., WASM render_qmd with VFS paths).
     let document_path = runtime
         .canonicalize(document_path)
         .unwrap_or_else(|_| document_path.to_path_buf());
-
-    let project_dir = &project.dir;
     let document_dir = document_path
         .parent()
         .ok_or_else(|| QuartoError::Other("Document has no parent directory".into()))?;
 
-    // Get relative path from project root to document directory
-    let relative_path = match document_dir.strip_prefix(project_dir) {
-        Ok(rel) => rel,
-        Err(_) => {
-            // Document is not under project directory
-            return Ok(Vec::new());
-        }
-    };
-
-    // Split into directory components
-    let components: Vec<_> = relative_path.components().collect();
-    if components.is_empty() {
-        // Document is in project root, no directories to walk
-        return Ok(Vec::new());
-    }
-
     let mut layers = Vec::new();
-    let mut current_dir = project_dir.clone();
+    for path in directory_metadata_paths_for_document(project, &document_path, runtime) {
+        // Parse the metadata file
+        let content = runtime
+            .file_read_string(&path)
+            .map_err(|e| QuartoError::Other(format!("Failed to read {}: {}", path.display(), e)))?;
 
-    // Walk through each directory from project root toward document
-    // (but not including project root itself - we start from first subdir)
-    for component in components {
-        current_dir = current_dir.join(component);
+        let filename = path.to_string_lossy().to_string();
+        let yaml = quarto_yaml::parse_file(&content, &filename).map_err(|e| {
+            QuartoError::Other(format!(
+                "Directory metadata validation failed for {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
 
-        // Look for _metadata.yml or _metadata.yaml
-        let metadata_path = find_metadata_file(&current_dir, runtime);
+        // Convert to ConfigValue with ProjectConfig interpretation context
+        let mut diagnostics = DiagnosticCollector::new();
+        let mut metadata =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
 
-        if let Some(path) = metadata_path {
-            // Parse the metadata file
-            let content = runtime.file_read_string(&path).map_err(|e| {
-                QuartoError::Other(format!("Failed to read {}: {}", path.display(), e))
-            })?;
+        // Adjust !path values to be relative to document directory
+        let layer_dir = path.parent().expect("metadata file has a directory");
+        adjust_paths_to_document_dir(&mut metadata, layer_dir, document_dir);
 
-            let filename = path.to_string_lossy().to_string();
-            let yaml = quarto_yaml::parse_file(&content, &filename).map_err(|e| {
-                QuartoError::Other(format!(
-                    "Directory metadata validation failed for {}: {}",
-                    path.display(),
-                    e
-                ))
-            })?;
-
-            // Convert to ConfigValue with ProjectConfig interpretation context
-            let mut diagnostics = DiagnosticCollector::new();
-            let mut metadata =
-                yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
-
-            // Adjust !path values to be relative to document directory
-            adjust_paths_to_document_dir(&mut metadata, &current_dir, document_dir);
-
-            layers.push((path, metadata));
-        }
+        layers.push((path, metadata));
     }
 
     Ok(layers)
+}
+
+/// Enumerate the `_metadata.yml` / `_metadata.yaml` layer files that
+/// apply to `document_path`, outermost directory first — the same
+/// walk, and crucially the **same path spelling**, as
+/// [`directory_metadata_for_document`] (the spelling is what
+/// `quarto_yaml::parse_file` hashed into each layer's FileId, so
+/// diagnostic assembly re-derives layer ids from these exact paths;
+/// bd-x113wg9v). Returns an empty list for single-file projects and
+/// for documents outside the project directory.
+///
+/// Callers that already canonicalized `document_path` (as
+/// [`directory_metadata_for_document`] does) pass it through; the
+/// function canonicalizes again defensively, which is idempotent.
+pub fn directory_metadata_paths_for_document(
+    project: &ProjectContext,
+    document_path: &Path,
+    runtime: &dyn SystemRuntime,
+) -> Vec<PathBuf> {
+    if project.is_single_file {
+        return Vec::new();
+    }
+    // Canonicalize so strip_prefix works reliably. project.dir is always
+    // canonical (from ProjectContext::discover), but callers may pass
+    // relative paths (e.g., WASM render_qmd with VFS paths).
+    let document_path = runtime
+        .canonicalize(document_path)
+        .unwrap_or_else(|_| document_path.to_path_buf());
+    let project_dir = &project.dir;
+    let Some(document_dir) = document_path.parent() else {
+        return Vec::new();
+    };
+    let Ok(relative_path) = document_dir.strip_prefix(project_dir) else {
+        // Document is not under project directory
+        return Vec::new();
+    };
+
+    let mut paths = Vec::new();
+    let mut current_dir = project_dir.clone();
+    // Walk through each directory from project root toward document
+    // (but not including project root itself - we start from first subdir)
+    for component in relative_path.components() {
+        current_dir = current_dir.join(component);
+        if let Some(path) = find_metadata_file(&current_dir, runtime) {
+            paths.push(path);
+        }
+    }
+    paths
 }
 
 /// Find `_metadata.yml` or `_metadata.yaml` in a directory.

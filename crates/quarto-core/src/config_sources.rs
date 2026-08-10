@@ -61,17 +61,46 @@ pub fn bind_config_source<'a>(
     info: &SourceInfo,
     candidates: impl IntoIterator<Item = &'a Path>,
 ) -> Option<&'a Path> {
+    bind_source_candidates(
+        source_context,
+        info,
+        candidates.into_iter().map(|p| {
+            let fid = quarto_yaml::file_id_for_filename(&p.to_string_lossy());
+            (fid, p)
+        }),
+    )
+}
+
+/// Generalization of [`bind_config_source`] for candidate lists that
+/// span **both** FileId schemes: quarto-yaml filename-hash ids for
+/// standalone config files, and dense parse-context ids for documents
+/// (a document's front-matter spans root at the `FileId` its own
+/// parse context assigned — `FileId(0)` for the primary slot — not at
+/// a filename hash). The caller supplies each candidate as an
+/// explicit `(FileId, &Path)` pair; the first pair whose id equals
+/// `info`'s resolved id is registered (content permitting) and
+/// returned. Same never-bind-a-non-match contract as
+/// [`bind_config_source`]. Precedent:
+/// `theme_diagnostic::sass_error_to_parse_error`'s candidate list.
+pub fn bind_source_candidates<'a>(
+    source_context: &mut SourceContext,
+    info: &SourceInfo,
+    candidates: impl IntoIterator<Item = (FileId, &'a Path)>,
+) -> Option<&'a Path> {
     let (fid_usize, _, _) = info.resolve_byte_range()?;
     let fid = FileId(fid_usize);
-    for candidate in candidates {
-        let name = candidate.to_string_lossy();
-        if quarto_yaml::file_id_for_filename(&name) != fid {
+    for (candidate_id, candidate) in candidates {
+        if candidate_id != fid {
             continue;
         }
         if source_context.get_file(fid).is_none()
             && let Ok(content) = std::fs::read_to_string(candidate)
         {
-            source_context.add_file_with_id(fid, name.into_owned(), Some(content));
+            source_context.add_file_with_id(
+                fid,
+                candidate.to_string_lossy().into_owned(),
+                Some(content),
+            );
         }
         return Some(candidate);
     }
