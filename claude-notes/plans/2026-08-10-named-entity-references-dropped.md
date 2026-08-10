@@ -3,7 +3,7 @@
 **Date:** 2026-08-10
 **Braid:** bd-named-entities-w6xbfftj (bug, P1, labels `pampa`, `parity`)
 **Checkout:** main @ `0cb8abce` (investigated in place; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled 2026-08-10 (user answered all design questions; see below). Ready for implementation on go-ahead.
 
 ## Triage verdict
 
@@ -98,34 +98,33 @@ Skeleton only — actual phase contents wait on the design discussion.
 - **Phase 4 — Bookkeeping.** Close strand; grammar-regex cleanup tracked in
   bd-v8qc9zyc (discovered-from).
 
-## Open design questions for the user
+## Design decisions (settled with user, 2026-08-10)
 
-1. **Table sharing mechanism.** Expose `HTML_ENTITIES_JSON` from
-   `tree-sitter-qmd`'s Rust bindings via `include_str!` (recommended — same
-   pattern as `NODE_TYPES`, single source of truth, no file copying), vs.
-   copying the JSON into pampa, vs. pulling a third-party entities crate?
-2. **Parse strategy.** Lazy `OnceLock<HashMap>` + serde_json over the 146 KB
-   JSON at first use (recommended — simple, one-time cost), vs. build-time
-   codegen (phf / generated match)? The WASM path also runs this, so parse cost
-   is paid in the browser once per module instance.
-3. **Lookup-miss behavior.** Emit the original text verbatim (recommended —
-   mirrors the numeric handler's unparseable fallback and covers the grammar's
-   bogus truncated alternatives), or emit nothing / warn?
-4. **Grammar regex cleanup scope.** Fix `html_entity_regex()` (filter to
-   semicolon-terminated keys) in this strand — requires `tree-sitter generate;
-   tree-sitter build` and grammar re-testing — or keep it in the separate
-   discovered strand and land the converter fix alone first (recommended)?
-5. **Smart typography interplay.** Decoded entities bypass
-   `apply_smart_typography` (so `&quot;` stays a straight quote), matching the
-   numeric-reference handler and Pandoc. Confirm that's the wanted behavior.
+1. **Table sharing mechanism:** expose `HTML_ENTITIES_JSON` from
+   `tree-sitter-qmd`'s Rust bindings via `include_str!` (same pattern as
+   `NODE_TYPES`; single source of truth).
+2. **Parse strategy:** lazy `OnceLock<HashMap>` + serde_json at first use.
+3. **Lookup-miss behavior:** emit the original text verbatim, **no warning**.
+   Rationale: the `entity_reference` regex is generated from the same table
+   the converter looks up in, so every node the grammar produces is a known
+   name — the only reachable misses are the ~106 bogus truncated alternatives
+   from the bd-v8qc9zyc regex bug (`&AM;`, `&AEli;`), which essentially never
+   occur in real prose and become unreachable once that strand lands.
+   Genuinely unknown references (`&foo;`) never match the regex and are
+   already literal text, matching CommonMark/Pandoc. (If we ever want to
+   catch typo'd entity names, that's a separate prose lint, not this arm.)
+4. **Grammar regex cleanup:** stays in the separate strand bd-v8qc9zyc;
+   this strand lands the converter fix alone.
+5. **Smart typography:** decoded entities bypass `apply_smart_typography`
+   (`&quot;` stays a straight quote), matching the numeric handler and Pandoc.
 
-## Risks / tradeoffs (draft)
+## Risks / tradeoffs
 
-- **qmd-writer re-escaping.** Decoding `&gt;` to a literal `>` in a `Str` means
-  the qmd writer emits `>`; at line start that would re-parse as a blockquote.
-  Numeric references have exactly this exposure today, so it's a pre-existing
-  writer-escaping question, not new to this fix — but the roundtrip test should
-  pin whichever behavior we get.
+- **qmd-writer re-escaping — verified NOT an issue.** The qmd writer already
+  backslash-escapes markdown-significant characters in `Str` content:
+  `&#62; not a blockquote` round-trips as `\> not a blockquote`, and mid-line
+  `A &#62; B` as `A \> B` (verified at `0cb8abce` via
+  `pampa -t qmd`). The roundtrip test pins this behavior for named entities.
 - **Snapshot churn.** Any existing snapshots containing dropped entities will
   change (correctly). Per CLAUDE.md, count and summarize them in the commit.
 - **WASM leg.** pampa changes flow into `wasm-quarto-hub-client`; full
