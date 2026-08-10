@@ -1,190 +1,216 @@
-# qmd-syntax-helper rule: migrate reference-style links and escape literal brackets (bd-reference-links-unsupported-ddc4skac)
+# qmd-syntax-helper rules: migrate reference-style links and escape literal brackets (bd-reference-links-unsupported-ddc4skac)
 
 **Date:** 2026-08-10
 **Braid:** `bd-reference-links-unsupported-ddc4skac` (feature, p1, labels: `diagnostics`, `parity`)
 **Branch:** `main` @ `05c2454e` — investigated in place, no worktree created (see *Where this landed*)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Designed — approved by Carlos 2026-08-10. Ready to implement; **start at Phase 0 (tests first).**
+
+## Scope, restated
+
+This is **not** a request to make the qmd parser accept reference-style
+links. `[...]` is reserved for span syntax and that is not being given back
+(decided 2026-08-10, Carlos). The deliverable is source migration in
+`crates/qmd-syntax-helper/`, plus a diagnostic so the breakage becomes
+self-reporting.
+
+## Decisions (2026-08-10)
+
+| Question | Decision |
+| --- | --- |
+| Image arm (`![alt][ref]`, `![solo]`) | **Fold in.** Same detection pass, same rewrite targets. |
+| Gating the destructive arm | **Two separately-named rules.** Fine-grained rule boundaries are wanted. |
+| Diagnostic | **This strand**, not a sibling. |
+| Rule names | `reference-links` (safe arm) and `literal-brackets` (destructive arm). |
+| `[a][b][c]` | **Decline to rewrite runs of ≥3 and report**, given the guard is a length check on data already in hand. Zero occurrences in the motivating corpus. |
 
 ## Triage verdict
 
-**Ready to design**, with one scope decision that has to be made first: the
-investigation turned up a **fourth damage shape the strand does not cover**
-(`![alt][ref]` renders as `<img src="">`, a broken image rather than lost
-text), and the strand's own open question about a diagnostic now has a
-concrete answer available. Everything else about the strand holds up
-exactly as written — the behavior reproduces at HEAD, the routing decision
-is sound, and the crate already has the machinery.
+**Ready to implement.** The behavior reproduces verbatim at HEAD, the
+routing decision holds, the crate already has the machinery, and the five
+open questions are settled. `cargo xtask verify --skip-hub-build` was green
+at `05c2454e` before any of this work.
 
 ## Issue context
 
-Filed 2026-08-10 by Carlos, still `open`. The strand is unusually complete:
-it front-loads the scope decision (**this is not a request to make the
-parser accept reference links** — `[...]` is reserved for span syntax), names
-the crate and the trait, sketches the three rewrites, and flags that the
-escaping arm is the destructive-if-wrong one.
+Filed 2026-08-10 by Carlos. The strand is unusually complete: it front-loads
+the scope decision, names the crate and trait, sketches the rewrites, and
+flags the escaping arm as the destructive-if-wrong one.
 
-Real-world impact is ~7 Posit Connect doc pages. Two failure classes:
-broken links plus a leaked definition paragraph (`admin/process-management`,
-`admin/integrations/package-manager`), and silently deleted brackets — of
-which three **change documented meaning**, not just formatting:
-`admin/security` (the `[1]`/`[2]` markers keyed to a numbered diagram),
-`admin/appendix/branding` and `admin/email` (the default mail subject prefix
-is literally `[Posit Connect]`, so the docs now state the wrong value), and
-`admin/opentelemetry/signal-reference-guide` (histogram bucket lists).
+Real-world impact is ~7 Posit Connect doc pages, in two failure classes.
+Broken links plus a leaked definition paragraph
+(`admin/process-management`, `admin/integrations/package-manager`); and
+silently deleted brackets, of which three **change documented meaning**
+rather than formatting: `admin/security` (the `[1]`/`[2]` markers keyed to a
+numbered diagram), `admin/appendix/branding` and `admin/email` (the default
+mail subject prefix is literally `[Posit Connect]`, so the docs now state
+the wrong value), and `admin/opentelemetry/signal-reference-guide`
+(histogram bucket lists).
 
 ## Dependency graph
 
 **Empty.** `braid dep tree` and `braid dep list` both return the strand
-alone; no `blocks`, no `parent-child`, no `discovered-from` inside this
-skein. A skein-wide search for neighbours turned up nothing related either.
+alone; a skein-wide search turned up no neighbours. Two consequences worth
+stating:
 
-That changes the calculus in two directions worth stating plainly:
-
-- **No incoming pressure.** Nothing in q2 is blocked on this. The urgency is
-  entirely external — the Connect docs port.
-- **The context that would normally live in a `discovered-from` edge is
-  external to this skein**: the origin strand is `br-raalju6n` in the
-  connect-docs porting skein, and the repro lives at an absolute path
-  (`~/repos/github/cscheid/q2-connect-docs/llms-info/repros/reference-links-unsupported/`)
-  in a local-only repo. The strand description carries that context inline,
-  which is why it reads so long. **I copied the repro into this repo** (see
-  below) so the record survives independently of that checkout.
+- **No incoming pressure.** Nothing in q2 is blocked on this; urgency is
+  external, from the Connect docs port.
+- **The `discovered-from` context is outside this skein** — origin strand
+  `br-raalju6n` in the connect-docs porting skein, repro in a local-only
+  repo. That is why the strand description carries so much inline. The repro
+  is now copied into this repo so the record survives independently.
 
 ## What the code looks like today
 
-Everything the strand points at still exists and still behaves as described.
-`cargo xtask verify --skip-hub-build` passes at `05c2454e` before any
-changes. Full detail, with byte ranges and probe outputs, is in
-`claude-notes/plans/reference-links-migration-investigation/findings.md`;
-the four `.qmd`/`.md` probes are alongside it. Summary:
+Full detail with byte ranges and probe outputs:
+`claude-notes/plans/reference-links-migration-investigation/findings.md`
+(seven probe files alongside it).
 
 **The bug reproduces verbatim at HEAD.** `pampa -t html` on the strand's
-repro gives `<span>the RedHat documentation</span><span>gcc-toolset</span>`,
+repro yields `<span>the RedHat documentation</span><span>gcc-toolset</span>`,
 `<span>Version TBD</span>`, and the trailing definition paragraph — no
 diagnostics, exit 0.
 
-**Detection should be AST-based, not regex-based.** This is the finding that
-most changes the shape of the work. `pampa` already gives every `Span` an
-empty-or-not `Attr` *and* a `SourceInfo` byte range **that includes the
-brackets**. So:
+**Detection is AST-based, not regex-based.** This is the finding that most
+shapes the work. `pampa` gives every `Span` an empty-or-not `Attr` *and* a
+`SourceInfo` byte range **including the brackets**; likewise every `Image`
+carries its url and range. So:
 
-- "these brackets will be eaten" ⟺ `Inline::Span` with empty `attr`;
-- `[label][ref]` ⟺ two bare spans whose ranges touch exactly;
-- `[x]{.cls}`, `[link](u)`, and brackets inside `` `code` `` are simply
-  *not* bare spans, so they are excluded structurally.
+| shape | predicate |
+| --- | --- |
+| brackets will be eaten | `Inline::Span` with empty `attr` |
+| image will break | `Inline::Image` with empty url |
+| `[label][ref]`, `![alt][ref]`, `[label][]` | two of the above whose ranges **touch exactly** |
+| `[x]{.cls}`, `[link](u)`, `![real](u.png)`, brackets in code | *not matched* — excluded structurally |
 
 The strand's §3 asks the escaping pass to skip `]` followed by `{`, `(`, or
-`[`. The AST does that work for us — that lookahead becomes unnecessary,
-and with it the class of bug it was guarding against.
+`[`. **The AST does that work**, and with it goes the class of bug that
+lookahead was guarding against.
 
-**Escaping is idempotent and safe in both engines**, verified in both
-directions: `\[…\]` produces *no* `Span` in q2 (so `convert`'s default
-iteration to `--max-iterations 10` cannot re-escape its own output), and
-both q2 @ `05c2454e` and `quarto pandoc` render it as literal brackets.
-
-**Four shapes exist, not three.** `![alt][ref]` — and bare `![alt]` — do not
-produce spans; they produce `<img src="" alt="alt" />`, an image with an
-empty `src`. That is a worse outcome than the `[…]` cases (broken element,
-not lost text) and it needs its own arm keyed off `Inline::Image`. Also
-newly pinned down: `[label][]` yields a bare span plus an *empty* span;
-spans cross soft line breaks, so edits must be offset-based; and `[a][b][c]`
-is genuinely ambiguous between `[a][b]`+`[c]` and `[a]`+`[b][c]`.
+**Escaping is idempotent and cross-engine safe**, verified in both
+directions for both arms: `\[…\]` produces no `Span` and `!\[…\]` produces
+no `Image` in q2, and both q2 @ `05c2454e` and `quarto pandoc` render them as
+literal brackets. This matters because `convert` defaults to `-r all` and
+iterates up to `--max-iterations` (default 10).
 
 **Framework fit is good.** `check -r <rule>` already emits one `CheckResult`
-*with a `SourceLocation`* per violation — that *is* the strand's requested
+*with a `SourceLocation`* per violation — that **is** the strand's requested
 "`--check` mode enumerating every bracket it would escape", already built.
-`apostrophe_quotes.rs` is the model for applying edits (reverse offset
-order, then write back). No existing rule walks the pampa AST, so this would
-be the first — a small new pattern for the crate, but no new dependency.
+(`convert --check` reports only a count; `check` is the stronger of the two
+and the one to point people at.) `apostrophe_quotes.rs` is the model for
+applying edits: collect offsets, apply in **reverse offset order**, write
+back. No existing rule walks the pampa AST, so this is the first — a small
+new pattern for the crate, but no new dependency.
 
-## Proposed phases (draft)
+## The two rules
 
-Skeleton only; contents wait on the design discussion below.
+The split is by **risk**, not by syntax: every shape below is detected in
+one shared pass, then routed to whichever rule owns it.
 
-- **Phase 0 — Test plan (TDD, failing first).** Fixtures under
-  `crates/qmd-syntax-helper/tests/fixtures/` covering each shape:
-  full/collapsed/shortcut reference, definition with and without title,
-  unmatched brackets, genuine `[x]{.cls}`, inline link, code span,
-  multi-line span, image reference, and the `[a][b][c]` ambiguity. Tests go
-  in `tests/integration/reference_links_test.rs`, registered in
-  `tests/integration/main.rs` (per `.claude/rules/integration-tests.md` —
-  no new top-level test binaries).
-- **Phase 1 — Detection.** AST walk collecting bare spans + byte ranges;
-  definition-line recognition; matching uses to definitions
-  (case-insensitive, whitespace-normalized labels).
-- **Phase 2 — Rewrite: references with definitions** → inline
-  `[label](url "Title")`, dropping each definition once its last use is
-  gone.
-- **Phase 3 — Rewrite: escaping unmatched brackets.** The destructive arm;
-  gated behind whatever the design discussion decides (see Q2).
-- **Phase 4 — Image arm** (`![alt][ref]`, `![alt]`), if in scope (Q1).
-- **Phase 5 — Registration + CLI**, README "Future Converters" entry moved
-  to shipped.
-- **Phase 6 — Optional diagnostic** (Q3), if it rides on this strand.
-- **Phase 7 — End-to-end verification** on the real Connect docs, per
-  CLAUDE.md's end-to-end rule: run the binary, inspect output, record the
-  invocation and a snippet.
+### `reference-links` — mechanical, safe
 
-## Open design questions for the user
+A use with a **matching definition**. Both the span and image forms:
 
-1. **Does the image arm belong in this strand?** `![alt][ref]` and bare
-   `![alt]` emit `<img src="">` — a broken image, arguably worse than the
-   text cases, and not mentioned in the strand. Fold it in as Phase 4, or
-   split it to a sibling strand? (I lean fold-in: same detection pass, same
-   rewrite target, and shipping the `[…]` rule alone would leave a
-   *worse*-rendering shape unmigrated.)
+| before | after |
+| --- | --- |
+| `[label][ref]` | `[label](url)` |
+| `[label][]`, `[ref]` (shortcut) | `[label](url)` |
+| `![alt][ref]`, `![alt][]`, `![alt]` | `![alt](url)` |
+| definition `[ref]: url "Title"` | folded into the use as `(url "Title")` |
 
-2. **How is the escaping arm gated?** The strand calls it
-   "destructive-if-wrong" and asks for a `--check` pass before any
-   `--in-place` run. The framework already gives per-violation locations via
-   `check`. Options, roughly increasing in caution: (a) one rule, both arms,
-   rely on `check` discipline; (b) one rule, escaping behind an opt-in flag;
-   (c) two separately-named rules, so `convert -r all` never escapes unless
-   asked. This matters because `convert` defaults to `-r all` **and**
-   iterates up to 10 times — an escaping rule in the default set will fire
-   on every file in a bulk run. (I lean (c): the two arms have genuinely
-   different risk profiles, and named rules are cheap.)
+The `[ref]: url` definition line is dropped once its last use is gone.
 
-3. **Does the diagnostic ride on this strand or a sibling?** The strand
-   leaves this undecided. Concretely it would be a Q-code for a block-level
-   line matching the link-reference-definition shape — which would make the
-   breakage self-reporting and give the rule a `q_2_NN.rs` key. Note the
-   detection work is *not* shared: the rule can key off AST shape today
-   without any diagnostic, so the diagnostic is additive rather than a
-   prerequisite. Separate strand, or Phase 6 here?
+### `literal-brackets` — destructive, opt-in
 
-4. **What is the rule's name?** `reference-links` covers arm (1);
-   `literal-brackets` or `escape-brackets` covers arm (2). If Q2 lands on
-   (c), we need both names. The README's *Future Converters* line says
-   "Reference-style links → inline links", which only names arm (1).
+A bracketed run with **no matching definition**, escaped so the brackets
+survive:
 
-5. **`[a][b][c]` resolution.** Follow CommonMark left-to-right greedy
-   (`[a][b]` consumes, `[c]` is then literal and gets escaped)? Or refuse to
-   touch chains of three-or-more adjacent bare spans and report them for
-   human review? The Connect corpus may well contain none of these — worth
-   a grep before deciding.
+| before | after |
+| --- | --- |
+| `[Version TBD]`, `[1]`, `[Posit Connect]` | `\[Version TBD\]` etc. |
+| `![solo]` (no definition) | `!\[solo\]` |
 
-## Risks / tradeoffs (draft)
+This rule is the one that writes an edit indistinguishable from author
+intent afterwards. It is separately named precisely so `convert -r all`
+never fires it unasked.
 
-- **Arm (2) writes an edit that is indistinguishable from author intent
-  afterwards.** This is the strand's own caveat and it is the real risk.
-  Mitigation is Q2 plus the existing per-violation `check` output.
-- **The AST-based approach couples the rule to pampa's span
-  representation.** If `[...]`-with-no-attrs ever stops producing a bare
-  `Span` (e.g. a future diagnostic changes the parse), the rule goes quiet
-  rather than failing loudly. Worth a test that asserts the *detector* sees
-  the shapes, not only that the rewrite is correct.
-- **First AST-walking rule in the crate.** Slight new-pattern cost; contained.
-- **The repro's home repo is local-only.** Mitigated by copying it into
-  `claude-notes/plans/reference-links-migration-investigation/`.
-- **Not a parser fix, by decision.** Sources migrated by this rule stop
-  being reference-link documents. That is the intended direction (2026-08-10,
-  Carlos) but it is one-way for the corpus it is run on.
+## Phases
+
+- [ ] **Phase 0 — Test plan (TDD, failing first).** Fixtures under
+      `crates/qmd-syntax-helper/tests/fixtures/` covering: full / collapsed /
+      shortcut references; definitions with and without titles; unmatched
+      brackets; genuine `[x]{.cls}`; inline link; code span; multi-line
+      span; all four image shapes; and a `[a][b][c]` chain. Tests live in
+      `tests/integration/reference_links_test.rs` and
+      `tests/integration/literal_brackets_test.rs`, registered in
+      `tests/integration/main.rs` — **no new top-level test binaries**
+      (`.claude/rules/integration-tests.md`). Include tests that assert the
+      *detector* sees each shape, not only that the rewrite is correct (see
+      Risks).
+- [ ] **Phase 1 — Shared detection.** AST walk collecting bare spans and
+      empty-url images with byte ranges; adjacency runs; definition-line
+      recognition; use↔definition matching with case-insensitive,
+      whitespace-normalized labels. Runs ≥3 are flagged `Ambiguous` here.
+- [ ] **Phase 2 — `reference-links` rewrite.** Uses with definitions →
+      inline form; drop each definition at last use. Span and image forms
+      together.
+- [ ] **Phase 3 — `literal-brackets` rewrite.** Escaping arm, span and image
+      forms. Reverse-offset edits.
+- [ ] **Phase 4 — Registration + CLI.** Both rules into `RuleRegistry`;
+      README's *Future Converters* entry moves to shipped and gains the
+      two-rule explanation plus the `check`-before-`convert` guidance.
+- [ ] **Phase 5 — Diagnostic.** See below.
+- [ ] **Phase 6 — End-to-end verification** per CLAUDE.md: run the real
+      binary against the Connect docs, inspect output, record the exact
+      invocation and a snippet here.
+
+## Phase 5 in detail — the diagnostic, and what it does *not* cover
+
+Two high-precision triggers, both keying off shapes that are never
+intentional qmd. Next free code is **Q-2-42** (highest allocated in
+`crates/pampa/resources/error-corpus/` is `Q-2-41`); allocate at
+implementation time.
+
+1. **A block-level line matching the link-reference-definition shape** —
+   the strand's own proposal. Catches the leaked-definition-paragraph
+   symptom.
+2. **Two adjacent bare spans / an empty-url image followed by a bare span**
+   — the `[label][ref]` and `![alt][ref]` shapes. Unambiguously reference
+   syntax; a genuine span never abuts another bare span this way.
+
+**The limitation to be explicit about:** neither trigger fires on a *lone*
+bare `[Version TBD]`. Diagnosing every bare span would be noisy and
+sometimes wrong, since `[text]` → `<span>text</span>` can be deliberate. So
+the diagnostic covers the `reference-links` shapes well and the
+`literal-brackets` shapes **not at all** — which is exactly why
+`literal-brackets` stays a run-`check`-first, opt-in rule rather than
+something that can ride on a diagnostic. The three meaning-changing Connect
+pages (`admin/security`, `branding`, `email`) are all lone-bracket cases and
+would **not** be caught by this diagnostic.
+
+Per `crates/pampa/CLAUDE.md`, adding a code means a `Q-2-42.json` in
+`resources/error-corpus/` with cases, then `./scripts/build_error_table.ts`.
+
+## Risks / tradeoffs
+
+- **`literal-brackets` writes an edit indistinguishable from author intent.**
+  The strand's own caveat and the real risk. Mitigated by the separate rule
+  name (never in `-r all` by accident) plus `check`'s per-violation
+  locations.
+- **AST coupling.** If `[...]`-with-no-attrs ever stops producing a bare
+  `Span` — e.g. a future diagnostic changes the parse — the rules go *quiet*
+  rather than failing loudly. Hence the Phase 0 requirement for
+  detector-level tests, so that regression trips a test instead of silently
+  migrating nothing.
+- **First AST-walking rule in the crate.** Small new-pattern cost; contained.
+- **Not a parser fix, by decision.** Sources migrated by these rules stop
+  being reference-link documents. Intended, but one-way for the corpus it is
+  run on.
+- **The repro's home repo is local-only.** Mitigated by the in-repo copy.
 
 ## Where this landed
 
-Investigated on `main` @ `05c2454e` in the primary checkout, per the
-skill's "work in the checkout you were invoked in". Note this checkout's
-`CLAUDE.local.md` still carries worktree context for an unrelated strand
-(`bd-09aja9gl`); it was not touched. If implementation wants isolation, a
-worktree should be created deliberately — I did not create one.
+Investigated on `main` @ `05c2454e` in the primary checkout, per the skill's
+"work in the checkout you were invoked in". This checkout's
+`CLAUDE.local.md` still carries stale worktree context for an unrelated
+strand (`bd-09aja9gl`); it was not touched. **No worktree was created** — if
+implementation wants isolation, create one deliberately.

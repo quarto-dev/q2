@@ -127,9 +127,72 @@ line</span> D [escaped] E <span>a</span><span>b</span><span>c</span></p>
   a new dependency: `pampa` is already a dep and `read` already returns the
   `Pandoc` value and `ASTContext`).
 
+## 6. Image detection is exactly parallel to span detection (probed after design review)
+
+`mini3.qmd`:
+
+```
+A ![alt][ref] B ![solo] C ![real](u.png) D ![x][]
+
+[ref]: https://r.example/i.png "T"
+```
+
+```
+{"t":"Image","s":3, "r":[2,8],  "target":["",""]}       # ![alt]  — empty url
+{"t":"Span", "s":5, "r":[8,13]}                          # [ref]   — touches at 8
+{"t":"Image","s":10,"r":[16,23],"target":["",""]}        # ![solo] — empty url
+{"t":"Image","s":15,"r":[26,40],"target":["u.png",""]}   # ![real](u.png) — EXCLUDED
+{"t":"Image","s":21,"r":[43,47],"target":["",""]}        # ![x]
+{"t":"Span", "s":23,"r":[47,49]}                         # []      — touches at 47
+```
+
+So the image predicate is **`Inline::Image` with an empty url**, structurally
+parallel to "`Inline::Span` with empty attr":
+
+- the `SourceInfo` range covers `![alt]` including the `!` and both brackets;
+- the following `[ref]` span touches it exactly, so the *same* adjacency test
+  finds `![alt][ref]` that finds `[label][ref]`;
+- a real `![real](u.png)` carries a non-empty url and is excluded without any
+  lookahead, exactly as `[x]{.cls}` is excluded by its non-empty attr.
+
+**The escape form for images is `!\[solo\]`, and it is safe in both engines**
+(`mini4.qmd` / `q1probe2.md`):
+
+| input | q2 @ `05c2454e` | `quarto pandoc` (Q1) |
+| --- | --- | --- |
+| `![solo]` (no definition) | `<img src="" alt="solo" />` | literal `![solo]` |
+| `!\[esc\]` | literal `![esc]` | literal `![esc]` |
+
+q2 produces **no `Image` node** for `!\[esc\]`, so the image arm is idempotent
+under repeated `convert` passes for the same reason the span arm is.
+
+## 7. Three-or-more adjacent bare spans: zero occurrences in the motivating corpus
+
+Grepping the Connect docs for chained brackets (`][…][`) across both the
+quarto-1 and quarto-2 trees returns exactly two files:
+
+```
+docs-quarto-2/admin/integrations/oauth-integrations/vault/index.qmd:212:]['data'][
+docs-quarto-2/cookbook/users/.../ldap/index.qmd:78:][0][
+```
+
+Both are **inside fenced code blocks** — `response['data']['data']['password']`
+and `response.json()['results'][0]['temp_ticket']` — so they never become
+spans at all and the AST pass is structurally blind to them. There are **no
+real `[a][b][c]` chains in prose** anywhere in the corpus that motivated this
+work.
+
+The ambiguity guard is therefore cheap insurance rather than load-bearing:
+adjacency runs are already computed to find `[label][ref]` pairs, so "run
+length ≥ 3 → decline and report" is a length check on data in hand, not new
+machinery.
+
 ## Files here
 
 - `repro.qmd` — copy of the strand's repro (the source repo is local-only).
 - `mini.qmd` — minimal four-shape probe used for the byte-range table.
 - `mini2.qmd` — collapsed/image/multiline/escaped/chained probe.
+- `mini3.qmd` — image reference shapes with source ranges and targets.
+- `mini4.qmd` — `![solo]` vs `!\[esc\]` under q2.
 - `q1probe.md` — the Q1 escaped-bracket cross-check.
+- `q1probe2.md` — the Q1 image-escape cross-check.
