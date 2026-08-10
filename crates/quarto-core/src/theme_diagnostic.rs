@@ -12,6 +12,8 @@
 //! The "Parse" in `ParseError` is historical — the type is just a
 //! `Vec<DiagnosticMessage>` + `SourceContext` envelope.
 
+use std::path::PathBuf;
+#[cfg(test)]
 use std::path::Path;
 
 use quarto_error_reporting::DiagnosticMessageBuilder;
@@ -50,30 +52,23 @@ use crate::error::ParseError;
 /// the source snippet.
 pub fn sass_error_to_parse_error(
     err: &SassError,
-    candidate_sources: &[(FileId, &Path)],
+    candidate_sources: &[(FileId, PathBuf)],
 ) -> ParseError {
     let location = sass_error_location(err);
 
+    // Candidate-matched binding via the shared helper (this function
+    // was the original precedent for it; bd-m6wmztln → bd-r64mj1aa):
+    // registers only the candidate whose id equals the diagnostic's
+    // resolved id, only with readable content. No match ⇒ span-less
+    // render — never a wrong span.
     let mut source_context = SourceContext::new();
-    if let Some(loc) = &location
-        && let Some((fid_usize, _, _)) = loc.resolve_byte_range()
-        && let Some((file_id, source_file)) =
-            candidate_sources.iter().find(|(fid, _)| fid.0 == fid_usize)
-        && let Ok(content) = std::fs::read_to_string(source_file)
-    {
-        // Only register the file when we actually have its content.
-        // A SourceFile with `content = None` triggers ariadne to
-        // re-read from disk at render time and panic on absence —
-        // which would mask the diagnostic with a noisier error.
-        // No content ⇒ span-less render, same as no location.
-        // *file_id comes from the caller-supplied candidate list entry
-        // whose id equals the diagnostic's resolved id (the
-        // bind_config_source precedent).
-        // lint:allow(add-file-with-id) — candidate-matched above
-        source_context.add_file_with_id(
-            *file_id,
-            source_file.to_string_lossy().into_owned(),
-            Some(content),
+    if let Some(loc) = &location {
+        crate::config_sources::bind_source_candidates(
+            &mut source_context,
+            loc,
+            candidate_sources
+                .iter()
+                .map(|(fid, p)| (*fid, p.as_path())),
         );
     }
 
@@ -229,7 +224,7 @@ mod tests {
             location: Some(location.clone()),
         };
 
-        let parse_err = sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), &yaml_path)]);
+        let parse_err = sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-1"));
@@ -282,7 +277,7 @@ mod tests {
             message: "no source info available".to_string(),
             location: None,
         };
-        let parse_err = sass_error_to_parse_error(&err, &[(FileId(0), Path::new("/nonexistent"))]);
+        let parse_err = sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-1"));
@@ -345,7 +340,7 @@ mod tests {
             location: Some(location.clone()),
         };
 
-        let parse_err = sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), &yaml_path)]);
+        let parse_err = sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-2"));
@@ -384,7 +379,7 @@ mod tests {
             name: "whatever".to_string(),
             location: None,
         };
-        let parse_err = sass_error_to_parse_error(&err, &[(FileId(0), Path::new("/nonexistent"))]);
+        let parse_err = sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-2"));
         assert_eq!(d.location, None);
@@ -417,7 +412,7 @@ mod tests {
             location: Some(location.clone()),
         };
 
-        let parse_err = sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), &yaml_path)]);
+        let parse_err = sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-4"));
@@ -456,7 +451,7 @@ mod tests {
             path: std::path::PathBuf::from("/somewhere/nope.scss"),
             location: None,
         };
-        let parse_err = sass_error_to_parse_error(&err, &[(FileId(0), Path::new("/nonexistent"))]);
+        let parse_err = sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-4"));
         assert_eq!(d.location, None);
