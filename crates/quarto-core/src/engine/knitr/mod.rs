@@ -190,6 +190,7 @@ impl ExecutionEngine for KnitrEngine {
         // Step 7: Build call options
         let call_options = CallROptions {
             quiet: ctx.quiet,
+            project_env: ctx.project_env.clone(),
             ..Default::default()
         };
 

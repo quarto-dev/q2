@@ -39,11 +39,14 @@ Working conventions for this phase:
       braid/bd-itj2mjkr-engine-slot-desync (remap made conditional, not
       additive; debug_assert judged unnecessary once the id comes from
       the add_file return). Awaiting PR/merge before strand close.*
-- [ ] **D3 / bd-x113wg9v (p2):** doc-level `resource_error_to_parse_error`
+- [x] **D3 / bd-x113wg9v (p2):** doc-level `resource_error_to_parse_error`
       mis-bind. Depends on PR #478. Fixture: `resources:` pattern declared in
       `_metadata.yml`, assert Q-5-1 snippet names the `_metadata.yml`. Fix:
       route through `bind_config_source` with candidates
       `[doc path, config_path] ++ extension_manifest_paths ++ dir-layer paths`.
+      *Done 2026-08-09 via new bind_source_candidates (two-scheme pairs)
+      + directory_metadata_paths_for_document; both temporary lint
+      blessings removed in the same commit.*
 - [x] **P2 / bd-f6h40a9r (p2):** `writers/incremental.rs:704-708` + `:747-766`
       foreign-offset fallback. Fix: `preimage_in` miss ⇒ re-serialize the
       inline (no `inline_source_span` fallback into foreign coordinates);
@@ -70,25 +73,34 @@ Working conventions for this phase:
       arg compared Rust-side against AttributionLookup::blamed_file_id
       (fed by bd-vmlhw7nx's AttributionData.file_id); two-arg calls keep
       the historical contract.*
-- [ ] **D4 / bd-h5rfw3ao (p3):** harden `project_type_error`
+- [x] **D4 / bd-h5rfw3ao (p3):** harden `project_type_error`
       (`project/mod.rs:903`) — route through `bind_config_source` (or add the
       hash-equality guard) + a test pinning the invariant.
+      *Done 2026-08-09: bind_config_source over config_path ++ manifest
+      paths; dead content params removed; pin test in
+      unknown_project_type.rs.*
 
 ### Coverage completion (correct sites, incomplete candidates)
 
-- [ ] **D5 / bd-r64mj1aa (p2, covers D6/D7):** `commands/render.rs` `attach_config_source` /
+- [x] **D5 / bd-r64mj1aa (p2, covers D6/D7):** `commands/render.rs` `attach_config_source` /
       `config_source_context`: extend candidates with
       `extension_manifest_paths` (+ dir-layer `_metadata.yml` paths for the
       per-page groups). Depends on PR #478.
-- [ ] **D6 (in bd-r64mj1aa):** `theme_error_candidates`
+      *Done 2026-08-09, all three legs; per-page layer coverage comes via
+      D7's metadata_merge registration on the structured path; new shared
+      register_config_source; zero lint allowances left in render.rs.*
+- [x] **D6 (in bd-r64mj1aa):** `theme_error_candidates`
       (`compile_theme_css.rs:633`): add `extension_manifest_paths` and the
       doc's dir-layer paths.
-- [ ] **D7 (in bd-r64mj1aa):** register extension manifests in
+- [x] **D7 (in bd-r64mj1aa):** register extension manifests in
       `MetadataMergeStage` so doc-scoped diagnostics anchored in
       `_extension.yml` get spans.
-- [ ] **D9 / bd-fc3mf161 (p3, may defer):** `pipeline.rs:800/:834/:1006` — thread
+- [x] **D9 / bd-fc3mf161 — DEFERRED (p4):** `pipeline.rs:800/:834/:1006` — thread
       the document's real SourceContext into the `StageError` fallback arm
       instead of rebuilding a single-file context.
+      *Deferred with evidence 2026-08-09: no StageError emitter produces
+      config-anchored diagnostics (all use Structured post-#478), so the
+      span-loss case is unreachable and untestable; see strand comment.*
 
 ### Guardrails
 
@@ -120,9 +132,9 @@ Working conventions for this phase:
 ### Phase exit
 
 - [ ] All strands above closed (tests green, e2e-verified where user-visible)
-- [ ] Write the step-2 memo for the quarto-source-map agent (Option B API,
+- [x] Write the step-2 memo for the quarto-source-map agent (Option B API,
       deprecation plan, quarto-yaml migration; declares Option C end-state)
-      — separate plan doc, linked from bd-nv4p0eb1
+      — `claude-notes/plans/2026-08-09-quarto-source-map-option-b-memo.md`
 - [ ] Update bd-nv4p0eb1 with phase-A completion evidence
 
 ## Session log
@@ -137,10 +149,12 @@ Working conventions for this phase:
   bd-u0tldu4z (flaky quarto-hub admin_collect_lifecycle test, unrelated
   to this work — no quarto-xml dep edge, green in isolation and on
   rerun). NOT pushed — awaiting user approval.
-- **Next session:** bd-fc3mf161 (D9, may defer) is the only unblocked
-  code item; bd-x113wg9v / bd-h5rfw3ao / bd-r64mj1aa wait on PR #478's
-  merge (then also remove the two temporary BLESSED_SUFFIXES entries in
-  the lint). Then the step-2 quarto-source-map memo (phase exit).
+- **2026-08-09 (session 1, part 3, post #478+#482 merges):** bd-x113wg9v,
+  bd-h5rfw3ao, bd-r64mj1aa done (temporary lint blessings and two more
+  inline allowances removed along the way); bd-fc3mf161 deferred to p4
+  with unreachability evidence; step-2 memo written. Phase A code
+  complete on `feature/bd-nv4p0eb1-span-hardening` (rebased-on/merged
+  main after #482).
 
 ## Details / decisions
 

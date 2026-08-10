@@ -82,4 +82,4 @@ the request returns [the task]{#task-guid} immediately.
 
 ## Related errors
 
-- `Q-2-38` — unclosed attribute specifier.
+- [`Q-2-38`](Q-2-38.qmd) — unclosed attribute specifier.

@@ -622,23 +622,34 @@ impl PipelineStage for CompileThemeCssStage {
 }
 
 /// FileId candidates for rendering a theme-config diagnostic's source
-/// span. The offending `theme:` value can live in either the project's
-/// `_quarto.yml` (most common) or the document's own frontmatter (when
-/// the document overrides `theme:`); the two use different FileId
-/// schemes:
+/// span. The merged `theme:` value can live in the project's
+/// `_quarto.yml`, the document's own frontmatter, a directory
+/// `_metadata.yml` layer, or a contributing extension's
+/// `_extension.yml` (bd-r64mj1aa) — two FileId schemes:
 ///
-/// - `_quarto.yml` uses the YAML parser's hash-based FileId (via
+/// - Standalone YAML files use the parser's hash-based FileId (via
 ///   `quarto_yaml::file_id_for_filename`).
 /// - The document uses pampa's primary `FileId(0)`.
 fn theme_error_candidates(
     ctx: &StageContext,
-) -> Vec<(quarto_source_map::FileId, &std::path::Path)> {
-    let mut candidates: Vec<(quarto_source_map::FileId, &std::path::Path)> = Vec::new();
+) -> Vec<(quarto_source_map::FileId, std::path::PathBuf)> {
+    let hash = |p: &std::path::Path| quarto_yaml::file_id_for_filename(&p.to_string_lossy());
+    let mut candidates: Vec<(quarto_source_map::FileId, std::path::PathBuf)> = Vec::new();
     if let Some(p) = ctx.project.config.config_path.as_deref() {
-        let fid = quarto_yaml::file_id_for_filename(&p.to_string_lossy());
+        candidates.push((hash(p), p.to_path_buf()));
+    }
+    candidates.push((quarto_source_map::FileId(0), ctx.document.input.clone()));
+    for p in &ctx.project.config.extension_manifest_paths {
+        candidates.push((hash(p), p.clone()));
+    }
+    for p in crate::project::directory_metadata_paths_for_document(
+        &ctx.project,
+        &ctx.document.input,
+        ctx.runtime.as_ref(),
+    ) {
+        let fid = hash(&p);
         candidates.push((fid, p));
     }
-    candidates.push((quarto_source_map::FileId(0), ctx.document.input.as_path()));
     candidates
 }
 

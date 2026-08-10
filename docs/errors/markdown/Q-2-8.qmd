@@ -12,7 +12,8 @@ categories:
 # `Q-2-8` — Unsupported Code Block Syntax
 
 > Reserved code, historically used for an old-style knitr-options
-> warning that has since been promoted to error `Q-2-36`.
+> warning that has since been promoted to error
+> [`Q-2-36`](Q-2-36.qmd).
 
 ## What this means
 
@@ -20,7 +21,8 @@ This code was once a warning Quarto raised when a code block was
 written with knitr-style header options — options listed inside
 the chunk header braces alongside the language tag — instead of
 Quarto's `#|` syntax. That diagnostic was later upgraded to an
-error and renumbered `Q-2-36`. The catalog retains this code so
+error and renumbered [`Q-2-36`](Q-2-36.qmd). The catalog retains
+this code so
 older messages remain resolvable, but no current Quarto release
 emits it.
 

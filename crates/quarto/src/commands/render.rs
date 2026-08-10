@@ -746,8 +746,15 @@ fn execute_single_doc(
     let mut project = ProjectContext::discover(&input, runtime_arc.as_ref())
         .context("Failed to discover project context")?;
     // Captured before the pipeline mutably borrows `project`; used to
-    // restore config-anchored source snippets at print time.
+    // restore config-anchored source snippets at print time. Manifests
+    // included: merged values can anchor in an extension's
+    // `_extension.yml` (bd-r64mj1aa).
     let config_path = project.config.config_path.clone();
+    let config_sources: Vec<PathBuf> = config_path
+        .iter()
+        .cloned()
+        .chain(project.config.extension_manifest_paths.iter().cloned())
+        .collect();
 
     quarto_util::user_status!(args.quiet, "Rendering single file: {}", input.display());
 
@@ -781,7 +788,7 @@ fn execute_single_doc(
         summary.promote_warnings_to_errors();
     }
 
-    print_render_diagnostics(&summary, args, config_path.as_deref());
+    print_render_diagnostics(&summary, args, &config_sources);
 
     // bd-ooleh: a single-file render has no "Rendered N of M" line to
     // augment, so the error/warning counts get their own line — printed
@@ -820,8 +827,15 @@ fn execute_project(
     let mut project = ProjectContext::discover(&project_dir, runtime_arc.as_ref())
         .context("Failed to discover project context")?;
     // Captured before the pipeline mutably borrows `project`; used to
-    // restore config-anchored source snippets at print time.
+    // restore config-anchored source snippets at print time. Manifests
+    // included: merged values can anchor in an extension's
+    // `_extension.yml` (bd-r64mj1aa).
     let config_path = project.config.config_path.clone();
+    let config_sources: Vec<PathBuf> = config_path
+        .iter()
+        .cloned()
+        .chain(project.config.extension_manifest_paths.iter().cloned())
+        .collect();
 
     // bd-w348iu63: warn about the likely `pre_render` / `post_render`
     // misspellings (Q2 has no schema layer; unknown keys are
@@ -850,6 +864,10 @@ fn execute_project(
             Some(t) => paths_relative_to(t.iter(), &project.dir),
             None => paths_relative_to(project.files.iter().map(|f| &f.input), &project.dir),
         };
+        let script_env = quarto_core::project::environment::subprocess_env_for_project(
+            runtime_arc.as_ref(),
+            &project,
+        );
         let ctx = render_scripts::RenderScriptsContext {
             project_dir: &project.dir,
             output_dir: &project.output_dir,
@@ -858,6 +876,7 @@ fn execute_project(
             render_all,
             quiet: args.quiet,
             file_count: input_files.len(),
+            project_env: &script_env,
         };
         if let Err(parse_error) = render_scripts::run_render_scripts(
             render_scripts::ScriptPhase::PreRender,
@@ -921,7 +940,7 @@ fn execute_project(
         summary.promote_warnings_to_errors();
     }
 
-    print_render_diagnostics(&summary, args, config_path.as_deref());
+    print_render_diagnostics(&summary, args, &config_sources);
 
     let rendered = summary.outputs.len();
     if let Some(mut line) = render_summary_line(false, total_files, rendered, &project.output_dir) {
@@ -950,6 +969,10 @@ fn execute_project(
     if run_scripts && !project.config.post_render_scripts.is_empty() {
         let output_files =
             paths_relative_to(summary.outputs.iter().map(|o| &o.output_path), &project.dir);
+        let script_env = quarto_core::project::environment::subprocess_env_for_project(
+            runtime_arc.as_ref(),
+            &project,
+        );
         let ctx = render_scripts::RenderScriptsContext {
             project_dir: &project.dir,
             output_dir: &project.output_dir,
@@ -958,6 +981,7 @@ fn execute_project(
             render_all,
             quiet: args.quiet,
             file_count: total_files,
+            project_env: &script_env,
         };
         if let Err(parse_error) = render_scripts::run_render_scripts(
             render_scripts::ScriptPhase::PostRender,
@@ -1032,12 +1056,12 @@ fn should_exit_nonzero<O: quarto_core::project::orchestrator::OutputDiagnostics>
 fn print_render_diagnostics(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
     args: &RenderArgs,
-    config_path: Option<&Path>,
+    config_sources: &[PathBuf],
 ) {
     if args.json_errors {
-        print_render_diagnostics_json(summary, config_path);
+        print_render_diagnostics_json(summary, config_sources);
     } else {
-        print_render_diagnostics_text(summary, args.quiet, config_path);
+        print_render_diagnostics_text(summary, args.quiet, config_sources);
     }
 
     // bd-c5u2g: emit per-process engine-discovery counters when
@@ -1072,63 +1096,39 @@ fn print_render_diagnostics(
 /// the config path, which is what the diagnostics' `SourceInfo`
 /// carries — the same trick [`attach_config_source`] plays for
 /// coalesced per-page diagnostics.
-fn config_source_context(config_path: Option<&Path>) -> Option<SourceContext> {
-    let config_path = config_path?;
-    let config_str = config_path.to_string_lossy();
-    let content = std::fs::read_to_string(config_path).ok()?;
+fn config_source_context(candidates: &[PathBuf]) -> Option<SourceContext> {
+    if candidates.is_empty() {
+        return None;
+    }
     let mut ctx = SourceContext::new();
-    // The id is derived from the registered path itself, so the triple
-    // cannot mis-pair.
-    // lint:allow(add-file-with-id) — id from file_id_for_filename(path)
-    ctx.add_file_with_id(
-        quarto_yaml::file_id_for_filename(&config_str),
-        config_str.into_owned(),
-        Some(content),
-    );
-    Some(ctx)
+    let mut registered = false;
+    for path in candidates {
+        registered |= quarto_core::config_sources::register_config_source(&mut ctx, path);
+    }
+    registered.then_some(ctx)
 }
 
-fn attach_config_source(group: &mut CoalescedDiagnostic, config_path: Option<&Path>) {
-    use quarto_source_map::FileId;
-
-    let Some(config_path) = config_path else {
-        return;
-    };
+fn attach_config_source(group: &mut CoalescedDiagnostic, candidates: &[PathBuf]) {
     let Some(loc) = group.representative.location.as_ref() else {
         return;
     };
-    let Some((fid, _, _)) = loc.resolve_byte_range() else {
-        return;
-    };
-    if group
-        .source_context
-        .as_ref()
-        .is_some_and(|c| c.get_file(FileId(fid)).is_some())
-    {
-        return;
-    }
-    // `parse_config` hashed `config_path.to_string_lossy()`; only a
-    // diagnostic actually anchored in this config file matches.
-    let config_str = config_path.to_string_lossy();
-    if quarto_yaml::file_id_for_filename(&config_str) != FileId(fid) {
-        return;
-    }
-    let Ok(content) = std::fs::read_to_string(config_path) else {
-        return;
-    };
-    group
-        .source_context
-        .get_or_insert_with(SourceContext::new)
-        // Guarded above: registers only when
-        // file_id_for_filename(config_str) == FileId(fid).
-        // lint:allow(add-file-with-id) — hash-equality guarded
-        .add_file_with_id(FileId(fid), config_str.into_owned(), Some(content));
+    // Candidate-matched: only the file whose re-derived FileId equals
+    // the diagnostic's resolved id gets registered (bind_config_source
+    // no-ops when the group's own context already resolves the id, and
+    // never binds a non-match). Candidates cover `_quarto.yml` plus
+    // every discovered extension manifest (bd-r64mj1aa).
+    let ctx = group.source_context.get_or_insert_with(SourceContext::new);
+    quarto_core::config_sources::bind_config_source(
+        ctx,
+        loc,
+        candidates.iter().map(PathBuf::as_path),
+    );
 }
 
 fn print_render_diagnostics_text(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
     quiet: bool,
-    config_path: Option<&Path>,
+    config_sources: &[PathBuf],
 ) {
     for failure in &summary.pass1_failures {
         eprintln!(
@@ -1169,7 +1169,7 @@ fn print_render_diagnostics_text(
             eprintln!("error: {}: {}", failure.input.display(), failure.error);
         }
     }
-    let project_ctx = config_source_context(config_path);
+    let project_ctx = config_source_context(config_sources);
     for diagnostic in &summary.project_diagnostics {
         eprintln!("{}", diagnostic.to_text(project_ctx.as_ref()));
     }
@@ -1194,7 +1194,7 @@ fn print_render_diagnostics_text(
             })
         });
         for mut group in coalesce_by_source(entries) {
-            attach_config_source(&mut group, config_path);
+            attach_config_source(&mut group, config_sources);
             eprintln!("{}", group.to_text());
         }
 
@@ -1267,7 +1267,7 @@ fn detect_single_input_format(inputs: &[String]) -> Option<String> {
 /// emits NDJSON instead.
 fn print_render_diagnostics_json(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
-    config_path: Option<&Path>,
+    config_sources: &[PathBuf],
 ) {
     // Pass-1 failures: emit one JsonPass1Failure per failure. If the
     // failure has structured diagnostics + a source context, attach
@@ -1327,7 +1327,7 @@ fn print_render_diagnostics_json(
     // project-scope with no span; those anchored in `_quarto.yml`
     // (the `project.render` glob diagnostics, Q-5-13/14/15) resolve
     // through the config's source context.
-    let project_ctx = config_source_context(config_path).unwrap_or_default();
+    let project_ctx = config_source_context(config_sources).unwrap_or_default();
     for diagnostic in &summary.project_diagnostics {
         emit_json_line(&diagnostic_to_json(diagnostic, &project_ctx));
     }

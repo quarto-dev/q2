@@ -317,6 +317,14 @@ impl PipelineStage for MetadataMergeStage {
             for (path, _) in &dir_layer_entries {
                 register(path);
             }
+            // Extension manifests too (bd-r64mj1aa): values merged from
+            // `contributes.metadata` / `contributes.format` keep their
+            // `_extension.yml`-hash FileIds, and without this registration
+            // every doc-scoped diagnostic anchored in a manifest rendered
+            // span-less.
+            for path in &ctx.project.config.extension_manifest_paths {
+                register(path);
+            }
         }
 
         let dir_layers: Vec<_> = dir_layer_entries

@@ -71,6 +71,14 @@ pub struct ExecutionContext {
     /// the context is finalized after include expansion and doesn't change
     /// during engine execution.
     pub source_context: Arc<SourceContext>,
+
+    /// Environment pairs from the project's `_environment` files to
+    /// pass to engine subprocesses, **already filtered** to keys the
+    /// real process environment does not define (see
+    /// [`crate::project::environment::env_for_subprocess`]). q2 never
+    /// mutates its own environment; executed code sees these values
+    /// only because spawn sites apply them with `Command::env`.
+    pub project_env: Vec<(String, String)>,
 }
 
 impl ExecutionContext {
@@ -94,7 +102,16 @@ impl ExecutionContext {
             // any consumer reads it.
             source_info: SourceInfo::generated(By::unknown()),
             source_context: Arc::new(SourceContext::new()),
+            project_env: Vec::new(),
         }
+    }
+
+    /// Set the project environment pairs passed to engine
+    /// subprocesses (pre-filtered by
+    /// [`crate::project::environment::env_for_subprocess`]).
+    pub fn with_project_env(mut self, project_env: Vec<(String, String)>) -> Self {
+        self.project_env = project_env;
+        self
     }
 
     /// Set the project directory.

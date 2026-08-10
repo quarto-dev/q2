@@ -1177,6 +1177,7 @@ pub fn build_transform_pipeline(
     runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
     target_format: String,
     variables: Option<quarto_pandoc_types::ConfigValue>,
+    project_env: hashlink::LinkedHashMap<String, String>,
 ) -> TransformPipeline {
     let mut pipeline: TransformPipeline = TransformPipeline::new();
 
@@ -1207,6 +1208,7 @@ pub fn build_transform_pipeline(
         runtime.clone(),
         lua_format,
         variables,
+        project_env,
     )));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     // Date normalization (bd-gx9cic8z P4): resolves today/now/
@@ -1545,6 +1547,7 @@ pub fn build_q2_preview_transform_pipeline(
     runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
     target_format: String,
     variables: Option<quarto_pandoc_types::ConfigValue>,
+    project_env: hashlink::LinkedHashMap<String, String>,
 ) -> TransformPipeline {
     let mut pipeline = build_transform_pipeline(
         shortcode_paths,
@@ -1552,6 +1555,7 @@ pub fn build_q2_preview_transform_pipeline(
         runtime,
         target_format,
         variables,
+        project_env,
     );
     pipeline.retain_excluding(Q2_PREVIEW_TRANSFORM_EXCLUDED);
     pipeline
@@ -2709,7 +2713,14 @@ mod tests {
     #[test]
     fn q2_preview_transform_excluded_names_exist_in_html_pipeline() {
         let runtime = make_test_runtime();
-        let html = build_transform_pipeline(vec![], vec![], runtime, "html".to_string(), None);
+        let html = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            None,
+            Default::default(),
+        );
         let html_names: Vec<&str> = html.iter().map(|t| t.name()).collect();
 
         let unknown: Vec<&&str> = Q2_PREVIEW_TRANSFORM_EXCLUDED
@@ -3141,6 +3152,7 @@ mod tests {
             runtime,
             "q2-preview".to_string(),
             None,
+            Default::default(),
         );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         assert!(
@@ -3164,6 +3176,7 @@ mod tests {
             runtime,
             "q2-preview".to_string(),
             None,
+            Default::default(),
         );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         for required in [
@@ -3210,7 +3223,14 @@ mod tests {
     #[test]
     fn html_pipeline_includes_code_block_decoration_transforms() {
         let runtime = make_test_runtime();
-        let pipeline = build_transform_pipeline(vec![], vec![], runtime, "html".to_string(), None);
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            None,
+            Default::default(),
+        );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
 
         let gen_pos = names.iter().position(|&n| n == "code-block-generate");
@@ -3272,8 +3292,14 @@ mod tests {
         // covers them automatically.
         for format in ["html", "revealjs"] {
             let runtime = make_test_runtime();
-            let pipeline =
-                build_transform_pipeline(vec![], vec![], runtime, format.to_string(), None);
+            let pipeline = build_transform_pipeline(
+                vec![],
+                vec![],
+                runtime,
+                format.to_string(),
+                None,
+                Default::default(),
+            );
             let steps: Vec<(&str, TransformPhase)> =
                 pipeline.iter().map(|t| (t.name(), t.phase())).collect();
 
@@ -3320,6 +3346,7 @@ mod tests {
             runtime,
             "q2-preview".to_string(),
             None,
+            Default::default(),
         );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         for required in ["code-block-generate", "code-block-render"] {
@@ -3339,8 +3366,14 @@ mod tests {
     fn mermaid_render_present_before_code_block_render() {
         for format in ["html", "revealjs"] {
             let runtime = make_test_runtime();
-            let pipeline =
-                build_transform_pipeline(vec![], vec![], runtime, format.to_string(), None);
+            let pipeline = build_transform_pipeline(
+                vec![],
+                vec![],
+                runtime,
+                format.to_string(),
+                None,
+                Default::default(),
+            );
             let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
 
             let mermaid_pos = names.iter().position(|&n| n == "mermaid-render");
@@ -3372,6 +3405,7 @@ mod tests {
                 runtime,
                 format.to_string(),
                 None,
+                Default::default(),
             );
             let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
             assert!(

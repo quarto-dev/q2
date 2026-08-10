@@ -26,6 +26,7 @@
 pub mod cache_key;
 pub mod dependency_graph;
 pub mod discovery;
+pub mod environment;
 pub mod index;
 pub mod listing;
 pub mod orchestrator;
@@ -131,73 +132,90 @@ pub fn directory_metadata_for_document(
         return Ok(Vec::new());
     }
 
-    // Canonicalize the document path so strip_prefix works reliably.
-    // project.dir is always canonical (from ProjectContext::discover), but
-    // callers may pass relative paths (e.g., WASM render_qmd with VFS paths).
     let document_path = runtime
         .canonicalize(document_path)
         .unwrap_or_else(|_| document_path.to_path_buf());
-
-    let project_dir = &project.dir;
     let document_dir = document_path
         .parent()
         .ok_or_else(|| QuartoError::Other("Document has no parent directory".into()))?;
 
-    // Get relative path from project root to document directory
-    let relative_path = match document_dir.strip_prefix(project_dir) {
-        Ok(rel) => rel,
-        Err(_) => {
-            // Document is not under project directory
-            return Ok(Vec::new());
-        }
-    };
-
-    // Split into directory components
-    let components: Vec<_> = relative_path.components().collect();
-    if components.is_empty() {
-        // Document is in project root, no directories to walk
-        return Ok(Vec::new());
-    }
-
     let mut layers = Vec::new();
-    let mut current_dir = project_dir.clone();
+    for path in directory_metadata_paths_for_document(project, &document_path, runtime) {
+        // Parse the metadata file
+        let content = runtime
+            .file_read_string(&path)
+            .map_err(|e| QuartoError::Other(format!("Failed to read {}: {}", path.display(), e)))?;
 
-    // Walk through each directory from project root toward document
-    // (but not including project root itself - we start from first subdir)
-    for component in components {
-        current_dir = current_dir.join(component);
+        let filename = path.to_string_lossy().to_string();
+        let yaml = quarto_yaml::parse_file(&content, &filename).map_err(|e| {
+            QuartoError::Other(format!(
+                "Directory metadata validation failed for {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
 
-        // Look for _metadata.yml or _metadata.yaml
-        let metadata_path = find_metadata_file(&current_dir, runtime);
+        // Convert to ConfigValue with ProjectConfig interpretation context
+        let mut diagnostics = DiagnosticCollector::new();
+        let mut metadata =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
 
-        if let Some(path) = metadata_path {
-            // Parse the metadata file
-            let content = runtime.file_read_string(&path).map_err(|e| {
-                QuartoError::Other(format!("Failed to read {}: {}", path.display(), e))
-            })?;
+        // Adjust !path values to be relative to document directory
+        let layer_dir = path.parent().expect("metadata file has a directory");
+        adjust_paths_to_document_dir(&mut metadata, layer_dir, document_dir);
 
-            let filename = path.to_string_lossy().to_string();
-            let yaml = quarto_yaml::parse_file(&content, &filename).map_err(|e| {
-                QuartoError::Other(format!(
-                    "Directory metadata validation failed for {}: {}",
-                    path.display(),
-                    e
-                ))
-            })?;
-
-            // Convert to ConfigValue with ProjectConfig interpretation context
-            let mut diagnostics = DiagnosticCollector::new();
-            let mut metadata =
-                yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
-
-            // Adjust !path values to be relative to document directory
-            adjust_paths_to_document_dir(&mut metadata, &current_dir, document_dir);
-
-            layers.push((path, metadata));
-        }
+        layers.push((path, metadata));
     }
 
     Ok(layers)
+}
+
+/// Enumerate the `_metadata.yml` / `_metadata.yaml` layer files that
+/// apply to `document_path`, outermost directory first — the same
+/// walk, and crucially the **same path spelling**, as
+/// [`directory_metadata_for_document`] (the spelling is what
+/// `quarto_yaml::parse_file` hashed into each layer's FileId, so
+/// diagnostic assembly re-derives layer ids from these exact paths;
+/// bd-x113wg9v). Returns an empty list for single-file projects and
+/// for documents outside the project directory.
+///
+/// Callers that already canonicalized `document_path` (as
+/// [`directory_metadata_for_document`] does) pass it through; the
+/// function canonicalizes again defensively, which is idempotent.
+pub fn directory_metadata_paths_for_document(
+    project: &ProjectContext,
+    document_path: &Path,
+    runtime: &dyn SystemRuntime,
+) -> Vec<PathBuf> {
+    if project.is_single_file {
+        return Vec::new();
+    }
+    // Canonicalize so strip_prefix works reliably. project.dir is always
+    // canonical (from ProjectContext::discover), but callers may pass
+    // relative paths (e.g., WASM render_qmd with VFS paths).
+    let document_path = runtime
+        .canonicalize(document_path)
+        .unwrap_or_else(|_| document_path.to_path_buf());
+    let project_dir = &project.dir;
+    let Some(document_dir) = document_path.parent() else {
+        return Vec::new();
+    };
+    let Ok(relative_path) = document_dir.strip_prefix(project_dir) else {
+        // Document is not under project directory
+        return Vec::new();
+    };
+
+    let mut paths = Vec::new();
+    let mut current_dir = project_dir.clone();
+    // Walk through each directory from project root toward document
+    // (but not including project root itself - we start from first subdir)
+    for component in relative_path.components() {
+        current_dir = current_dir.join(component);
+        if let Some(path) = find_metadata_file(&current_dir, runtime) {
+            paths.push(path);
+        }
+    }
+    paths
 }
 
 /// Find `_metadata.yml` or `_metadata.yaml` in a directory.
@@ -389,13 +407,9 @@ impl ResolvedProjectType {
 /// the previous `.ok().unwrap_or_default()` fallback silently rendered
 /// e.g. a `type: posit-docs` website as a bare default project.
 ///
-/// `content` is the already-read text of `config_path`, registered
-/// into the error's `SourceContext` so diagnostics render a snippet
-/// pointing at the offending `type:` scalar.
 fn resolve_project_type(
     metadata: &mut ConfigValue,
     config_path: &Path,
-    content: &str,
     extensions: &[crate::extension::Extension],
     load_diagnostics: &[quarto_error_reporting::DiagnosticMessage],
     runtime: &dyn SystemRuntime,
@@ -410,7 +424,7 @@ fn resolve_project_type(
             "`project.type` must be a string.".to_string(),
             &type_source,
             config_path,
-            content,
+            extensions,
             Vec::new(),
             Vec::new(),
         ));
@@ -425,7 +439,6 @@ fn resolve_project_type(
         &type_str,
         &type_source,
         config_path,
-        content,
         extensions,
         load_diagnostics,
         runtime,
@@ -448,7 +461,6 @@ fn resolve_custom_project_type(
     type_str: &str,
     type_source: &quarto_source_map::SourceInfo,
     config_path: &Path,
-    content: &str,
     extensions: &[crate::extension::Extension],
     load_diagnostics: &[quarto_error_reporting::DiagnosticMessage],
     runtime: &dyn SystemRuntime,
@@ -485,7 +497,7 @@ fn resolve_custom_project_type(
             format!("`{type_str}` is not a recognized project type."),
             type_source,
             config_path,
-            content,
+            extensions,
             hints,
             load_diagnostics.to_vec(),
         ));
@@ -891,31 +903,44 @@ fn project_type_error(
     problem: String,
     type_source: &quarto_source_map::SourceInfo,
     config_path: &Path,
-    content: &str,
+    extensions: &[crate::extension::Extension],
     extra_hints: Vec<String>,
     extra_diagnostics: Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> QuartoError {
     use quarto_error_reporting::DiagnosticMessageBuilder;
-    use quarto_source_map::{FileId, SourceContext};
+    use quarto_source_map::SourceContext;
 
+    // Candidate-matched binding (bd-h5rfw3ao): today `type_source`
+    // always originates in `config_path` (both call sites run before
+    // any extension-fragment merge), but that was enforced only by
+    // call ordering. Matching by re-derived FileId keeps the anchor
+    // correct even if a merged (extension-contributed) `project.type`
+    // ever reaches this path — and degrades span-less, never
+    // wrong-file, for anything else.
+    let manifest_paths: Vec<std::path::PathBuf> = extensions
+        .iter()
+        .map(|e| e.path.join("_extension.yml"))
+        .collect();
     let mut source_context = SourceContext::new();
-    if let Some((fid_usize, _, _)) = type_source.resolve_byte_range() {
-        // Sound only by call ordering: both project_type_error call sites
-        // run before any extension-fragment merge, so type_source provably
-        // originates in config_path. bd-h5rfw3ao tracks hardening this via
-        // bind_config_source.
-        // lint:allow(add-file-with-id) — pre-merge, single possible source
-        source_context.add_file_with_id(
-            FileId(fid_usize),
-            config_path.to_string_lossy().into_owned(),
-            Some(content.to_string()),
-        );
-    }
+    let matched = crate::config_sources::bind_config_source(
+        &mut source_context,
+        type_source,
+        std::iter::once(config_path).chain(manifest_paths.iter().map(std::path::PathBuf::as_path)),
+    );
 
     let mut builder = DiagnosticMessageBuilder::error("Unknown project type")
         .with_code("Q-5-17")
         .with_location(type_source.clone())
-        .problem(problem)
+        .problem(problem);
+    if let Some(path) = matched
+        && path != config_path
+    {
+        builder = builder.add_info(format!(
+            "The `project.type` value is contributed by the extension manifest `{}`.",
+            path.display()
+        ));
+    }
+    builder = builder
         .add_hint("Built-in project types are `default`, `website`, `book`, and `manuscript`.");
     for hint in extra_hints {
         builder = builder.add_hint(hint);
@@ -1338,14 +1363,8 @@ impl ProjectContext {
         // field below is extracted. An unresolvable `project.type` is
         // a hard error (Q-5-17), not a silent fall-back to the
         // default kind.
-        let resolved = resolve_project_type(
-            &mut metadata,
-            path,
-            &content,
-            &extensions,
-            &load_diagnostics,
-            runtime,
-        )?;
+        let resolved =
+            resolve_project_type(&mut metadata, path, &extensions, &load_diagnostics, runtime)?;
         let project_kind = resolved.kind;
 
         // Merge `contributes.metadata.project` from every discovered
