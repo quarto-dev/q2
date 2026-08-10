@@ -2,10 +2,10 @@
 
 **Date:** 2026-08-10
 **Braid:** bd-mermaid-cell-options-9wo3crl0
-**Branch:** `main` (investigation committed in place — no worktree was created; see
-"Where this should land" below)
-**Status:** Investigation — pending design alignment with user. **Do not start
-implementation until the user gives the go-ahead.**
+**Branch:** `feature/bd-mermaid-cell-options-9wo3crl0` (no worktree; the
+investigation commit `f44b3a81` moved onto this branch and `main` was rewound to
+`a217ab5a`, so the whole strand lands as one PR)
+**Status:** Design settled 2026-08-10 — implementing. See "Resolved decisions".
 
 ## Triage verdict
 
@@ -173,84 +173,86 @@ too, without touching `MermaidCodeBlock.tsx`. Doing the work inside
 from preview) *and* would land after `crossref-render`, so a `label:` could never
 be numbered. This is the strand's most important architectural constraint.
 
-## Proposed phases (draft)
+## Resolved decisions (Carlos, 2026-08-10)
 
-Skeleton only — contents wait on the design discussion below.
+1. **Unlabelled `fig-cap` emits `Block::Figure`.** A bare `fig-cap` with no
+   `label:` becomes a real `Figure` node, which the HTML writer already renders
+   as `<figure>…<figcaption>` with no number and no float scaffolding. Rationale
+   worth preserving: *Q1 could not do this because its cell handling was entirely
+   textual — it had to emit markdown and let a filter rebuild the structure. We
+   are working on the AST, so we can construct the node directly.* Labelled
+   captions keep going through the existing crossref float Div, which is what
+   gives them `Figure N:` numbering and `aria-describedby`.
 
-- **Phase 0 — Test plan (TDD, failing first).** Unit tests in
-  `cell_options` (mermaid → `%%`), in `codeblock_shorthand` (prefix selection,
-  YAML-quoted values, inline captions, `fig-alt` routing), and at least one
-  end-to-end `q2 render` fixture asserting `<figcaption>` + the accessible-name
-  markup on a `%%|` mermaid block. Per CLAUDE.md, the e2e test must drive the
-  real render path, not `render_qmd_to_html` with defaults.
-- **Phase 1 — Teach `cell_options` about mermaid.** Add `"mermaid" => ("%%",
-  None)` to `comment_syntax_for`. Cheap, isolated, testable.
-- **Phase 2 — Migrate `codeblock_shorthand` onto the `cell_options` facility.**
-  Replace the hard-coded `"#|"` matcher with a language-driven one (language =
-  the code block's first class, minus brace form). Fixes D1 for free. Needs care
-  around the `passthrough` set, which currently relies on line-level rewriting.
-- **Phase 3 — Route `fig-alt` (D3) and parse caption inlines (D2).** Decide the
-  markup for the accessible name (question 2) and stop dropping `fig-scap`.
-- **Phase 4 — Unlabelled `fig-cap`.** Make `fig-cap` without `label:` produce a
-  caption (question 1).
-- **Phase 5 — Preview verification.** Confirm the React path renders the same
-  structure; only touch `MermaidCodeBlock.tsx` if the parity check says so.
-- **Phase 6 — Docs.** `docs/guides/authoring/diagrams.qmd` has no captions/alt
-  section; add one showing the `%%|` form.
-- **Phase 7 (separate strand?) — `qmd-syntax-helper` rule** rewriting
-  ```` ```{mermaid} ```` → ```` ```mermaid ````, and `%%|`/`#|` normalization if
-  we settle on one marker. Rule surface: `crates/qmd-syntax-helper/src/rule.rs`,
-  conversions in `src/conversions/`.
+2. **`fig-alt` is injected as mermaid's native `accDescr:` directive** (option
+   (c)). It survives mermaid.js's replacement of the `<pre>` with an inline
+   `<svg>`, which `aria-label` on the `<pre>` would not.
+   **Recorded for the future:** option (a) — putting the accessible name on the
+   emitted element — *becomes the right answer once we render diagrams
+   server-side for PDF/print output.* At that point there is a real image element
+   to carry `alt`, the runtime SVG swap no longer happens, and `accDescr:` inside
+   the diagram source stops being the mechanism that reaches assistive tech. Any
+   future server-side-rendering strand should revisit this decision rather than
+   assume `accDescr:` generalizes.
 
-## Open design questions for the user
+3. **D1, D2 and D3 are all fixed on this strand**, one commit per defect so the
+   PR reads as a sequence of reviewable changes. The three `discovered-from`
+   strands (bd-5jcmmj1f, bd-sdpp9rw4, bd-il6pxq4f) stay open as the record and
+   close when this lands.
 
-1. **Unlabelled `fig-cap`.** Today a caption only appears when there is also a
-   `label:` that classifies as a crossref — `codeblock_shorthand` returns early
-   otherwise (probe C4: nothing happens). Q1 emits an unnumbered
-   `<figure><figcaption>` for a bare `fig-cap`. Should q2 do the same — and if
-   so, via a `Block::Figure` (which the HTML writer already renders with a bare
-   `<figcaption>`), or by extending the Div scaffold to an id-less float? This
-   matters a lot for the Connect docs, where captions may well appear without
-   labels.
+4. **Unknown option keys warn, with a source-mapped diagnostic.** This is what
+   makes migrating onto `cell_options::partition_cell_options` load-bearing
+   rather than incidental: it is the only path that carries real spans, so the
+   diagnostic can point at the offending key rather than at the block.
+   **Scope limit — important:** the warning applies to *non-executable* diagram
+   cells only. For an executable cell (` ```{python} `) an unrecognized key is
+   normally an engine option (`echo`, `eval`, `warning`, engine-specific keys)
+   and must keep passing through silently; warning there would fire on
+   essentially every real document. So "unknown key" is defined against the
+   recognized set *for a diagram language*, and the executable path keeps its
+   current passthrough behavior.
 
-2. **What markup does `fig-alt` produce?** The output here is `<pre
-   class="mermaid">` that mermaid.js replaces with an inline `<svg>` at runtime —
-   there is no `<img alt>` to hang it on. Candidates: (a) `aria-label` on the
-   `<pre>`; (b) a visually-hidden `<div>` plus `aria-describedby` (note the
-   figure scaffold *already* emits `aria-describedby` pointing at the
-   figcaption — a second description would need reconciling); (c) mermaid's own
-   `accDescr:`/`accTitle:` directives injected into the diagram source, which is
-   the mermaid-native answer and survives the SVG swap. I lean toward (c) with
-   (a) as a fallback, but it's a real decision and it's the accessibility story
-   for those Connect pages.
+5. **Q1 parity on the marker: ` ```mermaid ` accepts `%%|` only.** `#|` in a
+   mermaid fence stops being a cell-option marker — a deliberate behavior change
+   from what probe B3 does today. Rationale: q2 is in `0.*`; being strict now
+   avoids teaching people that `#|` is universal. Consequence worth handling:
+   `#` is *not* a mermaid comment character, so a leftover `#| …` line becomes
+   diagram source and mermaid renders a syntax error. A leading run of `#|` lines
+   in a mermaid block therefore gets its own diagnostic pointing at `%%|`,
+   so the failure is legible rather than a broken diagram.
 
-3. **Scope: do D1/D2/D3 get fixed here or split out?** They are pre-existing
-   general bugs in the `#|` shorthand, not mermaid regressions. D3 (`fig-alt`
-   dropped) is unavoidable here. D1 (quotes) falls out of the `cell_options`
-   migration whether we want it or not. D2 (markdown captions) is genuinely
-   separable. Options: (i) fix all three on this strand, (ii) fix D1+D3 here and
-   file D2, (iii) file all three and make this strand depend on them. Whichever
-   we pick, D1 and D2 will move existing snapshots — expect a snapshot diff to
-   report per the CLAUDE.md snapshot policy.
+6. **Lands on `feature/bd-mermaid-cell-options-9wo3crl0`**, no worktree. The
+   investigation commit moved onto the branch; `main` was rewound to `a217ab5a`.
 
-4. **Which option keys are honoured, and what happens to the rest?** The strand
-   asks. Beyond `label` / `fig-cap` / `fig-alt`: `fig-scap`? `fig-align`?
-   `mermaid-format`/`theme` (which overlap bd-sehm2rha / bd-nj25kgbu)? And for
-   unrecognized keys: today unconsumed `#|`/`%%|` lines are *left in the code
-   body* — harmless for mermaid (`%%` is a comment, the diagram still draws) but
-   visible in the source and visible in `q2 preview`. Q1 strips every option
-   line. Do we strip all of them, and do unknown keys warn or go quiet?
+## Phases
 
-5. **One marker or two?** Should ```` ```mermaid ```` accept `%%|` *only* (Q1
-   parity), or keep accepting `#|` as well (which works today, per probe B3, and
-   which someone may already depend on)? Accepting both is the compatible
-   choice; accepting only `%%|` is the principled one and would be a behavior
-   regression for B3-shaped documents.
-
-6. **Where should this land?** I investigated on `main` in the primary checkout
-   and committed only the plan + probes there. Say the word and I'll set up
-   `cargo xtask create-worktree bd-mermaid-cell-options-9wo3crl0` for the
-   implementation, or tell me which branch you want it on.
+- [x] **Phase 0 — Investigation** (commit `f44b3a81`): plan + probes.
+- [ ] **Phase 1 — `cell_options` learns mermaid.** Add `"mermaid" => ("%%",
+      None)` to `comment_syntax_for`, with tests (including that a matlab/tikz
+      `%` cell and a mermaid `%%` cell do not cross-talk).
+- [ ] **Phase 2 — Migrate `codeblock_shorthand` onto `cell_options` (fixes
+      D1).** Language-aware prefix selection (language = the block's first
+      class, brace forms excluded) + real YAML parsing, replacing the
+      hard-coded `"#|"` matcher and `split_once(':')`. Makes `%%|` work and
+      makes quoted captions come out unquoted.
+- [ ] **Phase 3 — Caption inlines (fixes D2).** Parse `fig-cap` as markdown
+      inlines instead of a single `Str`.
+- [ ] **Phase 4 — `fig-alt` + `fig-scap` (fixes D3).** Stop dropping them;
+      route `fig-alt` into `accDescr:` per decision 2.
+- [ ] **Phase 5 — Unlabelled `fig-cap` → `Block::Figure`** per decision 1.
+- [ ] **Phase 6 — Diagnostics.** Unknown-key warning for diagram cells and the
+      `#|`-in-mermaid warning, both source-mapped, per decisions 4 and 5.
+- [ ] **Phase 7 — End-to-end + preview verification.** `q2 render` on the
+      probes with output inspected and recorded here; confirm the React preview
+      path shows the same structure (`MermaidCodeBlock.tsx` touched only if the
+      parity check demands it).
+- [ ] **Phase 8 — Docs.** `docs/guides/authoring/diagrams.qmd` gains a captions
+      and alt-text section.
+- [ ] **Phase 9 (separate strand) — `qmd-syntax-helper` rule** rewriting
+      ```` ```{mermaid} ```` → ```` ```mermaid ````. With decision 5 this rule
+      should also rewrite the option marker to `%%|`. File before this PR
+      merges; rule surface is `crates/qmd-syntax-helper/src/rule.rs`,
+      conversions in `src/conversions/`.
 
 ## Risks / tradeoffs (draft)
 
@@ -262,7 +264,8 @@ Skeleton only — contents wait on the design discussion below.
   the largest single risk on this plan.
 - **`passthrough` semantics.** `strip_consumed_lines` keeps unconsumed option
   lines *textually*, which the engine then re-parses. Moving to structured
-  parsing means deciding how to re-emit them (or whether to, per question 4).
+  parsing means deciding how to re-emit them. Per decision 4 the executable path
+  keeps textual passthrough; only diagram cells consume every key.
 - **Language detection.** Picking the comment syntax needs the block's language,
   which for a plain fence is the first class. Brace-form classes arrive as
   `{mermaid}` (see the existing `brace_form_mermaid_cell_untouched` test) —
