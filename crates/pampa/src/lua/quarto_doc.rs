@@ -68,7 +68,10 @@ const UNSUPPORTED_FIELDS: &[&str] = &[
 
 /// Check if FORMAT matches a query using TS Quarto's alias-based matching.
 /// `format` is the current FORMAT global value, `query` is what the extension asked for.
-fn is_format_match(format: &str, query: &str) -> bool {
+/// Public: quarto-core's conditional-content transform reuses this for
+/// `when-format` / `unless-format` (bd-fu16z22k) so Lua's
+/// `quarto.doc.is_format` and the attribute syntax can never disagree.
+pub fn is_format_match(format: &str, query: &str) -> bool {
     // Exact match
     if format == query {
         return true;

@@ -38,6 +38,7 @@ mod callout_resolve;
 mod categories_sidebar;
 mod code_block_generate;
 mod code_block_render;
+mod conditional_content;
 mod config;
 mod config_markdown;
 mod crossref_index;
@@ -94,6 +95,7 @@ pub use code_block_generate::{
     resolve_default_copy_mode,
 };
 pub use code_block_render::CodeBlockRenderTransform;
+pub use conditional_content::ConditionalContentTransform;
 pub use config::{
     AppendixStyle, ReferenceLocation, TitleBlockStyle, is_feature_disabled, resolve_website_bool,
 };

@@ -71,17 +71,18 @@ use crate::transforms::{
     AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
     AuthorsNormalizeTransform, CalloutResolveTransform, CalloutTransform,
     CategoriesSidebarTransform, CodeBlockGenerateTransform, CodeBlockRenderTransform,
-    CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform,
-    DateNormalizeTransform, EquationLabelTransform, ExampleEmbedRenderTransform,
-    ExampleEmbedTransform, FloatRefTargetSugarTransform, FooterGenerateTransform,
-    FooterRenderTransform, FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform,
-    ListingRenderTransform, MermaidRenderTransform, MetadataNormalizeTransform,
-    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
-    PageNavRenderTransform, ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
-    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
-    TableBootstrapClassTransform, TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform,
-    TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
-    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    ConditionalContentTransform, CrossrefIndexTransform, CrossrefRenderTransform,
+    CrossrefResolveTransform, DateNormalizeTransform, EquationLabelTransform,
+    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
+    FooterGenerateTransform, FooterRenderTransform, FootnotesTransform, LinkRewriteTransform,
+    ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
+    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ResourceCollectorTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
+    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
+    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
+    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -1195,6 +1196,11 @@ pub fn build_transform_pipeline(
     let lua_format = crate::format::lua_format_for(&target_format).to_string();
 
     // === NORMALIZATION PHASE ===
+    // Conditional content runs FIRST: hidden content must disappear
+    // before callouts assemble, shortcodes resolve (no spurious
+    // warnings from deliberately-excluded content), and long before
+    // crossref numbering (bd-fu16z22k Phase 4).
+    pipeline.push(Box::new(ConditionalContentTransform::new()));
     pipeline.push(Box::new(CalloutTransform::new()));
     pipeline.push(Box::new(CalloutResolveTransform::new()));
     // Markdown-parse blessed website presentation config strings

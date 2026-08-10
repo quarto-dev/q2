@@ -454,6 +454,13 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-41",
     "since_version": "99.9.9"
   },
+  "Q-2-42": {
+    "subsystem": "markdown",
+    "title": "Invalid Conditional Content Attribute",
+    "message_template": "A `.content-visible` / `.content-hidden` element carries a condition attribute Quarto does not recognize. The supported conditions are `when-format`, `unless-format`, `when-profile`, `unless-profile`, `when-meta`, and `unless-meta`; anything else starting with `when-` or `unless-` is probably a typo and is ignored (Quarto 1 ignores it silently). Also reported when one element carries both `.content-visible` and `.content-hidden` (the element is hidden).",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-42",
+    "since_version": "99.9.9"
+  },
   "Q-3-1": {
     "subsystem": "writer",
     "title": "IO Error During Write",

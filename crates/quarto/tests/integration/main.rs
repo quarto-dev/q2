@@ -4,6 +4,7 @@
 pub mod attribution_cli_e2e;
 pub mod bootstrap_sh;
 pub mod coalesced_diagnostics;
+pub mod conditional_content_cli;
 pub mod create;
 pub mod extension_config_spans;
 pub mod get_config_cli;

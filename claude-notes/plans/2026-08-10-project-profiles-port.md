@@ -366,16 +366,37 @@ waits; nothing else blocks.
 
 ### Phase 4 — conditional content (full trio)
 
-- [ ] Failing tests: div + span visibility for when/unless ×
-      format/profile/meta; AND-across-kinds / OR-within-values;
-      bare `.content-hidden`; attribute stripping on survivors;
-      crossref interaction (hidden float does not consume a number);
-      unknown-attribute warning
-- [ ] Implement `conditional_content` transform (Normalization
-      phase), register format-agnostically in
-      `build_transform_pipeline`
-- [ ] Settle + document format-alias matching semantics
-- [ ] E2E render with `--profile`, inspect emitted HTML
+- [x] Failing tests first: 15 binary-driven tests in
+      `conditional_content_cli.rs` (14 observed failing) — div/span
+      visibility for when/unless × format/profile/meta,
+      AND-across-kinds, comma-OR-within-values, bare
+      `.content-hidden`, attribute stripping, nested conditionals,
+      when-meta reading profile-overlay metadata, crossref
+      renumbering (hidden `#fig-` float does not consume a number),
+      Q-2-42 typo warning — plus 11 unit tests on the pure walker
+- [x] Implemented `transforms/conditional_content.rs`
+      (`ConditionalContentTransform`), registered **first in the
+      Normalization phase** of `build_transform_pipeline`
+      (format-agnostic; preview pipeline inherits it): hidden
+      content disappears before callouts/shortcodes/crossrefs.
+      Engine cells inside hidden blocks still execute (Q1 parity —
+      engines run in an earlier stage).
+- [x] Format-alias matching: reuses pampa's
+      `lua::quarto_doc::is_format_match` (made pub), matched against
+      `lua_format_for(target_format)` — the attribute syntax and
+      Lua's `quarto.doc.is_format` can never disagree, and preview
+      pseudo-formats behave like render
+- [x] Divergences settled in-code (module docs): comma/space OR
+      within one condition value (q2 extension; Q1 matches
+      literally — its repeated-attribute OR is unrepresentable in
+      q2's map-shaped Attr); Q-2-42 warnings for unknown `when-*`/
+      `unless-*` spellings and for both-marker elements (hidden
+      wins); new catalog entry Q-2-42
+- [x] E2E (recorded): doc with visible/hidden/inline conditions;
+      `q2 render doc.qmd` → basic text only; `--profile advanced` →
+      advanced text + inline span, basic text gone (grep-verified
+      both ways). Bonus: the run exercised Q-5-19's hint for
+      conditional-content-only profiles exactly as designed.
 
 ### Phase 5 — docs, fixtures, wrap-up
 
