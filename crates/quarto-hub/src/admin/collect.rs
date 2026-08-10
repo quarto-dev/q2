@@ -159,7 +159,10 @@ pub async fn collect(
     // Re-verification (principle 5): recompute kind + liveness + age
     // against CURRENT storage, with the manifest's own gate options.
     let storage = samod::storage::TokioFilesystemStorage::new(&automerge_dir);
-    let doc_ids = list_doc_ids_filesystem(&automerge_dir);
+    // A pair we cannot identify aborts the collection outright: the
+    // collector must never act on a guessed doc id (bd-eb2wnxkp).
+    let doc_ids =
+        list_doc_ids_filesystem(&automerge_dir).map_err(|e| format!("refusing to collect: {e}"))?;
     let docs = load_all_docs(&storage, &doc_ids).await;
     let live = live_doc_ids(&docs);
     let opts = ScanOptions {

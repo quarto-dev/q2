@@ -65,7 +65,7 @@ async fn scan_real_store_finds_orphaned_capture_only() {
 
     // Scan offline through the same adapter the server uses.
     let fs_storage = TokioFilesystemStorage::new(&automerge_dir);
-    let doc_ids = list_doc_ids_filesystem(&automerge_dir);
+    let doc_ids = list_doc_ids_filesystem(&automerge_dir).unwrap();
     assert!(
         doc_ids.len() >= 4,
         "expected at least index + file + 2 captures; got {doc_ids:?}"

@@ -3,7 +3,10 @@
 **Date:** 2026-08-10
 **Braid:** bd-u0tldu4z (bug, p3 as filed — but see verdict)
 **Branch:** `main` (main checkout; no worktree — investigation only, per `/investigate-beads`)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Part A implemented on `main` (user go-ahead 2026-08-10: "do Part A of
+bd-eb2wnxkp here"). bd-u0tldu4z stays open for a future dedicated stress
+verification; moved-store scenario confirmed out of scope; Parts B/C of the
+eb2wnxkp plan remain open questions on that strand.
 
 ## Triage verdict
 
@@ -152,19 +155,46 @@ Unchanged from bd-eb2wnxkp's plan: `list_doc_ids_filesystem`
 
 ## Proposed phases (draft)
 
-The implementation lives in bd-eb2wnxkp's plan (Phases 1-9 there). For
-**this** strand:
-
-- Phase 0 — Link `caused-by` bd-eb2wnxkp; correct the strand description's
-  load hypothesis (comment with captured evidence). *(Done this session.)*
-- Phase 1 — Fold this session's ★ corner cases into the eb2wnxkp plan's test
-  phase (the `st/` collision test; the moved-store note in out-of-scope), plus
-  one test-hygiene item: `collect_reverification_skips_rereferenced_candidate`
-  should assert `candidates.len()` before indexing `candidates[0]`.
-- Phase 2 — After the eb2wnxkp fix lands: 150+-iteration stress loop over the
+- [x] Phase 0 — Link `caused-by` bd-eb2wnxkp; correct the strand description's
+  load hypothesis (comment with captured evidence).
+- [x] Phase 1 — **Part A implemented** (user-scoped: Part A only, on `main`):
+  - `recover_doc_id(prefix, rest)` in `crates/quarto-hub/src/admin/scan.rs`:
+    tests the ≤4 case variants of the 2-char splay prefix against
+    `DocumentId::from_str` (bs58check), dedups by parsed id preferring the
+    as-read casing (legacy-UUID hex parses case-insensitively — several
+    casings, one id — and must not read as Ambiguous; returning the as-read
+    *string* also keeps hypothetical UUID-form stores byte-compatible, leaving
+    instance B untangled for Part B). Zero matches → `Unidentifiable`,
+    multiple distinct ids → `Ambiguous`; both hard-fail.
+  - `list_doc_ids_filesystem` is now fallible; `hub admin scan` (main.rs) and
+    `collect()` abort on error ("refusing to collect: …"); recovery that
+    changes casing emits `tracing::warn!`.
+  - Over-broad module-doc safety claim narrowed (re-verification covers
+    staleness, not systematic mis-identification).
+  - Tests (TDD, red confirmed before implementation): 5 unit tests with
+    checksum-verified fixtures (incl. the ★ `st/` collision id
+    `StntkRJtG7hVPkKPY4Qkeu6f5bZ` and digit-prefix `26tzBsg…`); 2
+    deterministic hand-built-splay integration tests (platform-independent);
+    1 end-to-end collect test (live doc with case-renamed splay dir is not
+    quarantined; runtime case-insensitivity probe, skips honestly on
+    case-sensitive filesystems). New file
+    `tests/integration/admin_doc_id_recovery.rs`.
+  - Test hygiene: `collect_reverification_skips_rereferenced_candidate` now
+    asserts `candidates.len()` before indexing.
+  - E2E through the real binary (per end-to-end verification policy):
+    `cargo run --bin hub -- admin scan --data-dir <hand-built store> --json`
+    on a store with a folded `2C/` dir emitted
+    `WARN … on_disk=2C/PADPZ85aBLaaLaLrS2BNcVza1n
+    recovered=2cPADPZ85aBLaaLaLrS2BNcVza1n` and the manifest carried the true
+    id; with a `zz/not-a-doc-id` pair added, the binary refused
+    ("does not correspond to any valid document id … refusing to guess") and
+    exited 1. Output inspected in both runs.
+- [ ] Phase 2 — Future dedicated verification (bd-u0tldu4z stays open for
+  this, per user): 150+-iteration stress loop over the
   `admin_collect_lifecycle` + `admin_scan_real_store` families
   (`stress.sh` in the investigation dir); close bd-u0tldu4z on a clean loop,
-  citing the count.
+  citing the count. (A first post-fix loop was run this session — see strand
+  comment — but the dedicated verification pass remains open.)
 
 ## Open design questions for the user
 

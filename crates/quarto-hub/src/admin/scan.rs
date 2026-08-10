@@ -12,7 +12,11 @@
 //! semantics. (No stronger consistency exists anywhere in this system
 //! — an offline store can equally be behind a peer.) The collector
 //! re-verifies against current storage before acting, so scan-time
-//! staleness cannot cause an unsafe collection.
+//! *staleness* cannot cause an unsafe collection. (Staleness only:
+//! re-verification recomputes from the same inputs, so a *systematic*
+//! mis-identification — e.g. a doc id mis-read from a case-folded
+//! path, bd-eb2wnxkp — would survive it. That class is prevented at
+//! enumeration time by [`recover_doc_id`].)
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -60,6 +64,115 @@ pub struct LoadedDoc {
     pub bad_chunks: usize,
 }
 
+/// A splay directory pair that cannot be soundly mapped back to a
+/// document id (see [`recover_doc_id`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecoverError {
+    /// No case variant of the level-1 prefix yields an id that passes
+    /// bs58check (or parses as a legacy UUID). Either the store is
+    /// corrupt or a non-samod directory is sitting inside `automerge/`.
+    Unidentifiable { prefix: String, rest: String },
+    /// More than one case variant parses to a *distinct* id — a
+    /// bs58check collision (~2⁻³² per variant). Refuse rather than
+    /// guess.
+    Ambiguous { prefix: String, rest: String },
+}
+
+impl std::fmt::Display for RecoverError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RecoverError::Unidentifiable { prefix, rest } => write!(
+                f,
+                "directory pair {prefix}/{rest} does not correspond to any valid \
+                 document id (no case variant of {prefix:?} passes the id checksum); \
+                 refusing to guess — is this a samod store?"
+            ),
+            RecoverError::Ambiguous { prefix, rest } => write!(
+                f,
+                "directory pair {prefix}/{rest} matches more than one valid document \
+                 id across case variants of {prefix:?}; refusing to guess"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for RecoverError {}
+
+/// All casings of `s` (each ASCII-alphabetic char × {lower, upper}).
+/// For the 2-char splay prefix this is at most 4 strings. Variants
+/// containing characters outside the base58 alphabet simply fail to
+/// parse downstream — no special-casing needed.
+fn case_variants(s: &str) -> Vec<String> {
+    let mut variants = vec![String::new()];
+    for c in s.chars() {
+        let mut alts = vec![c];
+        if c.is_ascii_alphabetic() {
+            alts.push(if c.is_ascii_uppercase() {
+                c.to_ascii_lowercase()
+            } else {
+                c.to_ascii_uppercase()
+            });
+        }
+        variants = variants
+            .iter()
+            .flat_map(|prefix| {
+                alts.iter().map(move |a| {
+                    let mut v = prefix.clone();
+                    v.push(*a);
+                    v
+                })
+            })
+            .collect();
+    }
+    variants
+}
+
+/// Recover the true doc id from a samod splay directory pair.
+///
+/// Base58 is case-sensitive; APFS/NTFS fold case. When two ids' 2-char
+/// prefixes differ only by case, both docs share one on-disk level-1
+/// directory, and the id read back inherits the first-creator's casing
+/// (bd-eb2wnxkp). Only level-1 can fold this way — level-2 dirs are
+/// created fresh inside it with their writer's casing — so testing the
+/// ≤4 case variants of the prefix against the id's own checksum
+/// (samod's `DocumentId` is base58**check**; a wrong casing false-accepts
+/// at ~2⁻³²) identifies the true id. Zero or multiple distinct matches
+/// hard-fail: those arms guard the folding-is-prefix-only assumption,
+/// so if it is ever violated it breaks loudly instead of silently.
+///
+/// Returns the id as the *string that parsed* (not the parsed id's
+/// canonical re-encoding): `DocumentId::from_str` also accepts legacy
+/// UUID text, whose hex parses case-insensitively — several variant
+/// strings can name the same id, and re-encoding a UUID-form id to
+/// bs58check would break the path round-trip for such stores. Variants
+/// are deduplicated by parsed id, preferring the as-read casing.
+pub fn recover_doc_id(prefix: &str, rest: &str) -> Result<String, RecoverError> {
+    use std::str::FromStr;
+    let mut matches: Vec<(String, samod::DocumentId)> = Vec::new();
+    // case_variants yields the as-read casing first, so first-match-wins
+    // dedup keeps the on-disk casing when several casings parse to the
+    // same id (legacy UUID hex is case-insensitive).
+    for variant in case_variants(prefix) {
+        let candidate = format!("{variant}{rest}");
+        if let Ok(id) = samod::DocumentId::from_str(&candidate)
+            && !matches.iter().any(|(_, seen)| *seen == id)
+        {
+            matches.push((candidate, id));
+        }
+    }
+    match matches.len() {
+        1 => Ok(matches.pop().expect("len checked").0),
+        0 => Err(RecoverError::Unidentifiable {
+            prefix: prefix.to_string(),
+            rest: rest.to_string(),
+        }),
+        _ => Err(RecoverError::Ambiguous {
+            prefix: prefix.to_string(),
+            rest: rest.to_string(),
+        }),
+    }
+}
+
 /// Enumerate document ids from a **filesystem** samod store.
 ///
 /// Enumeration is deliberately NOT done through
@@ -70,17 +183,26 @@ pub struct LoadedDoc {
 /// in half. samod itself only ever uses per-doc prefixes (where the
 /// mapping round-trips); whole-store enumeration is simply outside
 /// the `Storage` contract. So we enumerate by mirroring the splay:
-/// doc id = `<level-1 dir name>` + `<level-2 dir name>`. Per-doc
-/// chunk loading then goes through the adapter (`load_range([id])`),
-/// which is correct on every backend.
+/// doc id = `<level-1 dir name>` + `<level-2 dir name>` — with the
+/// level-1 name treated as *possibly case-folded* and recovered via
+/// [`recover_doc_id`], because directory names are a lossy channel on
+/// case-insensitive filesystems (bd-eb2wnxkp).
+///
+/// Errors abort the listing (and with it any scan/collect): a pair we
+/// cannot identify makes the whole enumeration untrustworthy, and the
+/// collector must never act on a guessed id. When recovery changes
+/// the casing relative to the on-disk name, a warning is emitted so
+/// the operator knows the store has a folded directory.
 ///
 /// The adapter's own identity record (`st/orage-adapter-id`) is a
 /// *file* at level 2, not a directory, so the `is_dir` requirement
 /// skips it structurally.
-pub fn list_doc_ids_filesystem(automerge_dir: &std::path::Path) -> Vec<String> {
+pub fn list_doc_ids_filesystem(
+    automerge_dir: &std::path::Path,
+) -> Result<Vec<String>, RecoverError> {
     let mut out = Vec::new();
     let Ok(level1) = std::fs::read_dir(automerge_dir) else {
-        return out;
+        return Ok(out);
     };
     for l1 in level1.flatten() {
         if !l1.path().is_dir() {
@@ -97,12 +219,22 @@ pub fn list_doc_ids_filesystem(automerge_dir: &std::path::Path) -> Vec<String> {
                 continue;
             }
             if let Some(rest) = l2.file_name().to_str() {
-                out.push(format!("{prefix}{rest}"));
+                let id = recover_doc_id(&prefix, rest)?;
+                if !id.starts_with(&prefix) {
+                    tracing::warn!(
+                        on_disk = %format!("{prefix}/{rest}"),
+                        recovered = %id,
+                        "doc id recovered from case-folded splay directory \
+                         (case-insensitive filesystem); store layout is intact \
+                         but two ids share this level-1 directory"
+                    );
+                }
+                out.push(id);
             }
         }
     }
     out.sort();
-    out
+    Ok(out)
 }
 
 /// Load and classify the given documents through the storage adapter.
@@ -299,6 +431,74 @@ mod tests {
     use automerge::transaction::Transactable;
     use automerge::{ObjType, ROOT};
     use samod::storage::InMemoryStorage;
+
+    // ── recover_doc_id (bd-eb2wnxkp) ────────────────────────────────
+    // Fixture ids are real bs58check strings whose checksums were
+    // verified independently; their case-flipped prefixes fail to
+    // parse, which is the property recovery relies on. TRUE_ID was
+    // captured from an actual store (see
+    // claude-notes/plans/flaky-admin-collect-lifecycle-investigation/).
+    const TRUE_ID: &str = "2cPADPZ85aBLaaLaLrS2BNcVza1n";
+    const ST_ID: &str = "StntkRJtG7hVPkKPY4Qkeu6f5bZ";
+    const DIGIT_ID: &str = "26tzBsgAf68x9HnriDHKZHQkhp4R";
+
+    #[test]
+    fn case_variants_cover_alphabetic_chars_only() {
+        let mut v = case_variants("2c");
+        v.sort();
+        assert_eq!(v, vec!["2C", "2c"]);
+        let mut v = case_variants("st");
+        v.sort();
+        assert_eq!(v, vec!["ST", "St", "sT", "st"]);
+        assert_eq!(case_variants("26"), vec!["26"]);
+    }
+
+    #[test]
+    fn recover_accepts_true_casing_unchanged() {
+        assert_eq!(recover_doc_id("2c", &TRUE_ID[2..]).unwrap(), TRUE_ID);
+        assert_eq!(recover_doc_id("26", &DIGIT_ID[2..]).unwrap(), DIGIT_ID);
+    }
+
+    #[test]
+    fn recover_fixes_case_folded_prefix() {
+        // The regression: the on-disk level-1 dir carries the wrong
+        // casing; the checksum identifies the true id.
+        assert_eq!(recover_doc_id("2C", &TRUE_ID[2..]).unwrap(), TRUE_ID);
+        // All three wrong casings of the St id map back to it.
+        for folded in ["st", "ST", "sT"] {
+            assert_eq!(recover_doc_id(folded, &ST_ID[2..]).unwrap(), ST_ID);
+        }
+    }
+
+    #[test]
+    fn recover_rejects_unidentifiable_pair() {
+        // No case variant of a garbage pair passes the checksum…
+        assert!(matches!(
+            recover_doc_id("zz", "not-a-doc-id"),
+            Err(RecoverError::Unidentifiable { .. })
+        ));
+        // …including a digits-only prefix, which has no variants at all.
+        assert!(matches!(
+            recover_doc_id("26", "garbage"),
+            Err(RecoverError::Unidentifiable { .. })
+        ));
+        // NOTE: the Ambiguous arm needs two distinct ids differing only
+        // in prefix casing to both pass bs58check — a ~2⁻³² collision we
+        // cannot construct. Covered by inspection; the arm exists to
+        // guard the folding-is-prefix-only assumption.
+    }
+
+    #[test]
+    fn recover_keeps_legacy_uuid_ids_as_read() {
+        // DocumentId::from_str also accepts legacy UUID text, whose hex
+        // parses case-insensitively — several casings name the SAME id.
+        // That must not read as Ambiguous, and the on-disk casing must
+        // be preserved (re-encoding would break the path round-trip).
+        let uuid = "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d";
+        assert_eq!(recover_doc_id("1a", &uuid[2..]).unwrap(), uuid);
+        let folded = format!("1A{}", &uuid[2..]);
+        assert_eq!(recover_doc_id("1A", &uuid[2..]).unwrap(), folded);
+    }
 
     use crate::resource::{
         CAPTURE_MIME_TYPE, CaptureDocMeta, create_binary_document, create_capture_document,

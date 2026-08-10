@@ -7,6 +7,7 @@
 //! provider, test hub, tracing capture) live in [`support`].
 
 pub mod admin_collect_lifecycle;
+pub mod admin_doc_id_recovery;
 pub mod admin_scan_real_store;
 pub mod auth_bearer;
 pub mod login_nonce;
