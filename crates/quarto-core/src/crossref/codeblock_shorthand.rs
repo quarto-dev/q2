@@ -66,7 +66,8 @@
 
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_pandoc_types::attr::AttrSourceInfo;
-use quarto_pandoc_types::block::{Block, Blocks, Div, Paragraph};
+use quarto_pandoc_types::block::{Block, Blocks, Div, Figure, Paragraph, Plain};
+use quarto_pandoc_types::caption::Caption;
 use quarto_pandoc_types::inline::{Inline, Inlines, Str};
 use quarto_source_map::{SourceContext, SourceInfo};
 use yaml_rust2::Yaml;
@@ -135,28 +136,37 @@ fn try_desugar_code_block(
     let language = language_of(cb);
     let parsed = parse_cell_options(&language, &cb.text, body_source_for(cb, sources));
 
-    // Find a `label:` that classifies as a crossref.
-    let label = parsed.get("label")?;
-    let def = registry.classify_cite_id(label)?;
-    let identifier = label.to_string();
-    let ref_type = def.ref_type.clone();
+    match parsed.get("label") {
+        // A `label:` that classifies as a crossref: build the float Div
+        // the crossref pipeline numbers and renders.
+        Some(label) => {
+            let def = registry.classify_cite_id(label)?;
+            desugar_as_float(cb, &parsed, label, &def.ref_type.clone(), diagnostics)
+        }
+        // No label at all: a caption still deserves a figure, just an
+        // unnumbered one. A `label:` that is *not* a crossref means the
+        // author is naming the cell for the engine — leave it alone.
+        None => desugar_as_figure(cb, &parsed, diagnostics),
+    }
+}
 
+/// The labelled path: `::: {#fig-x} <code> <caption> :::`, which the
+/// crossref transforms later turn into a numbered float.
+fn desugar_as_float(
+    cb: &quarto_pandoc_types::block::CodeBlock,
+    parsed: &CellOptions,
+    label: &str,
+    ref_type: &str,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Option<Block> {
     // Classify each option key as consumed vs. passed-through.
-    let (consumed, passthrough) = partition_options(&parsed, &ref_type);
+    let (consumed, passthrough) = partition_options(parsed, ref_type);
 
     // Extract the caption from the consumed set, if any.
     let caption = consumed.get(&format!("{ref_type}-cap")).copied();
 
-    // Rewrite the code block's text to drop the consumed lines.
-    let new_text = strip_consumed_lines(&cb.text, &consumed, &parsed.syntax);
-    let _ = passthrough; // kept as-is in `new_text`; explicit for clarity.
-
-    let new_code_block = Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
-        attr: cb.attr.clone(),
-        text: new_text,
-        source_info: cb.source_info.clone(),
-        attr_source: cb.attr_source.clone(),
-    });
+    let new_code_block = strip_options(cb, &consumed, &parsed.syntax);
+    let _ = passthrough; // kept as-is in the body; explicit for clarity.
 
     // Build the Div scaffold.
     let mut div_content: Blocks = vec![new_code_block];
@@ -164,13 +174,80 @@ fn try_desugar_code_block(
         div_content.push(caption_paragraph(caption, diagnostics));
     }
 
-    let attr = (identifier, Vec::new(), hashlink::LinkedHashMap::new());
+    let attr = (
+        label.to_string(),
+        Vec::new(),
+        hashlink::LinkedHashMap::new(),
+    );
     Some(Block::Div(Div {
         attr,
         content: div_content,
         source_info: cb.source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
     }))
+}
+
+/// The unlabelled path (decision 1): `fig-cap` with no `label:` becomes
+/// a plain [`Block::Figure`], which the HTML writer renders as
+/// `<figure>…<figcaption>` with no number and no float scaffolding.
+///
+/// Q1 could not do this — its cell handling was textual, so it emitted
+/// markdown and let a filter rebuild the structure. Working on the AST,
+/// the node can be constructed directly.
+///
+/// Only `fig-cap`/`fig-scap` are honoured here: without a label there is
+/// no ref-type to derive a category from, and an unnumbered non-figure
+/// float is not a thing q2 models.
+fn desugar_as_figure(
+    cb: &quarto_pandoc_types::block::CodeBlock,
+    parsed: &CellOptions,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Option<Block> {
+    let caption = parsed.values.get("fig-cap")?;
+    let short = parsed.values.get("fig-scap");
+
+    let mut consumed: std::collections::HashMap<String, &OptionValue> =
+        std::collections::HashMap::new();
+    consumed.insert("fig-cap".to_string(), caption);
+    if let Some(short) = short {
+        consumed.insert("fig-scap".to_string(), short);
+    }
+
+    let new_code_block = strip_options(cb, &consumed, &parsed.syntax);
+
+    let long = match caption_paragraph(caption, diagnostics) {
+        Block::Paragraph(p) => vec![Block::Plain(Plain {
+            content: p.content,
+            source_info: p.source_info,
+        })],
+        other => vec![other],
+    };
+
+    Some(Block::Figure(Figure {
+        attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+        caption: Caption {
+            short: short.map(|s| caption_inlines(s, diagnostics)),
+            long: Some(long),
+            source_info: caption.value_source.clone(),
+        },
+        content: vec![new_code_block],
+        source_info: cb.source_info.clone(),
+        attr_source: AttrSourceInfo::empty(),
+    }))
+}
+
+/// Clone `cb` with the `consumed` option lines removed from its body.
+fn strip_options(
+    cb: &quarto_pandoc_types::block::CodeBlock,
+    consumed: &std::collections::HashMap<String, &OptionValue>,
+    syntax: &CommentSyntax,
+) -> Block {
+    Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
+        attr: cb.attr.clone(),
+        text: strip_consumed_lines(&cb.text, consumed, syntax),
+        source_info: cb.source_info.clone(),
+        attr_source: cb.attr_source.clone(),
+    })
 }
 
 /// The cell's language: the block's first class, with a brace-form
@@ -397,13 +474,24 @@ fn strip_consumed_lines(
 /// carried into `diagnostics`.
 fn caption_paragraph(caption: &OptionValue, diagnostics: &mut Vec<DiagnosticMessage>) -> Block {
     let source_info = caption.value_source.clone();
+    Block::Paragraph(Paragraph {
+        content: caption_inlines(caption, diagnostics),
+        source_info,
+    })
+}
+
+/// The inline content of a caption option — see [`caption_paragraph`]
+/// for the parsing contract. Split out because a short caption
+/// (`fig-scap`) is `Inlines`, not a block.
+fn caption_inlines(caption: &OptionValue, diagnostics: &mut Vec<DiagnosticMessage>) -> Inlines {
+    let source_info = caption.value_source.clone();
     let kind = pampa::pandoc::meta::parse_config_string_as_markdown(
         &caption.value,
         &source_info,
         diagnostics,
     );
 
-    let content: Inlines = match kind {
+    match kind {
         quarto_pandoc_types::ConfigValueKind::PandocInlines(inlines) => inlines,
         quarto_pandoc_types::ConfigValueKind::PandocBlocks(blocks) => blocks
             .into_iter()
@@ -414,12 +502,7 @@ fn caption_paragraph(caption: &OptionValue, diagnostics: &mut Vec<DiagnosticMess
             })
             .unwrap_or_else(|| literal_caption(&caption.value, &source_info)),
         _ => literal_caption(&caption.value, &source_info),
-    };
-
-    Block::Paragraph(Paragraph {
-        content,
-        source_info,
-    })
+    }
 }
 
 /// Fallback caption inlines: the option's text, verbatim.
@@ -605,6 +688,74 @@ mod tests {
         }
         walk(inlines, &mut out);
         out
+    }
+
+    /// Decision 1: a `fig-cap` with no `label:` is a caption on an
+    /// *unnumbered* figure. Emitting `Block::Figure` directly is the
+    /// AST-level answer Q1 could not reach — its cell handling was
+    /// textual, so it had to emit markdown and let a filter rebuild the
+    /// structure.
+    #[test]
+    fn unlabelled_fig_cap_becomes_a_figure() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| fig-cap: Caption without a label.\nflowchart LR\n  A --> B\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Figure(fig) = &blocks[0] else {
+            panic!("expected Figure, got {:?}", blocks[0]);
+        };
+        assert_eq!(fig.attr.0, "", "an unlabelled figure carries no id");
+        let Block::CodeBlock(cb) = &fig.content[0] else {
+            panic!("figure must wrap the diagram");
+        };
+        assert!(!cb.text.contains("%%|"));
+        assert!(cb.text.contains("flowchart LR"));
+
+        let long = fig.caption.long.as_ref().expect("caption present");
+        let Block::Plain(p) = &long[0] else {
+            panic!("expected a Plain caption block, got {:?}", long[0]);
+        };
+        assert_eq!(plain_text(&p.content), "Caption without a label.");
+        assert!(fig.caption.short.is_none());
+    }
+
+    /// `fig-scap` is the short caption, which `Caption::short` models
+    /// directly. It used to be consumed and dropped (bd-il6pxq4f).
+    #[test]
+    fn unlabelled_fig_scap_sets_the_short_caption() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| fig-cap: The long caption.\n%%| fig-scap: Short.\nflowchart LR\n  A --> B\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Figure(fig) = &blocks[0] else {
+            panic!("expected Figure, got {:?}", blocks[0]);
+        };
+        let short = fig.caption.short.as_ref().expect("short caption present");
+        assert_eq!(plain_text(short), "Short.");
+        let Block::CodeBlock(cb) = &fig.content[0] else {
+            panic!()
+        };
+        assert!(
+            !cb.text.contains("fig-scap"),
+            "a consumed fig-scap must leave the body; got:\n{}",
+            cb.text
+        );
+    }
+
+    /// No label and no caption: nothing to build, block untouched.
+    #[test]
+    fn unlabelled_uncaptioned_block_untouched() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in("mermaid", "flowchart LR\n  A --> B\n")];
+        let before = blocks.clone();
+        desugar(&mut blocks, &reg);
+        assert_eq!(blocks, before);
     }
 
     /// A brace-form executable cell still resolves to its language's
