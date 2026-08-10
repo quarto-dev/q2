@@ -331,6 +331,8 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
                 .map_or_else(|_| f.input.clone(), |r| r.to_path_buf())
         })
         .collect();
+    let script_env =
+        quarto_core::project::environment::subprocess_env_for_project(&runtime, &project);
     let ctx = render_scripts::RenderScriptsContext {
         project_dir: &project.dir,
         output_dir: &project.output_dir,
@@ -339,6 +341,7 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
         render_all: true,
         quiet: false,
         file_count: input_files.len(),
+        project_env: &script_env,
     };
     if let Err(parse_error) = render_scripts::run_render_scripts(
         render_scripts::ScriptPhase::PreRender,

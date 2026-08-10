@@ -282,6 +282,12 @@ mod exec {
         /// `QUARTO_PROJECT_SCRIPT_PROGRESS` hint (`"1"` on a
         /// multi-file render when not quiet).
         pub file_count: usize,
+        /// Project `_environment` pairs to set on script children,
+        /// pre-filtered to keys the real environment does not define
+        /// ([`crate::project::environment::env_for_subprocess`]).
+        /// Applied before the `QUARTO_PROJECT_*` variables, so those
+        /// win any collision.
+        pub project_env: &'a [(String, String)],
     }
 
     impl RenderScriptsContext<'_> {
@@ -388,6 +394,9 @@ mod exec {
 
         let mut cmd = build_script_command(ctx.project_dir, &tokens);
         cmd.current_dir(ctx.project_dir);
+        for (k, v) in ctx.project_env {
+            cmd.env(k, v);
+        }
         for (k, v) in env {
             cmd.env(k, v);
         }
@@ -885,6 +894,51 @@ mod tests {
                 assert!(render_scripts_unsupported_diagnostic(host, &config).is_none());
             }
         }
+    }
+
+    // ── project env propagation (bd-environment-files-372u9qbs) ─────
+
+    /// A pre-render script sees `_environment`-derived pairs passed
+    /// via `RenderScriptsContext::project_env`. Unix-only: the script
+    /// runs through `sh`; Windows coverage is the shared
+    /// `env_for_subprocess` unit tests plus the mechanical
+    /// `cmd.env` application.
+    #[cfg(unix)]
+    #[test]
+    fn scripts_receive_project_env() {
+        use quarto_source_map::By;
+
+        let dir = tempfile::tempdir().unwrap();
+        let project_dir = dir.path();
+        let out_path = project_dir.join("env-out.txt");
+
+        let script = RenderScript {
+            command: format!(
+                "sh -c \"printf %s $Q2_TEST_SCRIPT_ENV_VAR > {}\"",
+                out_path.display()
+            ),
+            source_info: SourceInfo::generated(By::unknown()),
+        };
+        let project_env = vec![(
+            "Q2_TEST_SCRIPT_ENV_VAR".to_string(),
+            "from-env-file".to_string(),
+        )];
+        let ctx = RenderScriptsContext {
+            project_dir,
+            output_dir: project_dir,
+            config_path: None,
+            extension_manifest_paths: &[],
+            render_all: true,
+            quiet: true,
+            file_count: 1,
+            project_env: &project_env,
+        };
+        run_render_scripts(ScriptPhase::PreRender, &[script], &ctx, &[])
+            .expect("script should succeed");
+        assert_eq!(
+            std::fs::read_to_string(&out_path).expect("script wrote the file"),
+            "from-env-file"
+        );
     }
 
     // ── error catalog registration ──────────────────────────────────

@@ -62,11 +62,19 @@ impl JupyterDaemon {
     /// Get or start a kernel session for the given key.
     ///
     /// If a session already exists for this (kernel, working_dir) pair,
-    /// it is reused. Otherwise, a new kernel is started.
+    /// it is reused. Otherwise, a new kernel is started with
+    /// `extra_env` applied on top of the inherited environment —
+    /// project `_environment` pairs pre-filtered so the real
+    /// environment wins. `extra_env` is a **spawn-time** input only:
+    /// the session key deliberately excludes it, so a reused session
+    /// keeps the env it was started with (sessions are keyed per
+    /// working dir, and a render/preview serves one project, so the
+    /// env is stable for a key's lifetime).
     pub async fn get_or_start_session(
         &self,
         kernel_name: &str,
         working_dir: &PathBuf,
+        extra_env: &[(String, String)],
     ) -> Result<SessionKey> {
         let key = SessionKey::new(kernel_name, working_dir.clone());
 
@@ -79,13 +87,13 @@ impl JupyterDaemon {
         }
 
         // Start a new kernel
-        self.start_kernel(&key).await?;
+        self.start_kernel(&key, extra_env).await?;
 
         Ok(key)
     }
 
     /// Start a new kernel for the given key.
-    async fn start_kernel(&self, key: &SessionKey) -> Result<()> {
+    async fn start_kernel(&self, key: &SessionKey, extra_env: &[(String, String)]) -> Result<()> {
         tracing::info!(kernel = %key.kernel_name, dir = %key.working_dir.display(),
             "Starting Jupyter kernel");
 
@@ -140,6 +148,7 @@ impl JupyterDaemon {
                 message: e.to_string(),
             })?
             .current_dir(&key.working_dir)
+            .envs(extra_env.iter().map(|(k, v)| (k, v)))
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .stdin(std::process::Stdio::piped())

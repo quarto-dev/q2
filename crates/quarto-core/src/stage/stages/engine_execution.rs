@@ -384,7 +384,10 @@ impl PipelineStage for EngineExecutionStage {
                 Some(ctx.project.dir.clone())
             })
             .with_engine_config(engine_config)
-            .with_source_info(qmd_source_info, source_context_arc.clone());
+            .with_source_info(qmd_source_info, source_context_arc.clone())
+            .with_project_env(crate::project::environment::env_for_subprocess(
+                &ctx.project_env,
+            ));
 
             trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
             let mut result = engine

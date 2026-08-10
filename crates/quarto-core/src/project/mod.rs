@@ -26,6 +26,7 @@
 pub mod cache_key;
 pub mod dependency_graph;
 pub mod discovery;
+pub mod environment;
 pub mod index;
 pub mod listing;
 pub mod orchestrator;

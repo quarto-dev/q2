@@ -11,3 +11,4 @@ title: Guides
 ## Projects
 
 - [Creating projects with `q2 create`](./projects/create.qmd)
+- [Project environment files](./projects/environment.qmd)

@@ -162,27 +162,113 @@ later if Posit external consumers want it); and whether multiline quoted
 values are worth supporting in v1 (proposal: yes — the grammar is small and
 Q1 accepts them).
 
-## Proposed phases (draft)
+## Implementation settled (2026-08-10, session 3)
 
-- Phase 0 — Test plan (TDD): failing tests first. Parser unit tests (dialect
-  cases above, span correctness); precedence tests (real env > `.local` >
-  `_environment`; real env never overwritten); `.required` diagnostic tests;
-  an end-to-end test driving the real render path (the repro fixture)
-  asserting `from-env-file` appears in output; WASM-path consideration per
-  `.claude/rules/wasm.md`.
-- Phase 1 — Span-annotated dotenv parser (quarto-source-map), `@std/dotenv`
-  dialect.
-- Phase 2 — `load_project_environment` in `StageContext` (modeled on
-  `load_project_variables`): read `_environment` + `_environment.local` (+
-  profile variants via a for-now-empty profile list), apply precedence, build
-  the project env map; `_environment.required` diagnostics.
-- Phase 3 — `EnvShortcodeHandler` consults the map (real env first, then map,
-  then fallback arg); Q-16-5 hint updated to mention `_environment`.
-- Phase 4 — Subprocess propagation: `Command::envs` for keys absent from the
-  real env at knitr/jupyter/render-script spawn sites.
-- Phase 5 — Docs (`docs/` user-facing; render with q2, not Q1). Document the
-  no-mutation policy's user-visible consequence: env-file changes require
-  restart (no preview re-watch).
+- Parser lives at `crates/quarto-core/src/project/environment.rs` (extractable
+  to its own crate later if external consumers appear).
+- Multiline quoted values (single- and double-quoted) ARE supported, matching
+  `@std/dotenv`.
+- FileId scheme: reuse `quarto_yaml::file_id_for_filename` so `_environment`
+  diagnostics bind file content through the existing
+  `config_sources::bind_config_source` machinery.
+
+## Work items
+
+### Phase 0 — Failing end-to-end test (TDD)
+
+- [x] End-to-end test driving the real render path: smoke-all fixture
+  `crates/quarto/tests/smoke-all/metadata/environment-files/` (`_quarto.yml` +
+  `_environment` + `_environment.local` + `index.qmd`); asserts both the base
+  value and the `.local` override appear, and that `?env:` markers and the
+  shadowed base value do NOT. **Observed failing at HEAD 2026-08-10**
+  (`SMOKE_FILTER=environment-files cargo nextest run -p quarto -E
+  'test(smoke_all)'`): 3 regex mismatches + 2 Q-16-5 warnings.
+
+### Phase 1 — Span-annotated dotenv parser
+
+- [x] Unit tests for the `@std/dotenv` dialect (37 tests, all listed cases
+  plus CRLF, BOM, UTF-8 values, duplicate keys, unterminated quotes, junk
+  lines, `$$`/lone-`$` literals, escaped `\$`, cycle termination).
+- [x] `parse_env_file(content, filename, lookup) -> ParsedEnvFile` in
+  `crates/quarto-core/src/project/environment.rs`, spans via
+  quarto-source-map, FileId via `quarto_yaml::file_id_for_filename`.
+  Expansion diverges from `@std/dotenv` only as documented in the module doc
+  (empty-string + diagnostic instead of `"undefined"`; bounded passes +
+  diagnostic instead of infinite loop; junk-line warning; first-`}` default).
+
+### Phase 2 — Project env map with precedence
+
+- [x] Precedence unit tests (`merge_env_layers`): `.local` beats
+  `_environment`; expansion sees higher-priority layers; real env wins in
+  expansion; same-file beats real env in expansion (@std semantics); layer
+  diagnostics collected.
+- [x] `_environment.required` tests (`check_required`): undefined required
+  var → diagnostic whose span resolves to the requiring key in
+  `_environment.required`; satisfied by real env or map → quiet.
+- [x] `load_project_environment(runtime, project, profiles: &[String], …)`
+  called from `StageContext::new` alongside `load_project_variables`;
+  `project_env` map (`LinkedHashMap`) stored on `StageContext`. Skipped in
+  single-file mode. Present-but-unreadable file warns (via `path_exists`);
+  missing files silent.
+
+### Phase 3 — env shortcode consults the map
+
+- [x] Tests: `{{< env NAME >}}` resolves from map when real env unset (map
+  beats fallback arg); real env wins over map; Q-16-5 still fires when
+  absent everywhere (hint updated to mention `_environment`).
+- [x] `EnvShortcodeHandler::new(project_env)` plumbed like `variables`
+  through `builtin_handlers` / `with_lua_support` /
+  `build_transform_pipeline` / `build_q2_preview_transform_pipeline` /
+  `AstTransformsStage` (ctx.project_env). WASM preview gets it free via
+  `StageContext::new` + VFS reads.
+- [x] **Phase 0 fixture now passes** (`SMOKE_FILTER=environment-files
+  cargo nextest run -p quarto -E 'test(smoke_all)'` → PASS).
+
+### Phase 4 — Subprocess propagation
+
+- [x] Tests: `env_for_subprocess` filters real-env-shadowed keys (unit);
+  `scripts_receive_project_env` spawns a real `sh` pre-render script that
+  reads the variable (unix-gated; Windows coverage = the shared filter unit
+  test + mechanical `cmd.env` application). knitr/jupyter spawn sites carry
+  the same pre-filtered pairs via `ExecutionContext::project_env` — not
+  spawn-tested (no R/jupyter in CI; replay bypasses spawning).
+- [x] Injection at all sites, real-env-wins preserved by pre-filtering with
+  `env_for_subprocess` (children inherit the real env; we only add keys it
+  lacks): knitr `CallROptions::project_env` → `call_r`'s `Command::envs`;
+  jupyter `JupyterDaemon::get_or_start_session(..., extra_env)` →
+  `start_kernel` spawn (spawn-time input; session key unchanged — a reused
+  session keeps its birth env, fine while a process serves one project);
+  render scripts `RenderScriptsContext::project_env` (applied before
+  `QUARTO_PROJECT_*` so those win), loaded at the five call sites (render
+  pre/post, publish pre/post, preview boot) via
+  `subprocess_env_for_project`.
+
+### Phase 5 — Docs + verification
+
+- [x] User-facing docs page `docs/guides/projects/environment.qmd` (files,
+  dialect, precedence, consumers, `.required`, restart-required note), added
+  to the docs sidebar and guides index; rendered with
+  `cargo run --bin q2 -- render docs/guides/projects/environment.qmd` and
+  output inspected.
+- [x] `cargo build --workspace` clean; `cargo nextest run --workspace`:
+  **11263 passed** (1 leaky, pre-existing), 197 skipped. `cargo xtask lint`
+  clean. Full **`cargo xtask verify` passed** (all 14 steps, WASM leg
+  included; one clippy nit — unnested or-pattern — fixed along the way).
+- [x] End-to-end verification through the real binary, output inspected:
+  - **Shortcode** — `env -u REPRO_VERSION cargo run --bin q2 -- render
+    claude-notes/plans/environment-files-loading-investigation/repro` →
+    `Version is <strong>from-env-file</strong>.` (was `?env:REPRO_VERSION` +
+    Q-16-5 before the fix; now zero warnings).
+  - **Engines (real R + real jupyter on this machine)** — scratchpad project
+    with `_environment` containing `Q2_E2E_ENGINE_VAR=engine-sees-me`;
+    `engine: jupyter` doc printing `os.environ.get(...)` rendered
+    `PYVAL:engine-sees-me`; `engine: knitr` doc with `Sys.getenv(...)`
+    rendered `RVAL: engine-sees-me`. Re-render with
+    `Q2_E2E_ENGINE_VAR=real-wins` exported → both cells print `real-wins`
+    (real environment beats the file in subprocesses too).
+  - **Render scripts** — covered by the spawning unit test
+    `scripts_receive_project_env` (real `sh` child reads the variable).
+- [ ] review.md checklist; commit (await user approval per review.md).
 
 ## Risks / tradeoffs (draft)
 

@@ -72,7 +72,7 @@ async fn test_kernel_execute_print() {
 
     // Start a kernel session
     let key = daemon
-        .get_or_start_session("python3", &working_dir)
+        .get_or_start_session("python3", &working_dir, &[])
         .await
         .expect("Failed to start kernel");
 
@@ -123,7 +123,7 @@ async fn test_kernel_execute_expression() {
     let working_dir = std::env::current_dir().unwrap();
 
     let key = daemon
-        .get_or_start_session("python3", &working_dir)
+        .get_or_start_session("python3", &working_dir, &[])
         .await
         .expect("Failed to start kernel");
 
@@ -166,7 +166,7 @@ async fn test_kernel_execute_error() {
     let working_dir = std::env::current_dir().unwrap();
 
     let key = daemon
-        .get_or_start_session("python3", &working_dir)
+        .get_or_start_session("python3", &working_dir, &[])
         .await
         .expect("Failed to start kernel");
 
@@ -239,7 +239,7 @@ async fn test_kernel_execute_matplotlib() {
     let working_dir = std::env::current_dir().unwrap();
 
     let key = daemon
-        .get_or_start_session("python3", &working_dir)
+        .get_or_start_session("python3", &working_dir, &[])
         .await
         .expect("Failed to start kernel");
 
