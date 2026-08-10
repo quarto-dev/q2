@@ -244,16 +244,33 @@ avoids both.
 
 ### Phase 0 — Test plan (TDD; write first, verify each fails at HEAD)
 
-- [ ] Project-render integration test (real render path, repro-shaped fixture with
+- [x] Project-render integration test (real render path, repro-shaped fixture with
       navbar): asserts substituted `<title>` (plain text, tags stripped), navbar
-      brand (markup un-escaped, shortcode substituted), page-footer region, include
-      file content, and doc `subtitle` — primary shortcode `{{< meta >}}`, one env
-      case with explicitly set process env.
-- [ ] Unresolved-shortcode tests: marker + Q-16-5 in each new context.
-- [ ] Include lazy-Lua test: builtin-only include file does not instantiate Lua;
-      include with extension shortcode resolves via Lua when configured.
-- [ ] Regression: `!md`-tagged config strings, `{text: …}` smart-includes with
-      shortcodes (currently silently dropped), scalar-only config reads unaffected.
+      brand (markup un-escaped, shortcode substituted), page-footer region, sidebar
+      title, include file content, and doc `subtitle`/`title` — primary shortcode
+      `{{< meta >}}`, one env case with explicitly set process env.
+      → `crates/quarto-core/tests/integration/shortcode_config_pipeline.rs`;
+      12/13 fail at branch point (verified 2026-08-10), the 13th is the
+      plain-strings no-regression guard which passes by design.
+- [x] Unresolved-shortcode tests: visible marker in website.title contexts and in
+      include files (Q-16-5 diagnostic assertions live at unit level in the
+      transform's test module, added with each phase's implementation).
+- [ ] Include lazy-Lua test: include with extension shortcode resolves via Lua when
+      configured (added in Phase 3 with the text expander; with the revised
+      architecture — expansion inside `ShortcodeResolveTransform` — laziness is
+      inherited from the transform's existing engine gating).
+- [x] Regression: `{text: …}` smart-includes with shortcodes (currently silently
+      dropped), escaped shortcodes in include files, plain scalar config strings
+      unaffected.
+
+**Architecture revision discovered during Phase 0 scouting:** include text is already
+in metadata (`rendered.includes.*`, written by `IncludeResolveStage` which runs
+*before* the transform pipeline) — so Phase 3's text-level expansion belongs in
+`ShortcodeResolveTransform` alongside the meta walk, reusing its handler registry,
+its (already conditionally-created) Lua engine, and its diagnostics channel. No
+second engine site, no stage-level Lua. Engine-contributed includes appended later
+by `ApplyTemplateStage` are engine output and deliberately not expanded (Q1's
+`cell-code` opt-out analog).
 
 ### Phase 1 — Metadata shortcode resolution (mechanism B)
 
