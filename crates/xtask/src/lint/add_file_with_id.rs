@@ -48,13 +48,6 @@ const BLESSED_SUFFIXES: &[&str] = &[
     "quarto-core/src/stage/stages/metadata_merge.rs",
     // Test-only span-assertion helpers; self-consistent by construction.
     "quarto-config/src/span_assert.rs",
-    // TEMPORARY: rewritten by PR #478 (bd-m6wmztln) to use
-    // bind_config_source; blessed here to avoid inline-comment conflicts
-    // with the in-flight branch. Remove after #478 merges.
-    "quarto-core/src/project/render_scripts.rs",
-    // TEMPORARY: doc-level path is bd-x113wg9v; project-level path is
-    // rewritten by PR #478. Remove once both land.
-    "quarto-core/src/project_resources.rs",
 ];
 
 /// Check a file for `add_file_with_id` calls outside blessed locations.

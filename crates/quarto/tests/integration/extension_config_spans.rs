@@ -83,3 +83,85 @@ fn out_of_project_resource_contributed_by_extension_names_extension_yml() {
         "snippet must not anchor in _quarto.yml (the pattern is not declared there); got: {stderr}"
     );
 }
+
+/// An out-of-project `resources` pattern inherited from a directory
+/// `_metadata.yml` layer must anchor its Q-5-1 snippet in that
+/// `_metadata.yml` — not in the document that inherited it
+/// (bd-x113wg9v, the doc-level sibling of bd-p86nlm92).
+#[test]
+fn out_of_project_resource_from_metadata_yml_names_metadata_yml() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().canonicalize().unwrap();
+    write_file(
+        &project.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    write_file(
+        &project.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nHome body.\n",
+    );
+    write_file(
+        &project.join("blog/_metadata.yml"),
+        "resources:\n  - \"../../escape.csv\"\n",
+    );
+    write_file(
+        &project.join("blog/post.qmd"),
+        "---\ntitle: Post\n---\n\nPost body.\n",
+    );
+
+    let out = run_q2_render(&project);
+    assert!(
+        !out.status.success(),
+        "out-of-project resource pattern must abort the render"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("[Q-5-1]"),
+        "diagnostic should carry the Q-5-1 code; got: {stderr}"
+    );
+    assert!(
+        stderr.contains("_metadata.yml:"),
+        "snippet should anchor in the declaring _metadata.yml; got: {stderr}"
+    );
+    assert!(
+        !stderr.contains("post.qmd:"),
+        "snippet must not anchor in the inheriting document; got: {stderr}"
+    );
+}
+
+/// Control: a `resources` pattern declared in the document's own
+/// frontmatter keeps anchoring in that document (the doc's spans root
+/// at its dense FileId, not a filename hash — the candidate list must
+/// carry both id schemes).
+#[test]
+fn out_of_project_resource_declared_in_doc_names_doc() {
+    let temp = TempDir::new().unwrap();
+    let project = temp.path().canonicalize().unwrap();
+    write_file(
+        &project.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    write_file(
+        &project.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nHome body.\n",
+    );
+    write_file(
+        &project.join("blog/post.qmd"),
+        "---\ntitle: Post\nresources:\n  - \"../../escape.csv\"\n---\n\nPost body.\n",
+    );
+
+    let out = run_q2_render(&project);
+    assert!(
+        !out.status.success(),
+        "out-of-project resource pattern must abort the render"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("[Q-5-1]"),
+        "diagnostic should carry the Q-5-1 code; got: {stderr}"
+    );
+    assert!(
+        stderr.contains("post.qmd:"),
+        "snippet should anchor in the declaring document; got: {stderr}"
+    );
+}
