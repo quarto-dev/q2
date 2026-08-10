@@ -1362,13 +1362,8 @@ impl ProjectContext {
         // field below is extracted. An unresolvable `project.type` is
         // a hard error (Q-5-17), not a silent fall-back to the
         // default kind.
-        let resolved = resolve_project_type(
-            &mut metadata,
-            path,
-            &extensions,
-            &load_diagnostics,
-            runtime,
-        )?;
+        let resolved =
+            resolve_project_type(&mut metadata, path, &extensions, &load_diagnostics, runtime)?;
         let project_kind = resolved.kind;
 
         // Merge `contributes.metadata.project` from every discovered

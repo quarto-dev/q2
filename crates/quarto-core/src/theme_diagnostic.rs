@@ -12,9 +12,9 @@
 //! The "Parse" in `ParseError` is historical — the type is just a
 //! `Vec<DiagnosticMessage>` + `SourceContext` envelope.
 
-use std::path::PathBuf;
 #[cfg(test)]
 use std::path::Path;
+use std::path::PathBuf;
 
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_sass::SassError;
@@ -66,9 +66,7 @@ pub fn sass_error_to_parse_error(
         crate::config_sources::bind_source_candidates(
             &mut source_context,
             loc,
-            candidate_sources
-                .iter()
-                .map(|(fid, p)| (*fid, p.as_path())),
+            candidate_sources.iter().map(|(fid, p)| (*fid, p.as_path())),
         );
     }
 
@@ -224,7 +222,8 @@ mod tests {
             location: Some(location.clone()),
         };
 
-        let parse_err = sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-1"));
@@ -277,7 +276,8 @@ mod tests {
             message: "no source info available".to_string(),
             location: None,
         };
-        let parse_err = sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-1"));
@@ -340,7 +340,8 @@ mod tests {
             location: Some(location.clone()),
         };
 
-        let parse_err = sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-2"));
@@ -379,7 +380,8 @@ mod tests {
             name: "whatever".to_string(),
             location: None,
         };
-        let parse_err = sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-2"));
         assert_eq!(d.location, None);
@@ -412,7 +414,8 @@ mod tests {
             location: Some(location.clone()),
         };
 
-        let parse_err = sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-4"));
@@ -451,7 +454,8 @@ mod tests {
             path: std::path::PathBuf::from("/somewhere/nope.scss"),
             location: None,
         };
-        let parse_err = sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-4"));
         assert_eq!(d.location, None);
