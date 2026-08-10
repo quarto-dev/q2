@@ -70,6 +70,46 @@ use quarto_source_map::SourceInfo;
 /// written into this process's environment.
 pub const QUARTO_PROFILE_VAR: &str = "QUARTO_PROFILE";
 
+/// Interpret a clap `Vec<String>` `--profile` flag as a selection:
+/// an empty vec means the flag was not given (`None`, fall through to
+/// `QUARTO_PROFILE` and config defaults); a non-empty vec — even one
+/// holding only an empty string — means it was given and **replaces**
+/// the environment variable (Q1 parity).
+pub fn cli_selection(values: &[String]) -> Option<&[String]> {
+    if values.is_empty() {
+        None
+    } else {
+        Some(values)
+    }
+}
+
+/// The `QUARTO_PROFILE` value user code (engine cells, render
+/// scripts) sees: the **normalized, group-expanded** active list,
+/// comma-joined — Q1 wrote exactly this back into the environment.
+/// `None` when no profiles are active (children then inherit
+/// whatever the parent environment has, which given an empty active
+/// set can only be unset-or-empty).
+///
+/// Spawn sites must apply this pair **unconditionally** via
+/// `Command::env`, overriding an inherited `QUARTO_PROFILE`: after
+/// `--profile b` replaced `QUARTO_PROFILE=a`, children must see `b`.
+/// This is the one deliberate exception to the "real environment
+/// always wins" rule of
+/// [`crate::project::environment::env_for_subprocess`] — the
+/// variable is quarto's own, not the user's.
+pub fn quarto_profile_env_value(active: &[ActiveProfile]) -> Option<String> {
+    if active.is_empty() {
+        return None;
+    }
+    Some(
+        active
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>()
+            .join(","),
+    )
+}
+
 /// Typed contents of a `profile:` config key after strict validation.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProjectProfileConfig {

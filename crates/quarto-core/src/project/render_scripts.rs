@@ -293,6 +293,12 @@ mod exec {
         /// Applied before the `QUARTO_PROJECT_*` variables, so those
         /// win any collision.
         pub project_env: &'a [(String, String)],
+        /// Normalized active project-profile list for the child's
+        /// `QUARTO_PROFILE`
+        /// ([`crate::project::project_profile::quarto_profile_env_value`],
+        /// bd-fu16z22k). Applied unconditionally — overrides an
+        /// inherited `QUARTO_PROFILE`, unlike `project_env` pairs.
+        pub quarto_profile: Option<String>,
     }
 
     impl RenderScriptsContext<'_> {
@@ -320,6 +326,9 @@ mod exec {
             ];
             if self.render_all {
                 env.push(("QUARTO_PROJECT_RENDER_ALL", "1".to_string()));
+            }
+            if let Some(quarto_profile) = &self.quarto_profile {
+                env.push(("QUARTO_PROFILE", quarto_profile.clone()));
             }
             env
         }
@@ -935,6 +944,7 @@ mod tests {
             config_path: None,
             extension_manifest_paths: &[],
             profile_config_paths: &[],
+            quarto_profile: None,
             render_all: true,
             quiet: true,
             file_count: 1,
@@ -945,6 +955,45 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&out_path).expect("script wrote the file"),
             "from-env-file"
+        );
+    }
+
+    /// A script sees the normalized `QUARTO_PROFILE` from
+    /// `RenderScriptsContext::quarto_profile` (bd-fu16z22k) — applied
+    /// via `cmd.env`, so it overrides anything inherited.
+    #[cfg(unix)]
+    #[test]
+    fn scripts_receive_quarto_profile() {
+        use quarto_source_map::By;
+
+        let dir = tempfile::tempdir().unwrap();
+        let project_dir = dir.path();
+        let out_path = project_dir.join("profile-out.txt");
+
+        let script = RenderScript {
+            command: format!(
+                "sh -c \"printf %s $QUARTO_PROFILE > {}\"",
+                out_path.display()
+            ),
+            source_info: SourceInfo::generated(By::unknown()),
+        };
+        let ctx = RenderScriptsContext {
+            project_dir,
+            output_dir: project_dir,
+            config_path: None,
+            extension_manifest_paths: &[],
+            profile_config_paths: &[],
+            quarto_profile: Some("advanced,production".to_string()),
+            render_all: true,
+            quiet: true,
+            file_count: 1,
+            project_env: &[],
+        };
+        run_render_scripts(ScriptPhase::PreRender, &[script], &ctx, &[])
+            .expect("script should succeed");
+        assert_eq!(
+            std::fs::read_to_string(&out_path).expect("script wrote the file"),
+            "advanced,production"
         );
     }
 

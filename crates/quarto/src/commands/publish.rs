@@ -31,6 +31,9 @@ pub struct PublishArgs {
     pub no_wait: bool,
     pub dry_run: bool,
     pub json: bool,
+    /// `--profile` values; `Some`-like semantics via non-empty vec —
+    /// replaces `QUARTO_PROFILE` when non-empty (bd-fu16z22k).
+    pub profile: Vec<String>,
 }
 
 /// Execute the `quarto publish` command.
@@ -70,8 +73,14 @@ pub fn execute(args: PublishArgs) -> Result<()> {
         None => cwd.clone(),
     };
 
-    let project = ProjectContext::discover(&path, runtime.as_ref())
-        .context("failed to discover project context for publish")?;
+    let profile_selection: Option<Vec<String>> =
+        quarto_core::project::project_profile::cli_selection(&args.profile).map(<[String]>::to_vec);
+    let project = ProjectContext::discover_with_profile(
+        &path,
+        runtime.as_ref(),
+        profile_selection.as_deref(),
+    )
+    .context("failed to discover project context for publish")?;
 
     let project_dir = project.dir.clone();
     let title = derive_title(&project, &project_dir);
@@ -97,6 +106,7 @@ pub fn execute(args: PublishArgs) -> Result<()> {
     let renderer = ProjectPublishRenderer {
         project_dir: project_dir.clone(),
         runtime: runtime.clone(),
+        profile_selection,
     };
     let registry = ProviderRegistry::with_builtins();
 
@@ -192,6 +202,10 @@ fn simple_slug(title: &str) -> String {
 struct ProjectPublishRenderer {
     project_dir: PathBuf,
     runtime: Arc<dyn SystemRuntime>,
+    /// `--profile` selection, carried so the render-time (re-)discovery
+    /// resolves the same project profiles as the top-level discovery
+    /// (bd-fu16z22k).
+    profile_selection: Option<Vec<String>>,
 }
 
 #[async_trait]
@@ -208,10 +222,15 @@ impl PublishRenderer for ProjectPublishRenderer {
         // Send + Sync, replace this with a normal `.await`.
         let project_dir = self.project_dir.clone();
         let runtime = self.runtime.clone();
+        let profile_selection = self.profile_selection.clone();
 
         let result: Result<PublishFiles, PublishError> = pollster::block_on(async move {
-            let mut project = ProjectContext::discover(&project_dir, runtime.as_ref())
-                .map_err(|e| PublishError::Other(anyhow::anyhow!("{e}")))?;
+            let mut project = ProjectContext::discover_with_profile(
+                &project_dir,
+                runtime.as_ref(),
+                profile_selection.as_deref(),
+            )
+            .map_err(|e| PublishError::Other(anyhow::anyhow!("{e}")))?;
 
             // bd-w348iu63: run `project.pre-render` scripts before
             // the pipeline, then re-discover so script-created
@@ -232,6 +251,9 @@ impl PublishRenderer for ProjectPublishRenderer {
                     config_path: project.config.config_path.as_deref(),
                     extension_manifest_paths: &project.config.extension_manifest_paths,
                     profile_config_paths: &project.config.profile_config_paths,
+                    quarto_profile: quarto_core::project::project_profile::quarto_profile_env_value(
+                        &project.config.active_config_profiles,
+                    ),
                     render_all: true,
                     quiet: false,
                     file_count: input_files.len(),
@@ -245,8 +267,12 @@ impl PublishRenderer for ProjectPublishRenderer {
                 )
                 .map_err(|e| PublishError::Other(anyhow::anyhow!("{e}")))?;
 
-                let re_project = ProjectContext::discover(&project_dir, runtime.as_ref())
-                    .map_err(|e| PublishError::Other(anyhow::anyhow!("{e}")))?;
+                let re_project = ProjectContext::discover_with_profile(
+                    &project_dir,
+                    runtime.as_ref(),
+                    profile_selection.as_deref(),
+                )
+                .map_err(|e| PublishError::Other(anyhow::anyhow!("{e}")))?;
                 render_scripts::check_forbidden_mutations(&project.config, &re_project.config)
                     .map_err(|e| PublishError::Other(anyhow::anyhow!("{e}")))?;
                 project = re_project;
@@ -290,6 +316,9 @@ impl PublishRenderer for ProjectPublishRenderer {
                     config_path: project.config.config_path.as_deref(),
                     extension_manifest_paths: &project.config.extension_manifest_paths,
                     profile_config_paths: &project.config.profile_config_paths,
+                    quarto_profile: quarto_core::project::project_profile::quarto_profile_env_value(
+                        &project.config.active_config_profiles,
+                    ),
                     render_all: true,
                     quiet: false,
                     file_count: summary.outputs.len(),
@@ -487,6 +516,7 @@ mod tests {
         let renderer = ProjectPublishRenderer {
             project_dir: project_dir.clone(),
             runtime,
+            profile_selection: None,
         };
 
         let files = renderer

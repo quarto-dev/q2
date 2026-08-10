@@ -385,9 +385,23 @@ impl PipelineStage for EngineExecutionStage {
             })
             .with_engine_config(engine_config)
             .with_source_info(qmd_source_info, source_context_arc.clone())
-            .with_project_env(crate::project::environment::env_for_subprocess(
-                &ctx.project_env,
-            ));
+            .with_project_env({
+                let mut pairs = crate::project::environment::env_for_subprocess(&ctx.project_env);
+                // QUARTO_PROFILE is applied unconditionally (it may
+                // override an inherited value): engine cells must see
+                // the normalized active set, exactly as Q1's env
+                // write-back guaranteed (bd-fu16z22k).
+                if let Some(value) = crate::project::project_profile::quarto_profile_env_value(
+                    &ctx.project.config.active_config_profiles,
+                ) {
+                    pairs.retain(|(k, _)| k != crate::project::project_profile::QUARTO_PROFILE_VAR);
+                    pairs.push((
+                        crate::project::project_profile::QUARTO_PROFILE_VAR.to_string(),
+                        value,
+                    ));
+                }
+                pairs
+            });
 
             trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
             let mut result = engine

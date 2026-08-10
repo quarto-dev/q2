@@ -1178,6 +1178,7 @@ pub fn build_transform_pipeline(
     target_format: String,
     variables: Option<quarto_pandoc_types::ConfigValue>,
     project_env: hashlink::LinkedHashMap<String, String>,
+    quarto_profile: Option<String>,
 ) -> TransformPipeline {
     let mut pipeline: TransformPipeline = TransformPipeline::new();
 
@@ -1209,6 +1210,7 @@ pub fn build_transform_pipeline(
         lua_format,
         variables,
         project_env,
+        quarto_profile,
     )));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     // Date normalization (bd-gx9cic8z P4): resolves today/now/
@@ -1548,6 +1550,7 @@ pub fn build_q2_preview_transform_pipeline(
     target_format: String,
     variables: Option<quarto_pandoc_types::ConfigValue>,
     project_env: hashlink::LinkedHashMap<String, String>,
+    quarto_profile: Option<String>,
 ) -> TransformPipeline {
     let mut pipeline = build_transform_pipeline(
         shortcode_paths,
@@ -1556,6 +1559,7 @@ pub fn build_q2_preview_transform_pipeline(
         target_format,
         variables,
         project_env,
+        quarto_profile,
     );
     pipeline.retain_excluding(Q2_PREVIEW_TRANSFORM_EXCLUDED);
     pipeline
@@ -2720,6 +2724,7 @@ mod tests {
             "html".to_string(),
             None,
             Default::default(),
+            None,
         );
         let html_names: Vec<&str> = html.iter().map(|t| t.name()).collect();
 
@@ -3153,6 +3158,7 @@ mod tests {
             "q2-preview".to_string(),
             None,
             Default::default(),
+            None,
         );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         assert!(
@@ -3177,6 +3183,7 @@ mod tests {
             "q2-preview".to_string(),
             None,
             Default::default(),
+            None,
         );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         for required in [
@@ -3230,6 +3237,7 @@ mod tests {
             "html".to_string(),
             None,
             Default::default(),
+            None,
         );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
 
@@ -3299,6 +3307,7 @@ mod tests {
                 format.to_string(),
                 None,
                 Default::default(),
+                None,
             );
             let steps: Vec<(&str, TransformPhase)> =
                 pipeline.iter().map(|t| (t.name(), t.phase())).collect();
@@ -3347,6 +3356,7 @@ mod tests {
             "q2-preview".to_string(),
             None,
             Default::default(),
+            None,
         );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         for required in ["code-block-generate", "code-block-render"] {
@@ -3373,6 +3383,7 @@ mod tests {
                 format.to_string(),
                 None,
                 Default::default(),
+                None,
             );
             let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
 
@@ -3406,6 +3417,7 @@ mod tests {
                 format.to_string(),
                 None,
                 Default::default(),
+                None,
             );
             let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
             assert!(

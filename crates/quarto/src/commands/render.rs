@@ -101,6 +101,11 @@ pub struct RenderArgs {
     /// Skip the project's `pre-render` / `post-render` scripts
     /// (bd-w348iu63). The render itself is unaffected.
     pub no_render_scripts: bool,
+    /// `--profile` values (comma-separated or repeated). Non-empty
+    /// replaces `QUARTO_PROFILE` entirely; empty means "not given"
+    /// (bd-fu16z22k). See
+    /// [`quarto_core::project::project_profile::cli_selection`].
+    pub profile: Vec<String>,
 }
 
 /// What to render after argument classification.
@@ -248,9 +253,10 @@ pub fn classify_inputs(
     inputs: &[String],
     cwd: &Path,
     runtime: &dyn SystemRuntime,
+    profile_selection: Option<&[String]>,
 ) -> std::result::Result<RenderTarget, DispatchError> {
     if inputs.is_empty() {
-        return classify_no_inputs(cwd, runtime);
+        return classify_no_inputs(cwd, runtime, profile_selection);
     }
 
     // Step 1: canonicalize each input and verify it exists.
@@ -277,7 +283,8 @@ pub fn classify_inputs(
     let mut shared_project: Option<PathBuf> = None;
     let mut any_outside_project = false;
     for r in &resolved {
-        let ctx = ProjectContext::discover(r, runtime).map_err(discover_error)?;
+        let ctx = ProjectContext::discover_with_profile(r, runtime, profile_selection)
+            .map_err(discover_error)?;
         // `is_single_file` only fires for *file* inputs with no
         // surrounding `_quarto.yml`. A *directory* input never trips
         // it, even when no config exists — so we re-check the
@@ -335,7 +342,8 @@ pub fn classify_inputs(
     // Re-discover from the project root to get the full
     // render-list-filtered file list. (Per-input `discover` only fills
     // `files` with that one input.)
-    let project = ProjectContext::discover(&project_dir, runtime).map_err(discover_error)?;
+    let project = ProjectContext::discover_with_profile(&project_dir, runtime, profile_selection)
+        .map_err(discover_error)?;
     let project_files: Vec<PathBuf> = project.files.iter().map(|f| f.input.clone()).collect();
 
     // Step 3: expand each input into the set of project files it
@@ -403,6 +411,7 @@ pub fn classify_inputs(
 fn classify_no_inputs(
     cwd: &Path,
     runtime: &dyn SystemRuntime,
+    profile_selection: Option<&[String]>,
 ) -> std::result::Result<RenderTarget, DispatchError> {
     let cwd_canon = runtime
         .canonicalize(cwd)
@@ -420,7 +429,8 @@ fn classify_no_inputs(
         return Err(DispatchError::NoInputAndNoProject(cwd_canon));
     };
 
-    let project = ProjectContext::discover(&project_root, runtime).map_err(discover_error)?;
+    let project = ProjectContext::discover_with_profile(&project_root, runtime, profile_selection)
+        .map_err(discover_error)?;
     Ok(RenderTarget::FullProject {
         project_dir: project.dir,
     })
@@ -678,7 +688,12 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     // surface the structured DispatchError as a JsonDiagnostic on
     // stderr before exiting so machine consumers can discriminate
     // by code (Q-7-2..8).
-    let target = match classify_inputs(&args.inputs, &cwd, &runtime) {
+    let target = match classify_inputs(
+        &args.inputs,
+        &cwd,
+        &runtime,
+        quarto_core::project::project_profile::cli_selection(&args.profile),
+    ) {
         Ok(t) => t,
         Err(e) => {
             if args.json_errors {
@@ -736,6 +751,22 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 }
 
+/// `-v` echo of the resolved project-profile activation set with
+/// per-profile provenance (bd-fu16z22k). Deliberately absent from
+/// normal output (Q1 parity: profiles are never announced); shows at
+/// `-v` because `verbose_to_filter(1)` enables `quarto=info`.
+fn echo_active_profiles(project: &ProjectContext) {
+    let active = &project.config.active_config_profiles;
+    if active.is_empty() {
+        return;
+    }
+    let described: Vec<String> = active
+        .iter()
+        .map(|p| format!("{} (from {})", p.name, p.source.describe()))
+        .collect();
+    tracing::info!("active project profiles: {}", described.join(", "));
+}
+
 fn execute_single_doc(
     input: PathBuf,
     args: &RenderArgs,
@@ -743,8 +774,13 @@ fn execute_single_doc(
     format: Format,
 ) -> Result<()> {
     let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
-    let mut project = ProjectContext::discover(&input, runtime_arc.as_ref())
-        .context("Failed to discover project context")?;
+    let mut project = ProjectContext::discover_with_profile(
+        &input,
+        runtime_arc.as_ref(),
+        quarto_core::project::project_profile::cli_selection(&args.profile),
+    )
+    .context("Failed to discover project context")?;
+    echo_active_profiles(&project);
     // Captured before the pipeline mutably borrows `project`; used to
     // restore config-anchored source snippets at print time. Manifests
     // included: merged values can anchor in an extension's
@@ -833,8 +869,13 @@ fn execute_project(
         run_clean_cache(runtime_arc.as_ref(), &project_dir).map_err(|e| anyhow::anyhow!("{e}"))?;
     }
 
-    let mut project = ProjectContext::discover(&project_dir, runtime_arc.as_ref())
-        .context("Failed to discover project context")?;
+    let mut project = ProjectContext::discover_with_profile(
+        &project_dir,
+        runtime_arc.as_ref(),
+        quarto_core::project::project_profile::cli_selection(&args.profile),
+    )
+    .context("Failed to discover project context")?;
+    echo_active_profiles(&project);
     // Captured before the pipeline mutably borrows `project`; used to
     // restore config-anchored source snippets at print time. Manifests
     // included: merged values can anchor in an extension's
@@ -884,6 +925,9 @@ fn execute_project(
             config_path: project.config.config_path.as_deref(),
             extension_manifest_paths: &project.config.extension_manifest_paths,
             profile_config_paths: &project.config.profile_config_paths,
+            quarto_profile: quarto_core::project::project_profile::quarto_profile_env_value(
+                &project.config.active_config_profiles,
+            ),
             render_all,
             quiet: args.quiet,
             file_count: input_files.len(),
@@ -898,8 +942,12 @@ fn execute_project(
             exit_with_parse_error(parse_error, args);
         }
 
-        let re_project = ProjectContext::discover(&project_dir, runtime_arc.as_ref())
-            .context("Failed to re-discover project context after pre-render scripts")?;
+        let re_project = ProjectContext::discover_with_profile(
+            &project_dir,
+            runtime_arc.as_ref(),
+            quarto_core::project::project_profile::cli_selection(&args.profile),
+        )
+        .context("Failed to re-discover project context after pre-render scripts")?;
         if let Err(parse_error) =
             render_scripts::check_forbidden_mutations(&project.config, &re_project.config)
         {
@@ -998,6 +1046,9 @@ fn execute_project(
             config_path: project.config.config_path.as_deref(),
             extension_manifest_paths: &project.config.extension_manifest_paths,
             profile_config_paths: &project.config.profile_config_paths,
+            quarto_profile: quarto_core::project::project_profile::quarto_profile_env_value(
+                &project.config.active_config_profiles,
+            ),
             render_all,
             quiet: args.quiet,
             file_count: total_files,
@@ -1742,7 +1793,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_project(&temp, &["index.qmd", "about.qmd"], None);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&[], &project, &runtime).unwrap();
+        let target = classify_inputs(&[], &project, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {
@@ -1762,7 +1813,7 @@ mod tests {
         write_file(&dir.join("_quarto.yml"), "project:\n  type: posit-docs\n");
         write_file(&dir.join("index.qmd"), "---\ntitle: x\n---\n");
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&[], &dir, &runtime).unwrap_err();
+        let err = classify_inputs(&[], &dir, &runtime, None).unwrap_err();
         let DispatchError::DiscoverParse(pe) = err else {
             panic!("expected DiscoverParse, got {err:?}");
         };
@@ -1775,7 +1826,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let dir = make_loose_dir(&temp, &["foo.qmd"]);
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&[], &dir, &runtime).unwrap_err();
+        let err = classify_inputs(&[], &dir, &runtime, None).unwrap_err();
         assert!(
             matches!(err, DispatchError::NoInputAndNoProject(_)),
             "expected NoInputAndNoProject, got {err:?}"
@@ -1802,7 +1853,7 @@ mod tests {
         write_file(&dir.join("sub/decoy.qmd"), "---\ntitle: decoy\n---\n");
 
         let runtime = RecordingRuntime::new();
-        let err = classify_inputs(&[], &dir, &runtime).unwrap_err();
+        let err = classify_inputs(&[], &dir, &runtime, None).unwrap_err();
         assert!(
             matches!(err, DispatchError::NoInputAndNoProject(_)),
             "expected NoInputAndNoProject, got {err:?}"
@@ -1826,7 +1877,7 @@ mod tests {
         let project = make_project(&temp, &["index.qmd", "sub/a.qmd", "sub/sub2/b.qmd"], None);
         let nested = project.join("sub").join("sub2");
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&[], &nested, &runtime).unwrap();
+        let target = classify_inputs(&[], &nested, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {
@@ -1840,7 +1891,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_project(&temp, &["index.qmd", "about.qmd"], None);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&["about.qmd".into()], &project, &runtime).unwrap();
+        let target = classify_inputs(&["about.qmd".into()], &project, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::Subset {
@@ -1855,7 +1906,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let dir = make_loose_dir(&temp, &["foo.qmd"]);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&["foo.qmd".into()], &dir, &runtime).unwrap();
+        let target = classify_inputs(&["foo.qmd".into()], &dir, &runtime, None).unwrap();
         assert_eq!(target, RenderTarget::SingleDoc(dir.join("foo.qmd")));
     }
 
@@ -1865,8 +1916,13 @@ mod tests {
         let project = make_project(&temp, &["index.qmd", "about.qmd"], None);
         let cwd = canonical(temp.path()); // any cwd
         let runtime = NativeRuntime::new();
-        let target =
-            classify_inputs(&[project.to_string_lossy().into_owned()], &cwd, &runtime).unwrap();
+        let target = classify_inputs(
+            &[project.to_string_lossy().into_owned()],
+            &cwd,
+            &runtime,
+            None,
+        )
+        .unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {
@@ -1880,7 +1936,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_project(&temp, &["top.qmd", "sub/a.qmd", "sub/b.qmd"], None);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&["sub".into()], &project, &runtime).unwrap();
+        let target = classify_inputs(&["sub".into()], &project, &runtime, None).unwrap();
         match target {
             RenderTarget::Subset {
                 project_dir,
@@ -1909,7 +1965,7 @@ mod tests {
         let project = make_project(&temp, &["a.qmd", "b.qmd", "c.qmd"], None);
         let runtime = NativeRuntime::new();
         let target =
-            classify_inputs(&["a.qmd".into(), "b.qmd".into()], &project, &runtime).unwrap();
+            classify_inputs(&["a.qmd".into(), "b.qmd".into()], &project, &runtime, None).unwrap();
         match target {
             RenderTarget::Subset {
                 project_dir,
@@ -1932,7 +1988,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_project(&temp, &["a.qmd", "b.qmd"], Some(&["a.qmd"]));
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&["b.qmd".into()], &project, &runtime).unwrap_err();
+        let err = classify_inputs(&["b.qmd".into()], &project, &runtime, None).unwrap_err();
         match err {
             DispatchError::NotInRenderList { path, project_dir } => {
                 assert_eq!(path, project.join("b.qmd"));
@@ -1950,7 +2006,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_project(&temp, &["main.qmd", "_partial.qmd"], None);
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&["_partial.qmd".into()], &project, &runtime).unwrap_err();
+        let err = classify_inputs(&["_partial.qmd".into()], &project, &runtime, None).unwrap_err();
         assert!(
             matches!(err, DispatchError::NotInRenderList { .. }),
             "expected NotInRenderList, got {err:?}"
@@ -1964,7 +2020,7 @@ mod tests {
         // Empty subdirectory.
         std::fs::create_dir_all(project.join("empty")).unwrap();
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&["empty".into()], &project, &runtime).unwrap_err();
+        let err = classify_inputs(&["empty".into()], &project, &runtime, None).unwrap_err();
         match err {
             DispatchError::NoRenderableMatches { path } => {
                 assert_eq!(path, project.join("empty"));
@@ -1988,6 +2044,7 @@ mod tests {
             ],
             &cwd,
             &runtime,
+            None,
         )
         .unwrap_err();
         assert!(
@@ -2001,7 +2058,8 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let dir = make_loose_dir(&temp, &["a.qmd", "b.qmd"]);
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&["a.qmd".into(), "b.qmd".into()], &dir, &runtime).unwrap_err();
+        let err =
+            classify_inputs(&["a.qmd".into(), "b.qmd".into()], &dir, &runtime, None).unwrap_err();
         assert!(
             matches!(err, DispatchError::MultiArgNonProject),
             "expected MultiArgNonProject, got {err:?}"
@@ -2013,7 +2071,8 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let dir = canonical(temp.path());
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&["does-not-exist.qmd".into()], &dir, &runtime).unwrap_err();
+        let err =
+            classify_inputs(&["does-not-exist.qmd".into()], &dir, &runtime, None).unwrap_err();
         assert!(
             matches!(err, DispatchError::PathNotFound(_)),
             "expected PathNotFound, got {err:?}"
@@ -2034,7 +2093,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_default_project(&temp, &["index.qmd"]);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&["index.qmd".into()], &project, &runtime).unwrap();
+        let target = classify_inputs(&["index.qmd".into()], &project, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {
@@ -2055,7 +2114,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_default_project(&temp, &["index.qmd", "about.qmd"]);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&[], &project, &runtime).unwrap();
+        let target = classify_inputs(&[], &project, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {
@@ -2073,7 +2132,7 @@ mod tests {
         let project = make_project(&temp, &["a.qmd", "b.qmd"], None);
         let runtime = NativeRuntime::new();
         let target =
-            classify_inputs(&["a.qmd".into(), "b.qmd".into()], &project, &runtime).unwrap();
+            classify_inputs(&["a.qmd".into(), "b.qmd".into()], &project, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {

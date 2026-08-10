@@ -143,6 +143,9 @@ impl PipelineStage for AstTransformsStage {
                     ctx.format.target_format.clone(),
                     ctx.variables.clone(),
                     ctx.project_env.clone(),
+                    crate::project::project_profile::quarto_profile_env_value(
+                        &ctx.project.config.active_config_profiles,
+                    ),
                 ),
                 _ => build_transform_pipeline(
                     shortcode_paths,
@@ -151,6 +154,9 @@ impl PipelineStage for AstTransformsStage {
                     ctx.format.target_format.clone(),
                     ctx.variables.clone(),
                     ctx.project_env.clone(),
+                    crate::project::project_profile::quarto_profile_env_value(
+                        &ctx.project.config.active_config_profiles,
+                    ),
                 ),
             };
             &jit_pipeline

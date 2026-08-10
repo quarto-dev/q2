@@ -1337,9 +1337,48 @@ impl ProjectContext {
             paths.into_iter().map(DocumentInfo::from_path).collect()
         };
 
+        // Project-less discovery (no `_quarto.yml` found): still
+        // resolve profile activation from the explicit selection /
+        // `QUARTO_PROFILE`, so `--profile bad/name` errors here too
+        // and conditional content (`when-profile`) sees the active
+        // set. There are no overlays, env files, or declarations to
+        // match, so the Q-5-19 unknown-profile warning never fires.
+        let config = match config {
+            Some(config) => config,
+            None => {
+                let mut diagnostics = Vec::new();
+                let env_profile = runtime
+                    .env_get(project_profile::QUARTO_PROFILE_VAR)
+                    .ok()
+                    .flatten();
+                let active = project_profile::resolve_active_profiles(
+                    &project_profile::ProfileResolutionInputs {
+                        cli: cli_selection,
+                        env_var: env_profile.as_deref(),
+                        ..Default::default()
+                    },
+                    &mut diagnostics,
+                );
+                if diagnostics
+                    .iter()
+                    .any(|d| d.kind == quarto_error_reporting::DiagnosticKind::Error)
+                {
+                    return Err(QuartoError::Parse(crate::error::ParseError::new(
+                        diagnostics,
+                        quarto_source_map::SourceContext::new(),
+                    )));
+                }
+                ProjectConfig {
+                    active_config_profiles: active,
+                    config_diagnostics: diagnostics,
+                    ..Default::default()
+                }
+            }
+        };
+
         Ok(Self {
             dir,
-            config: config.unwrap_or_default(),
+            config,
             is_single_file,
             files,
             output_dir,

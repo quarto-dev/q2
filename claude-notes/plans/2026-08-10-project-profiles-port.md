@@ -301,19 +301,51 @@ waits; nothing else blocks.
 
 ### Phase 2 — CLI + cache + subprocess env var
 
-- [ ] Failing tests: `--profile` reaches discover (incl. re-discovery
-      at render.rs:885), comma-and-repeated flag forms, `--profile`
-      replaces `QUARTO_PROFILE`, get-config shows overlay values
-- [ ] Wire `--profile` into `RenderArgs` + `discover_with_profile`;
-      add flag to preview / get-config / publish
-- [ ] `Pass1KeyInputs` + `pass1_key`: active list + overlay bytes;
-      test that profile switch changes the key
-- [ ] `QUARTO_PROFILE` on child processes (engines, render scripts)
-      unconditionally; normalized value in project env map for the
-      `env` shortcode (this sub-item moves to Phase 3 if #486 has
-      not landed yet)
-- [ ] E2E: `cargo run --bin q2 -- render fixture --profile x`,
-      inspect output (record invocation + snippet here)
+- [x] Failing tests first: 14 binary-driven tests in
+      `crates/quarto/tests/integration/project_profile_cli.rs`
+      (comma + repeated flags, `--profile` replaces
+      `QUARTO_PROFILE`, get-config overlay values, Q-5-19/21 through
+      the binary, single-file strictness, `-v` echo, help presence)
+- [x] Wire `--profile` into `RenderArgs` + all render/classify
+      discover sites (incl. the post-pre-render-script re-discovery)
+      + get-config + publish (threaded through
+      `ProjectPublishRenderer` so publish's render-time re-discovery
+      matches). **Preview: deferred to bd-pfgc273f** —
+      `QUARTO_PROFILE=x q2 preview` already works end-to-end (all
+      its discovers read the env via runtime); the flag form needs
+      HubContext threading, not rushed here.
+- [x] Project-less discovery also resolves + validates the selection
+      (bad names abort even without `_quarto.yml`; no Q-5-19 there)
+- [x] `-v` echo with per-profile provenance (`echo_active_profiles`
+      in commands/render.rs). Found + fixed two latent gaps:
+      `verbose_to_filter` never matched the `q2` bin crate's targets
+      (added `q2=` directives), and the tracing fmt layer wrote to
+      stdout (now stderr, where all q2 diagnostics live).
+- [x] `Pass1KeyInputs` + `pass1_key`: active names (count-prefixed,
+      order-sensitive — first-listed-wins makes order semantic) +
+      overlay bytes; `PROFILE_KEY_VERSION` bumped to 2; orchestrator
+      fills from `profile_config_paths`; 4 new key tests incl. a
+      domain-separation test
+- [x] `QUARTO_PROFILE` on child processes **unconditionally**
+      (override-inherited is the one exception to #486's
+      real-env-wins rule): engines via `EngineContext.project_env`
+      pair injection in `EngineExecutionStage`, render scripts via
+      `RenderScriptsContext.quarto_profile` (+real-spawn unix test);
+      `{{< env QUARTO_PROFILE >}}` special-cased in
+      `EnvShortcodeHandler` to beat the real env (unit-tested)
+- [x] E2E (2026-08-10, recorded): fixture with
+      `profile: group: [draft, final]` + `_quarto-prod.yml` setting
+      `title`; `q2 render index.qmd --profile prod` →
+      `<title>Production Title</title>`; body
+      `{{< env QUARTO_PROFILE none >}}` → `Active profiles:
+      prod,draft` (normalized + group-expanded); `q2 get-config
+      index.qmd title --profile prod` → `"Production Title"` (and
+      `"Base Title"` without); `-v` echoes `active project profiles:
+      prod (from --profile), draft (from profile.group default)`.
+      Output inspected by grep on the rendered HTML.
+- Note: real-engine (jupyter/knitr) visibility of `QUARTO_PROFILE`
+  is exercised manually in Phase 5 alongside the docs fixtures, same
+  policy as PR #486's engine-env verification.
 
 ### Phase 3 — environment integration (after PR #486 merges)
 
