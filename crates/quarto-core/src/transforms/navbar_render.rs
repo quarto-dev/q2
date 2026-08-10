@@ -120,7 +120,7 @@ impl AstTransform for NavbarRenderTransform {
             .resource_resolver
             .as_ref()
             .map_or_else(|| "./".to_string(), |r| r.page_url_for_site_root_dir());
-        let html = navbar_to_html(&navbar, fallback.as_deref(), &home_url);
+        let html = navbar_to_html(&navbar, fallback.as_ref(), &home_url);
 
         ast.meta.insert_path(
             &["rendered", "navigation", "navbar"],
@@ -170,14 +170,27 @@ fn rewrite_navigation_item_hrefs(
 /// `website.title` first, then falling back to the document's own
 /// `title`. `None` means the renderer has nothing to fall back to
 /// (brand anchor will be suppressed if no logo either).
-fn brand_title_fallback(meta: &ConfigValue) -> Option<String> {
-    if let Some(site_title) = meta
-        .get_path(&["website", "title"])
-        .and_then(|v| v.as_plain_text())
-    {
-        return Some(site_title);
+fn brand_title_fallback(meta: &ConfigValue) -> Option<ConfigValue> {
+    if let Some(site_title) = meta.get_path(&["website", "title"]) {
+        if is_renderable_title(site_title) {
+            return Some(site_title.clone());
+        }
     }
-    meta.get("title").and_then(|v| v.as_plain_text())
+    meta.get("title")
+        .filter(|v| is_renderable_title(v))
+        .cloned()
+}
+
+/// A title value the brand renderer can meaningfully display: textual
+/// scalars and Pandoc content. Booleans etc. (`title: false`) fall
+/// through to the next fallback, matching the previous
+/// `as_plain_text()`-based gating.
+fn is_renderable_title(value: &ConfigValue) -> bool {
+    value.as_plain_text().is_some()
+        || matches!(
+            value.value,
+            quarto_pandoc_types::config_value::ConfigValueKind::PandocBlocks(_)
+        )
 }
 
 #[cfg(test)]

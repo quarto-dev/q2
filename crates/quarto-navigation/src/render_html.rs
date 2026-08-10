@@ -43,7 +43,7 @@ use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
 /// pass `"./"` in unit tests / single-doc fallbacks. See bd-jgeu.
 pub fn navbar_to_html(
     navbar: &Navbar,
-    document_title_fallback: Option<&str>,
+    document_title_fallback: Option<&ConfigValue>,
     home_url: &str,
 ) -> String {
     let mut html = String::new();
@@ -309,7 +309,7 @@ fn render_page_nav_side(html: &mut String, side: &str, item: Option<&NavigationI
 
 // --- Private helpers ---------------------------------------------------------
 
-fn render_brand(navbar: &Navbar, fallback: Option<&str>, home_url: &str) -> Option<String> {
+fn render_brand(navbar: &Navbar, fallback: Option<&ConfigValue>, home_url: &str) -> Option<String> {
     let href = navbar.logo_href.as_deref().unwrap_or(home_url);
     let logo_img = navbar.logo.as_deref().map(|logo| {
         let alt = navbar
@@ -327,7 +327,11 @@ fn render_brand(navbar: &Navbar, fallback: Option<&str>, home_url: &str) -> Opti
     let title_html = match &navbar.title {
         NavbarTitle::Hidden => None,
         NavbarTitle::Text(cv) => Some(render_text(cv)),
-        NavbarTitle::Default => fallback.map(escape_html),
+        // The fallback (`website.title` → document `title`) is a
+        // ConfigValue so PandocInlines-shaped titles — the common form
+        // once ConfigMarkdownTransform has run — render as inlines
+        // (raw HTML honored) instead of being flattened and escaped.
+        NavbarTitle::Default => fallback.map(render_text),
     };
 
     // Nothing to show? Skip brand entirely.
@@ -806,8 +810,17 @@ fn push_inline(out: &mut String, inline: &Inline) {
                 out.push_str(&r.text);
             }
         }
+        // An unresolved shortcode reaching the renderer means it was
+        // never visited by ShortcodeResolveTransform's metadata walk
+        // (resolved ones are Str/error-marker nodes by now). Render the
+        // body-text-policy marker instead of silently dropping it.
+        Inline::Shortcode(sc) => {
+            out.push_str("<strong>");
+            out.push_str(&escape_html(&format!("?{}", sc.name)));
+            out.push_str("</strong>");
+        }
         // The remaining variants (Cite, Math, Image, Note, NoteReference,
-        // Shortcode, Attr, Insert, Delete, Highlight, EditComment, Custom)
+        // Attr, Insert, Delete, Highlight, EditComment, Custom)
         // are not expected in navbar/footer text. Fall back to plain text.
         other => {
             if let Some(content) = inline_plain_fallback(other) {
@@ -924,7 +937,7 @@ mod tests {
     #[test]
     fn navbar_falls_back_to_document_title() {
         let navbar = Navbar::with_defaults();
-        let html = navbar_to_html(&navbar, Some("Doc Title"), "./");
+        let html = navbar_to_html(&navbar, Some(&s("Doc Title")), "./");
         assert!(html.contains("Doc Title"));
         assert!(html.contains("navbar-brand"));
     }
@@ -935,7 +948,7 @@ mod tests {
             title: NavbarTitle::Hidden,
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, Some("Doc Title"), "./");
+        let html = navbar_to_html(&navbar, Some(&s("Doc Title")), "./");
         assert!(!html.contains("Doc Title"));
         assert!(!html.contains("navbar-brand"));
     }
@@ -1156,7 +1169,7 @@ mod tests {
         // Sanity-check the navbar's existing container wrapper; same
         // rationale as the footer, and guards against regressions.
         let navbar = Navbar::with_defaults();
-        let html = navbar_to_html(&navbar, Some("Doc"), "./");
+        let html = navbar_to_html(&navbar, Some(&s("Doc")), "./");
         assert!(
             html.contains("<div class=\"container-fluid\">"),
             "navbar should wrap body in .container-fluid: {}",

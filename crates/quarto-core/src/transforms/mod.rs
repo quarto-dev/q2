@@ -39,6 +39,7 @@ mod categories_sidebar;
 mod code_block_generate;
 mod code_block_render;
 mod config;
+mod config_markdown;
 mod crossref_index;
 mod crossref_render;
 mod crossref_resolve;
@@ -95,6 +96,7 @@ pub use code_block_render::CodeBlockRenderTransform;
 pub use config::{
     AppendixStyle, ReferenceLocation, TitleBlockStyle, is_feature_disabled, resolve_website_bool,
 };
+pub use config_markdown::{ConfigMarkdownTransform, apply_markdown_config_paths};
 pub use crossref_index::CrossrefIndexTransform;
 pub use crossref_render::CrossrefRenderTransform;
 pub use crossref_resolve::CrossrefResolveTransform;

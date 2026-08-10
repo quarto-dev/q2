@@ -289,16 +289,33 @@ by `ApplyTemplateStage` are engine output and deliberately not expanded (Q1's
   workspace run 11218 passed / 10 failed — the 10 are exactly the still-open
   Phase 2/3 tests. No regressions from walking all metadata.
 
-### Phase 2 — Website presentation strings (mechanism A)
+### Phase 2 — Website presentation strings (mechanism A) ✅
 
-- [ ] Add the markdown-parse registry (key path patterns → inline/block flavor) and
-      a small `Normalization` transform applying it to merged metadata, ordered
-      before `ShortcodeResolveTransform`.
-- [ ] Seed registry with the initial entries (decision 2).
-- [ ] `brand_title_fallback` (`navbar_render.rs`): pass the `ConfigValue` through to
-      `render_text` (sidebar precedent) instead of `as_plain_text` + `escape_html`.
-- [ ] `push_inline` (`quarto-navigation/render_html.rs`): add a `Shortcode` arm
-      (marker + diagnostic instead of silent escaped flatten).
+- [x] `ConfigMarkdownTransform` (`transforms/config_markdown.rs`), `Normalization`,
+      registered immediately before `ShortcodeResolveTransform`; applies the
+      `MARKDOWN_CONFIG_PATHS` registry (path patterns with `*` array wildcard) to
+      merged metadata via a new public pampa entry point
+      (`pampa::pandoc::meta::parse_config_string_as_markdown` — untagged-value
+      semantics, Q-1-20 warning on parse failure). Only `Scalar(String)` values are
+      re-parsed; the parse auto-detects inline (single paragraph) vs block, which
+      preserves q2's current footer DOM shape — the plan's per-entry "flavor" field
+      proved unnecessary. Documented limitation: `!str` in project config is
+      indistinguishable post-load, so it can't opt a blessed key out.
+- [x] Seed registry: `website.title`, `navbar.title` + `sidebar.title` +
+      `page-footer` (bare + left/center/right string form), each in both top-level
+      and `website.`-scoped forms where applicable.
+- [x] `brand_title_fallback` passes the `ConfigValue` through to `render_text`
+      (with a `is_renderable_title` gate preserving the old `title: false`
+      behavior); `navbar_to_html` fallback param is now `Option<&ConfigValue>`.
+- [x] `push_inline`: `Shortcode` arm renders the `<strong>?name</strong>` marker
+      instead of silently dropping (defense-in-depth — the meta walk normally
+      replaces unresolved shortcodes before rendering).
+- [x] Consumer audit: all blessed-key readers use `as_plain_text()` (handles
+      PandocInlines, drops RawInline — which is exactly Q1's `<title>` innerText
+      semantics) or preserve the ConfigValue; no `as_str()` hazards found.
+- Result: all five config-string tests green (title, navbar brand, sidebar,
+  footer, unresolved marker). Workspace: 11228 passed / 5 failed — exactly the
+  Phase-3 include tests. No regressions.
 
 ### Phase 3 — Include files (mechanism C)
 
