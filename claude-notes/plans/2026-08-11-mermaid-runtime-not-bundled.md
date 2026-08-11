@@ -3,7 +3,7 @@
 **Date:** 2026-08-11
 **Braid:** `bd-mermaid-runtime-not-bundled-vxejw159`
 **Branch:** `main` @ `001cb6a5` (investigated in place; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled 2026-08-11 (see §Resolved decisions). Ready to implement.
 
 ## Triage verdict
 
@@ -99,7 +99,26 @@ Identical. So "vendor the upstream UMD" and "do what Q1 does" are the *same* dec
 - **Phase 3 — End-to-end verification.** Run `q2 render` on the repro **with the network blocked** and confirm an actual rendered SVG. Include a non-flowchart diagram type (gantt or class) to prove the chunk problem is genuinely gone.
 - **Phase 4 — Docs + changelog.**
 
-## Open design questions for the user
+## Resolved decisions (2026-08-11)
+
+All five open questions settled with the user. The questions are kept below for the record; each is annotated with its answer.
+
+1. **Binary size — accepted.** 2.62 MiB unconditionally in the `q2` binary is acceptable for now. Filed **`bd-43gpsd7c`** to investigate a compressed compile-time embedding macro (`include_compressed_str!`-style) so the growing vendored-asset set doesn't accumulate uncompressed in `.rodata`.
+2. **Bundle by default.** No opt-in key. Matches Q1 and keeps the airgapped case working for users who never learn a key exists.
+3. **Render path only; preview split out.** Filed **`bd-1vwtdwtq`**. Direction recorded there: do *not* bundle mermaid into the hub-client the way Monaco was bundled — mermaid is 2.62 MiB and only some documents use it. Serve it from the same vendored bytes as an HTML dependency attached to preview projects that actually contain diagrams.
+4. **Theming/CSS parity split out.** Filed **`bd-93ensbpn`**.
+5. **Follow the reveal.js precedent** for version-bump ergonomics — vendored dir + README procedure + `node_modules` drift test, no bespoke `xtask` sync step. Rationale: keep every vendored asset on one mechanism so a future improvement fixes all of them at once.
+
+### Precedent correction carried into `bd-1vwtdwtq`
+
+The direction for #3 was framed as "like we do for revealjs." Checked, and revealjs does not currently do this — the split is:
+
+- **render**: vendored `resources/revealjs/` via `include_str!` → `site_libs/revealjs/` artifacts (`crates/quarto-core/src/revealjs/assemble.rs`)
+- **preview**: JS from the **npm** packages bundled into the client (`@revealjs/react` 0.2.0 + `reveal.js` 6.0.0 in `hub-client/package.json` and `ts-packages/preview-renderer/package.json`); CSS imported from the **vendored** files via vite (`RevealDeck.tsx`, `reveal-reset-scope.test.ts`)
+
+So "vendored bytes served to preview as a per-project HTML dependency" is a **new mechanism to design**, not a pattern to copy. Reveal is also a defensible thing to bundle (core to every deck) in a way mermaid is not. This is recorded in `bd-1vwtdwtq` so whoever picks it up isn't misled.
+
+## Open design questions for the user *(answered — see §Resolved decisions)*
 
 1. **Is 2.62 MiB in the `q2` binary acceptable, unconditionally?** `include_str!`/`include_bytes!` is compile-time, so every `q2` binary carries mermaid whether or not the user ever writes a diagram — this is how reveal.js already works, but reveal is ~175 KB and this is ~15×. Debug `q2` is currently 164 MB, so it's small in relative terms; release is the number that matters for the download. Accept it, or is a `--features` / download-on-first-use escape hatch wanted?
 
