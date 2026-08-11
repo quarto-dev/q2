@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-11
 **Braid:** bd-page-footer-items-f4th80mj (bug, P1, labels `parity` / `websites`)
-**Branch:** written on `main` @ `6dc835c2` in the main checkout (`/Users/cscheid/rooms/room-1/q2`). No worktree/branch was created — see "Where to do the work".
-**Status:** Design settled 2026-08-11 (all six questions answered by Carlos — see "Settled decisions"). Implementation in progress on branch `braid/bd-page-footer-items-f4th80mj-nav-item-text`.
+**Branch:** `braid/bd-page-footer-items-f4th80mj-nav-item-text`, off `main` @ `6516a330`, in the main checkout (`/Users/cscheid/rooms/room-1/q2`) — no worktree, per decision 6. Investigation was committed on `main` first (`6632884b`).
+**Status:** **Implemented and verified.** All six design questions answered by Carlos (see "Settled decisions"); all five defects fixed and verified end-to-end; full workspace suite green. Awaiting PR + review.
 
 ## Settled decisions (2026-08-11)
 
@@ -230,6 +230,11 @@ Contents depend on the design answers below; ordering does not.
 - **Phase 5 — E2E verification + docs.** Render the committed repro through `q2 render`, diff against the Q1 baseline captured in `observed-output.txt`, and record the invocation + observed markup per the end-to-end verification rule. Re-check the Connect-docs site if convenient.
 
 ## Open design questions for the user
+
+> **All six were answered on 2026-08-11** — see "Settled decisions" at the
+> top for the answers as implemented. Kept below as the record of what was
+> asked and what each option would have meant. Note that question 2's
+> answer was later *refined by measurement*: see "Q1's bare-scalar rule".
 
 1. **Mechanism — confirm the registry.** Do you agree this belongs in `MARKDOWN_CONFIG_PATHS` (per the 2026-08-10 Design decision #2) rather than in pampa's `ANNOTATIONS`, contrary to the handoff's suggestion? *Recommendation: yes, registry.*
 
