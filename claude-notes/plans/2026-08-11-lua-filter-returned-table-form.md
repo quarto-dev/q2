@@ -3,7 +3,8 @@
 **Date:** 2026-08-11
 **Braid:** `bd-lua-filter-table-form-ignored-ph23becz` (bug, p1, labels `pampa` / `parity`)
 **Branch:** `main` @ `808215fc` (investigated in the main checkout; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled (2026-08-11) — see **Settled decisions**. Phases are
+written but **implementation has not started and needs the user's go-ahead.**
 
 ## Triage verdict
 
@@ -104,6 +105,43 @@ the returned-table form has never worked in q2.
   table it is handed, so per-filter traversal mode comes for free — including
   per-entry traverse in the list form.
 
+**A second, independent bug found while scoping the warning (bd-18a2r2lp).**
+The walker dispatches on `LuaInline::tag_name` / `LuaBlock::tag_name`
+(`types.rs:272,1155`), but the globals whitelist is a *separate* hand-written
+list — and the two have drifted. Five dispatchable tags are missing from the
+whitelist:
+
+```
+Attr, BlockMetadata, CaptionBlock, NoteDefinitionFencedBlock, NoteDefinitionPara
+```
+
+A filter defining any of these **as a global** is silently dropped. Proven, not
+inferred, using `doc:walk` (which hands the walker a table directly and so
+bypasses the whitelist):
+
+```lua
+function NoteDefinitionPara(el)            -- global: never fires
+  quarto.log.output("GLOBAL NoteDefinitionPara FIRED")
+end
+function Pandoc(doc)
+  return doc:walk{ NoteDefinitionPara = function(el)   -- table: fires
+    quarto.log.output("WALK-TABLE NoteDefinitionPara FIRED") end }
+end
+```
+
+```
+$ pampa note.md -F whitelist-gap.lua -t plain
+WALK-TABLE NoteDefinitionPara FIRED     <- table path fires
+(no GLOBAL line)                        <- globals path silently drops it
+```
+
+This matters here for two reasons. It is a live instance of exactly the class
+the decided warning is meant to surface, and it settles *how* the warning must
+be built: **derive the name set from `tag_name` plus the catch-alls**, rather
+than adding a third hand-written list that can drift again. Filed as
+**bd-18a2r2lp** (`discovered-from` this strand) so it can be fixed
+independently if this plan stalls.
+
 **The fix pattern already exists in-tree.** The shortcode loader
 (`shortcode.rs:190`) does exactly this: `eval_async()` into a `Value`, and
 `if let Value::Table(ref table) = ret` register the returned handlers. The
@@ -168,69 +206,89 @@ about. `run-parity-matrix.sh` in the probes directory regenerates the whole
 table in one command and takes `PAMPA=…` to point at a patched build, so it is
 also the fix's smoke check.
 
-## Proposed phases (draft)
+## Phases
 
-Skeleton only — contents wait on the design discussion below.
+Now that the four decisions are settled, these are real phases rather than
+headings. Still to be confirmed with the user before implementation starts.
 
-- **Phase 0 — Tests first.**
-  - Unit tests in `crates/pampa/src/lua/filter_tests.rs` (TempDir + `apply_lua_filter`,
-    the existing pattern): table form, list form, per-entry `traverse`,
-    globals-still-work, and whichever edge-case semantics Q1 of the design
-    questions settles on.
-  - Differential cases under `tests/lua-conformance/differential/cases/`
-    with real pandoc oracles (`regen-oracles.sh`; local pandoc already matches
-    the pinned 3.9.0.2). Candidates: `filter-returns-table`,
-    `filter-returns-filter-list`, `filter-returns-table-traverse`,
-    `filter-returns-list-per-entry-traverse`. Each must be *observed failing*
-    before the fix.
-- **Phase 1 — Load-time change.** `eval_async::<Value>()` in `apply_lua_filter`;
-  classify the result (list / table / absent / invalid); keep `get_filter_table`
-  as the globals fallback.
-- **Phase 2 — Multi-pass application.** Apply a list of filter tables as
-  successive `apply_full_filter` passes over the document, in order.
-- **Phase 3 — Diagnostics.** Whatever Q2 below settles on for invalid returns
-  (and, if we choose it, the "declared filter did nothing" signal).
-- **Phase 4 — Docs.** `docs/guides/authoring/lua-filters.qmd` currently shows
-  only the top-level-function form and never mentions the returned table;
-  document both, plus the list form and `traverse`.
+- **Phase 0 — Tests first (TDD).** Every test below must be **observed failing**
+  before any fix lands.
+  - Unit tests in `crates/pampa/src/lua/filter_tests.rs` (TempDir +
+    `apply_lua_filter`, the existing idiom, 124 tests already): single table,
+    filter list applied in order, `traverse` on a returned table, per-entry
+    `traverse` in a list, globals-still-work when nothing is returned, and one
+    test per ⚠ row asserting the *new* parity behavior (`mixed` runs only the
+    table; `empty`/`emptylist` run nothing; `nilret`/`num` error).
+  - Differential cases under `tests/lua-conformance/differential/cases/` with
+    real pandoc oracles. `regen-oracles.sh` refuses to run unless the local
+    pandoc matches `ORACLE_VERSION`; it currently does (3.9.0.2), so oracles
+    can be generated as-is. The eleven probe scripts in
+    `…-investigation/pandoc-probes/` map onto cases nearly one-to-one — note
+    the error-shaped ones (`nilret`, `num`, `fnret`) cannot be oracle cases,
+    since the harness compares JSON ASTs; those stay unit tests.
+  - `run-parity-matrix.sh` with `PAMPA=` pointed at the patched build, as the
+    end-to-end smoke check.
+- **Phase 1 — Load-time classification.** `eval_async::<Value>()` in
+  `apply_lua_filter`, then classify per the pinned rule: **no value** →
+  globals via `get_filter_table`; **table with `rawlen == 0`** → single filter;
+  **table with `rawlen > 0`** → list of filters; **anything else** → `Q-11-6`
+  error. Note the classification hinges on *whether a value was returned at
+  all*, which is a stack-count question, not a nil-ness question — an explicit
+  `return nil` must land in the error branch, not the globals branch. That
+  distinction is the single most easily-fumbled part of the change; it deserves
+  its own test.
+- **Phase 2 — Multi-pass application.** Apply each filter table in the list as
+  a successive `apply_full_filter` pass over the whole document, in order, each
+  honoring its own `traverse`.
+- **Phase 3 — Diagnostics.**
+  - `Q-11-6` for an invalid script return, naming the filter path and the Lua
+    type, in the `filter_return_error` style from bd-23yvjfmm.
+  - The unrecognized-handler-name warning (decision 3). **Build its name set
+    from `tag_name` plus the catch-alls** — do not hand-write a third list.
+    bd-18a2r2lp is the cautionary example of what a hand-written list does over
+    time, and fixing it here (deriving the globals whitelist from the same
+    source) makes the two changes one coherent piece of work rather than two.
+  - Both new codes need `docs/errors/lua/<code>.qmd` in the same commit.
+- **Phase 4 — Docs.** `docs/guides/authoring/lua-filters.qmd` shows only the
+  top-level-function form and never mentions a returned table; document both
+  forms, the ordered list of passes, `traverse`, and — since we are now strict
+  about it — the rule that returning a value means globals are ignored.
 
-## Open design questions for the user
+## Settled decisions (user, 2026-08-11)
 
-1. **Full pandoc parity on the shadowing rules, or a friendlier subset?**
-   Pandoc's rule is "any returned value wins outright" — so `return {}` next to
-   working global handlers silently disables them, and a mixed
-   globals-plus-returned-table filter runs only the table. Strict parity is my
-   recommendation (predictability for ported filters, and it is what
-   `lua_differential` would assert), but the matrix above shows it flips four
-   filter shapes that work today. Do we take parity wholesale, or fall back to
-   globals in the shapes pandoc treats as errors (`nilret`, `num`) and
-   knowingly diverge there?
+All four design questions are answered. Recorded with their reasoning, because
+the reasoning is what a future reader needs when an edge case shows up.
 
-2. **What should an invalid return value do?** Pandoc errors, with a bad
-   message (`attempt to index a number value`, naming neither the filter nor
-   the offending value). Options: (a) error with a proper `Q-11-x` diagnostic
-   naming the filter path and the returned Lua type — strict on behavior,
-   better on message; (b) warn and fall back to globals. I lean (a), reusing
-   the `filter_return_error` contract from bd-23yvjfmm. Does an explicit
-   `return nil` get the same treatment as pandoc (error), or is that a
-   parity detail worth softening?
+1. **Strict pandoc parity, wholesale.** No softening for the shapes pandoc
+   treats as errors. The rationale: every divergent shape is a filter doing two
+   conflicting things at once (returning a value *and* defining globals), so
+   there is no defensible "right" answer to pick between them — and where no
+   choice is clearly correct, matching pandoc is the least harm. All five ⚠
+   rows in the matrix flip, deliberately.
 
-3. **Do we also want a "declared filter did nothing" signal?** The strand's
-   sharpest complaint is not the missing feature but the silence. Even after
-   this fix, a filter whose returned table has no keys the walker ever looks
-   up (e.g. a typo'd `Strs`, or a Q1-only handler name) stays silent. A
-   load-time warning for "filter defines no recognized handlers" would catch
-   that whole class. It is out of the literal scope of this strand — should it
-   be a follow-up strand, or folded into Phase 3 here?
+2. **Invalid script return → hard error with an actionable diagnostic.**
+   Behavior matches pandoc (it is an error); the message does not — ours names
+   the filter path and the offending Lua type. Explicit `return nil` is an
+   error too, on the same footing as `return 5`. The framing that makes this
+   feel right rather than pedantic: **`return { … }` is an affirmative choice**,
+   whereas a global `Str = function` can plausibly be an accidental collision.
+   A script that returns something uninterpretable has stated an intent we
+   cannot honor, so saying so beats guessing.
 
-4. **New error code, or stretch `Q-11-4`?** The existing `Q-11-4` is
-   *"Invalid Lua Filter Return Value"* and its message is specifically about a
-   **filter function's** return ("Return nil (keep the element), an element, a
-   list of elements…"). A bad **script-level** return is a different thing with
-   different advice, so my read is that it wants its own code (`Q-11-6`,
-   "Invalid Lua Filter Script Return Value") rather than a widened `Q-11-4`.
-   If we add one, the `error-docs-page-missing` lint requires
-   `docs/errors/lua/Q-11-6.qmd` **in the same commit**.
+3. **Yes — warn on unrecognized handler names.** Adopted into Phase 3 rather
+   than deferred. The decisive argument is not typo-catching but **regression
+   surfacing**: if q2 ever fails to recognize a handler name it should support,
+   that gap reaches the user as a visible (if wrongly-emitted) diagnostic
+   instead of silence. Silence mid-render is the thing that is hard to notice —
+   which is the whole complaint behind this strand. bd-18a2r2lp is a live
+   example of precisely that gap, found while scoping this.
+
+4. **New error code `Q-11-6`,** "Invalid Lua Filter Script Return Value" —
+   not a widened `Q-11-4`, which is about a *filter function's* return and
+   gives different advice. `docs/errors/lua/Q-11-6.qmd` ships **in the same
+   commit** (the `error-docs-page-missing` lint enforces this). The warning
+   from decision 3 needs its own code as well — likely `Q-11-7`, with its own
+   page, same rule.
 
 ## Adjacent findings (carried across; each needs its own decision)
 
