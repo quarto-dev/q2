@@ -132,27 +132,48 @@ the cause, then they apply the fix.
 
 ## Adding a new page
 
-Two paths:
-
-### With tooling (preferred, once `cargo xtask error-docs` ships)
-
-```
-cargo xtask error-docs new Q-X-Y
-```
-
-The command reads the catalog entry, creates
-`docs/errors/<subsystem>/Q-X-Y.qmd` with all front-matter fields
-populated from the catalog, and inserts `<!-- TODO: ... -->`
-placeholders in each body section. The new page starts at
-`status: draft`.
-
-### By hand
+**A page is not optional.** Adding a code to `error_catalog.json`
+without adding its page is a lint failure — see [Enforcement](#enforcement)
+below. Do both in the same commit.
 
 1. Find the catalog entry in `error_catalog.json`.
 2. Create `docs/errors/<subsystem>/Q-X-Y.qmd`, copying the template
    above.
 3. Fill the front-matter fields from the catalog entry. Start at
    `status: draft` until you write real prose.
+
+The `cargo xtask error-docs new Q-X-Y` generator described in
+[the tooling plan](../../claude-notes/plans/2026-05-22-error-docs-tooling.md)
+(bd-8otua) has not shipped; until it does, this is a by-hand step.
+
+## Enforcement
+
+`cargo xtask lint` reconciles the catalog against this directory and
+fails on two problems:
+
+- **A code with no page.** The catalog declares `Q-X-Y`; no file
+  exists at `docs/errors/<subsystem>/Q-X-Y.qmd`. Diagnostics carrying
+  the code link to a page that 404s.
+- **`docs_url` drift.** The entry's `docs_url` is not
+  `https://quarto.org/docs/errors/<subsystem>/<code>`, so the link the
+  user clicks does not reach the page even when the page exists.
+
+The check runs as step 1 of `cargo xtask verify` and in CI, so it
+fires before you open a PR. It reports violations against the catalog
+entry's own line, because that is where the declaration promising the
+page lives.
+
+Every code needs a page, with no opt-out for "internal" codes: the
+page is the first landing spot for anyone who hits the code, and the
+page itself is where the internal/user-facing distinction gets
+explained.
+
+The rule lives at `crates/xtask/src/lint/error_docs.rs`. It
+deliberately does *not* check orphan pages, misplaced pages, or
+front-matter drift — those belong to the richer audit in bd-8otua.
+In particular, **a page's `title` is free to differ from the catalog's
+`title`** (sentence case usually reads better as a page heading), the
+same way `description` is free to differ from `message_template`.
 
 ## Promoting through the status enum
 
@@ -190,14 +211,17 @@ page itself should render without warnings (other than `Q-13-4`
 for cross-references whose target pages do not yet exist; see
 the cross-reference convention below).
 
-Once the audit tool ships, also run:
+Also run the lint, which confirms the page sits at the path the
+catalog's `docs_url` points to:
 
 ```
-cargo xtask error-docs audit
+cargo xtask lint
 ```
 
-The audit verifies that your page's front-matter matches the
-catalog and that the page lives at the path the catalog expects.
+See [Enforcement](#enforcement) for what it checks. The broader audit
+(front-matter drift, orphan and misplaced pages, coverage rollups by
+status) is still bd-8otua's `cargo xtask error-docs`, which has not
+shipped.
 
 ## Cross-reference convention
 
@@ -209,15 +233,25 @@ pollute the audit signal. When the target page lands, promote the
 cross-reference from a code span to a real link in the same commit
 that adds the target.
 
+Since the coverage lint landed, **every catalog code has a page**, so
+a cross-reference to any existing code can be a real link. Same-subsystem
+targets are relative (`` [`Q-2-7`](Q-2-7.qmd) ``); cross-subsystem
+targets go through the parent (`` [`Q-16-1`](../extension/Q-16-1.qmd) ``).
+The code-span form is now only for a code being added in a later commit
+of the same series.
+
 The audit tool (`cargo xtask error-docs`, bd-8otua) will eventually
 flag eligible-but-not-linked cross-references so this promotion
 doesn't get forgotten.
 
 ## Related
 
-- [`crates/quarto-error-reporting/README.md`](../../crates/quarto-error-reporting/README.md)
-  — the error-reporting crate itself, with the API used to emit
-  these errors from Quarto code.
-- [`crates/quarto-error-reporting/CONTRIBUTING-ERRORS.md`](../../crates/quarto-error-reporting/CONTRIBUTING-ERRORS.md)
-  — guidance for *introducing* a new error code (catalog side).
-  Once you add a code there, also add a stub page here.
+- [`crates/quarto-error-catalog/`](../../crates/quarto-error-catalog/)
+  — the crate holding `error_catalog.json` and the `CatalogProvider`
+  that installs it. Adding a code means editing the catalog here; the
+  lint then requires a page in this directory.
+- [`posit-dev/quarto-error-reporting`](https://github.com/posit-dev/quarto-error-reporting)
+  — the error-reporting crate itself, with the API used to emit these
+  errors from Quarto code. It was externalized out of `crates/` and is
+  now consumed as a published dependency; the `Q-*` data stayed behind
+  in `quarto-error-catalog`.

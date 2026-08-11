@@ -3,7 +3,9 @@
 **Date:** 2026-08-11
 **Braid:** bd-u2qj4y29 (task, p2, filed 2026-08-10 by Carlos)
 **Checkout:** main checkout of q2, branch `main` @ `d05e021e`
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled 2026-08-11 with Carlos; implementing. See
+**Design decisions** below — they supersede the *Open design questions*
+section, which is kept as the record of what was asked.
 
 ## Triage verdict
 
@@ -160,29 +162,68 @@ to `lint/mod.rs`, or anchoring every violation at the catalog entry's line in
 `error_catalog.json` (which is at least honest — that *is* where the offending
 declaration lives).
 
-## Proposed phases (draft)
+## Design decisions (settled 2026-08-11 with Carlos)
 
-Skeleton only — contents wait on the design discussion, and Phase 0's shape
-depends on question 1.
+1. **A narrow repo-level `cargo xtask lint` rule, not bd-8otua's full
+   `error-docs` tool.** The stated goal is specific: *"avoid the situation
+   where an agent implements a new diagnostic code but neglects to add the
+   related documentation stub"*, and it must *"fire in our typical workflow,
+   ideally during the local checks before opening a PR."* `cargo xtask lint`
+   is exactly that surface — it runs standalone, as step 1 of `cargo xtask
+   verify` (the documented pre-push gate), and in CI. Decisions 3 and 4 below
+   narrow the check to two problem classes, which is well short of bd-8otua's
+   five-class audit plus `health`/`new`. So the rule ships as
+   `crates/xtask/src/lint/error_docs.rs`; **bd-8otua stays open** and should
+   later absorb this module rather than duplicate it.
 
-- **Phase 0 — Test plan (TDD).** Unit tests over synthetic
-  catalog/docs-tree fixtures: a code with a page, a code without, an orphan
-  page, a misplaced page, a `docs_url` that skips the subsystem. The check
-  must take the catalog path and docs root as parameters so tests don't
-  depend on the real tree.
-- **Phase 1 — The check itself.** Parse the catalog, enumerate
-  `docs/errors/*/Q-*.qmd`, report the problem classes settled in question 3.
-- **Phase 2 — Backfill the 28 missing pages.** Almost certainly the bulk of
-  the work, and a prerequisite for turning the gate on. Needs a decision on
-  `draft` vs `stub` for generated pages and whether generation is automated
-  (bd-8otua's `new <Q-X-Y>`) or hand-written.
-- **Phase 3 — Fix `Q-3-42` / `Q-3-43` `docs_url`.** One-line catalog edit;
-  can land independently and immediately.
-- **Phase 4 — Turn the gate on.** Wire into `cargo xtask lint` (and thus
-  `verify` + CI). Cannot precede Phase 2 without breaking CI on `main`.
-- **Phase 5 — Docs.** Update `docs/errors/README.md` (three places currently
-  say "once the tool ships") and
-  `crates/quarto-error-reporting/CONTRIBUTING-ERRORS.md`.
+2. **Backfill all 28 pages in this session**, before the gate goes on.
+   No allowlist, no warn-first mode. Pages carry real prose at
+   `status: stub` — the bar is "the docs page has the right content (even if
+   all LLM-generated stubs)", not a `<!-- TODO -->` skeleton.
+
+3. **The check verifies exactly two things:** the page exists at
+   `docs/errors/<subsystem>/<code>.qmd`, and `docs_url` equals
+   `https://quarto.org/docs/errors/<subsystem>/<code>`. Orphan, misplaced,
+   and front-matter `Mismatch` are explicitly out of scope for now (the probe
+   shows all three are currently clean anyway); they remain bd-8otua's.
+
+4. **Page `title` is free to differ from catalog `title`**, the way page
+   `description` already differs from `message_template`. `Q-2-43`/`Q-2-44`
+   stay as they are. A future audit may *recommend* alignment; it is not an
+   error.
+
+5. **Every code needs a page — no opt-out.** We do not distinguish internal
+   from user-facing codes: the page is the first landing spot for anyone who
+   encounters the code, and the page itself carries the context that makes
+   the distinction. So the rule is unconditional over the whole catalog.
+
+## Phases
+
+Ordered so every commit leaves `cargo xtask verify` green — the gate goes on
+only after the tree it guards is clean.
+
+- [ ] **Phase 0 — Test plan (TDD).** Unit tests over synthetic
+      catalog/docs-tree fixtures: a code with a page, a code without, a
+      `docs_url` that skips the subsystem, a `docs_url` that is entirely
+      wrong. The check takes catalog path + docs root as parameters so tests
+      never touch the real tree.
+- [ ] **Phase 1 — The check.** `crates/xtask/src/lint/error_docs.rs`, plus a
+      repo-level-check seam in `lint/mod.rs` (existing rules are all
+      per-Rust-file). Violations anchor at the offending entry's line in
+      `error_catalog.json` — that is where the declaration that promises the
+      page actually lives. Not yet wired into `run_check`.
+- [ ] **Phase 2 — Fix `Q-3-42` / `Q-3-43` `docs_url`.** Two-line catalog
+      edit; independent of everything else.
+- [ ] **Phase 3 — Backfill the 28 missing pages.** `extension` (9, new
+      directory), `project` (11), `lua` (4), `writer` (2), `theme` (1),
+      `markdown` (1). Front-matter from the catalog; body follows the
+      README's template; `status: stub`.
+- [ ] **Phase 4 — Turn the gate on.** Call the check from
+      `lint::run_check`, so it reaches `cargo xtask lint`, `cargo xtask
+      verify` step 1, and CI in one move.
+- [ ] **Phase 5 — Docs.** `docs/errors/README.md` and
+      `crates/quarto-error-reporting/CONTRIBUTING-ERRORS.md`: adding a code
+      now *requires* adding a page, and the lint says so.
 
 ## Open design questions for the user
 
