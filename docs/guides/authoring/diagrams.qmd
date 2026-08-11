@@ -192,18 +192,35 @@ into the drawing.
 
 Quarto draws diagrams in the browser: the rendered page keeps your
 diagram source and includes one script that loads the Mermaid library
-from the [jsdelivr CDN](https://www.jsdelivr.com/) and converts every
-diagram on the page to an SVG drawing. Two consequences are worth
-knowing:
+and converts every diagram on the page to an SVG drawing.
 
-- **Viewing a page with diagrams requires network access.** Offline,
-  the diagram source appears as preformatted text instead of a drawing.
-- **Documents without diagrams are unaffected.** The library loads only
-  on pages that contain at least one `mermaid` block.
+The library is **written into your rendered output** and referenced by a
+relative path — under `site_libs/mermaid/` in a website project, or
+beside the page in a single-document render. Three consequences are
+worth knowing:
+
+- **Rendered output works without network access.** A site can be
+  archived, or published on a closed or air-gapped network, and its
+  diagrams still draw. Nothing is fetched from a third party when a
+  reader opens the page.
+- **Documents without diagrams are unaffected.** The library is written
+  out and linked only for pages containing at least one `mermaid` block.
+- **Every page shares one copy.** In a website project all diagram pages
+  link the same file, which adds roughly 2.6 MB to the site once.
 
 If Mermaid cannot parse a diagram, the browser console reports the
 error; `q2 preview` goes further and shows the error message, together
 with the diagram source, in place of the drawing.
+
+::: {.callout-note}
+## Preview still needs the network
+
+The bundling described above applies to `q2 render`. During
+`q2 preview`, diagrams are drawn by the preview's own copy of Mermaid,
+which is still fetched from a CDN — so previewing a diagram offline may
+show the diagram source instead of a drawing, even though rendering the
+same document produces a self-contained page.
+:::
 
 ## Differences from Quarto 1
 

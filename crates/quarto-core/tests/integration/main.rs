@@ -39,6 +39,7 @@ pub mod link_rewriting_pipeline;
 pub mod listing_glob_resolution;
 pub mod listing_pipeline;
 pub mod math_mode_pipeline;
+pub mod mermaid_bundling_pipeline;
 pub mod metadata_path_resolution;
 pub mod navbar_footer_pipeline;
 pub mod navigation_e2e;
