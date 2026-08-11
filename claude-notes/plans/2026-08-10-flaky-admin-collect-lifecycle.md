@@ -189,6 +189,26 @@ Unchanged from bd-eb2wnxkp's plan: `list_doc_ids_filesystem`
     id; with a `zz/not-a-doc-id` pair added, the binary refused
     ("does not correspond to any valid document id … refusing to guess") and
     exited 1. Output inspected in both runs.
+- [x] Phase 1b — **Belt-and-braces collect guard** (user answered eb2wnxkp
+  open question 4 "yes, defense in depth" on 2026-08-11):
+  `locate_all_doc_dirs` + `locate_verified` in
+  `crates/quarto-hub/src/admin/collect.rs` map every recoverable id to the
+  on-disk director(ies) whose *actual names* round-trip to it via
+  `recover_doc_id`. A candidate that does not round-trip to exactly one real
+  directory is skipped (with reason) regardless of its liveness verdict, and
+  the quarantine rename source comes from this map — never from `doc_dir`
+  construction + filesystem case-folding. `doc_dir` remains only for
+  constructing restore destinations, documented as such. Tests: 3 unit tests
+  (folded dir located by actual name; absent id refused; duplicate-dir
+  ambiguity refused on case-sensitive filesystems, resolved where the
+  filesystem folds) + 1 integration test (folded orphan still correctly
+  quarantined under its true id). Note: the guard's refusal path is
+  unreachable through the CLI on a healthy store *by design* (every other
+  layer already defends); it is exercised at unit level and through
+  `collect()` itself, the same function the CLI dispatches to.
+- [x] Phase 1c — User answered eb2wnxkp open question 2 (2026-08-11): fix
+  stays in quarto-hub (done); upstream proposal filed as **bd-3uw7uufa**
+  (related: bd-eb2wnxkp).
 - [ ] Phase 2 — Future dedicated verification (bd-u0tldu4z stays open for
   this, per user): 150+-iteration stress loop over the
   `admin_collect_lifecycle` + `admin_scan_real_store` families

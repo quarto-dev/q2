@@ -217,3 +217,84 @@ async fn collect_does_not_quarantine_live_doc_with_folded_dir() {
         ctx.repo().stop().await;
     }
 }
+
+/// The complement: a folded ORPHAN must still be correctly
+/// quarantined. The rename source now comes from the round-trip map
+/// (actual on-disk names), so folding must neither block collection
+/// nor mis-target it. Case-insensitive filesystems only.
+#[tokio::test(flavor = "multi_thread")]
+async fn collect_quarantines_folded_orphan_by_actual_dir_name() {
+    let temp = TempDir::new().unwrap();
+    if !fs_is_case_insensitive(temp.path()) {
+        eprintln!("SKIP: filesystem is case-sensitive; fold cannot occur here");
+        return;
+    }
+    let project_root = temp.path().join("project");
+    std::fs::create_dir(&project_root).unwrap();
+    std::fs::write(project_root.join("a.qmd"), "# Hello\n").unwrap();
+
+    let storage = StorageManager::new(&project_root).unwrap();
+    let hub_dir = storage.hub_dir().to_path_buf();
+    let ctx = HubContext::new(storage, HubConfig::default())
+        .await
+        .unwrap();
+    let orphan = ctx.repo().create(old_capture_doc()).await.unwrap();
+    let orphan_id = orphan.document_id().to_string();
+    drop(orphan);
+    ctx.repo().stop().await;
+    drop(ctx); // releases hub.lock, which collect() must acquire
+
+    // Fold the orphan's level-1 splay dir.
+    let automerge_dir = hub_dir.join("automerge");
+    let prefix: String = orphan_id.chars().take(2).collect();
+    let folded: String = {
+        let mut done = false;
+        prefix
+            .chars()
+            .map(|c| {
+                if !done && c.is_ascii_alphabetic() {
+                    done = true;
+                    if c.is_ascii_uppercase() {
+                        c.to_ascii_lowercase()
+                    } else {
+                        c.to_ascii_uppercase()
+                    }
+                } else {
+                    c
+                }
+            })
+            .collect()
+    };
+    if folded == prefix {
+        eprintln!("SKIP: orphan doc id {orphan_id} has a caseless splay prefix");
+        return;
+    }
+    std::fs::rename(automerge_dir.join(&prefix), automerge_dir.join(&folded)).unwrap();
+
+    let fs_storage = TokioFilesystemStorage::new(&automerge_dir);
+    let ids = list_doc_ids_filesystem(&automerge_dir).unwrap();
+    assert!(ids.contains(&orphan_id), "true id recovered (got {ids:?})");
+    let manifest = scan(
+        &fs_storage,
+        &ids,
+        &hub_dir.canonicalize().unwrap().to_string_lossy(),
+        &ScanOptions::default(),
+    )
+    .await;
+    assert!(
+        manifest.candidates.iter().any(|c| c.doc_id == orphan_id),
+        "folded orphan is a candidate under its true id"
+    );
+
+    let outcome = collect(&hub_dir, &manifest, true).await.unwrap();
+    assert!(outcome.verified.iter().any(|c| c.doc_id == orphan_id));
+    let batch_dir = outcome.batch_dir.expect("batch created");
+    // Quarantined under the TRUE id, and gone from the store.
+    assert!(batch_dir.join("docs").join(&orphan_id).is_dir());
+    assert!(
+        !list_doc_ids_filesystem(&automerge_dir)
+            .unwrap()
+            .contains(&orphan_id),
+        "orphan chunks moved out of the store"
+    );
+}

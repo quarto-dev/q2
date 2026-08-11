@@ -27,7 +27,9 @@ use sha2::{Digest as _, Sha256};
 
 use super::classify::DocKind;
 use super::manifest::{CandidateDoc, MANIFEST_VERSION, ScanManifest};
-use super::scan::{ScanOptions, list_doc_ids_filesystem, live_doc_ids, load_all_docs};
+use super::scan::{
+    ScanOptions, list_doc_ids_filesystem, live_doc_ids, load_all_docs, recover_doc_id,
+};
 use crate::resource::read_capture_meta;
 
 /// Version of the `batch.json` schema written into quarantine batches.
@@ -116,10 +118,74 @@ impl AdminLock {
 
 /// The splayed on-disk directory of a doc's chunks:
 /// `<automerge>/<first-2-chars>/<rest>` (samod's `key_to_path`).
+///
+/// Only used to *construct* destinations (restore). Anything that
+/// removes or moves data must locate its source through
+/// [`locate_all_doc_dirs`] instead: constructing a path from an id
+/// and letting a case-insensitive filesystem resolve it is the lossy
+/// channel that mis-identified documents in the first place
+/// (bd-eb2wnxkp).
 fn doc_dir(automerge_dir: &Path, doc_id: &str) -> PathBuf {
     let first_two: String = doc_id.chars().take(2).collect();
     let rest: String = doc_id.chars().skip(2).collect();
     automerge_dir.join(first_two).join(rest)
+}
+
+/// Belt-and-braces guard (bd-eb2wnxkp): map every recoverable doc id
+/// in the store to the on-disk director(ies) whose *actual names*
+/// round-trip to it via [`recover_doc_id`]. The quarantine path only
+/// trusts this map — an id that does not round-trip to exactly one
+/// real directory is refused regardless of its liveness verdict.
+/// Pairs that fail recovery are skipped here (enumeration has already
+/// hard-failed the collection on those before this runs).
+fn locate_all_doc_dirs(
+    automerge_dir: &Path,
+) -> Result<std::collections::HashMap<String, Vec<PathBuf>>, String> {
+    let mut map: std::collections::HashMap<String, Vec<PathBuf>> = std::collections::HashMap::new();
+    let level1 = std::fs::read_dir(automerge_dir)
+        .map_err(|e| format!("cannot read {}: {e}", automerge_dir.display()))?;
+    for l1 in level1.flatten() {
+        if !l1.path().is_dir() {
+            continue;
+        }
+        let Some(prefix) = l1.file_name().to_str().map(str::to_string) else {
+            continue;
+        };
+        let Ok(level2) = std::fs::read_dir(l1.path()) else {
+            continue;
+        };
+        for l2 in level2.flatten() {
+            if !l2.path().is_dir() {
+                continue;
+            }
+            let name = l2.file_name();
+            let Some(rest) = name.to_str() else {
+                continue;
+            };
+            if let Ok(id) = recover_doc_id(&prefix, rest) {
+                map.entry(id).or_default().push(l2.path());
+            }
+        }
+    }
+    Ok(map)
+}
+
+/// Resolve `doc_id` through the round-trip map: exactly one on-disk
+/// directory, or a refusal reason.
+fn locate_verified(
+    doc_dirs: &std::collections::HashMap<String, Vec<PathBuf>>,
+    doc_id: &str,
+) -> Result<PathBuf, String> {
+    match doc_dirs.get(doc_id).map(Vec::as_slice) {
+        Some([one]) => Ok(one.clone()),
+        None | Some([]) => Err(
+            "id does not round-trip to any storage directory; refusing to quarantine".to_string(),
+        ),
+        Some(many) => Err(format!(
+            "id round-trips to {} distinct storage directories; refusing to quarantine",
+            many.len()
+        )),
+    }
 }
 
 /// Re-verify + quarantine. Dry-run unless `execute`.
@@ -171,10 +237,16 @@ pub async fn collect(
     };
     let now = chrono::Utc::now();
 
+    // Defense in depth: every candidate must also round-trip to
+    // exactly one real directory (checked again at rename time).
+    let doc_dirs =
+        locate_all_doc_dirs(&automerge_dir).map_err(|e| format!("refusing to collect: {e}"))?;
+
     let mut verified = Vec::new();
     let mut skipped = Vec::new();
     for candidate in &manifest.candidates {
-        let reason = verify_candidate(candidate, &docs, &live, &opts, now);
+        let reason = verify_candidate(candidate, &docs, &live, &opts, now)
+            .and_then(|()| locate_verified(&doc_dirs, &candidate.doc_id).map(|_| ()));
         match reason {
             Ok(()) => verified.push(candidate.clone()),
             Err(why) => skipped.push((candidate.doc_id.clone(), why)),
@@ -202,7 +274,12 @@ pub async fn collect(
 
     let mut batch_docs = Vec::new();
     for candidate in &verified {
-        let src = doc_dir(&automerge_dir, &candidate.doc_id);
+        // The rename source comes from the round-trip map — the real
+        // on-disk directory names — never from doc_dir construction,
+        // which a case-insensitive filesystem would resolve even for a
+        // mis-identified id (bd-eb2wnxkp).
+        let src = locate_verified(&doc_dirs, &candidate.doc_id)
+            .map_err(|why| format!("{}: {why}", candidate.doc_id))?;
         let chunks =
             hash_dir_files(&src).map_err(|e| format!("hashing {} failed: {e}", src.display()))?;
         let dst = batch_docs_dir.join(&candidate.doc_id);
@@ -467,4 +544,68 @@ fn hash_dir_files(dir: &Path) -> std::io::Result<Vec<BatchChunk>> {
     walk(dir, dir, &mut out)?;
     out.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Checksum-verified real id (see scan.rs tests): the case-flip
+    /// `2CPAD…` fails to parse, so recovery is unambiguous.
+    const TRUE_ID: &str = "2cPADPZ85aBLaaLaLrS2BNcVza1n";
+
+    fn add_doc_dir(automerge_dir: &Path, l1: &str, l2: &str) {
+        let dir = automerge_dir.join(l1).join(l2);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("snapshot"), b"x").unwrap();
+    }
+
+    #[test]
+    fn locate_resolves_folded_dir_by_actual_name() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let automerge_dir = temp.path().join("automerge");
+        // On-disk casing is folded ("2C"); the id's true prefix is "2c".
+        add_doc_dir(&automerge_dir, "2C", &TRUE_ID[2..]);
+        let map = locate_all_doc_dirs(&automerge_dir).unwrap();
+        let path = locate_verified(&map, TRUE_ID).unwrap();
+        // The located path carries the REAL directory name, not a
+        // constructed one — this is what makes the rename sound even
+        // on case-sensitive filesystems holding a folded store.
+        assert!(path.ends_with(Path::new("2C").join(&TRUE_ID[2..])));
+    }
+
+    #[test]
+    fn locate_refuses_id_absent_from_storage() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let automerge_dir = temp.path().join("automerge");
+        std::fs::create_dir_all(&automerge_dir).unwrap();
+        let map = locate_all_doc_dirs(&automerge_dir).unwrap();
+        let err = locate_verified(&map, TRUE_ID).unwrap_err();
+        assert!(err.contains("does not round-trip"), "got: {err}");
+    }
+
+    #[test]
+    fn locate_refuses_ambiguous_duplicate_dirs() {
+        // Two directories that both round-trip to the same id can only
+        // coexist on a case-SENSITIVE filesystem (a folded store copied
+        // from macOS, say). Where the filesystem folds them into one,
+        // the single entry must resolve fine — branch on what the
+        // filesystem actually did.
+        let temp = tempfile::TempDir::new().unwrap();
+        let automerge_dir = temp.path().join("automerge");
+        add_doc_dir(&automerge_dir, "2c", &TRUE_ID[2..]);
+        add_doc_dir(&automerge_dir, "2C", &TRUE_ID[2..]);
+        let level1_entries = std::fs::read_dir(&automerge_dir).unwrap().count();
+        let map = locate_all_doc_dirs(&automerge_dir).unwrap();
+        match level1_entries {
+            2 => {
+                let err = locate_verified(&map, TRUE_ID).unwrap_err();
+                assert!(err.contains("distinct storage directories"), "got: {err}");
+            }
+            1 => {
+                locate_verified(&map, TRUE_ID).unwrap();
+            }
+            n => panic!("unexpected level-1 entry count {n}"),
+        }
+    }
 }
