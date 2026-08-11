@@ -202,26 +202,26 @@ declaration lives).
 Ordered so every commit leaves `cargo xtask verify` green — the gate goes on
 only after the tree it guards is clean.
 
-- [ ] **Phase 0 — Test plan (TDD).** Unit tests over synthetic
+- [x] **Phase 0 — Test plan (TDD).** Unit tests over synthetic
       catalog/docs-tree fixtures: a code with a page, a code without, a
       `docs_url` that skips the subsystem, a `docs_url` that is entirely
       wrong. The check takes catalog path + docs root as parameters so tests
       never touch the real tree.
-- [ ] **Phase 1 — The check.** `crates/xtask/src/lint/error_docs.rs`, plus a
+- [x] **Phase 1 — The check.** `crates/xtask/src/lint/error_docs.rs`, plus a
       repo-level-check seam in `lint/mod.rs` (existing rules are all
       per-Rust-file). Violations anchor at the offending entry's line in
       `error_catalog.json` — that is where the declaration that promises the
       page actually lives. Not yet wired into `run_check`.
-- [ ] **Phase 2 — Fix `Q-3-42` / `Q-3-43` `docs_url`.** Two-line catalog
+- [x] **Phase 2 — Fix `Q-3-42` / `Q-3-43` `docs_url`.** Two-line catalog
       edit; independent of everything else.
-- [ ] **Phase 3 — Backfill the 28 missing pages.** `extension` (9, new
+- [x] **Phase 3 — Backfill the 28 missing pages.** `extension` (9, new
       directory), `project` (11), `lua` (4), `writer` (2), `theme` (1),
       `markdown` (1). Front-matter from the catalog; body follows the
       README's template; `status: stub`.
-- [ ] **Phase 4 — Turn the gate on.** Call the check from
+- [x] **Phase 4 — Turn the gate on.** Call the check from
       `lint::run_check`, so it reaches `cargo xtask lint`, `cargo xtask
       verify` step 1, and CI in one move.
-- [ ] **Phase 5 — Docs.** `docs/errors/README.md` and
+- [x] **Phase 5 — Docs.** `docs/errors/README.md` and
       `crates/quarto-error-reporting/CONTRIBUTING-ERRORS.md`: adding a code
       now *requires* adding a page, and the lint says so.
 
@@ -285,3 +285,85 @@ only after the tree it guards is clean.
   Worth linking to bd-mermaid-cell-options-9wo3crl0 (`discovered-from`) and
   to bd-8otua (`related` or `duplicates`) so the overlap is visible from the
   tracker rather than only from this plan.
+
+## Verification record (2026-08-11)
+
+Two commits: `ebfa7f22` (content — 28 pages + the two `docs_url` fixes)
+and the lint-rule commit that follows it.
+
+### The gate fires (end-to-end, through the real binary)
+
+Injected a fake `Q-2-99` into the catalog with no page, then ran the
+binary a developer runs, unpiped so the exit code is the real one:
+
+```
+$ cargo xtask lint
+crates/quarto-error-catalog/error_catalog.json:464:3: [error-docs-page-missing]
+  Q-2-99 has no documentation page; diagnostics carrying this code link to
+  https://quarto.org/docs/errors/markdown/Q-2-99, which 404s until
+  docs/errors/markdown/Q-2-99.qmd exists
+  suggestion: create docs/errors/markdown/Q-2-99.qmd following
+  docs/errors/README.md (front matter from the catalog entry, `status: stub`)
+
+LINT EXIT CODE = 1
+```
+
+Line 464 is `Q-2-99`'s own line in the catalog. Deleting an existing page
+(`docs/errors/extension/Q-16-5.qmd`) produces the same shape. Catalog
+restored after both probes; `git diff` on the catalog shows only the
+intended two-line `docs_url` change.
+
+Before the backfill, `the_real_catalog_and_docs_tree_agree` failed with
+all 28 missing pages plus the 2 URL drifts — the TDD red.
+
+### The docs site renders clean
+
+`cargo run --bin q2 -- render docs/`, compared against a stashed
+baseline of the same command on unmodified `main`:
+
+|                  | baseline (main) | after |
+| ---------------- | --------------: | ----: |
+| exit code        |               0 |     0 |
+| files rendered   |         197/197 | 225/225 |
+| warnings         |              25 |    25 |
+| errors           |               0 |     0 |
+
+Same 25 warnings in both: 11 `Q-13-4` body links in `brand.qmd` and 14
+`Q-5-6` missing images in `figures.qmd`, all pre-existing. The 28 new
+pages contribute **zero** warnings. All 193 codes resolve in the listing
+at `docs/errors/index.html`; `docs/_site/errors/extension/` holds all
+nine new pages. Spot-checked the rendered HTML of `Q-16-5` and `Q-3-42`.
+
+### Two authoring traps, both real bugs in the first draft
+
+1. **Bare shortcodes in prose *and* in fenced code blocks are executed.**
+   The first render fired 15 genuine `Q-16-3`/`Q-16-5` diagnostics from
+   the pages documenting those very codes — `{{< meta version >}}` inside
+   a ```` ```markdown ```` fence resolved rather than displaying. The
+   convention the rest of `docs/` uses is the triple-brace form
+   `{{{< … >}}}`, which renders as `{{< … >}}` in both inline code spans
+   and fenced blocks. Sibling pages `Q-2-27`/`Q-2-28` instead use a fence
+   attribute, ```` ```{.markdown shortcodes="false"} ```` — equivalent
+   output, and arguably better source readability for fenced examples.
+   Worth standardizing on one; not done here.
+2. **A trailing possessive apostrophe opens a single quote.** "the
+   scripts'" failed `Q-5-12` with `Q-2-7` (unclosed single quote) and took
+   the whole page out of the render, which in turn produced two `Q-13-4`
+   warnings on the pages linking to it. Rephrased.
+
+Both are worth knowing before writing the *next* error page; neither is a
+defect in the lint rule.
+
+### Discovered work filed
+
+- **bd-8meeijgq** (`discovered-from` bd-u2qj4y29) — `figures.qmd`
+  references 14 images that do not exist in the repo. Pre-existing, found
+  while establishing the render baseline; not a regression from this work.
+
+### Still open after this strand
+
+**bd-8otua** stays open and unblocked. It owns the richer
+`cargo xtask error-docs` audit — orphan pages, misplaced pages,
+front-matter `Mismatch`, `health` rollups, and the `new <Q-X-Y>`
+generator that `docs/errors/README.md` still describes as unshipped. When
+it lands it should **absorb** `lint/error_docs.rs`, not duplicate it.
