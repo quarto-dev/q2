@@ -1,0 +1,7 @@
+---
+title: Top-level function form (control)
+filters:
+  - function-form.lua
+---
+
+Marker: MARKER

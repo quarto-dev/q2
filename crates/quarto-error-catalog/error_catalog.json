@@ -923,6 +923,20 @@
     "docs_url": "https://quarto.org/docs/errors/lua/Q-11-5",
     "since_version": "99.9.9"
   },
+  "Q-11-6": {
+    "subsystem": "lua",
+    "title": "Invalid Lua Filter Script Return Value",
+    "message_template": "A Lua filter script returned a value that is not a filter. A filter script may return a table of handler functions, a list of such tables (applied as successive passes), or nothing at all (in which case the handlers are taken from the script's global functions).",
+    "docs_url": "https://quarto.org/docs/errors/lua/Q-11-6",
+    "since_version": "99.9.9"
+  },
+  "Q-11-7": {
+    "subsystem": "lua",
+    "title": "Unrecognized Lua Filter Handler Name",
+    "message_template": "A Lua filter defines a handler whose name is not an element type Quarto knows about, so it will never run. This is usually a typo in the handler name.",
+    "docs_url": "https://quarto.org/docs/errors/lua/Q-11-7",
+    "since_version": "99.9.9"
+  },
   "Q-12-1": {
     "subsystem": "listing",
     "title": "Custom Listing Template Not Yet Supported",
