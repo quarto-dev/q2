@@ -98,7 +98,7 @@ fn tree_fingerprint(dir: &Path) -> Vec<(String, u64)> {
 async fn scan_store(hub_dir: &Path) -> quarto_hub::admin::manifest::ScanManifest {
     let automerge_dir = hub_dir.join("automerge");
     let storage = TokioFilesystemStorage::new(&automerge_dir);
-    let ids = list_doc_ids_filesystem(&automerge_dir);
+    let ids = list_doc_ids_filesystem(&automerge_dir).unwrap();
     // The manifest's dataDir must be the HUB dir (collect's contract).
     scan(
         &storage,
@@ -136,7 +136,11 @@ async fn collect_lifecycle_quarantine_restore_purge() {
     // Orphan's chunks moved (not copied, not deleted).
     let orphan_quarantined = batch_dir.join("docs").join(&orphan_id);
     assert!(orphan_quarantined.is_dir());
-    assert!(!list_doc_ids_filesystem(&hub_dir.join("automerge")).contains(&orphan_id));
+    assert!(
+        !list_doc_ids_filesystem(&hub_dir.join("automerge"))
+            .unwrap()
+            .contains(&orphan_id)
+    );
     // batch.json embeds the manifest + chunk hashes.
     let record: quarto_hub::admin::collect::BatchRecord =
         serde_json::from_slice(&std::fs::read(batch_dir.join("batch.json")).unwrap()).unwrap();
@@ -165,7 +169,9 @@ async fn collect_lifecycle_quarantine_restore_purge() {
     assert_eq!(results.len(), 1);
     assert!(results[0].1.is_ok(), "restore failed: {:?}", results[0].1);
     assert!(
-        list_doc_ids_filesystem(&hub_dir.join("automerge")).contains(&orphan_id),
+        list_doc_ids_filesystem(&hub_dir.join("automerge"))
+            .unwrap()
+            .contains(&orphan_id),
         "orphan chunks back in place"
     );
     // Restored doc loads as a valid capture again.
@@ -202,6 +208,11 @@ async fn collect_lifecycle_quarantine_restore_purge() {
 async fn collect_reverification_skips_rereferenced_candidate() {
     let (_temp, hub_dir, orphan_id, _live_id) = build_store().await;
     let manifest = scan_store(&hub_dir).await;
+    // Assert the count before indexing: when this test flaked under
+    // bd-eb2wnxkp, a mis-identified LIVE doc joined the candidate list
+    // and candidates[0] was a completely different id — confusing the
+    // failure signature.
+    assert_eq!(manifest.candidates.len(), 1);
     assert_eq!(manifest.candidates[0].doc_id, orphan_id);
 
     // Between scan and collect, the orphan becomes referenced again
@@ -235,7 +246,11 @@ async fn collect_reverification_skips_rereferenced_candidate() {
         outcome.skipped[0].1
     );
     // Nothing moved.
-    assert!(list_doc_ids_filesystem(&hub_dir.join("automerge")).contains(&orphan_id));
+    assert!(
+        list_doc_ids_filesystem(&hub_dir.join("automerge"))
+            .unwrap()
+            .contains(&orphan_id)
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

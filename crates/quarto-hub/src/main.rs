@@ -223,7 +223,7 @@ async fn run_admin(cmd: AdminCommand) -> anyhow::Result<()> {
                 );
             }
             let storage = samod::storage::TokioFilesystemStorage::new(&automerge_dir);
-            let doc_ids = scan_mod::list_doc_ids_filesystem(&automerge_dir);
+            let doc_ids = scan_mod::list_doc_ids_filesystem(&automerge_dir)?;
             let manifest = scan_mod::scan(
                 &storage,
                 &doc_ids,
