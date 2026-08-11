@@ -33,9 +33,11 @@ Shortcodes resolve in:
 - **Document metadata** — any front-matter value, e.g. a `subtitle`
   that interpolates `{{{< env PRODUCT_VERSION >}}}`.
 - **Website configuration strings** in `_quarto.yml`:
-  `website.title`, the navbar and sidebar titles, and `page-footer`
-  text regions. These values are treated as markdown, so inline
-  formatting and raw HTML work there too.
+  `website.title`, the navbar and sidebar titles, `page-footer` text
+  regions, and the `text:` of individual navigation items — navbar
+  entries (including nested `menu:` items), sidebar `contents:` entries
+  at every level, and page-footer items. These values are treated as
+  markdown, so inline formatting and raw HTML work there too.
 - **Include files** (`include-in-header`, `include-before-body`,
   `include-after-body`, and `{text: …}` entries). Include files get
   *textual* substitution: the shortcode is replaced in place, but the

@@ -23,7 +23,13 @@
 //!
 //! **Registry.** [`MARKDOWN_CONFIG_PATHS`] lists the blessed key paths.
 //! A segment of `*` matches every element of an array at that
-//! position. Only `Scalar(String)` values are re-parsed: values that
+//! position; a segment of `**` matches zero or more levels of nesting
+//! through arrays *and* maps, which is what lets one entry cover a
+//! sidebar's recursive `contents:` or a navbar's nested `menu:`. `**`
+//! descent is bounded by [`MAX_CONFIG_DEPTH`] and reports
+//! [`CODE_CONFIG_NESTING_TOO_DEEP`] past it, so a config that has
+//! nested inside itself cannot overflow the stack.
+//! Only `Scalar(String)` values are re-parsed: values that
 //! are already `PandocInlines`/`PandocBlocks` (authored in document
 //! frontmatter, or `!md`-tagged) pass through untouched, as do
 //! non-string scalars (`title: false`), `!path` values, maps, and
@@ -57,6 +63,19 @@ use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 
+/// Maximum config nesting the registry walk will descend through
+/// before giving up and reporting [`CODE_CONFIG_NESTING_TOO_DEEP`].
+///
+/// Deliberately large and obviously artificial: real sidebars nest a
+/// handful of levels, so anything approaching this is a generated
+/// config that has recursed into itself. The bound exists to keep the
+/// `**` descent (below) from turning a pathological config into a
+/// stack overflow.
+const MAX_CONFIG_DEPTH: usize = 32;
+
+/// `Q-1-27` — config nesting exceeds [`MAX_CONFIG_DEPTH`].
+const CODE_CONFIG_NESTING_TOO_DEEP: &str = "Q-1-27";
+
 /// Blessed config key paths whose scalar-string values get markdown
 /// semantics. `*` matches every element of an array. Keys that can be
 /// authored both at top level and under `website:` appear in both
@@ -79,6 +98,27 @@ const MARKDOWN_CONFIG_PATHS: &[&[&str]] = &[
     &["page-footer", "left"],
     &["page-footer", "center"],
     &["page-footer", "right"],
+    // Navigation item `text:` (bd-page-footer-items-f4th80mj). `**`
+    // covers the navbar's nested `menu:` and the sidebar's recursive
+    // `contents:` in one entry each.
+    &["website", "page-footer", "**", "text"],
+    &["page-footer", "**", "text"],
+    &["website", "navbar", "left", "**", "text"],
+    &["website", "navbar", "right", "**", "text"],
+    &["navbar", "left", "**", "text"],
+    &["navbar", "right", "**", "text"],
+    &["website", "sidebar", "contents", "**", "text"],
+    &["sidebar", "contents", "**", "text"],
+    // Bare-string items in a page-footer region are display text, not
+    // paths (defect 2), so they get markdown semantics too. Spelled out
+    // per region rather than as `page-footer.**`, which would sweep in
+    // `border`, `background`, hrefs and icons.
+    &["website", "page-footer", "left", "*"],
+    &["website", "page-footer", "center", "*"],
+    &["website", "page-footer", "right", "*"],
+    &["page-footer", "left", "*"],
+    &["page-footer", "center", "*"],
+    &["page-footer", "right", "*"],
 ];
 
 /// AST transform: apply [`MARKDOWN_CONFIG_PATHS`] to merged metadata.
@@ -121,32 +161,82 @@ pub fn apply_markdown_config_paths(
     meta: &mut ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
+    let mut walk = Walk {
+        diagnostics,
+        depth_reported: false,
+    };
     for pattern in MARKDOWN_CONFIG_PATHS {
-        apply_pattern(meta, pattern, diagnostics);
+        apply_pattern(meta, pattern, 0, &mut walk);
     }
+}
+
+/// State threaded through the registry walk: the diagnostic sink, plus
+/// a latch so an over-deep config reports [`CODE_CONFIG_NESTING_TOO_DEEP`]
+/// once rather than once per node per pattern.
+struct Walk<'a> {
+    diagnostics: &'a mut Vec<DiagnosticMessage>,
+    depth_reported: bool,
 }
 
 /// Walk one pattern; at the end of the path, markdown-parse a
 /// scalar-string value in place.
-fn apply_pattern(
-    value: &mut ConfigValue,
-    pattern: &[&str],
-    diagnostics: &mut Vec<DiagnosticMessage>,
-) {
+///
+/// `depth` counts levels descended *into the value tree* (not pattern
+/// segments consumed), so the `**` descent below cannot outrun
+/// [`MAX_CONFIG_DEPTH`].
+fn apply_pattern(value: &mut ConfigValue, pattern: &[&str], depth: usize, walk: &mut Walk) {
+    if depth > MAX_CONFIG_DEPTH {
+        if !walk.depth_reported {
+            walk.depth_reported = true;
+            let mut diagnostic = DiagnosticMessage::warning(format!(
+                "Configuration nesting exceeds the maximum depth of {MAX_CONFIG_DEPTH}. \
+                 Quarto stopped applying markdown semantics below this point. This \
+                 usually means a generated configuration has nested inside itself."
+            ))
+            .with_code(CODE_CONFIG_NESTING_TOO_DEEP);
+            diagnostic.location = Some(value.source_info.clone());
+            walk.diagnostics.push(diagnostic);
+        }
+        return;
+    }
+
     let Some((head, rest)) = pattern.split_first() else {
-        parse_scalar_string_in_place(value, diagnostics);
+        parse_scalar_string_in_place(value, walk.diagnostics);
         return;
     };
+
+    // `**` — recursive descent. Matches zero or more levels of nesting
+    // through both arrays and maps, so one entry covers a sidebar's
+    // arbitrarily-nested `contents:` and a navbar's nested `menu:`.
+    if *head == "**" {
+        // Zero levels: try to match the remainder right here.
+        apply_pattern(value, rest, depth, walk);
+        // One or more: keep `**` in play and descend a level.
+        match &mut value.value {
+            ConfigValueKind::Map(entries) => {
+                for entry in entries {
+                    apply_pattern(&mut entry.value, pattern, depth + 1, walk);
+                }
+            }
+            ConfigValueKind::Array(items) => {
+                for item in items {
+                    apply_pattern(item, pattern, depth + 1, walk);
+                }
+            }
+            _ => {}
+        }
+        return;
+    }
 
     match &mut value.value {
         ConfigValueKind::Map(entries) => {
             if let Some(entry) = entries.iter_mut().find(|e| e.key == *head) {
-                apply_pattern(&mut entry.value, rest, diagnostics);
+                apply_pattern(&mut entry.value, rest, depth + 1, walk);
             }
         }
         ConfigValueKind::Array(items) if *head == "*" => {
             for item in items {
-                apply_pattern(item, rest, diagnostics);
+                apply_pattern(item, rest, depth + 1, walk);
             }
         }
         _ => {}
@@ -277,6 +367,222 @@ mod tests {
             kind_at(&meta, &["navbar", "title"]),
             ConfigValueKind::Scalar(Yaml::Boolean(false))
         ));
+    }
+
+    // --- Navigation item `text:` (bd-page-footer-items-f4th80mj) ----
+
+    fn arr(items: Vec<ConfigValue>) -> ConfigValue {
+        ConfigValue::new_array(items, SourceInfo::for_test())
+    }
+
+    /// Build `contents: [{text: …, contents: [{…}]}]` nested `depth`
+    /// levels deep, with a `text:` at every level.
+    fn nested_contents(depth: usize) -> ConfigValue {
+        let mut inner = map(vec![("text", s("*leaf*"))]);
+        for _ in 0..depth {
+            inner = map(vec![("text", s("*node*")), ("contents", arr(vec![inner]))]);
+        }
+        arr(vec![inner])
+    }
+
+    /// Navbar item `text:` becomes inlines — at the top level and
+    /// inside a nested `menu:` (decision 2: the whole item-text slice).
+    #[test]
+    fn navbar_item_text_parses_including_nested_menu() {
+        let submenu = map(vec![("text", s("Sub &copy; *emph*")), ("href", s("s.qmd"))]);
+        let item = map(vec![
+            ("text", s("Top *emph*")),
+            ("menu", arr(vec![submenu])),
+        ]);
+        let mut meta = map(vec![(
+            "website",
+            map(vec![("navbar", map(vec![("left", arr(vec![item]))]))]),
+        )]);
+        let mut diags = Vec::new();
+        apply_markdown_config_paths(&mut meta, &mut diags);
+
+        let left = meta
+            .get_path(&["website", "navbar", "left"])
+            .and_then(|v| v.as_array().map(|a| a.to_vec()))
+            .expect("left is an array");
+        assert!(
+            matches!(
+                &left[0].get("text").unwrap().value,
+                ConfigValueKind::PandocInlines(_)
+            ),
+            "navbar item text should be inlines; got {:?}",
+            left[0].get("text").unwrap().value
+        );
+        let sub = left[0].get("menu").unwrap().as_array().unwrap()[0].clone();
+        assert!(
+            matches!(
+                &sub.get("text").unwrap().value,
+                ConfigValueKind::PandocInlines(_)
+            ),
+            "nested menu item text should be inlines; got {:?}",
+            sub.get("text").unwrap().value
+        );
+        // `href` must stay a literal scalar — never markdown-parsed.
+        assert!(matches!(
+            &sub.get("href").unwrap().value,
+            ConfigValueKind::Scalar(_)
+        ));
+    }
+
+    /// Sidebar item `text:` becomes inlines at every `contents:` level
+    /// (decision 3: unify on markdown; decision 5: `**` descent).
+    #[test]
+    fn sidebar_item_text_parses_at_every_contents_depth() {
+        let mut meta = map(vec![(
+            "website",
+            map(vec![(
+                "sidebar",
+                map(vec![("contents", nested_contents(3))]),
+            )]),
+        )]);
+        let mut diags = Vec::new();
+        apply_markdown_config_paths(&mut meta, &mut diags);
+
+        // Walk down the four levels, asserting `text` is inlines at each.
+        let mut node = meta
+            .get_path(&["website", "sidebar", "contents"])
+            .and_then(|v| v.as_array().map(|a| a[0].clone()))
+            .expect("contents[0]");
+        for level in 0..4 {
+            assert!(
+                matches!(
+                    &node.get("text").unwrap().value,
+                    ConfigValueKind::PandocInlines(_)
+                ),
+                "sidebar text at level {} should be inlines; got {:?}",
+                level,
+                node.get("text").unwrap().value
+            );
+            let Some(next) = node
+                .get("contents")
+                .and_then(|c| c.as_array().map(|a| a[0].clone()))
+            else {
+                break;
+            };
+            node = next;
+        }
+    }
+
+    /// Page-footer item lists: a map item's `text:` and a *bare string*
+    /// item both become inlines (defects 1–4).
+    #[test]
+    fn footer_item_text_and_bare_string_parse() {
+        let items = arr(vec![
+            map(vec![
+                ("text", s("<b>logo</b>")),
+                ("href", s("https://e.com")),
+            ]),
+            s("Copyright &copy; *Example*"),
+        ]);
+        let mut meta = map(vec![(
+            "website",
+            map(vec![("page-footer", map(vec![("left", items)]))]),
+        )]);
+        let mut diags = Vec::new();
+        apply_markdown_config_paths(&mut meta, &mut diags);
+
+        let left = meta
+            .get_path(&["website", "page-footer", "left"])
+            .and_then(|v| v.as_array().map(|a| a.to_vec()))
+            .expect("left is an array");
+        assert!(
+            matches!(
+                &left[0].get("text").unwrap().value,
+                ConfigValueKind::PandocInlines(_)
+            ),
+            "footer item text should be inlines; got {:?}",
+            left[0].get("text").unwrap().value
+        );
+        assert!(
+            matches!(&left[1].value, ConfigValueKind::PandocInlines(_)),
+            "bare-string footer item should be inlines; got {:?}",
+            left[1].value
+        );
+    }
+
+    /// Item keys that are never markdown (`href`, `icon`, `rel`,
+    /// `target`, `aria-label`) stay literal scalars.
+    #[test]
+    fn item_non_text_keys_stay_scalar() {
+        let item = map(vec![
+            ("text", s("T")),
+            ("href", s("a*b*.qmd")),
+            ("icon", s("github")),
+            ("rel", s("me")),
+            ("target", s("_blank")),
+            ("aria-label", s("A *label*")),
+        ]);
+        let mut meta = map(vec![(
+            "website",
+            map(vec![("navbar", map(vec![("right", arr(vec![item]))]))]),
+        )]);
+        let mut diags = Vec::new();
+        apply_markdown_config_paths(&mut meta, &mut diags);
+
+        let it = meta
+            .get_path(&["website", "navbar", "right"])
+            .and_then(|v| v.as_array().map(|a| a[0].clone()))
+            .unwrap();
+        for key in ["href", "icon", "rel", "target", "aria-label"] {
+            assert!(
+                matches!(&it.get(key).unwrap().value, ConfigValueKind::Scalar(_)),
+                "`{}` must stay a literal scalar; got {:?}",
+                key,
+                it.get(key).unwrap().value
+            );
+        }
+    }
+
+    /// Recursive descent is bounded: a pathologically deep config emits
+    /// `Q-1-27` instead of recursing without limit (decision 5).
+    #[test]
+    fn recursive_descent_is_depth_bounded() {
+        let mut meta = map(vec![(
+            "website",
+            map(vec![(
+                "sidebar",
+                map(vec![("contents", nested_contents(MAX_CONFIG_DEPTH + 20))]),
+            )]),
+        )]);
+        let mut diags = Vec::new();
+        apply_markdown_config_paths(&mut meta, &mut diags);
+
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code.as_deref() == Some(CODE_CONFIG_NESTING_TOO_DEEP)),
+            "expected a {} diagnostic; got {:?}",
+            CODE_CONFIG_NESTING_TOO_DEEP,
+            diags.iter().map(|d| d.code.clone()).collect::<Vec<_>>()
+        );
+    }
+
+    /// The depth bound does not fire for ordinary configurations, and
+    /// only one diagnostic is emitted per over-deep descent.
+    #[test]
+    fn depth_bound_silent_for_ordinary_nesting() {
+        let mut meta = map(vec![(
+            "website",
+            map(vec![(
+                "sidebar",
+                map(vec![("contents", nested_contents(4))]),
+            )]),
+        )]);
+        let mut diags = Vec::new();
+        apply_markdown_config_paths(&mut meta, &mut diags);
+
+        assert!(
+            !diags
+                .iter()
+                .any(|d| d.code.as_deref() == Some(CODE_CONFIG_NESTING_TOO_DEEP)),
+            "ordinary nesting must not trip the depth bound; got {:?}",
+            diags.iter().map(|d| d.code.clone()).collect::<Vec<_>>()
+        );
     }
 
     /// Footer per-region string form parses; array (item-list) regions

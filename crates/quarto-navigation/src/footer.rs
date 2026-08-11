@@ -19,7 +19,7 @@ use quarto_pandoc_types::ConfigMapEntry;
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_source_map::{By, SourceInfo};
 
-use crate::item::NavigationItem;
+use crate::item::{BareScalar, NavigationItem};
 
 /// Content of a single footer region (`left`, `center`, or `right`).
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -43,11 +43,18 @@ impl FooterRegion {
             return FooterRegion::Empty;
         };
 
-        // Arrays are items.
+        // Arrays are items. In a footer region a bare scalar is a link
+        // only if it resolves to a project document, and display text
+        // otherwise (bd-page-footer-items-f4th80mj, defect 2) — unlike
+        // navbars and sidebars, where `- about.qmd` is always a link.
+        // The resolution check needs the project index, so it happens
+        // later, in `FooterGenerateTransform`'s demotion pass.
         if let Some(arr) = cv.as_array() {
             let items: Vec<NavigationItem> = arr
                 .iter()
-                .filter_map(NavigationItem::from_config_value)
+                .filter_map(|item| {
+                    NavigationItem::from_config_value_with(item, BareScalar::TextIfUnresolved)
+                })
                 .collect();
             if items.is_empty() {
                 return FooterRegion::Empty;
@@ -266,6 +273,45 @@ mod tests {
 
     fn arr(items: Vec<ConfigValue>) -> ConfigValue {
         ConfigValue::new_array(items, SourceInfo::for_test())
+    }
+
+    /// Defect 2 (bd-page-footer-items-f4th80mj) — a bare string in a
+    /// page-footer region is parsed as a *provisional* href that also
+    /// retains `bare_text`, so `FooterGenerateTransform` can demote it to
+    /// display text when it resolves to no project document. (The
+    /// demotion itself is tested in `footer_generate`.)
+    #[test]
+    fn bare_string_footer_item_retains_bare_text_fallback() {
+        let meta = map(vec![(
+            "page-footer",
+            map(vec![(
+                "left",
+                arr(vec![s("Copyright 2015-2026 Example, Inc.")]),
+            )]),
+        )]);
+        let footer = resolve_page_footer(&meta).unwrap();
+        let FooterRegion::Items(items) = &footer.left else {
+            panic!("expected items, got {:?}", footer.left);
+        };
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0]
+                .bare_text
+                .as_ref()
+                .and_then(|t| t.as_plain_text())
+                .as_deref(),
+            Some("Copyright 2015-2026 Example, Inc."),
+            "bare footer string must retain a display-text fallback"
+        );
+    }
+
+    /// The bare-scalar-is-text rule is page-footer-specific: navbars
+    /// and sidebars still read `- about.qmd` as a link target.
+    #[test]
+    fn navbar_bare_string_is_still_an_href() {
+        let item = NavigationItem::from_config_value(&s("about.qmd")).unwrap();
+        assert_eq!(item.href.as_deref(), Some("about.qmd"));
+        assert!(item.text.is_none());
     }
 
     #[test]

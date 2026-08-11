@@ -16,14 +16,22 @@ categories:
 
 ## What this means
 
-Quarto's configuration loader places a bound on how deeply nested
-a configuration can be. The bound is large enough that ordinary
-project configurations sit comfortably inside it; this error fires
-only when nesting reaches unusual depths.
+Quarto places a bound on how deeply nested a configuration can be
+when it walks the configuration to decide which values carry
+markdown — for example the `text:` of a navigation item, which may
+sit at any depth inside a sidebar's nested `contents:`. The bound is
+large enough that ordinary project configurations sit comfortably
+inside it; this warning fires only when nesting reaches unusual
+depths.
 
-The bound is in place to protect the loader from infinite or
-near-infinite structures that could arise from accidental
-self-reference in generated configurations.
+The bound protects Quarto from infinite or near-infinite structures
+that could arise from accidental self-reference in generated
+configurations.
+
+Configuration below the bound is still read normally. What stops is
+the markdown interpretation of values beneath that point: a `text:`
+nested deeper than the bound renders as literal text rather than as
+markdown.
 
 ## Why this happens
 
