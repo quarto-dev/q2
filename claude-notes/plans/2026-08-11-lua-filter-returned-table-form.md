@@ -242,19 +242,33 @@ strand's scope.
   `MermaidRenderTransform` (`quarto-core/src/transforms/mermaid.rs:166`) is a
   `TransformPhase::Finalization` transform inside `AstTransformsStage`. Quarto 1
   is the other way round, which is why `mermaid-zoom.lua` matches `RawBlock`.
-  **New information from this investigation:** q2 runs user filters at *two*
-  positions — `UserFiltersStage::pre()` and `::post()`, either side of
-  `AstTransformsStage` (`quarto-core/src/pipeline.rs:346-348`) — and
-  `filter_resolve.rs` already supports a per-filter `at:` field over eight
-  entry points plus a `quarto` sentinel. A bare `filters: [x]` defaults to
-  `pre-quarto` (→ `Position::Pre`, sees the `CodeBlock`); `at: post-quarto`
-  (or listing the filter *after* the `quarto` sentinel) puts it in
-  `Position::Post`, downstream of `AstTransformsStage`, where the `RawBlock`
-  exists. So **the Q1-equivalent behavior looks reachable today with a
-  one-line metadata change and no code change** — that wants confirming by
-  actually running it, and then the real question is whether bare `filters:`
-  defaulting to pre is the right default for ported extensions. Worth its own
-  strand. **Filing recommended — say the word and I will.**
+  **New information from this investigation, verified by running it.** q2 runs
+  user filters at *two* positions — `UserFiltersStage::pre()` and `::post()`,
+  either side of `AstTransformsStage` (`quarto-core/src/pipeline.rs:346-348`)
+  — and `filter_resolve.rs` already supports a per-filter `at:` field over
+  eight entry points plus a `quarto` sentinel. Probing with a filter that
+  reports what it sees (` ```mermaid ` fence, `q2 render`):
+
+  | filter declaration | what the filter sees |
+  | --- | --- |
+  | `filters: [probe.lua]` (default → `pre-quarto`) | `CodeBlock` classes `[mermaid]` |
+  | `filters: [quarto, probe.lua]` | `RawBlock` html `<pre class="mermaid">` |
+  | `filters: [{path: probe.lua, at: post-quarto}]` | `RawBlock` html `<pre class="mermaid">` |
+
+  So **the Q1-equivalent `RawBlock` view is reachable today with a one-line
+  metadata change and no code change.** That reduces the finding from "port
+  blocker" to "defaulting question": is `pre-quarto` the right default for
+  ported extensions, and is the choice discoverable? Worth its own strand.
+  **Filing recommended — say the word and I will.**
+
+  One correction to the strand's write-up while I was in here: at the default
+  pre position the class is `mermaid` only for the plain ` ```mermaid ` fence.
+  Q1's ` ```{mermaid} ` executable-cell spelling stays a `CodeBlock` with the
+  literal class `{mermaid}` all the way through and renders no diagram — but
+  that is **not** a bug to file: it is a deliberate, documented syntax decision
+  (`claude-notes/plans/2026-07-20-mermaid-regular-rendering.md` § Syntax
+  decision, guarded by a `brace_form_mermaid_cell_untouched` test). A ported
+  extension has to use the plain fence regardless of filter position.
 - **`quarto.doc.add_html_dependency` warns `Q-11-1` on `version`.** Assets do
   land under `_files/<name>/`; the `version` field is accepted-then-ignored
   with a warning. Cosmetic but noisy for ported extensions. Also worth its own
