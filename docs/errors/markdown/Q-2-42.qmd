@@ -1,0 +1,104 @@
+---
+title: "Invalid conditional content attribute"
+description: "A `.content-visible` / `.content-hidden` element carries a condition Quarto does not recognize, or carries both marker classes at once."
+code: Q-2-42
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-42` — Invalid conditional content attribute
+
+> A `.content-visible` / `.content-hidden` element carries a condition
+> Quarto does not recognize, or carries both marker classes at once.
+
+## What this means
+
+Conditional content lets one source file produce different output for
+different formats or profiles:
+
+```markdown
+::: {.content-visible when-format="html"}
+Only readers of the HTML version see this.
+:::
+```
+
+Quarto recognizes exactly six conditions:
+
+| Condition        | True when                                              |
+| ---------------- | ------------------------------------------------------ |
+| `when-format`    | the output format matches                              |
+| `unless-format`  | the output format does not match                       |
+| `when-profile`   | the named project profile is active                    |
+| `unless-profile` | the named project profile is not active                |
+| `when-meta`      | the dotted metadata path is present and not `false`    |
+| `unless-meta`    | the dotted metadata path is absent or `false`          |
+
+This warning fires in two situations. Either the element carries an
+attribute that starts with `when-` or `unless-` but is not one of those
+six — in which case the attribute is ignored — or the element carries
+both `.content-visible` and `.content-hidden`, which is contradictory.
+
+Both cases are quiet failures, which is why Quarto reports them.
+Quarto 1 ignores an unrecognized condition silently, so a typo turns
+into content that is unconditionally visible with no indication that
+the condition you wrote was never consulted.
+
+## Why this happens
+
+- **A typo in the condition name.** `when-formats`, `when-format-is`,
+  and `unless-formats` all look right and all do nothing.
+- **A condition borrowed from a different feature.** `when-meta` reads
+  document metadata; there is no `when-var`, `when-env`, or
+  `when-lang`.
+- **Both marker classes on one element**, usually from editing a
+  `.content-hidden` block into a `.content-visible` one and leaving
+  the old class behind. The element is treated as `.content-hidden`.
+
+## How to fix
+
+Correct the condition to one of the six recognized spellings:
+
+```markdown
+::: {.content-visible when-format="pdf"}
+PDF-only content.
+:::
+```
+
+If you meant to key off document metadata, use `when-meta` with a
+dotted path into the merged metadata:
+
+```markdown
+::: {.content-visible when-meta="draft"}
+Visible while `draft: true` is set in the front matter.
+:::
+```
+
+If the element carries both marker classes, delete the one you did not
+intend:
+
+```markdown
+<!-- before: contradictory -->
+::: {.content-visible .content-hidden when-format="html"}
+
+<!-- after -->
+::: {.content-visible when-format="html"}
+```
+
+## Example
+
+```markdown
+::: {.content-visible when-formats="html"}
+This paragraph is *always* visible: `when-formats` is not a condition,
+so nothing constrains the block.
+:::
+```
+
+Removing the trailing `s` makes the condition take effect.
+
+## Related errors
+
+- [`Q-5-19`](../project/Q-5-19.qmd) — a profile named in `when-profile`
+  that matches no profile in the project.

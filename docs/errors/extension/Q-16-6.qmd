@@ -1,0 +1,72 @@
+---
+title: "Block shortcode in inline position"
+description: "A shortcode used inside a sentence produced block-level output, which could not be carried into the inline position and was dropped."
+code: Q-16-6
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-6` — Block shortcode in inline position
+
+> A shortcode used inside a sentence produced block-level output, which
+> could not be carried into the inline position and was dropped.
+
+## What this means
+
+Markdown content comes in two shapes. *Inline* content lives inside a
+sentence — words, emphasis, links, code spans. *Block* content is
+standalone: paragraphs, divs, raw HTML blocks, figures.
+
+A shortcode can produce either, and where you put the invocation
+decides which one fits. Written inside a sentence, the shortcode's
+output has to be inline content, because that is the only thing that
+can sit between two words.
+
+The built-in `video` shortcode, for instance, produces a raw HTML
+block. Placed mid-sentence, none of that output can be represented
+inline, so it is dropped and this warning is reported.
+
+The rest of your document renders normally; only the shortcode's
+output is missing.
+
+## Why this happens
+
+- **The invocation is on the same line as other text.** Even a single
+  leading word puts the shortcode in an inline position:
+
+  ```markdown
+  Watch: {{{< video https://youtu.be/example >}}}
+  ```
+
+- **The invocation is inside a list item, table cell, or heading**
+  alongside other content.
+- **A missing blank line.** A shortcode on its own line but directly
+  adjacent to a paragraph above or below is part of that paragraph, and
+  therefore inline.
+
+## How to fix
+
+Put the shortcode in its own paragraph, with blank lines on both
+sides:
+
+```markdown
+Watch this:
+
+{{{< video https://youtu.be/example >}}}
+
+The rest of the section continues here.
+```
+
+The blank lines are what make it a block — this is ordinary markdown
+paragraph separation, not a shortcode-specific rule.
+
+If you need something inline, use a shortcode that produces inline
+output. `{{{< meta ... >}}}`, `{{{< var ... >}}}`, and `{{{< env ... >}}}`
+all substitute text and work anywhere.
+
+## Related errors
+
+- [`Q-16-3`](Q-16-3.qmd) — the shortcode name was not recognized.

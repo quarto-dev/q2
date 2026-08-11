@@ -1,0 +1,90 @@
+---
+title: "Invalid Lua filter return value"
+description: "A Lua filter function returned something that cannot be converted to AST elements."
+code: Q-11-4
+subsystem: lua
+status: stub
+since: "99.9.9"
+categories:
+  - lua
+---
+
+# `Q-11-4` — Invalid Lua filter return value
+
+> A Lua filter function returned something that cannot be converted to
+> AST elements.
+
+## What this means
+
+A filter function's return value tells Quarto what to put in the
+document where the matched element was. Only four kinds of return
+value have a meaning:
+
+| Return value          | Effect                                        |
+| --------------------- | --------------------------------------------- |
+| `nil` (or no `return`) | keep the element unchanged                   |
+| an element            | replace the element with this one             |
+| a list of elements     | replace the element with all of them          |
+| a string              | in inline contexts only, becomes a `Str`      |
+
+Anything else — a number, a boolean, a bare Lua table, a function —
+has no AST equivalent, so Quarto stops and names the offending filter
+function and the type it returned:
+
+```
+Q-11-4: filter function 'Str' returned an unsupported value: got number
+```
+
+## Why this happens
+
+- **Returning the result of an expression by reflex.** `return #elem.content`
+  or `return true` from a function whose purpose was really to inspect,
+  not transform.
+- **Returning a raw table** built by hand instead of a constructed
+  element: `return { t = "Str", text = "hi" }` rather than
+  `return pandoc.Str("hi")`.
+- **Returning a number or string in a block context.** A string is
+  accepted in inline positions only; a `Para` handler must return a
+  block.
+- **A stray `return` inside a conditional** that falls through to a
+  value meant for something else.
+
+## How to fix
+
+Return `nil` when the element should be left alone — most filter
+functions that only inspect should end without a `return` at all:
+
+```lua
+function Str(elem)
+  if elem.text:match("TODO") then
+    io.stderr:write("found a TODO\n")
+  end
+  -- no return: element is kept as-is
+end
+```
+
+Return a constructed element when replacing:
+
+```lua
+function Str(elem)
+  return pandoc.Str(elem.text:upper())
+end
+```
+
+Return a list to replace one element with several, or with none:
+
+```lua
+function Para(elem)
+  return {}          -- delete this paragraph
+end
+```
+
+If you need a block-level result from a string, wrap it:
+`return pandoc.Plain(pandoc.Str("text"))`.
+
+## Related errors
+
+- [`Q-11-3`](Q-11-3.qmd) — a wrong-typed argument to a `pandoc.*`
+  constructor.
+- [`Q-11-5`](Q-11-5.qmd) — an assignment to an element property was
+  rejected.

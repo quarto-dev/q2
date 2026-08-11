@@ -1,0 +1,67 @@
+---
+title: "Dark theme variant not yet supported"
+description: "The `theme:` configuration uses the `light:`/`dark:` map form; this release renders the light themes and ignores the dark entry."
+code: Q-14-3
+subsystem: theme
+status: stub
+since: "99.9.9"
+categories:
+  - theme
+---
+
+# `Q-14-3` — Dark theme variant not yet supported
+
+> The `theme:` configuration uses the `light:`/`dark:` map form; this
+> release renders the light themes and ignores the dark entry.
+
+## What this means
+
+Quarto lets `theme:` take a map with `light:` and `dark:` halves, so one
+document can ship both a light and a dark stylesheet plus a toggle
+between them:
+
+```yaml
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+```
+
+This release understands the map form but implements only half of it.
+The `light:` themes are compiled and applied; the `dark:` entry is
+parsed, accepted, and then ignored, and no dark-mode toggle is emitted.
+
+Your document still renders. It is styled by the light themes exactly
+as if you had written `theme: cosmo`.
+
+## Why this happens
+
+- **A project carried over from Quarto 1**, where the light/dark map is
+  fully supported.
+- **Following documentation or an example** that shows the map form.
+
+There is nothing wrong with the configuration itself — the warning
+reports a gap in this Quarto version, not a mistake in your file.
+
+## How to fix
+
+You have two reasonable options, and which one is right depends on
+whether you expect to keep the project on this version.
+
+**Keep the `dark:` entry.** The configuration is valid and will start
+working when dual light/dark support lands, at which point the warning
+disappears on its own. Nothing you write today will need revisiting.
+
+**Collapse to the single-theme form** to silence the warning now:
+
+```yaml
+format:
+  html:
+    theme: cosmo
+```
+
+Do not switch the halves in the hope of getting the dark theme instead
+— the `light:` key is what this release reads, so
+`light: darkly` is how you render dark styling today, at the cost of
+losing the light variant when the toggle ships.

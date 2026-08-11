@@ -1,0 +1,80 @@
+---
+title: "Shortcode script load failure"
+description: "A Lua shortcode script failed to load or execute, so the handlers it defines are unavailable."
+code: Q-16-2
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-2` — Shortcode script load failure
+
+> A Lua shortcode script failed to load or execute, so the handlers it
+> defines are unavailable.
+
+## What this means
+
+Shortcode handlers are defined by Lua scripts, which reach Quarto from
+two places: an extension's `contributes.shortcodes` list, or the
+document's own `shortcodes:` key. Quarto loads each script once, before
+rendering, and registers whatever handlers it defines.
+
+If a script fails to load — a syntax error, a runtime error at the top
+level, a missing file — none of its handlers get registered. The render
+continues, and each shortcode that needed one of those handlers reports
+[`Q-16-3`](Q-16-3.qmd) at its use site.
+
+The message names the script file, the extension it came from when
+applicable, and the Lua error itself.
+
+## Why this happens
+
+- **A Lua syntax error** in the script.
+- **An error at the top level of the script**, not inside a handler
+  function — for example a `require` of a module that is not on the
+  Lua path, or a file read that fails. Code outside a function runs at
+  load time.
+- **A script path in `contributes.shortcodes` that does not exist**,
+  usually a rename that missed the manifest.
+- **A document-level `shortcodes:` entry** whose path is relative to
+  the wrong directory. Paths resolve relative to the document.
+
+## How to fix
+
+Read the Lua error in the message — it points at the failing line.
+
+If the script uses `require`, note that top-level code runs before any
+document is processed, so anything it depends on must be available at
+that moment:
+
+```lua
+-- runs at load time; fails the whole script if the module is missing
+local json = require("json")
+
+return {
+  ["my-shortcode"] = function(args, kwargs, meta)
+    return pandoc.Str("hello")
+  end
+}
+```
+
+Moving optional work inside the handler keeps a failure local to the
+shortcode that needs it, rather than taking every handler in the file
+down with it.
+
+For a missing path, check the manifest against the files on disk:
+
+```yaml
+contributes:
+  shortcodes:
+    - shortcode.lua     # relative to the extension directory
+```
+
+## Related errors
+
+- [`Q-16-3`](Q-16-3.qmd) — the downstream symptom, reported at each
+  use site.
+- [`Q-16-1`](Q-16-1.qmd) — the whole extension failed to load, not
+  just one of its scripts.

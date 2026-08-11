@@ -1,0 +1,80 @@
+---
+title: "Unknown project profile"
+description: "An active profile matches no `_quarto-<name>.yml`, no `_environment-<name>`, and nothing declared under `profile:`."
+code: Q-5-19
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-19` — Unknown project profile
+
+> An active profile matches no `_quarto-<name>.yml`, no
+> `_environment-<name>`, and nothing declared under `profile:`.
+
+## What this means
+
+A profile named `staging` can affect a project in three ways:
+
+- a `_quarto-staging.yml` overlay, merged over `_quarto.yml`
+- an `_environment-staging` file, contributing environment variables
+- a declaration under `profile:` in `_quarto.yml`
+
+The profile you activated matches none of them, so activating it
+changes nothing. Almost always this means the name is misspelled — you
+asked for a configuration that does not exist, and got the default one
+without noticing.
+
+The render continues with whatever configuration was in effect.
+
+## Why this happens
+
+- **A typo** in `--profile`, in `QUARTO_PROFILE`, or in
+  `profile.default`.
+- **The overlay file is misnamed.** It must be exactly
+  `_quarto-<name>.yml` — `_quarto.staging.yml` and `quarto-staging.yml`
+  do not match.
+- **The overlay is in the wrong directory.** It belongs next to
+  `_quarto.yml` at the project root.
+- **A profile used only for conditional content.** If `staging` exists
+  purely so `when-profile="staging"` can key off it, there is no
+  overlay file to find — see the fix below.
+
+## How to fix
+
+If you meant to select an overlay, check the file name against the
+profile name:
+
+```
+_quarto.yml
+_quarto-staging.yml     ← selected by --profile staging
+```
+
+If the profile exists only for conditional content, declare it so
+Quarto knows it is real:
+
+```yaml
+profile:
+  group:
+    - [production, staging]
+```
+
+or, if it is the profile you want active by default:
+
+```yaml
+profile:
+  default: staging
+```
+
+With the declaration in place, `when-profile="staging"` works and the
+warning stops.
+
+## Related errors
+
+- [`Q-5-20`](Q-5-20.qmd) — the `profile:` key itself is malformed.
+- [`Q-5-21`](Q-5-21.qmd) — the profile name uses characters that are
+  not allowed.
+- [`Q-2-42`](../markdown/Q-2-42.qmd) — an unrecognized conditional
+  content attribute, the other half of the `when-profile` story.
