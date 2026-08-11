@@ -7,8 +7,17 @@ _quarto:
       ensureHtmlElements:
         - ["div.callout-note.callout-titled", "div.callout-title-container span.screen-reader-only"]
       ensureFileRegexMatches:
-        - ['<span class="screen-reader-only">Note</span>Off-Host Execution', "<code>renv</code>"]
-        - ["callout-title-container flex-fill\">\\s*Note\\s*</div>"]
+        # The `[^>]*` slots absorb data-sid/data-loc: the hub preview renders
+        # with `source-location: full`, so every tag here carries them, while
+        # the native runner renders without. These patterns must hold on both.
+        # `!str` keeps the `[...]` and `<...>` from being parsed as markdown
+        # (reference-link syntax / raw HTML), which emits warnings.
+        - [!str '<span class="screen-reader-only"[^>]*>Note</span>Off-Host Execution', !str "<code[^>]*>renv</code>"]
+        # Negative guard: the pre-fix behavior dropped title= and left the
+        # bare callout type as the heading. `[^>]*` matters here too — without
+        # it the guard is vacuous under `source-location: full`, where the div
+        # always carries attributes, so it could never catch that regression.
+        - [!str "callout-title-container flex-fill\"[^>]*>\\s*Note\\s*</div>"]
       noErrors: true
 ---
 
