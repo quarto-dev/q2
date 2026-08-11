@@ -1,0 +1,17 @@
+Buy these:
+- apples
+
+Buy these:
+1. apples
+
+Buy these:
+2. apples
+
+Buy these:
+1) apples
+
+Cost is
+1.5 dollars
+
+See RFC
+3986 for details
