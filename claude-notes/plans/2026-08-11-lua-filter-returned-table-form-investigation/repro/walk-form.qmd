@@ -1,0 +1,7 @@
+---
+title: Handler table via doc:walk (works)
+filters:
+  - walk-form.lua
+---
+
+Marker: MARKER
