@@ -59,3 +59,28 @@ strict pandoc parity — the last two by starting to error. They are all odd
 filters (why return a value *and* define globals?), but "odd" is not
 "nonexistent", and the flip would be as silent for them as the original bug is
 today.
+
+---
+
+## After the fix (2026-08-11)
+
+Same command, same four documents, on the patched tree:
+
+```
+$ q2 render
+Rendered 4 of 4 files to …/repro/_site
+
+index.html       Marker: TABLE-FORM-RAN      <- was MARKER (ignored)
+list-form.html   Marker: LIST-FORM-RAN       <- was MARKER (ignored)
+control.html     Marker: FUNCTION-FORM-RAN   <- unchanged
+walk-form.html   Marker: WALK-TABLE-RAN      <- unchanged
+```
+
+Both previously-silent forms now run, and neither of the two that already
+worked regressed. The rendered HTML was inspected directly (grepped for the
+marker), not inferred from the exit code.
+
+`../pandoc-probes/run-parity-matrix.sh` against the same build agrees with
+pandoc on every AST-shaped row; the three error rows now error in q2 too, with
+a `Q-11-6` message naming the file and the offending type instead of pandoc's
+`attempt to index a number value`.

@@ -62,6 +62,94 @@ functions also traverse metadata values — a `Str` function will visit
 the words of your `title` as well as your document body, exactly as in
 Pandoc.
 
+## Two ways to organize a filter
+
+Everything above defines handlers as **global functions**. A filter may
+instead **return a table** of them, which keeps the handlers out of the
+global namespace:
+
+``` lua
+return {
+  Str = function(el)
+    return pandoc.Str(el.text:upper())
+  end,
+}
+```
+
+Both forms are equivalent, and both work in Pandoc. Set `traverse` as a
+key of the table rather than as a global when you use this form:
+
+``` lua
+return {
+  traverse = 'topdown',
+  Div = function(el) ... end,
+}
+```
+
+::: callout-important
+## A returned table replaces the globals
+
+If a script both defines global handlers and returns a table, **only the
+returned table runs** — the globals are ignored entirely. This follows
+Pandoc.
+
+It also means an *empty* returned table silently disables every global
+handler in the file, and that an accidental `return nil` at the end of a
+script is an error rather than a no-op ([`Q-11-6`](../../errors/lua/Q-11-6.qmd)).
+To use your global functions, end the script without returning anything
+at all.
+:::
+
+## Several passes in a fixed order
+
+Returning a *list* of handler tables runs each one as a separate pass
+over the whole document, in order. Each pass sees the previous pass's
+output:
+
+``` lua
+return {
+  -- pass 1: mark the elements of interest
+  { Div = function(el) ... end },
+  -- pass 2: act on what pass 1 produced
+  { Span = function(el) ... end },
+}
+```
+
+Each entry carries its own `traverse` setting; a `traverse` on one entry
+does not affect the others.
+
+Reach for this when one transformation has to finish everywhere before
+another begins. Within a single filter table you cannot get that
+ordering by rearranging the handlers — the traversal order is fixed by
+the document structure, not by the order you wrote them in. (A `Pandoc`
+handler calling `doc:walk{...}` can also sequence passes by hand; a
+returned list is the declarative way to say the same thing.)
+
+## When a handler never runs
+
+Handlers are dispatched **by name**, so a misspelled one is simply never
+looked up. Quarto warns rather than leaving you to wonder
+([`Q-11-7`](../../errors/lua/Q-11-7.qmd)):
+
+```
+Warning [Q-11-7]: Lua filter 'my-filter.lua' defines a handler 'Strs',
+which is not an element type Quarto knows about, so it will never run.
+Did you mean 'Str'?
+```
+
+If you keep helper functions on a returned filter table, they will be
+warned about too. Make them `local` instead:
+
+``` lua
+local function shout(text)
+  return text:upper()
+end
+
+return {
+  Str = function(el) return pandoc.Str(shout(el.text)) end,
+}
+```
+
 ## How metadata looks from Lua
 
 Metadata values appear as natural Lua values, following modern Pandoc's

@@ -267,41 +267,72 @@ impl LuaInline {
     }
 }
 
-impl LuaInline {
-    /// Get the tag name for this inline element
-    pub fn tag_name(&self) -> &'static str {
-        match &*self.0.borrow() {
-            Inline::Str(_) => "Str",
-            Inline::Emph(_) => "Emph",
-            Inline::Underline(_) => "Underline",
-            Inline::Strong(_) => "Strong",
-            Inline::Strikeout(_) => "Strikeout",
-            Inline::Superscript(_) => "Superscript",
-            Inline::Subscript(_) => "Subscript",
-            Inline::SmallCaps(_) => "SmallCaps",
-            Inline::Quoted(_) => "Quoted",
-            Inline::Cite(_) => "Cite",
-            Inline::Code(_) => "Code",
-            Inline::Space(_) => "Space",
-            Inline::SoftBreak(_) => "SoftBreak",
-            Inline::LineBreak(_) => "LineBreak",
-            Inline::Math(_) => "Math",
-            Inline::RawInline(_) => "RawInline",
-            Inline::Link(_) => "Link",
-            Inline::Image(_) => "Image",
-            Inline::Note(_) => "Note",
-            Inline::Span(_) => "Span",
-            Inline::Shortcode(_) => "Shortcode",
-            Inline::NoteReference(_) => "NoteReference",
-            Inline::Attr(_) => "Attr",
-            Inline::Insert(_) => "Insert",
-            Inline::Delete(_) => "Delete",
-            Inline::Highlight(_) => "Highlight",
-            Inline::EditComment(_) => "EditComment",
-            Inline::Custom(_) => "Custom",
+/// Define an element type's Lua tag names once, generating both the
+/// `tag_name` dispatch and the list of every name it can return.
+///
+/// The two must never disagree: the walker looks handler functions up **by
+/// tag name** (`walk.rs`'s `inline_fn`/`block_fn`), so any consumer that needs
+/// to know "is this a handler name q2 recognizes?" — the globals scan in
+/// `get_filter_table`, the unrecognized-name warning — has to enumerate
+/// exactly the names `tag_name` produces. Maintaining that list by hand is
+/// what caused bd-18a2r2lp, where five dispatchable tags were missing from the
+/// globals whitelist and filters defining them were silently dropped.
+///
+/// Generating both from one source makes that drift unrepresentable: the match
+/// stays exhaustive (the compiler rejects a new variant that is not listed),
+/// and the constant is built from the same lines.
+macro_rules! element_tag_names {
+    (
+        $self_ty:ident, $enum:ident, $consts:ident;
+        $($variant:ident => $name:literal),* $(,)?
+    ) => {
+        impl $self_ty {
+            /// Get the tag name for this element
+            pub fn tag_name(&self) -> &'static str {
+                match &*self.0.borrow() {
+                    $($enum::$variant(_) => $name,)*
+                }
+            }
         }
-    }
 
+        /// Every tag name `tag_name` can return, in declaration order.
+        pub const $consts: &[&str] = &[$($name),*];
+    };
+}
+
+element_tag_names! {
+    LuaInline, Inline, INLINE_TAG_NAMES;
+    Str => "Str",
+    Emph => "Emph",
+    Underline => "Underline",
+    Strong => "Strong",
+    Strikeout => "Strikeout",
+    Superscript => "Superscript",
+    Subscript => "Subscript",
+    SmallCaps => "SmallCaps",
+    Quoted => "Quoted",
+    Cite => "Cite",
+    Code => "Code",
+    Space => "Space",
+    SoftBreak => "SoftBreak",
+    LineBreak => "LineBreak",
+    Math => "Math",
+    RawInline => "RawInline",
+    Link => "Link",
+    Image => "Image",
+    Note => "Note",
+    Span => "Span",
+    Shortcode => "Shortcode",
+    NoteReference => "NoteReference",
+    Attr => "Attr",
+    Insert => "Insert",
+    Delete => "Delete",
+    Highlight => "Highlight",
+    EditComment => "EditComment",
+    Custom => "Custom",
+}
+
+impl LuaInline {
     /// Get the list of field names for this inline element (for pairs iteration)
     pub fn field_names(&self) -> &'static [&'static str] {
         match &*self.0.borrow() {
@@ -1081,6 +1112,29 @@ impl UserData for LuaSourceInfo {
 #[derive(Debug, Clone)]
 pub struct LuaBlock(pub Rc<RefCell<Block>>, pub PropertyCache);
 
+element_tag_names! {
+    LuaBlock, Block, BLOCK_TAG_NAMES;
+    Plain => "Plain",
+    Paragraph => "Para",
+    LineBlock => "LineBlock",
+    CodeBlock => "CodeBlock",
+    RawBlock => "RawBlock",
+    BlockQuote => "BlockQuote",
+    OrderedList => "OrderedList",
+    BulletList => "BulletList",
+    DefinitionList => "DefinitionList",
+    Header => "Header",
+    HorizontalRule => "HorizontalRule",
+    Table => "Table",
+    Figure => "Figure",
+    Div => "Div",
+    BlockMetadata => "BlockMetadata",
+    NoteDefinitionPara => "NoteDefinitionPara",
+    NoteDefinitionFencedBlock => "NoteDefinitionFencedBlock",
+    CaptionBlock => "CaptionBlock",
+    Custom => "Custom",
+}
+
 impl LuaBlock {
     /// Construct a `LuaBlock` around a freshly-owned `Block` in a new cell.
     pub fn new(block: Block) -> Self {
@@ -1149,31 +1203,6 @@ impl LuaBlock {
     /// Deep-clone the inner `Block` into an owned value.
     pub fn clone_block(&self) -> Block {
         self.0.borrow().clone()
-    }
-
-    /// Get the tag name for this block element
-    pub fn tag_name(&self) -> &'static str {
-        match &*self.0.borrow() {
-            Block::Plain(_) => "Plain",
-            Block::Paragraph(_) => "Para",
-            Block::LineBlock(_) => "LineBlock",
-            Block::CodeBlock(_) => "CodeBlock",
-            Block::RawBlock(_) => "RawBlock",
-            Block::BlockQuote(_) => "BlockQuote",
-            Block::OrderedList(_) => "OrderedList",
-            Block::BulletList(_) => "BulletList",
-            Block::DefinitionList(_) => "DefinitionList",
-            Block::Header(_) => "Header",
-            Block::HorizontalRule(_) => "HorizontalRule",
-            Block::Table(_) => "Table",
-            Block::Figure(_) => "Figure",
-            Block::Div(_) => "Div",
-            Block::BlockMetadata(_) => "BlockMetadata",
-            Block::NoteDefinitionPara(_) => "NoteDefinitionPara",
-            Block::NoteDefinitionFencedBlock(_) => "NoteDefinitionFencedBlock",
-            Block::CaptionBlock(_) => "CaptionBlock",
-            Block::Custom(_) => "Custom",
-        }
     }
 
     /// Get the list of field names for this block element (for pairs iteration)

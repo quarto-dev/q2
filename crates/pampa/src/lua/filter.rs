@@ -46,6 +46,15 @@ pub enum LuaFilterError {
     LuaError(mlua::Error),
     /// Filter returned invalid type
     InvalidReturn(String),
+    /// The filter *script* returned something that is not a filter
+    /// (`Q-11-6`). Distinct from [`InvalidReturn`], which is about a single
+    /// handler function's return value (`Q-11-4`). Carries a
+    /// fully-formed, self-contained message: it is rendered verbatim, with no
+    /// wrapper prefix, because the wrapping is what made pandoc's own version
+    /// of this error unreadable.
+    ///
+    /// [`InvalidReturn`]: LuaFilterError::InvalidReturn
+    InvalidScriptReturn(String),
 }
 
 impl std::fmt::Display for LuaFilterError {
@@ -56,6 +65,7 @@ impl std::fmt::Display for LuaFilterError {
             }
             LuaFilterError::LuaError(err) => write!(f, "Lua filter error: {}", err),
             LuaFilterError::InvalidReturn(msg) => write!(f, "Invalid filter return: {}", msg),
+            LuaFilterError::InvalidScriptReturn(msg) => write!(f, "{}", msg),
         }
     }
 }
@@ -239,23 +249,54 @@ pub async fn apply_lua_filter(
 
     let lua = create_filter_environment(runtime, target_format, filter_path, attribution)?;
 
-    // Load and execute filter script
-    lua.load(&filter_source)
+    // Load and run the filter script, KEEPING its return values.
+    //
+    // `call_async` (not `eval_async`) is deliberate: `eval` first tries to
+    // compile the source as an *expression*, which would make q2 accept a
+    // filter file containing a bare `{ Str = f }` that pandoc rejects as a
+    // syntax error. `call_async` compiles the chunk strictly as a block, the
+    // way pandoc's `dofile` does.
+    //
+    // The result is a `MultiValue`, not a `Value`, because the classification
+    // below turns on *how many* values came back: `Value` collapses "returned
+    // nothing" and "returned nil" into the same `Value::Nil`, and those two
+    // must behave differently (globals vs. error).
+    let returned: mlua::MultiValue = lua
+        .load(&filter_source)
         .set_name(filter_path.to_string_lossy())
-        .exec_async()
+        .call_async(())
         .await?;
 
-    // Get filter functions from globals or return value
-    let filter_table = get_filter_table(&lua)?;
+    let filters = classify_filter_return(&lua, returned, filter_path)?;
 
     let meta_new_source = quarto_source_map::SourceInfo::generated(quarto_source_map::By::filter(
         filter_path.to_string_lossy().to_string(),
         0,
     ));
-    let filtered_pandoc = apply_full_filter(&lua, &filter_table, pandoc, &meta_new_source).await?;
+    // A returned list is applied as successive passes over the whole
+    // document, in order, each honoring its own `traverse` (pandoc's
+    // `runAll`). The single-filter and globals cases are one-element lists.
+    //
+    // Threaded through an `Option` rather than seeding with `pandoc.clone()`
+    // so the overwhelmingly common one-filter case does no extra deep copy of
+    // the document — each pass consumes the previous pass's output, and only
+    // the first reads the caller's `&Pandoc`.
+    let mut filtered_pandoc: Option<Pandoc> = None;
+    for filter_table in &filters {
+        let input = filtered_pandoc.as_ref().unwrap_or(pandoc);
+        filtered_pandoc =
+            Some(apply_full_filter(&lua, filter_table, input, &meta_new_source).await?);
+    }
+    // `filters` is never empty in practice (every branch of
+    // `classify_filter_return` yields at least one table), but fall back to
+    // the input rather than panicking if that ever stops holding.
+    let filtered_pandoc = filtered_pandoc.unwrap_or_else(|| pandoc.clone());
 
-    // Extract diagnostics, HTML dependencies, and text includes from Lua state
-    let diagnostics = super::diagnostics::extract_lua_diagnostics(&lua)?;
+    // Extract diagnostics, HTML dependencies, and text includes from Lua state.
+    // The load-time warnings go first: they describe handlers that never ran,
+    // so they belong before anything those handlers might have reported.
+    let mut diagnostics = unrecognized_handler_warnings(&filters, filter_path)?;
+    diagnostics.extend(super::diagnostics::extract_lua_diagnostics(&lua)?);
     let html_dependencies = super::quarto_doc::extract_html_dependencies(&lua)?;
     let text_includes = super::quarto_doc::extract_text_includes(&lua)?;
     let resources = super::quarto_doc::extract_resources(&lua)?;
@@ -319,76 +360,236 @@ pub async fn apply_lua_filters(
     })
 }
 
-/// Get the filter table from Lua (either from return value or globals)
-fn get_filter_table(lua: &Lua) -> Result<Table> {
-    // Pandoc filters can either:
-    // 1. Return a table with filter functions
-    // 2. Define filter functions as globals
-    // We'll support both by creating a table that checks globals
-    let globals = lua.globals();
+/// Classify a filter script's return values into the list of filter tables to
+/// apply, in order.
+///
+/// Pandoc's rule (`runFilterFile` / `peekFilterList`), pinned by probe against
+/// pandoc 3.9.0.2 — see
+/// `claude-notes/plans/2026-08-11-lua-filter-returned-table-form-investigation/pandoc-probes/`:
+///
+/// 1. The script returns **no value** → the filter is built from the globals.
+/// 2. The script returns **any value** → that value *is* the filter and the
+///    globals are never consulted:
+///    - a table with `rawlen == 0` → one filter;
+///    - a table with `rawlen > 0` → a list of filters, applied as successive
+///      passes (the named keys of such a table are ignored, exactly as in
+///      pandoc);
+///    - anything else → an error.
+///
+/// The distinction in (1) vs (2) is a *count* of returned values, not a check
+/// for nil: an explicit `return nil` is case 2, and an error. This is why the
+/// caller hands us a `MultiValue`.
+fn classify_filter_return(
+    lua: &Lua,
+    returned: mlua::MultiValue,
+    filter_path: &Path,
+) -> FilterResult<Vec<Table>> {
+    // Case 1: nothing returned — build the filter from the globals.
+    if returned.is_empty() {
+        return Ok(vec![get_filter_table(lua)?]);
+    }
 
-    // Create a filter table that wraps globals
+    // Case 2: the script returned something. Only a table can be a filter.
+    let value = &returned[0];
+    let Value::Table(table) = value else {
+        return Err(filter_script_return_error(
+            filter_path,
+            lua_facing_type_name(value),
+        ));
+    };
+
+    // A non-empty array part makes it a LIST of filters; otherwise it is a
+    // single filter table. `raw_len` matches pandoc's `rawlen`, which ignores
+    // `__index`/`__len` metamethods.
+    if table.raw_len() == 0 {
+        return Ok(vec![table.clone()]);
+    }
+
+    let mut filters = Vec::with_capacity(table.raw_len());
+    for (i, entry) in table.clone().sequence_values::<Value>().enumerate() {
+        match entry? {
+            Value::Table(t) => filters.push(t),
+            other => {
+                return Err(filter_script_list_entry_error(
+                    filter_path,
+                    i + 1,
+                    lua_facing_type_name(&other),
+                ));
+            }
+        }
+    }
+    Ok(filters)
+}
+
+/// Error for a filter script that returned something that is not a filter.
+///
+/// Pandoc errors here too, but its message (`attempt to index a number value`)
+/// names neither the filter nor the value. Ours does. Follows the
+/// `filter_return_error` contract from bd-23yvjfmm; `Q-11-6` is the
+/// script-level companion to `Q-11-4`'s per-handler return.
+fn filter_script_return_error(filter_path: &Path, got: &'static str) -> LuaFilterError {
+    LuaFilterError::InvalidScriptReturn(format!(
+        "Q-11-6: Lua filter '{}' returned {got}, which is not a filter. \
+         A filter script may return a table of handler functions, a list of \
+         such tables (applied as successive passes), or nothing at all (in \
+         which case the handlers are taken from the script's global \
+         functions).",
+        filter_path.display()
+    ))
+}
+
+/// Error for one bad entry inside a returned list of filters.
+fn filter_script_list_entry_error(
+    filter_path: &Path,
+    index: usize,
+    got: &'static str,
+) -> LuaFilterError {
+    LuaFilterError::InvalidScriptReturn(format!(
+        "Q-11-6: Lua filter '{}' returned a list of filters whose entry #{index} \
+         is {got}, not a table of handler functions.",
+        filter_path.display()
+    ))
+}
+
+/// Warn about keys in a filter table that hold a function but are not names
+/// q2 will ever dispatch (`Q-11-7`).
+///
+/// This is the antidote to the silence that made
+/// bd-lua-filter-table-form-ignored-ph23becz so hard to diagnose: a filter
+/// whose handlers are never consulted should say so rather than render a
+/// document that merely looks wrong. It catches two classes at once — an
+/// author's typo (`Strs`), and a genuine gap where q2 fails to recognize a
+/// handler name it ought to support. The second is the more valuable: it turns
+/// a future silent regression into a visible, if wrongly-emitted, diagnostic.
+///
+/// Scanning is uniform over every filter table, including the one built from
+/// globals — which by construction can only contain recognized names, so it
+/// never produces a warning. Only *function*-valued keys are considered, so
+/// `traverse` and any data the author parks on the table are ignored, matching
+/// pandoc's tolerance for extra keys.
+fn unrecognized_handler_warnings(
+    filters: &[Table],
+    filter_path: &Path,
+) -> mlua::Result<Vec<DiagnosticMessage>> {
+    let recognized: std::collections::HashSet<&str> = recognized_handler_names().collect();
+    let mut unknown: Vec<(usize, String)> = Vec::new();
+
+    for (index, table) in filters.iter().enumerate() {
+        for pair in table.clone().pairs::<Value, Value>() {
+            let (key, value) = pair?;
+            let (Value::String(name), Value::Function(_)) = (&key, &value) else {
+                continue;
+            };
+            let name = name.to_str()?.to_string();
+            if !recognized.contains(name.as_str()) {
+                unknown.push((index, name));
+            }
+        }
+    }
+
+    // `pairs` iterates in unspecified order, so sort before building messages
+    // to keep diagnostic output deterministic.
+    unknown.sort();
+
+    let passes = filters.len();
+    Ok(unknown
+        .into_iter()
+        .map(|(index, name)| {
+            let pass = if passes > 1 {
+                format!(" (pass {} of {passes})", index + 1)
+            } else {
+                String::new()
+            };
+            let suggestion = closest_handler_name(&name, &recognized)
+                .map(|near| format!(" Did you mean '{near}'?"))
+                .unwrap_or_default();
+            quarto_error_reporting::DiagnosticMessageBuilder::warning(format!(
+                "Lua filter '{}' defines a handler '{name}'{pass}, which is not an \
+                 element type Quarto knows about, so it will never run.{suggestion}",
+                filter_path.display()
+            ))
+            .with_code("Q-11-7")
+            .build()
+        })
+        .collect())
+}
+
+/// The recognized handler name closest to `name`, if one is within a small
+/// edit distance. Used only to enrich a warning, never to change behavior.
+fn closest_handler_name<'a>(
+    name: &str,
+    recognized: &std::collections::HashSet<&'a str>,
+) -> Option<&'a str> {
+    // Scale the tolerance with the name so that short names ("Str") do not
+    // match everything, while longer ones still tolerate a typo or two.
+    let budget = match name.len() {
+        0..=3 => 1,
+        4..=8 => 2,
+        _ => 3,
+    };
+    recognized
+        .iter()
+        .map(|candidate| (*candidate, edit_distance(name, candidate)))
+        .filter(|(_, distance)| *distance <= budget)
+        .min_by_key(|(candidate, distance)| (*distance, candidate.len()))
+        .map(|(candidate, _)| candidate)
+}
+
+/// Levenshtein distance, two-row variant.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    if a.is_empty() {
+        return b.len();
+    }
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut cur = vec![0usize; b.len() + 1];
+    for (i, ca) in a.iter().enumerate() {
+        cur[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let substitution = prev[j] + usize::from(ca != cb);
+            cur[j + 1] = substitution.min(prev[j + 1] + 1).min(cur[j] + 1);
+        }
+        std::mem::swap(&mut prev, &mut cur);
+    }
+    prev[b.len()]
+}
+
+/// Handler names the walker dispatches that are **not** element tags: the
+/// whole-document handlers and the element-list catch-alls.
+///
+/// `Doc` is pandoc's deprecated alias for `Pandoc` (see
+/// [`apply_pandoc_function`]).
+const CATCH_ALL_HANDLER_NAMES: &[&str] = &[
+    "Pandoc", "Doc", "Meta", "Inline", "Inlines", "Block", "Blocks",
+];
+
+/// Every handler name a Lua filter can define that q2 will actually dispatch.
+///
+/// Derived from the generated tag lists rather than hand-written, so it cannot
+/// drift from what the walker looks up — that drift is bd-18a2r2lp, where five
+/// dispatchable tags were missing from this scan and filters defining them as
+/// globals were silently dropped.
+pub(crate) fn recognized_handler_names() -> impl Iterator<Item = &'static str> {
+    super::types::INLINE_TAG_NAMES
+        .iter()
+        .copied()
+        .chain(super::types::BLOCK_TAG_NAMES.iter().copied())
+        .chain(CATCH_ALL_HANDLER_NAMES.iter().copied())
+}
+
+/// Build a filter table from the script's global functions.
+///
+/// Used only when the script returned no value; a script that returns a filter
+/// table has its globals ignored entirely (pandoc's rule — see
+/// [`classify_filter_return`]).
+fn get_filter_table(lua: &Lua) -> Result<Table> {
+    let globals = lua.globals();
     let filter_table = lua.create_table()?;
 
-    // Copy relevant filter functions from globals
-    let filter_names = [
-        // Inline types
-        "Str",
-        "Emph",
-        "Strong",
-        "Underline",
-        "Strikeout",
-        "Superscript",
-        "Subscript",
-        "SmallCaps",
-        "Quoted",
-        "Cite",
-        "Code",
-        "Space",
-        "SoftBreak",
-        "LineBreak",
-        "Math",
-        "RawInline",
-        "Link",
-        "Image",
-        "Note",
-        "Span",
-        // QMD-specific inline types
-        "Insert",
-        "Delete",
-        "Highlight",
-        "EditComment",
-        "NoteReference",
-        "Shortcode",
-        "Custom",
-        "Inline",
-        "Inlines",
-        // Block types
-        "Para",
-        "Plain",
-        "CodeBlock",
-        "RawBlock",
-        "BlockQuote",
-        "OrderedList",
-        "BulletList",
-        "DefinitionList",
-        "Header",
-        "HorizontalRule",
-        "Table",
-        "Figure",
-        "Div",
-        "LineBlock",
-        "Block",
-        "Blocks",
-        // Document-level
-        "Pandoc",
-        "Doc",
-        "Meta",
-    ];
-
-    for name in &filter_names {
-        if let Ok(func) = globals.get::<Function>(*name) {
-            filter_table.set(*name, func)?;
+    for name in recognized_handler_names() {
+        if let Ok(func) = globals.get::<Function>(name) {
+            filter_table.set(name, func)?;
         }
     }
 

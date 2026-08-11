@@ -3,8 +3,10 @@
 **Date:** 2026-08-11
 **Braid:** `bd-lua-filter-table-form-ignored-ph23becz` (bug, p1, labels `pampa` / `parity`)
 **Branch:** `main` @ `808215fc` (investigated in the main checkout; no worktree created)
-**Status:** Design settled (2026-08-11) — see **Settled decisions**. Phases are
-written but **implementation has not started and needs the user's go-ahead.**
+**Status:** In progress. Design settled 2026-08-11 (see **Settled decisions**);
+Phases 0–2 complete — the returned-table and filter-list forms work and match
+pandoc across all eleven probe shapes. Phases 3–5 (diagnostics, docs,
+verification) remain. See the **Phase log**.
 
 ## Triage verdict
 
@@ -216,82 +218,82 @@ phase ends at a clean commit (workspace builds, full test suite green).
 Every test here must be **observed failing** before any fix lands, and the
 observed failure recorded in the phase log.
 
-- [ ] 0.1 Unit tests, returned-table forms — `crates/pampa/src/lua/filter_tests.rs`
+- [x] 0.1 Unit tests, returned-table forms — `crates/pampa/src/lua/filter_tests.rs`
       (TempDir + `apply_lua_filter`, the existing idiom): single table; list
       applied in order; `traverse` on a returned table; per-entry `traverse` in
       a list; handler name outside the old ~50-name whitelist works in a
       returned table.
-- [ ] 0.2 Unit tests, globals path unchanged — script returning nothing still
+- [x] 0.2 Unit tests, globals path unchanged — script returning nothing still
       builds its filter from globals.
-- [ ] 0.3 Unit tests, the five parity flips — `mixed` runs only the table;
+- [x] 0.3 Unit tests, the five parity flips — `mixed` runs only the table;
       `empty` and `emptylist` run nothing; `nilret` and `num` error. These
       assert the *new* behavior and so fail in the opposite direction from the
       others (they pass today for the wrong reason — check the failure message,
       not just the red).
-- [ ] 0.4 Unit test, the stack-count distinction — explicit `return nil` errors
+- [x] 0.4 Unit test, the stack-count distinction — explicit `return nil` errors
       while falling off the end uses globals. Called out separately because it
       is the single most fumbleable part of Phase 1.
-- [ ] 0.5 Differential cases + oracles under
+- [x] 0.5 Differential cases + oracles under
       `crates/pampa/tests/lua-conformance/differential/cases/` for the
       AST-shaped probes (`tf`, `lf`, `hybrid`, `trav`, `listtrav`, `mixed`,
       `empty`, `emptylist`). Regenerate with `regen-oracles.sh` (local pandoc
       is 3.9.0.2, matching `ORACLE_VERSION`). The error-shaped probes
       (`nilret`, `num`, `fnret`) **cannot** be oracle cases — the harness
       compares JSON ASTs and pandoc produces none — so they stay unit tests.
-- [ ] 0.6 Record the observed failures (which tests, which messages) in the
+- [x] 0.6 Record the observed failures (which tests, which messages) in the
       phase log below, then commit the failing tests.
 
 ### Phase 1 — Load-time classification
 
-- [ ] 1.1 Replace `exec_async()` with `eval_async::<Value>()` in
+- [x] 1.1 Replace `exec_async()` with `eval_async::<Value>()` in
       `apply_lua_filter` (`filter.rs:243`).
-- [ ] 1.2 Classify the result per the pinned rule: **no value returned** →
+- [x] 1.2 Classify the result per the pinned rule: **no value returned** →
       globals via `get_filter_table`; **table, `rawlen == 0`** → single filter;
       **table, `rawlen > 0`** → list of filters; **anything else** → `Q-11-6`
       error. The branch hinges on *whether a value was returned at all*, not on
       nil-ness — `return nil` is an error, not a fallback.
-- [ ] 1.3 Confirm 0.1–0.4 now pass; 0.5 differential cases pass.
+- [x] 1.3 Confirm 0.1–0.4 now pass; 0.5 differential cases pass.
 
 ### Phase 2 — Multi-pass application
 
-- [ ] 2.1 Apply each table in a returned list as a successive
+- [x] 2.1 Apply each table in a returned list as a successive
       `apply_full_filter` pass over the whole document, in order, each honoring
       its own `traverse`.
-- [ ] 2.2 Confirm the list-form and per-entry-traverse tests pass.
+- [x] 2.2 Confirm the list-form and per-entry-traverse tests pass.
 
 ### Phase 3 — Diagnostics
 
-- [ ] 3.1 Add `Q-11-6` ("Invalid Lua Filter Script Return Value") to
+- [x] 3.1 Add `Q-11-6` ("Invalid Lua Filter Script Return Value") to
       `crates/quarto-error-catalog/error_catalog.json` **and**
       `docs/errors/lua/Q-11-6.qmd` in the same commit (the
       `error-docs-page-missing` lint enforces this).
-- [ ] 3.2 Emit `Q-11-6` from the Phase 1 error branch, naming the filter path
+- [x] 3.2 Emit `Q-11-6` from the Phase 1 error branch, naming the filter path
       and the offending Lua type, in the `filter_return_error` style from
       bd-23yvjfmm.
-- [ ] 3.3 Build the canonical handler-name set from `LuaInline::tag_name` /
+- [x] 3.3 Build the canonical handler-name set from `LuaInline::tag_name` /
       `LuaBlock::tag_name` plus the catch-alls (`Pandoc`, `Doc`, `Meta`,
       `Inline`, `Inlines`, `Block`, `Blocks`). **One source of truth** — do not
       hand-write a third list.
-- [ ] 3.4 Point `get_filter_table`'s globals scan at that set, which fixes
+- [x] 3.4 Point `get_filter_table`'s globals scan at that set, which fixes
       **bd-18a2r2lp** (the five dropped tags) as a side effect rather than as
       separate work.
-- [ ] 3.5 Add the unrecognized-handler-name warning (new code, likely
+- [x] 3.5 Add the unrecognized-handler-name warning (new code, likely
       `Q-11-7`, with its own docs page) — for both the returned-table and
       globals paths.
-- [ ] 3.6 Tests for 3.2 and 3.5, plus a regression test for bd-18a2r2lp
+- [x] 3.6 Tests for 3.2 and 3.5, plus a regression test for bd-18a2r2lp
       (a global `NoteDefinitionPara` handler fires).
 
 ### Phase 4 — Docs
 
-- [ ] 4.1 `docs/guides/authoring/lua-filters.qmd`: document the returned-table
+- [x] 4.1 `docs/guides/authoring/lua-filters.qmd`: document the returned-table
       form, the ordered list of passes, and `traverse` — today the page shows
       only the top-level-function form and never mentions a returned table.
-- [ ] 4.2 Document the strictness rule explicitly: returning a value means
+- [x] 4.2 Document the strictness rule explicitly: returning a value means
       globals are ignored entirely.
 
 ### Phase 5 — Verification and close-out
 
-- [ ] 5.1 `run-parity-matrix.sh` with `PAMPA=` pointed at the patched build;
+- [x] 5.1 `run-parity-matrix.sh` with `PAMPA=` pointed at the patched build;
       paste the resulting table into the phase log. Every row must match the
       pandoc column except the three error rows, where q2 should error with a
       `Q-11-6` message rather than pandoc's `attempt to index a …`.
@@ -307,7 +309,91 @@ observed failure recorded in the phase log.
 
 Appended as work lands, so a later session can pick up mid-plan.
 
-_(nothing yet — implementation not started)_
+### 2026-08-11 — Phases 0–2 (tests, load-time classification, multi-pass)
+
+**Commit convention note.** Phase 0 is TDD, so its artifact is a *failing*
+suite — which conflicts with the repo rule that a phase-boundary commit is
+green. Resolved by observing and recording the failures here, then committing
+Phases 0–2 together once green. The failure evidence below is the substitute
+for a red commit.
+
+**0.1–0.4 observed failing** (13 unit tests, before any src change; each ran in
+both the `pampa` lib and `bin/pampa` test binaries):
+
+```
+test_returned_table_form_runs_handlers                     left: "MARKER"      right: "TABLE-RAN"
+test_returned_list_applies_passes_in_order                 left: "MARKER"      right: "PASS-TWO"
+test_returned_table_honors_traverse_topdown                left: "x"           right: "S-P"
+test_returned_list_traverse_is_per_entry                   left: "x"           right: "Q"
+test_returned_table_dispatches_name_outside_globals_…      (handler never ran)
+test_hybrid_table_prefers_array_part                       left: "MARKER"      right: "ARRAY-RAN"
+test_empty_returned_table_disables_globals                 left: "GLOBAL-RAN"  right: "MARKER"
+test_empty_returned_list_disables_globals                  left: "GLOBAL-RAN"  right: "MARKER"
+test_returned_table_shadows_globals                        left: "GLOBAL-RAN"  right: "TABLE-RAN"
+test_explicit_return_nil_is_an_error                       got Ok("GLOBAL-RAN")
+test_non_table_return_is_an_error                          got Ok("GLOBAL-RAN")
+test_returned_function_is_an_error                         got Ok("MARKER")
+test_globals_used_when_script_returns_nothing              PASS (control, correctly green throughout)
+```
+
+Each failure is for the *right* reason: the returned-table tests show the input
+unchanged (the filter never ran), the parity flips show `GLOBAL-RAN` where the
+table should have won, and the error tests show `Ok(...)` where an error was
+required.
+
+**0.5 observed failing** — all 8 new differential cases reported by the ratchet
+as `unexpected FAILURE (not in differential/xfail.txt)`. No `xfail.txt` entries
+were added: the cases went from red to green within this same work session, so
+the ratchet never needed to record a gap. Oracles were generated with
+`regen-oracles.sh` against pandoc 3.9.0.2 and **no existing oracle changed**
+(checked with `git status` after the regen, since the script rewrites all
+cases).
+
+**1.1–1.2 — two implementation decisions worth recording**, because the obvious
+reading of the plan would have got both wrong:
+
+- **`call_async`, not `eval_async`.** mlua's `eval` first tries to compile the
+  source as an *expression* and only falls back to a block. That would make q2
+  accept a filter file containing a bare `{ Str = f }` with no `return` — which
+  pandoc rejects as a syntax error. `call_async` compiles strictly as a block,
+  matching pandoc's `dofile`. (The shortcode loader uses `eval_async` and has
+  the same latent widening; out of scope here, not filed — it is a different
+  contract with no pandoc equivalent.)
+- **`MultiValue`, not `Value`.** `Value` collapses "returned nothing" and
+  "returned nil" into the same `Value::Nil`, but those must diverge: the first
+  uses the globals, the second is an error. The classifier therefore switches
+  on `returned.is_empty()` — a *count* of returned values. This is the
+  distinction test 0.4 exists to pin.
+
+**Results.** 13/13 unit tests pass; all 8 differential cases match pandoc's
+oracle after normalization; full `pampa` suite 4360/4360 green.
+
+**Parity matrix against the patched build** (`run-parity-matrix.sh`, work item
+5.1 done early since the script was already at hand):
+
+```
+probe      | pandoc                   | q2
+-----------+--------------------------+-------------------------
+tf         | Marker: TABLE-FORM-RAN   | Marker: TABLE-FORM-RAN
+lf         | Marker: LIST-FORM-RAN    | Marker: LIST-FORM-RAN
+hybrid     | Marker: ARRAY-RAN        | Marker: ARRAY-RAN
+trav       | STR-TOPDOWN-PARA         | STR-TOPDOWN-PARA
+mixed      | Marker: TABLE-RAN        | Marker: TABLE-RAN
+empty      | Marker: MARKER           | Marker: MARKER
+nilret     | Error running filter nil | Filter error: … Q-11-6 …
+num        | Error running filter num | Filter error: … Q-11-6 …
+fnret      | Error running filter fnr | Filter error: … Q-11-6 …
+emptylist  | Marker: MARKER           | Marker: MARKER
+listtrav   | S-P1                     | S-P1
+```
+
+Every AST-shaped row matches; the three error rows error in both engines, with
+q2 giving the better message.
+
+**Carried into Phase 3:** the error currently surfaces as
+`Filter error: Lua filter error: runtime error: Q-11-6: …` — three nested
+prefixes before the code. Phase 3.2 should render it as a proper diagnostic
+rather than a stringified runtime error.
 
 ## Settled decisions (user, 2026-08-11)
 
@@ -405,3 +491,93 @@ strand's scope.
   TempDir + `apply_lua_filter` idiom (124 tests), and the differential suite
   has a working oracle regen path with the pinned pandoc already installed
   locally.
+
+### 2026-08-11 — Phases 3–4 (diagnostics, docs)
+
+**3.3/3.4 — the drift-proof name set, done properly.** The plan said "derive
+the set from `tag_name`", but `tag_name` is a method on a *value*, so there was
+nothing to enumerate. Rather than hand-writing the list a second time and
+adding a test to keep the two in step — which is the same arrangement that
+produced bd-18a2r2lp, just with an alarm on it — `tag_name` is now generated by
+an `element_tag_names!` macro that emits **both** the match arms and a
+`&[&str]` of every name it can return (`INLINE_TAG_NAMES`, `BLOCK_TAG_NAMES` in
+`types.rs`). The match stays exhaustive, so a new AST variant fails to compile
+until it is listed, and the constant cannot disagree with the dispatch because
+both come from the same lines. Drift is now unrepresentable rather than merely
+detected.
+
+`get_filter_table`'s ~50-name whitelist is deleted in favor of
+`recognized_handler_names()` over those constants plus the seven catch-alls.
+That fixes **bd-18a2r2lp** as a side effect: `pampa note.md -F whitelist-gap.lua`
+now prints `GLOBAL NoteDefinitionPara FIRED` where it printed nothing before.
+
+**3.2 — error rendering.** `Q-11-6` gets its own `LuaFilterError::InvalidScriptReturn`
+variant that renders its message verbatim, instead of riding on
+`mlua::Error::runtime` and arriving as
+`Filter error: Lua filter error: runtime error: Q-11-6: …`. It now reads:
+
+```
+Filter error: Q-11-6: Lua filter 'num.lua' returned number, which is not a
+filter. A filter script may return a table of handler functions, a list of such
+tables (applied as successive passes), or nothing at all (in which case the
+handlers are taken from the script's global functions).
+```
+
+**3.5 — the warning, and one thing that fell out nicely.** `Q-11-7` warns about
+function-valued keys that are not names q2 dispatches, with a
+smallest-edit-distance suggestion (`'Strs'` → *Did you mean 'Str'?*), naming the
+pass when the filter is a list. Two scoping decisions worth recording:
+
+- **Only function-valued keys warn.** `traverse` is a string and data parked on
+  the table is not a function, so both are ignored without needing a special
+  case — matching pandoc's tolerance for extra keys.
+- **The globals path cannot produce a false positive.** The globals-derived
+  table is *built from* the recognized set, so scanning uniformly across every
+  filter table is safe: a user's unrelated global helper can never reach the
+  warning. This is why there is no "is this from globals?" flag threaded
+  through. A test pins it (`test_globals_form_never_warns`).
+
+  Worth being explicit about the limitation this implies: a **typo in a global
+  handler name** (`function Strs(el)` at top level) still cannot be warned
+  about, because there is no way to tell it from an ordinary helper function.
+  The warning covers the returned-table form only. That is a real gap, and the
+  honest mitigation is the docs note steering authors toward `local` helpers.
+
+**Live output:**
+
+```
+$ pampa input.md -F typo.lua -t plain
+Warning [Q-11-7]: Lua filter 'typo.lua' defines a handler 'Strs', which is not
+an element type Quarto knows about, so it will never run. Did you mean 'Str'?
+```
+
+**3.1 — catalog + pages.** `Q-11-6` and `Q-11-7` added to
+`error_catalog.json` with `docs/errors/lua/Q-11-6.qmd` and `Q-11-7.qmd` in the
+same change; `cargo xtask lint` (which enforces exactly this) passes.
+
+**4.1/4.2 — docs.** `docs/guides/authoring/lua-filters.qmd` gains three
+sections: the two ways to organize a filter (with a callout on the returned
+table replacing the globals), several passes in a fixed order, and when a
+handler never runs. Rendered with `q2` (never Q1, per CLAUDE.md) and the output
+inspected — the first attempt used `/docs/errors/…` absolute links, which the
+project rejected because the project root *is* `docs/`; fixed to `../../errors/…`,
+matching `extensions.qmd`. While there, the sidebar in `docs/_quarto.yml` listed
+only `Q-11-1` of the six existing lua pages; all seven are now listed.
+
+**Test counts.** pampa 4378/4378 green (up from 4360: 13 return-value tests, 2
+bd-18a2r2lp regressions, 7 warning/edit-distance tests). `cargo xtask lint`
+clean.
+
+### 2026-08-11 — Phase 5 (verification)
+
+**5.1/5.2 done** and recorded above / in `repro/OBSERVED-AT-HEAD.md`.
+
+**5.3 — the gate caught something the tests did not.** `cargo nextest run
+--workspace` was 11708/11708 green and `cargo xtask lint` was clean, but
+`cargo xtask verify` failed at *step 1 of 14* on clippy's
+`needless_borrows_for_generic_args`: `DiagnosticMessageBuilder::warning(&format!(…))`
+where the builder takes `impl Into<String>`, so the `&` is redundant. One
+character. This is exactly the gap CLAUDE.md's git-push policy warns about —
+`cargo build` and `cargo nextest` do not run with `-D warnings`, so a clean
+test run says nothing about whether CI will accept the change. Worth
+remembering: run `verify` *before* believing a phase is done, not after.
