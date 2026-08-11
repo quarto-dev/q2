@@ -154,18 +154,93 @@ So the transform keeps ownership of its own emission (which also puts the `<scri
 
 Both halves are now pinned by tests — `runtime_is_not_keyed_as_a_template_script` (unit) and `revealjs_deck_bundles_the_runtime` (integration). The reveal case is the one a future "tidy-up" would break while unit tests stayed green, which is why it is called out in the fixture comment too.
 
-### Phase 3 — End-to-end verification
+### Phase 3 — End-to-end verification ✅
 
-- [ ] `q2 render` the repro; confirm the asset is written and the page references it relatively
-- [ ] Load the rendered page **with the network blocked**; confirm a real SVG renders
-- [ ] Include a non-flowchart diagram type (gantt or class) to prove the chunk trap is gone
-- [ ] Record invocation + observed output in this plan
+- [x] `q2 render` a website fixture; asset written, pages reference it relatively
+- [x] Loaded the rendered page in a real browser; confirmed real SVGs render
+- [x] Included **three** diagram types (flowchart, gantt, class) to prove the chunk trap is gone
+- [x] Confirmed **zero** external network requests
+- [x] Verified the nested page's `../site_libs/…` URL resolves and shares the same file
+- [x] Verified a revealjs deck and a single-doc render
+- [x] Record invocation + observed output in this plan (below)
 
-### Phase 4 — Docs + changelog
+#### Observed output
 
-- [ ] Update module docs in `mermaid.rs` (they currently describe the CDN design)
-- [ ] User-facing docs under `docs/` if diagrams are documented there
-- [ ] `cargo xtask verify` green
+Fixture: a website with a 3-diagram-type root page, a nested `docs/nested.qmd`, and a diagram-free `plain.qmd`.
+
+```
+$ q2 render .
+Rendered 3 of 3 files to …/e2e/_site
+
+$ find _site -iname '*mermaid*'
+_site/site_libs/mermaid
+_site/site_libs/mermaid/mermaid.min.js
+
+$ ls _site/site_libs
+bootstrap  mermaid  quarto
+
+$ grep -rl "jsdelivr\|cdn\." _site
+(none)
+
+# root page
+<script src="site_libs/mermaid/mermaid.min.js"></script>
+mermaid.initialize({ startOnLoad: false });
+mermaid.run({ querySelector: 'pre.mermaid' });
+
+# nested page
+<script src="../site_libs/mermaid/mermaid.min.js"></script>
+
+# diagram-free page: 0 mermaid references
+```
+
+Served over `127.0.0.1` and loaded in Chrome. **All three diagram types drew as real SVG** — each would be a *separate lazily-loaded chunk* under the ESM build, which is the precise failure this design avoids:
+
+```js
+{"mermaidBlocks":3,"blocksWithSvg":3,
+ "svgSizes":["flowchart-v2: 203x70","gantt: 799x124","class: 124x270"],
+ "mermaidGlobal":"object"}
+```
+
+Full network log for the page — **every request is local, none external**:
+
+```
+GET http://127.0.0.1:8899/index.html                                [200]
+GET http://127.0.0.1:8899/site_libs/bootstrap/bootstrap-icons.css   [200]
+GET http://127.0.0.1:8899/site_libs/quarto/quarto-theme-*.css       [200]
+GET http://127.0.0.1:8899/site_libs/quarto/bootstrap.bundle.min.js  [200]
+GET http://127.0.0.1:8899/site_libs/quarto/clipboard.min.js         [200]
+GET http://127.0.0.1:8899/site_libs/quarto/code-copy-init.js        [200]
+GET http://127.0.0.1:8899/site_libs/mermaid/mermaid.min.js          [200]
+GET http://127.0.0.1:8899/favicon.ico                               [404]
+```
+
+The only console error is the unrelated favicon 404. The nested page fetched the *same* runtime URL and got a `304`, confirming one shared copy. Screenshot of the three rendered diagrams:
+`mermaid-runtime-not-bundled-investigation/e2e-three-diagram-types.png`.
+
+Single-doc path checked separately via `examples/diagrams/01-mermaid-basic/` →
+`<script src="document_files/mermaid/mermaid.min.js"></script>`, asset present, no CDN.
+
+### Phase 4 — Docs ✅
+
+- [x] Update module docs in `mermaid.rs` (they described the CDN design)
+- [x] Update `resources/mermaid/README.md` with the "use the right dist file" warning
+- [x] Update user-facing `docs/guides/authoring/diagrams.qmd` — the "How diagrams render" section documented the CDN behavior and stated *"Viewing a page with diagrams requires network access"*, which is now false for rendered output. Rewritten, with a callout noting `q2 preview` still uses a CDN (bd-1vwtdwtq) so the doc does not overclaim.
+- [x] `cargo xtask verify` (full, including the WASM/hub leg) — **all steps passed**
+
+No changelog entry: `hub-client/changelog.md` covers hub-client changes, and this change does not touch hub-client.
+
+## Measured cost
+
+| | |
+| --- | --- |
+| Vendored file | 2,748,992 B (2.62 MiB) |
+| `wasm_quarto_hub_client_bg.wasm` | 38,935,233 → 41,758,814 B (**+2.82 MB, +7.3 %**) |
+
+The WASM number is the one worth flagging, and it was **not** anticipated in the design discussion. `quarto-core` is linked into `wasm-quarto-hub-client`, so `include_str!` embeds the bundle there too. Confirmed directly rather than inferred from the size delta (the baseline WASM predated some unrelated commits): distinctive mermaid strings (`__esbuild_esm_mermaid_nm`, `Bezier curve function generator`) are present in the `.wasm`.
+
+Today those bytes are dead weight in the client: the preview pipeline excludes the mermaid transform (`Q2_PREVIEW_TRANSFORM_EXCLUDED`) and `MermaidCodeBlock.tsx` fetches its own copy from a CDN. But this **helps** `bd-1vwtdwtq` rather than complicating it — the direction chosen there (serve the vendored bytes as a per-project HTML dependency instead of bundling mermaid into the client) can read the bytes that are *already embedded*, adding nothing further to the client. It also raises the value of `bd-43gpsd7c` (compressed embedding), which would shrink the native binary and the WASM together.
+
+Deliberately **not** addressed here by `#[cfg(not(target_arch = "wasm32"))]`-gating the constant: that would make `bd-1vwtdwtq`'s intended design harder, and WASM-side HTML export would then silently produce CDN-dependent output. Worth revisiting only if `bd-1vwtdwtq` concludes otherwise.
 
 ## Resolved decisions (2026-08-11)
 
