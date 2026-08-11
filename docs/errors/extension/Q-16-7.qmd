@@ -1,0 +1,84 @@
+---
+title: "Invalid project type contribution"
+description: "An extension resolved a custom `project.type`, but its `contributes.project` fragment is unusable."
+code: Q-16-7
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-7` — Invalid project type contribution
+
+> An extension resolved a custom `project.type`, but its
+> `contributes.project` fragment is unusable.
+
+## What this means
+
+An extension can define a custom project type, so a project can set
+`project.type: my-org/my-type` and inherit configuration the extension
+supplies. The extension declares this under `contributes.project` in
+its `_extension.yml`.
+
+Quarto found the extension your `project.type` names, but could not use
+what it declares. This stops the render — unlike most extension
+problems, there is no sensible way to continue, because the project
+type decides how every document in the project is processed.
+
+Four things make the fragment unusable:
+
+- `contributes.project` is not a mapping.
+- Its `project.type` is not a string.
+- It names a base type that is not built-in. Chaining custom types —
+  one extension's type inheriting from another's — is not supported.
+- It names `book` or `manuscript`, which Quarto 2 does not implement
+  yet.
+
+The message names the extension and the path to its `_extension.yml`.
+
+## Why this happens
+
+- **A hand-written extension manifest** with `contributes.project` as
+  a list rather than a mapping.
+- **An extension built against Quarto 1**, where the constraints
+  differ.
+- **A base type that is itself a custom type**, usually an attempt to
+  build a family of related project types by layering them.
+- **A `book`-based extension**, which cannot work until Quarto 2
+  implements the book project type.
+
+## How to fix
+
+This is a defect in the extension, not in your project — the fix
+belongs in the extension's `_extension.yml`. A usable contribution
+looks like this:
+
+```yaml
+title: My Project Type
+version: 1.0.0
+contributes:
+  project:
+    project:
+      type: website
+    format:
+      html:
+        theme: cosmo
+```
+
+The nested `project.type` names the **built-in base type** the custom
+type builds on: `default` or `website`. Everything else in the
+fragment is configuration merged into projects that use the type.
+
+If you do not maintain the extension, report the problem to its
+author. In the meantime, set `project.type` to a built-in type and
+copy the configuration you need directly into `_quarto.yml`.
+
+## Related errors
+
+- [`Q-16-9`](Q-16-9.qmd) — the fragment is valid but declares no base
+  type, so it silently falls back to `default`.
+- [`Q-5-17`](../project/Q-5-17.qmd) — the `project.type` matched no
+  extension at all.
+- [`Q-16-1`](Q-16-1.qmd) — the manifest could not be read; a common
+  root cause reported alongside this one.

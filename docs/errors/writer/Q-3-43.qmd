@@ -1,0 +1,68 @@
+---
+title: "Generated content edit dropped"
+description: "An edit typed into pipeline-generated content was reverted; the content has no editable source position in this file."
+code: Q-3-43
+subsystem: writer
+status: stub
+since: "99.9.9"
+categories:
+  - writer
+---
+
+# `Q-3-43` — Generated content edit dropped
+
+> An edit typed into pipeline-generated content was reverted; the
+> content has no editable source position in this file.
+
+## What this means
+
+This warning comes from the visual editor in `q2 preview` and Quarto
+Hub, not from a command-line render.
+
+Parts of a rendered document are produced by Quarto rather than typed
+by you. A resolved cross-reference is the clearest example: you write
+`@fig-plot`, and the editor shows **Figure 3**. Those characters are
+generated — the number depends on how many figures precede it, and no
+part of the phrase exists in your `.qmd`.
+
+The editor treats such regions as single atomic units. You can replace
+or delete one wholesale, but you cannot type inside it, because there
+are no source bytes to write the keystrokes back to. An edit that
+lands inside is reverted.
+
+Your document is unchanged.
+
+## Why this happens
+
+- **Typing inside a resolved cross-reference.** Clicking into
+  "Figure 3" and editing the number or the word.
+- **A selection spanning generated content**, then typing over it.
+- **Editing content that came from elsewhere** — an included file, a
+  metadata value — which has a source, just not in the file you have
+  open.
+
+## How to fix
+
+Edit the upstream source that produced the content.
+
+For a cross-reference, change the referenced element's label or its
+position in the document; the number is computed from document order
+and is not editable directly:
+
+```markdown
+![A scatter plot](plot.png){#fig-plot}
+
+As @fig-plot shows, ...
+```
+
+For content from an include, open the included file and edit it there.
+For content from metadata, edit the metadata key in the front matter or
+`_quarto.yml`.
+
+To remove generated content entirely, delete the whole unit rather than
+editing within it — deletion of an atomic region is supported.
+
+## Related errors
+
+- [`Q-3-42`](Q-3-42.qmd) — the same soft-drop, specific to
+  shortcode-resolved content.

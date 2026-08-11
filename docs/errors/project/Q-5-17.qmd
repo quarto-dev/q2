@@ -1,0 +1,81 @@
+---
+title: "Unknown project type"
+description: "`_quarto.yml` sets a `project.type` that is neither built-in nor contributed by an installed extension; the render stops."
+code: Q-5-17
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-17` — Unknown project type
+
+> `_quarto.yml` sets a `project.type` that is neither built-in nor
+> contributed by an installed extension; the render stops.
+
+## What this means
+
+`project.type` decides how every document in the project is processed.
+Quarto resolves it against two sources: the built-in types
+(`default`, `website`, `book`, `manuscript`) and the types contributed
+by extensions in `_extensions/` via `contributes: project:`.
+
+When neither matches — or when the value is not a string at all — the
+render stops before any document is processed.
+
+Stopping is deliberate. Earlier Quarto 2 versions continued with
+default-project behavior, and that turned out to be the worse failure:
+a broken site build looks like a successful one, and every document
+gets its own copy of the shared JS and CSS written next to the source
+file, littering the tree. An error at the start is easier to act on
+than a scattered mess at the end.
+
+## Why this happens
+
+- **A typo in the type name.**
+- **An extension that is not installed** in this project. Extensions
+  are per-project; one installed elsewhere is not visible here.
+- **An extension whose manifest failed to load.** This is the cause
+  worth checking first — look for a
+  [`Q-16-1`](../extension/Q-16-1.qmd) warning alongside this error. A
+  broken `_extension.yml` means the extension contributes nothing, and
+  its project type becomes unknown.
+- **A non-string value**, such as a list or a mapping, usually from
+  YAML indentation that nested more than intended.
+
+## How to fix
+
+The error's hints list the project-contributing extensions Quarto did
+find, which is the fastest way to spot a near-miss in the name.
+
+For a built-in type, use one of the four:
+
+```yaml
+project:
+  type: website
+```
+
+For an extension type, install it and use the full
+`organization/name` form:
+
+```bash
+quarto add <owner>/<repo>
+```
+
+```yaml
+project:
+  type: my-org/docs
+```
+
+If a `Q-16-1` was reported next to this error, fix that manifest first
+— this error usually goes with it.
+
+## Related errors
+
+- [`Q-16-1`](../extension/Q-16-1.qmd) — a manifest that failed to load;
+  a common root cause.
+- [`Q-16-8`](../extension/Q-16-8.qmd) — the opposite problem: a bare
+  name matching more than one extension.
+- [`Q-5-18`](Q-5-18.qmd) — a built-in type Quarto 2 has not
+  implemented yet.

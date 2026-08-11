@@ -1,0 +1,83 @@
+---
+title: "Profile key has no effect here"
+description: "A `profile:` key appears in a file that does not contribute profile configuration, and is ignored."
+code: Q-5-22
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-22` — Profile key has no effect here
+
+> A `profile:` key appears in a file that does not contribute profile
+> configuration, and is ignored.
+
+## What this means
+
+Profiles decide which configuration files get merged. That makes
+profile configuration itself a chicken-and-egg problem: it cannot come
+from a file that was selected by a profile, because the selection has
+already happened by then.
+
+So Quarto reads profile configuration from a fixed place:
+
+| File                    | Contributes                        |
+| ----------------------- | ---------------------------------- |
+| `_quarto.yml`           | all of `profile:`                  |
+| `_quarto.yml.local`     | `profile.default` only             |
+| `_quarto-<name>.yml`    | nothing                            |
+
+A `profile:` key in an overlay file is ignored entirely — the overlay
+was chosen *because* a profile was active, so it cannot influence which
+profiles are active. In `_quarto.yml.local`, `profile.default` is
+honored (that is how you set a personal default without touching the
+shared config), but `profile.group` is not: groups define the project's
+profile structure and belong in the shared file.
+
+## Why this happens
+
+- **Copying a `profile:` block into an overlay** while factoring
+  configuration out of `_quarto.yml`.
+- **Trying to chain profiles** — having `_quarto-staging.yml` activate
+  a further profile. This is not supported by design.
+- **Putting `profile.group` in `_quarto.yml.local`**, usually while
+  experimenting with a new group locally.
+
+## How to fix
+
+Move the `profile:` block to `_quarto.yml`:
+
+```yaml
+# _quarto.yml
+project:
+  type: website
+
+profile:
+  default: development
+  group:
+    - [production, staging, development]
+```
+
+and let the overlay carry only the configuration that profile selects:
+
+```yaml
+# _quarto-production.yml
+project:
+  output-dir: _site-production
+```
+
+To set a personal default without changing the shared configuration,
+`_quarto.yml.local` is the right place — just `default`, not `group`:
+
+```yaml
+# _quarto.yml.local
+profile:
+  default: development
+```
+
+## Related errors
+
+- [`Q-5-20`](Q-5-20.qmd) — malformed `profile:` configuration.
+- [`Q-5-19`](Q-5-19.qmd) — an active profile that matches nothing.

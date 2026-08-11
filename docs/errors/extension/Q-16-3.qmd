@@ -1,0 +1,82 @@
+---
+title: "Unknown shortcode"
+description: "A shortcode invocation matches no built-in, extension-contributed, or document-level handler; it renders as a visible `?name` marker."
+code: Q-16-3
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-3` — Unknown shortcode
+
+> A shortcode invocation matches no built-in, extension-contributed, or
+> document-level handler; it renders as a visible `?name` marker.
+
+## What this means
+
+When Quarto meets `{{{< name ... >}}}`, it looks for a handler called
+`name` in three places: the built-in handlers, the handlers
+contributed by loaded extensions, and any scripts listed under the
+document's `shortcodes:` key. If none of them defines `name`, the
+invocation cannot be resolved.
+
+Rather than dropping it silently or leaving the raw text in place,
+Quarto renders a visible `?name` marker in the output. The marker is
+deliberate: an unresolved shortcode is usually a mistake, and it should
+be obvious in the rendered document rather than discovered by a reader.
+
+## Why this happens
+
+- **A typo in the shortcode name.**
+- **An extension that failed to load.** This is the most common cause
+  and the least obvious one — the real failure was reported earlier as
+  [`Q-16-1`](Q-16-1.qmd) (bad manifest) or
+  [`Q-16-2`](Q-16-2.qmd) (script error), and this warning is only where
+  it becomes visible. **Check for those two codes earlier in the output
+  before hunting for a typo.**
+- **The extension is not installed** in this project. Extensions live
+  in the project's `_extensions/` directory; one installed in a
+  different project is not available here.
+- **A handler name that differs from the extension name.** An
+  extension called `fancy-boxes` may register a handler called
+  `fancybox`; the manifest's `contributes.shortcodes` scripts decide
+  the names, not the directory.
+
+## How to fix
+
+First scroll back through the render output. If a `Q-16-1` or `Q-16-2`
+warning appeared, fix that — this warning will go with it.
+
+If the extension is genuinely not installed:
+
+```bash
+quarto add <owner>/<repo>
+```
+
+If the name is wrong, check what the extension actually registers. The
+handler names are the keys of the table its Lua script returns:
+
+```lua
+return {
+  ["fancybox"] = function(args, kwargs, meta) ... end
+}
+```
+
+To use a shortcode script without packaging it as an extension, list it
+in the document front matter:
+
+```yaml
+---
+shortcodes:
+  - my-shortcodes.lua
+---
+```
+
+## Related errors
+
+- [`Q-16-1`](Q-16-1.qmd) — the extension's manifest could not be read.
+- [`Q-16-2`](Q-16-2.qmd) — the shortcode script failed to load.
+- [`Q-16-5`](Q-16-5.qmd) — the handler was found, but the value it
+  looked up does not exist.

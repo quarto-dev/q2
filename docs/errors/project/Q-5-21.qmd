@@ -1,0 +1,79 @@
+---
+title: "Invalid profile name"
+description: "Profile names must start with an ASCII letter or digit and contain only letters, digits, `.`, `_`, and `-`."
+code: Q-5-21
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-21` — Invalid profile name
+
+> Profile names must start with an ASCII letter or digit and contain
+> only letters, digits, `.`, `_`, and `-`.
+
+## What this means
+
+Profile names become file names — a profile called `staging` is looked
+up as `_quarto-staging.yml` and `_environment-staging`. That is why the
+allowed character set is narrow: a name with a slash, a space, or a
+non-ASCII character would produce a path that either does not work or
+means something different on a different operating system.
+
+The rules are:
+
+- the first character is an ASCII letter or digit
+- the rest are ASCII letters, digits, `.`, `_`, or `-`
+
+An explicitly given but *empty* selection is also an error —
+`--profile ""` or `QUARTO_PROFILE=" , "`. Asking for a profile and
+naming none is a mistake worth reporting; to select no profiles, pass
+no flag at all.
+
+## Why this happens
+
+- **A space in the name**, often from an unquoted multi-word value.
+- **A leading hyphen or underscore** — `-staging`, `_dev`.
+- **A path-like name** — `env/staging`.
+- **Accented or non-ASCII characters.**
+- **An empty value** from an unset shell variable expanding to nothing:
+  `--profile "$PROFILE"` where `PROFILE` was never set.
+- **A trailing comma** in a list, leaving an empty element:
+  `QUARTO_PROFILE=production,`
+
+## How to fix
+
+Rename the profile to fit the character set, and rename its overlay
+file to match:
+
+```
+_quarto-staging.yml       ✓
+_quarto-staging-eu.yml    ✓
+_quarto-staging.eu.yml    ✓
+_quarto-staging eu.yml    ✗ space
+_quarto--staging.yml      ✗ leading hyphen in the name
+```
+
+Multiple profiles are comma-separated, with no empty elements:
+
+```bash
+quarto render --profile production,fast
+```
+
+If a shell variable may be empty, omit the flag rather than passing an
+empty string:
+
+```bash
+if [ -n "$PROFILE" ]; then
+  quarto render --profile "$PROFILE"
+else
+  quarto render
+fi
+```
+
+## Related errors
+
+- [`Q-5-19`](Q-5-19.qmd) — a well-formed name that matches nothing.
+- [`Q-5-20`](Q-5-20.qmd) — malformed `profile:` configuration.

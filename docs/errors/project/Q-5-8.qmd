@@ -1,0 +1,85 @@
+---
+title: "Project render script failed"
+description: "A `project.pre-render` or `project.post-render` script exited with a non-zero status; the render is aborted."
+code: Q-5-8
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-8` — Project render script failed
+
+> A `project.pre-render` or `project.post-render` script exited with a
+> non-zero status; the render is aborted.
+
+## What this means
+
+A project can run scripts around its render:
+
+```yaml
+project:
+  pre-render: tools/fetch-data.py
+  post-render: tools/upload.sh
+```
+
+Quarto runs each in order and checks its exit status. A non-zero exit
+— or termination by a signal — means the script failed, and Quarto
+stops: remaining scripts in the list do not run, and neither does the
+render.
+
+Aborting is the right response because these scripts exist to prepare
+or finish the project. A pre-render script that failed to fetch data
+would leave every document rendering against stale or missing inputs;
+continuing would produce output that looks fine and is wrong.
+
+The script's own output — whatever it printed to stdout and stderr —
+appears above this diagnostic. That output, not the diagnostic, is
+where the actual cause is.
+
+## Why this happens
+
+- **The script itself failed**: a missing input file, a network error,
+  a bug.
+- **A missing dependency** — a Python package, an R library, a CLI
+  tool the script shells out to.
+- **A shell script without `set -e`** whose last command happened to
+  fail. The exit status of a shell script is that of its final
+  command.
+- **An assumed working directory.** Scripts run from the project root;
+  a relative path written for a different directory will not resolve.
+
+## How to fix
+
+Read the script's output above the diagnostic and fix the underlying
+failure. Running the script directly, from the project root, is the
+fastest way to iterate:
+
+```bash
+cd /path/to/project
+python3 tools/fetch-data.py
+echo "exit status: $?"
+```
+
+Quarto sets several environment variables the script may depend on —
+`QUARTO_PROJECT_ROOT`, `QUARTO_PROJECT_OUTPUT_DIR`,
+`QUARTO_PROJECT_INPUT_FILES` — so a script that reads them needs those
+set when you run it by hand.
+
+If the script's failure should not be fatal, handle it in the script
+rather than removing the check:
+
+```bash
+#!/usr/bin/env bash
+fetch-data || echo "warning: using cached data" >&2
+exit 0
+```
+
+## Related errors
+
+- [`Q-5-10`](Q-5-10.qmd) — the script could not be started at all.
+- [`Q-5-9`](Q-5-9.qmd) — a pre-render script changed a project setting
+  that must stay fixed.
+- [`Q-5-12`](Q-5-12.qmd) — the environment cannot run scripts, so they
+  were skipped.

@@ -1,0 +1,82 @@
+---
+title: "Project type contribution missing base type"
+description: "An extension's `contributes.project` fragment declares no `project.type`, so the custom type falls back to the `default` base type."
+code: Q-16-9
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-9` — Project type contribution missing base type
+
+> An extension's `contributes.project` fragment declares no
+> `project.type`, so the custom type falls back to the `default` base
+> type.
+
+## What this means
+
+A custom project type builds on a built-in one. The extension says
+which, by setting `project.type` inside its `contributes.project`
+fragment:
+
+```yaml
+contributes:
+  project:
+    project:
+      type: website     # <- the base type
+```
+
+When that declaration is absent, Quarto has to assume something, and
+it assumes `default`.
+
+`default` means *no project behavior*: documents render individually,
+with no navbar, no sidebar, no search, no site-wide navigation, and no
+shared resource handling. An extension that provides website styling
+but forgets the base type therefore produces a project that looks
+website-shaped in its configuration and behaves like a bag of loose
+documents.
+
+The render succeeds, which is what makes this worth warning about — the
+symptom is missing navigation rather than an error.
+
+## Why this happens
+
+- **The nesting is easy to lose.** The base type lives at
+  `contributes.project.project.type` — `project` appears twice, and
+  dropping the inner one is a natural slip.
+- **An extension that only meant to contribute formats** and picked up
+  a `contributes.project` fragment by accident.
+- **A manifest trimmed down** from a working example, with the base
+  type removed as apparent duplication.
+
+## How to fix
+
+This is a defect in the extension, not in your project. The fix is to
+declare the base type in the extension's `_extension.yml`:
+
+```yaml
+title: Docs Site
+version: 1.0.0
+contributes:
+  project:
+    project:
+      type: website
+    format:
+      html:
+        theme: cosmo
+        toc: true
+```
+
+If you do not maintain the extension, report it to its author. As a
+local workaround, set the base behavior yourself in `_quarto.yml`,
+since your own project configuration merges over the extension's.
+
+## Related errors
+
+- [`Q-16-7`](Q-16-7.qmd) — the fragment declares a base type, but one
+  that cannot be used.
+- [`Q-5-18`](../project/Q-5-18.qmd) — the same "renders with default
+  behavior" outcome, for a built-in type Quarto 2 has not implemented
+  yet.

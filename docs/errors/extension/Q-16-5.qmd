@@ -1,0 +1,90 @@
+---
+title: "Shortcode value not found"
+description: "A `meta`, `var`, or `env` shortcode could not resolve its key; the invocation renders as a visible `?name` marker."
+code: Q-16-5
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-5` — Shortcode value not found
+
+> A `meta`, `var`, or `env` shortcode could not resolve its key; the
+> invocation renders as a visible `?name` marker.
+
+## What this means
+
+Three built-in shortcodes look a value up somewhere and substitute it
+into the document:
+
+| Shortcode          | Reads from                        |
+| ------------------ | --------------------------------- |
+| `{{{< meta key >}}}` | the document's merged metadata    |
+| `{{{< var key >}}}`  | `_variables.yml`                  |
+| `{{{< env NAME >}}}` | the process environment           |
+
+The handler was found and ran — the failure is that the key it was
+asked for does not exist. Since there is no value to substitute,
+Quarto renders a visible `?name` marker in its place rather than an
+empty gap, so a missing value is obvious in the output instead of
+silently reading as a typo or a missing word.
+
+## Why this happens
+
+- **A typo in the key.**
+- **The key is defined at a different level than you expect.** `meta`
+  reads *merged* metadata — front matter plus `_quarto.yml` plus any
+  active profile overlay. A key defined only in a profile that is not
+  active resolves to nothing.
+- **`_variables.yml` is missing or in the wrong place.** It belongs at
+  the project root, next to `_quarto.yml`.
+- **A dotted path into a value that is not a mapping.**
+  `{{{< meta author.name >}}}` needs `author` to be a mapping with a
+  `name` key; if `author` is a plain string, the path resolves to
+  nothing.
+- **An environment variable not set in the rendering process.** A
+  variable set in your interactive shell is not necessarily present
+  in the environment that runs Quarto, particularly under an editor or
+  CI.
+
+## How to fix
+
+Define the key at the source the shortcode reads from.
+
+For `meta`, in the front matter or `_quarto.yml`:
+
+```yaml
+---
+version: "2.1"
+---
+
+Version {{{< meta version >}}}.
+```
+
+For `var`, in `_variables.yml` at the project root:
+
+```yaml
+product:
+  name: Quarto
+```
+
+```markdown
+{{{< var product.name >}}}
+```
+
+For `env`, give a fallback so an unset variable is not a failure:
+
+```markdown
+{{{< env BUILD_ID local >}}}
+```
+
+The fallback is the second argument; with it, an unset `BUILD_ID`
+renders as `local` and no warning is emitted. This is the right shape
+for anything that is set in CI but not on a developer machine.
+
+## Related errors
+
+- [`Q-16-3`](Q-16-3.qmd) — the shortcode name itself was not
+  recognized, so no lookup happened at all.
