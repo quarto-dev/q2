@@ -3,10 +3,10 @@
 **Date:** 2026-08-11
 **Braid:** `bd-lua-filter-table-form-ignored-ph23becz` (bug, p1, labels `pampa` / `parity`)
 **Branch:** `main` @ `808215fc` (investigated in the main checkout; no worktree created)
-**Status:** In progress. Design settled 2026-08-11 (see **Settled decisions**);
-Phases 0–2 complete — the returned-table and filter-list forms work and match
-pandoc across all eleven probe shapes. Phases 3–5 (diagnostics, docs,
-verification) remain. See the **Phase log**.
+**Status:** Complete and awaiting review — **PR #508**
+(`bugfix/bd-lua-filter-table-form-ignored-ph23becz`), all 8 CI checks green.
+All phases done. `main` was never touched: the work was developed in the main
+checkout but the commits were moved to a branch before pushing.
 
 ## Triage verdict
 
@@ -297,13 +297,13 @@ observed failure recorded in the phase log.
       paste the resulting table into the phase log. Every row must match the
       pandoc column except the three error rows, where q2 should error with a
       `Q-11-6` message rather than pandoc's `attempt to index a …`.
-- [ ] 5.2 End-to-end through the real binary: `q2 render` in
+- [x] 5.2 End-to-end through the real binary: `q2 render` in
       `…-investigation/repro/`, confirming `index.html` and `list-form.html`
       now show `TABLE-FORM-RAN` and `LIST-FORM-RAN`. Inspect the output, do not
       infer from exit code.
-- [ ] 5.3 `cargo xtask verify` (full, not `--skip-hub-build` — pampa is in the
+- [x] 5.3 `cargo xtask verify` (full, not `--skip-hub-build` — pampa is in the
       WASM closure). Remember `test:wasm` needs a fresh WASM artifact.
-- [ ] 5.4 Update the strand; report to the user before pushing.
+- [x] 5.4 Update the strand; report to the user before pushing.
 
 ## Phase log
 
@@ -581,3 +581,44 @@ character. This is exactly the gap CLAUDE.md's git-push policy warns about —
 `cargo build` and `cargo nextest` do not run with `-D warnings`, so a clean
 test run says nothing about whether CI will accept the change. Worth
 remembering: run `verify` *before* believing a phase is done, not after.
+
+### 2026-08-11 — Close-out
+
+**PR #508**, branch `bugfix/bd-lua-filter-table-form-ignored-ph23becz`, 5
+commits. All 8 CI checks green (ubuntu ×2, macos ×2, WASM, Hub-Client E2E, two
+Snyk), `mergeStateStatus: CLEAN`. CI agreed with the local
+`cargo xtask verify` — no platform-specific surprises, which was the main open
+risk given the `types.rs` macro.
+
+**`element_tag_names!` reviewed and kept** (user, 2026-08-11). The one place
+this work went beyond what the plan literally said; the alternative was a
+test-guarded duplicate list, which would have rebuilt the arrangement that
+caused bd-18a2r2lp.
+
+**Two aborted verify runs before the green one**, both worth remembering:
+
+1. Clippy `needless_borrows_for_generic_args` — one redundant `&`. The
+   workspace test suite was 11708/11708 green and `cargo xtask lint` was clean
+   at the time. `cargo build` and `cargo nextest` do not run with
+   `-D warnings`; a green test run says nothing about whether CI will accept
+   the change.
+2. `No space left on device` mid-compile. Not a code failure. The machine runs
+   several q2 checkouts (`~/rooms/room-N/q2`) whose `target/` directories
+   compete for disk, and a sibling checkout was also running a full workspace
+   test suite, which is what made this session's runs so slow. Symptoms to
+   recognise: `SLOW [>120s]` markers on trivial tests (`test_watcher_creation`
+   merely constructs a watcher), and a pass count frozen for minutes.
+
+**Follow-ups filed, none blocking the PR:**
+
+- **bd-2lz7sgc7** (question, p2) — should a bare `filters:` default to
+  `pre-quarto`? Not a capability gap: the Q1-equivalent `RawBlock` view is
+  reachable today via the `quarto` sentinel or `at: post-quarto`, verified by
+  probe. The likelier real defect is that `lua-filters.qmd` documents neither
+  the two filter positions nor `at:` nor the sentinel.
+- **br-vuf8asgk** (connect-docs skein) — verify mermaid-zoom runs unmodified
+  once this ships. Blocked on the q2 side. Deliberately *not* actionable yet:
+  it needs a **new q2 release** to test against, so it waits on the next
+  release rather than on the merge.
+
+**bd-18a2r2lp** stays open until the PR merges; its fix rides along in #508.
