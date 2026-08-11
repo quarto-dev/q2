@@ -3,7 +3,7 @@
 **Date:** 2026-08-11
 **Braid:** `bd-digit-line-splits-paragraph-w6tod0gh` (bug, P1, labels `bug` / `parity`)
 **Branch:** investigated in place on `main` @ `fc2895b2` — no worktree created (see "Where this should land")
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Implemented on `braid/bd-digit-line-splits-paragraph-w6tod0gh-continuation-line-starting-digit`. Design questions answered by the user 2026-08-11; see "Answers" and "Implementation record" below.
 
 ## Triage verdict
 
@@ -254,6 +254,120 @@ Skeleton only — contents wait on the design discussion.
    grammar rebuilds and three rounds of snapshot review. But it widens a P1
    bug fix. My inclination is to fold `-`/`+` in here and leave `:` to
    bd-cxiopjw7, but it is your call.
+
+## Answers (user, 2026-08-11)
+
+1. **CommonMark target** — confirmed. Get as close to CommonMark as possible;
+   flag it if existing tree-sitter spec tests break.
+2. **`2. apples`** — in scope. Behavioral changes are better batched so people
+   relearn habits once.
+3. **Digit bail-out** — bail past 9 digits, the conservative check.
+4. **`-` / `+`** — folded into this strand; `:` left to bd-cxiopjw7.
+
+## Implementation record
+
+### The change
+
+`crates/tree-sitter-qmd/tree-sitter-markdown/src/scanner.c` only — no grammar
+change, so `parser.c` is untouched and there are no generated diffs.
+
+Two peek helpers, mirroring the existing `*` peek:
+
+- `peek_dash_plus_opens_block` — a single `-`/`+` followed by whitespace/EOL
+  (list marker), or 3+ `-` followed by whitespace/EOL (thematic break). `--`
+  and `-5` are prose.
+- `peek_ordered_marker` — returns an `OrderedMarkerPeek { well_formed,
+  may_interrupt }`, bailing past 9 digits.
+
+Both SOFT_LINE_ENDING gates now consult those flags instead of excluding the
+raw character classes.
+
+### The one non-obvious part
+
+The two gates need **different answers from the same peek**, which the first
+implementation attempt got wrong and six existing tests caught:
+
+- **Gate 1 runs before `match_line`**, so it cannot yet distinguish a sibling
+  list item from a paragraph continuation, and it has no `all_will_be_matched`
+  guard. It must ask only `well_formed`. Asking the stricter question here
+  swallowed `2.` in `1. a` / `2. b` into item 1's paragraph — breaking
+  `issues.txt` #72, `list.txt` 4/15/16, and CommonMark Examples 261/282.
+- **Gate 2 runs after `match_line`**, where `all_will_be_matched` proves the
+  line belongs to the open blocks. Only there is the CommonMark interruption
+  rule (`may_interrupt`) the right question.
+
+That split is what separates two cases identical at the character level:
+`14.` after a paragraph must soft-break (CM 284), while `2.` after `1. a`
+must open a new item (gate 2 never fires, because `match_line` fails to match
+item 1's indent).
+
+A second attempt consulted `valid_symbols[LIST_MARKER_*]` the way
+`parse_ordered_list_marker` does. That fails: at line-ending scan time the
+parser is asking for `LINE_ENDING`/`SOFT_LINE_ENDING`, so the `LIST_MARKER_*`
+symbols are not in the valid set and read as false for every marker. The code
+comment records this so the next person doesn't retry it.
+
+Also extended: the `mark_end` guard after gate 2 was keyed on the *character*
+(`!= '`' && != '*'`). With three more peeking branches that proxy no longer
+holds, so it is now an explicit `second_peeked` boolean — otherwise a peeked
+run would be swallowed into the SOFT_LINE_ENDING token's range.
+
+### Tests
+
+- 15 new `paragraph.txt` cases (15–29) covering digit prose, digit +
+  punctuation, a run longer than any legal marker, `14.`/`2.` non-interrupting,
+  `1.`/`1)` still interrupting, the fatal link-text variant, both second-gate
+  paths (list-item and block-quote continuation), `-5`/`+5`, and guards for
+  `- item` / `+ item` / `---`.
+- **Three hand-escaped workarounds restored to their real inputs**, all three
+  of which failed before the fix and pass after:
+  - `new-spec.txt` Example 284: `\14.` → `14.`, apology dropped from the title.
+  - `block_quote.txt` test 4: `\1` → `1`, "but don't start continuation line
+    with 1" dropped from the title. (Lazy continuation into a block quote —
+    found during implementation, a third instance of the same tax.)
+  - Example 284's expected tree also needed updating, since the escaped input
+    had produced an extra `pandoc_str` for the backslash.
+
+TDD sequence: 12 tests confirmed failing before any scanner edit; corpus is
+now **572/572**.
+
+### Results
+
+- `tree-sitter test`: 572/572 (was 560/572 with the new tests added).
+- `cargo nextest run --workspace`: **11626 passed**, 197 skipped.
+- **Zero snapshot files changed.** The predicted snapshot churn did not
+  materialize — the AST only changes for inputs that were previously
+  mis-blocked, and no existing snapshot covered one.
+
+### End-to-end verification
+
+`cargo run --bin q2 -- render doc.qmd`, output inspected in `doc.html`:
+
+```html
+<p>To make license leases last
+30 minutes you would use the following syntax.</p>
+
+<p>The set of characters that must be encoded can be found in
+<a href="https://www.rfc-editor.org/rfc/rfc3986#section-3.2.1">Section 3.2.1 of RFC
+3986</a>.</p>
+
+<p>Buy these:</p>
+<ol type="1">
+<li>apples</li>
+<li>oranges</li>
+</ol>
+```
+
+The first paragraph is no longer split; the link that previously failed with
+`[Q-2-1] Unclosed Span` renders intact; a real ordered list still works.
+
+Against the reference, `pampa -t native` on the committed fixtures now matches
+`pandoc -f commonmark -t native` **exactly** for `interrupt.qmd` (all six
+matrix rows) and `dashplus.qmd` — including `Str "+5"`, confirming that the
+two `pandoc_str` CST nodes for `+5` (pre-existing `+` tokenization, present
+mid-line too) merge into a single `Str` at the AST level. The only remaining
+divergence in `dashplus.qmd` is the `:host` colon, deliberately left to
+bd-cxiopjw7.
 
 ## Risks / tradeoffs (draft)
 

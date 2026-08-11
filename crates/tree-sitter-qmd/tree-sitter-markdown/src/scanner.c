@@ -1266,6 +1266,113 @@ static bool parse_ordered_list_marker(Scanner *s, TSLexer *lexer,
     return false;
 }
 
+// bd-w6tod0gh: peek helpers for the SOFT_LINE_ENDING gates.
+//
+// The gates decide whether a continuation line ends the open paragraph. They
+// must exclude a leading character only when it *actually* opens a block —
+// the same discipline the '`' and '*' peeks already follow. A blanket
+// character-class exclusion splits prose that merely happens to start with
+// that character ("...leases last\n30 minutes...").
+//
+// Like those peeks, these advance the lexer WITHOUT calling mark_end:
+// tree-sitter rewinds to the last mark_end between scan calls, so the
+// advance is undone for the LINE_ENDING fall-through path.
+
+// Result of peeking at a digit-leading line. The two gates need different
+// answers from the same peek, because they ask different questions:
+//
+//   - The FIRST gate runs before match_line, so it cannot yet tell a sibling
+//     list item from a paragraph continuation. It must only ask "could this
+//     line open a block at all?" — `well_formed`. Answering the stricter
+//     question here would swallow '2.' in "1. a / 2. b" into item 1's
+//     paragraph, because the first gate has no all_will_be_matched guard.
+//
+//   - The SECOND gate runs after match_line, with all_will_be_matched proving
+//     the line belongs to the currently-open blocks. Only there is the
+//     CommonMark interruption rule the right question — `may_interrupt`.
+//
+// That split is what separates two cases identical at the character level:
+//
+//   ...my house is     14. cannot interrupt a paragraph -> soft-break (CM 284)
+//   14.  The number...
+//
+//   1. a               2. is a sibling item; match_line fails to match item
+//   2. b               1's indent, so the second gate never fires -> new item
+//
+// Note this deliberately does NOT consult valid_symbols the way
+// parse_ordered_list_marker does: at line-ending scan time the parser is
+// asking for LINE_ENDING / SOFT_LINE_ENDING, so the LIST_MARKER_* symbols are
+// not in the valid set and would read as false for every marker.
+typedef struct {
+    bool well_formed;    // <=9 digits, then '.' or ')', then whitespace/EOL
+    bool may_interrupt;  // ...and CommonMark lets it interrupt a paragraph
+} OrderedMarkerPeek;
+
+// Bails out past 9 digits, the longest marker parse_ordered_list_marker
+// accepts, so a pathological digit run costs a bounded peek.
+static OrderedMarkerPeek peek_ordered_marker(Scanner *s, TSLexer *lexer) {
+    OrderedMarkerPeek result = {false, false};
+    if (s->indentation > 3) {
+        return result;
+    }
+    // Only a bare '1' may interrupt a paragraph (CommonMark); any longer run
+    // or any other digit may not.
+    bool dont_interrupt = lexer->lookahead != '1';
+    size_t digits = 1;
+    advance(s, lexer);
+    while (lexer->lookahead >= '0' && lexer->lookahead <= '9') {
+        dont_interrupt = true;
+        digits++;
+        if (digits > 9) {
+            return result;  // longer than any legal marker
+        }
+        advance(s, lexer);
+    }
+    if (lexer->lookahead == '.') {
+        advance(s, lexer);
+    } else if (lexer->lookahead == ')') {
+        advance(s, lexer);
+    } else {
+        return result;
+    }
+    // A marker must be followed by whitespace, or end the line.
+    bool line_end = lexer->lookahead == '\n' || lexer->lookahead == '\r' ||
+                    lexer->eof(lexer);
+    if (lexer->lookahead != ' ' && lexer->lookahead != '\t' && !line_end) {
+        return result;
+    }
+    // An empty list item cannot interrupt a paragraph either.
+    if (line_end) {
+        dont_interrupt = true;
+    }
+    result.well_formed = true;
+    result.may_interrupt = !dont_interrupt;
+    return result;
+}
+
+// True when the upcoming '-'/'+' run opens a block: a single marker followed
+// by whitespace/EOL (list item), or 3+ dashes followed by whitespace/EOL
+// (thematic break). Mirrors the '*' peek. A run that is neither — "-5
+// degrees", "-- em dash" — is prose and must soft-break.
+static bool peek_dash_plus_opens_block(Scanner *s, TSLexer *lexer) {
+    int32_t marker = lexer->lookahead;
+    int level = 0;
+    while (lexer->lookahead == marker) {
+        advance(s, lexer);
+        level++;
+    }
+    bool trailing_ws_or_eol = (lexer->lookahead == ' ' ||
+                               lexer->lookahead == '\t' ||
+                               lexer->lookahead == '\n' ||
+                               lexer->lookahead == '\r' ||
+                               lexer->eof(lexer));
+    if (level == 1 && trailing_ws_or_eol) {
+        return true;  // list marker
+    }
+    // Only '-' forms a thematic break; '+++' is not one in CommonMark.
+    return marker == '-' && level >= 3 && trailing_ws_or_eol;
+}
+
 static bool parse_example_list_marker(Scanner *s, TSLexer *lexer,
                                        const bool *valid_symbols) {
     if (s->indentation <= 3 &&
@@ -2687,9 +2794,22 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             // Otherwise it opens an inline emphasis ('*emph*'), strong
             // ('**strong**'), or strong+emph ('***both***') and should
             // soft-break. Same peek-without-mark_end pattern as backticks.
+            //
+            // bd-w6tod0gh: the digit, '-' and '+' branches used to be blanket
+            // character-class exclusions, with no peek. That split any
+            // paragraph whose continuation line merely started with one of
+            // them ("...leases last\n30 minutes...", "-5 degrees"), and was
+            // fatal when the wrap fell inside link text. They now peek like
+            // '*' does — see peek_ordered_marker_interrupts /
+            // peek_dash_plus_opens_block.
             int32_t first_lookahead = lexer->lookahead;
             bool first_starts_with_fence = false;
             bool first_starts_with_star_block = false;
+            // Gate 1 asks "could this open a block?"; gate 2 asks "does it
+            // interrupt this paragraph?". They differ only for ordered
+            // markers — see OrderedMarkerPeek.
+            bool first_starts_with_marker_block = false;
+            bool first_marker_interrupts = false;
             bool first_peeked = false;
             if (lexer->lookahead == '`') {
                 int level = 0;
@@ -2698,6 +2818,18 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     level++;
                 }
                 first_starts_with_fence = (level >= 3);
+                first_peeked = true;
+            } else if (lexer->lookahead == '-' || lexer->lookahead == '+') {
+                // Bullets carry no interruption restriction, so both gates
+                // get the same answer.
+                first_starts_with_marker_block =
+                    peek_dash_plus_opens_block(s, lexer);
+                first_marker_interrupts = first_starts_with_marker_block;
+                first_peeked = true;
+            } else if (lexer->lookahead >= '0' && lexer->lookahead <= '9') {
+                OrderedMarkerPeek peek = peek_ordered_marker(s, lexer);
+                first_starts_with_marker_block = peek.well_formed;
+                first_marker_interrupts = peek.may_interrupt;
                 first_peeked = true;
             } else if (lexer->lookahead == '*') {
                 int level = 0;
@@ -2743,11 +2875,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             if (inside_code_span ||
                 ((!(s->state & STATE_INSIDE_ATX)) &&
                  (first_lookahead != '*' || !first_starts_with_star_block) &&
-                 first_lookahead != '-' &&
-                 first_lookahead != '+' && first_lookahead != '>' &&
+                 !first_starts_with_marker_block &&
+                 first_lookahead != '>' &&
                  first_lookahead != ':' && first_lookahead != '#' &&
                  !first_starts_with_fence &&
-                 first_lookahead > ' ' && !(first_lookahead >= '0' && first_lookahead <= '9'))) {
+                 first_lookahead > ' ')) {
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
                 if (first_peeked || inside_code_span) {
                     // Peek-advanced past indent + delimiter run (or this
@@ -2839,14 +2971,23 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             int32_t second_lookahead;
             bool second_starts_with_fence;
             bool second_starts_with_star_block;
+            bool second_starts_with_marker_block;
+            // True when a peek (here or in the first gate) advanced the lexer
+            // past the line's opening run. Gates the mark_end below.
+            bool second_peeked;
             if (first_peeked) {
                 second_lookahead = first_lookahead;
                 second_starts_with_fence = first_starts_with_fence;
                 second_starts_with_star_block = first_starts_with_star_block;
+                // Gate 2's question: does the marker interrupt this paragraph?
+                second_starts_with_marker_block = first_marker_interrupts;
+                second_peeked = true;
             } else {
                 second_lookahead = lexer->lookahead;
                 second_starts_with_fence = false;
                 second_starts_with_star_block = false;
+                second_starts_with_marker_block = false;
+                second_peeked = false;
                 if (lexer->lookahead == '`') {
                     int level = 0;
                     while (lexer->lookahead == '`' && level < 3) {
@@ -2854,6 +2995,17 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                         level++;
                     }
                     second_starts_with_fence = (level >= 3);
+                    second_peeked = true;
+                } else if (lexer->lookahead == '-' || lexer->lookahead == '+') {
+                    // bd-w6tod0gh: same peek as the first gate, at the
+                    // post-match_line position (after block prefixes like `> `).
+                    second_starts_with_marker_block =
+                        peek_dash_plus_opens_block(s, lexer);
+                    second_peeked = true;
+                } else if (lexer->lookahead >= '0' && lexer->lookahead <= '9') {
+                    second_starts_with_marker_block =
+                        peek_ordered_marker(s, lexer).may_interrupt;
+                    second_peeked = true;
                 } else if (lexer->lookahead == '*') {
                     int level = 0;
                     while (lexer->lookahead == '*') {
@@ -2870,6 +3022,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     } else if (level >= 3 && trailing_ws_or_eol) {
                         second_starts_with_star_block = true;
                     }
+                    second_peeked = true;
                 }
             }
 
@@ -2882,12 +3035,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             if (valid_symbols[SOFT_LINE_ENDING] && might_be_soft_break && all_will_be_matched &&
                 ((s->code_span_delimiter_length > 0) ||
                  ((second_lookahead != '*' || !second_starts_with_star_block) &&
-                  second_lookahead != '-' &&
-                  second_lookahead != '+' && second_lookahead != '>' &&
+                  !second_starts_with_marker_block &&
+                  second_lookahead != '>' &&
                   second_lookahead != ':' && second_lookahead != '#' &&
                   !second_starts_with_fence &&
-                  second_lookahead > ' ' && !(second_lookahead >= '0' &&
-                  second_lookahead <= '9')))) {
+                  second_lookahead > ' '))) {
                 s->indentation = 0;
                 s->column = 0;
                 // If the last line break ended a paragraph and no new block opened,
@@ -2904,9 +3056,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
                 DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
-                if (second_lookahead != '`' && second_lookahead != '*') {
+                if (!second_peeked) {
                     // No peek-advance; mark_end at current position
-                    // (original behavior).
+                    // (original behavior). When a peek DID advance, marking
+                    // here would swallow the peeked run into the
+                    // SOFT_LINE_ENDING token's range; leave the range where
+                    // the earlier mark_end put it.
                     lexer->mark_end(lexer);
                 }
                 EMIT_TOKEN(SOFT_LINE_ENDING);
