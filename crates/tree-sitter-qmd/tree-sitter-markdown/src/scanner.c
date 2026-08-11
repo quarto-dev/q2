@@ -1308,13 +1308,46 @@ typedef struct {
     bool may_interrupt;  // ...and CommonMark lets it interrupt a paragraph
 } OrderedMarkerPeek;
 
+// How many columns of a line's leading indentation the open blocks
+// could claim as list-item continuation indent, summed over the
+// LEADING run of LIST_ITEM* blocks on the stack. The first
+// SOFT_LINE_ENDING gate runs before match_line, so `s->indentation`
+// there is the raw column count including any open item's content
+// columns; raw minus this value is the indent relative to the
+// innermost list content column — the reference point CommonMark's
+// "a marker may be indented at most 3 spaces" rule needs. Any
+// non-list block stops the run: a BLOCK_QUOTE claims a '>' prefix,
+// not whitespace, so on a lazy continuation line (no '>') nothing at
+// or past the quote can claim indentation.
+static uint8_t claimable_list_indentation(Scanner *s) {
+    uint8_t claimed = 0;
+    for (size_t i = 0; i < s->open_blocks.size; i++) {
+        Block b = s->open_blocks.items[i];
+        if (b >= LIST_ITEM && b <= LIST_ITEM_MAX_INDENTATION) {
+            claimed += list_item_indentation(b);
+        } else {
+            break;
+        }
+    }
+    return claimed;
+}
+
 // Bails out past 9 digits, the longest marker parse_ordered_list_marker
 // accepts, so a pathological digit run costs a bounded peek.
+//
+// Shape-only: this asks whether the CHARACTERS form a marker, with no
+// indentation judgment. Whether the position allows a marker is the
+// caller's job, because the answer depends on which gate is asking:
+// at gate 1 `s->indentation` is the line's raw indent (block prefixes
+// not yet consumed — compare against claimable_list_indentation), at
+// gate 2 it is the residual indent after match_line (compare against
+// 3 directly). bd-indented-continuation-parse-error-j7be7kuc was
+// partly caused by an `s->indentation > 3` guard here that was only
+// correct for one of those call sites. Callers must ensure the peek
+// is only run when they will honor its advance (it always consumes at
+// least one character).
 static OrderedMarkerPeek peek_ordered_marker(Scanner *s, TSLexer *lexer) {
     OrderedMarkerPeek result = {false, false};
-    if (s->indentation > 3) {
-        return result;
-    }
     // Only a bare '1' may interrupt a paragraph (CommonMark); any longer run
     // or any other digit may not.
     bool dont_interrupt = lexer->lookahead != '1';
@@ -2820,17 +2853,29 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 first_starts_with_fence = (level >= 3);
                 first_peeked = true;
             } else if (lexer->lookahead == '-' || lexer->lookahead == '+') {
-                // Bullets carry no interruption restriction, so both gates
-                // get the same answer.
-                first_starts_with_marker_block =
-                    peek_dash_plus_opens_block(s, lexer);
-                first_marker_interrupts = first_starts_with_marker_block;
-                first_peeked = true;
+                // CommonMark: a marker more than 3 columns past the
+                // innermost list content column cannot form (the line
+                // standing alone would be indented code, which cannot
+                // interrupt a paragraph) — the line is lazy paragraph
+                // continuation. Skip the peek entirely so the
+                // non-peeked soft-break path below runs and its
+                // mark_end absorbs the indentation.
+                if (s->indentation <= claimable_list_indentation(s) + 3) {
+                    // Bullets carry no interruption restriction, so both
+                    // gates get the same answer.
+                    first_starts_with_marker_block =
+                        peek_dash_plus_opens_block(s, lexer);
+                    first_marker_interrupts = first_starts_with_marker_block;
+                    first_peeked = true;
+                }
             } else if (lexer->lookahead >= '0' && lexer->lookahead <= '9') {
-                OrderedMarkerPeek peek = peek_ordered_marker(s, lexer);
-                first_starts_with_marker_block = peek.well_formed;
-                first_marker_interrupts = peek.may_interrupt;
-                first_peeked = true;
+                // Same over-indentation rule as the dash/plus branch.
+                if (s->indentation <= claimable_list_indentation(s) + 3) {
+                    OrderedMarkerPeek peek = peek_ordered_marker(s, lexer);
+                    first_starts_with_marker_block = peek.well_formed;
+                    first_marker_interrupts = peek.may_interrupt;
+                    first_peeked = true;
+                }
             } else if (lexer->lookahead == '*') {
                 int level = 0;
                 while (lexer->lookahead == '*') {
@@ -2979,8 +3024,13 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 second_lookahead = first_lookahead;
                 second_starts_with_fence = first_starts_with_fence;
                 second_starts_with_star_block = first_starts_with_star_block;
-                // Gate 2's question: does the marker interrupt this paragraph?
-                second_starts_with_marker_block = first_marker_interrupts;
+                // Gate 2's question: does the marker interrupt this
+                // paragraph? The character shape must say yes AND the
+                // marker must sit within 3 columns of the innermost
+                // matched block's content column — after match_line,
+                // s->indentation holds exactly that residual.
+                second_starts_with_marker_block =
+                    first_marker_interrupts && s->indentation <= 3;
                 second_peeked = true;
             } else {
                 second_lookahead = lexer->lookahead;
@@ -2998,14 +3048,24 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     second_peeked = true;
                 } else if (lexer->lookahead == '-' || lexer->lookahead == '+') {
                     // bd-w6tod0gh: same peek as the first gate, at the
-                    // post-match_line position (after block prefixes like `> `).
-                    second_starts_with_marker_block =
-                        peek_dash_plus_opens_block(s, lexer);
-                    second_peeked = true;
+                    // post-match_line position (after block prefixes like
+                    // `> `), where s->indentation is the residual indent.
+                    // A marker more than 3 residual columns in cannot
+                    // form (CommonMark); skip the peek so second_peeked
+                    // stays false and the mark_end below absorbs the
+                    // residue into the SOFT_LINE_ENDING token.
+                    if (s->indentation <= 3) {
+                        second_starts_with_marker_block =
+                            peek_dash_plus_opens_block(s, lexer);
+                        second_peeked = true;
+                    }
                 } else if (lexer->lookahead >= '0' && lexer->lookahead <= '9') {
-                    second_starts_with_marker_block =
-                        peek_ordered_marker(s, lexer).may_interrupt;
-                    second_peeked = true;
+                    // Same residual-indent rule as the dash/plus branch.
+                    if (s->indentation <= 3) {
+                        second_starts_with_marker_block =
+                            peek_ordered_marker(s, lexer).may_interrupt;
+                        second_peeked = true;
+                    }
                 } else if (lexer->lookahead == '*') {
                     int level = 0;
                     while (lexer->lookahead == '*') {

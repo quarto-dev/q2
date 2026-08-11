@@ -95,37 +95,53 @@ Expected behavioral outcomes (pandoc parity, from the sweep):
 - [x] Process note `claude-notes/instructions/scanner-indentation-contexts.md`
 - [x] Characterization sweep (280 cells, pandoc vs pampa) — results
       summarized above
-- [ ] Strand → in_progress; commit setup artifacts
+- [x] Strand → in_progress; commit setup artifacts (e63f5831)
 
 ### Phase 1 — tests first (TDD)
-- [ ] Table-driven integration test in
-      `crates/pampa/tests/integration/` covering the sweep's meaningful
-      cells (prose × indent × context, marker × relative-indent bands,
-      backtick/star controls), expectations transcribed from pandoc
-      with deliberate-deviation cells (`*5`) encoded as expected errors
-- [ ] tree-sitter corpus cases for representative cells (indent
-      dimension added to paragraph.txt or a new corpus file)
-- [ ] Run both; record the failing set matches the sweep (118 cells)
+- [x] Table-driven integration test in
+      `crates/pampa/tests/integration/test_indented_continuation.rs`:
+      6 test fns, 138 cells (prose × indent × context, marker ×
+      relative-indent bands, backtick/star controls, `*5` deliberate
+      errors)
+- [x] tree-sitter corpus cases: new
+      `test/corpus/indented-continuation.txt` (10 cases; trees
+      generated post-fix via `--update` and hand-reviewed — the
+      integration table carried the fail-first burden)
+- [x] Failing set recorded pre-fix: 72 prose + 27 over-indent marker +
+      3 nesting cells, matching the sweep prediction cell-for-cell;
+      controls green pre-fix
+- [x] DISCOVERED: pandoc merges `- a` + `+ item` into one list; qmd
+      starts a new list (CommonMark). Pre-existing deliberate
+      deviation, control only.
 
 ### Phase 2 — grammar fix (Part A)
-- [ ] `_soft_line_break` optional `_whitespace`; `tree-sitter generate`
-      + `tree-sitter build`; resolve conflicts
-- [ ] `tree-sitter test` green (update only tests whose expectations
-      the fix legitimately changes; document each)
-- [ ] Prose cells of the integration test pass; marker cells still fail
-      (expected — Part B)
+- [x] `_soft_line_break` gains `optional($._whitespace)` under
+      `prec.right` (conflict vs `_attr_ws`/`_shortcode_sep` resolved
+      toward absorption); regenerated + built
+- [x] `tree-sitter test` 572/572 with NO existing-test changes
+- [x] Post-Part-A state: all 96 prose cells pass; 18 marker cells
+      still error, 3 digit cells parse-as-prose instead of nesting —
+      exactly the predicted Part B residue
 
 ### Phase 3 — scanner fix (Part B)
-- [ ] Verify `s->indentation` residual semantics at gate 2
-- [ ] Move indent guard: shape-only peeks at gate 1, residual-indent
-      guard at gate 2 (both paths); fix `first_peeked` semantics
-- [ ] `tree-sitter test` + full integration table green
+- [x] Verified `match` subtracts `list_item_indentation` from
+      `s->indentation` → gate 2 sees the residual
+- [x] `peek_ordered_marker` now shape-only; gate 1 guards both
+      dash/plus and digit branches with
+      `s->indentation <= claimable_list_indentation(s) + 3` (new
+      helper: leading LIST_ITEM* run of the stack); gate 2 guards with
+      residual `<= 3` on both the first_peeked shortcut and its own
+      peek branches (skipping the peek on over-indent so the existing
+      mark_end absorbs the residue); `first_peeked` now always means
+      "the peek advanced"
+- [x] `tree-sitter test` 582/582 + full integration table green
 
 ### Phase 4 — regeneration + verification
-- [ ] Regenerate error table (`build_error_table.ts`), commit autogen
-      changes
-- [ ] `cargo nextest run --workspace`; review snapshot churn and
-      document per snapshot policy
+- [x] Regenerated error table (`build_error_table.ts`); only
+      `_autogen-table.json` changed (state renumbering); `deno.lock`
+      artifact deleted (matches prior cleanup convention)
+- [x] `cargo nextest run --workspace`: 11727/11727 passed, ZERO
+      snapshot changes
 - [ ] `cargo xtask verify` (full, WASM leg)
 - [ ] E2E: scratch repros + the Connect-docs repro project
       (`q2 render` on

@@ -47,6 +47,7 @@ pub mod test_figure_figcaption_synthesis;
 pub mod test_grid_table_error;
 pub mod test_hard_soft_break;
 pub mod test_html_attr_handling;
+pub mod test_indented_continuation;
 pub mod test_inline_locations;
 pub mod test_json_div_transforms;
 pub mod test_json_errors;
