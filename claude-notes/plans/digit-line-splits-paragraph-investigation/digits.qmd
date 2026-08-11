@@ -1,0 +1,12 @@
+To make license leases last
+30 minutes you would use this.
+
+If the value is greater than
+1000, the base filter applies.
+
+To make license leases last
+thirty minutes you would use this.
+
+Buy these:
+1. apples
+2. oranges

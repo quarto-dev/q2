@@ -2036,10 +2036,10 @@ Foo
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
-Example 284 - https://github.github.com/gfm/#example-284 (qmd: start your soft breaks with \1, i'm sorry.)
+Example 284 - https://github.github.com/gfm/#example-284
 ================================================================================
 The number of windows in my house is
-\14.  The number of doors is 6.
+14.  The number of doors is 6.
 
 --------------------------------------------------------------------------------
 
@@ -2062,7 +2062,6 @@ The number of windows in my house is
       (pandoc_space)
       (pandoc_str)
       (pandoc_soft_break)
-      (pandoc_str)
       (pandoc_str)
       (pandoc_space)
       (pandoc_str)
