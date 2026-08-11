@@ -85,12 +85,55 @@ impl AstTransform for FooterGenerateTransform {
             enrich_footer_region(&mut footer.left, index);
             enrich_footer_region(&mut footer.center, index);
             enrich_footer_region(&mut footer.right, index);
+
+            // Anything enrichment could not resolve to a project document
+            // is display text, not a link (bd-page-footer-items-f4th80mj,
+            // defect 2).
+            //
+            // Deliberately inside the index branch: demotion is a claim
+            // that we *looked* for a matching document and did not find
+            // one. With no index attached (single-file renders) nothing
+            // resolves, so demoting there would turn every bare footer
+            // item into text on no evidence at all.
+            demote_unresolved_bare_items(&mut footer.left);
+            demote_unresolved_bare_items(&mut footer.center);
+            demote_unresolved_bare_items(&mut footer.right);
         }
 
         ast.meta
             .insert_path(&["navigation", "footer"], footer.to_config_value());
 
         Ok(())
+    }
+}
+
+/// Turn every unresolved bare-scalar item in a region into display text
+/// (bd-page-footer-items-f4th80mj, defect 2).
+///
+/// A bare scalar in a page-footer region is provisionally parsed as an
+/// href so href resolution and index enrichment can run over it. If
+/// enrichment found a matching document it filled `text`, and the item
+/// stays a link. If `text` is still empty the scalar named no document —
+/// it is a copyright line, an external URL, or a stale path — and Q1
+/// renders it as plain `<li>` text. Previously q2 emitted an anchor whose
+/// target was the sentence and whose body was empty.
+///
+/// Only items carrying [`NavigationItem::bare_text`] are eligible, so an
+/// explicit `href:` that misses the index keeps its anchor. The caller
+/// must only invoke this when a project index was actually consulted —
+/// see the call site.
+fn demote_unresolved_bare_items(region: &mut FooterRegion) {
+    let FooterRegion::Items(items) = region else {
+        return;
+    };
+    for item in items.iter_mut() {
+        let Some(bare) = item.bare_text.take() else {
+            continue;
+        };
+        if item.text.is_none() {
+            item.text = Some(*bare);
+            item.href = None;
+        }
     }
 }
 
@@ -294,6 +337,86 @@ mod tests {
     }
 
     // --- Phase 3 enrichment tests ---------------------------------
+
+    /// Defect 2 (bd-page-footer-items-f4th80mj) — Q1's rule, measured:
+    /// a bare footer scalar that resolves to a project document stays a
+    /// link with that document's title; anything else becomes display
+    /// text with no href.
+    #[tokio::test]
+    async fn footer_generate_demotes_unresolved_bare_items_to_text() {
+        let footer_cv = config_map(vec![(
+            "left",
+            arr(vec![
+                str_value("about.qmd"),               // resolves → link
+                str_value("Copyright 2026 Example."), // no match → text
+                str_value("https://example.com"),     // external → text
+            ]),
+        )]);
+        let meta = config_map(vec![("page-footer", footer_cv)]);
+        let index = Arc::new(ProjectIndex::new(vec![profile("about.qmd", "About")]));
+        let out = run_transform_with(meta, Some(index)).await;
+        let stored = out.get_path(&["navigation", "footer"]).unwrap();
+        let left = stored.get("left").and_then(|v| v.as_array()).unwrap();
+
+        assert_eq!(
+            left[0]
+                .get("text")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("About"),
+            "resolving bare item keeps its link and gains a title; got {:?}",
+            left[0]
+        );
+        assert!(
+            left[0].get("href").is_some(),
+            "resolving bare item keeps its href; got {:?}",
+            left[0]
+        );
+
+        for (idx, expected) in [
+            (1usize, "Copyright 2026 Example."),
+            (2, "https://example.com"),
+        ] {
+            assert_eq!(
+                left[idx]
+                    .get("text")
+                    .and_then(|v| v.as_plain_text())
+                    .as_deref(),
+                Some(expected),
+                "unresolved bare item {} should become text; got {:?}",
+                idx,
+                left[idx]
+            );
+            assert!(
+                left[idx].get("href").is_none(),
+                "unresolved bare item {} must drop its href; got {:?}",
+                idx,
+                left[idx]
+            );
+        }
+    }
+
+    /// An *explicit* `href:` that matches no document keeps its anchor —
+    /// only bare scalars are eligible for demotion.
+    #[tokio::test]
+    async fn footer_generate_keeps_explicit_href_without_index_match() {
+        let item = config_map(vec![("href", str_value("https://example.com/support"))]);
+        let footer_cv = config_map(vec![("right", arr(vec![item]))]);
+        let meta = config_map(vec![("page-footer", footer_cv)]);
+        let index = Arc::new(ProjectIndex::new(vec![profile("about.qmd", "About")]));
+        let out = run_transform_with(meta, Some(index)).await;
+        let stored = out.get_path(&["navigation", "footer"]).unwrap();
+        let right = stored.get("right").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(
+            right[0]
+                .get("href")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("https://example.com/support"),
+            "explicit href must survive; got {:?}",
+            right[0]
+        );
+    }
 
     /// Phase 3 test 37 — bare-href items in a footer Items region
     /// get `text` from the matching profile.

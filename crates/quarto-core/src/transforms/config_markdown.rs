@@ -23,7 +23,13 @@
 //!
 //! **Registry.** [`MARKDOWN_CONFIG_PATHS`] lists the blessed key paths.
 //! A segment of `*` matches every element of an array at that
-//! position. Only `Scalar(String)` values are re-parsed: values that
+//! position; a segment of `**` matches zero or more levels of nesting
+//! through arrays *and* maps, which is what lets one entry cover a
+//! sidebar's recursive `contents:` or a navbar's nested `menu:`. `**`
+//! descent is bounded by [`MAX_CONFIG_DEPTH`] and reports
+//! [`CODE_CONFIG_NESTING_TOO_DEEP`] past it, so a config that has
+//! nested inside itself cannot overflow the stack.
+//! Only `Scalar(String)` values are re-parsed: values that
 //! are already `PandocInlines`/`PandocBlocks` (authored in document
 //! frontmatter, or `!md`-tagged) pass through untouched, as do
 //! non-string scalars (`title: false`), `!path` values, maps, and
@@ -92,6 +98,27 @@ const MARKDOWN_CONFIG_PATHS: &[&[&str]] = &[
     &["page-footer", "left"],
     &["page-footer", "center"],
     &["page-footer", "right"],
+    // Navigation item `text:` (bd-page-footer-items-f4th80mj). `**`
+    // covers the navbar's nested `menu:` and the sidebar's recursive
+    // `contents:` in one entry each.
+    &["website", "page-footer", "**", "text"],
+    &["page-footer", "**", "text"],
+    &["website", "navbar", "left", "**", "text"],
+    &["website", "navbar", "right", "**", "text"],
+    &["navbar", "left", "**", "text"],
+    &["navbar", "right", "**", "text"],
+    &["website", "sidebar", "contents", "**", "text"],
+    &["sidebar", "contents", "**", "text"],
+    // Bare-string items in a page-footer region are display text, not
+    // paths (defect 2), so they get markdown semantics too. Spelled out
+    // per region rather than as `page-footer.**`, which would sweep in
+    // `border`, `background`, hrefs and icons.
+    &["website", "page-footer", "left", "*"],
+    &["website", "page-footer", "center", "*"],
+    &["website", "page-footer", "right", "*"],
+    &["page-footer", "left", "*"],
+    &["page-footer", "center", "*"],
+    &["page-footer", "right", "*"],
 ];
 
 /// AST transform: apply [`MARKDOWN_CONFIG_PATHS`] to merged metadata.
@@ -134,32 +161,82 @@ pub fn apply_markdown_config_paths(
     meta: &mut ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
+    let mut walk = Walk {
+        diagnostics,
+        depth_reported: false,
+    };
     for pattern in MARKDOWN_CONFIG_PATHS {
-        apply_pattern(meta, pattern, diagnostics);
+        apply_pattern(meta, pattern, 0, &mut walk);
     }
+}
+
+/// State threaded through the registry walk: the diagnostic sink, plus
+/// a latch so an over-deep config reports [`CODE_CONFIG_NESTING_TOO_DEEP`]
+/// once rather than once per node per pattern.
+struct Walk<'a> {
+    diagnostics: &'a mut Vec<DiagnosticMessage>,
+    depth_reported: bool,
 }
 
 /// Walk one pattern; at the end of the path, markdown-parse a
 /// scalar-string value in place.
-fn apply_pattern(
-    value: &mut ConfigValue,
-    pattern: &[&str],
-    diagnostics: &mut Vec<DiagnosticMessage>,
-) {
+///
+/// `depth` counts levels descended *into the value tree* (not pattern
+/// segments consumed), so the `**` descent below cannot outrun
+/// [`MAX_CONFIG_DEPTH`].
+fn apply_pattern(value: &mut ConfigValue, pattern: &[&str], depth: usize, walk: &mut Walk) {
+    if depth > MAX_CONFIG_DEPTH {
+        if !walk.depth_reported {
+            walk.depth_reported = true;
+            let mut diagnostic = DiagnosticMessage::warning(format!(
+                "Configuration nesting exceeds the maximum depth of {MAX_CONFIG_DEPTH}. \
+                 Quarto stopped applying markdown semantics below this point. This \
+                 usually means a generated configuration has nested inside itself."
+            ))
+            .with_code(CODE_CONFIG_NESTING_TOO_DEEP);
+            diagnostic.location = Some(value.source_info.clone());
+            walk.diagnostics.push(diagnostic);
+        }
+        return;
+    }
+
     let Some((head, rest)) = pattern.split_first() else {
-        parse_scalar_string_in_place(value, diagnostics);
+        parse_scalar_string_in_place(value, walk.diagnostics);
         return;
     };
+
+    // `**` — recursive descent. Matches zero or more levels of nesting
+    // through both arrays and maps, so one entry covers a sidebar's
+    // arbitrarily-nested `contents:` and a navbar's nested `menu:`.
+    if *head == "**" {
+        // Zero levels: try to match the remainder right here.
+        apply_pattern(value, rest, depth, walk);
+        // One or more: keep `**` in play and descend a level.
+        match &mut value.value {
+            ConfigValueKind::Map(entries) => {
+                for entry in entries {
+                    apply_pattern(&mut entry.value, pattern, depth + 1, walk);
+                }
+            }
+            ConfigValueKind::Array(items) => {
+                for item in items {
+                    apply_pattern(item, pattern, depth + 1, walk);
+                }
+            }
+            _ => {}
+        }
+        return;
+    }
 
     match &mut value.value {
         ConfigValueKind::Map(entries) => {
             if let Some(entry) = entries.iter_mut().find(|e| e.key == *head) {
-                apply_pattern(&mut entry.value, rest, diagnostics);
+                apply_pattern(&mut entry.value, rest, depth + 1, walk);
             }
         }
         ConfigValueKind::Array(items) if *head == "*" => {
             for item in items {
-                apply_pattern(item, rest, diagnostics);
+                apply_pattern(item, rest, depth + 1, walk);
             }
         }
         _ => {}

@@ -677,9 +677,21 @@ fn render_footer_region(html: &mut String, class: &str, region: &FooterRegion) {
 
 fn render_footer_item(item: &NavigationItem, indent: usize) -> String {
     let pad = " ".repeat(indent);
-    let mut attrs = link_attrs(item);
     let label = render_item_label(item);
-    let href = item.href.as_deref().unwrap_or("#");
+
+    // No href: emit the label directly in the `<li>`, with no wrapping
+    // anchor (bd-page-footer-items-f4th80mj, defect 5). Q1 does the same,
+    // and the sidebar already takes this shape for `SidebarEntry::Heading`.
+    //
+    // This is not cosmetic: item `text:` is markdown now, so a label
+    // carrying its own `<a>` — the common cookie-preferences pattern —
+    // would otherwise land *inside* this anchor and produce nested
+    // anchors, which is invalid HTML.
+    let Some(href) = item.href.as_deref() else {
+        return format!("{}<li class=\"nav-item\">{}</li>\n", pad, label);
+    };
+
+    let mut attrs = link_attrs(item);
     attrs.insert(0, format!("href=\"{}\"", escape_attr(href)));
     attrs.insert(1, "class=\"nav-link\"".to_string());
     format!(

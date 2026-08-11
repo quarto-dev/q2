@@ -27,7 +27,7 @@ pub mod render_html;
 pub mod sidebar;
 
 pub use footer::{FooterBorder, FooterRegion, PageFooter, resolve_page_footer};
-pub use item::NavigationItem;
+pub use item::{BareScalar, NavigationItem};
 pub use navbar::{CollapseBelow, Navbar, NavbarTitle, TogglePosition, resolve_navbar};
 pub use page_nav::PageNavigation;
 pub use sidebar::{
