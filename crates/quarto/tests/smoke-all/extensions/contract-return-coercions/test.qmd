@@ -6,7 +6,12 @@ _quarto:
     html:
       noErrors: true
       ensureFileRegexMatches:
-        - ["RET-STRING", "strong>RET-INLINE", "RET-INLINES", "RET-BLOCK", "RET-BLOCKS-1", "RET-BLOCKS-2", "RET-ARRAY"]
+        # `strong[^>]*>` not `strong>`: the hub preview renders with
+        # `source-location: full`, which puts data-sid/data-loc on the opening
+        # tag, so the text no longer sits flush against `>`. Both renderers
+        # must satisfy this pattern. `!str` keeps the `[...]` from being parsed
+        # as markdown reference-link syntax, which emits a warning.
+        - ["RET-STRING", !str "strong[^>]*>RET-INLINE", "RET-INLINES", "RET-BLOCK", "RET-BLOCKS-1", "RET-BLOCKS-2", "RET-ARRAY"]
 ---
 
 String: {{< rstr >}}

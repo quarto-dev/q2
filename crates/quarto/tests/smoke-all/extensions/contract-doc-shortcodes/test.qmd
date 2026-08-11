@@ -7,7 +7,16 @@ _quarto:
   tests:
     html:
       ensureFileRegexMatches:
-        - ["strong>_bringit_", "Shortcode Error \\(shorty\\): error message", "Shortcode Error \\(shorty\\): error_args"]
+        # `strong[^>]*>` not `strong>`: the hub preview renders with
+        # `source-location: full`, which puts data-sid/data-loc on the opening
+        # tag, so the text no longer sits flush against `>`. Both renderers
+        # must satisfy this pattern.
+        #
+        # The `!str` tag is load-bearing: assertion strings are otherwise
+        # parsed as markdown, where `[...]` reads as reference-link syntax and
+        # emits a warning — and this fixture asserts noErrorsOrWarnings by
+        # default, so that warning would fail it.
+        - [!str "strong[^>]*>_bringit_", "Shortcode Error \\(shorty\\): error message", "Shortcode Error \\(shorty\\): error_args"]
 ---
 
 {{< shorty _bringit_ >}}
