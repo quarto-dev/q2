@@ -87,17 +87,85 @@ And the provenance is clean — Q1 is not shipping a Q1-specific artifact:
 
 Identical. So "vendor the upstream UMD" and "do what Q1 does" are the *same* decision, needing no esbuild step of our own and no build-time fetch. The strand's framing of the choice as "vendor a multi-megabyte asset *or* fetch at build time" resolves to: vendor one upstream file, 2.62 MiB, regenerable from npm and drift-testable.
 
-## Proposed phases (draft)
+## Implementation mechanics (verified before writing code)
 
-- **Phase 0 — Test plan (TDD, failing first).**
-  - Unit: emitted script references a relative `site_libs/…/mermaid.min.js` and contains **no** `cdn.jsdelivr.net`.
-  - Unit: `register_mermaid_assets()` stores a `Project`-scoped artifact at `mermaid/mermaid.min.js`.
-  - Drift test mirroring `vendored_reveal_assets_match_npm_package` (skip when `node_modules` absent).
-  - Integration (through `render_document_to_file`, per the end-to-end rule): a website render with a diagram writes `_site/site_libs/mermaid/mermaid.min.js`; a nested page gets `../site_libs/…`; a diagram-free page ships neither the asset nor the script.
-- **Phase 1 — Vendor + register.** Add `resources/mermaid/{mermaid.min.js,LICENSE,README.md}`; add `mermaid` as a root devDependency to anchor the drift test; `register_mermaid_assets()` alongside the reveal pattern, called from the transform (the artifact bridge is confirmed to carry it back).
-- **Phase 2 — Emit a relative script.** Replace the module-import block with the classic-script + init form; keep the `MERMAID_JS_SENTINEL` idempotence contract.
-- **Phase 3 — End-to-end verification.** Run `q2 render` on the repro **with the network blocked** and confirm an actual rendered SVG. Include a non-flowchart diagram type (gantt or class) to prove the chunk problem is genuinely gone.
-- **Phase 4 — Docs + changelog.**
+- **`RenderContext.resource_resolver`** is populated for transforms (`ast_transforms.rs:195` clones it from `StageContext`), and `page_nav_render`, `navbar_render`, `sidebar_render`, `footer_render`, `link_rewrite`, and `resource_collector` already use it. The transform can compute its own page-relative URL.
+- **`ResourceResolverContext::html_url_for(scope, artifact_path)`** (`resource_resolver.rs:252`) is the URL function: `Project` scope + `mermaid/mermaid.min.js` → `site_libs/mermaid/mermaid.min.js` at the site root, `../site_libs/…` one level down, `../../../site_libs/…` three down (its own tests at lines 484-541 cover exactly this).
+- **Fallback when the resolver is absent** follows `collect_artifact_urls` (`apply_template.rs:376`): bare relative path with `\` → `/`.
+- **`Artifact`** stores `content: Vec<u8>`; `from_string`/`from_bytes` both copy once. The vendored file is valid UTF-8, so `include_str!` is used (it also lets the version guard read the text).
+- The UMD bundle ends with `globalThis["mermaid"] = …`, so a classic `<script src>` followed by bare `mermaid.initialize(...)` / `mermaid.run(...)` is the right emission shape — no module import.
+
+### Staleness guard: one deviation from the reveal.js precedent, with reason
+
+Reveal's `vendored_reveal_assets_match_npm_package` compares embedded bytes against `node_modules/reveal.js/dist/` because reveal has **two** live sources that must agree (vendored for render, npm for preview). Mermaid has **one** source today, so replicating that test's *form* would mean adding mermaid as a devDependency — **66 MB unpacked, 793 files** — purely to make a comparison with nothing to disagree with. That is cost without the purpose.
+
+The guard is split so we keep the protection without the dependency:
+
+- **Always-on:** the vendored bundle's own embedded `version:"…"` string must equal `MERMAID_VERSION`. That string occurs **exactly once** in the file, so it is an unambiguous anchor. Catches the real bug class — bumping `MERMAID_VERSION` without re-vendoring, or vice versa.
+- **Always-on:** the bundle must be self-contained (no `import(`, no `chunks/`). A direct regression guard for the trap this strand uncovered: the ESM entry point is a 26 KB stub over a 13 MB chunk tree. Re-vendoring the wrong dist file fails here.
+- **Conditional:** the reveal-style byte comparison against `node_modules/mermaid/dist/mermaid.min.js`, skipped when absent — exactly reveal's skip contract. Costs nothing now, and starts working automatically if `bd-1vwtdwtq` (preview path) adds mermaid to `node_modules`, which it likely will.
+
+Mechanisms 1-4 of the reveal precedent (vendored dir, README, `include_str!`, Project-scoped artifact registration) are followed exactly, so the uniformity that motivated decision #5 holds.
+
+## Work items
+
+### Phase 0 — Tests (TDD: written and failing first) ✅
+
+- [x] Unit: emitted script contains no `cdn.jsdelivr.net` (and no absolute URL at all)
+- [x] Unit: emitted script references the resolver-computed `site_libs/mermaid/mermaid.min.js`
+- [x] Unit: nested page gets `../site_libs/…`; 3-deep page gets `../../../…`
+- [x] Unit: `register_mermaid_assets()` stores a `Project`-scoped artifact at `mermaid/mermaid.min.js`
+- [x] Unit: transform registers the asset when a diagram is present
+- [x] Unit: transform registers nothing when no diagram is present (and nothing for non-HTML formats)
+- [x] Unit: sentinel idempotence still holds (asset registered once, script appended once)
+- [x] Guard: vendored bundle's embedded version matches `MERMAID_VERSION`
+- [x] Guard: vendored bundle is self-contained (no `import(`, no `chunks/`, assigns `globalThis.mermaid`)
+- [x] Guard: conditional byte-compare vs `node_modules/mermaid/dist/mermaid.min.js` (skips when absent)
+- [x] Integration: website render writes `_site/site_libs/mermaid/mermaid.min.js`
+- [x] Integration: nested page references `../site_libs/…` and it resolves on disk
+- [x] Integration: diagram-free page ships neither asset nor script
+- [x] Verified the new tests fail for the right reason before implementing (5 of 6 failed; the 6th is a regression guard that passes both before and after)
+- [x] **Added during Phase 2:** integration test for a **revealjs deck** (see the discovered issue below)
+- [x] **Added during Phase 2:** unit test that the runtime is *not* keyed under `js:`
+
+### Phase 1 — Vendor + register ✅
+
+- [x] Add `resources/mermaid/mermaid.min.js` (upstream npm 11.12.0, 2,748,992 B, SHA-256 `07e37dfa…`)
+- [x] Add `resources/mermaid/LICENSE` (mermaid MIT)
+- [x] Add `resources/mermaid/README.md` (source, version, provenance, update procedure, and a prominent "use the right dist file" warning)
+- [x] `register_mermaid_assets()` in the transform module
+- [x] Call it from the transform when a diagram is found
+
+### Phase 2 — Emit a relative script ✅
+
+- [x] Replace the module import with classic `<script src>` + init, using the resolver URL
+- [x] Preserve the `MERMAID_JS_SENTINEL` idempotence contract
+- [x] Update the existing unit test that asserted the CDN URL
+- [x] Update the two smoke-all fixtures (`mermaid/basic.qmd`, `mermaid/revealjs.qmd`) that asserted the CDN URL — now assert a relative `<script src>` and **forbid** `cdn.jsdelivr.net`
+- [x] Full workspace suite green (11644/11644)
+
+#### Discovered during Phase 2: the artifact key must not be `js:`
+
+The first implementation keyed the runtime `js:mermaid:mermaid.min.js`, following the convention in `dependency.rs` and the reveal assets. The integration tests caught the consequence immediately: **two** `<script src>` tags per page. `ApplyTemplateStage` collects every `js:` artifact and emits a head `<script>` for it (`apply_template.rs:167`), so the runtime loaded twice — 5.2 MiB per page.
+
+The fix is not simply "drop our own tag and let the template emit it", because the revealjs scaffold collects only `js:revealjs:*` (`apply_template.rs:305`) — a deck deliberately does not take the Bootstrap asset set. A `js:`-keyed runtime would therefore emit **no** tag at all in presentations, silently breaking every diagram in a deck.
+
+So the transform keeps ownership of its own emission (which also puts the `<script src>` immediately next to the `initialize`/`run` call that depends on it), and the artifact is keyed `mermaid:runtime` to stay out of the template's collection. Writing to disk is unaffected: the flush is path-driven, not prefix-driven (`artifact_flush.rs:109`).
+
+Both halves are now pinned by tests — `runtime_is_not_keyed_as_a_template_script` (unit) and `revealjs_deck_bundles_the_runtime` (integration). The reveal case is the one a future "tidy-up" would break while unit tests stayed green, which is why it is called out in the fixture comment too.
+
+### Phase 3 — End-to-end verification
+
+- [ ] `q2 render` the repro; confirm the asset is written and the page references it relatively
+- [ ] Load the rendered page **with the network blocked**; confirm a real SVG renders
+- [ ] Include a non-flowchart diagram type (gantt or class) to prove the chunk trap is gone
+- [ ] Record invocation + observed output in this plan
+
+### Phase 4 — Docs + changelog
+
+- [ ] Update module docs in `mermaid.rs` (they currently describe the CDN design)
+- [ ] User-facing docs under `docs/` if diagrams are documented there
+- [ ] `cargo xtask verify` green
 
 ## Resolved decisions (2026-08-11)
 
