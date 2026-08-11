@@ -3,7 +3,7 @@
 **Date:** 2026-08-11
 **Braid:** `bd-mermaid-runtime-not-bundled-vxejw159`
 **Branch:** `main` @ `001cb6a5` (investigated in place; no worktree created)
-**Status:** Design settled 2026-08-11 (see §Resolved decisions). Ready to implement.
+**Status:** **Implemented** on `braid/bd-mermaid-runtime-not-bundled-vxejw159` (commits `095cb39c`, `eeb1eb7d`). All phases complete; full `cargo xtask verify` green. Not pushed — awaiting review.
 
 ## Triage verdict
 
