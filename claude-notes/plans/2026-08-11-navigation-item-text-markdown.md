@@ -3,7 +3,16 @@
 **Date:** 2026-08-11
 **Braid:** bd-page-footer-items-f4th80mj (bug, P1, labels `parity` / `websites`)
 **Branch:** written on `main` @ `6dc835c2` in the main checkout (`/Users/cscheid/rooms/room-1/q2`). No worktree/branch was created — see "Where to do the work".
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled 2026-08-11 (all six questions answered by Carlos — see "Settled decisions"). Implementation in progress on branch `braid/bd-page-footer-items-f4th80mj-nav-item-text`.
+
+## Settled decisions (2026-08-11)
+
+1. **Mechanism: `MARKDOWN_CONFIG_PATHS`.** Confirmed. `ANNOTATIONS` in pampa is not touched.
+2. **Blast radius: option (b)** — the whole navigation item `text:` slice, including nested navbar `menu:` and all sidebar `contents` levels. *Not* in scope: `about.links[].text`, navbar tools, `website.sidebar.header/footer`, `margin-header/footer`, `body-header/footer`, `announcement`. Also deliberately out of scope: sidebar `section:` (a display-text sibling of `text:`, but it additionally feeds section identity, so it deserves its own check) — **follow-up strand filed**.
+3. **Sidebar: option (a)** — unify on markdown everywhere. q2 deliberately diverges from Q1's entities-only sidebar; that inconsistency is a Q1 bug we are comfortable not reproducing.
+4. **Inline parse** for item `text:`. q2's existing `center:` already omits Q1's `<p>`, so inline is the internally-consistent choice and avoids `<p>` inside `<a>`.
+5. **Recursive descent: option (a)**, with guards. Add a `**` segment to the pattern language, but bound the descent at an obviously-artificial depth (32) and emit a diagnostic rather than risking stack overflow. **Q-1-27 "Config Nesting Too Deep" already exists in the catalog as an un-emitted stub with a docs page** — wire it up rather than minting a new code. Carlos flagged a concern that the pattern language is growing; **regroup if the blast radius turns out to be large.**
+6. **Branch, not worktree** — `braid/bd-page-footer-items-f4th80mj-nav-item-text`. Needs a PR and review.
 
 ## Triage verdict
 

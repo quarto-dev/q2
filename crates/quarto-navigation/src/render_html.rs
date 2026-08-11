@@ -1254,6 +1254,95 @@ mod tests {
         assert!(html.contains("border-top: none"));
     }
 
+    // --- href-less footer items (bd-page-footer-items-f4th80mj) -----
+
+    /// Defect 5 — an item with `text:` but no `href:` renders its label
+    /// directly in the `<li>`, with no wrapping anchor. Mirrors Q1 and
+    /// the sidebar's existing `SidebarEntry::Heading` precedent.
+    #[test]
+    fn footer_item_without_href_renders_without_anchor() {
+        let footer = PageFooter {
+            left: FooterRegion::Items(vec![NavigationItem {
+                text: Some(s("Just text")),
+                ..NavigationItem::default()
+            }]),
+            ..PageFooter::default()
+        };
+        let html = page_footer_to_html(&footer);
+        assert!(
+            html.contains("Just text"),
+            "label should be present; html: {}",
+            html
+        );
+        assert!(
+            !html.contains("href=\"#\""),
+            "href-less footer item must not be wrapped in <a href=\"#\">; html: {}",
+            html
+        );
+        assert!(
+            !html.contains("<a "),
+            "href-less footer item must emit no anchor at all; html: {}",
+            html
+        );
+    }
+
+    /// Defect 5, the case that forces it to land with defect 1: item
+    /// text carrying its own `<a>` must not end up nested inside a
+    /// wrapping anchor (invalid HTML). This is the cookie-preferences
+    /// pattern from the Posit Connect docs.
+    #[test]
+    fn footer_item_with_own_anchor_does_not_nest_anchors() {
+        use quarto_pandoc_types::inline::RawInline;
+        let raw = |t: &str| {
+            Inline::RawInline(RawInline {
+                format: "html".to_string(),
+                text: t.to_string(),
+                source_info: SourceInfo::for_test(),
+            })
+        };
+        let text = ConfigValue::new_inlines(
+            vec![
+                raw("<a href=\"#\" id=\"open_preferences_center\">"),
+                str_inline("Cookie Preferences"),
+                raw("</a>"),
+            ],
+            SourceInfo::for_test(),
+        );
+        let footer = PageFooter {
+            right: FooterRegion::Items(vec![NavigationItem {
+                text: Some(text),
+                ..NavigationItem::default()
+            }]),
+            ..PageFooter::default()
+        };
+        let html = page_footer_to_html(&footer);
+        assert_eq!(
+            html.matches("<a ").count(),
+            1,
+            "exactly one anchor (the author's own) should survive; html: {}",
+            html
+        );
+    }
+
+    /// An item that *does* have an href keeps its anchor.
+    #[test]
+    fn footer_item_with_href_still_renders_anchor() {
+        let footer = PageFooter {
+            left: FooterRegion::Items(vec![NavigationItem {
+                href: Some("https://example.com".to_string()),
+                text: Some(s("Support")),
+                ..NavigationItem::default()
+            }]),
+            ..PageFooter::default()
+        };
+        let html = page_footer_to_html(&footer);
+        assert!(
+            html.contains("<a href=\"https://example.com\""),
+            "item with href keeps its anchor; html: {}",
+            html
+        );
+    }
+
     #[test]
     fn footer_escapes_literal_text() {
         let footer = PageFooter {
