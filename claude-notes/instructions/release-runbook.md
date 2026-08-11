@@ -88,7 +88,8 @@ git tag exactly equals `[workspace.package].version` in the root
 cargo xtask switch-task <strand>           # or: git switch -c release/vX.Y.Z main
 # edit root Cargo.toml: [workspace.package] version = "X.Y.Z"
 cargo update --workspace                    # rewrites Cargo.lock workspace versions only
-git diff Cargo.lock | grep -E '^[+-]version' | grep -v 'OLD\|NEW'   # sanity: no surprise bumps
+cargo update --manifest-path crates/wasm-quarto-hub-client/Cargo.toml --workspace   # SECOND lockfile, see below
+git diff '**/Cargo.lock' | grep -E '^[+-]version' | grep -v 'OLD\|NEW'   # sanity: no surprise bumps
 cargo build --bin q2 --locked && ./target/debug/q2 --version        # must print "q2 (quarto 2) X.Y.Z"
 ```
 
@@ -97,7 +98,17 @@ workspace members' own version entries — external deps stay pinned. The
 `--locked` build is the real check: CI builds with `--locked`, so the
 lockfile must already be in sync or every build leg fails.
 
-Commit (Cargo.toml + Cargo.lock), push, open a PR, get it merged. A
+**There are two lockfiles.** `crates/wasm-quarto-hub-client/` declares
+its own `[workspace]` so cargo does not traverse up into the monorepo,
+which means it carries a *separate* `Cargo.lock` recording the versions
+of every path dependency it pulls from `crates/`. A root
+`cargo update --workspace` does not touch it. Miss it and nothing fails
+loudly — the WASM build simply rewrites the file, so the next person to
+run `cargo xtask verify` (without `--skip-hub-build`) finds ~17 lines of
+unrequested churn in their working tree. The v0.17.0 bump missed it;
+v0.15.0 and v0.16.0 did not. Both locks should appear in the bump commit.
+
+Commit (Cargo.toml + both Cargo.lock files), push, open a PR, get it merged. A
 version bump is small but still goes through a PR — `main` is gated
 (CI clippy gate, bd-3zst4hwy).
 
