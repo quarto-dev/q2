@@ -13,9 +13,12 @@ _quarto:
         # must satisfy this pattern.
         #
         # The `!str` tag is load-bearing: assertion strings are otherwise
-        # parsed as markdown, where `[...]` reads as reference-link syntax and
-        # emits a warning — and this fixture asserts noErrorsOrWarnings by
-        # default, so that warning would fail it.
+        # parsed as markdown, and the `*` quantifier reads as an unclosed
+        # emphasis marker — [Q-1-20] Failed to parse metadata value as
+        # markdown. This fixture asserts noErrorsOrWarnings by default, so that
+        # warning fails it. (Verified: the same pattern with `+` instead of `*`
+        # parses clean, so the `*` is the trigger — not the brackets, which are
+        # fine on their own.)
         - [!str "strong[^>]*>_bringit_", "Shortcode Error \\(shorty\\): error message", "Shortcode Error \\(shorty\\): error_args"]
 ---
 
