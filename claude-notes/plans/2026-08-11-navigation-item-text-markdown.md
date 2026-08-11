@@ -20,6 +20,38 @@
 
 The single most consequential finding: **the handoff's suggested fix direction points at the wrong mechanism.** It proposes extending `ANNOTATIONS` in `crates/pampa/src/pandoc/meta_annotations.rs` (load-time, per-key-path interpretation). But bd-shortcodes-in-metadata-bp06aub8 already built a *second*, purpose-built mechanism for exactly this class of bug — `ConfigMarkdownTransform` / `MARKDOWN_CONFIG_PATHS` in `crates/quarto-core/src/transforms/config_markdown.rs` — and its plan (`claude-notes/plans/2026-08-10-shortcodes-website-config-includes.md`, Design decision #2) explicitly (a) rejects the load-time approach and (b) names **item `text:` fields** as the intended growth path, "one-line additions". This strand is that growth step. Details in "Two mechanisms" below.
 
+## Q1's bare-scalar rule (measured 2026-08-11)
+
+The strand and the original handoff both described defect 2 as "a bare
+footer string should be display text". **Measurement refuted that**, and
+the correction shaped the implementation, so it is recorded here.
+
+Given a project containing `about.qmd` (title "About Us"):
+
+| `_quarto.yml` footer item | Q1 output |
+|---|---|
+| `- about.qmd` | `<a class="nav-link" href="./about.html"><p>About Us</p></a>` |
+| `- https://example.com` | plain `<li>` text |
+| `- nonexistent.qmd` | plain `<li>` text |
+| `- Copyright 2026 Example, Inc.` | plain `<li>` text |
+
+So the rule is **resolution-dependent**: a bare scalar is a link *iff* it
+names a project document, and display text otherwise — a bare external
+URL included. That is exactly what q2's `enrich_navigation_items` already
+computes, which is why a blanket "bare scalar is text" rule broke four
+existing tests that encode the resolving case.
+
+Implementation consequence: the parser cannot decide, because it has no
+project index. `NavigationItem::bare_text` carries the original
+`ConfigValue` as a fallback and `FooterGenerateTransform` demotes items
+enrichment failed to resolve.
+
+**One deliberate divergence.** Demotion runs only when a project index was
+actually consulted. In a single-file render no index is attached, so
+*nothing* would resolve and every bare footer item would demote to text on
+no evidence at all. There, q2 keeps today's behavior (bare scalar stays an
+href). Q1 parity in that corner is untested and unclaimed.
+
 ## Issue context
 
 Filed 2026-08-11 by Carlos Scheidegger, one day old, no staleness concerns. Five defects in how `_quarto.yml` navigation item `text:` is interpreted and rendered, none of which emits a warning:
@@ -140,6 +172,51 @@ Ordering also favours the registry: `ConfigMarkdownTransform` runs in `Normaliza
 ## Pre-flight
 
 `cargo xtask verify --skip-hub-build` at `6dc835c2`: Rust legs green; hub-client `test:wasm` reported 3 failures (`includes/in-code-fence`, `quarto-test/callout-title-attribute` ×2). **These were stale-WASM artifacts of `--skip-hub-build`, not real breakage** — after `cd hub-client && npm run build:wasm`, `npm run test:wasm` is 131/131 green. HEAD is clean. (Worth remembering: `--skip-hub-build` leaves `test:wasm` running against whatever WASM was last built.)
+
+## Implementation record (2026-08-11)
+
+- [x] **Phase 0 — Tests first.** Seven tests written and confirmed red at
+      `dad4397b` (two regression guards green from the start). Registry
+      tests in `config_markdown.rs`; renderer tests in `render_html.rs`;
+      parse test in `footer.rs`.
+- [x] **Phase 1 — Registry entries + `**` + depth bound.** 14 new entries
+      in `MARKDOWN_CONFIG_PATHS`. `**` matches zero or more levels through
+      arrays *and* maps; descent bounded at `MAX_CONFIG_DEPTH = 32`,
+      reporting `Q-1-27` (a catalogued but never-emitted code) once per
+      walk via a latch.
+- [x] **Phase 2 — Bare footer scalars.** `BareScalar::TextIfUnresolved` +
+      `NavigationItem::bare_text` + `demote_unresolved_bare_items`. See
+      "Q1's bare-scalar rule" — this deviates from the drafted phase
+      because measurement showed the drafted rule was wrong.
+- [x] **Phase 3 — href-less footer item.** `render_footer_item` emits the
+      label directly in the `<li>`.
+- [x] **Phase 4 — Sidebar.** Covered by the `**` entry; markdown
+      everywhere (decision 3a).
+- [x] **Phase 5 — E2E + docs.** Verified through the binary (below);
+      `docs/guides/authoring/shortcodes.qmd` updated to list item `text:`;
+      `docs/errors/yaml/Q-1-27.qmd` rewritten to describe the walk that
+      now emits it rather than a hypothetical loader bound.
+
+**End-to-end verification.** `REPRO_YEAR=2026 q2 render` on the committed
+repro, output inspected:
+
+```html
+<li class="nav-item"><a href="https://example.com" class="nav-link"><img src="logo.svg" alt="Logo" width="65px" class="footer-logo"></a></li>
+<li class="nav-item">Copyright © 2015-2026 Example, Inc. All Rights Reserved.</li>
+...
+<li class="nav-item"><a href="#" id="open_preferences_center">Cookie Preferences</a></li>
+```
+
+plus navbar `Navbar © <b>bold</b> <em>emph</em> 2026` and sidebar
+`Sidebar © <em>emph</em>`. All five defects fixed; the cookie-preferences
+item emits exactly one anchor. Full workspace suite green (11659); **no
+snapshot files changed**.
+
+**Known consequence.** Item `text:` containing raw HTML now raises the
+informational `Q-2-9` ("HTML element converted to raw HTML") — the repro
+went from 4 to 7 such warnings. This is the same diagnostic `center:` and
+`website.title` already raise for blessed keys, not a new noise source,
+but sites with `<img>` in footer items will see it on every render.
 
 ## Proposed phases (draft)
 
