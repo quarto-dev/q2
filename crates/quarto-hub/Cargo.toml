@@ -45,9 +45,9 @@ time = "0.3"
 # utf16-indexing: use UTF-16 code units for text indices, matching the JS/WASM client.
 # Without this, the Rust default is UnicodeCodePoint, which disagrees with JS on
 # non-BMP characters (emoji etc.) — each emoji is 1 code point but 2 UTF-16 code units.
-automerge = { version = "0.10.0", features = ["utf16-indexing"] }
-# Vendored samod fork carrying the synchronous AccessPolicy trait (long-term home).
-samod = { version = "0.12.3", git = "https://github.com/quarto-dev/samod.git", branch = "access-policy", features = ["tokio", "axum", "tungstenite"] }
+automerge = { version = "0.11.0", features = ["utf16-indexing"] }
+# samod fork carrying the synchronous AccessPolicy trait.
+samod = { version = "0.13.0", git = "https://github.com/quarto-dev/samod.git", branch = "access-policy", features = ["tokio", "axum", "tungstenite"] }
 
 # Async streams (for samod event handling)
 futures = "0.3"
