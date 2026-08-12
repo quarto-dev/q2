@@ -530,6 +530,16 @@ fn build_storage(config: &PreviewConfig) -> Result<StorageManager> {
     }
 }
 
+/// The host's Ctrl-C line: a plain preview vs. an active `--share`
+/// session (whose guests lose their tunnel when the host exits).
+fn shutdown_message(share: bool) -> &'static str {
+    if share {
+        "Received Ctrl-C, ending the shared session…"
+    } else {
+        "Received Ctrl-C, shutting down the preview…"
+    }
+}
+
 fn build_hub_config(config: &PreviewConfig) -> HubConfig {
     // bd-9cyza5vy: in single-file mode (no `_quarto.yml`), the deck's
     // transitive dependencies aren't found by a dir walk. Resolve the full
@@ -592,6 +602,11 @@ fn build_hub_config(config: &PreviewConfig) -> HubConfig {
         } else {
             quarto_hub::sync::DiskWritePolicy::ReadOnly
         },
+        // Host-side Ctrl-C acknowledgment, symmetric with the guest's
+        // line in the CLI's run_join. The hub's signal task prints it
+        // before teardown begins, so a fast shutdown can't exit the
+        // process before the line appears (bd-wj9smyxg).
+        shutdown_message: Some(shutdown_message(config.share).to_string()),
     }
 }
 
@@ -840,6 +855,30 @@ mod tests {
             share: false,
             ui,
         }
+    }
+
+    #[test]
+    fn shutdown_message_marks_shared_sessions() {
+        // The share variant tells the host (and anyone watching) that
+        // guests are about to lose their tunnel.
+        assert!(shutdown_message(true).contains("ending the shared session"));
+        assert!(shutdown_message(false).contains("shutting down the preview"));
+    }
+
+    #[test]
+    fn hub_config_carries_ctrl_c_shutdown_message() {
+        let plain = build_hub_config(&test_config(PreviewUi::Viewer, false));
+        assert_eq!(
+            plain.shutdown_message.as_deref(),
+            Some("Received Ctrl-C, shutting down the preview…")
+        );
+        let mut sharing = test_config(PreviewUi::Viewer, false);
+        sharing.share = true;
+        let shared = build_hub_config(&sharing);
+        assert_eq!(
+            shared.shutdown_message.as_deref(),
+            Some("Received Ctrl-C, ending the shared session…")
+        );
     }
 
     #[test]

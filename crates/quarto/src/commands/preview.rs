@@ -254,19 +254,12 @@ async fn run(args: PreviewArgs) -> Result<()> {
     };
 
     // Host-side Ctrl-C acknowledgment, symmetric with the guest's line
-    // in run_join: the hub's own "initiating graceful shutdown" goes to
-    // tracing::info, which the CLI's default filter hides — so without
-    // this the process just vanished. tokio allows any number of ctrl_c
-    // listeners; the hub's own handler still drives the graceful
-    // shutdown (and its final filesystem sync).
-    let sharing = args.share;
-    let ctrl_c_printer = tokio::spawn(async move {
-        let _ = tokio::signal::ctrl_c().await;
-        println!();
-        println!("  {}", shutdown_message(sharing));
-    });
-
-    let result = match args.ui {
+    // in run_join: printed by the hub's own signal task via
+    // `HubConfig::shutdown_message` (set in quarto-preview's
+    // build_hub_config from `args.share`). Printing there — on the
+    // shutdown critical path — keeps a fast teardown from exiting the
+    // process before the line appears (bd-wj9smyxg).
+    match args.ui {
         quarto_preview::PreviewUi::Viewer => quarto_preview::run(config).await,
         quarto_preview::PreviewUi::Editor => {
             // Phase 4 (bd-jt1etjbn): the share-route boot URL needs the
@@ -331,20 +324,6 @@ async fn run(args: PreviewArgs) -> Result<()> {
             })
             .await
         }
-    };
-    // The server exited on its own (error path): disarm the printer so
-    // a late Ctrl-C can't announce a shutdown that already happened.
-    ctrl_c_printer.abort();
-    result
-}
-
-/// The host's Ctrl-C line: a plain preview vs. an active `--share`
-/// session (whose guests lose their tunnel when the host exits).
-fn shutdown_message(share: bool) -> &'static str {
-    if share {
-        "Received Ctrl-C, ending the shared session…"
-    } else {
-        "Received Ctrl-C, shutting down the preview…"
     }
 }
 
@@ -1508,13 +1487,5 @@ mod tests {
         let addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
         let ready = wait_until_healthy(addr, std::time::Duration::from_millis(200)).await;
         assert!(!ready, "no listener → not healthy");
-    }
-
-    #[test]
-    fn shutdown_message_marks_shared_sessions() {
-        // The share variant tells the host (and anyone watching) that
-        // guests are about to lose their tunnel.
-        assert!(shutdown_message(true).contains("ending the shared session"));
-        assert!(shutdown_message(false).contains("shutting down the preview"));
     }
 }
