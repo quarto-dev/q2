@@ -2,11 +2,22 @@
 
 **Date:** 2026-08-12
 **Braid:** bd-adjacent-footnote-definitions-miif1k1z (bug, p2, label `parser`)
-**Branch:** `main` (investigated in the main checkout, no worktree created)
-**Base:** `main` @ `c28cfd81`, pre-flight `cargo xtask verify --skip-hub-build` **green**
-(11728 tests run, 11728 passed, 197 skipped; all 14 steps passed)
-**Status:** Investigation — pending design alignment with user. **Do not start
-implementation until the user gives the go-ahead.**
+**Worktree:** `.worktrees/bd-adjacent-footnote-definitions-miif1k1z-adjacent-footnote-definitions-merge`
+(branch `braid/bd-adjacent-footnote-definitions-miif1k1z-adjacent-footnote-definitions-merge`, based on `main` @ `7bcddf61`)
+**Pre-flight:** `cargo xtask verify --skip-hub-build` **green** before any change
+(11728 tests run, 11728 passed, 197 skipped; all 14 steps passed). Run in the
+main checkout at `c28cfd81`; `main` has since been reset to `7bcddf61`, which
+differs only by two unrelated Q-2-10 *plan* commits (docs).
+**Status:** Design settled 2026-08-12 — **implementation approved and in
+progress.** See "Design decisions (settled)" below.
+
+> **Note on where this work lives.** The investigation was originally done in
+> the main checkout. Partway through implementation another session reset
+> `main` and switched branches *in that same working tree*, discarding the
+> uncommitted scanner work. Nothing was lost permanently — the investigation
+> commit was recovered from the reflog and cherry-picked here — but the fix is
+> now developed in a dedicated worktree so a concurrent session cannot disturb
+> it. If you are picking this up: work here, not in the main checkout.
 
 ## Triage verdict
 
@@ -272,6 +283,148 @@ Skeleton only — contents wait on the design discussion.
   it lands: a code comment in the gates at minimum, and — if the answer is
   "diverge deliberately" — a line in the qmd-vs-Pandoc docs.
 - **Phase 5 — file the spin-off strands** (Q5).
+
+## Design decisions (settled)
+
+User answers, 2026-08-12. These close Q1–Q5 below; the questions are kept for
+the reasoning that produced them.
+
+1. **`[^id]:` DOES interrupt an ordinary paragraph.** `hello there.` /
+   `[^b]: two.` becomes paragraph + definition. This is a deliberate divergence
+   from Pandoc, in the same direction q2 already diverges for `#` and `-`
+   (Finding 3).
+2. **A code comment is enough** for that divergence — no user-facing docs pass
+   in this change. Phase 4 shrinks to a comment in the gates.
+3. **Peek is scoped to `[^id]:` only.** No general bracket form; the
+   link-reference-definition motivation does not apply (Finding 5).
+4. **bd-mt1ksg9b stays separate.** This strand goes first.
+5. **Both spin-offs filed** (Finding 6 / Finding 7):
+   - **bd-jttkymsw** (p2) — unresolved reference renders as an invisible empty
+     span with no diagnostic. Survives this fix.
+   - **bd-v9zs83zj** (p3) — footnotes appendix omits the `Footnotes` heading.
+     Dispatched separately by the user.
+
+## Work items
+
+- [x] Phase 0 — indent × context corpus cases, confirmed failing first
+- [x] Phase 1 — `peek_ref_id_specifier`
+- [x] Phase 2 — wire into both gates
+- [x] Phase 3 — `tree-sitter test` + full `cargo xtask verify` + end-to-end render
+- [x] Phase 4 — divergence code comment
+
+## Implementation record
+
+**Files touched: `src/scanner.c` and `test/corpus/inline_ref_def.txt` only.**
+No grammar change, so `parser.c` is untouched and there are no generated
+diffs — same shape as 92737cdd.
+
+### Phase 0 — TDD
+
+11 corpus cases appended to `test/corpus/inline_ref_def.txt`, covering the
+indent × context sweep required by
+`claude-notes/instructions/scanner-indentation-contexts.md`. Confirmed failing
+first, and failing in exactly the right places: **6 failed / 5 passed**, where
+the 5 passers are the cells that must *not* change (indent 4, over-indented in
+a list, and the three negatives — bracket span in prose, bare `[^b]` reference,
+`[ref]: url`). After the fix: **11/11**.
+
+### The load-bearing constraint: the peek must never be looser than the parser
+
+The non-obvious part of this fix. `inline_ref_def` is
+`seq(ref_id_specifier, _whitespace, pandoc_paragraph)`, and *both* the
+whitespace and a non-empty body are mandatory. Probed at block start:
+
+| Input | Parses to |
+| --- | --- |
+| `[^x]: two.` | `inline_ref_def` |
+| `[^x]:\ttwo.` | `inline_ref_def` |
+| `[^]: two.` | `inline_ref_def` (empty id is legal) |
+| `[^x]:two.` | **ERROR node** |
+| `[^x]:` | **ERROR node** |
+| `[^x]: ` (empty body) | **ERROR node** |
+
+So `peek_ref_id_specifier` requires the colon, then whitespace, then a
+non-whitespace character before EOL — stricter than `parse_ref_id_specifier`,
+deliberately. Had the peek merely mirrored `parse_ref_id_specifier`, a line
+like `[^x]:two.` would have had its soft break suppressed and then failed to
+form any block: a **hard parse error, which drops the whole file from the
+render**. That is the bd-j7be7kuc failure mode. The invariant is written into
+the helper's comment: stricter is always safe (the line stays paragraph
+continuation, today's behavior), looser turns benign prose into an
+unrenderable file.
+
+### The one place this fix departs from 92737cdd's shape
+
+The dash/plus branch sets `first_peeked = true` *outside* its indentation
+guard, with a comment explaining that the over-indent verdict must still take
+the peeked emission path. **Copying that verbatim for `[` was wrong**, and the
+over-indented-list-item corpus case caught it: it regressed from passing to
+failing, gaining a `(block_continuation)` child inside its `pandoc_soft_break`.
+
+The reason the two differ: on the over-indent path the `[` branch never
+advances the lexer, so leaving `first_peeked` false reproduces byte for byte
+what the line did before `[` had a branch at all. Both `first_peeked` and
+`second_peeked` are therefore set *inside* the guard. This is noted in the code
+so nobody "restores symmetry" later.
+
+### Behavior change beyond the reported symptom
+
+Batched deliberately, per the user's decision (Design decision 1):
+
+- `hello there.` / `[^b]: two.` is now a paragraph **plus a definition**
+  (previously one paragraph). Pandoc keeps one paragraph. Same for a
+  definition at a list item's content column.
+
+The full sweep after the fix (`sweep-after.txt`) matches the Pandoc column
+(`pandoc-sweep.txt`) on **every cell except B and F**, which are exactly this
+divergence.
+
+### Results
+
+- `tree-sitter test`: **593/593** (582 pre-existing + 11 new), zero regressions.
+- Full `cargo xtask verify` (**not** `--skip-hub-build`): **all 14 steps
+  passed**, exit 0. Rust tests **11728 passed**, 197 skipped. Step 4
+  (tree-sitter grammars) and step 7 (hub-client incl. WASM) both ran — the
+  WASM leg matters because the grammar feeds `wasm-qmd-parser`.
+- **Zero snapshot files changed.** The churn flagged as the main risk did not
+  materialize — same outcome as 92737cdd.
+
+### End-to-end
+
+`cargo run --bin q2 -- render repro.qmd --to html`, output file inspected.
+Both references resolve to real superscript links, four correctly-numbered
+notes, note 1's body no longer carries the second definition, and **no
+`quarto-note-reference` span survives anywhere in the output**:
+
+```html
+<p>App modes: <code>python-api</code> (flask<span id="fnref1"><sup><a href="#fn1"
+class="footnote-ref" role="doc-noteref">1</a></sup></span>) and
+<code>python-fastapi</code><span id="fnref2"><sup><a href="#fn2"
+class="footnote-ref" role="doc-noteref">2</a></sup></span>.</p>
+...
+<li><div id="fn1"><p>Other WSGI-compliant application frameworks…</p></div></li>
+<li><div id="fn2"><p>Other ASGI-compliant application frameworks…</p></div></li>
+```
+
+Before the fix the same file produced
+`<span class="quarto-note-reference" data-reference-id="asgi"></span>` — an
+invisible empty span — with the second definition's text pasted into note 1.
+
+### A trap for the next person: `sweep.sh` was path-absolute
+
+The committed sweep script originally `cd`-ed to an absolute path in the main
+checkout. Run from this worktree it silently swept the *main checkout's*
+parser and reported pre-fix results. It now resolves the grammar directory
+relative to `BASH_SOURCE`, so it always sweeps the checkout it lives in.
+`sweep-after.txt` was regenerated after that fix.
+
+### Still open, unchanged by this fix
+
+- **bd-jttkymsw** — an unresolved reference still renders as an invisible empty
+  span with no diagnostic. This fix removes one *cause* of unresolved
+  references; it does not touch the resolution path.
+- **bd-v9zs83zj** — the `Footnotes` appendix heading is still missing.
+- **bd-mt1ksg9b** — the `*` gate peeks still lack their indentation guard.
 
 ## Open design questions for the user
 

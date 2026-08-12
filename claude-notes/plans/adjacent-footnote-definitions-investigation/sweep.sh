@@ -1,6 +1,11 @@
 #!/bin/bash
 # indent x context sweep for '[' at line start after a paragraph line
-cd /Users/cscheid/rooms/room-2/q2/crates/tree-sitter-qmd/tree-sitter-markdown
+#
+# Resolve the grammar dir relative to THIS script, not an absolute path:
+# the sweep must run against the parser of whatever checkout/worktree it
+# lives in. An absolute path silently sweeps the main checkout's parser
+# and reports pre-fix results from inside a worktree.
+cd "$(dirname "${BASH_SOURCE[0]}")/../../../crates/tree-sitter-qmd/tree-sitter-markdown" || exit 1
 probe() {
   local name="$1"; local body="$2"
   printf '%b' "$body" > /tmp/q2probe.qmd
