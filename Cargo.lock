@@ -701,7 +701,7 @@ dependencies = [
 
 [[package]]
 name = "comrak-to-pandoc"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "comrak",
  "hashlink",
@@ -3545,7 +3545,7 @@ dependencies = [
 
 [[package]]
 name = "quarto"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3591,7 +3591,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-analysis"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "insta",
  "quarto-error-reporting",
@@ -3617,7 +3617,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-brand"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "pathdiff",
  "quarto-util",
@@ -3629,7 +3629,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-citeproc"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "glob",
  "hashlink",
@@ -3663,7 +3663,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-core"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3719,7 +3719,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-csl"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "insta",
  "quarto-error-reporting",
@@ -3747,7 +3747,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-error-catalog"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "once_cell",
  "quarto-error-reporting",
@@ -3783,7 +3783,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "hashlink",
  "insta",
@@ -3812,7 +3812,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight-encoding"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3820,7 +3820,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-hub"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "automerge",
@@ -3864,7 +3864,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-hub-provider"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "automerge",
  "ciborium",
@@ -3890,7 +3890,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-lsp"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "insta",
@@ -3906,7 +3906,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-lsp-core"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "insta",
  "pampa",
@@ -3929,7 +3929,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-mcp-launcher"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -3945,7 +3945,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-navigation"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "quarto-config",
  "quarto-pandoc-types",
@@ -3980,7 +3980,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-preview"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "automerge",
@@ -4012,7 +4012,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-project-create"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "quarto-doctemplate",
  "serde",
@@ -4023,7 +4023,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-publish"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4048,7 +4048,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-sass"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "grass",
  "include_dir",
@@ -4071,7 +4071,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-source-fetch"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "flate2",
  "tar",
@@ -4094,7 +4094,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-system-runtime"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -4112,7 +4112,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-test"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "quarto-core",
@@ -4129,7 +4129,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-trace"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "flate2",
  "serde",
@@ -4140,7 +4140,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-trace-server"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4167,7 +4167,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-util"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -4175,7 +4175,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-xml"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "insta",
  "quarto-error-reporting",
@@ -4395,7 +4395,7 @@ dependencies = [
 
 [[package]]
 name = "reconcile-viewer"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "clap",
  "hashlink",
@@ -6434,7 +6434,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-printf-fmt"
-version = "0.19.0"
+version = "0.20.0"
 
 [[package]]
 name = "wasmparser"
