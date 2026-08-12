@@ -18,18 +18,47 @@
 //! This transform warns; it does not rewrite. The migration lives in
 //! `qmd-syntax-helper`'s `reference-links` and `literal-brackets` rules.
 //!
-//! # What it deliberately does *not* catch
+//! # The three shapes
 //!
-//! A **lone** bare bracket group — `[Version TBD]`, `[1]`, `[Posit Connect]`
-//! — is not diagnosed, even though its brackets are silently deleted too.
-//! There is no way to tell it apart from a deliberate `[text]` span, so
-//! warning on it would fire on legitimate documents. Both triggers below are
-//! instead shapes that are *never* intentional qmd.
+//! - `Q-2-45` — a reference *use*: `[label][ref]`, `[label][]`, `![alt][ref]`.
+//! - `Q-2-46` — a reference *definition* line: `[ref]: https://…`.
+//! - `Q-2-49` — a **lone** bare bracket group: `[Version TBD]`, `[1]`,
+//!   `[Posit Connect]`.
 //!
-//! That gap is the reason `literal-brackets` is a run-`check`-first, opt-in
-//! rule rather than something a diagnostic can drive: the three
-//! meaning-changing Connect pages (`admin/security`, `admin/appendix/
-//! branding`, `admin/email`) are all lone-bracket cases this will not report.
+//! A span claimed by `Q-2-45` or `Q-2-46` is not also reported as
+//! `Q-2-49`: one mistake, one diagnostic.
+//!
+//! # Why `Q-2-49` exists now, when it deliberately did not before
+//!
+//! This module used to argue that a lone bracket group could not be
+//! diagnosed, because it is indistinguishable from a deliberate `[text]`
+//! span and a warning that fires on legitimate documents is a bad warning.
+//! The reasoning was sound; one of its premises was not.
+//!
+//! The premise was that a project using bare spans deliberately had no way
+//! to say so — which made "someone might mean it" an unanswerable
+//! objection, paid for by every reader of every *other* project getting
+//! silently wrong output. Two Connect pages documented the wrong default
+//! mail subject prefix (`[Posit Connect]` → `Posit Connect`) for the whole
+//! duration of the port. That premise no longer holds:
+//! [`crate::diagnostic_policy`] lets a project write
+//!
+//! ```yaml
+//! diagnostics:
+//!   Q-2-49:
+//!     level: off
+//!     reason: "bare spans are hooks for our annotate.lua filter"
+//! ```
+//!
+//! so the few projects that mean it opt out once, in one place.
+//!
+//! It is also worth recording how narrow "meaning it" turns out to be. A
+//! bare span renders as `<span>text</span>` — no class, no id, no
+//! attributes — so a lone `[text]` accomplishes nothing in the output.
+//! The one substantive legitimate use is a Lua filter that treats bare
+//! spans as markers, which is exactly the case suppression serves.
+//!
+//! See `claude-notes/plans/2026-08-12-warning-suppression-and-lone-bracket-diagnostic.md`.
 
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_pandoc_types::attr::is_empty_attr;
@@ -46,6 +75,8 @@ use crate::transform::{AstTransform, TransformPhase};
 const CODE_REFERENCE_USE: &str = "Q-2-45";
 /// `[ref]: https://…` — a link reference *definition* line.
 const CODE_REFERENCE_DEFINITION: &str = "Q-2-46";
+/// A lone `[text]` — a bracket group with no attribute block.
+const CODE_LONE_BRACKETS: &str = "Q-2-49";
 
 /// Warns about reference-style link syntax without modifying the AST.
 pub struct ReferenceLinkDiagnosticsTransform;
@@ -133,6 +164,10 @@ fn scan_inlines(inlines: &Inlines, diagnostics: &mut Vec<DiagnosticMessage>) {
     // Whether position `i` starts a source line — the definition shape is
     // only a definition at the start of one.
     let mut at_line_start = true;
+    // Positions already explained by a more specific diagnostic. A span
+    // that is half of `[label][ref]` is one mistake, not two, so it must
+    // not also be reported as a lone bracket group.
+    let mut claimed = vec![false; inlines.len()];
 
     for i in 0..inlines.len() {
         let current = &inlines[i];
@@ -147,6 +182,7 @@ fn scan_inlines(inlines: &Inlines, diagnostics: &mut Vec<DiagnosticMessage>) {
             && str_node.text.starts_with(':')
         {
             diagnostics.push(definition_warning(current));
+            claimed[i] = true;
         }
         // `[label][ref]`, `[label][]`, `![alt][ref]` — a reference use. Two
         // bracket groups written with nothing at all between them is never
@@ -156,9 +192,19 @@ fn scan_inlines(inlines: &Inlines, diagnostics: &mut Vec<DiagnosticMessage>) {
             && is_bare_span(following)
         {
             diagnostics.push(reference_use_warning(current, following));
+            claimed[i] = true;
+            claimed[i + 1] = true;
         }
 
         at_line_start = matches!(current, Inline::SoftBreak(_) | Inline::LineBreak(_));
+    }
+
+    // Second pass: every bare span not already explained above is a lone
+    // bracket group whose brackets q2 discards (bd-lone-bracket-diagnostic-mxu41qbt).
+    for (i, inline) in inlines.iter().enumerate() {
+        if !claimed[i] && is_bare_span(inline) {
+            diagnostics.push(lone_bracket_warning(inline));
+        }
     }
 }
 
@@ -192,6 +238,18 @@ fn reference_use_warning(label: &Inline, reference: &Inline) -> DiagnosticMessag
     ))
     .with_code(CODE_REFERENCE_USE);
     diagnostic.location = source_info(label);
+    diagnostic
+}
+
+fn lone_bracket_warning(span: &Inline) -> DiagnosticMessage {
+    let label = label_text(span);
+    let mut diagnostic = DiagnosticMessage::warning(format!(
+        "`[{label}]` has no attribute block, so it renders as an empty span and \
+         the brackets are discarded — the reader sees `{label}`. Write `\\[{label}\\]` \
+         to keep the brackets literal, or `[{label}]{{.class}}` if a span was intended."
+    ))
+    .with_code(CODE_LONE_BRACKETS);
+    diagnostic.location = source_info(span);
     diagnostic
 }
 
@@ -382,10 +440,60 @@ mod tests {
         );
     }
 
+    /// The shape this whole strand is about: `[Version TBD]` renders as
+    /// `<span>Version TBD</span>`, silently losing its brackets and
+    /// changing what the sentence says.
     #[test]
-    fn does_not_warn_about_a_lone_bracket_group() {
-        // Deliberately not diagnosed — indistinguishable from a `[text]` span.
-        assert!(codes("Requires Posit Connect [Version TBD] or later.\n").is_empty());
+    fn warns_about_a_lone_bracket_group() {
+        assert_eq!(
+            codes("Requires Posit Connect [Version TBD] or later.\n"),
+            vec![CODE_LONE_BRACKETS]
+        );
+    }
+
+    #[test]
+    fn lone_bracket_warning_names_the_text_and_the_escape() {
+        let messages = messages("The default is \"[Posit Connect]\".\n");
+        assert_eq!(messages.len(), 1);
+        assert!(
+            messages[0].contains("[Posit Connect]") && messages[0].contains("\\["),
+            "the warning must quote the text and point at the escape, got: {}",
+            messages[0]
+        );
+    }
+
+    /// A span consumed by the `Q-2-45` / `Q-2-46` triggers must not *also*
+    /// be reported as a lone bracket group — one mistake, one diagnostic.
+    #[test]
+    fn a_reference_use_reports_only_the_reference_code() {
+        assert_eq!(
+            codes("See [the docs][gcc].\n"),
+            vec![CODE_REFERENCE_USE],
+            "both halves of `[label][ref]` are consumed by Q-2-45"
+        );
+    }
+
+    #[test]
+    fn a_definition_line_reports_only_the_definition_code() {
+        assert_eq!(
+            codes("[gcc]: https://e.com\n"),
+            vec![CODE_REFERENCE_DEFINITION]
+        );
+    }
+
+    /// Numbered markers keyed to a diagram — the Connect `admin/security`
+    /// case. Each is its own bracket group, so each is its own warning.
+    #[test]
+    fn warns_once_per_lone_bracket_group() {
+        assert_eq!(
+            codes("Session [1], then cookie [2].\n"),
+            vec![CODE_LONE_BRACKETS, CODE_LONE_BRACKETS]
+        );
+    }
+
+    #[test]
+    fn finds_lone_brackets_nested_in_other_inlines() {
+        assert_eq!(codes("**bold [1] text**\n"), vec![CODE_LONE_BRACKETS]);
     }
 
     #[test]
@@ -408,10 +516,20 @@ mod tests {
         assert!(codes("A \\[a\\]\\[b\\] B\n").is_empty());
     }
 
+    /// Only a *line-initial* span followed by `:` is definition-shaped.
+    ///
+    /// Before `Q-2-49` this asserted no diagnostic at all. That was never
+    /// the claim being tested — the claim is that this is not a
+    /// *definition* — and the silence it relied on was the very gap
+    /// `Q-2-49` closes: `[label]` mid-sentence does lose its brackets.
+    /// So the assertion is now "reported as a lone bracket group, not as
+    /// a definition."
     #[test]
     fn does_not_treat_a_mid_line_colon_span_as_a_definition() {
-        // Only a *line-initial* span followed by `:` is definition-shaped.
-        assert!(codes("Text before [label]: after\n").is_empty());
+        assert_eq!(
+            codes("Text before [label]: after\n"),
+            vec![CODE_LONE_BRACKETS]
+        );
     }
 
     #[test]

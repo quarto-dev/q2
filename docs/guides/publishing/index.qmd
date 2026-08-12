@@ -21,6 +21,55 @@ problem in the project rather than stopping at the first one.
 A render that produces no warnings behaves identically with and
 without the flag.
 
+## Suppressing diagnostics
+
+Sometimes Quarto warns about something your project does on purpose.
+The `diagnostics:` key turns a specific warning off, by error code:
+
+```yaml
+# _quarto.yml
+diagnostics:
+  Q-2-49: off
+```
+
+Every warning Quarto prints carries its code in brackets — `[Q-2-49]` —
+and each code has a documentation page explaining what it means. Read
+that page before silencing it: most warnings are worth fixing rather
+than hiding.
+
+When you do silence one, say why. The long form takes a reason:
+
+```yaml
+diagnostics:
+  Q-2-49:
+    level: off
+    reason: "bare spans are markers for our annotate.lua filter"
+```
+
+The reason is optional, but it is what lets the next person to read the
+file decide whether the suppression still applies. A bare code list
+records *that* you dissented; a reason records *why*.
+
+`diagnostics:` works in `_quarto.yml` for a whole project, in a
+directory's `_metadata.yml`, or in a single document's front matter,
+following the same precedence as any other Quarto setting — a document
+overrides its directory, which overrides the project. It applies to
+`quarto render` and `quarto preview` alike, so a construct you have
+declared legitimate does not reappear as a warning while you are
+editing.
+
+Two things `diagnostics:` deliberately cannot do:
+
+- **It cannot suppress errors**, only warnings and informational
+  messages. Silencing an error would mean publishing broken output with
+  no indication that anything went wrong.
+- **It cannot suppress a diagnostic that has no code.** A few of
+  Quarto's warnings do not carry one yet.
+
+Suppression is applied before `--strict` promotes warnings to errors,
+so a suppressed warning stays suppressed in CI rather than reappearing
+as a build failure.
+
 ## More
 
 TBD.

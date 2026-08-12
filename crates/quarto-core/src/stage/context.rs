@@ -108,6 +108,17 @@ pub struct StageContext {
     /// Diagnostics (warnings, errors, info) collected during execution
     pub diagnostics: Vec<DiagnosticMessage>,
 
+    /// Per-code suppression policy declared in `diagnostics:` metadata.
+    ///
+    /// Resolved by `MetadataMergeStage` (the first point at which
+    /// project + directory + document layers have been merged) and applied
+    /// by [`run_pipeline`](crate::pipeline::run_pipeline) to
+    /// [`Self::diagnostics`] just before it returns — the single point every
+    /// per-document diagnostic passes through, for every frontend. Empty by
+    /// default, in which case application is a no-op.
+    /// See [`crate::diagnostic_policy`] (bd-lone-bracket-diagnostic-mxu41qbt).
+    pub diagnostic_policy: crate::diagnostic_policy::DiagnosticPolicy,
+
     /// Ref-type registry: built-in + `crossref.custom` + promised-id prefixes.
     ///
     /// Populated by `PreEngineSugaringStage` after metadata merge and before
@@ -279,6 +290,7 @@ impl StageContext {
             artifacts: ArtifactStore::new(),
             includes: PandocIncludes::default(),
             diagnostics: startup_diagnostics,
+            diagnostic_policy: crate::diagnostic_policy::DiagnosticPolicy::default(),
             ref_type_registry: None,
             crossref_index: None,
             resource_report: crate::project_resources::DocumentResourceReport::new(),

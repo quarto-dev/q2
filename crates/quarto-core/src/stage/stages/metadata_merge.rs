@@ -419,6 +419,17 @@ impl PipelineStage for MetadataMergeStage {
         // The trace file is written to `.quarto/trace/<stem>/latest.json`.
         activate_trace_from_metadata(&doc.ast.meta, &doc.path, ctx);
 
+        // Resolve the `diagnostics:` suppression policy here — this is the
+        // first point at which project, directory, and document layers have
+        // been merged, so precedence between them is whatever the merge
+        // already decided rather than a second set of rules. The policy is
+        // *applied* much later, in `run_pipeline`
+        // (bd-lone-bracket-diagnostic-mxu41qbt).
+        let (policy, policy_diagnostics) =
+            crate::diagnostic_policy::DiagnosticPolicy::from_metadata(&doc.ast.meta);
+        ctx.diagnostic_policy = policy;
+        ctx.add_diagnostics(policy_diagnostics);
+
         Ok(PipelineData::DocumentAst(doc))
     }
 }

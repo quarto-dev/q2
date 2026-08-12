@@ -808,7 +808,21 @@ pub async fn run_pipeline(
             }
             other => crate::error::QuartoError::Other(other.to_string()),
         })
-        .map(|d| (d, stage_ctx.diagnostics))
+        .map(|d| {
+            // Apply the `diagnostics:` suppression policy resolved by
+            // `MetadataMergeStage`. This is deliberately the *only* place
+            // suppression happens: every per-document diagnostic — from
+            // stages, transforms, pampa, or Lua filters — leaves the
+            // pipeline through this expression, and every frontend
+            // (`quarto render`, `q2 preview`, hub-client) reads it from
+            // here. Doing it inside the render also puts it strictly
+            // before `--strict`'s promotion at the CLI summary boundary,
+            // so a suppressed warning stays suppressed rather than
+            // reappearing as an error (bd-lone-bracket-diagnostic-mxu41qbt).
+            let mut diagnostics = stage_ctx.diagnostics;
+            stage_ctx.diagnostic_policy.apply(&mut diagnostics);
+            (d, diagnostics)
+        })
 }
 
 pub async fn parse_qmd_to_ast(
@@ -3629,5 +3643,135 @@ mod tests {
             "expected alice's identity entry with color; got:\n{}",
             output.ast_json
         );
+    }
+
+    // === bd-lone-bracket-diagnostic-mxu41qbt: `diagnostics:` suppression ===
+    //
+    // These exercise the *wiring*, not the policy parser (which has its own
+    // unit tests in `diagnostic_policy.rs`): the policy must be resolved by
+    // `MetadataMergeStage` from merged metadata and applied by
+    // `run_pipeline` on the way out. `Q-2-45` is used as the specimen
+    // because it is a per-document, coded warning that a two-line fixture
+    // reliably triggers.
+
+    /// `[label][ref]` reliably produces `Q-2-45`. This is the baseline the
+    /// suppression tests below are measured against — without it, a
+    /// suppression test could pass simply because the warning never fired.
+    #[test]
+    fn reference_link_warning_fires_without_suppression() {
+        let content = b"---\ntitle: Test\n---\n\nSee [label][ref].\n";
+        let diagnostics = render_and_collect_diagnostics(content);
+        assert!(
+            diagnostics.iter().any(|c| c == "Q-2-45"),
+            "expected Q-2-45 in {diagnostics:?}"
+        );
+    }
+
+    /// Front-matter suppression.
+    #[test]
+    fn document_metadata_suppresses_a_diagnostic() {
+        let content = b"---\ntitle: Test\ndiagnostics:\n  Q-2-45: off\n---\n\nSee [label][ref].\n";
+        let diagnostics = render_and_collect_diagnostics(content);
+        assert!(
+            !diagnostics.iter().any(|c| c == "Q-2-45"),
+            "Q-2-45 should have been suppressed; got {diagnostics:?}"
+        );
+    }
+
+    /// Suppressing one code must not silence the document wholesale.
+    #[test]
+    fn suppression_is_scoped_to_the_named_code() {
+        let content = b"---\ntitle: Test\ndiagnostics:\n  Q-2-46: off\n---\n\nSee [label][ref].\n";
+        let diagnostics = render_and_collect_diagnostics(content);
+        assert!(
+            diagnostics.iter().any(|c| c == "Q-2-45"),
+            "suppressing Q-2-46 must leave Q-2-45 alone; got {diagnostics:?}"
+        );
+    }
+
+    /// The long form, with a reason, behaves identically to the short form.
+    #[test]
+    fn long_form_suppression_works_end_to_end() {
+        let content = b"---\ntitle: Test\ndiagnostics:\n  Q-2-45:\n    level: off\n    reason: legacy corpus\n---\n\nSee [label][ref].\n";
+        let diagnostics = render_and_collect_diagnostics(content);
+        assert!(
+            !diagnostics.iter().any(|c| c == "Q-2-45"),
+            "Q-2-45 should have been suppressed; got {diagnostics:?}"
+        );
+    }
+
+    /// A malformed entry is reported (Q-5-27) rather than silently
+    /// ignored, and does not suppress anything.
+    #[test]
+    fn malformed_suppression_entry_is_reported() {
+        let content =
+            b"---\ntitle: Test\ndiagnostics:\n  Q-2-45: shout\n---\n\nSee [label][ref].\n";
+        let diagnostics = render_and_collect_diagnostics(content);
+        assert!(
+            diagnostics.iter().any(|c| c == "Q-5-27"),
+            "expected the invalid-entry diagnostic; got {diagnostics:?}"
+        );
+        assert!(
+            diagnostics.iter().any(|c| c == "Q-2-45"),
+            "a malformed entry must not suppress; got {diagnostics:?}"
+        );
+    }
+
+    /// Decision 3: suppression applies in the q2-preview pipeline too, not
+    /// only under `quarto render`. Preview is where authors actually live,
+    /// so a project that has opted out must not be nagged there.
+    #[test]
+    fn suppression_applies_in_the_preview_pipeline() {
+        let content = b"---\ntitle: Test\ndiagnostics:\n  Q-2-45: off\n---\n\nSee [label][ref].\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let runtime = make_test_runtime();
+
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            Vec::new(),
+        ))
+        .expect("q2-preview render");
+
+        let codes: Vec<String> = output
+            .diagnostics
+            .iter()
+            .filter_map(|d| d.code.clone())
+            .collect();
+        assert!(
+            !codes.iter().any(|c| c == "Q-2-45"),
+            "preview must honor suppression; got {codes:?}"
+        );
+    }
+
+    /// Render `content` as HTML and return the codes of every diagnostic
+    /// that survived the pipeline.
+    fn render_and_collect_diagnostics(content: &[u8]) -> Vec<String> {
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .expect("render must succeed");
+
+        output
+            .diagnostics
+            .iter()
+            .filter_map(|d| d.code.clone())
+            .collect()
     }
 }
