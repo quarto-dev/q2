@@ -210,7 +210,7 @@ Settled after the decisions below. TDD throughout: tests written and observed fa
 
 ### Phase 3 — Q-2-49, the lone-bracket diagnostic ✅
 
-- [x] Catalog entries **Q-2-49** (`markdown`) and **Q-5-23** (`project`, "Invalid `diagnostics:` Entry") + `docs/errors/markdown/Q-2-49.qmd` and `docs/errors/project/Q-5-23.qmd` in the same commit (`cargo xtask lint` passes: 957 files).
+- [x] Catalog entries **Q-2-49** (`markdown`) and **Q-5-27** (`project`, "Invalid `diagnostics:` Entry") + `docs/errors/markdown/Q-2-49.qmd` and `docs/errors/project/Q-5-27.qmd` in the same commit (`cargo xtask lint` passes: 957 files).
 - [x] Third trigger in `reference_link_diagnostics.rs`. `scan_inlines` now tracks a `claimed` bitmap so a span consumed by Q-2-45/Q-2-46 is **not** also reported as Q-2-49 — one mistake, one diagnostic.
 - [x] Module docs rewritten: the old "no way to tell it apart from a deliberate span" section is replaced by an account of which premise changed and why.
 - [x] 17 tests in the transform (13 pre-existing, 4 new), all passing.
@@ -249,7 +249,7 @@ Q-2-49 gone, the others untouched. With all three codes suppressed, `q2 render -
 
 ```
    2 [Q-2-45]
-   1 [Q-5-23]
+   1 [Q-5-27]
 ```
 
 — the malformed entry is reported once and suppresses nothing.
@@ -260,6 +260,28 @@ Q-2-49 gone, the others untouched. With all three codes suppressed, `q2 render -
 ### Determinism note
 
 `DiagnosticPolicy` stores entries in a `LinkedHashMap`, not a `HashMap`. They are lookup-only today, so either would be correct — but the deferred unused-suppression report (bd-91rgxmav) will iterate them to produce user-visible output, and author-config order is the order that report wants. Cheaper to get right now than to debug as nondeterministic output later; the repo's own guidance is "when in doubt, use `LinkedHashMap`."
+
+### Merge with `main`: the invalid-entry code moved to Q-5-27
+
+The branch originally used **Q-5-23** for the invalid-`diagnostics:`-entry
+warning; it was free when the code was allocated. While the PR was open,
+main's `aliases:` work claimed Q-5-23 through Q-5-26 — Q-5-23 is now
+"Alias Would Overwrite a Rendered Page". Merging main surfaced this as an
+add/add conflict on `docs/errors/project/Q-5-23.qmd`, which is the useful
+kind of conflict: a silent textual merge would have left two different
+diagnostics sharing one code and one docs URL.
+
+Resolution: main keeps Q-5-23 (its page taken verbatim); this branch's
+warning moved to **Q-5-27** (main's Q-5 maximum is 26), with its page at
+`docs/errors/project/Q-5-27.qmd`. Q-2-49 was re-checked and is still
+free, so the lone-bracket code is unchanged.
+
+**Worth knowing for anyone allocating a code on a long-lived branch:**
+the catalog is a shared numeric namespace with no reservation mechanism,
+so "free when I looked" decays. Re-check immediately before merge. The
+`error-docs-page-missing` lint catches a code with no page, but nothing
+catches two branches picking the same number — the add/add conflict is
+the only signal, and only because each side wrote a docs page.
 
 ### Follow-up strands filed
 

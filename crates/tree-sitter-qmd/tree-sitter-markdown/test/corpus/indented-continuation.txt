@@ -1,0 +1,217 @@
+================================================================================
+indented-continuation 1: indented dash-leading prose continuation soft-breaks (bd-j7be7kuc)
+================================================================================
+hello
+  -5 degrees
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+indented-continuation 2: indented double-dash prose continuation soft-breaks
+================================================================================
+hello
+  -- em dash
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+indented-continuation 3: indented digit-leading prose continuation soft-breaks
+================================================================================
+This value is in seconds, so to make license leases last
+    30 minutes you would use the following syntax.
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+indented-continuation 4: ordered marker at relative indent 1 opens a nested list
+================================================================================
+1. one
+    1. nested a
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_list
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))))))))
+
+================================================================================
+indented-continuation 5: over-indented bullet in a list is lazy prose continuation
+================================================================================
+- one
+          - over
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))))
+
+================================================================================
+indented-continuation 6: over-indented bullet after a top-level paragraph is prose
+================================================================================
+hello
+    - item
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+indented-continuation 7: over-indented marker after a block quote is lazy continuation
+================================================================================
+> a
+    1. nested
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_soft_break)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)))))
+
+================================================================================
+indented-continuation 8: marker at indent 0 after a block quote closes the quote (control)
+================================================================================
+> a
+- item
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)))
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+
+================================================================================
+indented-continuation 9: dash prose continuation at the item content column (control)
+================================================================================
+- a
+  -5 degrees
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))))
+
+================================================================================
+indented-continuation 10: non-interrupting ordered marker in a list item stays prose
+================================================================================
+1. one
+    14. nope
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))))

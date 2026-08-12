@@ -1,0 +1,14 @@
+## A: definitions on consecutive lines
+
+App modes: `python-api` (flask[^wsgi]) and `python-fastapi`[^asgi].
+
+[^wsgi]: Other WSGI-compliant application frameworks may be served via this app mode.
+[^asgi]: Other ASGI-compliant application frameworks may be served via this app mode.
+
+## B: control — definitions separated by a blank line
+
+Delta[^d1] and epsilon[^d2].
+
+[^d1]: Note one.
+
+[^d2]: Note two.

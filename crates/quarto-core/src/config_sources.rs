@@ -107,6 +107,62 @@ pub fn bind_source_candidates<'a>(
     None
 }
 
+/// [`bind_source_candidates`] for diagnostics that must span **several
+/// documents at once**, re-keying each span onto its own file.
+///
+/// The problem this solves: a document's front matter roots its spans
+/// at the parse context's dense `FileId(0)`, and *every* document uses
+/// that same id. [`bind_source_candidates`] registers the first file to
+/// claim an id and skips the rest, which is right when one `ParseError`
+/// concerns one document — but a diagnostic about two pages colliding
+/// concerns two, and the second document's offsets would then be
+/// rendered against the first document's text. That is the exact
+/// mis-pairing this module exists to prevent, arrived at from the other
+/// direction.
+///
+/// The fix is to stop using the dense id in the merged context. The
+/// matched file is registered under the FileId derived from its *own
+/// path* ([`register_config_source`]), and the returned `SourceInfo` is
+/// the input's byte range re-keyed to that id. Offsets are unchanged
+/// and remain offsets into that same file — `FileId(0)`'s content *is*
+/// the document's full text — so the span still renders exactly where
+/// the author wrote it, while two documents can now coexist in one
+/// `SourceContext`.
+///
+/// Candidate selection is identical to [`bind_source_candidates`]:
+/// match by re-derived id, never bind a non-match. Returns `None` — so
+/// the diagnostic degrades to a span-less render — when the span has no
+/// resolvable byte range or no candidate matches.
+///
+/// A file whose path-derived id already equals the span's id (any
+/// standalone YAML config) round-trips unchanged; only the dense
+/// document ids are actually rewritten.
+pub fn rebase_source_candidates<'a>(
+    source_context: &mut SourceContext,
+    info: &SourceInfo,
+    candidates: impl IntoIterator<Item = (FileId, &'a Path)>,
+) -> Option<(&'a Path, SourceInfo)> {
+    let (fid_usize, start_offset, end_offset) = info.resolve_byte_range()?;
+    let fid = FileId(fid_usize);
+    for (candidate_id, candidate) in candidates {
+        if candidate_id != fid {
+            continue;
+        }
+        if !register_config_source(source_context, candidate) {
+            // Unreadable: attribute in prose, but never claim a span
+            // we cannot render.
+            return None;
+        }
+        let rebased = SourceInfo::Original {
+            file_id: quarto_yaml::file_id_for_filename(&candidate.to_string_lossy()),
+            start_offset,
+            end_offset,
+        };
+        return Some((candidate, rebased));
+    }
+    None
+}
+
 /// Register `path` in `source_context` under its own derived FileId
 /// (`quarto_yaml::file_id_for_filename` of the path's spelling),
 /// content permitting. The triple cannot mis-pair — id, path, and

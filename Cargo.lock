@@ -213,16 +213,16 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "automerge"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09b78abcbba93428b9465b26cb2816a5b4654cce507f099a84a8c1b311cb3633"
+checksum = "c1b59cbd9e7685a1ac6bf6046ddcd8acb550fa5bf03c09f6c1056728a742b40d"
 dependencies = [
  "cfg-if",
  "flate2",
  "getrandom 0.4.2",
  "hex",
  "hexane",
- "itertools",
+ "itertools 0.15.0",
  "leb128",
  "rand 0.10.1",
  "rustc-hash",
@@ -701,7 +701,7 @@ dependencies = [
 
 [[package]]
 name = "comrak-to-pandoc"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "comrak",
  "hashlink",
@@ -1935,9 +1935,9 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hexane"
-version = "0.2.1"
+version = "1.0.0-alpha.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f4ecba0bb4e14df997df7cab6d1b584c6432d8865cf2adfced814706d715a7b"
+checksum = "81df830f11babb0eee9a082e09135ef0a7d8791f3fe9b279bb9485bf7eaf23e0"
 dependencies = [
  "leb128",
  "thiserror 2.0.18",
@@ -2386,6 +2386,15 @@ name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
 dependencies = [
  "either",
 ]
@@ -3536,7 +3545,7 @@ dependencies = [
 
 [[package]]
 name = "quarto"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3582,7 +3591,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-analysis"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "insta",
  "quarto-error-reporting",
@@ -3608,7 +3617,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-brand"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "pathdiff",
  "quarto-util",
@@ -3620,7 +3629,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-citeproc"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "glob",
  "hashlink",
@@ -3654,7 +3663,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-core"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3710,7 +3719,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-csl"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "insta",
  "quarto-error-reporting",
@@ -3738,7 +3747,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-error-catalog"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "once_cell",
  "quarto-error-reporting",
@@ -3774,7 +3783,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "hashlink",
  "insta",
@@ -3803,7 +3812,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight-encoding"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3811,7 +3820,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-hub"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "automerge",
@@ -3855,7 +3864,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-hub-provider"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "automerge",
  "ciborium",
@@ -3881,7 +3890,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-lsp"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "insta",
@@ -3897,7 +3906,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-lsp-core"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "insta",
  "pampa",
@@ -3920,7 +3929,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-mcp-launcher"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -3936,7 +3945,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-navigation"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "quarto-config",
  "quarto-pandoc-types",
@@ -3971,7 +3980,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-preview"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "automerge",
@@ -4003,7 +4012,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-project-create"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "quarto-doctemplate",
  "serde",
@@ -4014,7 +4023,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-publish"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4039,7 +4048,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-sass"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "grass",
  "include_dir",
@@ -4062,7 +4071,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-source-fetch"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "flate2",
  "tar",
@@ -4085,7 +4094,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-system-runtime"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -4103,7 +4112,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-test"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "quarto-core",
@@ -4120,7 +4129,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-trace"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "flate2",
  "serde",
@@ -4131,7 +4140,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-trace-server"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4158,7 +4167,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-util"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -4166,7 +4175,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-xml"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "insta",
  "quarto-error-reporting",
@@ -4386,7 +4395,7 @@ dependencies = [
 
 [[package]]
 name = "reconcile-viewer"
-version = "0.17.0"
+version = "0.19.0"
 dependencies = [
  "clap",
  "hashlink",
@@ -4815,8 +4824,8 @@ dependencies = [
 
 [[package]]
 name = "samod"
-version = "0.12.3"
-source = "git+https://github.com/quarto-dev/samod.git?branch=access-policy#56c83568bb7a35d2cbdf322f67ccc5fb2fdc25e9"
+version = "0.13.0"
+source = "git+https://github.com/quarto-dev/samod.git?branch=access-policy#067679615bb9d950d59a4e276ae4d3cfd7fa1e62"
 dependencies = [
  "async-channel",
  "automerge",
@@ -4838,8 +4847,8 @@ dependencies = [
 
 [[package]]
 name = "samod-core"
-version = "0.12.3"
-source = "git+https://github.com/quarto-dev/samod.git?branch=access-policy#56c83568bb7a35d2cbdf322f67ccc5fb2fdc25e9"
+version = "0.13.0"
+source = "git+https://github.com/quarto-dev/samod.git?branch=access-policy#067679615bb9d950d59a4e276ae4d3cfd7fa1e62"
 dependencies = [
  "automerge",
  "base64 0.21.7",
@@ -6425,7 +6434,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-printf-fmt"
-version = "0.17.0"
+version = "0.19.0"
 
 [[package]]
 name = "wasmparser"
@@ -6574,7 +6583,7 @@ dependencies = [
  "cranelift-frontend",
  "cranelift-native",
  "gimli",
- "itertools",
+ "itertools 0.14.0",
  "log",
  "object",
  "pulley-interpreter",

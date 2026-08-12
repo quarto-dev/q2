@@ -41,7 +41,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@automerge/automerge": "^3.2.6",
+    "@automerge/automerge": "^3.4.1",
     "@automerge/automerge-repo": "^2.5.1",
     "@quarto/pandoc-types": "*",
     "@quarto/preview-renderer": "*",

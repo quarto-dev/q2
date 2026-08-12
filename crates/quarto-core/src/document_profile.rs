@@ -80,7 +80,19 @@ use thiserror::Error;
 ///   file each was written in. The raw `resources` field stays as-is
 ///   because `ResourceReportStage` compares raw pattern strings to
 ///   detect filter-added entries; the two answer different questions.
-pub const DOCUMENT_PROFILE_VERSION: u32 = 9;
+/// - `10`: `bd-aliases-redirects-missing-sch7cd1g`. Adds
+///   `aliases: Vec<String>` and the index-aligned
+///   `alias_sources: Vec<SourceInfo>` — the document's `aliases:`
+///   front-matter entries, kept **raw**. Unlike `resource_globs`,
+///   these are deliberately *not* resolved at extraction time:
+///   resolving an alias needs only the page's own `output_href`
+///   (already on the profile) and no filesystem, while *validating*
+///   one needs every other page in the project. Resolution and
+///   collision detection therefore both live in the post-render pass,
+///   which is also the only place a diagnostic survives profile
+///   caching (see `rejected_resources` for the same lesson learned
+///   the hard way).
+pub const DOCUMENT_PROFILE_VERSION: u32 = 10;
 
 /// Depth used when extracting the heading outline at the profile
 /// checkpoint.
@@ -394,6 +406,39 @@ pub struct DocumentProfile {
     pub image: Option<String>,
     pub draft: bool,
 
+    /// `aliases:` front-matter entries — old URLs that should redirect
+    /// to this page — exactly as the author wrote them.
+    ///
+    /// Kept raw. An alias is resolved against this profile's own
+    /// [`output_href`](Self::output_href), which needs no filesystem
+    /// and no other document; but deciding whether it is *legal*
+    /// needs every other page in the project. Both therefore happen
+    /// in `project::website_post_render`, which is additionally the
+    /// only place a diagnostic survives profile caching — a collision
+    /// reported at extraction time would appear on the render that
+    /// populated the cache and never again.
+    ///
+    /// Consumed only by website projects; other project types warn
+    /// that the key is inert rather than dropping it silently.
+    ///
+    /// Default empty; added v9 → v10.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
+
+    /// Provenance for [`Self::aliases`], same order and length — the
+    /// YAML scalar each alias came from.
+    ///
+    /// Collision diagnostics index into this with the position of the
+    /// offending alias, so the two vectors are index-aligned by
+    /// contract. Carried for the same reason as
+    /// [`Self::resource_glob_sources`]: an alias inherited from a
+    /// `_metadata.yml` and shared by many pages is the difference
+    /// between a useful error and a puzzle.
+    ///
+    /// Default empty; added v9 → v10.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alias_sources: Vec<quarto_source_map::SourceInfo>,
+
     /// Author-supplied sort key from `order:` frontmatter. Consumed by
     /// Phase-2 auto-sidebar expansion to order sibling entries. `None`
     /// when the key is absent or non-integer. Additive on top of
@@ -638,6 +683,8 @@ impl Default for DocumentProfile {
             keywords: Vec::new(),
             image: None,
             draft: false,
+            aliases: Vec::new(),
+            alias_sources: Vec::new(),
             order: None,
             outline: Vec::new(),
             includes: Vec::new(),
@@ -680,6 +727,7 @@ impl DocumentProfile {
         let meta = &ast.meta;
         let outline = extract_outline(&ast.blocks);
         let authors_structured = extract_structured_authors(meta);
+        let aliases = extract_string_list_with_sources(meta, "aliases");
 
         Self {
             profile_version: DOCUMENT_PROFILE_VERSION,
@@ -696,6 +744,8 @@ impl DocumentProfile {
             keywords: extract_string_list(meta, "keywords"),
             image: plain_text_field(meta, "image"),
             draft: meta.get("draft").and_then(|v| v.as_bool()).unwrap_or(false),
+            aliases: aliases.iter().map(|(s, _)| s.clone()).collect(),
+            alias_sources: aliases.into_iter().map(|(_, info)| info).collect(),
             order: meta
                 .get("order")
                 .and_then(|v| v.as_int())
@@ -877,6 +927,38 @@ fn extract_string_list(meta: &ConfigValue, key: &str) -> Vec<String> {
         arr.iter().filter_map(|v| v.as_plain_text()).collect()
     } else if let Some(s) = value.as_plain_text() {
         vec![s]
+    } else {
+        Vec::new()
+    }
+}
+
+/// [`extract_string_list`] that also keeps each entry's source span.
+///
+/// Same shape rules as its span-less sibling — a YAML sequence yields
+/// one entry per item, a bare scalar yields a single entry — but each
+/// string is paired with the [`SourceInfo`] of the `ConfigValue` it
+/// came from, so a later diagnostic can point at what the author
+/// actually wrote.
+///
+/// The parallel implementation in
+/// [`crate::project_resources::extract_resource_patterns`] does the
+/// same job for `resources:`; it stays separate because it builds a
+/// domain type (`RawResourcePattern`) rather than a bare pair.
+///
+/// [`SourceInfo`]: quarto_source_map::SourceInfo
+fn extract_string_list_with_sources(
+    meta: &ConfigValue,
+    key: &str,
+) -> Vec<(String, quarto_source_map::SourceInfo)> {
+    let Some(value) = meta.get(key) else {
+        return Vec::new();
+    };
+    if let Some(arr) = value.as_array() {
+        arr.iter()
+            .filter_map(|v| v.as_plain_text().map(|s| (s, v.source_info.clone())))
+            .collect()
+    } else if let Some(s) = value.as_plain_text() {
+        vec![(s, value.source_info.clone())]
     } else {
         Vec::new()
     }
@@ -1146,6 +1228,56 @@ Body.
         let ast = parse_qmd("---\ntitle: Bad order\norder: \"abc\"\n---\n\nBody.\n");
         let profile = DocumentProfile::extract(&ast, Path::new("bad.qmd"), "bad.html", "html");
         assert_eq!(profile.order, None);
+    }
+
+    #[test]
+    fn profile_extract_aliases_in_declaration_order() {
+        // Order is load-bearing: the post-render pass reports the
+        // *first* declaration of a colliding alias as the primary and
+        // the rest as secondaries, so a reshuffle would move the span
+        // the diagnostic points at.
+        let ast = parse_qmd(
+            "---\ntitle: Moved\naliases:\n  - /old.html\n  - ../previous/index.html\n---\n\nBody.\n",
+        );
+        let profile = DocumentProfile::extract(&ast, Path::new("m.qmd"), "m.html", "html");
+        assert_eq!(profile.aliases, vec!["/old.html", "../previous/index.html"]);
+    }
+
+    #[test]
+    fn profile_extract_aliases_absent_is_empty() {
+        let ast = parse_qmd("---\ntitle: No aliases\n---\n\nBody.\n");
+        let profile = DocumentProfile::extract(&ast, Path::new("x.qmd"), "x.html", "html");
+        assert!(profile.aliases.is_empty());
+        assert!(profile.alias_sources.is_empty());
+    }
+
+    #[test]
+    fn profile_extract_aliases_accepts_single_scalar() {
+        // Q1 requires a YAML list and silently ignores a bare scalar.
+        // Accepting both matches how `resources:` already behaves here,
+        // and a dropped redirect is exactly the silent failure this
+        // feature exists to prevent.
+        let ast = parse_qmd("---\ntitle: One\naliases: /old.html\n---\n\nBody.\n");
+        let profile = DocumentProfile::extract(&ast, Path::new("o.qmd"), "o.html", "html");
+        assert_eq!(profile.aliases, vec!["/old.html"]);
+        assert_eq!(profile.alias_sources.len(), 1);
+    }
+
+    #[test]
+    fn profile_extract_alias_sources_parallel_to_aliases() {
+        // The two vectors are index-aligned by contract — collision
+        // diagnostics index into `alias_sources` with the position of
+        // the offending alias.
+        let ast = parse_qmd(
+            "---\ntitle: Moved\naliases:\n  - /a.html\n  - /b.html\n  - /c.html\n---\n\nBody.\n",
+        );
+        let profile = DocumentProfile::extract(&ast, Path::new("m.qmd"), "m.html", "html");
+        assert_eq!(profile.aliases.len(), 3);
+        assert_eq!(
+            profile.alias_sources.len(),
+            profile.aliases.len(),
+            "alias_sources must stay index-aligned with aliases"
+        );
     }
 
     #[test]
@@ -1658,8 +1790,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_9() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 9);
+    fn document_profile_version_is_10() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 10);
     }
 
     /// A v3 profile (the pre-listings shape) must be rejected by

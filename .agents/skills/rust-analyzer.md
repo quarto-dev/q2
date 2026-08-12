@@ -1,0 +1,1 @@
+../../.claude/skills/rust-analyzer.md

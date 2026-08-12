@@ -78,8 +78,8 @@ use yaml_rust2::Yaml;
 /// The metadata key a policy is read from.
 const METADATA_KEY: &str = "diagnostics";
 
-/// `Q-5-23` — an entry under `diagnostics:` that could not be understood.
-const CODE_INVALID_ENTRY: &str = "Q-5-23";
+/// `Q-5-27` — an entry under `diagnostics:` that could not be understood.
+const CODE_INVALID_ENTRY: &str = "Q-5-27";
 
 /// What a policy says to do with one diagnostic code.
 ///

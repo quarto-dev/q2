@@ -29,6 +29,7 @@ website:
             - guides/authoring/index.qmd
             - guides/projects/create.qmd
             - guides/projects/render-list.qmd
+            - guides/projects/aliases.qmd
             - guides/projects/scripts.qmd
             - guides/projects/environment.qmd
             - guides/projects/profiles.qmd
@@ -244,6 +245,12 @@ website:
         - section: "lua"
           contents:
             - errors/lua/Q-11-1.qmd
+            - errors/lua/Q-11-2.qmd
+            - errors/lua/Q-11-3.qmd
+            - errors/lua/Q-11-4.qmd
+            - errors/lua/Q-11-5.qmd
+            - errors/lua/Q-11-6.qmd
+            - errors/lua/Q-11-7.qmd
 
 format:
   html:

@@ -482,6 +482,327 @@ pub(super) fn write_robots_txt(
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Alias redirect stubs — native-only
+// ═══════════════════════════════════════════════════════════════════
+
+/// Write a redirect stub for every `aliases:` entry in the project.
+///
+/// Planning is pure and lives in [`crate::project::aliases`]; this
+/// function is the part that touches disk. It writes nothing at all
+/// when the plan reports a conflict — a half-written set of redirects
+/// is worse than none, and by Phase 1's contract a hook failure aborts
+/// the render.
+///
+/// Unlike the other hooks here this one is not gated on a config key:
+/// `aliases:` is per-document, so the plan is simply empty when no
+/// page declares any.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn write_alias_redirects(
+    project: &ProjectContext,
+    index: &ProjectIndex,
+    runtime: &dyn SystemRuntime,
+) -> Result<()> {
+    use crate::project::aliases::{plan_alias_stubs, render_stub};
+
+    let plan = plan_alias_stubs(index.profiles());
+
+    if !plan.conflicts.is_empty() {
+        return Err(QuartoError::Parse(alias_conflicts_to_parse_error(
+            &plan.conflicts,
+            project,
+            runtime,
+        )));
+    }
+
+    for stub in &plan.stubs {
+        let dst = project.output_dir.join(&stub.stub_href);
+        if let Some(parent) = dst.parent() {
+            runtime.dir_create(parent, true).map_err(|e| {
+                QuartoError::other(format!(
+                    "Failed to create alias directory {}: {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
+        }
+        runtime
+            .file_write(&dst, render_stub(stub).as_bytes())
+            .map_err(|e| {
+                QuartoError::other(format!(
+                    "Failed to write alias redirect {}: {}",
+                    dst.display(),
+                    e
+                ))
+            })?;
+    }
+
+    Ok(())
+}
+
+/// Turn every conflict into a diagnostic, sharing one `SourceContext`.
+///
+/// All of them, not the first: a site with dozens of aliasing files
+/// should learn about its mistakes in one render rather than one per
+/// render.
+#[cfg(not(target_arch = "wasm32"))]
+fn alias_conflicts_to_parse_error(
+    conflicts: &[crate::project::aliases::AliasConflict],
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+) -> crate::error::ParseError {
+    use quarto_source_map::SourceContext;
+
+    let mut source_context = SourceContext::new();
+    let diagnostics = conflicts
+        .iter()
+        .map(|conflict| alias_conflict_diagnostic(conflict, project, runtime, &mut source_context))
+        .collect();
+    crate::error::ParseError::new(diagnostics, source_context)
+}
+
+/// Register the file an alias was written in and return its span,
+/// re-keyed so several documents can share one `SourceContext`.
+///
+/// An alias can be declared in the page's own front matter (spans
+/// rooted at the document parse context's dense `FileId(0)`) or
+/// inherited from a directory `_metadata.yml` or `_quarto.yml`
+/// (quarto-yaml filename-hash ids). Both id schemes go into the
+/// candidate list, and
+/// [`rebase_source_candidates`](crate::config_sources::rebase_source_candidates)
+/// picks the one whose id actually matches — never binding a
+/// non-match, so a span is either right or absent.
+///
+/// The *rebasing* matters here specifically because a collision
+/// diagnostic names two pages: without it, the second document's
+/// `FileId(0)` offsets would be rendered against the first
+/// document's text.
+#[cfg(not(target_arch = "wasm32"))]
+fn locate_alias(
+    who: &crate::project::aliases::AliasRef,
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    source_context: &mut quarto_source_map::SourceContext,
+) -> Option<quarto_source_map::SourceInfo> {
+    use quarto_source_map::FileId;
+
+    let doc_source = project.dir.join(&who.source_path);
+    let config = &project.config;
+    let layer_paths =
+        crate::project::directory_metadata_paths_for_document(project, &doc_source, runtime);
+    let hash = |p: &Path| quarto_yaml::file_id_for_filename(&p.to_string_lossy());
+
+    let candidates = std::iter::once((FileId(0), doc_source.as_path()))
+        .chain(config.config_path.as_deref().map(|p| (hash(p), p)))
+        .chain(
+            config
+                .profile_config_paths
+                .iter()
+                .map(|p| (hash(p), p.as_path())),
+        )
+        .chain(layer_paths.iter().map(|p| (hash(p), p.as_path())));
+
+    crate::config_sources::rebase_source_candidates(source_context, &who.source_info, candidates)
+        .map(|(_, span)| span)
+}
+
+/// Render one conflict as a diagnostic.
+#[cfg(not(target_arch = "wasm32"))]
+fn alias_conflict_diagnostic(
+    conflict: &crate::project::aliases::AliasConflict,
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    source_context: &mut quarto_source_map::SourceContext,
+) -> DiagnosticMessage {
+    use crate::project::aliases::AliasConflict;
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+
+    // `with_location` takes an owned SourceInfo and there is no
+    // `with_optional_location`, so each arm threads the Option.
+    let at = |builder: DiagnosticMessageBuilder,
+              span: Option<quarto_source_map::SourceInfo>|
+     -> DiagnosticMessageBuilder {
+        match span {
+            Some(info) => builder.with_location(info),
+            None => builder,
+        }
+    };
+
+    match conflict {
+        AliasConflict::OverwritesPage {
+            alias,
+            stub_href,
+            page_source,
+        } => {
+            let span = locate_alias(alias, project, runtime, source_context);
+            at(
+                DiagnosticMessageBuilder::error("Alias would overwrite a rendered page")
+                    .with_code("Q-5-23"),
+                span,
+            )
+            .problem(format!(
+                "`{}` in `{}` resolves to `{}`, which is where `{}` renders. \
+                 Only one file can exist there.",
+                alias.alias,
+                alias.source_path.display(),
+                stub_href,
+                page_source.display()
+            ))
+            .add_info(
+                "Quarto 1 skips the redirect with a warning. Quarto 2 stops instead: a site \
+                 that builds while silently missing a redirect keeps 404ing old links with \
+                 nothing in the output to say why.",
+            )
+            .add_hint("Point the alias at a path no page renders to?")
+            .build()
+        }
+
+        AliasConflict::DuplicateClaim {
+            first,
+            second,
+            stub_href,
+            fragment,
+        } => {
+            let first_span = locate_alias(first, project, runtime, source_context);
+            let second_span = locate_alias(second, project, runtime, source_context);
+            let route = if fragment.is_empty() {
+                format!("`{stub_href}`")
+            } else {
+                format!("`{stub_href}#{fragment}`")
+            };
+            let builder = at(
+                DiagnosticMessageBuilder::error("Two pages claim the same alias")
+                    .with_code("Q-5-24"),
+                first_span,
+            )
+            .problem(format!(
+                "`{}` and `{}` both redirect {route} to themselves. A redirect can only \
+                 send visitors to one page.",
+                first.source_path.display(),
+                second.source_path.display()
+            ));
+            let builder = match second_span {
+                Some(info) => builder.add_info_at(
+                    format!("Also claimed by `{}` here.", second.source_path.display()),
+                    info,
+                ),
+                None => builder.add_info(format!(
+                    "Also claimed by `{}` (`{}`).",
+                    second.source_path.display(),
+                    second.alias
+                )),
+            };
+            builder
+                .add_hint("Remove the alias from one of the two pages?")
+                .build()
+        }
+
+        AliasConflict::NoDefaultOwner {
+            stub_href,
+            contributors,
+        } => {
+            let span = contributors
+                .first()
+                .and_then(|who| locate_alias(who, project, runtime, source_context));
+            let names = contributors
+                .iter()
+                .map(|c| format!("`{}`", c.source_path.display()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            at(
+                DiagnosticMessageBuilder::error("No page owns the alias's fragment-less URL")
+                    .with_code("Q-5-24"),
+                span,
+            )
+            .problem(format!(
+                "{names} route fragments through `{stub_href}`, but no page claims it \
+                 without a fragment, so a visitor arriving at the bare URL has no \
+                 destination."
+            ))
+            .add_info(
+                "Quarto 1 sends that visitor to the site root. Picking one of these pages \
+                 instead would be a guess about which one you meant.",
+            )
+            .add_hint("Add the fragment-less alias to whichever page should own the old URL?")
+            .build()
+        }
+
+        AliasConflict::CaseOnlyAliasCollision { first, second } => {
+            let first_span = locate_alias(first, project, runtime, source_context);
+            let second_span = locate_alias(second, project, runtime, source_context);
+            let builder = at(
+                DiagnosticMessageBuilder::error("Aliases differ only by case").with_code("Q-5-25"),
+                first_span,
+            )
+            .problem(format!(
+                "`{}` in `{}` and `{}` in `{}` resolve to paths that differ only in \
+                 capitalization. macOS and Windows treat those as one file.",
+                first.alias,
+                first.source_path.display(),
+                second.alias,
+                second.source_path.display()
+            ))
+            .add_info(
+                "Checked on every platform, including case-sensitive ones, so a Linux build \
+                 cannot ship a site that loses a redirect when served from macOS or Windows.",
+            );
+            let builder = match second_span {
+                Some(info) => builder.add_info_at("The other spelling is here.", info),
+                None => builder,
+            };
+            builder
+                .add_hint("Rename one so the two differ by more than capitalization?")
+                .build()
+        }
+
+        AliasConflict::CaseOnlyPageCollision {
+            alias,
+            stub_href,
+            page_href,
+            page_source,
+        } => {
+            let span = locate_alias(alias, project, runtime, source_context);
+            at(
+                DiagnosticMessageBuilder::error("Alias differs only by case from a rendered page")
+                    .with_code("Q-5-25"),
+                span,
+            )
+            .problem(format!(
+                "`{}` in `{}` resolves to `{}`, which differs only in capitalization from \
+                 `{}` rendered by `{}`. macOS and Windows treat those as one file.",
+                alias.alias,
+                alias.source_path.display(),
+                stub_href,
+                page_href,
+                page_source.display()
+            ))
+            .add_hint("Rename the alias so it cannot collide with the page?")
+            .build()
+        }
+
+        AliasConflict::EscapesOutputDir { alias } => {
+            let span = locate_alias(alias, project, runtime, source_context);
+            at(
+                DiagnosticMessageBuilder::error("Alias resolves outside the output directory")
+                    .with_code("Q-5-26"),
+                span,
+            )
+            .problem(format!(
+                "`{}` in `{}` climbs above the site's output directory. Redirect stubs must \
+                 be written inside the site.",
+                alias.alias,
+                alias.source_path.display()
+            ))
+            .add_info(
+                "A relative alias resolves against the page's own output location, not the \
+                 project root, so a page deep in the tree can climb further than expected.",
+            )
+            .add_hint("Use a site-root-relative alias such as `/old.html`?")
+            .build()
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════
 

@@ -1,0 +1,60 @@
+### A0 indent0 adjacent defs
+    | [^a]: one.
+    | [^b]: two.
+  --->
+document section inline_ref_def ref_id_specifier pandoc_paragraph pandoc_str pandoc_soft_break inline_note_reference pandoc_str pandoc_space pandoc_str 
+
+### A1 indent1 second def
+    | [^a]: one.
+    |  [^b]: two.
+  --->
+document section inline_ref_def ref_id_specifier pandoc_paragraph pandoc_str pandoc_soft_break inline_note_reference pandoc_str pandoc_space pandoc_str 
+
+### A3 indent3 second def
+    | [^a]: one.
+    |    [^b]: two.
+  --->
+document section inline_ref_def ref_id_specifier pandoc_paragraph pandoc_str pandoc_soft_break inline_note_reference pandoc_str pandoc_space pandoc_str 
+
+### A4 indent4 second def
+    | [^a]: one.
+    |     [^b]: two.
+  --->
+document section inline_ref_def ref_id_specifier pandoc_paragraph pandoc_str pandoc_soft_break inline_note_reference pandoc_str pandoc_space pandoc_str 
+
+### B  paragraph then def
+    | hello there.
+    | [^b]: two.
+  --->
+document section pandoc_paragraph pandoc_str pandoc_space pandoc_str pandoc_soft_break inline_note_reference pandoc_str pandoc_space pandoc_str 
+
+### C  paragraph then bracket-not-def
+    | hello there.
+    | [not a footnote] in prose.
+  --->
+document section pandoc_paragraph pandoc_str pandoc_space pandoc_str pandoc_soft_break pandoc_span content pandoc_str pandoc_space pandoc_str pandoc_space pandoc_str pandoc_space pandoc_str pandoc_space pandoc_str 
+
+### D  paragraph then bare bracket ref
+    | hello there.
+    | [^b] is a ref.
+  --->
+document section pandoc_paragraph pandoc_str pandoc_space pandoc_str pandoc_soft_break inline_note_reference pandoc_space pandoc_str pandoc_space pandoc_str pandoc_space pandoc_str 
+
+### E  blockquote adjacent defs
+    | > [^a]: one.
+    | > [^b]: two.
+  --->
+document section pandoc_block_quote block_quote_marker inline_ref_def ref_id_specifier pandoc_paragraph pandoc_str pandoc_soft_break inline_note_reference pandoc_str pandoc_space pandoc_str 
+
+### F  in list item
+    | - item text
+    |   [^b]: two.
+  --->
+document section pandoc_list list_item list_marker_minus pandoc_paragraph pandoc_str pandoc_space pandoc_str pandoc_soft_break inline_note_reference pandoc_str pandoc_space pandoc_str 
+
+### G  link-style ref def line
+    | hello there.
+    | [ref]: http://example.com
+  --->
+document section pandoc_paragraph pandoc_str pandoc_space pandoc_str pandoc_soft_break pandoc_span content pandoc_str pandoc_str pandoc_space pandoc_str pandoc_str pandoc_str pandoc_str pandoc_str 
+

@@ -1,65 +1,60 @@
 ---
-title: "Invalid `diagnostics:` entry"
-description: "An entry under `diagnostics:` could not be understood, so it suppresses nothing."
+title: "Alias Would Overwrite a Rendered Page"
+description: "An `aliases:` entry points at a path where the project already renders a page."
 code: Q-5-23
 subsystem: project
-status: stub
+status: complete
 since: "99.9.9"
 categories:
   - project
 ---
 
-# `Q-5-23` — Invalid `diagnostics:` entry
+# `Q-5-23` — Alias Would Overwrite a Rendered Page
 
-> An entry under `diagnostics:` was not in a recognized form. It has no
-> effect: the diagnostic it names is still reported.
+> An `aliases:` entry resolves to a path where the project renders
+> a page. Writing the redirect stub there would replace that page,
+> so the render stops instead.
 
 ## What this means
 
-The `diagnostics:` key maps an error code to what Quarto should do with
-it. Each entry takes one of two forms:
+Each entry in a page's `aliases:` list becomes a small redirect
+file in the output directory, so an old URL keeps working after
+the page moves. This error fires when that redirect file would be
+written on top of a real page.
+
+Only one file can exist at a path. If the redirect were written,
+the page would be gone from the built site and every visitor to it
+would be bounced elsewhere.
+
+## Why this happens
+
+Usually the alias was never updated after a reorganization:
 
 ```yaml
-diagnostics:
-  Q-2-49: off                    # short form
-
-  Q-2-45:                        # long form, with a reason
-    level: off
-    reason: "legacy corpus, migrating incrementally"
+---
+title: Deployment
+aliases:
+  - /index.html   # but index.qmd renders here
+---
 ```
 
-`off` is the only level Quarto currently supports.
+It also happens when two pages swap places and each keeps the
+other's old URL as an alias.
 
-This warning fires when an entry does not match either form — a
-misspelled level, a long-form entry with no `level:` key, or a
-`diagnostics:` value that is not a map. Quarto reports it rather than
-ignoring it because there is no schema layer to catch the mistake for
-you: an entry that is silently dropped would look exactly like a
-suppression that failed to work.
+## How to fix it
 
-## How to fix
+Point the alias at a path no page renders to, or delete it if the
+page it named no longer exists. If you genuinely want visitors to
+land on the other page, edit that page instead of redirecting to
+it — a redirect and a page cannot share a URL.
 
-Check the entry against the two forms above. In particular:
+## Difference from Quarto 1
 
-```yaml
-diagnostics:
-  Q-2-49: error      # not supported — `off` is the only level
-  Q-2-49:            # long form missing `level:`
-    reason: "..."
-  diagnostics:       # must be a map, not a list
-    - Q-2-49
-```
+Quarto 1 detects the same situation, prints a warning, and skips
+the redirect. Quarto 2 treats it as an error.
 
-Writing a `reason:` is optional but worth the line — it is what makes
-the suppression reviewable later, when whoever reads the file next has
-to decide whether it still applies.
-
-## Notes
-
-Two limits are worth knowing when a suppression appears not to work:
-
-- **Errors are never suppressed**, only warnings and informational
-  diagnostics. Silencing an error would ship broken output with no
-  signal at all.
-- **Only diagnostics that carry a code can be suppressed.** Some Quarto
-  warnings do not yet have one.
+The reason is what the warning leaves behind: a site that builds
+"successfully" while silently missing a redirect the author
+believes exists. Old links keep 404ing, and nothing in the output
+says why. A failed render that names the problem is recoverable in
+a minute; a missing redirect can go unnoticed for months.

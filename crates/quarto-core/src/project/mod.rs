@@ -23,6 +23,7 @@
 //!   [`orchestrator::ProjectPipeline`] two-pass driver.
 //! - [`discovery`]: multi-file project file-list expansion.
 
+pub mod aliases;
 pub mod cache_key;
 pub mod dependency_graph;
 pub mod discovery;

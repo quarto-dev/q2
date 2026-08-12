@@ -1308,13 +1308,56 @@ typedef struct {
     bool may_interrupt;  // ...and CommonMark lets it interrupt a paragraph
 } OrderedMarkerPeek;
 
+// How many columns of a line's leading indentation the open blocks
+// could claim as list-item continuation indent, summed over the
+// LEADING run of LIST_ITEM* blocks on the stack. The first
+// SOFT_LINE_ENDING gate runs before match_line, so `s->indentation`
+// there is the raw column count including any open item's content
+// columns; raw minus this value is the indent relative to the
+// innermost list content column — the reference point CommonMark's
+// "a marker may be indented at most 3 spaces" rule needs.
+//
+// Blocks that match a continuation line without consuming anything —
+// FENCED_DIV, FENCED_CODE_BLOCK, ANONYMOUS (see match(), they just
+// `return 1`) — are transparent: they contribute nothing but do not
+// stop the walk, so a div wrapping a list does not change how nested
+// markers are judged (first fix attempt for bd-j7be7kuc broke
+// `::: {.x}` + `* a` + 4-space `1. b` by stopping here). A
+// BLOCK_QUOTE stops the walk: it claims a '>' prefix, not
+// whitespace, so on a lazy continuation line (no '>') nothing at or
+// past the quote can claim indentation.
+static uint8_t claimable_list_indentation(Scanner *s) {
+    uint8_t claimed = 0;
+    for (size_t i = 0; i < s->open_blocks.size; i++) {
+        Block b = s->open_blocks.items[i];
+        if (b >= LIST_ITEM && b <= LIST_ITEM_MAX_INDENTATION) {
+            claimed += list_item_indentation(b);
+        } else if (b == FENCED_DIV || b == FENCED_CODE_BLOCK ||
+                   b == ANONYMOUS) {
+            continue;
+        } else {
+            break;
+        }
+    }
+    return claimed;
+}
+
 // Bails out past 9 digits, the longest marker parse_ordered_list_marker
 // accepts, so a pathological digit run costs a bounded peek.
+//
+// Shape-only: this asks whether the CHARACTERS form a marker, with no
+// indentation judgment. Whether the position allows a marker is the
+// caller's job, because the answer depends on which gate is asking:
+// at gate 1 `s->indentation` is the line's raw indent (block prefixes
+// not yet consumed — compare against claimable_list_indentation), at
+// gate 2 it is the residual indent after match_line (compare against
+// 3 directly). bd-indented-continuation-parse-error-j7be7kuc was
+// partly caused by an `s->indentation > 3` guard here that was only
+// correct for one of those call sites. Callers must ensure the peek
+// is only run when they will honor its advance (it always consumes at
+// least one character).
 static OrderedMarkerPeek peek_ordered_marker(Scanner *s, TSLexer *lexer) {
     OrderedMarkerPeek result = {false, false};
-    if (s->indentation > 3) {
-        return result;
-    }
     // Only a bare '1' may interrupt a paragraph (CommonMark); any longer run
     // or any other digit may not.
     bool dont_interrupt = lexer->lookahead != '1';
@@ -1371,6 +1414,72 @@ static bool peek_dash_plus_opens_block(Scanner *s, TSLexer *lexer) {
     }
     // Only '-' forms a thematic break; '+++' is not one in CommonMark.
     return marker == '-' && level >= 3 && trailing_ws_or_eol;
+}
+
+// True when the upcoming line forms a footnote definition's opening
+// specifier -- '[^id]:' followed by whitespace and a non-empty body.
+// That is the block form of `inline_ref_def` (grammar.js:283), and like
+// '#' or '-' it must interrupt an open paragraph. Mirrors
+// parse_ref_id_specifier's identifier rule (scanner.c:1808) so the peek
+// and the real parser agree on what a specifier is.
+//
+// DELIBERATELY STRICTER THAN parse_ref_id_specifier, and the extra
+// strictness is load-bearing. The grammar rule is
+// seq(ref_id_specifier, _whitespace, pandoc_paragraph), so the
+// whitespace and the body are both mandatory: '[^x]:two.' (no space)
+// and '[^x]:' (empty body) parse to an ERROR node even at block start.
+// If this peek called those block openers, the gate would suppress the
+// soft break and the line would then fail to form any block -- a hard
+// parse error, which drops the WHOLE FILE from the render rather than
+// just the block. That is the bd-j7be7kuc failure mode. The invariant
+// to preserve when editing: this peek must never be LOOSER than what
+// inline_ref_def actually accepts. Being stricter is always safe (the
+// line merely stays paragraph continuation, today's behavior); being
+// looser turns a benign paragraph into an unrenderable file.
+//
+// Shape-only, like peek_ordered_marker: no indentation judgment here,
+// because s->indentation means different things at the two gates. The
+// caller decides whether the position allows a block to open.
+//
+// bd-miif1k1z. Scoped to the '[^id]:' footnote form only: qmd has no
+// link reference definitions -- '[ref]: url' parses as a bracket span
+// plus literal text -- so there is no second bracket form to serve.
+static bool peek_ref_id_specifier(Scanner *s, TSLexer *lexer) {
+    // precondition: lexer->lookahead == '['
+    advance(s, lexer);
+    if (lexer->lookahead != '^') {
+        return false;
+    }
+    advance(s, lexer);
+    // Identifier characters, per parse_ref_id_specifier and the pandoc
+    // manual: no spaces, tabs, newlines, '^', '[' or ']'. An empty id
+    // is accepted ('[^]: x' parses), so this loop may run zero times.
+    // '\r' and EOF are excluded here but not in parse_ref_id_specifier;
+    // that is the safe direction (see the strictness note above).
+    while (!lexer->eof(lexer) && lexer->lookahead != ' ' &&
+           lexer->lookahead != '\t' && lexer->lookahead != '\n' &&
+           lexer->lookahead != '\r' && lexer->lookahead != '^' &&
+           lexer->lookahead != '[' && lexer->lookahead != ']') {
+        advance(s, lexer);
+    }
+    if (lexer->lookahead != ']') {
+        return false;
+    }
+    advance(s, lexer);
+    if (lexer->lookahead != ':') {
+        return false;
+    }
+    advance(s, lexer);
+    // _whitespace between the specifier and the body is mandatory.
+    if (lexer->lookahead != ' ' && lexer->lookahead != '\t') {
+        return false;
+    }
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+        advance(s, lexer);
+    }
+    // ...and the body must be non-empty on this line.
+    return !lexer->eof(lexer) && lexer->lookahead != '\n' &&
+           lexer->lookahead != '\r';
 }
 
 static bool parse_example_list_marker(Scanner *s, TSLexer *lexer,
@@ -2820,17 +2929,85 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 first_starts_with_fence = (level >= 3);
                 first_peeked = true;
             } else if (lexer->lookahead == '-' || lexer->lookahead == '+') {
-                // Bullets carry no interruption restriction, so both gates
-                // get the same answer.
-                first_starts_with_marker_block =
-                    peek_dash_plus_opens_block(s, lexer);
-                first_marker_interrupts = first_starts_with_marker_block;
+                // CommonMark: a marker more than 3 columns past the
+                // innermost list content column cannot form (the line
+                // standing alone would be indented code, which cannot
+                // interrupt a paragraph) — the line is lazy paragraph
+                // continuation, so leave the block flags false. The
+                // over-indent verdict must still take the PEEKED
+                // emission path (first_peeked = true even though
+                // nothing was consumed): skipping mark_end leaves the
+                // indentation for the next scan, where either
+                // match_line claims it or the grammar's
+                // soft-break-trailing _whitespace absorbs it. The
+                // absorbing (non-peeked) emission is NOT equivalent —
+                // swallowing the next line's indent into
+                // SOFT_LINE_ENDING keeps a bogus paragraph-
+                // continuation GLR fork alive across whitespace-only
+                // lines (attributed-div-ws-blank-list repro).
+                if (s->indentation <= claimable_list_indentation(s) + 3) {
+                    // Bullets carry no interruption restriction, so both
+                    // gates get the same answer.
+                    first_starts_with_marker_block =
+                        peek_dash_plus_opens_block(s, lexer);
+                    first_marker_interrupts = first_starts_with_marker_block;
+                }
                 first_peeked = true;
             } else if (lexer->lookahead >= '0' && lexer->lookahead <= '9') {
-                OrderedMarkerPeek peek = peek_ordered_marker(s, lexer);
-                first_starts_with_marker_block = peek.well_formed;
-                first_marker_interrupts = peek.may_interrupt;
+                // Same over-indentation rule and emission-path rule as
+                // the dash/plus branch.
+                if (s->indentation <= claimable_list_indentation(s) + 3) {
+                    OrderedMarkerPeek peek = peek_ordered_marker(s, lexer);
+                    first_starts_with_marker_block = peek.well_formed;
+                    first_marker_interrupts = peek.may_interrupt;
+                }
                 first_peeked = true;
+            } else if (lexer->lookahead == '[') {
+                // bd-miif1k1z: '[^id]: body' is the block form of a
+                // footnote definition (inline_ref_def) and interrupts an
+                // open paragraph the way '#' and '-' do. Without this,
+                // two definitions on consecutive lines parsed as one --
+                // the second was absorbed as lazy continuation into the
+                // first note's body and its reference rendered as an
+                // empty span.
+                //
+                // Same over-indentation rule as the dash/plus branch
+                // above. Footnote definitions carry no CommonMark-style
+                // interruption restriction (unlike ordered markers), so
+                // both gates get the same answer.
+                //
+                // NOTE this makes '[^id]:' interrupt an ORDINARY
+                // paragraph too, not just a definition body:
+                //
+                //     hello there.
+                //     [^b]: two.
+                //
+                // is a paragraph plus a definition in qmd, where pandoc
+                // keeps one paragraph with literal '[^b]:' text (pandoc's
+                // note body is a raw-line collector that stops at the
+                // next definition, so a definition never interrupts
+                // ordinary prose there). This divergence is DELIBERATE:
+                // q2's note body is an ordinary paragraph, so '#' and '-'
+                // already interrupt it where pandoc absorbs them as
+                // literal text. Scoping this to definition bodies only
+                // would need the scanner to know it is inside an
+                // inline_ref_def, which is a grammar rule, not an open
+                // block -- state the scanner does not have.
+                if (s->indentation <= claimable_list_indentation(s) + 3) {
+                    first_starts_with_marker_block =
+                        peek_ref_id_specifier(s, lexer);
+                    first_marker_interrupts = first_starts_with_marker_block;
+                    // Only inside the guard: unlike the dash/plus branch,
+                    // the over-indent verdict here does NOT need the
+                    // peeked emission path. When over-indented we never
+                    // advance, so leaving first_peeked false reproduces
+                    // byte for byte what this line did before '[' had a
+                    // branch at all -- which is the behavior the
+                    // over-indented list-item corpus case pins. Hoisting
+                    // this out of the guard "for symmetry" makes the soft
+                    // break swallow the block continuation.
+                    first_peeked = true;
+                }
             } else if (lexer->lookahead == '*') {
                 int level = 0;
                 while (lexer->lookahead == '*') {
@@ -2979,8 +3156,13 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 second_lookahead = first_lookahead;
                 second_starts_with_fence = first_starts_with_fence;
                 second_starts_with_star_block = first_starts_with_star_block;
-                // Gate 2's question: does the marker interrupt this paragraph?
-                second_starts_with_marker_block = first_marker_interrupts;
+                // Gate 2's question: does the marker interrupt this
+                // paragraph? The character shape must say yes AND the
+                // marker must sit within 3 columns of the innermost
+                // matched block's content column — after match_line,
+                // s->indentation holds exactly that residual.
+                second_starts_with_marker_block =
+                    first_marker_interrupts && s->indentation <= 3;
                 second_peeked = true;
             } else {
                 second_lookahead = lexer->lookahead;
@@ -2998,14 +3180,41 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     second_peeked = true;
                 } else if (lexer->lookahead == '-' || lexer->lookahead == '+') {
                     // bd-w6tod0gh: same peek as the first gate, at the
-                    // post-match_line position (after block prefixes like `> `).
-                    second_starts_with_marker_block =
-                        peek_dash_plus_opens_block(s, lexer);
+                    // post-match_line position (after block prefixes like
+                    // `> `), where s->indentation is the residual indent.
+                    // A marker more than 3 residual columns in cannot
+                    // form (CommonMark) — leave the verdict false, but
+                    // keep the PEEKED emission path (second_peeked =
+                    // true) for the same fork-viability reason as the
+                    // first gate: the residue must stay outside the
+                    // SOFT_LINE_ENDING token.
+                    if (s->indentation <= 3) {
+                        second_starts_with_marker_block =
+                            peek_dash_plus_opens_block(s, lexer);
+                    }
                     second_peeked = true;
                 } else if (lexer->lookahead >= '0' && lexer->lookahead <= '9') {
-                    second_starts_with_marker_block =
-                        peek_ordered_marker(s, lexer).may_interrupt;
+                    // Same residual-indent rule and emission-path rule
+                    // as the dash/plus branch.
+                    if (s->indentation <= 3) {
+                        second_starts_with_marker_block =
+                            peek_ordered_marker(s, lexer).may_interrupt;
+                    }
                     second_peeked = true;
+                } else if (lexer->lookahead == '[') {
+                    // bd-miif1k1z: same peek as the first gate, at the
+                    // post-match_line position where s->indentation is
+                    // the residual indent. See the first gate for why a
+                    // footnote definition interrupts a paragraph at all,
+                    // and for the deliberate pandoc divergence.
+                    //
+                    // second_peeked inside the guard, for the same reason
+                    // as the first gate.
+                    if (s->indentation <= 3) {
+                        second_starts_with_marker_block =
+                            peek_ref_id_specifier(s, lexer);
+                        second_peeked = true;
+                    }
                 } else if (lexer->lookahead == '*') {
                     int level = 0;
                     while (lexer->lookahead == '*') {

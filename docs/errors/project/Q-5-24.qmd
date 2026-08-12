@@ -1,0 +1,73 @@
+---
+title: "Two Pages Claim the Same Alias"
+description: "Two pages declare `aliases:` entries that resolve to the same redirect, so only one could take effect."
+code: Q-5-24
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-24` — Two Pages Claim the Same Alias
+
+> Two pages declare `aliases:` entries that resolve to the same
+> redirect, so only one of them could take effect.
+
+## What this means
+
+A redirect can only send visitors to one place. When two pages
+both claim an old URL, there is no way to honour both, and no way
+to guess which author is right.
+
+```yaml
+# guides/deploying.qmd
+aliases:
+  - /deploy.html
+
+# reference/deploy-api.qmd
+aliases:
+  - /deploy.html      # same old URL, different page
+```
+
+## Fragments make this subtler
+
+An alias may carry a fragment, and several pages *may* share one
+redirect file as long as they claim different fragments:
+
+```yaml
+# building.qmd
+aliases:
+  - /hub/              # owns the bare URL
+  - /hub/#image
+
+# deploying.qmd
+aliases:
+  - /hub/#deploy       # fine: a different fragment
+```
+
+That is allowed, and both fragments route to their own page.
+
+This error still fires in two cases:
+
+- **Two pages claim the same fragment**, including the
+  fragment-less one (as in the first example).
+- **No page claims the bare URL.** If `building.qmd` above dropped
+  its `/hub/` entry, both remaining aliases would be fragments,
+  and a visitor arriving at plain `/hub/` would have no defined
+  destination. Rather than pick one arbitrarily, Quarto asks you
+  to say which page owns it.
+
+## How to fix it
+
+Remove the alias from all but one page. If several pages really do
+descend from one old page, choose the one a visitor should land on
+by default and give it the fragment-less alias; the others keep
+their fragment-qualified entries.
+
+## Difference from Quarto 1
+
+Quarto 1 does not report this at all. The last page processed wins
+and overwrites the earlier redirect, so which page a visitor
+reaches depends on file-processing order — and the author whose
+alias lost is never told.

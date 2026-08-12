@@ -3700,7 +3700,7 @@ mod tests {
         );
     }
 
-    /// A malformed entry is reported (Q-5-23) rather than silently
+    /// A malformed entry is reported (Q-5-27) rather than silently
     /// ignored, and does not suppress anything.
     #[test]
     fn malformed_suppression_entry_is_reported() {
@@ -3708,7 +3708,7 @@ mod tests {
             b"---\ntitle: Test\ndiagnostics:\n  Q-2-45: shout\n---\n\nSee [label][ref].\n";
         let diagnostics = render_and_collect_diagnostics(content);
         assert!(
-            diagnostics.iter().any(|c| c == "Q-5-23"),
+            diagnostics.iter().any(|c| c == "Q-5-27"),
             "expected the invalid-entry diagnostic; got {diagnostics:?}"
         );
         assert!(

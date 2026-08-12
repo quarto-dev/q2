@@ -1,0 +1,65 @@
+---
+title: "Invalid `diagnostics:` entry"
+description: "An entry under `diagnostics:` could not be understood, so it suppresses nothing."
+code: Q-5-27
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-27` — Invalid `diagnostics:` entry
+
+> An entry under `diagnostics:` was not in a recognized form. It has no
+> effect: the diagnostic it names is still reported.
+
+## What this means
+
+The `diagnostics:` key maps an error code to what Quarto should do with
+it. Each entry takes one of two forms:
+
+```yaml
+diagnostics:
+  Q-2-49: off                    # short form
+
+  Q-2-45:                        # long form, with a reason
+    level: off
+    reason: "legacy corpus, migrating incrementally"
+```
+
+`off` is the only level Quarto currently supports.
+
+This warning fires when an entry does not match either form — a
+misspelled level, a long-form entry with no `level:` key, or a
+`diagnostics:` value that is not a map. Quarto reports it rather than
+ignoring it because there is no schema layer to catch the mistake for
+you: an entry that is silently dropped would look exactly like a
+suppression that failed to work.
+
+## How to fix
+
+Check the entry against the two forms above. In particular:
+
+```yaml
+diagnostics:
+  Q-2-49: error      # not supported — `off` is the only level
+  Q-2-49:            # long form missing `level:`
+    reason: "..."
+  diagnostics:       # must be a map, not a list
+    - Q-2-49
+```
+
+Writing a `reason:` is optional but worth the line — it is what makes
+the suppression reviewable later, when whoever reads the file next has
+to decide whether it still applies.
+
+## Notes
+
+Two limits are worth knowing when a suppression appears not to work:
+
+- **Errors are never suppressed**, only warnings and informational
+  diagnostics. Silencing an error would ship broken output with no
+  signal at all.
+- **Only diagnostics that carry a code can be suppressed.** Some Quarto
+  warnings do not yet have one.
