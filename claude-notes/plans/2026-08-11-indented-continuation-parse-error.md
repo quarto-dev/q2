@@ -142,13 +142,23 @@ Expected behavioral outcomes (pandoc parity, from the sweep):
       artifact deleted (matches prior cleanup convention)
 - [x] `cargo nextest run --workspace`: 11727/11727 passed, ZERO
       snapshot changes
-- [ ] `cargo xtask verify` (full, WASM leg)
-- [ ] E2E: scratch repros + the Connect-docs repro project
-      (`q2 render` on
+- [x] `cargo xtask verify` (full, WASM leg): all 14 steps passed
+- [x] E2E: all six scratch repros produce the pandoc-parity ASTs;
+      Connect-docs repro project renders **3 of 3 files** (was 0 of 3):
+      `q2 render` in
       `~/repos/github/cscheid/q2-connect-docs/llms-info/repros/indented-continuation-parse-error/`,
-      expect 3/3 files, then the real `api/index.qmd` project if
-      feasible)
-- [ ] Close strand with summary; PR
+      output inspected — the digit wrap renders as one joined `<p>`
+      ("...license leases last\n30 minutes...") and
+      nested-ordered-list.html contains the nested `<ol>` markup
+- [x] Post-fix sweep: 280 cells, only the 28 deliberate `*5`
+      unclosed-emphasis cells still error; all structural
+      pampa-vs-pandoc disagreements are known deliberate deviations
+      (CommonMark interruption, new-list-on-marker-change, smart `--`,
+      and bd-z69hr4o0)
+- [x] Discovered strands filed: bd-mt1ksg9b (star peeks share the
+      over-indent defect, pre-existing), bd-z69hr4o0 (spurious Space
+      after SoftBreak for backtick/star continuations, pre-existing)
+- [x] Strand closed (fix verified end-to-end); PR pending push approval
 
 ## Reference: sweep failure structure (pre-fix)
 
