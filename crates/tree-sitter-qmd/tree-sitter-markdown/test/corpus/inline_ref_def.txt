@@ -19,3 +19,221 @@
             (pandoc_str)
             (pandoc_space)
             (pandoc_str)))))
+
+================================================================================
+bd-miif1k1z: adjacent definitions, indent 0 (top level)
+================================================================================
+[^a]: one.
+[^b]: two.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (inline_ref_def
+          (ref_id_specifier)
+          (pandoc_paragraph
+            (pandoc_str)))
+        (inline_ref_def
+          (ref_id_specifier)
+          (pandoc_paragraph
+            (pandoc_str)))))
+
+================================================================================
+bd-miif1k1z: adjacent definitions, indent 1 (top level)
+================================================================================
+[^a]: one.
+ [^b]: two.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (inline_ref_def
+          (ref_id_specifier)
+          (pandoc_paragraph
+            (pandoc_str)))
+        (inline_ref_def
+          (ref_id_specifier)
+          (pandoc_paragraph
+            (pandoc_str)))))
+
+================================================================================
+bd-miif1k1z: adjacent definitions, indent 3 (top level)
+================================================================================
+[^a]: one.
+   [^b]: two.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (inline_ref_def
+          (ref_id_specifier)
+          (pandoc_paragraph
+            (pandoc_str)))
+        (inline_ref_def
+          (ref_id_specifier)
+          (pandoc_paragraph
+            (pandoc_str)))))
+
+================================================================================
+bd-miif1k1z: indent 4 stays body content (over-indent, matches pandoc)
+================================================================================
+[^a]: one.
+    [^b]: two.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (inline_ref_def
+          (ref_id_specifier)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_soft_break)
+            (inline_note_reference)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)))))
+
+================================================================================
+bd-miif1k1z: definition interrupts an ordinary paragraph (deliberate pandoc divergence)
+================================================================================
+hello there.
+[^b]: two.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (inline_ref_def
+          (ref_id_specifier)
+          (pandoc_paragraph
+            (pandoc_str)))))
+
+================================================================================
+bd-miif1k1z: adjacent definitions inside a block quote
+================================================================================
+> [^a]: one.
+> [^b]: two.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_block_quote
+          (block_quote_marker)
+          (inline_ref_def
+            (ref_id_specifier)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation)))
+          (inline_ref_def
+            (ref_id_specifier)
+            (pandoc_paragraph
+              (pandoc_str))))))
+
+================================================================================
+bd-miif1k1z: definition at a list item's content column
+================================================================================
+- item text
+  [^b]: two.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (block_continuation))
+            (inline_ref_def
+              (ref_id_specifier)
+              (pandoc_paragraph
+                (pandoc_str)))))))
+
+================================================================================
+bd-miif1k1z: over-indented in a list item stays paragraph continuation (no parse error)
+================================================================================
+- item text
+      [^b]: two.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (pandoc_soft_break)
+              (inline_note_reference)
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))))))
+
+================================================================================
+bd-miif1k1z: negative — bracket span in prose is not a definition
+================================================================================
+hello there.
+[not a footnote] in prose.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_soft_break)
+          (pandoc_span
+            (content
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)))
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+bd-miif1k1z: negative — a bare reference (no colon) is not a definition
+================================================================================
+hello there.
+[^b] is a ref.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_soft_break)
+          (inline_note_reference)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+bd-miif1k1z: negative — link reference definition syntax is not a qmd construct
+================================================================================
+hello there.
+[ref]: http://example.com
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_soft_break)
+          (pandoc_span
+            (content
+              (pandoc_str)))
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str))))

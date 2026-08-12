@@ -1,0 +1,91 @@
+### A0 indent0 adjacent defs
+    | [^a]: one.
+    | [^b]: two.
+  ---> pandoc -f markdown -t native:
+      [WARNING] Note with key 'a' defined at line 1 column 1 but not used.
+      [WARNING] Note with key 'b' defined at line 2 column 1 but not used.
+      []
+
+### A1 indent1 second def
+    | [^a]: one.
+    |  [^b]: two.
+  ---> pandoc -f markdown -t native:
+      [WARNING] Note with key 'a' defined at line 1 column 1 but not used.
+      [WARNING] Note with key 'b' defined at line 2 column 1 but not used.
+      []
+
+### A3 indent3 second def
+    | [^a]: one.
+    |    [^b]: two.
+  ---> pandoc -f markdown -t native:
+      [WARNING] Note with key 'a' defined at line 1 column 1 but not used.
+      [WARNING] Note with key 'b' defined at line 2 column 1 but not used.
+      []
+
+### A4 indent4 second def
+    | [^a]: one.
+    |     [^b]: two.
+  ---> pandoc -f markdown -t native:
+      [WARNING] Note with key 'a' defined at line 1 column 1 but not used.
+      []
+
+### B  paragraph then def
+    | hello there.
+    | [^b]: two.
+  ---> pandoc -f markdown -t native:
+      [ Para
+          [ Str "hello"
+          , Space
+          , Str "there."
+          , SoftBreak
+          , Str "[^b]:"
+          , Space
+          , Str "two."
+          ]
+      ]
+
+### D  paragraph then bare ref
+    | hello there.
+    | [^b] is a ref.
+  ---> pandoc -f markdown -t native:
+      [ Para
+          [ Str "hello"
+          , Space
+          , Str "there."
+          , SoftBreak
+          , Str "[^b]"
+          , Space
+          , Str "is"
+          , Space
+          , Str "a"
+          , Space
+          , Str "ref."
+          ]
+      ]
+
+### E  blockquote adjacent defs
+    | > [^a]: one.
+    | > [^b]: two.
+  ---> pandoc -f markdown -t native:
+      [WARNING] Note with key 'a' defined at _chunk line 1 column 1 but not used.
+      [WARNING] Note with key 'b' defined at _chunk line 2 column 1 but not used.
+      [ BlockQuote [] ]
+
+### F  in list item
+    | - item text
+    |   [^b]: two.
+  ---> pandoc -f markdown -t native:
+      [ BulletList
+          [ [ Plain
+                [ Str "item"
+                , Space
+                , Str "text"
+                , SoftBreak
+                , Str "[^b]:"
+                , Space
+                , Str "two."
+                ]
+            ]
+          ]
+      ]
+
