@@ -44,6 +44,7 @@ pub mod config_sources;
 pub mod crossref;
 pub mod dates;
 pub mod dependency;
+pub mod diagnostic_policy;
 pub mod document_profile;
 pub mod engine;
 pub mod error;

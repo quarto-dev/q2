@@ -187,19 +187,134 @@ Before shipping B, **measure the noise**: run the detection over a real corpus (
 
 A **preliminary text-level probe over `docs/`** is recorded in `lone-bracket-diagnostic-and-warning-suppression-investigation/noise-probe.md`: 8 regex candidates, **all 8 false positives** (mermaid node syntax and Python inside nested fences, one YAML flow sequence in front matter) — so the true count of AST-level lone bare spans in q2's own docs is **zero**. Encouraging but not decisive: `docs/` is written by people fluent in qmd span syntax. The corpora that matter are ones ported from Pandoc / Quarto 1, where reference-link habits survive, and the real measurement should go through `qmd-syntax-helper check -r literal-brackets` rather than a regex.
 
-## Proposed phases (draft)
+## Work items
 
-- **Phase 0 — Test plan (TDD).** Re-run the strand's repro and capture current output. Failing tests for: policy resolution from merged metadata (project-only, doc-only, doc-overrides-project); `apply_diagnostic_policy` across all four summary sources; suppress-then-promote ordering under `--strict`; error-not-suppressible; unknown-code warning; unused-suppression info; `--show-suppressed`.
-- **Phase 1 — Policy type + resolution.** `DiagnosticPolicy` in `quarto-core`, parsed from merged metadata. No application yet.
-- **Phase 2 — Application at the summary boundary.** `apply_diagnostic_policy` beside `promote_warnings_to_errors`; `RenderOutput` carries the resolved policy; CLI wiring and ordering vs `--strict`.
-- **Phase 3 — Validation + rot control.** Unknown-code warning (new Q-code), unused-suppression reporting, `--show-suppressed`.
-- **Phase 4 — Coverage.** Decide the bd-m2w7a relationship; optionally an xtask lint requiring codes on new warnings.
-- **Phase 5 — Preview / hub scope.** Whatever open question 5 decides.
-- **Phase 6 — Noise measurement for the lone-bracket rule.**
-- **Phase 7 — Q-2-49 diagnostic** + `docs/errors/markdown/Q-2-49.qmd` (the `error-docs-page-missing` lint requires the page in the same commit) + module-doc rewrite + `qmd-syntax-helper` rule re-keying.
-- **Phase 8 — User docs.** Suppression belongs alongside the "Rendering in CI" section that strict mode added to `docs/guides/publishing/index.qmd`.
+Settled after the decisions below. TDD throughout: tests written and observed failing before each implementation step.
+
+### Phase 1 — `DiagnosticPolicy` type + resolution ✅
+
+- [x] `crates/quarto-core/src/diagnostic_policy.rs`: `DiagnosticPolicy`, `PolicyEntry { level, reason, source }`, `PolicyLevel::Off`.
+- [x] `DiagnosticPolicy::from_metadata(&ConfigValue) -> (Self, Vec<DiagnosticMessage>)` — parses the `diagnostics:` key in both short and long form; malformed entries produce a diagnostic rather than being ignored (there is no schema layer to catch them).
+- [x] `DiagnosticPolicy::apply(&self, &mut Vec<DiagnosticMessage>)` — drops suppressed diagnostics. **Never drops `DiagnosticKind::Error`** (A5): silencing an error means shipping broken output silently, which is the exact failure this strand is about.
+- [x] 12 unit tests: short form, long form, reason captured, unknown level rejected, non-map value rejected, empty policy is a no-op, errors survive suppression, uncoded diagnostics survive, one bad entry does not void its neighbours.
+- [x] **Mutation-checked**: deleting the `DiagnosticKind::Error` guard makes `errors_are_never_suppressed` fail, confirming the safety test is not vacuous.
+
+**One non-obvious case worth recording:** YAML 1.1 resolves a bare `off` to boolean `false`, so `parse_level` accepts `Scalar(Yaml::Boolean(false))` as well as the string `"off"`. Without that, the documented spelling would have been rejected as invalid. Level parsing also goes through `as_plain_text()` rather than `as_str()` — a bare YAML string in front-matter context is stored as `PandocInlines`, for which `as_str()` returns `None` (this is what the `metadata-as-str` xtask lint exists to catch).
+
+### Phase 2 — Wire it into the single seam ✅
+
+- [x] `StageContext.diagnostic_policy` field (defaults empty).
+- [x] `MetadataMergeStage` resolves the policy from merged metadata after `activate_trace_from_metadata` and stores it on the context; malformed-entry diagnostics go into `ctx.diagnostics`.
+- [x] `run_pipeline` applies the policy to `stage_ctx.diagnostics` immediately before returning.
+- [x] 6 wiring tests in `pipeline.rs`, including a **baseline test** (`reference_link_warning_fires_without_suppression`) so a suppression test cannot pass merely because the warning never fired, and a preview-pipeline test covering decision 3.
+
+### Phase 3 — Q-2-49, the lone-bracket diagnostic ✅
+
+- [x] Catalog entries **Q-2-49** (`markdown`) and **Q-5-23** (`project`, "Invalid `diagnostics:` Entry") + `docs/errors/markdown/Q-2-49.qmd` and `docs/errors/project/Q-5-23.qmd` in the same commit (`cargo xtask lint` passes: 957 files).
+- [x] Third trigger in `reference_link_diagnostics.rs`. `scan_inlines` now tracks a `claimed` bitmap so a span consumed by Q-2-45/Q-2-46 is **not** also reported as Q-2-49 — one mistake, one diagnostic.
+- [x] Module docs rewritten: the old "no way to tell it apart from a deliberate span" section is replaced by an account of which premise changed and why.
+- [x] 17 tests in the transform (13 pre-existing, 4 new), all passing.
+
+**One pre-existing test changed, deliberately.** `does_not_treat_a_mid_line_colon_span_as_a_definition` (`Text before [label]: after`) asserted *no diagnostic at all*. That was never the claim it was named for — the claim is "this is not a *definition*" — and the silence it relied on was precisely the gap Q-2-49 closes, since `[label]` mid-sentence does lose its brackets. It now asserts `vec![CODE_LONE_BRACKETS]`. No other existing test changed; the full workspace suite passes at **11700 tests**.
+
+### Phase 4 — End-to-end verification + docs ✅
+
+- [x] User docs: a "Suppressing diagnostics" section in `docs/guides/publishing/index.qmd`, beside the `--strict` section. Rendered with Q2 (`cargo run --bin q2 -- render docs/…`) and the output inspected.
+- [x] `cargo xtask lint` clean; full workspace tests green.
+
+**End-to-end, real binary, output inspected** (`/tmp/q2repro`, a copy of the strand's repro):
+
+```
+$ q2 render
+Warning: [Q-2-45] `[the RedHat documentation][gcc-toolset]` looks like a reference-style link …
+Warning: [Q-2-45] `[noexec][noexec]` …
+Warning: [Q-2-49] `[Version TBD]` has no attribute block, so it renders as an empty span and the
+                 brackets are discarded — the reader sees `Version TBD`. Write `\[Version TBD\]` …
+Warning: [Q-2-49] `[1]` …
+Warning: [Q-2-49] `[2]` …
+Warning: [Q-2-49] `[Posit Connect]` …
+Warning: [Q-2-46] `[gcc-toolset]:` …
+Warning: [Q-2-46] `[noexec]:` …
+```
+
+Section B — silent through 0.19.0 — now reports all four cases with precise spans, and Section A is unchanged (no double-reporting). Then, with `diagnostics: {Q-2-49: {level: off, reason: …}}` appended to `_quarto.yml`:
+
+```
+$ q2 render 2>&1 | grep -oE "\[Q-2-[0-9]+\]" | sort | uniq -c
+   2 [Q-2-45]
+   2 [Q-2-46]
+```
+
+Q-2-49 gone, the others untouched. With all three codes suppressed, `q2 render --strict` prints no diagnostics and **exits 0** — confirming suppress-then-promote ordering. Corrupting one entry to `Q-2-45: shout`:
+
+```
+   2 [Q-2-45]
+   1 [Q-5-23]
+```
+
+— the malformed entry is reported once and suppresses nothing.
+
+- [x] `cargo xtask verify` (full, all 14 steps including the WASM build and hub-client tests): **passed**.
+- [ ] **Not done, stated plainly:** suppression has not been exercised in a live `q2 preview` browser session. The preview *pipeline* is covered by a unit test (`suppression_applies_in_the_preview_pipeline`, which drives `render_qmd_to_preview_ast` and asserts the code is gone), and the seam it relies on is the same one the CLI uses — but that is not the same as watching a browser. Anyone picking this up should run the `npm run build:wasm` → `cargo xtask build-q2-preview-spa` → `cargo build --bin q2` chain and confirm visually.
+
+### Determinism note
+
+`DiagnosticPolicy` stores entries in a `LinkedHashMap`, not a `HashMap`. They are lookup-only today, so either would be correct — but the deferred unused-suppression report (bd-91rgxmav) will iterate them to produce user-visible output, and author-config order is the order that report wants. Cheaper to get right now than to debug as nondeterministic output later; the repo's own guidance is "when in doubt, use `LinkedHashMap`."
+
+### Follow-up strands filed
+
+- **bd-91rgxmav** — warning-suppression v1 follow-ups (validation, rot control, `--show-suppressed`, globs, per-line, project-scoped coverage, the codes lint, additional levels).
+- **bd-cljk1g5p** — re-key `qmd-syntax-helper`'s `literal-brackets` rule to the `q_2_49.rs` convention.
+
+Both linked `discovered-from` this strand.
+
+### Deferred to a follow-up strand
+
+Unknown-code validation, unused-suppression reporting, `--show-suppressed`, per-path globs, per-line suppression, project-scoped-diagnostic coverage, and the xtask lint requiring codes on new warnings.
+
+**Also deferred: re-keying `qmd-syntax-helper`'s `literal-brackets` rule to the `q_2_NN.rs` convention.** Now that Q-2-49 exists the rule *could* become `q_2_49.rs` like its siblings, which was one of the strand's stated motivations. It is deliberately not part of this change: the rename touches a user-visible CLI surface (`-r literal-brackets`, which appears in the `Q-2-46` docs page, the rule's own header, and the new `Q-2-49` page), and the sibling rules derive violations from parse errors while this one derives them from its own `bracket_analysis` — so it is a real refactor rather than a rename. The rule works as-is; `-r literal-brackets` remains the correct invocation everywhere it is documented.
+
+The rule should also **stay opt-in** for `convert -r all` regardless of the re-keying, for the reason its own header gives: an escape is a source edit that cannot afterwards be distinguished from an author's intent.
+
+## Decisions (Carlos, 2026-08-12)
+
+1. **Config shape:** per-code map, reason *encouraged* (short form `Q-2-49: off`, long form `{level:, reason:}`). Chosen over a flat `suppress:` list so per-code severity (`error`, `warning`) is reachable later without a second key.
+2. **Sequencing:** minimal suppression (`off` only) **plus** Q-2-49 ship together. Unknown-code validation, unused-suppression reporting, and `--show-suppressed` are deferred to a follow-up strand.
+3. **Scope:** suppression applies **everywhere**, including `q2 preview` and hub-client — deliberately diverging from `--strict`'s Decision-D1 exclusion, because an author who has declared a construct legitimate should not be nagged in the editor.
+4. **Uncoded warnings:** ship anyway; the ~25–30 uncoded warnings are simply unsuppressible in v1, documented as such, with bd-m2w7a linked as `related`. No xtask lint in v1.
+
+### What decision 3 changes about the design
+
+The summary-boundary seam (A1) is **CLI-only** — `q2 preview` and hub-client never build a `ProjectRenderSummary`. Applying the policy there would have excluded exactly the surface decision 3 requires.
+
+The seam that satisfies decision 3 is **`run_pipeline`** (`crates/quarto-core/src/pipeline.rs:717`), whose single tail expression
+
+```rust
+.map(|d| (d, stage_ctx.diagnostics))
+```
+
+(:811) is the one place every per-document diagnostic passes through, for *every* frontend: `render_qmd_to_html` (:920), `parse_qmd_to_ast`, and `render_qmd_to_preview_ast` (:998) all funnel through it. Filtering there covers CLI single-doc, CLI project (per-page), preview, and WASM in one edit — and, because it happens inside the render, it lands strictly *before* `--strict`'s promotion at the CLI boundary, so the suppress-then-promote ordering of A3 falls out for free rather than needing to be enforced.
+
+Resolution and application are split:
+
+- **Resolve** in `MetadataMergeStage`, right after `activate_trace_from_metadata` (`metadata_merge.rs:420`) — the point where merged metadata exists. Project → directory → document precedence comes free from the existing merge, so `_quarto.yml` and front matter both work with no new precedence machinery.
+- **Apply** in `run_pipeline`'s tail, via a new `StageContext.diagnostic_policy` field.
+
+**Known v1 gap, accepted:** *project-scoped* diagnostics (`project_diagnostics` in `ProjectRenderSummary`, plus the `eprintln!` config-diagnostic path at `render.rs:897`) do not pass through `run_pipeline` and are therefore not suppressible in v1. Per-document diagnostics — which is what Q-2-49 is — are fully covered, including when the suppression is written in `_quarto.yml`, because project config is merge layer 1.
 
 ## Open design questions for the user
+
+**Questions 1–3 and 5 are answered above.** Questions 4, 6, and 7 remain open; 4 is assumed as stated (project + document only, globs and per-line deferred) unless Carlos says otherwise.
+
+1. ~~**Sequencing.**~~ *Answered: decision 2.*
+
+2. ~~**Config shape.**~~ *Answered: decision 1.*
+
+3. ~~**The uncoded-warning gap.**~~ *Answered: decision 4.*
+
+5. ~~**Preview / hub scope.**~~ *Answered: decision 3.*
+
+<details><summary>Original wording of the answered questions</summary>
 
 1. **Sequencing.** Confirm: suppression fully first (A, phases 1–5), then the diagnostic (B, phases 6–7)? Or interleave — ship a minimal `off`-only suppression and Q-2-49 together, deferring validation/rot-control to a follow-up?
 

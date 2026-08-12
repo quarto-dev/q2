@@ -1377,5 +1377,19 @@
     "message_template": "Cell options are written in the cell language's own comment syntax. A mermaid diagram comments with `%%`, so its options are `%%|` — `#|` is not a mermaid comment and becomes part of the diagram, which mermaid then fails to parse.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-48",
     "since_version": "99.9.9"
+  },
+  "Q-2-49": {
+    "subsystem": "markdown",
+    "title": "Bracketed text renders without its brackets",
+    "message_template": "`[...]` is span syntax in quarto-markdown, so a bracket group with no attribute block renders as an empty span and the brackets are discarded. Escape them as `\\[...\\]` to keep them literal.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-49",
+    "since_version": "99.9.9"
+  },
+  "Q-5-23": {
+    "subsystem": "project",
+    "title": "Invalid `diagnostics:` Entry",
+    "message_template": "An entry under `diagnostics:` could not be understood. Each entry maps an error code to a level — `Q-2-49: off` — or to a map with a `level:` key and an optional `reason:`.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-23",
+    "since_version": "99.9.9"
   }
 }
