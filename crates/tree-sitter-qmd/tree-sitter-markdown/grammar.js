@@ -988,10 +988,28 @@ module.exports = grammar({
             optional($.block_continuation)
         ),
 
-        _soft_line_break: $ => seq(
+        // prec.right: a _whitespace after _soft_line_ending could also
+        // be parsed OUTSIDE this rule (e.g. _attr_ws / _shortcode_sep
+        // build seq(_soft_line_break, _whitespace) shapes). Prefer
+        // absorbing it here — both readings are separators, and
+        // absorption is what keeps stray continuation indentation out
+        // of the inline stream.
+        _soft_line_break: $ => prec.right(seq(
             $._soft_line_ending,
-            optional($.block_continuation)
-        ),
+            optional($.block_continuation),
+            // bd-indented-continuation-parse-error-j7be7kuc: a
+            // continuation line's leading indentation is not always
+            // consumed by the scanner. When a SOFT_LINE_ENDING gate
+            // peek judges an indented line "prose", the peeked path
+            // deliberately skips mark_end (the lexer cannot rewind to
+            // post-indent/pre-delimiter), so any indentation beyond
+            // what block_continuation claims reaches the parser as a
+            // _whitespace token. Absorb it here — pandoc strips
+            // continuation-line leading whitespace, so it contributes
+            // nothing to the inline stream (the whole seq is aliased
+            // to pandoc_soft_break -> a single SoftBreak).
+            optional($._whitespace)
+        )),
 
 
         _inline_whitespace: $ => prec(-1, choice($._whitespace, $._soft_line_break)),
