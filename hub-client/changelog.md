@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-12
+
+- [`e5769e5b`](https://github.com/quarto-dev/q2/commits/e5769e5b): Bump the samod sync library to 0.13.0 (now from shikokuchuo/samod, access-policy branch) and the JS automerge package to 3.4.1.
+
 ### 2026-08-07
 
 - [`279d7e5e`](https://github.com/quarto-dev/q2/commits/279d7e5e): `.md` files are now first-class source files: they sync into hub projects, get live preview, outline, folding, diagnostics, and qmd highlighting in the editor, and cross-document links into `.md` pages navigate like `.qmd` ones.
