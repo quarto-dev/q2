@@ -1315,16 +1315,26 @@ typedef struct {
 // there is the raw column count including any open item's content
 // columns; raw minus this value is the indent relative to the
 // innermost list content column — the reference point CommonMark's
-// "a marker may be indented at most 3 spaces" rule needs. Any
-// non-list block stops the run: a BLOCK_QUOTE claims a '>' prefix,
-// not whitespace, so on a lazy continuation line (no '>') nothing at
-// or past the quote can claim indentation.
+// "a marker may be indented at most 3 spaces" rule needs.
+//
+// Blocks that match a continuation line without consuming anything —
+// FENCED_DIV, FENCED_CODE_BLOCK, ANONYMOUS (see match(), they just
+// `return 1`) — are transparent: they contribute nothing but do not
+// stop the walk, so a div wrapping a list does not change how nested
+// markers are judged (first fix attempt for bd-j7be7kuc broke
+// `::: {.x}` + `* a` + 4-space `1. b` by stopping here). A
+// BLOCK_QUOTE stops the walk: it claims a '>' prefix, not
+// whitespace, so on a lazy continuation line (no '>') nothing at or
+// past the quote can claim indentation.
 static uint8_t claimable_list_indentation(Scanner *s) {
     uint8_t claimed = 0;
     for (size_t i = 0; i < s->open_blocks.size; i++) {
         Block b = s->open_blocks.items[i];
         if (b >= LIST_ITEM && b <= LIST_ITEM_MAX_INDENTATION) {
             claimed += list_item_indentation(b);
+        } else if (b == FENCED_DIV || b == FENCED_CODE_BLOCK ||
+                   b == ANONYMOUS) {
+            continue;
         } else {
             break;
         }
@@ -2857,25 +2867,35 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 // innermost list content column cannot form (the line
                 // standing alone would be indented code, which cannot
                 // interrupt a paragraph) — the line is lazy paragraph
-                // continuation. Skip the peek entirely so the
-                // non-peeked soft-break path below runs and its
-                // mark_end absorbs the indentation.
+                // continuation, so leave the block flags false. The
+                // over-indent verdict must still take the PEEKED
+                // emission path (first_peeked = true even though
+                // nothing was consumed): skipping mark_end leaves the
+                // indentation for the next scan, where either
+                // match_line claims it or the grammar's
+                // soft-break-trailing _whitespace absorbs it. The
+                // absorbing (non-peeked) emission is NOT equivalent —
+                // swallowing the next line's indent into
+                // SOFT_LINE_ENDING keeps a bogus paragraph-
+                // continuation GLR fork alive across whitespace-only
+                // lines (attributed-div-ws-blank-list repro).
                 if (s->indentation <= claimable_list_indentation(s) + 3) {
                     // Bullets carry no interruption restriction, so both
                     // gates get the same answer.
                     first_starts_with_marker_block =
                         peek_dash_plus_opens_block(s, lexer);
                     first_marker_interrupts = first_starts_with_marker_block;
-                    first_peeked = true;
                 }
+                first_peeked = true;
             } else if (lexer->lookahead >= '0' && lexer->lookahead <= '9') {
-                // Same over-indentation rule as the dash/plus branch.
+                // Same over-indentation rule and emission-path rule as
+                // the dash/plus branch.
                 if (s->indentation <= claimable_list_indentation(s) + 3) {
                     OrderedMarkerPeek peek = peek_ordered_marker(s, lexer);
                     first_starts_with_marker_block = peek.well_formed;
                     first_marker_interrupts = peek.may_interrupt;
-                    first_peeked = true;
                 }
+                first_peeked = true;
             } else if (lexer->lookahead == '*') {
                 int level = 0;
                 while (lexer->lookahead == '*') {
@@ -3051,21 +3071,24 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     // post-match_line position (after block prefixes like
                     // `> `), where s->indentation is the residual indent.
                     // A marker more than 3 residual columns in cannot
-                    // form (CommonMark); skip the peek so second_peeked
-                    // stays false and the mark_end below absorbs the
-                    // residue into the SOFT_LINE_ENDING token.
+                    // form (CommonMark) — leave the verdict false, but
+                    // keep the PEEKED emission path (second_peeked =
+                    // true) for the same fork-viability reason as the
+                    // first gate: the residue must stay outside the
+                    // SOFT_LINE_ENDING token.
                     if (s->indentation <= 3) {
                         second_starts_with_marker_block =
                             peek_dash_plus_opens_block(s, lexer);
-                        second_peeked = true;
                     }
+                    second_peeked = true;
                 } else if (lexer->lookahead >= '0' && lexer->lookahead <= '9') {
-                    // Same residual-indent rule as the dash/plus branch.
+                    // Same residual-indent rule and emission-path rule
+                    // as the dash/plus branch.
                     if (s->indentation <= 3) {
                         second_starts_with_marker_block =
                             peek_ordered_marker(s, lexer).may_interrupt;
-                        second_peeked = true;
                     }
+                    second_peeked = true;
                 } else if (lexer->lookahead == '*') {
                     int level = 0;
                     while (lexer->lookahead == '*') {

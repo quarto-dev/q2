@@ -345,6 +345,79 @@ fn controls_backtick_and_star_continuations() {
     report(failures);
 }
 
+/// Fenced divs are transparent to list indentation: FENCED_DIV (like
+/// FENCED_CODE_BLOCK and ANONYMOUS) matches a continuation line
+/// without consuming any prefix, so a div wrapping a list must not
+/// change how nested-marker indentation is judged, and a
+/// whitespace-only line inside a div must behave exactly like a blank
+/// line. Regression found on the first bd-j7be7kuc fix attempt via
+/// the Connect-docs `.definition-list` pattern
+/// (repros/attributed-div-ws-blank-list): claimable_list_indentation
+/// stopped its scan at FENCED_DIV, and the over-indent verdict's
+/// absorbing mark_end made a bogus paragraph-continuation fork viable
+/// across whitespace-only lines.
+#[test]
+fn attributed_div_is_transparent_to_list_indentation() {
+    let mut failures = Vec::new();
+    // Nested marker at relative indent 2 inside an attributed div:
+    // must nest exactly as it does without the div.
+    check_cell(
+        &mut failures,
+        "div direct nest".to_string(),
+        "::: {.x}\n* a\n    1. b\n:::\n",
+        Ok(
+            "[ Div ( \"\" , [\"x\"] , [] ) [BulletList [[Plain [Str \"a\"], \
+            OrderedList (1, Decimal, Period) [[Plain [Str \"b\"]]]]]] ]",
+        ),
+    );
+    // The Connect-docs repro: whitespace-only separator lines (4
+    // spaces) inside an attributed div. The list structure must match
+    // the truly-blank-line variant below. Note the first block is
+    // Plain here but Para in the blank variant: v0.18.0 behaves the
+    // same way (whitespace-only lines read as tight in the loose/tight
+    // computation, with or without a div — pandoc/Q1 say loose). That
+    // pre-existing quirk is out of scope and tracked separately; these
+    // cells pin the v0.18.0 output.
+    check_cell(
+        &mut failures,
+        "div + whitespace-only lines (repro A)".to_string(),
+        "::: {.definition-list}\n\n* Find:\n    \n    1.  Exact.\n    \n    2.  Latest.\n:::\n",
+        Ok("[ Div ( \"\" , [\"definition-list\"] , [] ) [BulletList \
+             [[Plain [Str \"Find:\"], OrderedList (1, Decimal, Period) \
+             [[Plain [Str \"Exact.\"]], [Plain [Str \"Latest.\"]]]]]] ]"),
+    );
+    check_cell(
+        &mut failures,
+        "div + truly blank lines (control B)".to_string(),
+        "::: {.definition-list}\n\n* Find:\n\n    1.  Exact.\n\n    2.  Latest.\n:::\n",
+        Ok("[ Div ( \"\" , [\"definition-list\"] , [] ) [BulletList \
+             [[Para [Str \"Find:\"], OrderedList (1, Decimal, Period) \
+             [[Plain [Str \"Exact.\"]], [Plain [Str \"Latest.\"]]]]]] ]"),
+    );
+    // Prose continuation inside a div still soft-breaks.
+    check_cell(
+        &mut failures,
+        "div + indented prose continuation".to_string(),
+        "::: {.x}\n* a\n    -5 degrees\n:::\n",
+        Ok(
+            "[ Div ( \"\" , [\"x\"] , [] ) [BulletList [[Plain [Str \"a\", \
+            SoftBreak, Str \"-5\", Space, Str \"degrees\"]]]] ]",
+        ),
+    );
+    // Over-indented marker inside a div (relative indent 4): lazy
+    // prose continuation, same as without the div.
+    check_cell(
+        &mut failures,
+        "div + over-indented marker".to_string(),
+        "::: {.x}\n* a\n      1. b\n:::\n",
+        Ok(
+            "[ Div ( \"\" , [\"x\"] , [] ) [BulletList [[Plain [Str \"a\", \
+            SoftBreak, Str \"1.\", Space, Str \"b\"]]]] ]",
+        ),
+    );
+    report(failures);
+}
+
 /// Deliberate qmd strictness: an unclosed `*` emphasis is an error at
 /// any indent (pandoc would fall back to a literal `*5`). These must
 /// KEEP failing — they are not part of the regression.

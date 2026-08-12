@@ -117,7 +117,8 @@ indented-continuation 5: over-indented bullet in a list is lazy prose continuati
         (list_marker_minus)
         (pandoc_paragraph
           (pandoc_str)
-          (pandoc_soft_break)
+          (pandoc_soft_break
+            (block_continuation))
           (pandoc_str)
           (pandoc_space)
           (pandoc_str))))))

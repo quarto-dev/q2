@@ -158,7 +158,54 @@ Expected behavioral outcomes (pandoc parity, from the sweep):
 - [x] Discovered strands filed: bd-mt1ksg9b (star peeks share the
       over-indent defect, pre-existing), bd-z69hr4o0 (spurious Space
       after SoftBreak for backtick/star continuations, pre-existing)
-- [x] Strand closed (fix verified end-to-end); PR pending push approval
+- [x] Strand closed (fix verified end-to-end); PR #510 opened
+
+### Phase 5 — branch regression: attributed-div contexts (2026-08-11)
+
+Found by the q2-connect-docs agent testing PR #510
+(repro: `llms-info/repros/attributed-div-ws-blank-list`): a nested
+ordered list inside an *attributed* fenced div silently rendered as
+paragraph text. Isolation: old scanner + new grammar was CORRECT, so
+the cause was Part B, not the grammar `prec.right` the repro README
+suspected. Two defects, both fixed:
+
+- [x] `claimable_list_indentation` stopped its walk at FENCED_DIV;
+      but FENCED_DIV / FENCED_CODE_BLOCK / ANONYMOUS `match()` without
+      consuming anything — they are transparent and are now skipped.
+      (Even `::: {.x}` + `* a` + 4-space `1. b` — no whitespace-only
+      line involved — lost its nested list; v0.18.0 hard-errored on
+      that same input, so the fix is strictly better than 0.18 here.)
+- [x] The over-indent verdict used the absorbing (non-peeked)
+      `mark_end` emission, which swallowed the next line's indent into
+      SOFT_LINE_ENDING and kept a bogus paragraph-continuation GLR
+      fork alive across whitespace-only lines (token log showed a
+      size-7 SOFT_LINE_ENDING spanning ws-line remainder + newline +
+      next indent). Both gates now use the peeked (skip-mark_end)
+      emission for the over-indent verdict — the old fork-killing
+      shape; the grammar's trailing `_whitespace` absorbs the residue.
+- [x] TDD: 5 new cells in
+      `test_indented_continuation::attributed_div_is_transparent_to_list_indentation`
+      (direct nest + repro A failed pre-fix; controls B, prose, and
+      over-indent passed); corpus case 5's tree updated (soft break
+      now carries `block_continuation` instead of absorbing indent —
+      same AST).
+- [x] Repro A/B/C now byte-identical to v0.18.0 output (verified
+      against a throwaway 7c964559 build); direct-nest improves on
+      0.18 (nested `<ol>` vs parse error).
+- [x] Canonical-read check (user-suggested methodology): qmd writer's
+      canonical form of the repro re-reads to the identical AST —
+      fixed point, no diagnostics fallback needed.
+- [x] E2E: `q2 render` of the repro site — section A renders its
+      `<ol>` again (3 ordered lists on the page).
+- [x] Discovered strand bd-25ezfgs8: whitespace-only separator lines
+      read as TIGHT where pandoc/Q1 say loose (Plain vs Para;
+      pre-existing in v0.18.0, with or without a div; out of scope
+      per the not-perfectly-CommonMark decision).
+- [x] `tree-sitter test` 582/582; workspace 11728/11728; zero
+      snapshot churn. Error table NOT regenerated: only scanner.c
+      changed, no grammar regen, LR states unchanged.
+- [ ] Full `cargo xtask verify` re-run; push to PR #510 (needs
+      approval)
 
 ## Reference: sweep failure structure (pre-fix)
 
