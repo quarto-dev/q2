@@ -2,15 +2,77 @@
 
 **Date:** 2026-08-12
 **Braid:** `bd-ellipsis-not-smart-48bv2pe6` (bug, p3, label `markdown`)
-**Checkout:** invoked on `main` @ `7bcddf61` — **no branch was created.** See "Before implementation" below.
-**Status:** Investigation complete — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Branch:** `braid/ellipsis-not-smart-48bv2pe6` (off `main` @ `27f96dfb`)
+**Status:** **Implemented.** All design questions answered; fix landed, tests green,
+verified end-to-end. Pending full `cargo xtask verify` sign-off and user review.
 
 ## Triage verdict
 
-**Ready to design.** The root cause is identified and confirmed by three independent
-probes; it is a one-line asymmetry in the tree-sitter token-start character class,
-*not* the attribute-class routing the strand hypothesized. The remaining decisions
-are which of three fix sites to use and how much regeneration fallout to absorb.
+**Ready to design** → **done.** The root cause was a one-line asymmetry in the
+tree-sitter token-start character class, *not* the attribute-class routing the strand
+hypothesized. All four design questions were answered by the user (see "Decisions"),
+option B was implemented, and the parser-regeneration risk did not materialize.
+
+## Decisions (user, 2026-08-12)
+
+1. **Fix site: option B**, with the explicit instruction to *start* there and only
+   revisit if parser regeneration caused an unforeseen, unfixable cascade. It did not —
+   `_autogen-table.json` regenerated with a zero-byte diff and all 11,736 workspace
+   tests pass.
+2. **`....` → `….` is in scope.** Small user-visible differences are acceptable when
+   they move q2 closer to Pandoc. Confirmed against `pandoc -f markdown -t native`,
+   which emits `Str "\8230."`.
+3. **Probe sweep** as proposed, plus `1.` vs `1...` ordered-list behavior.
+4. **Test placement:** new `smart-typography-positions.qmd` fixture, not an extension
+   of the existing one.
+
+## Outcome
+
+The fix is a single new alternative in `PANDOC_REGEX_STR`
+(`crates/tree-sitter-qmd/tree-sitter-markdown/grammar.js`), which makes a run of dots
+lex as one `pandoc_str` token so `apply_smart_typography` sees the whole run:
+
+```js
+"[.]+",
+"[>.,;!?]",
+```
+
+`apply_smart_typography` itself is unchanged, as predicted.
+
+End-to-end through `cargo run --bin q2 -- render`:
+
+```
+<p>Click the <strong>…</strong> menu to open it.</p>
+<p>Wait for it… then see (…) here.</p>
+<p>Four dots …. and two .. dots.</p>
+<p>Escaped a...b stays literal, code <code>...</code> untouched.</p>
+```
+
+Output inspected directly in the generated HTML. The first line is the exact Connect
+docs construct from the strand.
+
+### Probe-sweep results
+
+Baseline captured in `ellipsis-not-smart-investigation/probe-sweep.qmd`. Every
+at-risk construct behaves correctly after the fix:
+
+| construct | after |
+|---|---|
+| `[x](../foo.html)` link destination | untouched |
+| `../foo` in prose | literal `../foo` |
+| `..` / `.` in prose | literal |
+| `{.class}`, `[y]{.a .b}` | still parse as attribute classes |
+| pipe-table cells | `.` and `..` literal, `...` → `…` |
+| `1.` ordered list | still a list |
+| `1...` | `1…`, not a list (unchanged — was already alnum-led) |
+| `` `...` `` code span | untouched |
+| `a\.\.\.b` | literal `a...b` |
+
+### Answer to the `1.` vs `1...` question
+
+`1.` still produces `OrderedList (1, Decimal, Period)`. `1...` was never a list and
+still is not — it produces `Str "1…"`. Its behavior is *unchanged* by this fix,
+because `1...` is alnum-led and so was already lexing as a single token.
 
 ## Issue context
 
@@ -82,79 +144,50 @@ it tests round-tripping, not conversion.
 
 Pre-flight `cargo xtask verify --skip-hub-build` passed at `7bcddf61`.
 
-## Proposed phases (draft)
+## Phases
 
-- **Phase 0 — Tests first (TDD).** Add the position dimension: a tree-sitter grammar
-  test asserting a dot run lexes as one `pandoc_str` node at token start; extend
-  `smart-typography.qmd` (or add a sibling fixture) with space-preceded, paren-preceded,
-  block-start and `**...**` cases; keep the escaped-run rows. Verify they fail.
-- **Phase 1 — Grammar fix.** One of the three options below, then
-  `tree-sitter generate; tree-sitter build; tree-sitter test` in
-  `crates/tree-sitter-qmd/tree-sitter-markdown`.
-- **Phase 2 — Regeneration fallout.** Re-run `./scripts/build_error_table.ts` if parser
-  states shifted (see Risks); review every changed snapshot per the CLAUDE.md
-  snapshot-reporting rule.
-- **Phase 3 — Full verification.** `cargo nextest run --workspace`, then
-  `cargo xtask verify` (WASM leg included — pampa feeds `wasm-qmd-parser`), plus the
-  end-to-end check: `cargo run --bin q2 -- render` on a fixture containing "the ... menu"
-  and inspect the HTML.
+- [x] **Phase 0 — Tests first (TDD).** Added
+      `crates/pampa/tests/integration/test_smart_typography_positions.rs` (8 tests) and
+      `crates/tree-sitter-qmd/.../test/corpus/dot-runs.txt` (8 grammar cases).
+      Verified failing: 4 of 8 Rust tests failed on the position/remainder assertions,
+      4 controls (short runs, escaped runs, code spans, dashes) passed from the start —
+      exactly the expected split.
+- [x] **Phase 1 — Grammar fix (option B).** `tree-sitter generate` reported no
+      conflicts, so the no-`conflicts:` design invariant at `grammar.js:136` holds.
+      `tree-sitter test`: 590/590.
+- [x] **Phase 2 — Regeneration fallout.** `./scripts/build_error_table.ts` produced a
+      **zero-byte diff** in `_autogen-table.json`; the error-corpus tests pass. One
+      pre-existing grammar test had to change (see Risks).
+- [x] **Phase 3 — Full verification.** `cargo nextest run --workspace`: 11,736 passed.
+      End-to-end `q2 render` output inspected (above). Full `cargo xtask verify`
+      (all 14 steps, WASM leg and hub-client build included): passed.
+      `cargo xtask lint`: 958 files, all checks passed.
+- [ ] **Phase 4 — Docs.** Probably nothing to write: this restores documented Pandoc
+      behavior rather than adding a feature. Flag for user judgment.
 
-## Open design questions for the user
+## Risks — how each resolved
 
-1. **Which fix site?** Three options, in my order of preference:
+- **Parser regeneration (the main risk): did not materialize.**
+  `./scripts/build_error_table.ts` regenerated `_autogen-table.json` with **no diff at
+  all**, so no LR state that the error catalog depends on moved. The error-corpus tests
+  pass. This was the one thing that could have forced a retreat to option C; it didn't.
+- **Grammar design invariant: held.** `tree-sitter generate` reported no conflicts, so
+  the parser is still deterministic LR per `grammar.js:136`.
+- **Snapshot churn: none, except one deliberate change.** No pre-existing `.snap` file
+  changed — notably `smart-typography.snap` is byte-identical, confirming word-adjacent
+  behavior is untouched. Exactly one new snapshot was added.
+- **One pre-existing grammar test had to change.** `test/corpus/punctuation-vs-image.txt`
+  case 5 ("multiple punctuation marks") feeds the literal input `...` and asserted
+  **three** `pandoc_str` nodes — i.e. its expectation encoded the buggy tokenization
+  directly. It now asserts one node. This is the only pre-existing test touched, and the
+  change is forced by the fix rather than incidental. Flagged per the repo rule about not
+  editing tests you did not write.
 
-   - **(B) — recommended.** Add a dedicated dot-run alternative to `PANDOC_REGEX_STR`
-     (e.g. `"[.]+"` ahead of the `"[>.,;!?]"` alternative at line 127). Surgical: only
-     consecutive dots group. `.class` still lexes as `.` + `class`, so nothing near the
-     attribute grammar moves. The escape invariant survives untouched because each `\.`
-     node holds exactly one dot.
-   - **(A)** Add `.` to `startStrRegex`. One character, but a dot-led token would then
-     absorb alnum and dashes — `.class` becomes a single token, which is adjacent to the
-     `{.class}` / `[x]{.class}` attribute rules. Bigger blast radius for no extra benefit.
-   - **(C)** Leave the grammar alone; coalesce adjacent single-dot nodes in the reader
-     before conversion. Fights the deliberate per-node design documented at
-     `text_helpers.rs:156`, and has to re-derive the escaped/unescaped distinction that
-     the grammar already encodes.
+## Follow-up worth considering (not in scope here)
 
-   Do you want B, or do you see a reason to prefer another?
-
-2. **Is `....` → `….` in scope?** Pandoc's rule (three at a time, remainder literal)
-   gives `….` for four dots. It falls out of B for free and matches
-   `apply_smart_typography` as already written, so I'd include it — but it is a second
-   user-visible behavior change beyond what the strand reports. Confirm?
-
-3. **How far should the probe sweep go before committing to B?** Grouping dot runs into
-   one token touches any construct where consecutive dots appear: relative paths
-   (`../foo`) inside link destinations, `..` in prose, a line *starting* with dots, dots
-   inside pipe-table cells and attribute braces. I'd probe each before implementing.
-   Anywhere else you want covered?
-
-4. **Test placement.** Extend the existing `smart-typography.qmd` snapshot (one fixture,
-   bigger diff) or add a sibling `smart-typography-positions.qmd` (isolates the new
-   dimension, cleaner review)? And do you want a `qmd-json-qmd` roundtrip row starting
-   from the *unconverted* `...` to close the gap `dashes_spaced.qmd` left?
-
-## Risks / tradeoffs (draft)
-
-- **Parser regeneration is the main risk, not the fix.** Changing `grammar.js` shifts
-  the generated LR table, and the error-message infrastructure
-  (`resources/error-corpus/_autogen-table.json`) maps *integer parse states* to
-  diagnostics. State renumbering can silently redirect error messages. Phase 2 must
-  re-run `./scripts/build_error_table.ts` and diff the result, and Phase 0's tests
-  cannot catch a regression here — the error-corpus tests can.
-- **Snapshot churn.** Any fixture with a space-preceded `...` in prose will change
-  output. Expected and desirable, but per CLAUDE.md every changed `.snap` must be
-  counted, summarized, and surprises flagged before the commit lands.
-- **Grammar design invariant.** `grammar.js:136` declares "no `conflicts:`" — the
-  grammar must stay deterministic LR. Option B adds an alternative to an existing
-  token regex, resolved by longest-match in the lexer, so it should not introduce a
-  conflict; `tree-sitter generate` will complain loudly if it does. Worth watching for.
-- **WASM leg.** `pampa` feeds `wasm-qmd-parser`, so the full `cargo xtask verify`
-  (not `--skip-hub-build`) is required before this can be considered done.
-
-## Before implementation
-
-This investigation ran on `main`. The plan-skeleton commit lands there; **implementation
-should move to its own branch** — either `cargo xtask create-worktree bd-ellipsis-not-smart-48bv2pe6`
-for an isolated worktree, or a plain topic branch. Your call, not something this
-investigation should decide.
+`## Heading with ... dots` produces the identifier `heading-with-...-dots` in q2, both
+before and after this fix. Pandoc produces `heading-with-dots` — it strips the
+punctuation. So q2's heading-id algorithm diverges from Pandoc on punctuation, which is
+a *separate* pre-existing defect this investigation surfaced but did not touch. Note
+that the fix does change the *text* of such a heading to use U+2026 while leaving the
+id spelled with ASCII dots. Worth its own strand if the user agrees.

@@ -124,6 +124,25 @@ const PANDOC_REGEX_STR =
             "[" + PANDOC_VALID_OTHER_PUNCTUATION + "]",
             "[" + PANDOC_VALID_SYMBOLS + "]",
             "[" + PANDOC_COMBINING_MARKS + "]",
+            // A run of dots lexes as ONE token so that smart typography sees the
+            // whole run. `apply_smart_typography` is applied per prose-str node
+            // (deliberately — that is what keeps `a\.\.\.b` literal, since each
+            // escaped dot arrives as its own backslash-plus-dot node), so a run
+            // split across nodes can never be converted: each node holds a run of
+            // one, which correctly stays literal, and `merge_strs` concatenates
+            // them only afterwards.
+            //
+            // Without this alternative a dot run at *token start* fell through to
+            // the single-character `[>.,;!?]` case below and emitted one node per
+            // dot, so `the ... menu` never became an ellipsis while `a...b` did.
+            // `-` never had this problem because it is in `startStrRegex`; `.` is
+            // not, and adding it there would make `.class` a single token next
+            // door to the attribute grammar. See bd-ellipsis-not-smart-48bv2pe6.
+            //
+            // Longest-match in the lexer means a lone `.` still matches as one
+            // character, and `..` stays a literal two-dot run per Pandoc's
+            // three-at-a-time rule.
+            "[.]+",
             "[>.,;!?]",
             startStrRegex +
             regexOr(
