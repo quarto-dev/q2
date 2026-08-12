@@ -204,8 +204,8 @@ suspected. Two defects, both fixed:
 - [x] `tree-sitter test` 582/582; workspace 11728/11728; zero
       snapshot churn. Error table NOT regenerated: only scanner.c
       changed, no grammar regen, LR states unchanged.
-- [ ] Full `cargo xtask verify` re-run; push to PR #510 (needs
-      approval)
+- [x] Full `cargo xtask verify` re-run green; 062f4f88 pushed to
+      PR #510 (approved 2026-08-11); strand closed
 
 ## Reference: sweep failure structure (pre-fix)
 
