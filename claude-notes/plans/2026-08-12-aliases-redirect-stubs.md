@@ -2,10 +2,133 @@
 
 **Date:** 2026-08-12
 **Braid:** `bd-aliases-redirects-missing-sch7cd1g` (p2, feature, label `website`)
-**Duplicate of / duplicated by:** `bd-hzwecpyk` "Implement page aliases (URL redirects) for website projects" (cderv, 2026-06-23) — see § Duplicate strand
-**Checkout:** invoked on `main` @ `1ba0f2ec` (no worktree created — this skill works in place)
-**Status:** Design questions answered 2026-08-12 (§ Design decisions). One open item: stub
-template A-vs-B. **Do not start implementation until the user gives the go-ahead.**
+**Duplicate:** `bd-hzwecpyk` — **closed** in favour of this strand
+**Follow-up:** `bd-wdhhl0t9` (stale-stub cleanup, deferred)
+**Branch:** `braid/aliases-redirect-stubs`, based on `main` @ `1ba0f2ec` (no worktree — work in place)
+**Status:** **Implemented.** All phases complete and verified end-to-end
+(§ Outcome). `cargo xtask verify --skip-hub-build` green; the Connect-docs
+file-count gap is closed.
+
+## Outcome
+
+**The Connect-docs gap is closed exactly: 451 HTML files, against Quarto 1's 451.**
+All 99 redirect stub paths are byte-for-byte identical in location to Q1's.
+
+Verified by rendering a copy of `docs-quarto-2` (in the session scratchpad, so the port
+repo was never modified) with `q2 render`:
+
+```
+q2 HTML files (with aliases): 451      Q1 HTML files: 451
+q2 redirect stubs:             99      Q1 redirect stubs: 101
+stub paths present in both:    99      in q2 but not Q1: 0
+```
+
+### The two-stub difference is a bug this feature found in Quarto 1
+
+The first render of the *unmodified* Connect docs **failed**, with two `Q-5-25`
+case-only-collision errors. Both are real author errors, and both are actively
+destroying pages in the published Q1 site.
+
+`cookbook/content/integrations/msgraph/viewer/r/index.qmd` renders to
+`…/viewer/r/index.html` and declares the alias `…/viewer/R/` — capital `R`. On macOS
+those are one file. Q1's collision guard is an exact string compare, so it does not
+notice, writes the stub, and the stub lands on top of the rendered page. Confirmed
+directly in the Q1 reference site:
+
+```
+$ head docs-quarto-1/_site/cookbook/content/integrations/msgraph/viewer/r/index.html
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>Redirect</title>
+    var redirects = {"":"../r/index.html"};
+```
+
+That file is not the documentation page. It is a redirect **pointing at itself** — an
+infinite loop where a page used to be. The same happened to
+`…/integrations/sharepoint/viewer/r/index.qmd`. No `R/` directory exists in the Q1
+output; macOS folded it into `r/`.
+
+So the counts reconcile as: Q1 = 350 real pages + 101 stubs; q2 = **352** real pages +
+99 stubs. Same total, two more actual pages — the two Q1 silently ate. This is the
+"genuinely confusing result we have already hit in the Connect docs" the strand
+description alluded to, now with a mechanism.
+
+The Connect docs need those two aliases removed before they will render under q2. That
+is a fix in the port repo, not here; the scratch copy stood in for it to measure the
+gap.
+
+### Repro fixture
+
+```
+$ cargo run --bin q2 -- render claude-notes/plans/aliases-redirect-stubs-investigation/repro
+Rendered 2 of 2 files to …/repro/_site
+
+$ find _site -name '*.html'
+_site/current/index.html   _site/index.html
+_site/old-name.html        _site/previous/index.html   ← both new
+```
+
+`_site/old-name.html` carries `{"":"current/index.html"}` and
+`_site/previous/index.html` carries `{"":"../current/index.html"}` — each relative to
+its own location. Output inspected directly; `_site/` removed afterwards.
+
+## Work items
+
+Checked off as each lands. Phases are committed at their boundaries once the workspace
+is green.
+
+### Phase 0 — Test plan (TDD)
+
+- [x] Promote the repro into `crates/quarto-core/tests/integration/website_post_render.rs`
+- [x] Resolution tests: site-root-relative, page-relative, trailing-slash, extensionless, `.html`
+- [x] Fragment tests: single fragment; two pages → one stub, two targets; fragment-less + fragment in one stub
+- [x] Error tests: stub-vs-page collision; same alias+fragment from two pages; case-only collision; alias escaping the output dir
+- [x] `draft: true` page emits no stub
+- [x] `default`-project render with `aliases:` warns
+- [x] `document_profile.rs` unit test for `aliases` extraction
+- [x] Confirm every new test fails for the right reason
+
+### Phase 1 — `DocumentProfile::aliases`
+
+- [x] Add `pub aliases: Vec<String>` + `extract_string_list(meta, "aliases")`
+- [x] Bump `DOCUMENT_PROFILE_VERSION` 9 → 10, update the guard test at `:1662`
+- [x] Update `claude-notes/designs/document-profile-contract.md` change log
+
+### Phase 2 — Alias resolution (pure)
+
+- [x] `crates/quarto-core/src/project/aliases.rs`: forward-slash path helpers (normalize, dirname, relative-from)
+- [x] `resolve_alias(alias, page_output_href)` implementing the Q1 fixup + resolution rules
+- [x] Output-dir escape detection
+- [x] Unit tests green
+
+### Phase 3 — Stub map + collision detection
+
+- [x] Fold profiles into `stub_href -> {fragment -> target}`, skipping drafts
+- [x] Detect all four error conditions, **collecting** rather than failing fast
+- [x] ASCII case-folded comparison, platform-independent
+- [x] Deterministic ordering (sorted stubs, sorted fragments)
+
+### Phase 4 — Template + write
+
+- [x] Candidate-B stub renderer with JSON encoding for JS + HTML escaping for attributes
+- [x] `write_alias_redirects` in `website_post_render.rs`
+- [x] Wire into `orchestrator.rs` alongside `write_sitemap`
+- [x] Warning for `aliases:` in non-website projects
+
+### Phase 5 — Diagnostics
+
+- [x] `Q-5-23`+ catalog entries naming both colliding pages and the offending alias
+- [x] `docs/errors/project/Q-5-NN.qmd` page per code (same commit — `error-docs-page-missing` lint)
+
+### Phase 6 — End-to-end verification
+
+- [x] `cargo run --bin q2 -- render` on the in-tree repro; inspect actual stub bytes
+- [x] Re-render the Connect docs; report the new file-count gap against 451
+- [x] Report whether any of its 106 aliases now hard-error (see § Risks)
+
+### Phase 7 — Docs
+
+- [x] User-facing `docs/` page for `aliases:`, including the documented divergences from Q1
 
 ## Triage verdict
 
@@ -273,12 +396,13 @@ led to each.
    when checked out on a case-insensitive filesystem. Deterministic cross-platform
    behavior is the point; Q1's guard is an exact string compare and catches none of this.
 
-4. **Stub template — OPEN.** Two candidates written out at
-   `aliases-redirect-stubs-investigation/stub-candidate-{a-q1-parity,b-improved}.html`.
-   B adds a `<noscript><meta http-equiv=refresh>` fallback, `<link rel=canonical>`,
+4. **Stub template — candidate B.** Written out at
+   `aliases-redirect-stubs-investigation/stub-candidate-b-improved.html` (A, the Q1
+   byte-parity version, is kept alongside it for comparison). B adds a
+   `<noscript><meta http-equiv=refresh>` fallback, `<link rel=canonical>`,
    `<meta charset>`, a DOCTYPE, and a visible body link. Byte-parity with Q1 is
    explicitly **not** required — the divergence is to be communicated to the
-   connect-docs agent as an intentional improvement. Recommendation: **B**.
+   connect-docs agent as an intentional improvement.
 
    Two mechanics that must survive whichever is chosen:
    - The `<meta refresh>` must live **inside `<noscript>`**. Bare, it races the script

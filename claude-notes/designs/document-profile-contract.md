@@ -434,3 +434,42 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   `DocumentProfileError::VersionMismatch` and silently
   regenerated, identical to every prior bump.
   Plan: `claude-notes/plans/2026-07-15-html-title-block-parity.md`.
+- **v8 (`bd-v7ixzsp5`, GH #456)** and **v9 (`bd-mt7a6uc4`).**
+  (Entries added retroactively in 2026-08 — like v6, these bumps
+  were documented only in the `DOCUMENT_PROFILE_VERSION`
+  doc-comment at the time. That comment remains the fuller
+  account.) v8 changed `listing_content_globs` from
+  `Vec<String>` to `Vec<GlobPattern>`, resolving patterns to
+  project-relative form at extraction time against the directory
+  of the file each was written in, and carrying a `negated` flag.
+  v9 added `resource_globs: Vec<GlobPattern>` plus the
+  index-aligned `resource_glob_sources` and `rejected_resources`,
+  applying the same host-directory resolution to `resources:`.
+- **2026-08-12 — v10 (`bd-aliases-redirects-missing-sch7cd1g`).**
+  `DOCUMENT_PROFILE_VERSION` bumped 9 → 10. Two new fields, both
+  `#[serde(default, skip_serializing_if = "Vec::is_empty")]`:
+  - `aliases: Vec<String>` — the document's `aliases:`
+    front-matter entries (old URLs that should redirect to this
+    page), kept **raw**.
+  - `alias_sources: Vec<SourceInfo>` — index-aligned provenance,
+    one entry per alias.
+
+  Note the deliberate contrast with v9's `resource_globs`:
+  `resources:` patterns are *resolved* at extraction time because
+  resolution depends on the declaring file's directory, which only
+  the stage knows. An alias instead resolves against the page's own
+  `output_href` — already on the profile — so extraction stays pure
+  and resolution moves to the consumer. Validation has no choice in
+  the matter: whether an alias collides is a property of the whole
+  project, so it can only be decided once every profile is in hand.
+
+  Both therefore happen in `project::website_post_render`, which is
+  also the only place a diagnostic survives profile caching. This is
+  the same lesson `rejected_resources` records: a diagnostic emitted
+  at extraction time appears on the render that populated the cache
+  and never again.
+
+  v9 cache entries on disk are rejected with
+  `DocumentProfileError::VersionMismatch` and silently regenerated,
+  identical to every prior bump.
+  Plan: `claude-notes/plans/2026-08-12-aliases-redirect-stubs.md`.

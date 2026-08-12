@@ -291,13 +291,19 @@ pub trait ProjectType {
     async fn post_render(
         &self,
         _project: &ProjectContext,
-        _index: &ProjectIndex,
+        index: &ProjectIndex,
         _output_paths: &[std::path::PathBuf],
         _project_artifacts: &crate::artifact::ArtifactStore,
         _resolver: &crate::resource_resolver::ResourceResolverContext,
         _runtime: &dyn quarto_system_runtime::SystemRuntime,
-        _diagnostics: &mut Vec<DiagnosticMessage>,
+        diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> Result<()> {
+        // Only website projects write redirect stubs. Every other
+        // project type says so rather than dropping the key in
+        // silence — the silence *was* the original bug report
+        // (bd-aliases-redirects-missing-sch7cd1g): a porting project
+        // got no signal that its redirects had disappeared.
+        super::aliases::warn_aliases_ignored(index, diagnostics);
         Ok(())
     }
 }
@@ -377,10 +383,19 @@ impl ProjectType for WebsiteProjectType {
         // them — see Phase 9 plan §Decision 4.
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use super::website_post_render::{copy_favicon, write_robots_txt, write_sitemap};
+            use super::website_post_render::{
+                copy_favicon, write_alias_redirects, write_robots_txt, write_sitemap,
+            };
             copy_favicon(project, runtime, diagnostics)?;
             write_sitemap(project, index, output_paths, runtime)?;
             write_robots_txt(project, runtime)?;
+            // `aliases:` redirect stubs
+            // (bd-aliases-redirects-missing-sch7cd1g). Unlike its
+            // neighbours this hook can *fail* the render: an alias
+            // collision is an error, not a warning, because the
+            // alternative is a redirect silently pointing at the
+            // wrong page. See the `Q-5-23`..`Q-5-26` docs pages.
+            write_alias_redirects(project, index, runtime)?;
             // L7 (`bd-qf7r`): replace listing description / image
             // placeholder envelopes with engine-rendered preview
             // content read from sibling outputs. Bracketed feature
@@ -934,7 +949,17 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                 &mut project_diagnostics,
             )
             .await
-            .map_err(|e| QuartoError::other(format!("post_render failed: {e}")))?;
+            // A hook that already produced structured diagnostics
+            // passes through intact. Wrapping it in `other` would
+            // flatten Ariadne spans into a string the caller can no
+            // longer inspect, re-render, or serialize — the CLI would
+            // print pre-rendered ANSI inside a generic message, and
+            // `--to json` would lose the diagnostics entirely.
+            // Opaque errors still get the context prefix.
+            .map_err(|e| match e {
+                QuartoError::Parse(_) => e,
+                other => QuartoError::other(format!("post_render failed: {other}")),
+            })?;
 
         // bd-o8pr Phases 1 + 2: copy resources to the output dir.
         // - Phase 1 (static channel): project- and document-level

@@ -64,6 +64,7 @@ pub mod sidebar_pipeline;
 pub mod theme_light_dark;
 pub mod title_block_pipeline;
 pub mod video_shortcode_preview;
+pub mod website_aliases;
 pub mod website_post_render;
 
 fn main() {}

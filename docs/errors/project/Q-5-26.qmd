@@ -1,0 +1,64 @@
+---
+title: "Alias Resolves Outside the Output Directory"
+description: "An `aliases:` entry climbs above the site's output directory."
+code: Q-5-26
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-26` — Alias Resolves Outside the Output Directory
+
+> An `aliases:` entry climbs above the site's output directory.
+> Redirect stubs must be written inside the site.
+
+## What this means
+
+A redirect stub is a file in your site's output directory. An
+alias with enough `../` segments to climb out of it would write
+somewhere else on disk — outside the site, and outside anything
+you would deploy.
+
+```yaml
+---
+title: Deployment
+aliases:
+  - ../../old-site/deploy.html   # above the output directory
+---
+```
+
+## Why this happens
+
+Relative aliases resolve against the **page's own output
+location**, not against the project root. A page that renders deep
+in the tree can climb further than its author expected:
+
+```yaml
+# renders to _site/index.html
+aliases:
+  - ../old.html    # one level above _site/ — rejected
+```
+
+Absolute aliases have the same limit: a leading `/` means the root
+of the site, so `/../old.html` also climbs out.
+
+## How to fix it
+
+Use a site-root-relative alias, which is almost always what is
+meant:
+
+```yaml
+aliases:
+  - /old.html      # _site/old.html
+```
+
+If you need to redirect from a URL your Quarto project does not
+build, that redirect belongs in your web server or hosting
+configuration rather than in `aliases:`.
+
+## Difference from Quarto 1
+
+Quarto 1 has no guard here and will write the file wherever the
+path lands.
