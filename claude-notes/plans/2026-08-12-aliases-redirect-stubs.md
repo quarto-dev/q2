@@ -4,7 +4,8 @@
 **Braid:** `bd-aliases-redirects-missing-sch7cd1g` (p2, feature, label `website`)
 **Duplicate of / duplicated by:** `bd-hzwecpyk` "Implement page aliases (URL redirects) for website projects" (cderv, 2026-06-23) — see § Duplicate strand
 **Checkout:** invoked on `main` @ `1ba0f2ec` (no worktree created — this skill works in place)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design questions answered 2026-08-12 (§ Design decisions). One open item: stub
+template A-vs-B. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
@@ -196,33 +197,127 @@ pages**. A fragment-less first cut would either drop entries or silently send
 `#deploying-the-content` to the wrong page. `/cookbook/runtime-caches/` has the same
 two-fragment shape.
 
-## Proposed phases (draft)
+## Proposed phases
 
-Skeleton only — contents wait on the design discussion.
+Updated to reflect the decisions above. Phase contents are firm enough to implement once
+the stub-template choice (decision 4) is settled; only Phase 3's template rendering
+depends on it.
 
-- **Phase 0 — Test plan (TDD).** Port the external repro into
+- **Phase 0 — Test plan (TDD).** Promote the repro into
   `crates/quarto-core/tests/integration/website_post_render.rs`, which already has a
-  `render_project(...)` harness driving the real project pipeline. Failing tests first:
-  absolute alias, page-relative alias, extensionless alias, trailing-slash alias,
-  hash-fragment alias, two pages claiming one alias, alias colliding with a real page.
-  Plus a `document_profile.rs` unit test for extraction.
+  `render_project(...)` harness driving the real project pipeline. Failing tests first,
+  one per corpus-attested shape and one per error condition:
+  - resolution: site-root-relative, page-relative, trailing-slash, extensionless, `.html`
+  - fragments: single fragment; two fragments from *two different pages* merging into one
+    stub with two different targets (the `custom-execution-environments` shape); a
+    fragment-less alias coexisting with fragment ones in the same stub
+  - errors: stub-vs-rendered-page collision; same alias + same fragment key from two
+    pages; case-only collision (must fail on Linux too — a `#[cfg]`-free test)
+  - `draft: true` page emits no stub
+  - `default`-project render with `aliases:` warns
+  - plus a `document_profile.rs` unit test for extraction.
 - **Phase 1 — `DocumentProfile::aliases`.** Add `pub aliases: Vec<String>`, extract via
   `extract_string_list(meta, "aliases")`, bump `DOCUMENT_PROFILE_VERSION` 9 → 10, update
-  the version-guard test and the contract doc
-  (`claude-notes/designs/document-profile-contract.md`) change log.
-- **Phase 2 — Alias resolution.** Pure function: `(alias, profile) -> (stub_output_path, fragment, href_back_to_page)`.
-  Unit-testable with no filesystem. Implements the Q1 fixup + resolution rules.
-- **Phase 3 — `write_alias_redirects` in `website_post_render.rs`.** Build the stub map
-  from `index.profiles()`, apply the collision policy (design question 2), render the
-  template, write via `runtime`. Wire into `orchestrator.rs` alongside `write_sitemap`.
-- **Phase 4 — Diagnostics.** Whatever design questions 2/5 settle on: collision warning,
-  same-alias-two-pages warning, and possibly a "`aliases:` ignored outside website
-  projects" notice. New `Q-*` codes need catalog entries **and** `docs/errors/` pages in
-  the same commit (see the `error-docs-page-missing` lint).
-- **Phase 5 — End-to-end verification.** `cargo run --bin q2 -- render` on the repro
-  fixture; inspect the actual stub bytes; diff against the Q1 render. Then re-check the
-  Connect-docs file-count gap (451 vs 352) and report the new number.
-- **Phase 6 — Docs.** User-facing page under `docs/` describing `aliases:`.
+  the `assert_eq!(DOCUMENT_PROFILE_VERSION, 9)` guard at `document_profile.rs:1662` and
+  the contract doc (`claude-notes/designs/document-profile-contract.md`) change log.
+- **Phase 2 — Alias resolution (pure, no filesystem).**
+  `(alias, profile) -> (stub_output_path, fragment, href_back_to_page)`, implementing the
+  Q1 fixup + resolution rules from § Q1 reference behavior. Fully unit-testable.
+- **Phase 3 — Stub map + collision detection.** Fold every profile's aliases into a
+  `stub_path -> {fragment -> target_href}` map. Detect the three error conditions from
+  decision 2, including the case-folded comparison, against
+  `ProjectIndex::lookup_by_href` for the stub-vs-page case. **Collisions must be
+  collected and reported together, not fail on the first one** — a 69-file project with
+  several bad aliases should learn about all of them in one render.
+- **Phase 4 — Template + write.** Render the chosen stub (decision 4) and write via
+  `runtime`. Wire `write_alias_redirects` into `orchestrator.rs` alongside
+  `write_sitemap`. Skip `draft: true` profiles.
+- **Phase 5 — Diagnostics.** `Q-5-23`+ catalog entries for the collision errors, plus the
+  non-website warning. Each code needs a `docs/errors/project/Q-5-NN.qmd` page **in the
+  same commit** (`error-docs-page-missing` lint). Diagnostics should name both colliding
+  pages and the alias that caused it — this is the one chance to explain a hard error on
+  a site that used to render under Q1.
+- **Phase 6 — End-to-end verification.** `cargo run --bin q2 -- render` on the in-tree
+  repro; inspect the actual stub bytes. Then re-render the Connect docs and report the
+  new file-count gap against 451 — and, because of decision 2, whether any of its 106
+  aliases now hard-error.
+- **Phase 7 — Docs.** User-facing page under `docs/` describing `aliases:`, including the
+  documented divergences from Q1 (hard errors, no stubs for drafts).
+
+## Design decisions (user, 2026-08-12)
+
+These supersede the open-questions section below, which is kept for the reasoning that
+led to each.
+
+1. **Duplicate strands — resolved.** `bd-hzwecpyk` **closed** as a duplicate; this strand
+   is the implementation strand. Its Hugo-migration motivation is preserved in a closing
+   comment.
+
+2. **Collision policy — hard error, not Q1's warn-and-skip.** No realistic scenario was
+   identified in which an author wants a colliding alias to survive the render. This
+   diverges from Q1 (which warns and skips the stub-vs-output case, and is *silent* on
+   the two-pages case). Three distinct conditions, all errors:
+   - an alias stub path equals a rendered page's output path;
+   - two pages claim the same alias *and the same fragment key* (including the
+     fragment-less `""` key);
+   - a path collision that exists only under case-folding (see 3).
+
+   Note this is a **hard error on a previously-working Q1 site**: a Connect-docs-style
+   project that Q1 rendered with warnings will now fail the render. That is the intent
+   (silent wrong redirects are worse), but it needs a good diagnostic and a
+   `docs/errors/` page that explains the fix, not just the fault.
+
+3. **Case-insensitive collisions — error, on every platform.** Two paths differing only
+   by case are treated as colliding *regardless of the host filesystem*, so a Linux CI
+   build fails the same way a macOS build does rather than shipping a site that breaks
+   when checked out on a case-insensitive filesystem. Deterministic cross-platform
+   behavior is the point; Q1's guard is an exact string compare and catches none of this.
+
+4. **Stub template — OPEN.** Two candidates written out at
+   `aliases-redirect-stubs-investigation/stub-candidate-{a-q1-parity,b-improved}.html`.
+   B adds a `<noscript><meta http-equiv=refresh>` fallback, `<link rel=canonical>`,
+   `<meta charset>`, a DOCTYPE, and a visible body link. Byte-parity with Q1 is
+   explicitly **not** required — the divergence is to be communicated to the
+   connect-docs agent as an intentional improvement. Recommendation: **B**.
+
+   Two mechanics that must survive whichever is chosen:
+   - The `<meta refresh>` must live **inside `<noscript>`**. Bare, it races the script
+     and can win, sending a fragment-carrying URL to the default target instead of that
+     fragment's own target — which for
+     `/cookbook/custom-execution-environments/#deploying-the-content` is a *different
+     page*. (`<noscript>` in `<head>` may legally contain `meta`/`link`/`style`.)
+   - B introduces three HTML **attribute** contexts for the href where A has none, so B
+     needs real HTML-escaping of `&`/`"`/`<`. A's single JS context is covered by JSON
+     encoding.
+
+   Carried over from Q1 in both candidates, flagged rather than silently decided: when a
+   fragment **is** in the map, the fragment is dropped from the final URL (Q1's
+   `if (!redirects[hash])` guard) — the new page may not have that anchor. Arguably wrong
+   when the anchor survived the move; a separate judgment call from the template choice.
+
+5. **Silence outside website projects — warn.** A `default`-type project or single-file
+   render that declares `aliases:` emits a warning that the key has no effect there.
+   (Warning, not error — unlike the collision cases, nothing is being silently
+   *mis*-rendered; the user is just being told the key is inert.)
+
+6. **Hash fragments — implement properly in the first cut.** Not deferrable; see the
+   corpus measurement above.
+
+7. **Drafts — `draft: true` pages emit no stubs.** Rationale (user): a draft isn't ready,
+   and leaking its existence via a live redirect URL is worse than over-eagerly hiding a
+   draft. Recorded as a comment on `bd-4zdf` so the sitemap question resolves the same
+   way rather than being re-decided.
+
+8. **Stale stubs — follow-up strand `bd-wdhhl0t9`** (`discovered-from` this one). Out of
+   scope for the initial implementation.
+
+### Error codes to add
+
+`project` is the right subsystem; next free codes are **`Q-5-23`, `Q-5-24`, `Q-5-25`**
+(highest in use is `Q-5-22`). Whether the three conditions in decision 2 are one code
+with variants or three separate codes is an implementation call. Each new code needs a
+`docs/errors/project/Q-5-NN.qmd` page **in the same commit** — enforced by the
+`error-docs-page-missing` lint.
 
 ## Open design questions for the user
 
@@ -271,7 +366,17 @@ Skeleton only — contents wait on the design discussion.
    `_site/` across incremental renders. Q1 has the same behavior. Out of scope, or track
    as a follow-up strand?
 
-## Risks / tradeoffs (draft)
+## Risks / tradeoffs
+
+- **Decision 2 makes this a breaking change for existing Q1 sites.** Alias collisions
+  that Q1 tolerated (with a warning, or silently) now fail the render. This is
+  deliberate, but it means the Connect-docs port could go from "renders with a gap" to
+  "does not render" on first contact — Phase 6 must check this explicitly, and the
+  diagnostics from Phase 5 are what make it recoverable rather than infuriating.
+- **Case-folding comparison needs a defined rule.** "Differs only by case" is
+  ASCII-simple but Unicode-hard (Turkish dotless ı, ligatures, normalization forms).
+  Suggest ASCII-only case folding plus exact comparison for the rest, documented — not
+  full Unicode case folding, which would surprise in the other direction.
 
 - **`DOCUMENT_PROFILE_VERSION` bump is cheap but not invisible.** `cache_key.rs` folds
   the version into its hash, so every project's profile cache invalidates once on the
