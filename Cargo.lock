@@ -4825,7 +4825,7 @@ dependencies = [
 [[package]]
 name = "samod"
 version = "0.13.0"
-source = "git+https://github.com/shikokuchuo/samod.git?branch=access-policy#067679615bb9d950d59a4e276ae4d3cfd7fa1e62"
+source = "git+https://github.com/quarto-dev/samod.git?branch=access-policy#067679615bb9d950d59a4e276ae4d3cfd7fa1e62"
 dependencies = [
  "async-channel",
  "automerge",
@@ -4848,7 +4848,7 @@ dependencies = [
 [[package]]
 name = "samod-core"
 version = "0.13.0"
-source = "git+https://github.com/shikokuchuo/samod.git?branch=access-policy#067679615bb9d950d59a4e276ae4d3cfd7fa1e62"
+source = "git+https://github.com/quarto-dev/samod.git?branch=access-policy#067679615bb9d950d59a4e276ae4d3cfd7fa1e62"
 dependencies = [
  "automerge",
  "base64 0.21.7",
