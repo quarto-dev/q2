@@ -1391,5 +1391,33 @@
     "message_template": "Cell options are written in the cell language's own comment syntax. A mermaid diagram comments with `%%`, so its options are `%%|` — `#|` is not a mermaid comment and becomes part of the diagram, which mermaid then fails to parse.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-48",
     "since_version": "99.9.9"
+  },
+  "Q-5-23": {
+    "subsystem": "project",
+    "title": "Alias Would Overwrite a Rendered Page",
+    "message_template": "An `aliases:` entry resolves to a path where the project renders a page. Writing the redirect stub there would replace that page, so the render stops instead.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-23",
+    "since_version": "99.9.9"
+  },
+  "Q-5-24": {
+    "subsystem": "project",
+    "title": "Two Pages Claim the Same Alias",
+    "message_template": "Two pages declare `aliases:` entries that resolve to the same redirect, so only one of them could take effect. Also raised when several pages route fragments through one alias and none claims the fragment-less URL.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-24",
+    "since_version": "99.9.9"
+  },
+  "Q-5-25": {
+    "subsystem": "project",
+    "title": "Alias Paths Differ Only by Case",
+    "message_template": "Two paths differ only in capitalization, which macOS and Windows treat as the same file. Checked on every platform so a Linux build cannot ship a site that breaks when served elsewhere.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-25",
+    "since_version": "99.9.9"
+  },
+  "Q-5-26": {
+    "subsystem": "project",
+    "title": "Alias Resolves Outside the Output Directory",
+    "message_template": "An `aliases:` entry climbs above the site's output directory. Redirect stubs must be written inside the site.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-26",
+    "since_version": "99.9.9"
   }
 }

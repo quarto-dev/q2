@@ -1,0 +1,5 @@
+---
+title: Home
+---
+
+See [the current page](current/index.qmd).

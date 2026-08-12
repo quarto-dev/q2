@@ -1,0 +1,8 @@
+---
+title: Current location
+aliases:
+  - /old-name.html
+  - ../previous/index.html
+---
+
+This page used to live at `/old-name.html` and `/previous/`.
