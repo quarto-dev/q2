@@ -22,8 +22,11 @@
 //!    warning for the missing editor dist — unlike the viewer it is
 //!    opt-in (`--ui editor`), and the placeholder page names the fix.
 //!
-//! Both paths are exposed via `cargo:rustc-env` and consumed by
-//! `src/lib.rs` through `include_dir!("$VAR")`.
+//! Both dirs are then archived as deterministic, identity-only
+//! tar.zst (bd-rem4bpee — `.gz` precompression siblings stay out of
+//! the binary; the runtime regenerates gzip responses lazily) and
+//! exposed via `cargo:rustc-env`, consumed by `src/lib.rs` through
+//! `include_bytes!(env!("$VAR"))`.
 
 use std::path::{Path, PathBuf};
 
@@ -38,11 +41,6 @@ fn main() {
     } else {
         make_placeholder_dist()
     };
-
-    println!(
-        "cargo:rustc-env=QUARTO_PREVIEW_EMBED_DIR={}",
-        embed_dir.display()
-    );
 
     // Re-run if the real dist/ tree changes. Directory-mtime watches
     // miss in-place file rewrites (vite emits hashed filenames so this
@@ -65,13 +63,90 @@ fn main() {
     } else {
         make_editor_placeholder()
     };
-    println!(
-        "cargo:rustc-env=QUARTO_HUB_CLIENT_EMBED_DIR={}",
-        editor_embed_dir.display()
-    );
     println!("cargo:rerun-if-changed={}", editor_dist.display());
     if editor_dist.is_dir() {
         watch_recursive(&editor_dist);
+    }
+
+    // Archive both embed dirs as deterministic identity-only tar.zst
+    // (bd-rem4bpee) — after the editor manifest write above, so
+    // `spa-manifest.json` rides inside the editor archive.
+    let viewer_archive = archive_embed_dir(&embed_dir, "viewer-embed.tar.zst");
+    println!(
+        "cargo:rustc-env=QUARTO_PREVIEW_EMBED_ARCHIVE={}",
+        viewer_archive.display()
+    );
+    let editor_archive = archive_embed_dir(&editor_embed_dir, "editor-embed.tar.zst");
+    println!(
+        "cargo:rustc-env=QUARTO_HUB_CLIENT_EMBED_ARCHIVE={}",
+        editor_archive.display()
+    );
+}
+
+/// Archive an embed dir as a deterministic tar.zst in `OUT_DIR`
+/// (bd-rem4bpee). Identity files only: the `.gz` precompression
+/// siblings are incompressible and stay out of the binary — the
+/// runtime regenerates gzip responses lazily. Deterministic for
+/// reproducible builds: entries sorted by relative path, forward-slash
+/// normalized, mtime 0, fixed mode.
+fn archive_embed_dir(dir: &Path, archive_name: &str) -> PathBuf {
+    use std::io::Write;
+
+    let mut rels = Vec::new();
+    collect_identity_files(dir, dir, &mut rels);
+    rels.sort();
+
+    let mut builder = tar::Builder::new(Vec::new());
+    for rel in &rels {
+        let bytes = std::fs::read(dir.join(rel)).expect("read embed file");
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_mtime(0);
+        header.set_cksum();
+        let name = rel.to_string_lossy().replace('\\', "/");
+        builder
+            .append_data(&mut header, name, bytes.as_slice())
+            .expect("append tar entry");
+    }
+    let tar_bytes = builder.into_inner().expect("finish tar");
+
+    let mut encoder = zstd::stream::Encoder::new(Vec::new(), 19).expect("zstd encoder");
+    if let Ok(n) = std::thread::available_parallelism() {
+        let _ = encoder.multithread(n.get() as u32);
+    }
+    encoder.write_all(&tar_bytes).expect("zstd compress");
+    let zst = encoder.finish().expect("zstd finish");
+
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let archive = out_dir.join(archive_name);
+    std::fs::write(&archive, zst).expect("write embed archive");
+    archive
+}
+
+/// Every non-`.gz` file under `dir`, as `root`-relative paths. The
+/// `.gz` siblings are the npm precompress pass's output for the
+/// disk-serving path; they are never embedded.
+fn collect_identity_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(it) => it,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            collect_identity_files(root, &path, out);
+            continue;
+        }
+        if path.extension().is_some_and(|e| e == "gz") {
+            continue;
+        }
+        out.push(
+            path.strip_prefix(root)
+                .expect("entry under walk root")
+                .to_path_buf(),
+        );
     }
 }
 

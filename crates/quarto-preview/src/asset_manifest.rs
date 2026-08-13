@@ -62,12 +62,11 @@ pub fn embedded_manifests() -> EmbeddedManifests {
 /// post-resolution editor view; the viewer's manifest would describe
 /// the wrong bundle). Phase 3's join frontend routes on the entry set.
 pub fn embedded_manifest(ui: PreviewUi) -> Option<spa_manifest::Manifest> {
-    let dir = match ui {
-        PreviewUi::Viewer => &EMBEDDED_SPA,
-        PreviewUi::Editor => &EMBEDDED_EDITOR,
-    };
-    let file = dir.get_file(spa_manifest::MANIFEST_FILENAME)?;
-    let text = std::str::from_utf8(file.contents()).ok()?;
+    let bytes = match ui {
+        PreviewUi::Viewer => EMBEDDED_SPA.get(spa_manifest::MANIFEST_FILENAME),
+        PreviewUi::Editor => EMBEDDED_EDITOR.get(spa_manifest::MANIFEST_FILENAME),
+    }?;
+    let text = std::str::from_utf8(bytes).ok()?;
     spa_manifest::parse(text).ok()
 }
 

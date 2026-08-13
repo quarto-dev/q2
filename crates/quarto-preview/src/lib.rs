@@ -8,8 +8,9 @@
 //! `index.html` can own `/`; that's controlled via
 //! `HubConfig::register_root_ws = false`.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{Context, Result};
 use axum::{
@@ -18,7 +19,6 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use include_dir::{Dir, include_dir};
 use quarto_core::engine::EngineRegistry;
 use quarto_hub::{StorageManager, context::HubConfig, server, watch::WatchFilter};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
@@ -39,18 +39,85 @@ pub use asset_manifest::{
 };
 pub use config::EnginePolicy;
 
-/// The SPA bundle embedded at build time. See `build.rs` for how the
-/// source directory is chosen (real `q2-preview-spa/dist/` if present,
-/// else a placeholder).
-static EMBEDDED_SPA: Dir<'_> = include_dir!("$QUARTO_PREVIEW_EMBED_DIR");
+/// The SPA bundle embedded at build time as an identity-only tar.zst
+/// archive (bd-rem4bpee). See `build.rs` for how the source directory
+/// is chosen (real `q2-preview-spa/dist/` if present, else a
+/// placeholder) and archived.
+static EMBEDDED_SPA: EmbeddedBundle =
+    EmbeddedBundle::new(include_bytes!(env!("QUARTO_PREVIEW_EMBED_ARCHIVE")));
 
 /// The hub-client editor bundle embedded for `--ui editor` (live-share
-/// plan Phase 4, bd-jt1etjbn). See `build.rs`: the real
-/// `hub-client/dist-preview-embed/` when built (with files
+/// plan Phase 4, bd-jt1etjbn), same archive treatment. See `build.rs`:
+/// the real `hub-client/dist-preview-embed/` when built (with files
 /// byte-identical to the viewer dist stripped — those are served
 /// through [`EMBEDDED_SPA`] by [`lookup_embedded`]), else a
 /// placeholder pointing at `cargo xtask build-hub-client-embed`.
-static EMBEDDED_EDITOR: Dir<'_> = include_dir!("$QUARTO_HUB_CLIENT_EMBED_DIR");
+static EMBEDDED_EDITOR: EmbeddedBundle =
+    EmbeddedBundle::new(include_bytes!(env!("QUARTO_HUB_CLIENT_EMBED_ARCHIVE")));
+
+/// An embedded SPA bundle: identity files only, held in the binary as
+/// a tar.zst archive and decompressed into a lookup map on first
+/// access (bd-rem4bpee). Lazy so `q2 render` — which never serves
+/// assets — pays nothing: no CPU, no RSS.
+struct EmbeddedBundle {
+    archive: &'static [u8],
+    files: OnceLock<HashMap<String, Box<[u8]>>>,
+}
+
+impl EmbeddedBundle {
+    const fn new(archive: &'static [u8]) -> Self {
+        EmbeddedBundle {
+            archive,
+            files: OnceLock::new(),
+        }
+    }
+
+    fn files(&'static self) -> &'static HashMap<String, Box<[u8]>> {
+        self.files
+            .get_or_init(|| decode_embedded_archive(self.archive))
+    }
+
+    /// The bundle's file at `rel` (a `/`-separated, dist-relative
+    /// path), when present.
+    fn get(&'static self, rel: &str) -> Option<&'static [u8]> {
+        self.files().get(rel).map(|b| &**b)
+    }
+
+    /// All dist-relative paths in the bundle. Test seam: the serving
+    /// paths only ever look files up, never iterate.
+    #[cfg(test)]
+    fn paths(&'static self) -> impl Iterator<Item = &'static str> {
+        self.files().keys().map(String::as_str)
+    }
+}
+
+/// Decode an embedded tar.zst bundle into its path → bytes map. The
+/// archive is written by this crate's own build.rs, so a decode
+/// failure is a build bug, not a runtime condition — hence the
+/// expects.
+fn decode_embedded_archive(archive: &'static [u8]) -> HashMap<String, Box<[u8]>> {
+    let decoder =
+        zstd::stream::read::Decoder::new(archive).expect("embedded tar.zst must initialize");
+    let mut tar = tar::Archive::new(decoder);
+    let mut files = HashMap::new();
+    let entries = tar.entries().expect("embedded tar.zst must list entries");
+    for entry in entries {
+        let mut entry = entry.expect("embedded tar.zst entry must parse");
+        if !entry.header().entry_type().is_file() {
+            continue;
+        }
+        let rel = entry
+            .path()
+            .expect("embedded tar.zst entry path must be valid")
+            .to_string_lossy()
+            .into_owned();
+        let mut bytes = Vec::with_capacity(entry.header().size().unwrap_or(0) as usize);
+        std::io::Read::read_to_end(&mut entry, &mut bytes)
+            .expect("embedded tar.zst entry must decode");
+        files.insert(rel, bytes.into_boxed_slice());
+    }
+    files
+}
 
 /// Optional override pointing at a SPA bundle on disk. Set once at
 /// `run()` start and read on every SPA-fallback invocation. Process-
@@ -136,7 +203,7 @@ pub fn set_editor_boot(info: EditorBootInfo) {
 /// UI × write policy is a real 2×2, so `--ui editor` without
 /// `--allow-edit` is a deliberate sandbox mode (guests' edits drive the
 /// live session; the host's disk stays authoritative).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum PreviewUi {
     /// The read-only preview SPA (q2-preview-spa) — the default.
     #[default]
@@ -729,12 +796,10 @@ fn current_ui() -> PreviewUi {
 /// shared content-hashed assets (most notably the ~42 MB
 /// `wasm_quarto_hub_client_bg-*.wasm`) are embedded once, in the viewer
 /// bundle. Viewer mode never reads the editor embed.
-fn lookup_embedded(ui: PreviewUi, rel: &str) -> Option<&'static include_dir::File<'static>> {
+fn lookup_embedded(ui: PreviewUi, rel: &str) -> Option<&'static [u8]> {
     match ui {
-        PreviewUi::Viewer => EMBEDDED_SPA.get_file(rel),
-        PreviewUi::Editor => EMBEDDED_EDITOR
-            .get_file(rel)
-            .or_else(|| EMBEDDED_SPA.get_file(rel)),
+        PreviewUi::Viewer => EMBEDDED_SPA.get(rel),
+        PreviewUi::Editor => EMBEDDED_EDITOR.get(rel).or_else(|| EMBEDDED_SPA.get(rel)),
     }
 }
 
@@ -744,8 +809,8 @@ fn lookup_embedded(ui: PreviewUi, rel: &str) -> Option<&'static include_dir::Fil
 /// actually flips which embed the fallback serves.
 pub fn embedded_editor_index_html() -> Option<&'static str> {
     EMBEDDED_EDITOR
-        .get_file("index.html")
-        .and_then(|f| f.contents_utf8())
+        .get("index.html")
+        .and_then(|bytes| std::str::from_utf8(bytes).ok())
 }
 
 /// The note announced when `--ui editor` runs without `--allow-edit`
@@ -774,14 +839,14 @@ async fn spa_handler(req: axum::http::Request<axum::body::Body>) -> Response {
     let ui = current_ui();
     // Try the exact path first (an asset like `assets/index-<hash>.js`).
     if let Some(file) = lookup_embedded(ui, rel) {
-        return asset_response(rel, file.contents().to_vec(), embedded_gz(ui, rel), ctx);
+        return asset_response(rel, file.to_vec(), embedded_gz(ui, rel), ctx);
     }
     // SPA fallback: any non-asset path gets `index.html` for client-
     // side routing.
     if let Some(index) = lookup_embedded(ui, "index.html") {
         return asset_response(
             "index.html",
-            index.contents().to_vec(),
+            index.to_vec(),
             embedded_gz(ui, "index.html"),
             ctx,
         );
@@ -789,10 +854,49 @@ async fn spa_handler(req: axum::http::Request<axum::body::Body>) -> Response {
     (StatusCode::NOT_FOUND, "no spa").into_response()
 }
 
-/// The precompressed `<rel>.gz` sibling of an embedded asset, present
-/// when the dist was built with the xtask precompression pass (Phase 1).
+/// Runtime-generated gzip bytes for an embedded asset (bd-rem4bpee).
+/// The archive embed is identity-only — the precompressed `.gz`
+/// siblings stay out of the binary — so the first gzip-accepted
+/// request for a compressible file pays the compression (level 9,
+/// matching the precompress pass's `Z_BEST_COMPRESSION`), cached per
+/// (UI, path) thereafter. Files the precompress pass skips
+/// (already-compressed containers) report None, exactly as when the
+/// `.gz` siblings were embedded.
 fn embedded_gz(ui: PreviewUi, rel: &str) -> Option<Vec<u8>> {
-    lookup_embedded(ui, &format!("{rel}.gz")).map(|f| f.contents().to_vec())
+    if !gz_compressible(rel) {
+        return None;
+    }
+    let identity = lookup_embedded(ui, rel)?;
+    let cache = GZ_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let key = (ui, rel.to_string());
+    if let Some(hit) = cache.lock().expect("gz cache poisoned").get(&key) {
+        return Some(hit.clone());
+    }
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
+    std::io::Write::write_all(&mut encoder, identity).expect("gzip encode is infallible");
+    let gz = encoder.finish().expect("gzip finish is infallible");
+    cache
+        .lock()
+        .expect("gz cache poisoned")
+        .insert(key, gz.clone());
+    Some(gz)
+}
+
+/// The runtime gzip cache: (UI, dist-relative path) → gzip bytes.
+/// Lookup-only, never iterated (the coding.md HashMap carve-out).
+static GZ_CACHE: OnceLock<Mutex<HashMap<(PreviewUi, String), Vec<u8>>>> = OnceLock::new();
+
+/// Mirror of `scripts/precompress-dist.mjs`'s SKIP_EXTENSIONS: the
+/// already-compressed containers that never got a `.gz` sibling. The
+/// runtime gzip path must match that set exactly — gzipping a skipped
+/// type would diverge from the disk-served wire contract.
+fn gz_compressible(rel: &str) -> bool {
+    const SKIP: &[&str] = &[
+        "br", "gz", "woff", "woff2", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "mp4",
+        "webm", "pdf", "zip",
+    ];
+    let ext = rel.rsplit('.').next().unwrap_or("");
+    !SKIP.contains(&ext.to_ascii_lowercase().as_str())
 }
 
 /// Serve a `resources:`-declared file from disk at the artifact-rooted path the
@@ -834,7 +938,7 @@ async fn serve_spa_index(ctx: AssetRequestCtx<'_>) -> Response {
     if let Some(index) = lookup_embedded(ui, "index.html") {
         return asset_response(
             "index.html",
-            index.contents().to_vec(),
+            index.to_vec(),
             embedded_gz(ui, "index.html"),
             ctx,
         );
@@ -1083,32 +1187,18 @@ mod tests {
     // that is how one ~38 MB WASM serves both frontends.
     // ──────────────────────────────────────────────────────────────
 
-    fn files_recursive(
-        dir: &'static include_dir::Dir<'static>,
-    ) -> Vec<&'static include_dir::File<'static>> {
-        let mut out = Vec::new();
-        let mut stack = vec![dir];
-        while let Some(d) = stack.pop() {
-            out.extend(d.files());
-            stack.extend(d.dirs());
-        }
-        out
-    }
-
     #[test]
     fn editor_lookup_serves_editor_index_with_react_mount() {
         let file = lookup_embedded(PreviewUi::Editor, "index.html")
             .expect("the editor embed always has an index.html (real dist or placeholder)");
         let expected = EMBEDDED_EDITOR
-            .get_file("index.html")
-            .expect("editor embed index.html")
-            .contents();
+            .get("index.html")
+            .expect("editor embed index.html");
         assert_eq!(
-            file.contents(),
-            expected,
+            file, expected,
             "editor mode must serve the *editor* embed's index, never the viewer's"
         );
-        let html = std::str::from_utf8(file.contents()).expect("index.html is UTF-8");
+        let html = std::str::from_utf8(file).expect("index.html is UTF-8");
         assert!(
             html.contains(r#"id="root""#),
             "even the placeholder must carry the React mount point:\n{html}"
@@ -1119,9 +1209,8 @@ mod tests {
     fn viewer_lookup_never_reads_the_editor_embed() {
         // Viewer mode is Phase-A behavior, byte for byte: any file that
         // exists only in the editor embed must miss in viewer mode.
-        for editor_file in files_recursive(&EMBEDDED_EDITOR) {
-            let rel = editor_file.path().to_str().expect("utf-8 rel path");
-            if EMBEDDED_SPA.get_file(rel).is_some() {
+        for rel in EMBEDDED_EDITOR.paths() {
+            if EMBEDDED_SPA.get(rel).is_some() {
                 continue; // viewer legitimately has its own copy
             }
             assert!(
@@ -1138,19 +1227,89 @@ mod tests {
         // viewer's bytes. On a placeholder tree the shared set is empty
         // and this loop body never runs; on a built tree the ~38 MB
         // wasm_quarto_hub_client_bg-*.wasm is the load-bearing case.
-        for viewer_file in files_recursive(&EMBEDDED_SPA) {
-            let rel = viewer_file.path().to_str().expect("utf-8 rel path");
-            if EMBEDDED_EDITOR.get_file(rel).is_some() {
+        for rel in EMBEDDED_SPA.paths() {
+            if EMBEDDED_EDITOR.get(rel).is_some() {
                 continue; // editor's own copy wins; covered elsewhere
             }
             let served = lookup_embedded(PreviewUi::Editor, rel)
                 .unwrap_or_else(|| panic!("shared asset {rel} must fall back to the viewer embed"));
             assert_eq!(
-                served.contents(),
-                viewer_file.contents(),
+                served,
+                EMBEDDED_SPA.get(rel).expect("viewer file"),
                 "fallback for {rel} must serve the viewer's bytes"
             );
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // tar.zst archive embed (bd-rem4bpee): the bundles embed as
+    // identity-only tar.zst archives, decompressed lazily on first
+    // asset request; gzip responses are generated at runtime, so no
+    // `.gz` sibling may ride along in the binary.
+    // ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn embedded_bundles_hold_no_gz_siblings() {
+        for (label, bundle) in [("viewer", &EMBEDDED_SPA), ("editor", &EMBEDDED_EDITOR)] {
+            for rel in bundle.paths() {
+                assert!(
+                    !rel.ends_with(".gz"),
+                    "{label} embed carries precompressed sibling {rel} — \
+                     the archive embed is identity-only"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn gz_compressible_mirrors_the_precompress_skip_set() {
+        // The runtime gzip path must match scripts/precompress-dist.mjs's
+        // SKIP_EXTENSIONS exactly: those files never had a `.gz` sibling,
+        // so gzipping them at runtime would change the wire contract.
+        for compressible in [
+            "a.js", "a.css", "a.wasm", "a.html", "a.svg", "a.ttf", "a.json",
+        ] {
+            assert!(
+                gz_compressible(compressible),
+                "{compressible} must be gzipped at runtime"
+            );
+        }
+        for skipped in [
+            "a.woff", "a.woff2", "a.png", "a.jpg", "a.jpeg", "a.gif", "a.webp", "a.avif", "a.ico",
+            "a.mp4", "a.webm", "a.pdf", "a.zip", "a.br", "a.gz",
+        ] {
+            assert!(
+                !gz_compressible(skipped),
+                "{skipped} is an already-compressed container"
+            );
+        }
+    }
+
+    #[test]
+    fn embedded_gz_gunzips_to_identity() {
+        // index.html exists on both tree states (real dist and
+        // placeholder), so this runs everywhere.
+        let identity = lookup_embedded(PreviewUi::Viewer, "index.html")
+            .expect("index.html is always embedded");
+        let gz = embedded_gz(PreviewUi::Viewer, "index.html").expect("index.html is compressible");
+        let mut decoded = Vec::new();
+        std::io::Read::read_to_end(
+            &mut flate2::read::GzDecoder::new(gz.as_slice()),
+            &mut decoded,
+        )
+        .expect("runtime-generated gz gunzips");
+        assert_eq!(
+            decoded, identity,
+            "runtime gz must decode to the identity bytes"
+        );
+    }
+
+    #[test]
+    fn embedded_gz_none_for_already_compressed_types() {
+        // Holds on both tree states: the extension check precedes any
+        // lookup, so even a missing file must report None here.
+        assert!(embedded_gz(PreviewUi::Viewer, "assets/x.woff2").is_none());
+        assert!(embedded_gz(PreviewUi::Viewer, "assets/x.png").is_none());
     }
 
     #[test]
@@ -1160,15 +1319,13 @@ mod tests {
         // been stripped from the editor embed (it is served via the
         // viewer fallback instead). Guards against a naive double-embed
         // quietly re-adding ~38 MB to the binary.
-        for editor_file in files_recursive(&EMBEDDED_EDITOR) {
-            let rel = editor_file.path();
-            if let Some(viewer_file) = EMBEDDED_SPA.get_file(rel) {
+        for rel in EMBEDDED_EDITOR.paths() {
+            if let Some(viewer_bytes) = EMBEDDED_SPA.get(rel) {
                 assert_ne!(
-                    viewer_file.contents(),
-                    editor_file.contents(),
-                    "{} is byte-identical in both embeds — build.rs should have stripped it \
-                     from the editor embed",
-                    rel.display()
+                    viewer_bytes,
+                    EMBEDDED_EDITOR.get(rel).expect("editor file"),
+                    "{rel} is byte-identical in both embeds — build.rs should have stripped it \
+                     from the editor embed"
                 );
             }
         }

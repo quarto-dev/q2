@@ -428,7 +428,7 @@ async fn serve_local(
     };
     let parts = asset_response_parts(
         rel,
-        file.contents().to_vec(),
+        file.to_vec(),
         embedded_gz(ui, rel),
         AssetRequestCtx {
             accept_encoding: accept_encoding.as_ref(),

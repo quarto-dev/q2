@@ -9,7 +9,6 @@ description = "Local HTTP server hosting the q2-preview SPA. Wraps quarto-hub fo
 [dependencies]
 anyhow.workspace = true
 tracing.workspace = true
-include_dir.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "fs", "sync"] }
 axum = "0.8"
 flate2.workspace = true
@@ -36,12 +35,19 @@ quarto-source-map.workspace = true
 quarto-system-runtime.workspace = true
 quarto-trace.workspace = true
 spa-manifest.workspace = true
+# The embed format: identity-only tar.zst archives, decoded lazily at
+# runtime (bd-rem4bpee). flate2 (above) regenerates gzip responses.
+tar.workspace = true
+zstd.workspace = true
 
 [build-dependencies]
 # Writes the editor embed's spa-manifest.json over the post-dedupe,
 # post-resolution file view (live-share plan Phase 2, design decision
 # 4 — only this script knows that file set).
 spa-manifest.workspace = true
+# Archives the embed dirs to tar.zst at compile time (bd-rem4bpee).
+tar.workspace = true
+zstd.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
