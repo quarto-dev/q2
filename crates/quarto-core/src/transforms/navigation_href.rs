@@ -409,6 +409,28 @@ pub fn resolve_static_resource_href(
     }
 }
 
+/// Resolve a **project-root-relative** static-resource path to a
+/// page-relative URL.
+///
+/// Sibling of [`resolve_static_resource_href`] for *config-declared*
+/// assets (the navbar logo, footer imagery): nav-surface paths are
+/// project-root-relative by convention (Phase 2 Decision 7/8), and a
+/// leading `/` means the same thing (decision 4 of
+/// bd-root-relative-paths-design-fc5pvkcv), so there is no source
+/// document to normalize against — delegating with an empty
+/// `source_relative` anchors relative paths at the project root.
+///
+/// This is what lets one config value serve pages at every depth: the
+/// value `images/logo.svg` emits as `images/logo.svg` on the root
+/// page and `../../images/logo.svg` two levels down, instead of one
+/// literal that can only be correct at a single depth.
+pub fn resolve_root_relative_resource_href(
+    raw: &str,
+    resolver: Option<&ResourceResolverContext>,
+) -> String {
+    resolve_static_resource_href(raw, "", resolver)
+}
+
 /// Resolve a navigation href to its project-root-relative form using
 /// the source location of the YAML scalar that produced it.
 ///

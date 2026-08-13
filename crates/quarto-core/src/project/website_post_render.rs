@@ -112,11 +112,81 @@ pub(super) fn copy_favicon(
         return Ok(());
     }
 
-    let dst = project.output_dir.join(&normalized);
+    copy_asset_file(project, runtime, &normalized, "favicon")
+}
+
+/// Copy the navbar logo (`website.navbar.logo` / `navbar.logo`) from
+/// the project root to the output directory.
+///
+/// Decision 5 of bd-root-relative-paths-design-fc5pvkcv: favicon is
+/// not special — config-declared assets q2 knows about get the same
+/// warn-and-continue copy treatment. Same no-op cases as
+/// [`copy_favicon`]: no metadata, no navbar/logo, external URL.
+/// A leading `/` is site-root-relative (decision 4) and strips to the
+/// same project-relative path.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn copy_navbar_logo(
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Result<()> {
+    let Some(meta) = project.config.metadata.as_ref() else {
+        return Ok(());
+    };
+    let Some(navbar) = quarto_navigation::resolve_navbar(meta) else {
+        return Ok(());
+    };
+    let Some(raw) = navbar.logo else {
+        return Ok(());
+    };
+    // External logo URLs are served by whoever hosts them (mirrors
+    // the favicon rule, and checks before slash-stripping so
+    // protocol-relative `//host/x` is never misread as site-rooted).
+    if quarto_util::is_external_url(&raw) {
+        return Ok(());
+    }
+    let normalized = raw.strip_prefix('/').unwrap_or(&raw);
+    if normalized.is_empty() {
+        return Ok(());
+    }
+
+    let src = project.dir.join(normalized);
+    let exists = runtime.path_exists(&src, None).map_err(|e| {
+        QuartoError::other(format!(
+            "Failed to probe navbar logo source {}: {}",
+            src.display(),
+            e
+        ))
+    })?;
+    if !exists {
+        diagnostics.push(DiagnosticMessage::warning(format!(
+            "website.navbar.logo refers to missing file '{}'",
+            normalized
+        )));
+        return Ok(());
+    }
+
+    copy_asset_file(project, runtime, normalized, "navbar logo")
+}
+
+/// Copy `<project>/<normalized>` → `<output>/<normalized>`, creating
+/// parent directories. Shared tail of the config-asset copy hooks
+/// ([`copy_favicon`], [`copy_navbar_logo`]); callers have already
+/// resolved, normalized, and existence-checked the path.
+#[cfg(not(target_arch = "wasm32"))]
+fn copy_asset_file(
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    normalized: &str,
+    what: &str,
+) -> Result<()> {
+    let src = project.dir.join(normalized);
+    let dst = project.output_dir.join(normalized);
     if let Some(parent) = dst.parent() {
         runtime.dir_create(parent, true).map_err(|e| {
             QuartoError::other(format!(
-                "Failed to create favicon directory {}: {}",
+                "Failed to create {} directory {}: {}",
+                what,
                 parent.display(),
                 e
             ))
@@ -124,7 +194,8 @@ pub(super) fn copy_favicon(
     }
     runtime.file_copy(&src, &dst).map_err(|e| {
         QuartoError::other(format!(
-            "Failed to copy favicon {} → {}: {}",
+            "Failed to copy {} {} → {}: {}",
+            what,
             src.display(),
             dst.display(),
             e

@@ -34,7 +34,9 @@ use crate::render::RenderContext;
 use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::is_feature_disabled;
-use crate::transforms::navigation_href::{NavSurface, resolve_href_for_html};
+use crate::transforms::navigation_href::{
+    NavSurface, resolve_href_for_html, resolve_root_relative_resource_href,
+};
 
 pub struct NavbarRenderTransform;
 
@@ -109,6 +111,14 @@ impl AstTransform for NavbarRenderTransform {
                 location,
                 &mut local_diags,
             );
+        }
+        // Brand `logo` (Case A of
+        // bd-root-relative-paths-design-fc5pvkcv): a config-declared
+        // static asset — project-root-relative after the generate
+        // transform — relativized per page so it resolves at every
+        // depth. Not an index lookup: the logo is a file, not a doc.
+        if let Some(logo) = navbar.logo.as_mut() {
+            *logo = resolve_root_relative_resource_href(logo, ctx.resource_resolver.as_ref());
         }
         ctx.diagnostics = local_diags;
 
@@ -820,6 +830,83 @@ mod tests {
         assert!(
             html.contains("<a class=\"navbar-brand\" href=\"https://example.com/\">"),
             "external logo_href should pass through unchanged; got: {}",
+            html
+        );
+    }
+
+    // ---- Case A (bd-root-relative-paths-design-fc5pvkcv): brand logo ----
+
+    async fn render_navbar_logo(logo: &str) -> String {
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            logo: Some(logo.to_string()),
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/tools/converter.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/tools/converter.html",
+            "site_libs",
+            "converter",
+        );
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_resource_resolver(resolver);
+        NavbarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        ast.meta
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap()
+    }
+
+    /// The brand `logo` is a config-declared static asset —
+    /// project-root-relative by convention, shared by pages at every
+    /// depth — so it must relativize per page like `logo-href` does.
+    /// From a depth-1 page, `images/logo.svg` emits as
+    /// `../images/logo.svg`.
+    #[tokio::test]
+    async fn navbar_render_brand_logo_rebased_at_depth() {
+        let html = render_navbar_logo("images/logo.svg").await;
+        assert!(
+            html.contains("<img src=\"../images/logo.svg\""),
+            "logo must be page-relative from a depth-1 page; got: {}",
+            html
+        );
+    }
+
+    /// A leading `/` means the same thing (site-root-relative,
+    /// decision 4) — identical output to the bare form.
+    #[tokio::test]
+    async fn navbar_render_brand_root_slash_logo_rebased_at_depth() {
+        let html = render_navbar_logo("/images/logo.svg").await;
+        assert!(
+            html.contains("<img src=\"../images/logo.svg\""),
+            "leading-/ logo must rebase identically; got: {}",
+            html
+        );
+    }
+
+    /// External logo URLs pass through unchanged.
+    #[tokio::test]
+    async fn navbar_render_brand_external_logo_passes_through() {
+        let html = render_navbar_logo("https://cdn.example.com/logo.svg").await;
+        assert!(
+            html.contains("<img src=\"https://cdn.example.com/logo.svg\""),
+            "external logo must pass through; got: {}",
             html
         );
     }

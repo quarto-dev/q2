@@ -384,9 +384,11 @@ impl ProjectType for WebsiteProjectType {
         #[cfg(not(target_arch = "wasm32"))]
         {
             use super::website_post_render::{
-                copy_favicon, write_alias_redirects, write_robots_txt, write_sitemap,
+                copy_favicon, copy_navbar_logo, write_alias_redirects, write_robots_txt,
+                write_sitemap,
             };
             copy_favicon(project, runtime, diagnostics)?;
+            copy_navbar_logo(project, runtime, diagnostics)?;
             write_sitemap(project, index, output_paths, runtime)?;
             write_robots_txt(project, runtime)?;
             // `aliases:` redirect stubs

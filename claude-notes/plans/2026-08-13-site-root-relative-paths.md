@@ -259,15 +259,30 @@ Work items:
 
 ### Phase 2 — Case A (navbar logo)
 
-- [ ] Failing tests: logo resolution at depth (generate + render
-      transform units); logo copy + missing-file warning; e2e at depth 2
-- [ ] Implement: `logo_source: SourceInfo` pairing in
-      `quarto-navigation` (`navbar.rs`, round-trip included)
-- [ ] Implement: `resolve_metadata_path` in `navbar_generate`;
-      page-relative resolution in `navbar_render` (static-resource
-      helper, since logo is an asset not a doc)
-- [ ] Implement: logo copy-with-warning beside `copy_favicon`
-      (decision 5)
+- [x] Failing tests (6 failed as expected before implementation):
+      `navbar_render` units (logo rebased at depth, leading-`/` form,
+      external passthrough); pipeline tests (per-page rebase at root +
+      depth 2, copy without `project.resources`, leading-`/` variant);
+      missing-file warning; `_metadata.yml`-authored logo resolving
+      against the authoring dir (the one fixture that *discriminates*
+      generate-time resolution — same-page frontmatter cases collapse
+      to identity); `logo_source` capture + round-trip unit in
+      quarto-navigation
+- [x] Implement: `logo_source: SourceInfo` pairing in
+      `quarto-navigation` (`navbar.rs`, capture in `from_config_value`,
+      round-trip in `to_config_value`)
+- [x] Implement: `resolve_metadata_path` on `logo` in
+      `navbar_generate`; new `resolve_root_relative_resource_href`
+      helper in `navigation_href` (delegates to the static helper with
+      empty source — config paths are project-root-relative by
+      convention) applied in `navbar_render`
+- [x] Implement: `copy_navbar_logo` beside `copy_favicon` in
+      `website_post_render` (decision 5), shared `copy_asset_file`
+      tail; registered in the orchestrator post-render hooks
+- [x] e2e (real binary): deep page emits
+      `<img src="../../images/config-logo.svg" … class="navbar-logo">`
+      (was verbatim `images/config-logo.svg`); logo copied to
+      `_site/images/` without `project.resources`. Output inspected.
 - [ ] Full workspace tests + commit
 
 ### Phase 3 — Case C (incentive removal: images + links in nav/footer regions)

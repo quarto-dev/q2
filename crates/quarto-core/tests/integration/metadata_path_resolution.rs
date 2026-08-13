@@ -198,6 +198,57 @@ fn frontmatter_sidebar_resolves_sibling_relative_qmd() {
     );
 }
 
+// === Case A (bd-root-relative-paths-design-fc5pvkcv): navbar logo ========
+
+/// A navbar logo declared in a directory-scoped `_metadata.yml`
+/// resolves relative to the *authoring* directory (bd-qor9a
+/// semantics), then page-relative per page. `docs/_metadata.yml`
+/// declaring `logo: images/logo.svg` means `docs/images/logo.svg`;
+/// from `docs/sub/page.html` that must emit `../images/logo.svg` —
+/// without generate-time resolution the raw value would be read as
+/// project-root-relative and emit `../../images/logo.svg`, pointing
+/// at a file that doesn't exist.
+#[test]
+fn metadata_yml_navbar_logo_resolves_against_authoring_dir() {
+    let (_dir, outputs, _diags) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n",
+        );
+        write(
+            &project_dir.join("docs/_metadata.yml"),
+            "navbar:\n  title: Docs\n  logo: images/logo.svg\n",
+        );
+        write(
+            &project_dir.join("docs/images/logo.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("docs/index.qmd"),
+            "---\ntitle: Docs Home\n---\n\nD.\n",
+        );
+        write(
+            &project_dir.join("docs/sub/page.qmd"),
+            "---\ntitle: Sub\n---\n\nS.\n",
+        );
+    });
+
+    let docs_html = find_html(&outputs, "docs/index.html");
+    assert!(
+        docs_html.contains("<img src=\"images/logo.svg\""),
+        "docs/index.html logo should resolve to the sibling images/ dir; got: {}",
+        snippet(docs_html, "navbar-logo")
+    );
+
+    let sub_html = find_html(&outputs, "docs/sub/page.html");
+    assert!(
+        sub_html.contains("<img src=\"../images/logo.svg\""),
+        "docs/sub/page.html logo must climb exactly one level (to docs/images/), \
+         not two (to <root>/images/); got: {}",
+        snippet(sub_html, "navbar-logo")
+    );
+}
+
 // === Regression guard: _quarto.yml-rooted sidebar still works ============
 
 /// `_quarto.yml`-rooted sidebar entries continue to resolve as

@@ -398,3 +398,97 @@ fn pipeline_single_doc_navbar_works_with_top_level_config() {
         "about.html should not inherit index.html's doc-level navbar"
     );
 }
+
+// === Case A (bd-root-relative-paths-design-fc5pvkcv): navbar logo =========
+
+/// The navbar logo is a config-declared static asset shared by pages
+/// at every depth, so it must be emitted page-relative per page —
+/// `images/logo.svg` on the root page, `../../images/logo.svg` two
+/// levels down — and the file must be copied into the output tree
+/// (decision 5) without any `project.resources` declaration.
+#[test]
+fn pipeline_navbar_logo_rebased_per_page_and_copied() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  navbar:\n    title: Site\n    logo: images/logo.svg\n    left:\n      - index.qmd\n",
+        );
+        write(
+            &project_dir.join("images/logo.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+        write(
+            &project_dir.join("deep/deeper/page.qmd"),
+            "---\ntitle: Deep\n---\n\nD.\n",
+        );
+    });
+
+    let root_html = read(&project_dir.join("_site/index.html"));
+    assert!(
+        root_html.contains("<img src=\"images/logo.svg\""),
+        "root page logo should be depth-0 relative; got: {}",
+        root_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+
+    let deep_html = read(&project_dir.join("_site/deep/deeper/page.html"));
+    assert!(
+        deep_html.contains("<img src=\"../../images/logo.svg\""),
+        "depth-2 page logo must climb to the site root; got: {}",
+        deep_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+
+    assert!(
+        project_dir.join("_site/images/logo.svg").exists(),
+        "logo file must be copied to the output tree (decision 5)"
+    );
+}
+
+/// A leading `/` on the logo path means site-root-relative
+/// (decision 4) and produces identical output to the bare form.
+#[test]
+fn pipeline_navbar_root_slash_logo_rebased_per_page() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  navbar:\n    title: Site\n    logo: /images/logo.svg\n    left:\n      - index.qmd\n",
+        );
+        write(
+            &project_dir.join("images/logo.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+        write(
+            &project_dir.join("deep/deeper/page.qmd"),
+            "---\ntitle: Deep\n---\n\nD.\n",
+        );
+    });
+
+    let deep_html = read(&project_dir.join("_site/deep/deeper/page.html"));
+    assert!(
+        deep_html.contains("<img src=\"../../images/logo.svg\""),
+        "leading-/ logo must rebase identically to the bare form; got: {}",
+        deep_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+    assert!(
+        project_dir.join("_site/images/logo.svg").exists(),
+        "leading-/ logo file must be copied to the output tree"
+    );
+}
