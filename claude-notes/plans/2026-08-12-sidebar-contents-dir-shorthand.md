@@ -259,20 +259,33 @@ in the main checkout.
 
 - `cargo xtask lint` — all checks passed (961 files).
 - `cargo nextest run --workspace` — **11834 passed**, 0 failed.
-- `cargo xtask verify` — **fails at step 4/14 on pre-existing tree-sitter
-  grammar failures, unrelated to this branch.** Confirmed by checking out `main`
-  and running `tree-sitter test` in
-  `crates/tree-sitter-qmd/tree-sitter-markdown`: the baseline produces the
-  *identical* result, `601 parses / 590 successful / 11 failed / 98.17%`. The
-  failing cases (`dot run at token start`, `bd-miif1k1z: adjacent definitions`,
-  `multiple punctuation marks`) are grammar tests with no connection to sidebars.
-  This is a condition of the checkout, not a regression — but it does mean
-  **`cargo xtask verify` cannot run clean here until the grammar is regenerated**.
-- `cargo xtask verify --skip-treesitter-tests --skip-treesitter-crlf-tests` —
-  **EXIT=0, all 14 steps passed**, including the WASM/hub-client leg
-  (steps 7-8) that `--skip-hub-build` would have skipped. This is the leg that
-  matters here, since `quarto-core` is in `wasm-quarto-hub-client`'s
-  dependency closure.
+- `cargo xtask verify` — **EXIT=0, all 14 steps passed, no skips.** This
+  includes the WASM/hub-client leg (steps 7-8) that `--skip-hub-build` would
+  have skipped — the leg that matters here, since `quarto-core` is in
+  `wasm-quarto-hub-client`'s dependency closure.
+
+### A false alarm worth recording
+
+The first `cargo xtask verify` run on this branch aborted at step 4/14 with 11
+failing tree-sitter grammar tests (`601 parses / 590 successful / 98.17%`).
+Checking out `main` reproduced it identically, so it was not a regression — but
+the initial conclusion, "the grammar needs regenerating before verify can run
+clean here," was **wrong**, and the `--skip-treesitter-tests` workaround was
+unnecessary.
+
+CI runs the same `tree-sitter test` in the same directory
+(`.github/workflows/test-suite.yml:171`) and passed on all four runners, which
+is what prompted a closer look:
+
+- `tree-sitter generate` changed **no tracked files** — the committed parser was
+  already in sync with `grammar.js`.
+- Re-running the tests afterward gives **601/601, 100%**.
+- The stale thing was `crates/tree-sitter-qmd/tree-sitter-markdown/markdown.dylib`,
+  a **gitignored build artifact**.
+
+So: a stale local `.dylib`, not a grammar problem and not a branch problem. If
+you see grammar failures that `main` also reproduces, run `tree-sitter generate`
+in that directory before concluding anything about the grammar.
 
 ## Phase 4 — end-to-end verification (2026-08-13)
 
