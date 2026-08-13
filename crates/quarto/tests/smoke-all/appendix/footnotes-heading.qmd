@@ -1,0 +1,26 @@
+---
+title: Footnotes appendix heading
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "div#quarto-appendix section#footnotes h2.anchored.quarto-appendix-heading",
+          ]
+        # The heading replaces the rule as the section separator, matching
+        # Quarto 1's `prependHeading` (bd-v9zs83zj). No `<hr>` may survive
+        # inside the titled footnotes section.
+        - ["div#quarto-appendix section#footnotes hr"]
+      ensureFileRegexMatches:
+        - [">Footnotes</h2>"]
+---
+
+Text with a note.[^a]
+
+More text with another.[^b]
+
+[^a]: First note.
+
+[^b]: Second note.
