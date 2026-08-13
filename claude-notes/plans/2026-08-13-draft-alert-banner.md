@@ -180,9 +180,19 @@ at `/Users/cscheid/repos/github/cscheid/q2-connect-docs/llms-info/repros/draft-b
   - `smoke-all/localization/lang-es-draft-banner.qmd` asserting `Borrador`
     (mirrors `lang-es-appendix-headings.qmd` from `60d42f0e`).
   - Unit test wherever the localized-text precedence lands.
-- **Phase 1 — Emit the banner.** Template slot at top of `<body>` in
-  `FULL_HTML_TEMPLATE`, guarded on `draft`; localized text per design question 1.
-  Comment pointing at `bd-w0o9` for the future `draft-mode: gone` suppression.
+- **Phase 1 — Emit the banner.** A transform (per decision 1) that reads `draft`
+  from meta, resolves the localized term via `LanguageTerms::from_meta` with the
+  `toc_generate.rs` precedence chain, and `insert_path`s the result for the
+  template; plus a slot at top of `<body>` in `FULL_HTML_TEMPLATE` guarded on
+  `draft`, and the `<meta name="quarto:status" content="draft">` header emission
+  (decision 3). Icon is `<i class="bi bi-pencil-square">` (decision 2). Comment
+  pointing at `bd-w0o9` for the future `draft-mode: gone` suppression, and at the
+  `llms.txt` rationale for the otherwise-unconsumed meta tag.
+  - Phase-ordering note: per `.claude/rules` / the transform-pipeline contract,
+    pick the phase deliberately. This transform consumes no crossref/float
+    structure, so it is not forced into `Finalization`; `Normalization` is the
+    natural home alongside the other metadata producers. Confirm against
+    `test_build_transform_pipeline_phase_ordering`.
 - **Phase 2 — End-to-end verification.** `q2 render` on the committed repro; diff
   the banner markup against `_site-q1/drafty.html`; confirm the CSS rule applies
   (read back computed styles in a browser, as `60d42f0e` did). Check `q2 preview`
@@ -192,7 +202,89 @@ at `/Users/cscheid/repos/github/cscheid/q2-connect-docs/llms-info/repros/draft-b
 
 No SCSS phase, no plumbing phase — both turned out to already exist.
 
+## Design decisions (settled 2026-08-13 with user)
+
+1. **Localized string is computed in a transform**, following the
+   `toc_generate.rs` / `appendix.rs` precedent — not inline in `template.rs`.
+   Rationale (user): "we're not being fussy about the number of transforms there
+   currently, and the consistency is helpful for future refactorings."
+2. **Icon uses the `bi bi-pencil-square` font class**, Q1-identical.
+3. **Also emit `<meta name="quarto:status" content="draft">`.** Rationale (user):
+   q2 will need `llms.txt` support soon anyway, and this is one fewer thing to go
+   back and patch. Note this makes q2's structure match Q1's *mechanism*, not just
+   its output — worth a comment that the meta tag is the forward-compatibility
+   hook for `llms.txt` / `website-draft`, since nothing consumes it yet.
+4. **Preview: expected free, verify in Phase 2** (analysis below).
+5. **Revealjs: open** — see below; the answer changed once the cost was known.
+
+### Q1's revealjs exclusion is incidental, but q2's cost is not
+
+**Is there a stated reason in Q1?** No. The guard
+`isHtmlOutput() and not isHtmlSlideOutput()` predates the banner: it arrives in
+`99e47b461` ("Website Drafts - empty draft docs", Charles Teague, 2024-01-30),
+whose purpose was *emptying* draft documents. Emptying a reveal deck's blocks
+would produce a broken presentation — a plausible reason for the guard **there**.
+The banner lands three commits later (`5b06ea3af`, "Display a draft notice for
+visible drafts") and inherits the exclusion **for free**, because the banner keys
+off `meta[quarto:status]`, which only the already-guarded filter emits. Nobody
+appears to have decided that slides shouldn't show a draft notice. So the
+inclination to be consistent is well-founded on principle.
+
+**But in q2 revealjs is a genuinely separate path, and the cost is real:**
+
+- **Different template.** `apply_template.rs:306` routes revealjs to
+  `revealjs::render_revealjs_document` (`revealjs/assemble.rs:369`) — a
+  hand-built `format!` scaffold that **bypasses doctemplate entirely**. It shares
+  nothing with `FULL_HTML_TEMPLATE`, so the `$if(draft)$` slot buys nothing here.
+- **Different CSS bundle, without Bootstrap.** Reveal gets
+  `quarto-revealjs.scss` (`bundle.rs:369`), not `_bootstrap-rules.scss`. Neither
+  `#quarto-draft-alert` **nor** `.alert.alert-warning` exists there. Correction 1
+  above ("the CSS already ships") is **true for HTML only** — reveal would need
+  both rules authored, and `alert-warning` is a Bootstrap component with a theme
+  color, not a one-liner.
+- **No natural anchor, and the tree already said so.** `assemble.rs:424-426`
+  documents exactly this problem for the `before-body` include slot: *"`before-body`
+  has no natural anchor in the deck scaffold — reveal.js owns everything inside
+  `.reveal` — and is deferred until a concrete consumer appears."* The draft banner
+  is a `before-body`-shaped element. Supporting it means solving a placement
+  question the codebase has explicitly deferred, with **no Q1 reference output to
+  port from** (Q1 never renders this case). That is design work, not a port.
+
+**Recommendation:** ship HTML in this strand; file revealjs as a follow-up. The
+follow-up is then the "concrete consumer" that motivates resolving the deferred
+`before-body` anchor question — a cleaner framing than smuggling that decision in
+here. If you'd rather do both at once, the plan grows a phase for the reveal
+scaffold plus new SCSS, and Phase 2 needs a design call on where a banner sits
+over a deck.
+
+### Preview: free, pending confirmation
+
+Traced, not assumed — but not yet end-to-end verified (that needs the feature to
+exist first):
+
+- `wasm-quarto-hub-client/src/lib.rs:1521` calls `render_qmd_to_html` — the same
+  `quarto-core` entry point the CLI uses, not a preview-specific renderer.
+- That runs the same pipeline, reaching `ApplyTemplateStage`. Its `_template_bundle`
+  parameter is documented "currently unused" (`lib.rs:1084`), so the preview lands
+  in the `None` (no-custom-template) arm at `apply_template.rs:314`.
+- That arm calls `select_template(is_minimal_html(&metadata))`. `is_minimal_html`
+  (`format.rs:489`) is true only for `minimal: true` or `theme: none|pandoc`, so a
+  normal preview document gets `FULL_HTML_TEMPLATE` — and the banner with it.
+
+**Caveat:** minimal-mode documents (`theme: none`/`pandoc`) will not get the
+banner, in preview or render. That is correct — Bootstrap's `alert-warning` isn't
+loaded there either, so the markup would be unstyled.
+
+Confirm in Phase 2 by previewing the committed repro (remembering the WASM rebuild
+chain in `CLAUDE.md` — `npm run build:wasm` → `cargo xtask build-q2-preview-spa` →
+`cargo build --bin q2`, or the preview silently serves pre-change code). If it
+turns out not to be free, file a follow-up strand rather than growing this one.
+
 ## Open design questions for the user
+
+**All resolved except revealjs (question 5), which is re-opened in the decisions
+section above now that the cost is known.** The original list is kept below for
+the record — it documents what was asked and what the recommendations were.
 
 1. **Where does the localized "Draft" string get computed?** Two candidates:
    - **(a) In `template.rs` where the context is built.** `add_metadata_to_context`
