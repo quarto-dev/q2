@@ -3,9 +3,9 @@
 **Date:** 2026-08-13
 **Braid:** bd-toc-smart-quotes-6nro57ed
 **Branch:** `main` @ `0dcd7e83` (investigated in the main checkout — no worktree was created)
-**Status:** **In progress.** Design settled 2026-08-13 (see "Decisions"); implementation
-authorized by the user the same day. Progress is tracked in the Work items checklist below —
-Phase 0 done, Phase 1 next.
+**Status:** **Complete** (2026-08-13). All five phases done; `cargo xtask verify` green,
+11,846/11,846 workspace tests pass, end-to-end verified through the `q2` binary. See
+"Outcome" at the end of the Work items.
 
 ## Triage verdict
 
@@ -456,11 +456,36 @@ walk inline nodes) would duplicate the HTML writer in TypeScript.
 - [x] Re-rendered all three investigation fixtures; output appended to `OBSERVED.md`.
 - [x] Snapshot changes: **none**, as Phase 0 predicted.
 
-### Phase 5 — Follow-ups (file, don't implement)
+### Phase 5 — Follow-ups — **DONE**
 
-- [ ] Un-defer `bd-zzke` with the corrected ~10-site list.
-- [ ] Leave `bd-heading-id-drops-inline-content-fl84n3ql` to its own strand (`related` edge
-      added 2026-08-13).
+- [x] `bd-zzke` un-deferred (`deferred` -> `open`) with a rewritten description: the
+      corrected 10-site table, the essential-vs-incidental axis analysis, the named-flavour
+      warning about options-struct combinatorics, and a note that `toc.rs`'s copy is already
+      gone. Linked `related` to this strand and to the autoid one.
+- [x] `bd-qzn1azon` **closed** — its whole scope (a "see also, and when to pick which" note
+      in both key-path registries) landed in Phase 3.
+- [x] `bd-d7ljiz9q` filed earlier in this session: `!str` cannot opt a project-config key out
+      of markdown parsing. Not in scope here; it becomes more load-bearing as the blessed set
+      grows.
+- [x] `bd-heading-id-drops-inline-content-fl84n3ql` left to its own strand, per decision 4,
+      with the `related` edge added.
+
+## Outcome
+
+All phases complete. The strand's own symptom and the wider defect behind it are both fixed,
+end-to-end verified through the `q2` binary, and covered by the tree's first end-to-end TOC
+tests.
+
+| | before | after |
+|---|---|---|
+| `## Using a "raw" volume` | `Using a raw volume` | `Using a “raw” volume` |
+| `` ## Use `code` and *em* `` | `Use code and em` | `Use <code>code</code> and <em>em</em>` |
+| `## Math $x+y$ and a [link](…)` | `Math x+y and a link` | `Math <span class="math inline">\(x+y\)</span> and a link` |
+| `toc-title` in front matter | markup flattened | markup rendered |
+| `toc-title` in `_quarto.yml` | markup never parsed | markup rendered |
+
+Not fixed, deliberately: the anchor ids (`#using-a-volume`, `#math-and-a`) are the sibling
+strand's defect in `autoid::collect_text`, a different code path.
 
 No docs phase: no new user-facing option — this is q2 catching up to Q1's existing behavior.
 
