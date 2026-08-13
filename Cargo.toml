@@ -298,6 +298,14 @@ runtimelib = { git = "https://github.com/cscheid/runtimed", rev = "fc58eb48139a3
 jupyter-protocol = { git = "https://github.com/cscheid/runtimed", rev = "fc58eb48139a30cc559ac5973cb6debb00375b88" }
 
 # Profiles must be set at the workspace level
+[profile.release]
+# Strip the symbol table from shipped binaries (bd-p0p4r9b2): ~21.6 MiB
+# of 172k mangled Rust symbols that are never used at runtime. Panic
+# file:line messages are unaffected (Location lives in rodata, not the
+# symtab). Profiling uses [profile.release-perf], which overrides this
+# with strip = false.
+strip = "symbols"
+
 [profile.dev]
 # Tell `rustc` to optimize for small code size to
 # work around "too many locals" error from wasm-pack
