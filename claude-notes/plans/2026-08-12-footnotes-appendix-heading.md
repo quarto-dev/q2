@@ -190,7 +190,9 @@ The `.quarto-appendix-heading` rules are **substantive**, not cosmetic trim
   margin-top: 0; line-height: 1.4em; font-weight: 600;
   opacity: 0.9; border-bottom: none; margin-bottom: 0;
 }
-#quarto-appendix.plain .quarto-appendix-heading { font-size: 1em !important; }
+/* NOTE: both blocks are nested under `.default`, not `.plain` — see the
+   correction under "Browser verification". */
+#quarto-appendix.default .quarto-appendix-heading { font-size: 1em !important; }
 ```
 
 Without the class, appendix headings render as ordinary `<h2>` — full size, with
@@ -246,56 +248,165 @@ Route through the end-to-end entry point (`render_document_to_file` or equivalen
 `render_qmd_to_html` with `HtmlRenderConfig::default()` — the heading only exists on the
 appendix branch, so a default-config test would pass vacuously.
 
-- [ ] Heading present: `<h2 …>Footnotes</h2>` inside `#quarto-appendix`.
-- [ ] `<hr>` gone from the titled footnotes section.
-- [ ] Localization: `lang: es` → `Notas` (from `_language-es.yml`).
-- [ ] Negative: `appendix-style: none` → no appendix, no heading, **and the `<hr>` still
+- [x] Heading present: `<h2 …>Footnotes</h2>` inside `#quarto-appendix`.
+- [x] `<hr>` gone from the titled footnotes section.
+- [x] Localization: `lang: es` → `Notas` (from `_language-es.yml`).
+- [x] Negative: `appendix-style: none` → no appendix, no heading, **and the `<hr>` still
       present** in the in-place footnotes section (matching Q1).
-- [ ] Negative: `book: true` → unchanged.
-- [ ] Classes: heading carries `anchored quarto-appendix-heading`.
-- [ ] No `id` on the heading.
-- [ ] The other four headings localize too (at least one, e.g. `References` → `Referencias`).
-- [ ] Stage-less unit test still gets the English fallback (`from_meta` → `None`).
+- [x] Negative: `book: true` → unchanged.
+- [x] Classes: heading carries `anchored quarto-appendix-heading`.
+- [x] No `id` on the heading.
+- [x] The other four headings localize too (at least one, e.g. `References` → `Referencias`).
+- [x] Stage-less unit test still gets the English fallback (`from_meta` → `None`).
 
 ### Phase 1 — Localized title helper
 
-- [ ] Add `appendix_title(meta, term_key, english_fallback) -> String` following the
+- [x] Add `appendix_title(meta, term_key, english_fallback) -> String` following the
       `toc_generate.rs:122-135` precedence: localized term > English literal. (No
       user-metadata override tier — unlike `toc-title`, there is no per-document
       `footnotes-title` option in Q1.)
-- [ ] Add `appendix_heading(title) -> Block::Header` building the level-2 `Header` with
+- [x] Add `appendix_heading(title) -> Block::Header` building the level-2 `Header` with
       empty `id` and classes `["anchored", "quarto-appendix-heading"]`, so all five sites
       share one constructor.
 
 ### Phase 2 — `wrap_footnotes`
 
-- [ ] Add `wrap_footnotes`, the missing sibling of `wrap_bibliography`, prepending the
+- [x] Add `wrap_footnotes`, the missing sibling of `wrap_bibliography`, prepending the
       heading into the existing `Div#footnotes` (it is already a `.section` with the right
       id/role — do **not** nest a second section).
-- [ ] Strip the leading `HorizontalRule` while wrapping (Q1's `prependHeading` removes the
+- [x] Strip the leading `HorizontalRule` while wrapping (Q1's `prependHeading` removes the
       first `hr` in the element). Keep the removal in the appendix transform, not in
       `create_footnotes_section` — the rule must survive when appendix processing is off.
-- [ ] Call it at `appendix.rs:156`.
+- [x] Call it at `appendix.rs:156`.
 
 ### Phase 3 — Retrofit the four existing headings
 
-- [ ] `wrap_bibliography` → `section-title-references` / `"References"`.
-- [ ] `create_license_section` → `section-title-reuse` / `"Reuse"`.
-- [ ] `create_copyright_section` → `section-title-copyright` / `"Copyright"`.
-- [ ] `create_citation_section` → `section-title-citation` / `"Citation"`.
-- [ ] All four switch to the shared `appendix_heading` constructor (gains both classes).
+- [x] `wrap_bibliography` → `section-title-references` / `"References"`.
+- [x] `create_license_section` → `section-title-reuse` / `"Reuse"`.
+- [x] `create_copyright_section` → `section-title-copyright` / `"Copyright"`.
+- [x] `create_citation_section` → `section-title-citation` / `"Citation"`.
+- [x] All four switch to the shared `appendix_heading` constructor (gains both classes).
 
 ### Phase 4 — Verification
 
-- [ ] Full `cargo xtask verify` (not `--skip-hub-build`; `quarto-core` is in hub-client's
-      dependency closure).
-- [ ] End-to-end `cargo run --bin q2 -- render` on the committed repro; inspect the HTML
-      and record the snippet in the plan per CLAUDE.md.
-- [ ] Browser look at the rendered appendix — Phase 3 activates real CSS, so this is a
-      visual change that grep cannot confirm.
-- [ ] Review and report snapshot churn counts per the CLAUDE.md snapshot policy.
-- [ ] Re-render the four named Connect-docs pages and confirm the text diff against the
-      Q1 reference actually closes.
+- [x] Full workspace suite green: `cargo nextest run --workspace` → **11800 passed**,
+      197 skipped, 0 failed.
+- [x] Full `cargo xtask verify` (not `--skip-hub-build`; `quarto-core` is in hub-client's
+      dependency closure): **all 14 steps passed, 11801 tests passed / 197 skipped**,
+      exit code 0. See the note below on a spurious tree-sitter failure encountered on the
+      way — it was a stale build cache, not this change.
+- [x] End-to-end `cargo run --bin q2 -- render` on the committed repro; HTML inspected —
+      snippets recorded under "End-to-end verification" below.
+- [x] Browser look at the rendered appendix — Phase 3 activates real CSS, so this is a
+      visual change that grep cannot confirm. Computed styles read back from a real page
+      (see "Browser verification" below): every rule in the previously-dead block applies.
+- [x] **Snapshot churn: zero.** No `.snap` file changed. Verified this is real coverage,
+      not a blind spot: `grep -rl 'quarto-appendix\|doc-endnotes\|quarto-bibliography'
+      --include='*.snap' crates/` returns nothing — no insta snapshot in the tree contains
+      appendix HTML at all. The appendix is exercised by smoke-all fixtures and unit tests
+      instead. (The plan predicted churn; the prediction was wrong.)
+- [x] Re-render a named Connect-docs page and confirm the text diff against the Q1
+      reference actually closes — see "Connect-docs diff" below.
+
+## End-to-end verification
+
+`cargo run --bin q2 -- render repro.qmd --to html`, output inspected:
+
+```html
+<div id="quarto-appendix" class="default">
+<section id="footnotes" class="footnotes section" role="doc-endnotes">
+<h2 class="anchored quarto-appendix-heading">Footnotes</h2>
+<ol type="1">
+<li><div id="fn1">
+```
+
+Byte-for-byte the markup Quarto 1 emits, and the `<hr />` is gone.
+
+The same document with `lang: es`, `license:`, `copyright:` and `citation:` —
+`grep -o '<h2 class="[^"]*">[^<]*</h2>'`:
+
+```html
+<h2 class="anchored quarto-appendix-heading">Notas</h2>
+<h2 class="anchored quarto-appendix-heading">Reutilización</h2>
+<h2 class="anchored quarto-appendix-heading">Derechos de autor</h2>
+<h2 class="anchored quarto-appendix-heading">Cómo citar</h2>
+```
+
+All five headings localize, and multi-word titles keep their spacing — which is what
+the canonical `Str`/`Space` inline split in `title_inlines` buys. A single `Str`
+carrying embedded spaces would have rendered identically in HTML but is not what the
+AST means by a run of text.
+
+## Connect-docs diff
+
+The motivation for the strand was four Connect-docs pages differing from the Quarto 1
+reference render. Checked against `q2-connect-docs` (`docs-quarto-1/_site` is the Q1
+reference; `docs-quarto-2/_site` was built by a pre-fix q2), on `user/manifest`:
+
+```
+Q1 reference: <h2 class="anchored quarto-appendix-heading">Footnotes</h2>
+q2 (old):     grep -c quarto-appendix-heading → 0
+```
+
+Re-rendering that page's `index.qmd` with this build (copied into a scratch dir so the
+docs repo stays untouched):
+
+```
+<h2 class="anchored quarto-appendix-heading">Footnotes</h2>
+hr count inside the footnotes section: 0
+```
+
+Byte-identical to the Q1 reference on both counts. This is the check that would have
+failed had we shipped the heading without also dropping the `<hr>` — the diff would have
+closed on the heading and reopened on the rule.
+
+## Note: a spurious tree-sitter failure during verification
+
+The first full `cargo xtask verify` failed at step 4 with a corpus case this change never
+touched (`punctuation-vs-image.txt`, "5 - multiple punctuation marks", input `...`).
+Chased to ground before continuing:
+
+- It reproduced with the working tree **fully stashed** — i.e. on pristine `main`, so no
+  local edit caused it.
+- `tree-sitter generate` produced **no diff**, so the committed `parser.c` is in sync with
+  `grammar.js`; the grammar source was never the problem.
+- After that regenerate forced a rebuild, the test passed 3/3 consecutive runs.
+- The only gitignored artifact in the grammar dir is `markdown.dylib`, the compiled
+  parser — a **stale build cache** was the actual input.
+
+Filed as **`bd-7ilvb5r2`**. Worth knowing because the failure is indistinguishable from a
+real grammar regression and points at a file the session never touched.
+
+A process note that cost real time here: `cargo xtask verify | tail -30` reports **`tail`'s**
+exit code, not xtask's, so a failed verify looks like it exited 0. Run it unpiped when the
+exit status matters.
+
+## Browser verification
+
+Phase 3 activates CSS that had never matched anything, so grep cannot confirm it.
+Computed styles read back from the rendered page (all four appendix headings identical):
+
+| Property | Computed | Source rule |
+| --- | --- | --- |
+| `font-weight` | `600` | `.quarto-appendix-heading` |
+| `font-size` | `17px` (= `1em`) | `font-size: 1em !important` |
+| `margin-top` / `margin-bottom` | `0px` / `0px` | `.quarto-appendix-heading` |
+| `border-bottom` | `0px none` | `border-bottom: none` |
+| `opacity` | `0.9` | `.quarto-appendix-heading` |
+| `class` | `anchored quarto-appendix-heading` | emitted by `appendix_heading` |
+
+`document.querySelectorAll('#footnotes hr').length` → **0**.
+
+Without the class these would render as ordinary `<h2>` — roughly 27px with Bootstrap's
+`border-bottom`. The horizontal line still visible above the appendix is
+`#quarto-appendix.default { border-top: 1px solid }`, the container's own rule, which is
+correct and matches Q1.
+
+**Correction to Finding 4:** that section stated the `font-size: 1em !important` rule
+sits under `#quarto-appendix.plain`. It does not — both blocks in
+`_bootstrap-rules.scss` are nested under `#quarto-appendix.default` (lines 2225 and
+2229), so the rule applies in the default style too. The compiled stylesheet confirms
+it, and the 17px computed size above is that rule firing under `.default`.
 
 ## Design answers (settled with the user, 2026-08-12)
 

@@ -47,7 +47,7 @@ use hashlink::LinkedHashMap;
 use quarto_pandoc_types::Blocks;
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Div, Header, Paragraph};
-use quarto_pandoc_types::inline::{Inline, Link, Str};
+use quarto_pandoc_types::inline::{Inline, Link, Space, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::{By, SourceInfo};
 use smallvec::smallvec;
@@ -145,14 +145,14 @@ impl AstTransform for AppendixStructureTransform {
         if reference_location != ReferenceLocation::Margin
             && let Some(bibliography) = extract_bibliography(&mut ast.blocks)
         {
-            appendix_sections.push(wrap_bibliography(bibliography));
+            appendix_sections.push(wrap_bibliography(bibliography, &ast.meta));
         }
 
         // 3. Collect footnotes section (if not margin mode)
         if reference_location != ReferenceLocation::Margin
             && let Some(footnotes) = extract_footnotes(&mut ast.blocks)
         {
-            appendix_sections.push(footnotes);
+            appendix_sections.push(wrap_footnotes(footnotes, &ast.meta));
         }
 
         // 4. Create metadata-driven sections
@@ -236,24 +236,128 @@ fn extract_footnotes(blocks: &mut Vec<Block>) -> Option<Block> {
     footnotes
 }
 
+/// The localized title for an appendix section.
+///
+/// Precedence follows `toc_generate.rs` (decided under bd-llhlzd7p): the
+/// resolved `section-title-*` term when [`LanguageResolveStage`] has run,
+/// otherwise the English literal. `LanguageTerms::from_meta` returns `None`
+/// when the stage has not run — the case in stage-less unit tests — which is
+/// what the literal tail is for.
+///
+/// There is deliberately **no** per-document override tier here: unlike
+/// `toc-title`, Quarto 1 exposes no `footnotes-title`-style option for these
+/// sections, so metadata is not consulted beyond the language table.
+///
+/// [`LanguageResolveStage`]: crate::stage::stages::language_resolve
+fn appendix_title(meta: &ConfigValue, term_key: &str, english: &str) -> String {
+    crate::language::LanguageTerms::from_meta(meta)
+        .and_then(|terms| terms.get(term_key).map(str::to_string))
+        // A term explicitly set to null round-trips as an empty string; an
+        // untitled section is never what the reader wants, so fall through.
+        .filter(|title| !title.is_empty())
+        .unwrap_or_else(|| english.to_string())
+}
+
+/// Split a title into canonical Pandoc inlines.
+///
+/// Titles are `Str`/`Space` alternations rather than one `Str` carrying
+/// embedded spaces, which is what the AST means by a run of text. Every
+/// English appendix title happens to be a single word, so this only shows up
+/// once localized — `section-title-copyright` is "Derechos de autor" in
+/// Spanish and "Droits d'auteur" in French.
+fn title_inlines(title: &str, source_info: &SourceInfo) -> Vec<Inline> {
+    let mut inlines = Vec::new();
+    for (i, word) in title.split_whitespace().enumerate() {
+        if i > 0 {
+            inlines.push(Inline::Space(Space {
+                source_info: source_info.clone(),
+            }));
+        }
+        inlines.push(Inline::Str(Str {
+            text: word.to_string(),
+            source_info: source_info.clone(),
+        }));
+    }
+    inlines
+}
+
+/// Build the level-2 heading that titles an appendix section.
+///
+/// Mirrors Quarto 1's `prependHeading` + `headingClasses`
+/// (`format-html-appendix.ts:98`): no id — the heading is not linkable and
+/// does not enter the TOC — and the classes `anchored quarto-appendix-heading`.
+///
+/// `quarto-appendix-heading` drives real styling that q2 already ships
+/// (`resources/scss/bootstrap/_bootstrap-rules.scss`). `anchored` is inert
+/// here: in Quarto 1 it is a selector hook AnchorJS reads to inject heading
+/// anchor links, and q2 ships neither that runtime nor any rule matching the
+/// class. It is emitted anyway so the appendix is already correct when
+/// heading anchors land — see bd-5kf2dnw4, which must skip headings that
+/// already carry the class (pushing onto a `Vec<String>` is not idempotent
+/// the way Quarto 1's `classList.add` is).
+fn appendix_heading(meta: &ConfigValue, term_key: &str, english: &str) -> Block {
+    let source_info = SourceInfo::Generated {
+        by: By::appendix(),
+        from: smallvec![],
+    };
+    Block::Header(Header {
+        level: 2,
+        attr: (
+            String::new(),
+            vec![
+                "anchored".to_string(),
+                "quarto-appendix-heading".to_string(),
+            ],
+            LinkedHashMap::new(),
+        ),
+        content: title_inlines(&appendix_title(meta, term_key, english), &source_info),
+        source_info,
+        attr_source: AttrSourceInfo::empty(),
+    })
+}
+
+/// Title the footnotes section in place.
+///
+/// The section built by `FootnotesTransform` is already a `.section` Div with
+/// the right id and `doc-endnotes` role, so the heading is prepended into it
+/// rather than nesting a second section around it.
+///
+/// The leading `<hr>` is dropped: Quarto 1's `prependHeading` removes the
+/// rule when it inserts the heading (`format-html-shared.ts:405-409`), the
+/// heading taking over as the section separator. The strip lives here, not in
+/// `create_footnotes_section`, because the rule must survive when appendix
+/// processing is off and no heading is ever added (bd-v9zs83zj).
+fn wrap_footnotes(footnotes: Block, meta: &ConfigValue) -> Block {
+    let mut div = match footnotes {
+        Block::Div(div) => div,
+        // `extract_footnotes` only ever yields a Div; nothing to title otherwise.
+        other => return other,
+    };
+
+    if let Some(pos) = div
+        .content
+        .iter()
+        .position(|b| matches!(b, Block::HorizontalRule(_)))
+    {
+        div.content.remove(pos);
+    }
+
+    div.content.insert(
+        0,
+        appendix_heading(meta, "section-title-footnotes", "Footnotes"),
+    );
+    Block::Div(div)
+}
+
 /// Wrap bibliography in a section with appropriate attributes.
-fn wrap_bibliography(bibliography: Block) -> Block {
+fn wrap_bibliography(bibliography: Block, meta: &ConfigValue) -> Block {
     let source_info = SourceInfo::Generated {
         by: By::appendix(),
         from: smallvec![],
     };
 
     // Create header for the bibliography section
-    let header = Block::Header(Header {
-        level: 2,
-        attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-        content: vec![Inline::Str(Str {
-            text: "References".to_string(),
-            source_info: source_info.clone(),
-        })],
-        source_info: source_info.clone(),
-        attr_source: AttrSourceInfo::empty(),
-    });
+    let header = appendix_heading(meta, "section-title-references", "References");
 
     Block::Div(Div {
         attr: (
@@ -307,16 +411,7 @@ fn create_license_section(meta: &ConfigValue) -> Option<Block> {
         from: smallvec![],
     };
 
-    let header = Block::Header(Header {
-        level: 2,
-        attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-        content: vec![Inline::Str(Str {
-            text: "Reuse".to_string(),
-            source_info: source_info.clone(),
-        })],
-        source_info: source_info.clone(),
-        attr_source: AttrSourceInfo::empty(),
-    });
+    let header = appendix_heading(meta, "section-title-reuse", "Reuse");
 
     let content = Block::Paragraph(Paragraph {
         content: vec![Inline::Str(Str {
@@ -361,16 +456,7 @@ fn create_copyright_section(meta: &ConfigValue) -> Option<Block> {
         from: smallvec![],
     };
 
-    let header = Block::Header(Header {
-        level: 2,
-        attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-        content: vec![Inline::Str(Str {
-            text: "Copyright".to_string(),
-            source_info: source_info.clone(),
-        })],
-        source_info: source_info.clone(),
-        attr_source: AttrSourceInfo::empty(),
-    });
+    let header = appendix_heading(meta, "section-title-copyright", "Copyright");
 
     let content = Block::Paragraph(Paragraph {
         content: vec![Inline::Str(Str {
@@ -408,16 +494,7 @@ fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
         from: smallvec![],
     };
 
-    let header = Block::Header(Header {
-        level: 2,
-        attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-        content: vec![Inline::Str(Str {
-            text: "Citation".to_string(),
-            source_info: source_info.clone(),
-        })],
-        source_info: source_info.clone(),
-        attr_source: AttrSourceInfo::empty(),
-    });
+    let header = appendix_heading(meta, "section-title-citation", "Citation");
 
     // Create citation content based on what's available
     let content_inlines = if let Some(url) = citation_url {
@@ -466,8 +543,8 @@ fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::block::Plain;
+    use quarto_pandoc_types::{ConfigMapEntry, ConfigValueKind};
     use quarto_source_map::{FileId, Location, Range};
 
     use crate::format::Format;
@@ -523,6 +600,97 @@ mod tests {
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
         })
+    }
+
+    /// Metadata carrying a resolved `quarto.language` table, shaped exactly as
+    /// `LanguageResolveStage` injects it. Transforms read it back through
+    /// `LanguageTerms::from_meta`.
+    fn make_meta_with_lang(lang: &str) -> ConfigValue {
+        let terms = crate::language::resolve_language(lang, &[]);
+        make_meta(vec![
+            meta_entry(
+                "lang",
+                ConfigValue::new_string(lang.to_string(), dummy_source_info()),
+            ),
+            meta_entry(
+                "quarto",
+                make_meta(vec![meta_entry("language", terms.to_config_value())]),
+            ),
+        ])
+    }
+
+    /// A footnotes section shaped like the one `create_footnotes_section`
+    /// actually emits: an `<hr>` followed by the note list. The plain
+    /// `make_footnotes_section` helper omits the rule, which is precisely the
+    /// element the appendix transform has to strip (bd-v9zs83zj).
+    fn make_footnotes_section_with_rule() -> Block {
+        Block::Div(Div {
+            attr: (
+                "footnotes".to_string(),
+                vec!["footnotes".to_string(), "section".to_string()],
+                LinkedHashMap::from_iter([("role".to_string(), "doc-endnotes".to_string())]),
+            ),
+            content: vec![
+                Block::HorizontalRule(quarto_pandoc_types::block::HorizontalRule {
+                    source_info: dummy_source_info(),
+                }),
+                Block::Plain(Plain {
+                    content: vec![make_str("Footnote content")],
+                    source_info: dummy_source_info(),
+                }),
+            ],
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    /// The `Header` an appendix section leads with.
+    fn section_heading(block: &Block) -> &Header {
+        let Block::Div(div) = block else {
+            panic!("expected a section Div, got {block:?}");
+        };
+        match div.content.first() {
+            Some(Block::Header(h)) => h,
+            other => panic!("expected a leading Header, got {other:?}"),
+        }
+    }
+
+    /// Flattened text of a heading's inlines. Titles are `Str`/`Space`
+    /// alternations, so `Space` has to render as a space rather than be
+    /// skipped — otherwise "Derechos de autor" reads as "Derechosdeautor".
+    fn heading_text(header: &Header) -> String {
+        header
+            .content
+            .iter()
+            .map(|inline| match inline {
+                Inline::Str(s) => s.text.as_str(),
+                Inline::Space(_) => " ",
+                other => panic!("unexpected inline in an appendix heading: {other:?}"),
+            })
+            .collect()
+    }
+
+    /// The sections inside the `#quarto-appendix` container, which the
+    /// transform appends as the document's last block.
+    fn appendix_sections(ast: &Pandoc) -> &[Block] {
+        let Some(Block::Div(div)) = ast.blocks.last() else {
+            panic!("expected a trailing appendix Div");
+        };
+        assert_eq!(div.attr.0, "quarto-appendix");
+        &div.content
+    }
+
+    /// Run the transform over `ast` with a throwaway HTML render context.
+    async fn run_transform(ast: &mut Pandoc) {
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        AppendixStructureTransform::new()
+            .transform(ast, &mut ctx)
+            .await
+            .unwrap();
     }
 
     fn make_footnotes_section() -> Block {
@@ -927,5 +1095,218 @@ mod tests {
             }
             other => panic!("Expected Generated, got {:?}", other),
         }
+    }
+
+    // ---------------------------------------------------------------
+    // Appendix section headings (bd-v9zs83zj)
+    //
+    // Quarto 1 titles every appendix section from a `section-title-*`
+    // language term and tags the heading `anchored quarto-appendix-heading`
+    // (`format-html-appendix.ts:98`). The footnotes section additionally
+    // loses its `<hr>`, because Q1's `prependHeading` removes the rule when
+    // it inserts the heading (`format-html-shared.ts:405-409`).
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_footnotes_section_gets_heading() {
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![make_footnotes_section_with_rule()],
+        };
+        run_transform(&mut ast).await;
+
+        let heading = section_heading(&appendix_sections(&ast)[0]);
+        assert_eq!(heading_text(heading), "Footnotes");
+        assert_eq!(heading.level, 2);
+    }
+
+    #[tokio::test]
+    async fn test_appendix_heading_has_q1_classes_and_no_id() {
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![make_footnotes_section_with_rule()],
+        };
+        run_transform(&mut ast).await;
+
+        let (id, classes, attrs) = &section_heading(&appendix_sections(&ast)[0]).attr;
+        // Q1's `prependHeading` sets no id: the heading is not linkable and
+        // does not enter the TOC.
+        assert_eq!(id, "");
+        assert_eq!(classes, &["anchored", "quarto-appendix-heading"]);
+        assert!(attrs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_footnotes_rule_removed_when_titled() {
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![make_footnotes_section_with_rule()],
+        };
+        run_transform(&mut ast).await;
+
+        let Block::Div(footnotes) = &appendix_sections(&ast)[0] else {
+            panic!("expected the footnotes Div");
+        };
+        assert!(
+            !footnotes
+                .content
+                .iter()
+                .any(|b| matches!(b, Block::HorizontalRule(_))),
+            "the heading replaces the rule as the separator; got {:?}",
+            footnotes.content
+        );
+        // The note content itself must survive the strip.
+        assert!(
+            footnotes
+                .content
+                .iter()
+                .any(|b| matches!(b, Block::Plain(_))),
+            "footnote content was dropped along with the rule"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_footnotes_rule_kept_when_appendix_disabled() {
+        // With no appendix to title the section, the rule is the only
+        // separator the reader gets — so it must stay. Q1 agrees: it only
+        // titles footnotes from inside `processDocumentAppendix`.
+        let mut ast = Pandoc {
+            meta: make_meta(vec![meta_entry(
+                "appendix-style",
+                ConfigValue::new_string("none".to_string(), dummy_source_info()),
+            )]),
+            blocks: vec![make_footnotes_section_with_rule()],
+        };
+        run_transform(&mut ast).await;
+
+        let Some(Block::Div(footnotes)) = ast.blocks.last() else {
+            panic!("expected the footnotes Div to stay in place");
+        };
+        assert_eq!(footnotes.attr.0, "footnotes");
+        assert!(
+            footnotes
+                .content
+                .iter()
+                .any(|b| matches!(b, Block::HorizontalRule(_))),
+            "the rule must survive when the appendix never titles the section"
+        );
+        assert!(
+            !footnotes
+                .content
+                .iter()
+                .any(|b| matches!(b, Block::Header(_))),
+            "no heading may be added when appendix processing is off"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_footnotes_rule_kept_for_book_format() {
+        // Books skip appendix processing entirely, so — as with
+        // `appendix-style: none` — nothing titles the section and the rule
+        // stays.
+        let mut ast = Pandoc {
+            meta: make_meta(vec![meta_entry(
+                "book",
+                ConfigValue::new_bool(true, dummy_source_info()),
+            )]),
+            blocks: vec![make_footnotes_section_with_rule()],
+        };
+        run_transform(&mut ast).await;
+
+        let Some(Block::Div(footnotes)) = ast.blocks.last() else {
+            panic!("expected the footnotes Div to stay in place");
+        };
+        assert_eq!(footnotes.attr.0, "footnotes");
+        assert!(
+            footnotes
+                .content
+                .iter()
+                .any(|b| matches!(b, Block::HorizontalRule(_))),
+            "the rule must survive in book format"
+        );
+        assert!(
+            !footnotes
+                .content
+                .iter()
+                .any(|b| matches!(b, Block::Header(_))),
+            "no heading may be added in book format"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_footnotes_heading_english_fallback_without_language_stage() {
+        // `LanguageTerms::from_meta` returns None when the resolve stage has
+        // not run (as in these stage-less unit tests). The English literal is
+        // the documented fallback tier, per `toc_generate.rs`.
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![make_footnotes_section_with_rule()],
+        };
+        run_transform(&mut ast).await;
+
+        assert_eq!(
+            heading_text(section_heading(&appendix_sections(&ast)[0])),
+            "Footnotes"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_footnotes_heading_localized() {
+        let mut ast = Pandoc {
+            meta: make_meta_with_lang("es"),
+            blocks: vec![make_footnotes_section_with_rule()],
+        };
+        run_transform(&mut ast).await;
+
+        assert_eq!(
+            heading_text(section_heading(&appendix_sections(&ast)[0])),
+            "Notas"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_all_appendix_headings_localized() {
+        // Every section the transform can emit takes its title from the
+        // matching `section-title-*` term, not an English literal.
+        let mut meta_entries = match &make_meta_with_lang("es").value {
+            ConfigValueKind::Map(entries) => entries.clone(),
+            _ => unreachable!("make_meta_with_lang builds a map"),
+        };
+        meta_entries.push(meta_entry(
+            "license",
+            ConfigValue::new_string("CC BY 4.0".to_string(), dummy_source_info()),
+        ));
+        meta_entries.push(meta_entry(
+            "copyright",
+            ConfigValue::new_string("Posit, PBC".to_string(), dummy_source_info()),
+        ));
+        meta_entries.push(meta_entry(
+            "citation",
+            make_meta(vec![meta_entry(
+                "url",
+                ConfigValue::new_string("https://example.com".to_string(), dummy_source_info()),
+            )]),
+        ));
+
+        let mut ast = Pandoc {
+            meta: make_meta(meta_entries),
+            blocks: vec![make_bibliography(), make_footnotes_section_with_rule()],
+        };
+        run_transform(&mut ast).await;
+
+        let titles: Vec<String> = appendix_sections(&ast)
+            .iter()
+            .map(|s| heading_text(section_heading(s)))
+            .collect();
+        assert_eq!(
+            titles,
+            vec![
+                "Referencias",       // section-title-references
+                "Notas",             // section-title-footnotes
+                "Reutilización",     // section-title-reuse
+                "Derechos de autor", // section-title-copyright
+                "Cómo citar",        // section-title-citation
+            ]
+        );
     }
 }

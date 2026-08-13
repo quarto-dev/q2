@@ -1,0 +1,23 @@
+---
+title: Footnotes keep their rule when the appendix is off
+appendix-style: none
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      # With appendix processing disabled the footnotes section is never
+      # relocated or titled, so it keeps the `<hr>` it was built with.
+      # Quarto 1 behaves the same way: `insertFootnotesTitle` is only
+      # reached from inside `processDocumentAppendix` (bd-v9zs83zj).
+      ensureHtmlElements:
+        - ["section#footnotes hr"]
+        - ["div#quarto-appendix", "h2.quarto-appendix-heading"]
+      ensureFileRegexMatches:
+        - []
+        - [">Footnotes</h2>"]
+---
+
+Text with a note.[^a]
+
+[^a]: Only note.

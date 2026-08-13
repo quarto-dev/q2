@@ -1,0 +1,22 @@
+---
+title: Appendix heading localization
+lang: es
+format: html
+license: "CC BY 4.0"
+copyright: "Posit, PBC"
+citation:
+  url: https://example.com/doc
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      # Every appendix heading takes its text from the `section-title-*`
+      # language terms, not an English literal (bd-v9zs83zj).
+      ensureFileRegexMatches:
+        - ["Notas", "Reutilización", "Derechos de autor", "Cómo citar"]
+        - ["Footnotes", "Reuse", "Copyright", "Citation"]
+---
+
+Texto con una nota.[^a]
+
+[^a]: Primera nota.
