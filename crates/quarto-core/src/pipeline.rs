@@ -962,7 +962,7 @@ pub async fn render_qmd_to_html(
 /// * `source_name` - Name of the source file (for error messages
 ///   and the `ASTContext::filenames` slot the JSON writer reads)
 /// * `ctx` - Render context. Should have a `resource_resolver`
-///   set so `ResourceCollectorTransform` rewrites image URLs to
+///   set so `LinkRewriteTransform` rewrites link and image URLs to
 ///   the same path the consumer (e.g. `RenderToPreviewAstRenderer`)
 ///   uses when flushing artifacts to VFS.
 /// * `runtime` - System runtime for filesystem operations

@@ -104,6 +104,11 @@ impl TogglePosition {
 pub struct Navbar {
     pub title: NavbarTitle,
     pub logo: Option<String>,
+    /// `SourceInfo` of the YAML scalar that produced `logo`.
+    /// bd-root-relative-paths-design-fc5pvkcv — paired with `logo`
+    /// (mirroring `logo_href_source`, bd-qor9a) so the resolver knows
+    /// which YAML file the logo path was authored in.
+    pub logo_source: SourceInfo,
     pub logo_alt: Option<String>,
     pub logo_href: Option<String>,
     /// `SourceInfo` of the YAML scalar that produced `logo_href`.
@@ -129,6 +134,7 @@ impl Navbar {
         Self {
             title: NavbarTitle::Default,
             logo: None,
+            logo_source: SourceInfo::generated(By::programmatic_config()),
             logo_alt: None,
             logo_href: None,
             logo_href_source: SourceInfo::generated(By::programmatic_config()),
@@ -165,7 +171,12 @@ impl Navbar {
             };
         }
 
-        nav.logo = cv.get("logo").and_then(|v| v.as_plain_text());
+        if let Some(logo_cv) = cv.get("logo") {
+            nav.logo = logo_cv.as_plain_text();
+            if nav.logo.is_some() {
+                nav.logo_source = logo_cv.source_info.clone();
+            }
+        }
         nav.logo_alt = cv.get("logo-alt").and_then(|v| v.as_plain_text());
         if let Some(logo_href_cv) = cv.get("logo-href") {
             nav.logo_href = logo_href_cv.as_plain_text();
@@ -229,7 +240,10 @@ impl Navbar {
             }),
         }
 
-        push_optional_string(&mut entries, "logo", &self.logo, &info);
+        // logo round-trips its source_info
+        // (bd-root-relative-paths-design-fc5pvkcv) so the generate-time
+        // path resolver can locate the authoring YAML file.
+        push_optional_string(&mut entries, "logo", &self.logo, &self.logo_source);
         push_optional_string(&mut entries, "logo-alt", &self.logo_alt, &info);
         // logo-href round-trips its source_info (bd-qor9a) so the
         // diagnostic surface can locate it back in the YAML.
@@ -548,6 +562,34 @@ mod tests {
             ("navbar", b(false)),
         ]);
         assert!(resolve_navbar(&meta).is_none());
+    }
+
+    /// Case A (bd-root-relative-paths-design-fc5pvkcv): `logo` is
+    /// paired with the YAML scalar's `SourceInfo` — like `logo-href`
+    /// (bd-qor9a) — so the generate-transform can resolve a
+    /// frontmatter-authored logo path against the authoring file.
+    /// Capture and round-trip both directions.
+    #[test]
+    fn logo_source_captured_and_round_tripped() {
+        use quarto_source_map::FileId;
+        let logo_loc = SourceInfo::original(FileId(7), 4, 19);
+        let navbar_cv = map(vec![(
+            "logo",
+            ConfigValue::new_string("images/logo.svg", logo_loc.clone()),
+        )]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).expect("navbar must resolve");
+        assert_eq!(nav.logo.as_deref(), Some("images/logo.svg"));
+        assert_eq!(
+            nav.logo_source, logo_loc,
+            "logo_source must capture the YAML scalar's SourceInfo"
+        );
+
+        let reparsed = Navbar::from_config_value(&nav.to_config_value());
+        assert_eq!(
+            reparsed.logo_source, logo_loc,
+            "logo_source must survive the to/from round-trip"
+        );
     }
 
     #[test]

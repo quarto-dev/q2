@@ -1,0 +1,96 @@
+---
+title: Paths in websites
+---
+
+A website is usually developed from a local server rooted at the
+output directory, but deployed somewhere else — often under a
+subdirectory of a larger site (`https://example.com/docs/`). Quarto
+rewrites the paths you write so the rendered site works in both
+places. This page explains what you can write, what Quarto does with
+it, and the one case Quarto deliberately leaves alone.
+
+## Two ways to write a path
+
+Everywhere Quarto reads a path — markdown links and images, navbar
+and footer configuration, `logo:`, and so on — you can write it in
+one of two forms:
+
+- **Relative** (`images/plot.png`, `../index.qmd`): resolved relative
+  to the file you wrote it in. In configuration files
+  (`_quarto.yml`, a directory `_metadata.yml`), relative paths are
+  resolved against the directory of the file that declares them.
+- **Site-root-relative** (`/images/plot.png`, `/index.qmd`): a
+  leading `/` always means "from the project root". It never means
+  your filesystem's root, and it does not mean "from the deployed
+  domain's root" — Quarto rewrites it before it reaches the browser.
+
+Both forms produce the same rendered output: a **page-relative** URL.
+A page two directories deep referencing `/images/plot.png` emits
+`../../images/plot.png`, so the link keeps working no matter which
+URL prefix the site is served under.
+
+Links to project documents get the same treatment plus an extension
+rewrite: `[Home](/index.qmd)` renders as `../../index.html` from that
+same page.
+
+## Configuration-declared assets
+
+Values in `_quarto.yml` are shared by pages at every depth, so no
+single literal path could be correct on all of them — this is exactly
+what the per-page rewrite is for. It applies to:
+
+- `website.navbar.logo`
+- markdown images and links inside `page-footer` regions and the
+  navbar title
+- navbar, sidebar, and footer item `href`s
+
+Prefer plain markdown for footer imagery:
+
+``` {.yaml filename="_quarto.yml"}
+website:
+  page-footer:
+    left: '[![Logo](/images/logo.svg)](https://example.com)'
+```
+
+The image renders page-relative on every page, and Quarto copies
+`images/logo.svg` into the output directory for you. If the file is
+missing, the render completes with a warning naming the missing path.
+
+## Raw HTML is not rewritten
+
+Quarto 2 does not parse or rewrite HTML you author yourself. A raw
+HTML block or inline like
+
+``` markdown
+`<img src="/images/logo.svg">`{=html}
+```
+
+is emitted byte-for-byte. The `/images/...` path inside it works from
+a local server rooted at the output directory and breaks when the
+site is deployed under a subdirectory — silently, because Quarto does
+not look inside raw HTML.
+
+If you need an image or link in configuration or content, write it in
+markdown and let Quarto resolve it. Markdown images support
+attributes (`![alt](/images/x.svg){.my-class width=32}`), which
+covers most reasons to reach for raw HTML.
+
+Files referenced only from raw HTML are also invisible to resource
+collection, so they are not copied to the output directory. Declare
+them explicitly to have them copied:
+
+``` {.yaml filename="_quarto.yml"}
+project:
+  type: website
+  resources:
+    - images/
+```
+
+## Fully-qualified URLs
+
+A URL with a scheme (`https://…`) or a protocol-relative URL
+(`//host/…`) passes through untouched, everywhere. Building asset
+URLs from `site-url` works, but hard-codes the deploy location into
+every page — for versioned documentation that includes the version
+segment — so prefer site-root-relative paths unless you specifically
+want an absolute URL.

@@ -418,6 +418,80 @@ fn pipeline_favicon_missing_diagnoses_continues() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Case A (bd-root-relative-paths-design-fc5pvkcv) — navbar logo copy
+// ═══════════════════════════════════════════════════════════════════
+
+/// Decision 5: favicon is not special — a missing navbar logo gets
+/// the same warn-and-continue treatment `copy_favicon` pioneered.
+/// The render completes, nothing is copied, and a warning diagnostic
+/// names the missing file.
+#[test]
+fn pipeline_navbar_logo_missing_diagnoses_continues() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  navbar:\n    title: Site\n    logo: images/missing-logo.svg\n    left:\n      - index.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    assert!(
+        !project_dir.join("_site/images/missing-logo.svg").exists(),
+        "missing logo must not be written"
+    );
+    assert!(
+        summary
+            .project_diagnostics
+            .iter()
+            .any(|d| d.title.contains("missing-logo.svg")),
+        "expected a diagnostic mentioning 'missing-logo.svg'; got: {:?}",
+        summary
+            .project_diagnostics
+            .iter()
+            .map(|d| d.title.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+/// Decision 5, footer edition: a footer text-region image whose file
+/// is missing warns (naming the file) and the render continues.
+#[test]
+fn pipeline_footer_image_missing_diagnoses_continues() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  page-footer:\n    center: \"![](/images/gone.svg)\"\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    assert!(
+        !project_dir.join("_site/images/gone.svg").exists(),
+        "missing footer image must not be written"
+    );
+    assert!(
+        summary
+            .project_diagnostics
+            .iter()
+            .any(|d| d.title.contains("gone.svg")),
+        "expected a diagnostic mentioning 'gone.svg'; got: {:?}",
+        summary
+            .project_diagnostics
+            .iter()
+            .map(|d| d.title.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Test 39 — default project: no Phase-7 outputs, no metadata churn
 // ═══════════════════════════════════════════════════════════════════
 

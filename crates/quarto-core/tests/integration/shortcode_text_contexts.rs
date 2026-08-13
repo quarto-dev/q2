@@ -259,7 +259,7 @@ fn image_src_substitutes() {
     assert!(
         html.contains("src=\"assets/logo.png\""),
         "image src must substitute; got: {}",
-        line_containing(&html, "src=")
+        line_containing(&html, "<img")
     );
 }
 

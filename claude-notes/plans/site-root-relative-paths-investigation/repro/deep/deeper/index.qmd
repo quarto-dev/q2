@@ -1,0 +1,9 @@
+---
+title: Deep page
+---
+
+A markdown image with a root-absolute path: ![](/images/x.svg)
+
+A markdown link with a root-absolute path: [root](/index.qmd)
+
+Raw HTML with a root-absolute path: <img src="/images/x.svg" alt="">
