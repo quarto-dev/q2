@@ -3,9 +3,9 @@
 **Date:** 2026-08-13
 **Braid:** bd-toc-smart-quotes-6nro57ed
 **Branch:** `main` @ `0dcd7e83` (investigated in the main checkout — no worktree was created)
-**Status:** **Design settled 2026-08-13** — all open questions answered (see "Decisions"
-below). Phases are drafted against those decisions. **Do not start implementation until the
-user gives the go-ahead.**
+**Status:** **In progress.** Design settled 2026-08-13 (see "Decisions"); implementation
+authorized by the user the same day. Progress is tracked in the Work items checklist below —
+Phase 0 done, Phase 1 next.
 
 ## Triage verdict
 
@@ -280,20 +280,44 @@ These are why "change `String` to `Inlines`" is not a one-commit change.
 Phase boundaries are commit points (per `CLAUDE.md`'s commit-and-continue rule). Checked
 items are done and committed.
 
-### Phase 0 — Test plan (TDD, failing first)
+### Phase 0 — Test plan (TDD, failing first) — **DONE**
 
-- [ ] End-to-end test: a `toc: true` document whose headings carry a quoted span, inline
-      code, emphasis, math and a link, driven through `render_document_to_file` (pattern:
-      `crates/quarto-core/tests/integration/render_page_in_project.rs`) — **not**
-      `render_qmd_to_html` with defaults. Assert the TOC anchor's inner HTML against the Q1
-      shape in `toc-smart-quotes-investigation/OBSERVED.md`. There is currently **no e2e TOC
-      test at all**, which is why this shipped.
-- [ ] Unit: `TocEntry` round-trips through `ConfigValue` preserving inlines.
-- [ ] Unit: `from_config_value` accepts both `PandocInlines` and `Scalar(String)` (the
-      latter wrapped as a single `Str`).
-- [ ] Measure snapshot churn now rather than discovering it in Phase 2 (see Risks).
-- [ ] Confirm every new test fails at HEAD, for the expected reason, before touching
-      production code.
+- [x] End-to-end test file `crates/quarto-core/tests/integration/toc_markup.rs`, driving the
+      real CLI path (`ProjectPipeline` -> `RenderToFileRenderer` -> `render_document_to_file`)
+      against a temp project and reading the HTML off disk. Nine tests; expected shapes are
+      Q1's, from `toc-smart-quotes-investigation/OBSERVED.md`.
+- [x] Confirmed every test fails at HEAD for the expected reason (see below).
+- [x] Measured snapshot churn — **it is zero**.
+- [ ] ~~Unit: `TocEntry` round-trips through `ConfigValue` preserving inlines~~ — moved to
+      Phase 1. These test an API that does not exist until the type changes; writing them
+      now would not compile, which is not a useful red signal (and would break the crate
+      build). They land with the change they describe.
+
+**Red/green split at HEAD: 5 fail, 4 pass.** The four that pass are guarding behavior the
+epic must *preserve*, so they are regression guards rather than missing red:
+
+| test | at HEAD | why |
+|---|---|---|
+| `toc_entry_keeps_quote_glyphs` | **FAIL** | `Using a raw volume` — the strand's bug |
+| `toc_entry_keeps_inline_markup` | **FAIL** | `Use code and em and strong` — flattened |
+| `toc_entry_keeps_inline_math` | **FAIL** | `Math x+y inline` — span lost |
+| `toc_title_from_frontmatter_keeps_markup` | **FAIL** | `On this page` — parsed, then flattened |
+| `toc_title_from_project_config_keeps_markup` | **FAIL** | `On **this** page` — never parsed |
+| `toc_entry_keeps_str_internal_smart_typography` | pass | control (reader-side rewrites) |
+| `toc_entry_strips_links_but_keeps_their_text` | pass | forward guard for the Phase 2 strip |
+| `toc_entry_drops_footnotes` | pass | forward guard (`Note` skipped today) |
+| `toc_entry_escapes_literal_markup_characters` | pass | guard for escaping after `html_escape` goes |
+
+The two `toc-title` rows are worth reading together: **the same YAML fails two different
+ways** depending on source, which is the `InterpretationContext` split from decision 2
+showing up empirically rather than as an argument. Front matter parses the markdown and then
+`as_plain_text()` discards it; project config never parses it, so the asterisks reach the
+page verbatim.
+
+**Snapshot churn: zero.** No `.snap` file in the tree contains `id="TOC"`, `nav-link`, or
+`toc-title` (245 snapshots checked), and no Rust test outside this new file asserts on TOC
+HTML. The Risks section had this flagged as a broad hazard; it is nil — for the same reason
+the defect shipped, namely that the TOC had no test coverage at all.
 
 ### Phase 1 — `TocEntry.title: Inlines`
 
@@ -309,10 +333,30 @@ items are done and committed.
 ### Phase 2 — `toc_render` emits markup
 
 - [ ] Replace `html_escape(&entry.title)` with `pampa::writers::html::write_inlines_to`.
+- [ ] **Strip links and notes at render time** (see the decision below) so the TOC's own
+      `<a>` never wraps a nested `<a>`.
 - [ ] Cross-check output against Q1's `<code>` / `<em>` / `<strong>` /
       `<span class="math inline">` shapes.
 - [ ] Rework the `toc_render.rs:422` test: a literal `<b>` typed in a heading arrives as
       `Str("<b>")` and must still be escaped; a `RawInline` must not be.
+
+> **Design decision (2026-08-13, during Phase 0): strip at render, not at generation.**
+>
+> `## Math $x+y$ and a [link](https://example.com)` renders in Q1's TOC as
+> `Math <span class="math inline">\(x+y\)</span> and a link` — the link's *text* survives, the
+> anchor does not. Pandoc does this with `deLink`/`deNote` before emitting the TOC, for the
+> obvious reason: `<a>` cannot legally nest, and the TOC entry is itself an `<a>`. A naive
+> `write_inlines_to` over raw header content would emit invalid HTML.
+>
+> The stripping belongs in `toc_render` (Phase 2), **not** in `generate_toc` (Phase 1),
+> because `TocEntry` is also `DocumentProfile.outline` — a general-purpose semantic outline
+> that project features consume. "An anchor may not nest" is a constraint of *this HTML
+> rendering*, not a fact about the document's heading structure, and the profile contract
+> says profiles are read-only and consumers should not have to re-derive what was thrown
+> away. So: keep the profile faithful, strip where the constraint actually applies.
+>
+> Scope of the strip, mirroring Pandoc: `Link` unwraps to its content; `Note` and
+> `NoteReference` are dropped. Everything else renders.
 
 ### Phase 3 — `toc-title` gets the same treatment (decision 2)
 
@@ -327,6 +371,31 @@ items are done and committed.
       (`meta_annotations.rs` `ANNOTATIONS` and `config_markdown.rs`
       `MARKDOWN_CONFIG_PATHS`) — this is `bd-qzn1azon`'s whole scope, and Phase 3 is already
       editing one of them. Close `bd-qzn1azon` when done.
+- [ ] **Preview parity** (found in Phase 0, see below): emit the *rendered* title HTML into
+      `rendered.navigation.toc-title`, switch `template.rs:213` to it, and switch
+      `PreviewDocument.tsx:184` + `TocSlot` to consume it via `dangerouslySetInnerHTML`.
+- [ ] Extend `PreviewDocument.integration.test.tsx` (the TOC cases at :383-420) for the new
+      shape, and run `npm run build:all` from `hub-client/` — per `CLAUDE.md`, passing tests
+      are not sufficient for TS changes.
+
+> **Preview/render parity constraint (found during Phase 0).**
+>
+> The TOC *entries* are safe: `TocRenderTransform` writes the inner `<ul>` as an HTML string
+> to `rendered.navigation.toc`, and the preview injects it with `dangerouslySetInnerHTML`
+> (`chromeSlots.tsx` `TocSlot`). Markup added in Phases 1-2 flows through untouched.
+>
+> The **title** does not. `PreviewDocument.tsx:184-186` reads
+> `navigation.toc.title` through `extractMetaString` and passes it to `TocSlot` as a
+> `title: string` prop, rendered as a React *text node*. Turning that metadata value into
+> `Inlines` makes `extractMetaString` return nothing, so the preview would silently drop the
+> `<h2 id="toc-title">` while `q2 render` still emits it — a preview/render divergence of
+> exactly the kind `.claude/skills/preview-render-parity` exists to chase, and invisible to
+> every Rust test.
+>
+> Fix: give the title the same treatment the entries already get — render it to HTML in
+> `TocRenderTransform` and publish it under `rendered.navigation.*`. That keeps one seam
+> ("`rendered.*` is HTML produced from metadata") instead of inventing a second, and both
+> consumers read the same value.
 
 ### Phase 4 — Verification
 
