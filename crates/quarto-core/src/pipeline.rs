@@ -72,7 +72,7 @@ use crate::transforms::{
     AuthorsNormalizeTransform, CalloutResolveTransform, CalloutTransform,
     CategoriesSidebarTransform, CodeBlockGenerateTransform, CodeBlockRenderTransform,
     ConditionalContentTransform, CrossrefIndexTransform, CrossrefRenderTransform,
-    CrossrefResolveTransform, DateNormalizeTransform, EquationLabelTransform,
+    CrossrefResolveTransform, DateNormalizeTransform, DraftAlertTransform, EquationLabelTransform,
     ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
     FooterGenerateTransform, FooterRenderTransform, FootnotesTransform, LinkRewriteTransform,
     ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
@@ -1112,6 +1112,10 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 ///     and append a `<link rel="stylesheet">` so `bi-*` icons render (bd-bsut)
 /// 4c. `WebsiteCanonicalUrlTransform` - Set `canonical-url` from
 ///     `website.site-url + output_href` (Phase 7)
+/// 4d. `DraftAlertTransform` - For `draft: true` pages, set the localized
+///     `rendered.draft-alert-text` the template's `#quarto-draft-alert`
+///     banner gates on, and append a `quarto:status` meta tag
+///     (bd-draft-banner-missing-hgx1gkqm)
 /// 5. `TitleBlockTransform` - Add title header from metadata if not present
 /// 6. `SectionizeTransform` - Wrap headers in section Divs (for HTML semantic structure)
 /// 7. `FootnotesTransform` - Extract footnotes and create footnotes section
@@ -1278,6 +1282,13 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(WebsiteFaviconTransform::new()));
     pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
     pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
+    // Draft marking (bd-draft-banner-missing-hgx1gkqm). Not website-scoped
+    // — a standalone `draft: true` document gets the banner too — but it
+    // belongs with the metadata producers above: it only writes
+    // `rendered.draft-alert-text` and a `quarto:status` header include,
+    // both consumed later (by the template and `IncludeResolveStage`
+    // respectively). Self-gates to non-reveal HTML.
+    pipeline.push(Box::new(DraftAlertTransform::new()));
     // Slide construction for `format: revealjs` replaces the generic
     // title-block + sectionize pair: reveal needs an exactly-two-level slide
     // tree built from `slide-level` (Pandoc keeps reveal slide-construction

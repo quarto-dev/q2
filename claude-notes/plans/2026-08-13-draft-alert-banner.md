@@ -170,7 +170,153 @@ external connect-docs checkout. `drafty.qmd` is `title: "Drafty"` + `draft: true
 page at all — q2 ignores the key). The Q1 reference output lives in the original
 at `/Users/cscheid/repos/github/cscheid/q2-connect-docs/llms-info/repros/draft-banner-missing/_site-q1/`.
 
-## Proposed phases (draft)
+## Work items
+
+Design settled 2026-08-13; implementation approved and underway. Revealjs split
+out to **bd-4c7n9o1h**.
+
+### Phase 0 — Tests (TDD: written and confirmed failing first)
+
+- [x] Unit tests in the new `transforms/draft_alert.rs`:
+  - [x] `draft: true` + HTML → localized text inserted, `quarto:status` meta appended
+  - [x] no `draft` key → no-op
+  - [x] `draft: false` → no-op
+  - [x] localized (`lang: es`) → `Borrador`
+  - [x] stage-less fallback (no `LanguageTerms`) → English `Draft`
+  - [x] revealjs target → no-op (reserved for bd-4c7n9o1h)
+  - [x] idempotent on re-run (no duplicate meta tag)
+- [x] smoke-all fixture: draft page asserts banner present + `quarto:status`
+- [x] smoke-all fixture: non-draft page asserts banner absent
+- [x] smoke-all fixture: `localization/lang-es-draft-banner.qmd` asserts `Borrador`
+- [x] Confirm every new test fails for the right reason before implementing
+
+### Phase 1 — Implementation
+
+- [x] `transforms/draft_alert.rs`: new `DraftAlertTransform` (phase `Normalization`)
+- [ ] Register in `build_transform_pipeline`; confirm `test_build_transform_pipeline_phase_ordering` stays green
+- [x] Template slot in `FULL_HTML_TEMPLATE`, above the navbar slot (Q1 puts the banner first inside `#quarto-header`, i.e. above the secondary nav)
+- [x] `<meta name="quarto:status" content="draft">` via `append_to_rendered_header`
+- [x] Comments: `bd-w0o9` (future `draft-mode: gone` suppression), `bd-4c7n9o1h` (revealjs), and why the meta tag exists with no consumer yet
+- [ ] All Phase 0 tests green
+
+### Phase 2 — End-to-end verification
+
+- [x] `q2 render` on the committed repro; banner markup diffed against `_site-q1/drafty.html`
+- [x] Confirm the shipped CSS actually applies (read back computed styles in a browser)
+- [x] `q2 preview` on the repro via the full WASM rebuild chain — **trace was wrong; follow-up filed (bd-3cpv7dah)**
+- [x] Record invocation + observed output in this plan
+
+#### Results
+
+**`q2 render` — byte-identical to Q1.**
+
+```
+$ cd claude-notes/plans/draft-alert-banner-investigation/repro
+$ q2 render
+Rendered 2 of 2 files to .../repro/_site
+```
+
+`_site/drafty.html` lines 15–16:
+
+```html
+<body class="nav-sidebar floating quarto-light">
+<div id="quarto-draft-alert" class="alert alert-warning"><i class="bi bi-pencil-square"></i>Draft</div>
+```
+
+Character-for-character identical to the Q1 reference in
+`_site-q1/drafty.html`. Also confirmed by inspection:
+`<meta name="quarto:status" content="draft">` present in the draft page's
+head; `_site/index.html` (the non-draft control) contains **zero**
+occurrences of either `quarto-draft-alert` or `quarto:status`.
+
+**Computed styles read back in Chrome** (served over `http.server`, since
+`file://` would not exercise the real stylesheet URLs):
+
+| property | computed | source |
+| --- | --- | --- |
+| `margin-top` / `margin-bottom` | `0px` / `0px` | `#quarto-draft-alert` |
+| `padding` | `4.59px` (= `.3em`) | `#quarto-draft-alert` |
+| `text-align` / `font-size` | `center` / `15.3px` (= `.9em`) | `#quarto-draft-alert` |
+| `background-color` / `color` | `rgb(255,243,205)` / `rgb(102,77,3)` | Bootstrap `.alert-warning` |
+| icon `margin-right` | `4.59px` (= `.3em`) | `#quarto-draft-alert i` |
+| icon `::before` font / glyph | `bootstrap-icons` / `U+F4CA` | `.bi-pencil-square` |
+
+`document.body.firstElementChild === el` → **true** (correct position), and
+the banner spans the full viewport width at `y=0`. Screenshot inspected:
+full-width pale-yellow strip, pencil icon, centered "Draft". So the
+shipped-CSS claim is confirmed at the pixel level, not just by grep.
+
+**`q2 preview` — banner ABSENT. The Phase-2 trace was wrong.**
+
+Built through the full chain (`npm run build:wasm` →
+`cargo xtask build-q2-preview-spa` → `cargo build --bin q2`), then
+`q2 preview drafty.qmd --port 8877`. The preview iframe reports
+`hasBanner: false` — while `statusMeta: true`.
+
+Every step of the earlier reasoning was individually correct (the preview
+*does* call `render_qmd_to_html`, *does* reach the no-custom-template arm,
+`is_minimal_html` *is* false) and the conclusion was still wrong, because
+**the preview never uses the resulting HTML page**. It is a React SPA that
+mounts into `<div id="root">` and *reconstructs* the chrome from metadata,
+slot by slot, in `ts-packages/preview-renderer/src/q2-preview/`
+(`PreviewDocument.tsx`, `chromeSlots.tsx`) — whose comments cite
+`template.rs` line numbers explicitly. A new slot in `FULL_HTML_TEMPLATE`
+therefore reaches `q2 render` only. The `quarto:status` meta *does* appear
+because `HeaderIncludesEffect` applies `rendered.includes.header`
+imperatively to `document.head` — which is exactly why the partial success
+was misleading.
+
+Split to **bd-3cpv7dah** per the agreed rule. The fix looks like ~20 lines
+(a `DraftAlertSlot` before `NavbarSlot`), since the transform already
+publishes the localized label the slot would consume.
+
+**Lesson worth keeping:** "same entry point, same stage, same branch" is
+not evidence that two pipelines produce the same DOM. The preview's shape
+contract is a separate surface, and only a real preview run tests it.
+
+### Phase 3 — Docs & close
+
+- [x] Check whether `docs/` documents drafts at all; add/adjust if so — **it does not; filed bd-98lngao9 rather than write a page for a half-shipped feature**
+- [x] Full `cargo xtask verify` (with the WASM leg — not `--skip-hub-build`) — 14/14 green
+- [x] Report snapshot churn explicitly — **zero**
+- [ ] Commit, ask before pushing
+
+#### Docs
+
+There is no drafts page to extend. `draft: true` appears only in passing
+(`docs/guides/projects/aliases.qmd:93`, plus incidental front matter in
+`docs/errors/markdown/Q-2-42.qmd:75`); nothing tells a user what marking a
+page a draft does. Writing that page now would document a half-shipped
+feature — `draft-mode` (bd-w0o9) is the option users will actually reach
+for, and a page written before it lands would need rewriting immediately.
+Filed as **bd-98lngao9** with the three behaviours to cover (sidebar
+exclusion, alias-stub suppression, the banner) and the note that it should
+be written together with bd-w0o9.
+
+#### Snapshot churn: zero
+
+No `.snap` file changed. The prediction held — but not for free: the first
+template edit put the `$if(...)$` and its markup on one line, which added a
+stray blank line to the body of **every non-draft page** and broke two
+byte-identity tests (`artifact_scoping_pipeline::single_doc_render_unchanged_under_scope_refactor`,
+`attribution_baseline_snapshot::attribution_off_html_baseline`). Rewriting
+the slot in the own-line directive idiom the navbar slot already uses
+restored byte-identity. Those two tests are a genuinely valuable guard —
+worth knowing they exist before touching the template.
+
+#### Verification summary
+
+- `cargo nextest run --workspace`: **11,846 passed**, 197 skipped
+- `cargo xtask verify` (full, incl. WASM + hub-client): **14/14 steps green**
+- New tests: 14 unit tests in `draft_alert.rs`, 4 smoke-all fixtures
+  (`drafts/draft-banner.qmd`, `drafts/not-a-draft.qmd`,
+  `drafts/draft-false.qmd`, `localization/lang-es-draft-banner.qmd`)
+
+Note on the session-start failures: the 3 hub-client WASM smoke tests that
+failed under `--skip-hub-build` at `0dcd7e83` were, as diagnosed, stale
+artifacts from `60d42f0e` — the full verify with the WASM leg passes them.
+
+## Proposed phases (draft — superseded by the checklist above)
 
 - **Phase 0 — Test plan (TDD, failing first).**
   - `crates/quarto/tests/smoke-all/` fixture: `draft: true` page asserting

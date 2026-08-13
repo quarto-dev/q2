@@ -1,0 +1,33 @@
+---
+title: Draft page
+draft: true
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      # Quarto 1 parity (bd-draft-banner-missing-hgx1gkqm). Q1 emits
+      # `<div id="quarto-draft-alert" class="alert alert-warning">
+      # <i class="bi bi-pencil-square"></i>Draft</div>` as the first
+      # child of the page header. Q2 has no `#quarto-header` wrapper
+      # (see transforms/title_banner.rs), so top-of-body is the
+      # equivalent position.
+      ensureHtmlElements:
+        - [
+            "div#quarto-draft-alert.alert.alert-warning",
+            "div#quarto-draft-alert i.bi.bi-pencil-square",
+            'head meta[name="quarto:status"][content="draft"]',
+          ]
+      ensureFileRegexMatches:
+        - [
+            # The icon precedes the label as a bare text node, exactly as
+            # Q1 builds it (an `<i>` sibling, not a wrapping span).
+            "</i>Draft</div>",
+            # The banner must be the FIRST thing in the body -- above the
+            # navbar, mirroring Q1's insertBefore(header.firstChild). A
+            # selector-only test cannot see position, so assert it here.
+            '<body[^>]*>\s*<div id="quarto-draft-alert"',
+          ]
+---
+
+A draft page.
