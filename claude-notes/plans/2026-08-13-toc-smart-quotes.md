@@ -234,11 +234,13 @@ These are why "change `String` to `Inlines`" is not a one-commit change.
    version discipline is mandatory.
 2. **`navigation.toc` is a documented user/filter override point.** `TocGenerateTransform`
    deliberately skips generation when `navigation.toc` already exists in metadata
-   (`toc_generate.rs`), so hand-written YAML with plain-string titles must keep working.
-   `TocEntry::from_config_value` (toc.rs:146) reads `title` via `as_plain_text()`; it will
-   need to accept *either* a YAML string (promoting it to a single `Str`, or parsing it as
-   markdown — see Q1 below) or `PandocInlines`. The round-trip becomes asymmetric and must
-   stay backward-compatible.
+   (`toc_generate.rs`), so hand-written overrides must keep working.
+   `TocEntry::from_config_value` (toc.rs:146) reads `title` via `as_plain_text()` and must
+   accept both shapes the metadata layer can hand it: `PandocInlines` (front matter, or
+   `!md`-tagged project config — use directly) and `Scalar(String)` (project config's
+   literal default, or programmatic construction — wrap as a single `Str`). Note the parse
+   already happened upstream at YAML-load time per `InterpretationContext`; this is not a
+   re-parsing decision. See Q1/Q2 below for the context split and its consequence.
 3. **The render side has a precedent, so it is not new surface.**
    `pampa::writers::html::write_inlines_to` is `pub` (html.rs:2018) and quarto-core already
    uses exactly this pattern to render `PandocInlines` metadata to HTML
@@ -283,20 +285,52 @@ No docs phase: no new user-facing option — this is q2 catching up to Q1's exis
 Questions 1, 2 and 5 from the first round are settled (see "Scope decision" above).
 Remaining:
 
-1. **Legacy string titles in `navigation.toc`: promote or parse?**
-   When a user or Lua filter hand-writes `navigation.toc` with
-   `title: "My **bold** section"`, should `from_config_value` (a) wrap it as a single `Str`
-   — literal, no markup, backward-identical; or (b) run it through the qmd inline parser so
-   hand-written entries get the same markup support as generated ones? I lean **(a)**, with
-   the markup path available by writing `PandocInlines` — because (b) silently changes the
-   meaning of existing YAML that happens to contain `*` or `_`. Your call.
+1. ~~**Legacy string titles: promote or parse?**~~ **Withdrawn — the premise was wrong.**
+   Markdown parsing of metadata strings happens at **YAML-load time**, not in
+   `from_config_value`. The `InterpretationContext` (config_value.rs:104-135) sets the
+   default per source, and the two sources have **opposite defaults**:
 
-2. **Does `toc-title` get the same treatment?**
-   `NavigationToc.title` is the TOC's own heading (`<h2 id="toc-title">`), still a `String`
-   read via `as_str()` (toc.rs:214). Q1 renders it through Pandoc too, so
-   `toc-title: "On **this** page"` would produce markup there. Include it in this epic, or
-   leave it and file separately? I lean **include it** — same defect, same phase, and
-   leaving it makes the module internally inconsistent.
+   | source | untagged string | opt out / in |
+   |---|---|---|
+   | document front matter (`DocumentMetadata`) | **parsed as markdown** → `PandocInlines` | `!str` keeps it literal |
+   | `_quarto.yml` (`ProjectConfig`) | **kept literal** → `Scalar(String)` | `!md` parses it |
+
+   So a front-matter `navigation.toc` entry with `title: "My **bold** section"` already
+   arrives as `PandocInlines` carrying a `Strong`. Today `as_plain_text()` (toc.rs:146)
+   throws that markup away — which is the *same defect this epic fixes*, not a separate
+   decision. Nothing to re-parse; carrying inlines just stops discarding what is already
+   there.
+
+   What survives is narrower and has an answer that follows from the existing contract: a
+   `Scalar(String)` reaching `from_config_value` came from project config (literal by
+   design) or from programmatic construction, so it should be **wrapped as a single `Str`**.
+   Re-parsing it would bypass `ProjectConfig`'s deliberate literal-by-default rule; the
+   sanctioned way to opt a project-config key into markdown is the registry — see Q2.
+
+2. **Should `toc-title` be blessed in `MARKDOWN_CONFIG_PATHS`?** *(the real question Q1 was
+   groping at)*
+   `toc-title` is read from merged metadata via `as_plain_text()`
+   (`toc_generate.rs:125-133`), so it inherits the split above:
+
+   - front matter — `toc-title: "On **this** page"` → `PandocInlines`, markup **available**
+     (and currently discarded by `as_plain_text`, fixed by this epic);
+   - `_quarto.yml` — same YAML → `Scalar(String)`, markup **never parsed**, because
+     `toc-title` is **not** in `MARKDOWN_CONFIG_PATHS`
+     (`transforms/config_markdown.rs:84-122`, which blesses `website.title`, navbar/sidebar
+     titles, `page-footer` regions and nav-item `text`).
+
+   So after this epic a project-level `toc-title` would still be markup-free while a
+   document-level one renders — a split with no principled justification, since `toc-title`
+   is presentation text exactly like `website.title` and `sidebar.title` next to it in the
+   registry. Adding `&["toc-title"]` is a one-line change and the module documents this as
+   the growth path ("Growing the feature = adding a line here").
+
+   I lean **yes, bless it, in this epic**. Two caveats worth your call: it is a behavior
+   change for existing `_quarto.yml` files whose `toc-title` happens to contain `*` or `_`
+   (the `!str` opt-out does not work in project config — documented limitation at
+   config_markdown.rs:40-45), and `NavigationToc.title` is currently `String` read via
+   `as_str()` (toc.rs:214), so blessing it only pays off if that field also becomes
+   `Inlines` in Phase 3.
 
 3. **`bd-zzke`: un-defer now or after this lands?**
    It shrinks once the TOC stops flattening. I lean **after**, so its site audit runs
