@@ -2,17 +2,18 @@
 
 **Date:** 2026-08-12
 **Braid:** `bd-sidebar-contents-dir-shorthand-z7arvhx8` (bug, p1, label `navigation`)
-**Branch:** investigated in the **main checkout** on `main` @ `152ed8fb`. No worktree
-was created — see "Where to do the work" below.
-**Status:** Investigation — pending design alignment with user.
-**Do not start implementation until the user gives the go-ahead.**
+**Branch:** `braid/bd-sidebar-contents-dir-shorthand-z7arvhx8`, off `main` @
+`152ed8fb`, in the **main checkout** (no worktree — user's call, Q5).
+**Also fixes:** `bd-4feoon8u` (multi-sidebar `auto:` selection).
+**Status:** Design settled 2026-08-13 — implementing.
 
 ## Triage verdict
 
 **Ready to design** — the bug is real, reproducible at HEAD, and precisely
 located. But the fix the strand proposes is **necessary and not sufficient**:
 it repairs the minimal repro while leaving the real-world Connect-docs failure
-in place. Two further decisions are needed before implementation (Q1/Q2 below).
+in place. Two further decisions were needed before implementation; both are
+settled below.
 
 ## Issue context
 
@@ -171,7 +172,7 @@ index.html             sidebar=0
 So **a pre-existing bug exists today, independent of this strand**: a
 multi-sidebar project using explicit `auto: <dir>` loses that sidebar entirely.
 Filed as `bd-4feoon8u` (`discovered-from` this
-strand). See Q4 for whether to fold the fix in here.
+strand), and fixed on this branch (D4).
 
 Note `resolve_sidebar_membership`
 (`crates/quarto-core/src/project/sidebar_membership.rs:77`) *does* expand before
@@ -188,97 +189,98 @@ not compensate.
   string, and every `chapters` hit in the tree is a test fixture directory name.
   When books land, they should route through whatever this fix establishes.
 
-## Proposed phases (draft)
+## Design decisions (settled 2026-08-13)
 
-Contents depend on the answers to Q1/Q2 below.
+**D1 — `auto: <bare dir>` produces a titled section too (full Q1 parity).**
+One spelling, one behavior. `contents: <dir>` then routes to
+`AutoSpec::Path` and needs no representation of its own.
 
-- **Phase 0 — Pin with failing tests.** Both failures are already reproduced
-  (the repro for the shorthand, the committed probe for the selection gap), so
-  this phase is about turning them into tests. Write failing tests: (a) parse —
-  scalar `contents: guides` produces the chosen `Auto` representation;
-  (b) expansion — it yields a titled section matching Q1's shape;
-  (c) end-to-end — a multi-sidebar project renders `#quarto-sidebar` on the
-  directory's pages. Confirm each fails before touching implementation.
-- **Phase 1 — Parse.** Route the scalar shorthand in `parse_contents` (`:528`).
-  One site covers both top-level and nested `contents:`, matching Q1's recursion.
-- **Phase 2 — Expansion shape.** Make a bare-directory spec expand via
-  `section_for_dir` rather than `flatten_as_links`. Shape determined by Q1.
-- **Phase 3 — Selection ordering.** Make `sidebar_for_page` see expanded
-  contents, per Q2.
-- **Phase 4 — End-to-end verification.** `cargo run --bin q2 -- render` on the
-  repro *and* the multi-sidebar probe; diff the sidebar DOM against
-  `_site-q1/`. Per CLAUDE.md, record the invocation and observed output.
-- **Phase 5 — Docs + error catalog.** Document the shorthand. Check whether
-  `Q-13-6` ("`auto:` matched no documents") wording still reads correctly when
-  the user wrote `contents: <dir>` and never typed `auto:`.
+The implementation falls out more cleanly than expected: `group_with_subdirs`
+partitions candidates by their *first path component*. When every candidate is
+beneath `how-to/`, `top_level` is empty and `dir_groups` has exactly one entry,
+so it already returns `vec![section_for_dir("how-to", …)]` — precisely Q1's
+shape. So D1 is **not** a new code path; it is choosing `Scope::All` instead of
+`Scope::Flat` for a bare-directory `AutoSpec::Path`.
 
-## Open design questions for the user
+Consequence: `auto_path_scopes_to_subdir` ("Test 21", `sidebar_auto.rs:504`) is
+rewritten — it asserts the behavior we are deliberately changing. Globs
+(`auto: docs/*`, `auto: docs/**/*.qmd`) are unaffected and stay flat.
 
-**Q1. Should `auto: <bare dir>` also produce a titled section, or only the new
-`contents: <dir>` shorthand?**
+**D2 — Expand before selecting.** Hoist expansion above `sidebar_for_page` and
+expand *every* declared sidebar, then pick. Correct by construction, and it is
+also the fix for `bd-4feoon8u`.
 
-In Q1 these are the same code path and both produce sections. In q2 they would
-diverge unless we change `auto:` too.
+The trap: this transform runs **per page**, so naively expanding all sidebars
+would fire `Q-13-6` ("`auto:` matched no documents") for unselected sidebars on
+every page. Expansion must therefore collect diagnostics **per sidebar**, and
+only the picked sidebar's diagnostics may reach `ctx.diagnostics`. Same applies
+to `strip_auto`'s `Q-13-5` on the no-index path.
 
-- **(a) Full Q1 parity** — make a bare-directory `AutoSpec::Path` expand via
-  `section_for_dir`; `contents: <dir>` then routes to `AutoSpec::Path` and the
-  strand's one-line fix genuinely suffices. Cost: changes documented `auto:`
-  behavior and rewrites `auto_path_scopes_to_subdir` (Test 21). *My
-  recommendation* — one spelling, one behavior, matches Q1, smallest surface.
-- **(b) Keep `auto:` flat; give the shorthand its own representation** (e.g. an
-  `AutoSpec::Dir(String)` variant, or a grouping flag). No existing behavior
-  changes. Cost: two different meanings for what Q1 treats as one spelling, and
-  a lasting parity gap on `auto:`.
+**D3 — Directory-ness comes from the project index, not the filesystem.** A
+pattern is a bare directory when it carries no glob metacharacter *and* at least
+one indexed profile lives beneath it. No I/O, WASM-safe.
 
-Note this only bites for a bare directory. `auto: docs/*` and `auto: docs/**/*.qmd`
-are globs, not directories, and stay flat under either option.
+Accepted quirk (user-confirmed): an empty or unindexed directory is not
+recognised as a directory and falls through to the `Q-13-6` empty-match warning.
+Unavoidable under the WASM/automerge project representation.
 
-**Q2. How should sidebar selection see through `auto:`?**
+**D4 — `bd-4feoon8u` is fixed here.** It is the same change as D2; splitting
+would be artificial.
 
-- **(a) Expand before selecting** — hoist `expand_auto` above `sidebar_for_page`
-  and expand each candidate sidebar, then pick. Correct by construction and also
-  fixes the pre-existing `auto:`-in-multi-sidebar bug. Cost: expands every
-  declared sidebar instead of just the chosen one, per page.
-  *My recommendation.*
-- **(b) Teach `contains_source_path` to match `Auto` specs directly** against the
-  glob without expanding. Cheaper, but duplicates matching logic in a second
-  place and risks the two drifting.
+**D5 — Branch, not worktree.** `braid/bd-sidebar-contents-dir-shorthand-z7arvhx8`
+in the main checkout.
 
-**Q3. Should "is this a directory?" be decided from the project index or the
-filesystem?** Q1 stats the filesystem. q2's expansion is index-driven and must
-work under WASM. I'd suggest **treating it as a directory when any indexed
-profile lives beneath it** — no I/O, WASM-safe, and consistent with the fact that
-only indexed documents can ever become entries. Confirm that's acceptable, since
-it means an empty or unindexed directory behaves as "not a directory" and falls
-through to the `Q-13-6` empty-match warning.
+## Phases
 
-**Q4. Should `bd-4feoon8u` be fixed here, or on its own?** The pre-existing
-multi-sidebar `auto:` selection bug is now filed separately (it reproduces with
-today's syntax, so it deserves its own record either way). But the Connect-docs
-case cannot be fixed without it. I'd implement both under this plan and close
-`bd-4feoon8u` with the same PR — confirm, or say if you want them split across
-branches.
+- [x] **Phase 1 — Expansion shape (D1, D3).** *Test first.*
+      `sidebar_auto.rs`: add the index-driven bare-directory test; select
+      `Scope::All` for such a spec in `collect_candidates`. Rewrite Test 21 to
+      the new contract and keep the glob tests green as the regression fence.
+- [ ] **Phase 2 — Parse the shorthand.** *Test first.*
+      `sidebar.rs:528`: route a scalar `contents:` that is neither `auto` nor a
+      separator to `SidebarEntry::Auto(AutoSpec::Path(s))`. One site covers both
+      top-level and nested `contents:`, matching Q1's recursion. Bare strings in
+      an *array* are untouched (Q1 parity — they stay `Link`/`Separator`).
+- [ ] **Phase 3 — Selection ordering (D2, `bd-4feoon8u`).** *Test first.*
+      `sidebar_generate.rs`: resolve hrefs + expand every parsed sidebar, then
+      `sidebar_for_page`, then enrich + active-state. Per-sidebar diagnostics;
+      only the picked sidebar's are emitted.
+- [ ] **Phase 4 — End-to-end verification.** `cargo run --bin q2 -- render` on
+      both the minimal repro and the committed multi-sidebar probe; compare the
+      sidebar DOM against the repro's `_site-q1/`. Per CLAUDE.md, record the
+      exact invocation and observed output in this plan.
+- [ ] **Phase 5 — Docs.** Document the shorthand and the `auto: <dir>` section
+      shape. Re-read `Q-13-6`'s wording for the case where the user wrote
+      `contents: <dir>` and never typed `auto:`.
+- [ ] **Phase 6 — Full `cargo xtask verify`** (not `--skip-hub-build`;
+      `quarto-core` is WASM-relevant), then request push approval.
 
-**Q5. Where should the work happen?** This investigation ran in the main
-checkout, which is clean at `origin/main`. Per the skill I did not create a
-branch or worktree. Given this touches `quarto-core` (WASM-relevant) and wants a
-full `cargo xtask verify`, a worktree via
-`cargo xtask create-worktree bd-sidebar-contents-dir-shorthand-z7arvhx8` seems
-right — but that's your call.
+## Known limitation (deliberate, not a regression)
 
-## Risks / tradeoffs (draft)
+`section_for_dir` builds its children as flat links, so documents nested
+*deeper* than one level under the directory (`how-to/deep/x.qmd` under
+`auto: how-to`) appear as flat entries rather than a nested sub-section. Q1
+recurses arbitrarily (`nodesToEntries`). This matches q2's existing one-level
+`group_with_subdirs` behavior and is out of scope here; file a follow-up if the
+Connect docs need it.
 
-- **Behavior change to a shipped feature.** Under option Q1(a), any project
-  relying on `auto: <dir>` producing a flat list gets a titled section instead.
-  This is Q1 parity, but it *is* a visible change for existing q2 users.
+## Risks / tradeoffs
+
+- **Behavior change to a shipped feature.** Per D1, any project relying on
+  `auto: <dir>` producing a flat list gets a titled section instead. This is Q1
+  parity, but it *is* a visible change for existing q2 users and should be
+  called out in the release notes.
 - **Selection ordering is load-bearing and under-tested.** The
   `sidebar_for_page` → `expand_auto` order looks incidental rather than
   designed. Changing it affects every multi-sidebar project, and the
   Rule-2 wildcard currently masks the defect in every single-sidebar project —
-  which is why this went unnoticed. Phase 0's probe should pin the current
-  behavior before it moves.
+  which is why this went unnoticed. The committed probe pins the pre-fix
+  behavior; Phase 3 must keep single-sidebar projects working unchanged.
 - **`quarto-core` is WASM-relevant**, so full `cargo xtask verify` (not
   `--skip-hub-build`) is required before pushing, per CLAUDE.md.
+- **Per-page cost.** D2 expands every declared sidebar on every page instead of
+  just the picked one. Fine at Connect-docs scale; worth a look if a project ever
+  declares many sidebars over many pages.
 - **Machine contention.** Sibling checkouts at `~/rooms/room-N/q2` share this
   disk and CPU; `verify` runs here are slow and have previously died on disk
   space. Budget for it.
