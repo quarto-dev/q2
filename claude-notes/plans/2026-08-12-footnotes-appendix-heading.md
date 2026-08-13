@@ -3,17 +3,17 @@
 **Date:** 2026-08-12
 **Braid:** bd-v9zs83zj
 **Checkout:** main @ `de2375f0` (no worktree/branch created — this skill ran in the main checkout)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled 2026-08-12 — **ready to implement.** All four questions
+answered by the user; see "Design answers" below.
 
 ## Triage verdict
 
-**Ready to design.** The bug reproduces exactly as filed, the fix site is a single
+**Ready to implement.** The bug reproduces exactly as filed, the fix site is a single
 identified line (`appendix.rs:156`), and the localization mechanism the strand asks
-about already exists and already has the right key. But the investigation found that
-the reported symptom is **one of four instances of the same defect**, and that the
+about already exists and already has the right key. The investigation found that
+the reported symptom is **one of five instances of the same defect**, and that the
 strand's claim "the `<hr />` is correct" is **false** — Q1 deletes the `<hr>` when it
-inserts the heading. Both change the scope, so the design questions below need answers
-before implementation.
+inserts the heading. Both widened the scope; the user has approved the wider scope.
 
 Pre-flight `cargo xtask verify --skip-hub-build` green at `de2375f0` (all 14 steps
 passed, exit 0).
@@ -180,71 +180,165 @@ class, so those rules are dead and *all five* appendix headings are unstyled.
 
 Q1 applies `["anchored", "quarto-appendix-heading"]`
 (`format-html-appendix.ts:98`) to every appendix heading. q2 also never emits `"anchored"`
-anywhere (`grep -rn '"anchored"' crates/` → zero hits), which is a separate and larger
-gap — the anchor-link mechanism itself does not exist in q2 — so `anchored` should
-probably not be added blind. This drives Q3.
+anywhere (`grep -rn '"anchored"' crates/` → zero hits). This drives Q3.
 
-## Proposed phases (draft)
+The `.quarto-appendix-heading` rules are **substantive**, not cosmetic trim
+(`_bootstrap-rules.scss:2235`, `:2276`):
 
-Skeleton only — contents depend on the answers to Q1–Q4.
+```scss
+#quarto-appendix.default .quarto-appendix-heading {
+  margin-top: 0; line-height: 1.4em; font-weight: 600;
+  opacity: 0.9; border-bottom: none; margin-bottom: 0;
+}
+#quarto-appendix.plain .quarto-appendix-heading { font-size: 1em !important; }
+```
 
-- **Phase 0 — Test plan (TDD, failing first).** A `render_to_file`-level test asserting
-  the heading text appears inside `#quarto-appendix`; a localization test (`lang: es` →
-  `Notas`); a negative test (`appendix-style: none` → no heading, matching Q1); and, if
-  Q1 is answered "yes", an assertion that no `<hr>` survives in the section. Route through
-  the end-to-end entry point per CLAUDE.md, not `render_qmd_to_html` with defaults —
-  the heading only appears on the appendix branch.
-- **Phase 1 — `wrap_footnotes`.** Add the missing sibling of `wrap_bibliography` in
-  `appendix.rs`, mirroring its shape; use it at `appendix.rs:156`.
-- **Phase 2 — Localized title lookup.** A small helper (`appendix_title(meta, key,
-  fallback)`) following the `toc_generate.rs` precedence, applied to footnotes and — if
-  Q2 is "yes" — retrofitted to the four existing literals.
-- **Phase 3 — `<hr>` removal**, if Q1 is "yes". Cleanest as *not emitting* the
-  `HorizontalRule` in `create_footnotes_section` when the appendix will title the section
-  — but that couples two transforms, so more likely the appendix transform strips it while
-  wrapping. Needs design.
-- **Phase 4 — Heading classes**, if Q3 is "yes".
-- **Phase 5 — Verification.** Full `cargo xtask verify`; end-to-end render inspected;
-  re-render the four named Connect docs pages and confirm the text diff against the Q1
-  reference actually closes.
+Without the class, appendix headings render as ordinary `<h2>` — full size, with
+Bootstrap's `border-bottom`, and the wrong margins. So emitting it is a **real step
+toward Q1 parity**, not just class noise.
 
-## Open design questions for the user
+(Noted in passing, out of scope: `.quarto-appendix-contents > *:not(h2)` at `:2281`
+implies Q1's `div.quarto-appendix-contents` content wrapper, which q2 also never emits.
+Footnotes are unaffected — the sibling selector `*[role="doc-endnotes"] > ol` gives them
+the 0.9em independently — so this only matters for the other appendix sections. Not
+filed; call it out if the Connect-docs diff surfaces it.)
 
-1. **The `<hr>` (Finding 3 — most important).** Q1 deletes the `<hr>` when it inserts the
-   heading, so adding the heading alone leaves q2 differing from the reference render and
-   does not close the diff this strand exists to close. Should the fix also drop the rule
-   from the titled footnotes section? *Recommendation: yes* — otherwise the strand's stated
-   motivation is unmet. It does mean the `<hr>` stays when appendix processing is off,
-   matching Q1 exactly.
+### Finding 5 — `.anchored` is a pure JS selector hook, and emitting it is inert (Q3 research)
 
-2. **Scope: fix all five headings or just footnotes (Finding 2)?** `References`, `Reuse`,
-   `Copyright`, `Citation` are hardcoded English despite their `section-title-*` keys
-   existing and being fully translated. *Recommendation: all five in one commit* — it is
-   the same one-line change at each site, the helper is written either way, and doing only
-   footnotes leaves four known-wrong sites plus an inconsistent file. If you'd rather keep
-   this strand minimal, I'd file the other four as their own p3 strand rather than leave
-   them unrecorded.
+Traced through the Q1 source at the user's request. `.anchored` is **not**
+appendix-specific and **has no styling of its own**:
 
-3. **Heading classes (Finding 4).** Q1 emits `class="anchored quarto-appendix-heading"`.
-   q2 ships the `.quarto-appendix-heading` SCSS but emits neither class. Add
-   `quarto-appendix-heading` (activating dead CSS — this is a *visual* change, so it may
-   move snapshots)? *Recommendation: add `quarto-appendix-heading`, skip `anchored`* —
-   `anchored` implies an anchor-link mechanism q2 does not have, so emitting it would be
-   cargo-culting. Or defer all class work to its own strand if you want this one to stay
-   text-only.
+- **Emitted document-wide.** `format-html.ts:828-848` is a DOM postprocessor that adds
+  `anchored` to every `h2`–`h6`, `.quarto-figure[id]` and `div[id^=tbl-]` inside `main`
+  (Bootstrap) or `body`, gated on the `anchors` format option, skipping `#toc-title` and
+  anything carrying `.no-anchor`.
+- **Pre-applied in the appendix** at `format-html-appendix.ts:98` and `:363` only because
+  appendix headings are synthesized by a *different* postprocessor; `classList.add` is
+  idempotent, so the two passes don't collide.
+- **Consumed by AnchorJS**, not CSS. `quarto-html-after-body.ejs:38-46` does
+  `anchorJS.add('.anchored')`, which injects an `a.anchorjs-link` (the ¶ hover link) into
+  each match. `_quarto-rules.scss:147-175` styles **`.anchorjs-link`** — the element
+  AnchorJS creates — and there is no `.anchored { … }` rule anywhere.
 
-4. **Heading `id`.** Q1's `prependHeading` sets no `id`, and q2's existing appendix headings
-   pass `String::new()`. Confirm we match (no `id`) — it means the heading is not linkable
-   and will not appear in the TOC. *Recommendation: match Q1, no `id`.*
+q2 has **none** of this: no `anchors` option (`grep -rn '"anchors"' crates/` → zero),
+no `anchor.min.js`, no `quarto.js`, no `.anchorjs-link` styling, no `.anchored` rules.
+
+The consequence is the useful one: **emitting `anchored` in q2 today is completely inert**
+— nothing styles it and nothing reads it — so it carries zero visual risk, and it is
+precisely the marker a future anchor-link feature needs. This *inverts* the risk ordering
+in the original Q3 recommendation: `anchored` is the safe class and
+`quarto-appendix-heading` is the one that actually changes pixels.
+
+**Design note for the follow-up.** When q2 implements the document-wide pass it must be an
+**AST transform**, not a DOM postprocessor (CLAUDE.md: q2 has no post-Pandoc DOM stage).
+Unlike `classList.add`, pushing onto a `Vec<String>` of classes is **not idempotent** — the
+appendix headings are `h2` and would be caught by the general pass too, yielding
+`class="anchored anchored quarto-appendix-heading"`. The general transform must skip
+headings that already carry the class. Recorded in the follow-up strand.
+
+## Work items
+
+All work lands in `crates/quarto-core/src/transforms/appendix.rs` unless noted.
+
+### Phase 0 — Tests (TDD: written and failing first)
+
+Route through the end-to-end entry point (`render_document_to_file` or equivalent), **not**
+`render_qmd_to_html` with `HtmlRenderConfig::default()` — the heading only exists on the
+appendix branch, so a default-config test would pass vacuously.
+
+- [ ] Heading present: `<h2 …>Footnotes</h2>` inside `#quarto-appendix`.
+- [ ] `<hr>` gone from the titled footnotes section.
+- [ ] Localization: `lang: es` → `Notas` (from `_language-es.yml`).
+- [ ] Negative: `appendix-style: none` → no appendix, no heading, **and the `<hr>` still
+      present** in the in-place footnotes section (matching Q1).
+- [ ] Negative: `book: true` → unchanged.
+- [ ] Classes: heading carries `anchored quarto-appendix-heading`.
+- [ ] No `id` on the heading.
+- [ ] The other four headings localize too (at least one, e.g. `References` → `Referencias`).
+- [ ] Stage-less unit test still gets the English fallback (`from_meta` → `None`).
+
+### Phase 1 — Localized title helper
+
+- [ ] Add `appendix_title(meta, term_key, english_fallback) -> String` following the
+      `toc_generate.rs:122-135` precedence: localized term > English literal. (No
+      user-metadata override tier — unlike `toc-title`, there is no per-document
+      `footnotes-title` option in Q1.)
+- [ ] Add `appendix_heading(title) -> Block::Header` building the level-2 `Header` with
+      empty `id` and classes `["anchored", "quarto-appendix-heading"]`, so all five sites
+      share one constructor.
+
+### Phase 2 — `wrap_footnotes`
+
+- [ ] Add `wrap_footnotes`, the missing sibling of `wrap_bibliography`, prepending the
+      heading into the existing `Div#footnotes` (it is already a `.section` with the right
+      id/role — do **not** nest a second section).
+- [ ] Strip the leading `HorizontalRule` while wrapping (Q1's `prependHeading` removes the
+      first `hr` in the element). Keep the removal in the appendix transform, not in
+      `create_footnotes_section` — the rule must survive when appendix processing is off.
+- [ ] Call it at `appendix.rs:156`.
+
+### Phase 3 — Retrofit the four existing headings
+
+- [ ] `wrap_bibliography` → `section-title-references` / `"References"`.
+- [ ] `create_license_section` → `section-title-reuse` / `"Reuse"`.
+- [ ] `create_copyright_section` → `section-title-copyright` / `"Copyright"`.
+- [ ] `create_citation_section` → `section-title-citation` / `"Citation"`.
+- [ ] All four switch to the shared `appendix_heading` constructor (gains both classes).
+
+### Phase 4 — Verification
+
+- [ ] Full `cargo xtask verify` (not `--skip-hub-build`; `quarto-core` is in hub-client's
+      dependency closure).
+- [ ] End-to-end `cargo run --bin q2 -- render` on the committed repro; inspect the HTML
+      and record the snippet in the plan per CLAUDE.md.
+- [ ] Browser look at the rendered appendix — Phase 3 activates real CSS, so this is a
+      visual change that grep cannot confirm.
+- [ ] Review and report snapshot churn counts per the CLAUDE.md snapshot policy.
+- [ ] Re-render the four named Connect-docs pages and confirm the text diff against the
+      Q1 reference actually closes.
+
+## Design answers (settled with the user, 2026-08-12)
+
+All four questions are closed. The governing principle the user stated: **the goal is to
+get Quarto 2 to emit output like Quarto 1 does**, and these would have to be fixed
+somewhere anyway.
+
+1. **The `<hr>` — YES, drop it** from the titled footnotes section, matching Q1's
+   `prependHeading`. The heading replaces the rule as the separator. The `<hr>` correctly
+   remains when appendix processing is off (`appendix-style: none`, `book: true`), which
+   is also what Q1 does.
+
+2. **Scope — ALL FIVE headings.** Footnotes plus the four existing hardcoded literals
+   (`References`, `Reuse`, `Copyright`, `Citation`), each routed through the localized
+   `section-title-*` term with the `toc_generate.rs` precedence. No separate strand.
+
+3. **Heading classes — EMIT BOTH**, `anchored` and `quarto-appendix-heading`, matching
+   Q1's `headingClasses` exactly. Finding 5 (researched at the user's request) shows
+   `anchored` is a pure AnchorJS selector hook with no styling of its own, so emitting it
+   is inert today rather than cargo-culting; it is the marker the future feature needs, and
+   emitting it now means the appendix is already correct when anchors land.
+   **Follow-up filed: `bd-5kf2dnw4`** — implement the document-wide `.anchored` pass plus
+   the AnchorJS runtime so the class becomes live. Its non-obvious constraint (class-push
+   is not idempotent; the general pass must skip headings that already carry it) is
+   recorded there and in Finding 5.
+
+4. **Heading `id` — none**, matching Q1's `prependHeading` and q2's existing appendix
+   headings. The heading is not linkable and does not appear in the TOC.
 
 ## Risks / tradeoffs (draft)
 
-- **Snapshot churn is the main risk**, and it scales with the answers: Q2="all five" and
-  Q3="add class" both widen it. Any HTML snapshot of a document with footnotes, a
-  bibliography, or license/citation metadata will move. Expect to review the diff carefully
-  and report counts per the CLAUDE.md snapshot policy.
-- **Q3 is a visual change, not just markup** — activating dead CSS alters rendered
-  appearance. Worth an actual browser look, not just a grep.
+- **Snapshot churn is the main risk**, and the settled answers maximize it: all five
+  headings change, all five gain two classes, and the footnotes `<hr>` disappears. Any HTML
+  snapshot of a document with footnotes, a bibliography, or license/citation metadata will
+  move. Review the diff carefully and report counts per the CLAUDE.md snapshot policy.
+- **Phase 3 is a visual change, not just markup** — `quarto-appendix-heading` activates
+  real, substantive CSS (font-weight, size, margins, `border-bottom: none`). Worth an
+  actual browser look, not just a grep. `anchored`, by contrast, is inert (Finding 5) and
+  carries no visual risk.
+- **The `<hr>` removal is conditional and easy to get wrong.** The rule must vanish only
+  when the appendix titles the section, and must survive under `appendix-style: none` /
+  `book: true`. That is why the strip belongs in the appendix transform rather than in
+  `create_footnotes_section`. Both directions need a test.
 - **No conflict with the parent strand.** `bd-adjacent-footnote-definitions-miif1k1z`
   touches `scanner.c` only; this touches `quarto-core` transforms. Independent.
 - **`--skip-hub-build` is sufficient here** (unlike the parent, which changed the grammar
