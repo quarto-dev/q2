@@ -1,0 +1,13 @@
+---
+title: probe2
+---
+
+## 1 leading digit
+
+## .leading dot
+
+## with ... dots
+
+## trailing dots ...
+
+## $x$ only math

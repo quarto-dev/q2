@@ -1,0 +1,11 @@
+---
+title: probe6
+---
+
+## cite [@somekey] end
+
+## cite [see @somekey, p. 33] end
+
+## cite [@a; @b] end
+
+## intext @somekey says end
