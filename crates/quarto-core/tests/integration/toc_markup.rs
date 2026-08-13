@@ -286,6 +286,7 @@ fn toc_entry_escapes_literal_markup_characters() {
 /// metadata layer (`InterpretationContext::DocumentMetadata`), so its
 /// markup must reach the rendered `<h2 id="toc-title">`.
 #[test]
+#[ignore = "phase 3 of bd-toc-smart-quotes-6nro57ed: NavigationToc.title becomes Inlines and toc-title gets blessed in MARKDOWN_CONFIG_PATHS"]
 fn toc_title_from_frontmatter_keeps_markup() {
     let html = render_index_with_toc(
         "## Section\n\nBody.\n",
@@ -305,6 +306,7 @@ fn toc_title_from_frontmatter_keeps_markup() {
 /// only gets markdown semantics once `toc-title` is blessed in
 /// `MARKDOWN_CONFIG_PATHS`.
 #[test]
+#[ignore = "phase 3 of bd-toc-smart-quotes-6nro57ed: NavigationToc.title becomes Inlines and toc-title gets blessed in MARKDOWN_CONFIG_PATHS"]
 fn toc_title_from_project_config_keeps_markup() {
     let html = render_index_with_toc(
         "## Section\n\nBody.\n",

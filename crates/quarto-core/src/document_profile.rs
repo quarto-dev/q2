@@ -1046,6 +1046,14 @@ mod tests {
         ast
     }
 
+    /// Project a TOC entry title to plain text for assertions. The
+    /// profile's outline carries inlines (bd-toc-smart-quotes-6nro57ed);
+    /// consumers that want text project it themselves, and the
+    /// plain-text writer is the shared way to do that.
+    fn title_text(title: &quarto_pandoc_types::Inlines) -> String {
+        pampa::writers::plaintext::inlines_to_string(title).0
+    }
+
     fn entry_ids(entries: &[TocEntry]) -> Vec<&str> {
         entries.iter().map(|e| e.id.as_str()).collect()
     }
@@ -1098,11 +1106,11 @@ Deep text.
         assert_eq!(profile.outline.len(), 2, "two top-level headings");
         let first = &profile.outline[0];
         assert_eq!(first.level, 1);
-        assert_eq!(first.title, "Top");
+        assert_eq!(title_text(&first.title), "Top");
         assert_eq!(entry_ids(&first.children), vec!["sub"]);
         assert_eq!(first.children[0].level, 2);
         assert_eq!(entry_ids(&first.children[0].children), vec!["deep"]);
-        assert_eq!(profile.outline[1].title, "Top two");
+        assert_eq!(title_text(&profile.outline[1].title), "Top two");
         assert!(
             all_unnumbered(&profile.outline),
             "profile outline must be un-numbered"

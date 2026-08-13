@@ -319,26 +319,75 @@ page verbatim.
 HTML. The Risks section had this flagged as a broad hazard; it is nil — for the same reason
 the defect shipped, namely that the TOC had no test coverage at all.
 
-### Phase 1 — `TocEntry.title: Inlines`
+### Phase 1 — `TocEntry.title: Inlines` — **DONE** (landed with Phase 2)
 
-- [ ] Change the field type; `generate_toc` clones header content instead of flattening.
-- [ ] Delete `toc.rs::inlines_to_text` and its two unit tests.
-- [ ] `to_config_value` emits `ConfigValueKind::PandocInlines`.
-- [ ] `from_config_value` accepts both shapes.
+- [x] Change the field type; `generate_toc` clones header content instead of flattening.
+- [x] Delete `toc.rs::inlines_to_text` and its two unit tests (replaced by four new ones
+      covering the round-trip and both accepted title shapes).
+- [x] `to_config_value` emits `ConfigValueKind::PandocInlines`.
+- [x] `from_config_value` accepts both shapes, via the new `config_value_to_inlines`.
 - [ ] Bump `profile_version` and add the change-log entry to
       `claude-notes/designs/document-profile-contract.md`.
 - [ ] Confirm the incremental-rebuild path degrades to a full rebuild on version mismatch
       rather than erroring.
 
-### Phase 2 — `toc_render` emits markup
+> **Phases 1 and 2 landed in one commit, deliberately.** `toc_render` is the type's only
+> production consumer, so the tree cannot compile with the type changed and the renderer
+> untouched. The alternative — a temporary `as_plain_text()` flatten in `toc_render` to keep
+> Phase 1 self-contained — is exactly the "TODO that undoes existing work" `CLAUDE.md`
+> forbids. One commit, both changes.
+>
+> The two `profile_version` items are **deliberately still open** and move to Phase 3's
+> commit: they are a contract change with its own doc update, and keeping them separate from
+> the behavior change keeps both reviewable.
 
-- [ ] Replace `html_escape(&entry.title)` with `pampa::writers::html::write_inlines_to`.
-- [ ] **Strip links and notes at render time** (see the decision below) so the TOC's own
-      `<a>` never wraps a nested `<a>`.
-- [ ] Cross-check output against Q1's `<code>` / `<em>` / `<strong>` /
-      `<span class="math inline">` shapes.
-- [ ] Rework the `toc_render.rs:422` test: a literal `<b>` typed in a heading arrives as
-      `Str("<b>")` and must still be escaped; a `RawInline` must not be.
+### Phase 2 — `toc_render` emits markup — **DONE**
+
+- [x] Replace `html_escape(&entry.title)` with `pampa::writers::html::write_inlines_to`,
+      via the new `render_toc_label`.
+- [x] **Strip links and notes at render time** (`strip_links_and_notes`, exhaustive match)
+      so the TOC's own `<a>` never wraps a nested `<a>`.
+- [x] Cross-checked against Q1 — output is **byte-identical** for both probe entries
+      (see the end-to-end record in `OBSERVED.md`).
+- [x] Reworked the escaping test and added two unit tests (`test_renders_toc_label_with_markup`,
+      `test_toc_label_strips_links_and_notes`).
+
+**End-to-end verification** (`cargo run --bin q2 -- render <fixture>`, output inspected):
+
+```html
+<!-- repro/ — the strand's own case -->
+<a href="#using-a-volume" class="nav-link" data-scroll-target="#using-a-volume">
+Using a “raw” volume
+</a>
+
+<!-- markup-probe/ — matches Quarto 1 exactly, link stripped -->
+<a href="#use-code-and-em-and-strong" ...>
+Use <code>code</code> and <em>em</em> and <strong>strong</strong>
+</a>
+<a href="#math-and-a" ...>
+Math <span class="math inline">\(x+y\)</span> and a link
+</a>
+```
+
+(The `#math-and-a` id is still wrong — that is the sibling strand
+`bd-heading-id-drops-inline-content-fl84n3ql`, deliberately out of scope per decision 4.)
+
+**Downstream blast radius, measured:** exactly two files needed updating —
+`toc_render.rs` (the intended consumer) and `document_profile.rs` +
+`document_profile_pipeline.rs` tests, which now project titles to text with
+`pampa::writers::plaintext::inlines_to_string`. That projection is the
+"consumers that cannot render markup project it themselves" clause of the new
+`TocEntry::title` contract, using the one flattener in the tree that is already correct.
+
+**Test status at this commit:** 11,843 of 11,845 workspace tests pass. The two `toc-title`
+tests are `#[ignore]`d with a reason naming Phase 3, so the tree is green; Phase 3 removes
+the attribute as its first act.
+
+**Incidental finding (not filed):** the tree has no shared inline-walking utility — every
+transform hand-rolls its own `visit_inline` (link_rewrite, crossref_index, equation_label,
+attribution_render, resource_collector, …). `strip_links_and_notes` is one more. That is the
+same family as `bd-zzke` but a different shape (transform vs. flatten); worth mentioning
+there when it is un-deferred.
 
 > **Design decision (2026-08-13, during Phase 0): strip at render, not at generation.**
 >
