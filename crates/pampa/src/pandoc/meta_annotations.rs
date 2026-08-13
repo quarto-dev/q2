@@ -46,6 +46,34 @@
 //!   (`format.*.listing.contents` covers per-format nesting).
 //!   Matching is exact-length, never a suffix match, so a user's
 //!   unrelated `my.listing.contents` key is not captured.
+//!
+//! ## See also: the *other* key-path table, and when to pick which
+//!
+//! There are two registries in the tree that decide how a config
+//! string is interpreted, and picking the wrong one is a mistake that
+//! has already been made once (bd-qzn1azon; the
+//! `bd-page-footer-items-f4th80mj` handoff located its bug correctly
+//! and then proposed fixing it here):
+//!
+//! | | this table (`ANNOTATIONS`) | `MARKDOWN_CONFIG_PATHS` |
+//! |---|---|---|
+//! | when | **load time**, per untagged scalar | **transform time**, over merged metadata |
+//! | for | values that are **not** markdown — globs, paths | website *presentation* strings that **are** markdown |
+//! | effect | picks a non-markdown [`Interpretation`] | re-parses `Scalar(String)` as qmd |
+//! | honours `!str` | yes — explicit tags win | no — the tag is gone by then |
+//!
+//! Rule of thumb: **adding markdown semantics to a presentation key
+//! goes in `MARKDOWN_CONFIG_PATHS`; protecting a machine-facing key
+//! from markdown goes here.** Load-time parsing was considered and
+//! rejected for the presentation class — see
+//! `claude-notes/plans/2026-08-10-shortcodes-website-config-includes.md`.
+//!
+//! `MARKDOWN_CONFIG_PATHS` lives in
+//! `crates/quarto-core/src/transforms/config_markdown.rs` (no intra-doc
+//! link: `quarto-core` depends on `pampa`, not the other way round).
+//!
+//! Both tables are documented as temporary, pending schema-driven
+//! interpretation.
 
 use quarto_config::Interpretation;
 

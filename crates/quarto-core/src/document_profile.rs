@@ -92,7 +92,18 @@ use thiserror::Error;
 ///   which is also the only place a diagnostic survives profile
 ///   caching (see `rejected_resources` for the same lesson learned
 ///   the hard way).
-pub const DOCUMENT_PROFILE_VERSION: u32 = 10;
+/// - `11`: `bd-toc-smart-quotes-6nro57ed`. Changes `outline`'s entry
+///   titles from `String` to `Inlines` (`TocEntry::title`). The
+///   outline now carries the heading's inline markup — emphasis,
+///   code, math, and the quoted-span delimiters a flattened title
+///   silently dropped — so it is a faithful semantic outline rather
+///   than a lossy projection. **Serialized shape changes**: a title
+///   that was `"Top"` is now an array of inline nodes, so v10
+///   profiles fail to deserialize at the field level and cached
+///   profiles must be regenerated. Consumers wanting plain text
+///   project it themselves with
+///   `pampa::writers::plaintext::inlines_to_string`.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 11;
 
 /// Depth used when extracting the heading outline at the profile
 /// checkpoint.
@@ -1046,6 +1057,14 @@ mod tests {
         ast
     }
 
+    /// Project a TOC entry title to plain text for assertions. The
+    /// profile's outline carries inlines (bd-toc-smart-quotes-6nro57ed);
+    /// consumers that want text project it themselves, and the
+    /// plain-text writer is the shared way to do that.
+    fn title_text(title: &quarto_pandoc_types::Inlines) -> String {
+        pampa::writers::plaintext::inlines_to_string(title).0
+    }
+
     fn entry_ids(entries: &[TocEntry]) -> Vec<&str> {
         entries.iter().map(|e| e.id.as_str()).collect()
     }
@@ -1098,11 +1117,11 @@ Deep text.
         assert_eq!(profile.outline.len(), 2, "two top-level headings");
         let first = &profile.outline[0];
         assert_eq!(first.level, 1);
-        assert_eq!(first.title, "Top");
+        assert_eq!(title_text(&first.title), "Top");
         assert_eq!(entry_ids(&first.children), vec!["sub"]);
         assert_eq!(first.children[0].level, 2);
         assert_eq!(entry_ids(&first.children[0].children), vec!["deep"]);
-        assert_eq!(profile.outline[1].title, "Top two");
+        assert_eq!(title_text(&profile.outline[1].title), "Top two");
         assert!(
             all_unnumbered(&profile.outline),
             "profile outline must be un-numbered"
@@ -1790,8 +1809,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_10() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 10);
+    fn document_profile_version_is_11() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 11);
     }
 
     /// A v3 profile (the pre-listings shape) must be rejected by

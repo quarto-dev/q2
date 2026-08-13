@@ -199,11 +199,14 @@ async fn pipeline_profile_matches_metadata() {
 
     // Outline: two top-level sections, first has one subsection.
     assert_eq!(profile.outline.len(), 2, "two top-level headings");
-    assert_eq!(profile.outline[0].title, "Section one");
+    assert_eq!(title_text(&profile.outline[0].title), "Section one");
     assert_eq!(profile.outline[0].level, 1);
     assert_eq!(profile.outline[0].children.len(), 1);
-    assert_eq!(profile.outline[0].children[0].title, "Subsection");
-    assert_eq!(profile.outline[1].title, "Section two");
+    assert_eq!(
+        title_text(&profile.outline[0].children[0].title),
+        "Subsection"
+    );
+    assert_eq!(title_text(&profile.outline[1].title), "Section two");
 
     // The inner ast is still present and usable.
     assert!(
@@ -364,9 +367,13 @@ async fn run_head_pipeline_in_dir(
 /// Walk every entry in an outline (and its nested children) and collect
 /// their titles, so we can check for the presence of a specific heading
 /// without assuming tree shape.
+fn title_text(title: &quarto_pandoc_types::Inlines) -> String {
+    pampa::writers::plaintext::inlines_to_string(title).0
+}
+
 fn collect_outline_titles(outline: &[pampa::toc::TocEntry]) -> Vec<String> {
     fn walk(entry: &pampa::toc::TocEntry, out: &mut Vec<String>) {
-        out.push(entry.title.clone());
+        out.push(pampa::writers::plaintext::inlines_to_string(&entry.title).0);
         for child in &entry.children {
             walk(child, out);
         }

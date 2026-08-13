@@ -63,6 +63,7 @@ pub mod shortcode_text_contexts;
 pub mod sidebar_pipeline;
 pub mod theme_light_dark;
 pub mod title_block_pipeline;
+pub mod toc_markup;
 pub mod video_shortcode_preview;
 pub mod website_aliases;
 pub mod website_post_render;

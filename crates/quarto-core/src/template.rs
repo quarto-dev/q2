@@ -149,7 +149,9 @@ $endfor$
 /// - `$page-layout$` - page layout type (article, full, etc.)
 /// - `$version$` - Quarto version for generator meta tag
 /// - `$rendered.navigation.toc$` - Rendered TOC HTML (if toc: true)
-/// - `$navigation.toc.title$` - TOC title (if set)
+/// - `$rendered.navigation.toc-title$` - TOC title, rendered to HTML
+///   (if set). Pre-rendered rather than read from `navigation.toc.title`
+///   because the title carries inline markup — see `toc_render`.
 /// - `$rendered.navigation.navbar$` - Rendered navbar HTML (if navbar: set)
 /// - `$rendered.navigation.sidebar$` - Rendered sidebar HTML (if website.sidebar: set)
 /// - `$rendered.navigation.page_navigation$` - Rendered prev/next page-nav strip
@@ -212,8 +214,8 @@ $endif$
 $if(rendered.navigation.toc)$
 <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
 <nav id="TOC" role="doc-toc" class="toc-active">
-$if(navigation.toc.title)$
-<h2 id="toc-title">$navigation.toc.title$</h2>
+$if(rendered.navigation.toc-title)$
+<h2 id="toc-title">$rendered.navigation.toc-title$</h2>
 $endif$
 $rendered.navigation.toc$
 </nav>

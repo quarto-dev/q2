@@ -50,6 +50,28 @@
 //! `MetadataNormalizeTransform` / `WebsiteTitlePrefixTransform`
 //! (which flatten the resolved values into `pagetitle`).
 //!
+//! ## See also: the *other* key-path table, and when to pick which
+//!
+//! The sibling registry is `ANNOTATIONS` in
+//! `crates/pampa/src/pandoc/meta_annotations.rs`. Extending the wrong
+//! one is a mistake that has already been made (bd-qzn1azon):
+//!
+//! | | [`MARKDOWN_CONFIG_PATHS`] (this table) | `ANNOTATIONS` |
+//! |---|---|---|
+//! | when | **transform time**, over merged metadata | **load time**, per untagged scalar |
+//! | for | website *presentation* strings that **are** markdown | values that are **not** markdown — globs, paths |
+//! | effect | re-parses `Scalar(String)` as qmd | picks a non-markdown `Interpretation` |
+//! | honours `!str` | no — the tag is gone by then (see the limitation above, bd-d7ljiz9q) | yes — explicit tags win |
+//!
+//! Rule of thumb: **adding markdown semantics to a presentation key
+//! goes here; protecting a machine-facing key from markdown goes in
+//! `ANNOTATIONS`.** Load-time parsing was considered and rejected for
+//! this class — see
+//! `claude-notes/plans/2026-08-10-shortcodes-website-config-includes.md`.
+//!
+//! Both tables are documented as temporary, pending schema-driven
+//! interpretation.
+//!
 //! [`ShortcodeResolveTransform`]: crate::transforms::ShortcodeResolveTransform
 
 use quarto_analysis::AnalysisContext;
@@ -119,6 +141,14 @@ const MARKDOWN_CONFIG_PATHS: &[&[&str]] = &[
     &["page-footer", "left", "*"],
     &["page-footer", "center", "*"],
     &["page-footer", "right", "*"],
+    // The table-of-contents heading (bd-toc-smart-quotes-6nro57ed).
+    // Presentation text like the titles above, and Quarto 1 renders it
+    // through Pandoc. Without this, `toc-title: "On **this** page"`
+    // renders markup from front matter but shows literal asterisks from
+    // `_quarto.yml` — the same YAML behaving two ways. Unlike the
+    // sidebar's `section:` (bd-xygsu15r), no id is derived from it: the
+    // `<h2 id="toc-title">` id is a literal constant.
+    &["toc-title"],
 ];
 
 /// AST transform: apply [`MARKDOWN_CONFIG_PATHS`] to merged metadata.

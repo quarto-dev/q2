@@ -36,7 +36,7 @@
 //!         children: [...]
 //! ```
 
-use pampa::toc::{TocConfig, generate_toc};
+use pampa::toc::{TocConfig, config_value_to_inlines, generate_toc, plain_inlines};
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
@@ -121,17 +121,29 @@ impl AstTransform for TocGenerateTransform {
         // Title precedence (decided 2026-07-17, bd-llhlzd7p): user
         // `toc-title` metadata > localized `toc-title-document` term >
         // English literal (stage-less unit-test fallback).
-        // `as_plain_text` (not `as_str`): a bare `toc-title` front-matter string
-        // is stored as `ConfigValueKind::PandocInlines`. (bd-y89ihf0i)
+        //
+        // The user-supplied value is read as **inlines**, not text
+        // (bd-toc-smart-quotes-6nro57ed). A front-matter `toc-title` is
+        // already `ConfigValueKind::PandocInlines`, so `as_plain_text()`
+        // — the previous read, itself a fix for the `as_str()` trap in
+        // bd-y89ihf0i — was discarding markup the metadata layer had
+        // just parsed. A `_quarto.yml` `toc-title` arrives as
+        // `Scalar(String)` and gets markdown semantics from
+        // `MARKDOWN_CONFIG_PATHS` upstream, so by here both sources
+        // agree.
+        //
+        // The two fallbacks are genuinely plain text — a localized term
+        // from the language catalog, and an English literal — so they
+        // are wrapped in a single `Str`.
         let title = ast
             .meta
             .get("toc-title")
-            .and_then(|v| v.as_plain_text())
+            .and_then(config_value_to_inlines)
             .or_else(|| {
                 crate::language::LanguageTerms::from_meta(&ast.meta)
-                    .and_then(|t| t.get("toc-title-document").map(|s| s.to_string()))
+                    .and_then(|t| t.get("toc-title-document").map(plain_inlines))
             })
-            .or_else(|| Some("Table of Contents".to_string()));
+            .or_else(|| Some(plain_inlines("Table of Contents")));
 
         let config = TocConfig { depth, title };
 
@@ -441,7 +453,12 @@ mod tests {
         transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         let toc = ast.meta.get_path(&["navigation", "toc"]).unwrap();
-        assert_eq!(toc.get("title").unwrap().as_str(), Some("Contents"));
+        // The title is `PandocInlines` now, so `as_str()` returns
+        // `None` — project it instead (bd-toc-smart-quotes-6nro57ed).
+        assert_eq!(
+            toc.get("title").unwrap().as_plain_text().as_deref(),
+            Some("Contents")
+        );
     }
 
     #[tokio::test]
@@ -491,8 +508,62 @@ mod tests {
 
         let toc = ast.meta.get_path(&["navigation", "toc"]).unwrap();
         assert_eq!(
-            toc.get("title").unwrap().as_str(),
+            toc.get("title").unwrap().as_plain_text().as_deref(),
             Some("Table of Contents")
+        );
+    }
+
+    /// A `toc-title` carrying markup keeps it: the front-matter value is
+    /// already `PandocInlines`, and the transform must not flatten it
+    /// (bd-toc-smart-quotes-6nro57ed).
+    #[tokio::test]
+    async fn test_toc_title_keeps_inline_markup() {
+        use quarto_pandoc_types::inline::Strong;
+
+        let styled = ConfigValue::new_inlines(
+            vec![
+                Inline::Str(Str {
+                    text: "On ".to_string(),
+                    source_info: dummy_source_info(),
+                }),
+                Inline::Strong(Strong {
+                    content: vec![Inline::Str(Str {
+                        text: "this".to_string(),
+                        source_info: dummy_source_info(),
+                    })],
+                    source_info: dummy_source_info(),
+                }),
+            ],
+            dummy_source_info(),
+        );
+
+        let mut ast = Pandoc {
+            meta: config_map(vec![("toc", config_bool(true)), ("toc-title", styled)]),
+            blocks: vec![
+                make_header(2, "intro", "Introduction"),
+                make_para("Content."),
+            ],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        TocGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        let title = ast
+            .meta
+            .get_path(&["navigation", "toc", "title"])
+            .expect("toc title");
+        let inlines = pampa::toc::config_value_to_inlines(title).expect("inlines");
+        assert!(
+            inlines.iter().any(|i| matches!(i, Inline::Strong(_))),
+            "the Strong node must survive; got {inlines:?}"
         );
     }
 }
