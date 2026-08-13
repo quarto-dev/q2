@@ -3,9 +3,9 @@
 **Date:** 2026-08-13
 **Braid:** bd-toc-smart-quotes-6nro57ed
 **Branch:** `main` @ `0dcd7e83` (investigated in the main checkout — no worktree was created)
-**Status:** Scope settled 2026-08-13 — **TOC entries carry inlines**; the narrow glyph fix is
-*not* being done. Phases below are drafted against that decision but the phase contents are
-still skeletal. **Do not start implementation until the user gives the go-ahead.**
+**Status:** **Design settled 2026-08-13** — all open questions answered (see "Decisions"
+below). Phases are drafted against those decisions. **Do not start implementation until the
+user gives the go-ahead.**
 
 ## Triage verdict
 
@@ -16,21 +16,47 @@ flattens every heading to plain text** (`TocEntry.title: String`). Dropped quote
 the one symptom the Connect corpus happens to hit; `<code>`, `<em>`, `<strong>` and math
 spans are lost the same way.
 
-### Scope decision (user, 2026-08-13)
+## Decisions (user, 2026-08-13)
 
-Do the larger task here, phased. Specifically:
+All settled; nothing is awaiting an answer.
 
-- **The narrow glyph fix is skipped.** It would be deleted wholesale by the real fix: once
-  `TocEntry.title` is `Inlines`, `generate_toc` clones header content and
-  `toc.rs::inlines_to_text` ceases to exist. Confirmed there is no residue keeping it alive —
-  the *only* production read of `entry.title` is `html_escape(&entry.title)` at
-  `toc_render.rs:143` (no `title=` attribute, no `aria-label`, no plain-text sink). The one
-  scenario that would justify it is a release cutting mid-epic and needing the Connect docs
-  correct in the interim; absent that it is churn plus a second place encoding quote-glyph
-  policy.
-- **Consolidation (`bd-zzke`) is sequenced after, not merged in.** See "The wider family"
-  below — the TOC work *removes* one of the copies, so it shrinks that strand rather than
-  depending on it.
+1. **Do the larger task here, phased: TOC entries carry inlines.** The narrow glyph fix is
+   **skipped** — it would be deleted wholesale by the real fix, since once `TocEntry.title`
+   is `Inlines`, `generate_toc` clones header content and `toc.rs::inlines_to_text` ceases
+   to exist. Confirmed there is no residue keeping it alive: the *only* production read of
+   `entry.title` is `html_escape(&entry.title)` at `toc_render.rs:143` (no `title=`
+   attribute, no `aria-label`, no plain-text sink). The one scenario that would justify it
+   is a release cutting mid-epic and needing the Connect docs correct in the interim.
+
+2. **`NavigationToc.title` also becomes `Inlines`, and `toc-title` gets blessed in
+   `MARKDOWN_CONFIG_PATHS`** — both in this epic. The two caveats were accepted knowingly:
+   the behavior change for existing `_quarto.yml` files whose `toc-title` contains `*` or
+   `_`, and the fact that `!str` cannot opt out in project config
+   (config_markdown.rs:40-45). Standing rationale from the user: *"It's good for us to parse
+   more YAML fields into Markdown in general, especially since we have `!str` and `!path` as
+   mechanisms for controlling that behavior in Quarto 2."*
+
+   **Implementation note — pick the right registry.** The tree has *two* key-path tables and
+   `bd-qzn1azon` exists because someone already extended the wrong one:
+   `pampa/src/pandoc/meta_annotations.rs` `ANNOTATIONS` is load-time and for keys whose value
+   is **not** markdown (globs, paths); `quarto-core/src/transforms/config_markdown.rs`
+   `MARKDOWN_CONFIG_PATHS` is transform-time over merged metadata and is the one for
+   presentation strings. `toc-title` goes in the latter.
+
+   **Precedent to follow:** `bd-xygsu15r` (sidebar `section:`) is the same one-line-registry
+   shape. It was split out because that field *also* feeds section identity, so blessing it
+   needs a check that `as_plain_text()` id derivation still behaves. `toc-title` has no such
+   entanglement — the `<h2 id="toc-title">` id is a literal constant, not derived from the
+   title — so this is the easy case.
+
+3. **Consolidation (`bd-zzke`) is sequenced after, not merged in.** See "The wider family"
+   below — the TOC work *removes* one of the copies, so it shrinks that strand rather than
+   depending on it. Its description still needs the corrected site list (it lists 6; there
+   are ~10).
+
+4. **`bd-heading-id-drops-inline-content-fl84n3ql` stays fully independent.** Same
+   root-cause class, different code path; this epic no longer touches
+   `toc.rs::inlines_to_text` at all.
 
 ## Issue context
 
@@ -66,7 +92,9 @@ That changes the calculus in two ways:
   `admin/getting-started/off-host-install/configure-helm-chart`.
 
 **Recommendation: add the missing `related` edge** between the two strands so the graph
-carries what the comment currently carries. (Not done unilaterally — see design question 5.)
+carries what the comment currently carries. `related` is informational — it does not gate
+`ready` — so it is compatible with decision 4 (keep the fixes independent). Not done
+unilaterally; still offered.
 
 The sibling strand is the *more severe* of the pair: `autoid::collect_text` handles only
 five inline kinds and drops the rest **without recursing**, so whole words vanish from
@@ -247,9 +275,11 @@ These are why "change `String` to `Inlines`" is not a one-commit change.
    (`template.rs:961`, `revealjs/footer_logo.rs:187`). `toc_render` swapping
    `html_escape(&entry.title)` for `write_inlines_to` follows an established path.
 
-## Proposed phases (draft)
+## Proposed phases
 
-Skeleton only — contents wait on the remaining design questions.
+Drafted against the settled decisions above. Phase boundaries are commit points (per
+`CLAUDE.md`'s commit-and-continue rule); the work items inside each still want a pass with
+fresh eyes at implementation time.
 
 - **Phase 0 — Test plan (TDD, failing first).**
   - End-to-end first, because its absence is why this shipped: a `toc: true` document whose
@@ -260,7 +290,9 @@ Skeleton only — contents wait on the remaining design questions.
     `toc-smart-quotes-investigation/OBSERVED.md`. There is currently **no e2e TOC test at
     all**.
   - Unit: `TocEntry` round-trips through `ConfigValue` preserving inlines;
-    `from_config_value` still accepts a legacy plain-string title.
+    `from_config_value` accepts both `PandocInlines` and `Scalar(String)` (the latter
+    wrapped as a single `Str`).
+  - Measure snapshot churn here rather than discovering it in Phase 2 (see Risks).
   - Verify all fail at HEAD before touching anything.
 - **Phase 1 — `TocEntry.title: Inlines`.** Change the type; `generate_toc` clones header
   content instead of flattening. Delete `toc.rs::inlines_to_text` and its two unit tests.
@@ -270,9 +302,15 @@ Skeleton only — contents wait on the remaining design questions.
 - **Phase 2 — `toc_render` emits markup.** Replace `html_escape(&entry.title)` with
   `pampa::writers::html::write_inlines_to`. Cross-check against Q1's `<code>` / `<em>` /
   `<strong>` / `<span class="math inline">` shapes.
-- **Phase 3 — Sweep the TOC-adjacent remainder.** `NavigationToc.title` (the TOC *heading*,
-  toc.rs:181) is still a `String` read via `as_str()` at toc.rs:214 — decide whether
-  `toc-title` gets the same treatment (Q2 below).
+- **Phase 3 — `toc-title` gets the same treatment (decision 2).** Two parts:
+  - `NavigationToc.title: Option<Inlines>` (toc.rs:181), read from merged metadata without
+    `as_plain_text()` flattening (toc_generate.rs:125-133, toc.rs:214), rendered through
+    `write_inlines_to` into `<h2 id="toc-title">`.
+  - Add `&["toc-title"]` to `MARKDOWN_CONFIG_PATHS` (config_markdown.rs:84-122) so a
+    project-level `toc-title` gets the same markdown semantics as a front-matter one.
+    Test both sources. Confirm the localized-term fallback path
+    (`toc-title-document` via `LanguageTerms`) still yields plain text sensibly — it returns
+    a `String` today and will need wrapping.
 - **Phase 4 — Verification.** `cargo xtask verify`, plus a re-render of both investigation
   fixtures with the output appended to `OBSERVED.md` alongside the Q1 capture.
 - **Phase 5 — Follow-ups (file, don't implement).** Un-defer `bd-zzke` with the corrected
@@ -282,68 +320,39 @@ No docs phase: no new user-facing option — this is q2 catching up to Q1's exis
 
 ## Open design questions for the user
 
-Questions 1, 2 and 5 from the first round are settled (see "Scope decision" above).
-Remaining:
+**None — design is settled.** See "Decisions" above. The two questions that were live in
+round two are recorded there as decisions 2 and 3; the round-one questions about scope and
+about pairing with the autoid strand are decisions 1 and 4.
 
-1. ~~**Legacy string titles: promote or parse?**~~ **Withdrawn — the premise was wrong.**
-   Markdown parsing of metadata strings happens at **YAML-load time**, not in
-   `from_config_value`. The `InterpretationContext` (config_value.rs:104-135) sets the
-   default per source, and the two sources have **opposite defaults**:
+Kept for the record, since the reasoning is easy to re-litigate:
 
-   | source | untagged string | opt out / in |
-   |---|---|---|
-   | document front matter (`DocumentMetadata`) | **parsed as markdown** → `PandocInlines` | `!str` keeps it literal |
-   | `_quarto.yml` (`ProjectConfig`) | **kept literal** → `Scalar(String)` | `!md` parses it |
+- **"Legacy string titles: promote or parse?" was withdrawn — the premise was wrong.**
+  Markdown parsing of metadata strings happens at **YAML-load time**, not in
+  `from_config_value`. The `InterpretationContext` (config_value.rs:104-135) sets the
+  default per source, and the two sources have **opposite defaults**:
 
-   So a front-matter `navigation.toc` entry with `title: "My **bold** section"` already
-   arrives as `PandocInlines` carrying a `Strong`. Today `as_plain_text()` (toc.rs:146)
-   throws that markup away — which is the *same defect this epic fixes*, not a separate
-   decision. Nothing to re-parse; carrying inlines just stops discarding what is already
-   there.
+  | source | untagged string | opt out / in |
+  |---|---|---|
+  | document front matter (`DocumentMetadata`) | **parsed as markdown** -> `PandocInlines` | `!str` keeps it literal |
+  | `_quarto.yml` (`ProjectConfig`) | **kept literal** -> `Scalar(String)` | `!md` parses it |
 
-   What survives is narrower and has an answer that follows from the existing contract: a
-   `Scalar(String)` reaching `from_config_value` came from project config (literal by
-   design) or from programmatic construction, so it should be **wrapped as a single `Str`**.
-   Re-parsing it would bypass `ProjectConfig`'s deliberate literal-by-default rule; the
-   sanctioned way to opt a project-config key into markdown is the registry — see Q2.
+  So a front-matter `title: "My **bold** section"` already arrives as `PandocInlines`
+  carrying a `Strong`; `as_plain_text()` (toc.rs:146) discards it. That is the defect this
+  epic fixes, not a decision to make. The residual — what to do with a `Scalar(String)` —
+  follows from the contract: it came from project config (literal by design) or programmatic
+  construction, so **wrap it as a single `Str`**. Re-parsing would bypass `ProjectConfig`'s
+  deliberate default; the registry (decision 2) is the sanctioned opt-in.
 
-2. **Should `toc-title` be blessed in `MARKDOWN_CONFIG_PATHS`?** *(the real question Q1 was
-   groping at)*
-   `toc-title` is read from merged metadata via `as_plain_text()`
-   (`toc_generate.rs:125-133`), so it inherits the split above:
+## One gap worth filing separately
 
-   - front matter — `toc-title: "On **this** page"` → `PandocInlines`, markup **available**
-     (and currently discarded by `as_plain_text`, fixed by this epic);
-   - `_quarto.yml` — same YAML → `Scalar(String)`, markup **never parsed**, because
-     `toc-title` is **not** in `MARKDOWN_CONFIG_PATHS`
-     (`transforms/config_markdown.rs:84-122`, which blesses `website.title`, navbar/sidebar
-     titles, `page-footer` regions and nav-item `text`).
+The user's standing rationale for blessing more keys is that `!str` / `!path` give authors
+control. That is true in document front matter and **false in project config**: after load,
+`!str`-tagged and untagged strings are both `Scalar(String)`, so a blessed key cannot be
+opted out of markdown parsing from `_quarto.yml` (documented at config_markdown.rs:40-45).
 
-   So after this epic a project-level `toc-title` would still be markup-free while a
-   document-level one renders — a split with no principled justification, since `toc-title`
-   is presentation text exactly like `website.title` and `sidebar.title` next to it in the
-   registry. Adding `&["toc-title"]` is a one-line change and the module documents this as
-   the growth path ("Growing the feature = adding a line here").
-
-   I lean **yes, bless it, in this epic**. Two caveats worth your call: it is a behavior
-   change for existing `_quarto.yml` files whose `toc-title` happens to contain `*` or `_`
-   (the `!str` opt-out does not work in project config — documented limitation at
-   config_markdown.rs:40-45), and `NavigationToc.title` is currently `String` read via
-   `as_str()` (toc.rs:214), so blessing it only pays off if that field also becomes
-   `Inlines` in Phase 3.
-
-3. **`bd-zzke`: un-defer now or after this lands?**
-   It shrinks once the TOC stops flattening. I lean **after**, so its site audit runs
-   against the post-epic tree rather than being redone. Either way its description needs the
-   corrected site list (it lists 6; there are ~10).
-
-4. **Should this be fixed jointly with bd-heading-id-drops-inline-content-fl84n3ql?**
-   (Carried over.) They share a heading and a root-cause *class*, but not a code path — and
-   this epic no longer touches `toc.rs::inlines_to_text` at all, which weakens the "fix
-   together" case further. The autoid strand is now cleanly independent, and its own
-   judgement call (whether quote glyphs reach the slug filter) is moot since the slug filter
-   strips non-alphanumerics anyway. My recommendation is now **fully independent strands**,
-   contra the first round.
+This is accepted for `toc-title` specifically. But as the blessed set grows — `bd-xygsu15r`
+is the next one queued — the missing opt-out becomes more load-bearing, and it is the one
+mechanism the broader policy leans on. Not filed; offered.
 
 ## Risks / tradeoffs (draft)
 
