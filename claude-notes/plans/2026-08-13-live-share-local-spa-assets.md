@@ -2,7 +2,8 @@
 
 **Epic:** bd-puc7xt6e
 **Date:** 2026-08-13
-**Status:** Phase 0 complete (2026-08-13) — baseline recorded, skeletons landed red
+**Status:** Phase 1 complete (2026-08-13) — wire payload 54.67 → 10.36 MB
+(5.3×); slow-link first render 48.0 → 10.0 s; **gate: Phases 2–3 proceed**
 **Parent context:** `claude-notes/plans/2026-08-03-q2-preview-live-share-iroh.md` (live-share design; spike measured 13.2 s cross-network first-render)
 
 ## Overview
@@ -233,14 +234,15 @@ missing behavior on the complete ones), output inspected.
 
 - **Phase 1** — `crates/quarto-preview/tests/integration/asset_serving.rs`
   (complete bodies against today's public seams, runtime-red):
-  `br_served_when_accepted` (fails: no `Content-Encoding: br`),
-  `br_bytes_roundtrip_to_identity` (fails same way; uses the new
-  `brotli` dev-dep), `cache_headers_match_local_prod_contract` (fails:
-  no `Cache-Control`; pins `no-cache` for `/` and `public,
+  `gz_served_when_accepted` (fails: no `Content-Encoding: gzip`),
+  `gz_bytes_roundtrip_to_identity` (fails same way; decodes with the
+  existing `flate2` dep), `cache_headers_match_local_prod_contract`
+  (fails: no `Cache-Control`; pins `no-cache` for `/` and `public,
   max-age=31536000, immutable` for `/assets/*` per
-  `scripts/local-prod-server.mjs`), `identity_served_without_br_acceptance`
+  `scripts/local-prod-server.mjs`), `identity_served_without_gz_acceptance`
   (**passes today by design** — it guards the identity path against
-  regression once `.br` serving lands).
+  regression once `.gz` serving lands). *(Named `br_*` when landed;
+  renamed with the gz-only decision — see the communication record.)*
 - **Phase 2** — `config_endpoint.rs` gains
   `config_reports_embedded_asset_manifest_hashes` (fails: no `assets`
   block; placeholder-aware so fresh-clone CI stays green) and
@@ -265,32 +267,116 @@ missing behavior on the complete ones), output inspected.
 
 ### Phase 1 — Payload reduction (no architecture change)
 
-- [ ] Add wasm-opt (`-Oz`) to `build:wasm` after the wasm-bindgen step, and
+- [x] Add wasm-opt (`-Oz`) to `build:wasm` after the wasm-bindgen step, and
   tune `[profile.release]` in `crates/wasm-quarto-hub-client/Cargo.toml`
   (`lto`, `opt-level = "s"`, `codegen-units = 1` — measure each
   independently). The build is already `--release` per the Phase 0 audit;
-  record before/after sizes.
-- [ ] Emit precompressed `.br` siblings **only** (no `.gz` — decided
-  2026-08-13 to minimize binary growth) at build time (vite plugin or an
-  xtask post-pass over both dist dirs); extend `asset_response` to serve
-  them when `Accept-Encoding` allows, with correct `Content-Encoding` and
-  `Vary`. Identity bytes stay embedded for clients that don't send `br`.
-  Verify in Phase 4's browser session that the target browsers actually
-  advertise `br` for `http://127.0.0.1` origins (potentially-trustworthy,
-  but confirm — a browser that doesn't gets identity and the full payload).
-- [ ] Record the binary-size delta (embedded identity + `.br` vs. identity
+  record before/after sizes. *(done 2026-08-13 — matrix below)*
+- [x] Emit precompressed `.gz` siblings **only** (no `.br` — decision
+  amended 2026-08-13 to gzip for maximum compatibility: universal
+  `Accept-Encoding` support with no potentially-trustworthy-origin
+  concern, and `flate2` is already in the tree; supersedes the same-day
+  `.br`-only decision, which had the smaller wire payload) at build time
+  (an xtask post-pass over both dist dirs); extend `asset_response` to
+  serve them when `Accept-Encoding` allows, with correct
+  `Content-Encoding` and `Vary`. Identity bytes stay embedded for
+  clients that don't send `gzip`. *(done 2026-08-13 —
+  `crates/xtask/src/precompress.rs` + `asset_response` rework)*
+- [x] Record the binary-size delta (embedded identity + `.gz` vs. identity
   alone) in this file, the same way the parent plan tracked the iroh
-  dep-tree delta.
-- [ ] Audit cache headers on `/assets/*` (content-hashed → `immutable`) and
+  dep-tree delta. *(done 2026-08-13 — see "Phase 1 results")*
+- [x] Audit cache headers on `/assets/*` (content-hashed → `immutable`) and
   `/` (`no-cache`), matching the local-prod contract. (Today
   `asset_response` sets only Content-Type — this phase creates the
-  behavior.)
-- [ ] Tests: asset handler returns `Content-Encoding: br` for an
-  `Accept-Encoding: br` request and identity otherwise; compressed bytes
-  round-trip; cache headers as specified.
-- [ ] Re-run the Phase 0 measurements. **Gate:** if first-render over the
+  behavior.) *(done 2026-08-13 — pinned by
+  `cache_headers_match_local_prod_contract`)*
+- [x] Tests: asset handler returns `Content-Encoding: gzip` for an
+  `Accept-Encoding: gzip` request and identity otherwise; compressed
+  bytes round-trip; cache headers as specified. *(done 2026-08-13 —
+  `asset_serving.rs` un-ignored, 4/4 green)*
+- [x] Re-run the Phase 0 measurements. **Gate:** if first-render over the
   simulated slow link is now acceptable (target: ≤ 5 s), Phases 2–3 can be
-  deferred; note the decision here.
+  deferred; note the decision here. *(done 2026-08-13 — 10.0 s > 5 s:
+  **Phases 2–3 proceed**; see "Phase 1 results")*
+
+#### Phase 1 results (measured 2026-08-13)
+
+**WASM size matrix** (shipped blob `pkg/wasm_quarto_hub_client_bg.wasm`;
+each knob measured independently, then combined; harness
+`/tmp/phase1-wasm-matrix.sh`, log `/tmp/phase1-wasm-matrix.log`):
+
+| Config | Bytes | Δ vs baseline |
+|---|---|---|
+| baseline (no `[profile.release]`) | 41,909,271 | — |
+| `codegen-units = 1` | 36,683,806 | −12.5% |
+| `opt-level = "s"` | 38,724,917 | −7.6% |
+| `lto = true` (fat) | 41,173,913 | −1.8% |
+| `lto = "thin"` | 46,500,921 | **+11.0% — regression** (cross-crate inlining bloat) |
+| combined (thin + s + cu1) | 35,342,719 | −15.7% |
+| combined (fat + s + cu1) | 32,726,966 | −21.9% |
+| combined (thin) + `wasm-opt -Oz` | 27,345,755 | −34.8% |
+| combined (fat) + `wasm-opt -Os` | 27,505,438 | −34.4% |
+| **combined (fat) + `wasm-opt -Oz`** | **26,898,758** | **−35.8%** |
+
+Final: `lto = true, opt-level = "s", codegen-units = 1` in
+`crates/wasm-quarto-hub-client/Cargo.toml` + `wasm-opt -Oz` as
+`build:wasm` step 3 (wasm-pack order: bindgen first, then opt on the
+`*_bg.wasm`). Fat-over-thin buys 447 KB (1.6%) for ~15 s more build
+time (~80 s vs ~65 s for the profile rebuild) — worth it at these
+absolute sizes. `wasm-opt` is located by `build-wasm.js` (PATH, then
+the Homebrew binaryen prefix) and checked by `cargo dev-setup`.
+
+**Precompression (gz-only):** `scripts/precompress-dist.mjs` (node:zlib,
+level 9), wired into the SPA builds themselves — `npm run build` in
+q2-preview-spa and `build:preview-embed` in hub-client — so every build
+path regenerates the siblings (a bare `vite build` would otherwise wipe
+them via `emptyOutDir`; verify step 13 runs `npm run build`, so an
+xtask-only post-pass would have been silently lost there). The manifest
+Phase 2 hashes covers identity assets, not the `.gz` bytes, so
+cross-platform zlib byte differences are invisible to correctness.
+Viewer dist: 35 files, 36,333,609 → 9,561,959 B (3.80×); editor dist:
+148 files, 58,387,104 → 16,396,281 B (3.56×). The hub WASM's `.gz` is
+6,717,677 B (4.0×).
+
+**Binary-size delta** (`target/debug/q2`): 255,330,896 → 213,721,744 B
+(**−41.6 MB net**). The `.gz` siblings add 16,958,367 B of embed
+(viewer 9,561,959 + post-dedupe editor 7,396,408), but wasm-opt
+(−15.0 MB on the viewer WASM identity) and the editor-embed dedupe
+firing again (−26.9 MB: viewer/editor WASM builds realigned, sha256
+`f71de404…` both sides — fixing the drift Phase 0 recorded) more than
+pay for it. Total embedded SPA content: 117.7 MB → ~78 MB.
+
+**Serving:** `asset_response` now owns every asset-path header:
+Content-Type, the local-prod cache contract (`assets/*` → `public,
+max-age=31536000, immutable`; everything else → `no-cache`),
+`Accept-Encoding: gzip` negotiation against the embedded `.gz` sibling
+(`Content-Encoding: gzip` + unconditional `Vary: Accept-Encoding`;
+identity otherwise, incl. `gzip;q=0` refusal), explicit
+`Content-Length`, and HEAD semantics — the single helper Phase 3's
+join frontend shares (design decision 2).
+
+**Measurements** (same fixture, harness, and methodology as the Phase
+0 baseline; binary embedding the wasm-opt'd, gz-siblinged dists):
+
+| Leg | Phase 0 | Phase 1 | Δ |
+|---|---|---|---|
+| (a) direct loopback | 668 ms / 54,672,999 B | 720 ms / 10,355,448 B | wire ÷5.3; wall ≈ unchanged (local boot is CPU-bound) |
+| (b) relay-pinned | 3,215 ms | 2,127 ms | −34% (0 DIRECT selections, as before) |
+| (c) 10 Mbps / 100 ms | 48,041 ms | 10,024 ms | −79% |
+
+**Cache behavior (CDP probe):** under the new `immutable` headers the
+renderer iframe's duplicate automerge-WASM fetch became a disk-cache
+hit (0 wire bytes); the duplicate `meta-*.js` still re-downloaded — it
+races the app's first fetch early in boot, before the first response
+commits to the disk cache. The boot driver's byte totals count both
+duplicates (it reads `content-length`, which cache hits also carry);
+true wire is ~1.1 MB lower than reported on both Phase 1 legs.
+
+**Gate: Phases 2–3 proceed.** 10.0 s at 10 Mbps/100 ms is a 4.8×
+improvement but still 2× over the ≤ 5 s target. The floor at 10 Mbps
+for the remaining ~9.2–10.4 MB is 7.4–8.3 s — no encoding decision
+closes that; only not sending the bytes (Phase 3's local serving)
+does.
 
 ### Phase 2 — Manifest + config handshake
 
@@ -365,15 +451,13 @@ missing behavior on the complete ones), output inspected.
   serving is exact-manifest-hit only, with no local index fallback, so an
   unrecognized path can never be shadowed by a locally synthesized
   `index.html`. (`/auth/*` is the existing case this rule protects.)
-- **Binary-size growth** — embedding `.br` siblings adds roughly the
-  compressed size of the dist (~a quarter of identity at brotli q11, so
-  on the order of 10–13 MB) to every `q2` binary. `.br`-only (no `.gz`)
+- **Binary-size growth** — embedding `.gz` siblings adds roughly the
+  compressed size of the dist (~a third of identity at gzip -9, so on
+  the order of 15–18 MB) to every `q2` binary. `.gz`-only (no `.br`)
   caps this; Phase 1 records the measured delta.
-- **Browser `br` support on plain HTTP** — if a target browser omits `br`
-  in `Accept-Encoding` for `http://127.0.0.1`, that browser gets identity
-  and the full payload. Phase 4's real browser session must confirm the
-  negotiation; if a major browser omits `br`, reconsider per-request
-  compression for the identity path rather than re-adding `.gz`.
+- ~~**Browser `br` support on plain HTTP**~~ — moot since the 2026-08-13
+  move to gz-only: gzip is universal in `Accept-Encoding`, including on
+  plain-HTTP loopback origins.
 
 ## Communication record
 
@@ -397,3 +481,23 @@ missing behavior on the complete ones), output inspected.
   assigned to the shared `asset_response` helper; manifest self-exclusion
   and `build.rs` ownership of the post-dedupe editor manifest clarified;
   cross-platform manifest CI check added to Phase 2.
+- 2026-08-13: Compression format amended to **gz-only** (maximum
+  compatibility: universal `Accept-Encoding` support, no
+  potentially-trustworthy-origin caveat, and `flate2` was already in the
+  tree — the `brotli` dev-dep added earlier today was removed before
+  Phase 1 landed). Supersedes the `.br`-only decision recorded above;
+  the trade is a weaker ratio (~3× vs ~3.5–4× on the WASM), which the
+  Phase 1 gate re-run measures. The wasm-opt/binaryen work is
+  unaffected — it shrinks the identity bytes gzip then encodes.
+- 2026-08-13: **Phase 1 complete** (numbers inline above). WASM
+  41.9 → 26.9 MB (profile tuning + `wasm-opt -Oz`, each knob measured —
+  `lto = "thin"` alone *regressed* +11%, so fat). `.gz` precompression
+  wired into the SPA npm builds as the single producer (an xtask-only
+  pass would have been wiped by verify step 13's bare `npm run build`).
+  `asset_response` owns cache/encoding/HEAD semantics for Phase 3 to
+  share. Binary 255.3 → 213.7 MB despite +17.0 MB of `.gz` (dedupe
+  realigned). Wire 54.67 → 10.36 MB; slow-link first render
+  48.0 → 10.0 s — gate: Phases 2–3 proceed. Full `cargo xtask verify`
+  green (steps split across runs: 11,896 Rust tests passed; hub-client
+  `test:ci` incl. 131 wasm tests against the `-Oz` module; tree-sitter
+  601/601 + CRLF parity).

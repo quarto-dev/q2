@@ -1,22 +1,19 @@
-//! Phase 1 skeletons (bd-ee0qcq3c; plan
+//! Phase 1 tests (bd-ee0qcq3c; plan
 //! `claude-notes/plans/2026-08-13-live-share-local-spa-assets.md`):
-//! precompressed `.br` serving and cache headers for the embedded-SPA
-//! asset path.
-//!
-//! These tests are **complete and ignored**: they compile against
-//! today's public seams (the smoke-test pattern — `extend_with_spa` on
-//! a stand-in router, no hub boot) and fail at runtime until Phase 1
-//! extends `asset_response`. Unignore to start Phase 1 red.
+//! precompressed `.gz` serving and cache headers for the embedded-SPA
+//! asset path. Landed as ignored skeletons in Phase 0 (named `br_*`);
+//! un-ignored and made green in Phase 1 under the gz-only decision
+//! (see the plan's communication record).
 //!
 //! Contracts pinned here:
 //!
-//! - `Accept-Encoding: br` on a precompressible asset →
-//!   `Content-Encoding: br` + `Vary: Accept-Encoding` + the `.br`
+//! - `Accept-Encoding: gzip` on a precompressible asset →
+//!   `Content-Encoding: gzip` + `Vary: Accept-Encoding` + the `.gz`
 //!   sibling bytes; Content-Type unchanged.
-//! - No `br` in `Accept-Encoding` → identity bytes, no
-//!   `Content-Encoding`. (Identity stays embedded for clients that
-//!   don't send `br`.)
-//! - The `.br` bytes brotli-decompress to the identity bytes.
+//! - No `gzip` in `Accept-Encoding` (including a `br`-only client) →
+//!   identity bytes, no `Content-Encoding`. (Identity stays embedded
+//!   for clients that don't send `gzip`.)
+//! - The `.gz` bytes gunzip to the identity bytes.
 //! - Cache headers match the local-prod contract
 //!   (`scripts/local-prod-server.mjs`): paths under `/assets/` (Vite
 //!   content-hashed) get `public, max-age=31536000, immutable`;
@@ -93,21 +90,20 @@ async fn get_with_encoding(
 }
 
 #[tokio::test]
-#[ignore = "Phase 1 skeleton (bd-ee0qcq3c): precompressed .br serving not implemented yet"]
-async fn br_served_when_accepted() {
+async fn gz_served_when_accepted() {
     let addr = spawn_with_addr(extend_with_spa(Router::new())).await;
     let Some(asset) = discover_asset_path(addr).await else {
         eprintln!("placeholder tree (no built dist); nothing to compress");
         return;
     };
 
-    let (headers, body) = get_with_encoding(addr, &asset, Some("br")).await;
+    let (headers, body) = get_with_encoding(addr, &asset, Some("gzip")).await;
     assert_eq!(
         headers
             .get(reqwest::header::CONTENT_ENCODING)
             .and_then(|v| v.to_str().ok()),
-        Some("br"),
-        "Accept-Encoding: br must yield Content-Encoding: br; headers: {headers:?}"
+        Some("gzip"),
+        "Accept-Encoding: gzip must yield Content-Encoding: gzip; headers: {headers:?}"
     );
     let vary = headers
         .get(reqwest::header::VARY)
@@ -143,15 +139,15 @@ async fn br_served_when_accepted() {
 }
 
 #[tokio::test]
-#[ignore = "Phase 1 skeleton (bd-ee0qcq3c): precompressed .br serving not implemented yet"]
-async fn identity_served_without_br_acceptance() {
+async fn identity_served_without_gz_acceptance() {
     let addr = spawn_with_addr(extend_with_spa(Router::new())).await;
     let Some(asset) = discover_asset_path(addr).await else {
         eprintln!("placeholder tree (no built dist); nothing to compress");
         return;
     };
 
-    for accept in [None, Some("gzip")] {
+    // No header at all, and a brotli-only client: both get identity.
+    for accept in [None, Some("br")] {
         let (headers, body) = get_with_encoding(addr, &asset, accept).await;
         assert!(
             headers.get(reqwest::header::CONTENT_ENCODING).is_none(),
@@ -165,37 +161,35 @@ async fn identity_served_without_br_acceptance() {
 }
 
 #[tokio::test]
-#[ignore = "Phase 1 skeleton (bd-ee0qcq3c): precompressed .br serving not implemented yet"]
-async fn br_bytes_roundtrip_to_identity() {
+async fn gz_bytes_roundtrip_to_identity() {
     let addr = spawn_with_addr(extend_with_spa(Router::new())).await;
     let Some(asset) = discover_asset_path(addr).await else {
         eprintln!("placeholder tree (no built dist); nothing to compress");
         return;
     };
 
-    let (_, br_body) = get_with_encoding(addr, &asset, Some("br")).await;
+    let (_, gz_body) = get_with_encoding(addr, &asset, Some("gzip")).await;
     let (_, identity) = get_with_encoding(addr, &asset, None).await;
 
     assert!(
-        br_body.len() < identity.len(),
-        "brotli should shrink the asset ({} !< {})",
-        br_body.len(),
+        gz_body.len() < identity.len(),
+        "gzip should shrink the asset ({} !< {})",
+        gz_body.len(),
         identity.len()
     );
     let mut decoded = Vec::new();
     std::io::Read::read_to_end(
-        &mut brotli::Decompressor::new(br_body.as_slice(), 4096),
+        &mut flate2::read::GzDecoder::new(gz_body.as_slice()),
         &mut decoded,
     )
-    .expect("br body brotli-decompresses");
+    .expect("gz body gunzips");
     assert_eq!(
         decoded, identity,
-        "decompressed .br bytes must equal the identity bytes"
+        "decompressed .gz bytes must equal the identity bytes"
     );
 }
 
 #[tokio::test]
-#[ignore = "Phase 1 skeleton (bd-ee0qcq3c): cache headers not implemented yet"]
 async fn cache_headers_match_local_prod_contract() {
     let addr = spawn_with_addr(extend_with_spa(Router::new())).await;
 

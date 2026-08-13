@@ -37,6 +37,9 @@ pub fn run() -> Result<()> {
     if !status.success() {
         bail!("hub-client preview-embed build failed");
     }
+    // `build:preview-embed` ends with the gzip precompression post-pass
+    // (scripts/precompress-dist.mjs), so dist-preview-embed/ already
+    // carries its `.gz` siblings here.
     println!("✓ hub-client/dist-preview-embed/ is up to date");
     Ok(())
 }

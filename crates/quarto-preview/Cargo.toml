@@ -45,7 +45,6 @@ reqwest = { version = "0.12", features = ["blocking", "json"] }
 # The Phase 3 money test dials samod's `/ws` through the tunnel
 # (`dial_websocket` takes a `url::Url`).
 url = "2"
-brotli = "8.0.4"
 
 [lints]
 workspace = true

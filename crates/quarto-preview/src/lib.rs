@@ -14,7 +14,7 @@ use std::sync::{Arc, OnceLock};
 use anyhow::{Context, Result};
 use axum::{
     Router,
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
@@ -696,7 +696,7 @@ fn current_ui() -> PreviewUi {
 /// Editor mode looks in the editor embed first, then falls back to the
 /// viewer embed — the dedupe seam (Phase 4, bd-jt1etjbn): `build.rs`
 /// strips editor-dist files byte-identical to the viewer dist, so
-/// shared content-hashed assets (most notably the ~38 MB
+/// shared content-hashed assets (most notably the ~42 MB
 /// `wasm_quarto_hub_client_bg-*.wasm`) are embedded once, in the viewer
 /// bundle. Viewer mode never reads the editor embed.
 fn lookup_embedded(ui: PreviewUi, rel: &str) -> Option<&'static include_dir::File<'static>> {
@@ -729,25 +729,40 @@ pub fn editor_ephemeral_note(allow_edit: bool) -> Option<&'static str> {
 }
 
 async fn spa_handler(req: axum::http::Request<axum::body::Body>) -> Response {
+    let ctx = AssetRequestCtx {
+        accept_encoding: req.headers().get(header::ACCEPT_ENCODING),
+        is_head: req.method() == Method::HEAD,
+    };
     let path = req.uri().path();
     let rel = path.trim_start_matches('/');
     let rel = if rel.is_empty() { "index.html" } else { rel };
 
     if let Some(Some(override_dir)) = SPA_DIR_OVERRIDE.get() {
-        return serve_from_disk(override_dir, rel).await;
+        return serve_from_disk(override_dir, rel, ctx).await;
     }
 
     let ui = current_ui();
     // Try the exact path first (an asset like `assets/index-<hash>.js`).
     if let Some(file) = lookup_embedded(ui, rel) {
-        return asset_response(rel, file.contents().to_vec());
+        return asset_response(rel, file.contents().to_vec(), embedded_gz(ui, rel), ctx);
     }
     // SPA fallback: any non-asset path gets `index.html` for client-
     // side routing.
     if let Some(index) = lookup_embedded(ui, "index.html") {
-        return asset_response("index.html", index.contents().to_vec());
+        return asset_response(
+            "index.html",
+            index.contents().to_vec(),
+            embedded_gz(ui, "index.html"),
+            ctx,
+        );
     }
     (StatusCode::NOT_FOUND, "no spa").into_response()
+}
+
+/// The precompressed `<rel>.gz` sibling of an embedded asset, present
+/// when the dist was built with the xtask precompression pass (Phase 1).
+fn embedded_gz(ui: PreviewUi, rel: &str) -> Option<Vec<u8>> {
+    lookup_embedded(ui, &format!("{rel}.gz")).map(|f| f.contents().to_vec())
 }
 
 /// Serve a `resources:`-declared file from disk at the artifact-rooted path the
@@ -761,49 +776,151 @@ async fn spa_handler(req: axum::http::Request<axum::body::Body>) -> Response {
 /// through to the SPA index, exactly as before this route existed.
 async fn artifact_resource_handler(
     axum::extract::Path(rest): axum::extract::Path<String>,
+    method: Method,
+    headers: HeaderMap,
 ) -> Response {
+    let ctx = AssetRequestCtx {
+        accept_encoding: headers.get(header::ACCEPT_ENCODING),
+        is_head: method == Method::HEAD,
+    };
     if let Some(map) = RESOURCE_DISK_MAP.get()
         && let Some(disk) = map.get(&rest)
         && let Ok(bytes) = tokio::fs::read(disk).await
     {
-        return asset_response(&rest, bytes);
+        return asset_response(&rest, bytes, disk_gz(disk).await, ctx);
     }
-    serve_spa_index().await
+    serve_spa_index(ctx).await
 }
 
 /// Serve the SPA `index.html` (override dir if set, else the embedded bundle).
 /// The index branch of [`spa_handler`], shared with the artifact route's
 /// fall-through (a non-resource `/.quarto/…` path got `index.html` before this
 /// route existed, so preserve that).
-async fn serve_spa_index() -> Response {
+async fn serve_spa_index(ctx: AssetRequestCtx<'_>) -> Response {
     if let Some(Some(override_dir)) = SPA_DIR_OVERRIDE.get() {
-        return serve_from_disk(override_dir, "index.html").await;
+        return serve_from_disk(override_dir, "index.html", ctx).await;
     }
-    if let Some(index) = lookup_embedded(current_ui(), "index.html") {
-        return asset_response("index.html", index.contents().to_vec());
+    let ui = current_ui();
+    if let Some(index) = lookup_embedded(ui, "index.html") {
+        return asset_response(
+            "index.html",
+            index.contents().to_vec(),
+            embedded_gz(ui, "index.html"),
+            ctx,
+        );
     }
     (StatusCode::NOT_FOUND, "no spa").into_response()
 }
 
-async fn serve_from_disk(root: &std::path::Path, rel: &str) -> Response {
+async fn serve_from_disk(root: &std::path::Path, rel: &str, ctx: AssetRequestCtx<'_>) -> Response {
     let abs = root.join(rel);
     match tokio::fs::read(&abs).await {
-        Ok(bytes) => asset_response(rel, bytes),
+        Ok(bytes) => asset_response(rel, bytes, disk_gz(&abs).await, ctx),
         Err(_) => {
             // Fallback to index.html for client-side routing.
             let index = root.join("index.html");
             match tokio::fs::read(&index).await {
-                Ok(bytes) => asset_response("index.html", bytes),
+                Ok(bytes) => asset_response("index.html", bytes, disk_gz(&index).await, ctx),
                 Err(e) => (StatusCode::NOT_FOUND, e.to_string()).into_response(),
             }
         }
     }
 }
 
-fn asset_response(rel: &str, bytes: Vec<u8>) -> Response {
+/// The precompressed `<file>.gz` sibling of a disk-served file, when
+/// present (a dev override dir only has them after an xtask build).
+async fn disk_gz(abs: &std::path::Path) -> Option<Vec<u8>> {
+    let mut sibling = abs.as_os_str().to_os_string();
+    sibling.push(".gz");
+    tokio::fs::read(PathBuf::from(sibling)).await.ok()
+}
+
+/// Request-side context for [`asset_response`] content negotiation.
+/// Phase 3's join frontend drives the same helper from its raw
+/// head-peek, so header, encoding-negotiation, and HEAD semantics live
+/// here alone (plan design decisions 2–3 — never fork this logic).
+#[derive(Clone, Copy, Default)]
+struct AssetRequestCtx<'a> {
+    /// Raw `Accept-Encoding` value, when the request carried one.
+    accept_encoding: Option<&'a HeaderValue>,
+    /// HEAD: emit the negotiated headers (incl. `Content-Length`) with
+    /// an empty body.
+    is_head: bool,
+}
+
+/// Build the response for a served asset. Owns every header the asset
+/// path sets: Content-Type; the cache contract (mirrors
+/// `scripts/local-prod-server.mjs` — Vite's content-hashed `assets/*`
+/// are immutable, everything else revalidates); gzip content
+/// negotiation against a precompressed `<file>.gz` sibling (Phase 1:
+/// `.gz`-only, no `.br` — maximum compatibility); and HEAD semantics.
+fn asset_response(
+    rel: &str,
+    bytes: Vec<u8>,
+    gz_bytes: Option<Vec<u8>>,
+    ctx: AssetRequestCtx<'_>,
+) -> Response {
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, content_type_for(rel));
-    (StatusCode::OK, headers, bytes).into_response()
+    headers.insert(
+        header::CACHE_CONTROL,
+        if rel.starts_with("assets/") {
+            HeaderValue::from_static("public, max-age=31536000, immutable")
+        } else {
+            HeaderValue::from_static("no-cache")
+        },
+    );
+    // The representation varies on Accept-Encoding whether or not this
+    // particular response is the encoded one, so Vary is unconditional.
+    headers.insert(header::VARY, HeaderValue::from_static("Accept-Encoding"));
+
+    let body = match (accepts_gzip(ctx.accept_encoding), gz_bytes) {
+        (true, Some(gz)) => {
+            headers.insert(header::CONTENT_ENCODING, HeaderValue::from_static("gzip"));
+            gz
+        }
+        _ => bytes,
+    };
+    // Explicit Content-Length: a HEAD response (empty body) must still
+    // describe the representation's size.
+    headers.insert(
+        header::CONTENT_LENGTH,
+        HeaderValue::from_str(&body.len().to_string()).expect("valid Content-Length"),
+    );
+    let body = if ctx.is_head { Vec::new() } else { body };
+    (StatusCode::OK, headers, body).into_response()
+}
+
+/// Does the `Accept-Encoding` value permit gzip? Token match is
+/// case-insensitive; `gzip;q=0` is an explicit refusal (RFC 7231
+/// §5.3.4). Deliberately no wildcard (`*`) handling: every browser that
+/// speaks gzip names it explicitly.
+fn accepts_gzip(value: Option<&HeaderValue>) -> bool {
+    let Some(value) = value else { return false };
+    let Ok(value) = value.to_str() else {
+        return false;
+    };
+    value.split(',').any(|entry| {
+        let mut parts = entry.split(';');
+        if !parts
+            .next()
+            .unwrap_or("")
+            .trim()
+            .eq_ignore_ascii_case("gzip")
+        {
+            return false;
+        }
+        !parts.any(|param| {
+            let param = param.trim();
+            let Some(q) = param
+                .strip_prefix("q=")
+                .or_else(|| param.strip_prefix("Q="))
+            else {
+                return false;
+            };
+            q.trim().parse::<f32>().is_ok_and(|q| q <= 0.0)
+        })
+    })
 }
 
 fn content_type_for(path: &str) -> HeaderValue {
