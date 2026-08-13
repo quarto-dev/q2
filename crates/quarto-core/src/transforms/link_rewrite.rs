@@ -256,9 +256,20 @@ impl<'a> LinkRewriter<'a> {
                 // normalize (leading `/` = site-root, Decision 4 of
                 // bd-root-relative-paths-design-fc5pvkcv) and
                 // relativize to the page.
+                //
+                // EXCEPT in VFS-root mode (hub-client q2-preview):
+                // preview images are not fetched by URL — the
+                // parent-side asset walker reads the VFS and mints
+                // blob URLs keyed by the *user-written* path (the
+                // contract pinned by
+                // `hub-client/src/services/assetManifestProject.wasm.test.ts`),
+                // so a rewrite here would orphan every preview image.
+                // Same mode-gate as `ResourceCollectorTransform`.
                 self.visit_inlines(&mut img.content);
-                img.target.0 =
-                    resolve_static_resource_href(&img.target.0, self.source, self.resolver);
+                if !self.resolver.is_some_and(|r| r.is_vfs_root_mode()) {
+                    img.target.0 =
+                        resolve_static_resource_href(&img.target.0, self.source, self.resolver);
+                }
             }
             Inline::Emph(e) => self.visit_inlines(&mut e.content),
             Inline::Underline(u) => self.visit_inlines(&mut u.content),
@@ -831,6 +842,38 @@ mod tests {
         assert_eq!(
             image_urls(&out),
             vec!["../../images/x.svg#frag", "../../images/x.svg?v=2"]
+        );
+    }
+
+    /// VFS-root mode (hub-client q2-preview): image targets pass
+    /// through **untouched**. Preview images are not fetched by URL —
+    /// the parent-side asset walker reads the VFS and mints blob URLs
+    /// keyed by the *user-written* path
+    /// (`hub-client/src/services/assetManifestProject.wasm.test.ts`
+    /// pins that contract), so a rewrite here would orphan every
+    /// preview image. Links are unaffected (they already rewrite in
+    /// VFS mode — bd-kw93.14).
+    #[tokio::test]
+    async fn image_rewrite_skipped_in_vfs_root_mode() {
+        let blocks = vec![para(vec![image_inline("../hero.png", "h")])];
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/sub/page.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.resource_resolver = Some(ResourceResolverContext::vfs_root("/project"));
+        let mut ast = Pandoc {
+            meta: empty_meta(),
+            blocks,
+        };
+        LinkRewriteTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert_eq!(
+            image_urls(&ast.blocks),
+            vec!["../hero.png"],
+            "VFS-root mode must preserve the user-written image path"
         );
     }
 

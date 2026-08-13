@@ -324,18 +324,47 @@ Work items:
       to `_site/images/`. Output inspected. This is the markdown-native
       replacement for all four raw-HTML `src=` offenders in the
       Connect docs.
-- [ ] Full workspace tests + commit
+- [x] Full workspace tests (11847 green, no snapshot churn) + commit
+      `5da1e5f4`
 
 ### Phase 4 — Docs + follow-ups
 
-- [ ] Website docs: leading-`/` decree, markdown-first footer imagery,
-      `project.resources:` for raw-HTML assets, raw-HTML limitation
-      stated plainly
-- [ ] File discovered-from strands: listing `is_external_src`
-      leading-`/` site; listing preview-URL substitution site
-- [ ] Update Connect-docs-side repro READMEs (outside this repo) after
-      landing
-- [ ] Final `cargo xtask verify` (full, WASM leg included) + commit
+- [x] Website docs: new `docs/guides/projects/paths.qmd` ("Paths in
+      websites") — the two path forms, per-page rewriting,
+      config-declared assets with markdown-first footer guidance, the
+      raw-HTML non-rewriting stance stated plainly, `project.resources:`
+      for raw-HTML-referenced assets, full-URL caveats. Added to the
+      docs sidebar; site renders clean (page verified in `_site`,
+      rendered with q2).
+- [x] File discovered-from strands:
+      - `bd-epk8cmdl` — listing leading-`/` sites (`is_external_src`,
+        preview-URL substitution)
+      - `bd-tef2lm9j` — nav hrefs to static (non-document) files never
+        page-relativize (`resolve_href_for_html` fall-through)
+      - `bd-i8k7h6h1` — reveal deck footer/logo regions not walked
+        (p3)
+- [x] Fixed stale `pipeline.rs` doc comment attributing image-URL
+      rewriting to `ResourceCollectorTransform` (it's
+      `LinkRewriteTransform`).
+- [x] **Discovered + fixed by the full-verify WASM leg:** the Phase 1
+      image rewrite broke the q2-preview asset contract. In VFS-root
+      mode (hub-client preview) images are not fetched by URL — the
+      parent-side asset walker reads the VFS and mints blob URLs keyed
+      by the *user-written* path
+      (`hub-client/src/services/assetManifestProject.wasm.test.ts`
+      pins this; 2 of its tests + 1 printableDocument test caught the
+      break). Image rewriting is now mode-gated off in VFS-root mode
+      (same gate `ResourceCollectorTransform` already uses), with a
+      Rust regression test
+      (`image_rewrite_skipped_in_vfs_root_mode`, failed before the
+      gate). Links keep rewriting in VFS mode (bd-kw93.14 behavior,
+      unchanged). This is exactly why the CLAUDE.md rule says plain
+      workspace tests are not sufficient for quarto-core changes.
+- [ ] Update Connect-docs-side repro READMEs (outside this repo) —
+      deferred until this work is pushed/landed; the repros document
+      released behavior.
+- [x] Final `cargo xtask verify` (full, WASM leg included): all
+      verification steps passed.
 
 ## Risks / tradeoffs
 
