@@ -1,0 +1,61 @@
+---
+title: "Heading auto-id"
+# bd-heading-id-drops-inline-content-fl84n3ql: when a heading carries no
+# explicit {#id}, the id is derived from the heading text. The collector
+# used to handle only Str/Space/Emph/Strong/Code and discard every other
+# inline kind *without recursing into it*, so whole words vanished from
+# the anchor — `## Using a "raw" volume` became `using-a-volume`.
+#
+# Also covered here, decided with the same fix: Pandoc's empty-id
+# fallback. A heading that collects to nothing gets `section` (then
+# `section-1`, ...) instead of no id attribute at all, which left the
+# heading unlinkable and handed `-1`/`-2` to its siblings.
+#
+# Every id below was measured against pandoc 3.9.0.2, which is the same
+# algorithm Quarto 1 uses. Table:
+# claude-notes/plans/heading-id-drops-inline-content-investigation/observed-2026-08-13.md
+#
+# This drives the real render path; the unit-level coverage lives in
+# crates/pampa/tests/integration/test_heading_auto_id.rs.
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - [
+            "<section id=\"using-a-raw-volume\"",
+            "<section id=\"see-the-docs-now\"",
+            "<section id=\"use-strike-here\"",
+            "<section id=\"math-xy-inline\"",
+            "<section id=\"small-caps-here\"",
+            "<section id=\"use-emphasis-and-strong-and-code-here\"",
+            "<section id=\"section\"",
+            "<section id=\"section-1\"",
+          ]
+        # The pre-fix ids, and the pre-fix dedup damage.
+        - [
+            "<section id=\"using-a-volume\"",
+            "<section id=\"see-now\"",
+            "<section id=\"use-here\"",
+            "<section id=\"math-inline\"",
+            "<section id=\"small-here\"",
+            "<section id=\"-1\"",
+            "<section class=\"section level2\">",
+          ]
+---
+
+## Using a "raw" volume
+
+## See [the docs](https://example.com) now
+
+## Use ~~strike~~ here
+
+## Math $x+y$ inline
+
+## Small [caps]{.smallcaps} here
+
+## Use *emphasis* and **strong** and `code` here
+
+## ![](img.png)
+
+## ![](other.png)
