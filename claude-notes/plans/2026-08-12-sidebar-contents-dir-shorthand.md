@@ -249,7 +249,7 @@ in the main checkout.
       both the minimal repro and the committed multi-sidebar probe; compare the
       sidebar DOM against the repro's `_site-q1/`. Per CLAUDE.md, record the
       exact invocation and observed output in this plan.
-- [ ] **Phase 5 — Docs.** Document the shorthand and the `auto: <dir>` section
+- [x] **Phase 5 — Docs.** Document the shorthand and the `auto: <dir>` section
       shape. Re-read `Q-13-6`'s wording for the case where the user wrote
       `contents: <dir>` and never typed `auto:`.
 - [ ] **Phase 6 — Full `cargo xtask verify`** (not `--skip-hub-build`;
