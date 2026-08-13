@@ -170,6 +170,12 @@ jobs:
       - name: npm ci
         run: npm ci
 
+      # wasm-opt (binaryen) is `build:wasm` step 3 (live-share payload
+      # plan Phase 1). Pinned to the version local dev uses (Homebrew
+      # binaryen 132) so CI and dev builds produce the same bytes.
+      - name: Install binaryen (wasm-opt)
+        run: npm install -g binaryen@132.0.0
+
       - name: Build WASM (hub-client)
         run: npm run build:wasm
         working-directory: hub-client

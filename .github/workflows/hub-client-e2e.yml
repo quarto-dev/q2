@@ -117,6 +117,12 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      # wasm-opt (binaryen) is `build:wasm` step 3 (live-share payload
+      # plan Phase 1). Pinned to the version local dev uses (Homebrew
+      # binaryen 132) so CI and dev builds produce the same bytes.
+      - name: Install binaryen (wasm-opt)
+        run: npm install -g binaryen@132.0.0
+
       # WASM artifacts must exist before any package's `vite build` runs
       # (hub-client and q2-demos/* all import the WASM module).
       - name: Build WASM
