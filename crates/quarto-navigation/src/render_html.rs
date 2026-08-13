@@ -822,6 +822,46 @@ fn push_inline(out: &mut String, inline: &Inline) {
                 out.push_str(&r.text);
             }
         }
+        // Markdown images are first-class in nav/footer text regions
+        // (bd-root-relative-paths-design-fc5pvkcv, Case C): without
+        // this arm they flattened to alt text, which pushed authors
+        // into raw `<img>`{=html} — the one form whose paths cannot
+        // be rebased. The src is emitted verbatim; page-relative
+        // resolution happens upstream in quarto-core's render
+        // transforms, keeping this module resolver-free.
+        Inline::Image(img) => {
+            out.push_str("<img src=\"");
+            out.push_str(&escape_attr(&img.target.0));
+            out.push_str("\" alt=\"");
+            out.push_str(&escape_attr(
+                &inlines_plain_text(&img.content).unwrap_or_default(),
+            ));
+            out.push('"');
+            if !img.target.1.is_empty() {
+                out.push_str(" title=\"");
+                out.push_str(&escape_attr(&img.target.1));
+                out.push('"');
+            }
+            let (id, classes, kvs) = &img.attr;
+            if !id.is_empty() {
+                out.push_str(" id=\"");
+                out.push_str(&escape_attr(id));
+                out.push('"');
+            }
+            if !classes.is_empty() {
+                out.push_str(" class=\"");
+                out.push_str(&escape_attr(&classes.join(" ")));
+                out.push('"');
+            }
+            for (k, v) in kvs {
+                out.push(' ');
+                out.push_str(&escape_attr(k));
+                out.push_str("=\"");
+                out.push_str(&escape_attr(v));
+                out.push('"');
+            }
+            out.push('>');
+        }
         // An unresolved shortcode reaching the renderer means it was
         // never visited by ShortcodeResolveTransform's metadata walk
         // (resolved ones are Str/error-marker nodes by now). Render the
@@ -831,7 +871,7 @@ fn push_inline(out: &mut String, inline: &Inline) {
             out.push_str(&escape_html(&format!("?{}", sc.name)));
             out.push_str("</strong>");
         }
-        // The remaining variants (Cite, Math, Image, Note, NoteReference,
+        // The remaining variants (Cite, Math, Note, NoteReference,
         // Attr, Insert, Delete, Highlight, EditComment, Custom)
         // are not expected in navbar/footer text. Fall back to plain text.
         other => {
@@ -844,9 +884,14 @@ fn push_inline(out: &mut String, inline: &Inline) {
 
 fn inline_plain_fallback(inline: &Inline) -> Option<String> {
     // Best-effort flattening for unsupported inline kinds.
+    inlines_plain_text(std::slice::from_ref(inline))
+}
+
+/// Flatten inlines to their plain text (used for `<img alt>` and the
+/// unsupported-inline fallback).
+fn inlines_plain_text(inlines: &[Inline]) -> Option<String> {
     use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_pandoc_types::config_value::ConfigValueKind;
-    let inlines = std::slice::from_ref(inline);
     let cv = ConfigValue {
         value: ConfigValueKind::PandocInlines(inlines.to_vec()),
         source_info: SourceInfo::generated(By::programmatic_config()),
@@ -1390,6 +1435,54 @@ mod tests {
         let out = inlines_to_html(&inlines);
         assert!(out.contains("<a href=\"https://example.com\">site</a>"));
         assert!(out.contains("<code>x &amp; y</code>"));
+    }
+
+    /// Case C incentive removal
+    /// (bd-root-relative-paths-design-fc5pvkcv): a markdown image in a
+    /// nav/footer text region renders as a real `<img>` — src, alt
+    /// (flattened content), title, and attributes all carried through —
+    /// instead of flattening to its alt text, which is what pushed
+    /// authors into raw `<img>`{=html}. The src is emitted verbatim:
+    /// page-relative resolution happens upstream in quarto-core.
+    #[test]
+    fn inlines_to_html_image_renders_img_tag() {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        let mut attr: quarto_pandoc_types::attr::Attr = Default::default();
+        attr.0 = "brand-img".to_string();
+        attr.1.push("footer-logo".to_string());
+        attr.2.insert("width".to_string(), "32".to_string());
+        let inlines = vec![Inline::Image(quarto_pandoc_types::inline::Image {
+            attr,
+            content: vec![str_inline("Posit logo")],
+            target: ("../../images/logo.svg".to_string(), "The title".to_string()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })];
+        let out = inlines_to_html(&inlines);
+        assert_eq!(
+            out,
+            "<img src=\"../../images/logo.svg\" alt=\"Posit logo\" \
+             title=\"The title\" id=\"brand-img\" class=\"footer-logo\" \
+             width=\"32\">"
+        );
+    }
+
+    /// Attribute-less image: only src and alt, and everything is
+    /// escaped.
+    #[test]
+    fn inlines_to_html_image_minimal_and_escaped() {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        let inlines = vec![Inline::Image(quarto_pandoc_types::inline::Image {
+            attr: Default::default(),
+            content: vec![str_inline("a & b")],
+            target: ("x\"y.svg".to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })];
+        let out = inlines_to_html(&inlines);
+        assert_eq!(out, "<img src=\"x&quot;y.svg\" alt=\"a &amp; b\">");
     }
 
     // --- Navbar active-item rendering (Phase 3) -------------------------

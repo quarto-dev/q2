@@ -166,6 +166,13 @@ pub fn resolve_href_for_html(
         Some(i) => (&raw[..i], &raw[i..]),
         None => (raw, ""),
     };
+    // Decision 4 (bd-root-relative-paths-design-fc5pvkcv): a leading
+    // `/` in config space means site-root-relative — identical to the
+    // bare project-root-relative form. Strip it for the index lookup
+    // (and for the miss diagnostic, which reports project-relative
+    // paths). Protocol-relative `//host/…` was already classified
+    // external above.
+    let path_part = path_part.strip_prefix('/').unwrap_or(path_part);
 
     if let Some(idx) = index {
         if let Some(profile) = idx.lookup_by_source(Path::new(path_part)) {
@@ -429,6 +436,90 @@ pub fn resolve_root_relative_resource_href(
     resolver: Option<&ResourceResolverContext>,
 ) -> String {
     resolve_static_resource_href(raw, "", resolver)
+}
+
+/// Resolve `Link` and `Image` targets inside a config-declared
+/// `PandocInlines` region — footer text regions, the navbar title.
+///
+/// Config space is project-root-relative (a leading `/` means the
+/// same thing, decision 4): links resolve like nav-item hrefs via
+/// [`resolve_href_for_html`] (`.qmd` → output href, page-relative,
+/// Q-13 miss diagnostics on the given `surface`), images via
+/// [`resolve_root_relative_resource_href`]. Recurses through the
+/// formatting inlines the nav/footer emitter renders.
+///
+/// bd-root-relative-paths-design-fc5pvkcv (Case C): this walk is what
+/// makes plain markdown the natural form for config-declared imagery
+/// and links — the pure emitter in `quarto-navigation` receives
+/// fully-resolved targets and stays resolver-free.
+pub fn rewrite_config_inlines(
+    inlines: &mut [quarto_pandoc_types::inline::Inline],
+    resolver: Option<&ResourceResolverContext>,
+    index: Option<&ProjectIndex>,
+    surface: &NavSurface<'_>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    use quarto_pandoc_types::inline::Inline;
+    for inline in inlines.iter_mut() {
+        match inline {
+            Inline::Link(link) => {
+                rewrite_config_inlines(&mut link.content, resolver, index, surface, diagnostics);
+                let location = link.target_source.url.clone();
+                link.target.0 = resolve_href_for_html(
+                    &link.target.0,
+                    resolver,
+                    index,
+                    surface.clone(),
+                    location,
+                    diagnostics,
+                );
+            }
+            Inline::Image(img) => {
+                rewrite_config_inlines(&mut img.content, resolver, index, surface, diagnostics);
+                img.target.0 = resolve_root_relative_resource_href(&img.target.0, resolver);
+            }
+            Inline::Emph(e) => {
+                rewrite_config_inlines(&mut e.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Strong(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Underline(u) => {
+                rewrite_config_inlines(&mut u.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Strikeout(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Superscript(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Subscript(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::SmallCaps(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Quoted(q) => {
+                rewrite_config_inlines(&mut q.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Span(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Insert(i) => {
+                rewrite_config_inlines(&mut i.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Delete(d) => {
+                rewrite_config_inlines(&mut d.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Highlight(h) => {
+                rewrite_config_inlines(&mut h.content, resolver, index, surface, diagnostics)
+            }
+            // Leaves and variants the nav/footer emitter doesn't
+            // render as containers (Str, Space, Code, RawInline,
+            // Math, Note, Cite, Custom, …).
+            _ => {}
+        }
+    }
 }
 
 /// Resolve a navigation href to its project-root-relative form using
@@ -1628,6 +1719,25 @@ mod tests {
         assert_eq!(
             resolve_static_resource_href("/assets/app.html#top", "docs/api.qmd", Some(&r)),
             "../assets/app.html#top"
+        );
+    }
+
+    /// Decision 4 (bd-root-relative-paths-design-fc5pvkcv): a leading
+    /// `/` on a nav href means site-root-relative — `/about.qmd` is
+    /// the same as `about.qmd`. The index lookup must strip it, and
+    /// the result relativizes per page like any other nav href.
+    #[test]
+    fn href_leading_slash_resolves_project_root_relative() {
+        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
+        let r = website_resolver("docs/api.html");
+        let mut diags = Vec::new();
+        let out =
+            resolve_href_for_html("/about.qmd", Some(&r), Some(&idx), surf(), None, &mut diags);
+        assert_eq!(out, "../about.html");
+        assert!(
+            diags.is_empty(),
+            "no miss diagnostic for the stripped form; got {:?}",
+            diags
         );
     }
 

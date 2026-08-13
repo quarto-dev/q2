@@ -169,10 +169,132 @@ pub(super) fn copy_navbar_logo(
     copy_asset_file(project, runtime, normalized, "navbar logo")
 }
 
+/// Copy images referenced from `page-footer` text regions into the
+/// output tree.
+///
+/// Decision 5 of bd-root-relative-paths-design-fc5pvkcv, footer
+/// edition: a footer-region markdown image (`![](/images/x.svg)`) is
+/// a config-declared asset like the favicon and navbar logo, so it
+/// gets the same warn-and-continue copy. External URLs and `data:`
+/// URIs are skipped; a leading `/` is site-root-relative and strips
+/// to the project-relative path; `?query`/`#fragment` tails are
+/// dropped for the file probe.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn copy_footer_images(
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Result<()> {
+    use quarto_navigation::FooterRegion;
+    use quarto_pandoc_types::config_value::ConfigValueKind;
+
+    let Some(meta) = project.config.metadata.as_ref() else {
+        return Ok(());
+    };
+    let Some(footer) = quarto_navigation::resolve_page_footer(meta) else {
+        return Ok(());
+    };
+
+    let mut urls: Vec<String> = Vec::new();
+    for region in [&footer.left, &footer.center, &footer.right] {
+        let FooterRegion::Text(cv) = region else {
+            continue;
+        };
+        match &cv.value {
+            ConfigValueKind::PandocInlines(inlines) => {
+                collect_inline_image_urls(inlines, &mut urls);
+            }
+            // At post-render time the project config still holds the
+            // raw scalar — markdown-izing config strings
+            // (`ConfigMarkdownTransform`) happens in the per-doc
+            // pipeline. Parse the same way here; parse warnings are
+            // dropped, the per-doc pipeline already reported them.
+            ConfigValueKind::Scalar(_) => {
+                let Some(text) = cv.as_plain_text() else {
+                    continue;
+                };
+                let mut parse_diags = Vec::new();
+                let kind = pampa::pandoc::meta::parse_config_string_as_markdown(
+                    &text,
+                    &cv.source_info,
+                    &mut parse_diags,
+                );
+                if let ConfigValueKind::PandocInlines(inlines) = &kind {
+                    collect_inline_image_urls(inlines, &mut urls);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    for raw in urls {
+        if quarto_util::is_external_url(&raw) {
+            continue;
+        }
+        let path = raw.split(['#', '?']).next().unwrap_or(raw.as_str());
+        let normalized = path.strip_prefix('/').unwrap_or(path);
+        if normalized.is_empty() {
+            continue;
+        }
+        let src = project.dir.join(normalized);
+        let exists = runtime.path_exists(&src, None).map_err(|e| {
+            QuartoError::other(format!(
+                "Failed to probe page-footer image source {}: {}",
+                src.display(),
+                e
+            ))
+        })?;
+        if !exists {
+            diagnostics.push(DiagnosticMessage::warning(format!(
+                "page-footer image refers to missing file '{}'",
+                normalized
+            )));
+            continue;
+        }
+        copy_asset_file(project, runtime, normalized, "page-footer image")?;
+    }
+    Ok(())
+}
+
+/// Collect `Image` target URLs from config-region inlines, in order,
+/// deduplicated, recursing through formatting containers.
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_inline_image_urls(
+    inlines: &[quarto_pandoc_types::inline::Inline],
+    out: &mut Vec<String>,
+) {
+    use quarto_pandoc_types::inline::Inline;
+    for inline in inlines {
+        match inline {
+            Inline::Image(img) => {
+                if !out.contains(&img.target.0) {
+                    out.push(img.target.0.clone());
+                }
+                collect_inline_image_urls(&img.content, out);
+            }
+            Inline::Link(l) => collect_inline_image_urls(&l.content, out),
+            Inline::Emph(e) => collect_inline_image_urls(&e.content, out),
+            Inline::Strong(s) => collect_inline_image_urls(&s.content, out),
+            Inline::Underline(u) => collect_inline_image_urls(&u.content, out),
+            Inline::Strikeout(s) => collect_inline_image_urls(&s.content, out),
+            Inline::Superscript(s) => collect_inline_image_urls(&s.content, out),
+            Inline::Subscript(s) => collect_inline_image_urls(&s.content, out),
+            Inline::SmallCaps(s) => collect_inline_image_urls(&s.content, out),
+            Inline::Quoted(q) => collect_inline_image_urls(&q.content, out),
+            Inline::Span(s) => collect_inline_image_urls(&s.content, out),
+            Inline::Insert(i) => collect_inline_image_urls(&i.content, out),
+            Inline::Delete(d) => collect_inline_image_urls(&d.content, out),
+            Inline::Highlight(h) => collect_inline_image_urls(&h.content, out),
+            _ => {}
+        }
+    }
+}
+
 /// Copy `<project>/<normalized>` → `<output>/<normalized>`, creating
 /// parent directories. Shared tail of the config-asset copy hooks
-/// ([`copy_favicon`], [`copy_navbar_logo`]); callers have already
-/// resolved, normalized, and existence-checked the path.
+/// ([`copy_favicon`], [`copy_navbar_logo`], [`copy_footer_images`]);
+/// callers have already resolved, normalized, and existence-checked
+/// the path.
 #[cfg(not(target_arch = "wasm32"))]
 fn copy_asset_file(
     project: &ProjectContext,

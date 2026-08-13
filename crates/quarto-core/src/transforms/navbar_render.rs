@@ -23,7 +23,7 @@
 //! - `navigation.navbar` absent — nothing to render.
 
 use quarto_error_reporting::DiagnosticMessage;
-use quarto_navigation::{Navbar, NavigationItem, render_html::navbar_to_html};
+use quarto_navigation::{Navbar, NavbarTitle, NavigationItem, render_html::navbar_to_html};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::{By, SourceInfo};
@@ -35,7 +35,7 @@ use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::is_feature_disabled;
 use crate::transforms::navigation_href::{
-    NavSurface, resolve_href_for_html, resolve_root_relative_resource_href,
+    NavSurface, resolve_href_for_html, resolve_root_relative_resource_href, rewrite_config_inlines,
 };
 
 pub struct NavbarRenderTransform;
@@ -119,6 +119,20 @@ impl AstTransform for NavbarRenderTransform {
         // depth. Not an index lookup: the logo is a file, not a doc.
         if let Some(logo) = navbar.logo.as_mut() {
             *logo = resolve_root_relative_resource_href(logo, ctx.resource_resolver.as_ref());
+        }
+        // Navbar title markdown (Case C): Link/Image targets inside
+        // the title's parsed inlines resolve like footer text regions.
+        if let NavbarTitle::Text(cv) = &mut navbar.title
+            && let quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines) =
+                &mut cv.value
+        {
+            rewrite_config_inlines(
+                inlines.as_mut_slice(),
+                ctx.resource_resolver.as_ref(),
+                ctx.project_index.as_deref(),
+                &NavSurface::Navbar,
+                &mut local_diags,
+            );
         }
         ctx.diagnostics = local_diags;
 
@@ -907,6 +921,72 @@ mod tests {
         assert!(
             html.contains("<img src=\"https://cdn.example.com/logo.svg\""),
             "external logo must pass through; got: {}",
+            html
+        );
+    }
+
+    /// Case C (bd-root-relative-paths-design-fc5pvkcv): a markdown
+    /// image inside the navbar *title* — a config-declared
+    /// PandocInlines region — resolves page-relative like footer text
+    /// regions do.
+    #[tokio::test]
+    async fn navbar_render_title_image_resolves_page_relative() {
+        use crate::resource_resolver::ResourceResolverContext;
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Image, Inline, Str};
+
+        let title_cv = ConfigValue {
+            value: quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(vec![
+                Inline::Image(Image {
+                    attr: Default::default(),
+                    content: vec![Inline::Str(Str {
+                        text: "Brand".to_string(),
+                        source_info: SourceInfo::for_test(),
+                    })],
+                    target: ("/images/brand.svg".to_string(), String::new()),
+                    source_info: SourceInfo::for_test(),
+                    attr_source: AttrSourceInfo::empty(),
+                    target_source: TargetSourceInfo::empty(),
+                }),
+            ]),
+            source_info: SourceInfo::for_test(),
+            merge_op: Default::default(),
+        };
+        let navbar = Navbar {
+            title: NavbarTitle::Text(title_cv),
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/tools/converter.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/tools/converter.html",
+            "site_libs",
+            "converter",
+        );
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_resource_resolver(resolver);
+        NavbarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("<img src=\"../images/brand.svg\" alt=\"Brand\">"),
+            "title image must resolve page-relative; got: {}",
             html
         );
     }

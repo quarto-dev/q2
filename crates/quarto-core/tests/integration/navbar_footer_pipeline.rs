@@ -492,3 +492,70 @@ fn pipeline_navbar_root_slash_logo_rebased_per_page() {
         "leading-/ logo file must be copied to the output tree"
     );
 }
+
+// === Case C (bd-root-relative-paths-design-fc5pvkcv): footer markdown ====
+
+/// The incentive-removal e2e: a `page-footer` region written in plain
+/// markdown — an image with a site-root path and a `.qmd` link — is
+/// emitted page-relative on every page, and the image is copied into
+/// the output tree. This is the markdown-native replacement for the
+/// raw `<img …>`{=html} pattern that q2 cannot (and will not) rewrite.
+#[test]
+fn pipeline_footer_text_image_and_link_resolve_per_page_and_copy() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  page-footer:\n    left: \"![Logo](/images/x.svg) and [root](/index.qmd)\"\n",
+        );
+        write(
+            &project_dir.join("images/x.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+        write(
+            &project_dir.join("deep/deeper/page.qmd"),
+            "---\ntitle: Deep\n---\n\nD.\n",
+        );
+    });
+
+    let root_html = read(&project_dir.join("_site/index.html"));
+    assert!(
+        root_html.contains("<img src=\"images/x.svg\" alt=\"Logo\">"),
+        "root page footer image should be depth-0 relative; got: {}",
+        root_html
+            .lines()
+            .find(|l| l.contains("footer"))
+            .unwrap_or("<no footer line>")
+    );
+    assert!(
+        root_html.contains("href=\"index.html\""),
+        "root page footer link should resolve to index.html"
+    );
+
+    let deep_html = read(&project_dir.join("_site/deep/deeper/page.html"));
+    assert!(
+        deep_html.contains("<img src=\"../../images/x.svg\" alt=\"Logo\">"),
+        "depth-2 footer image must climb to the site root; got: {}",
+        deep_html
+            .lines()
+            .find(|l| l.contains("footer-left"))
+            .unwrap_or("<no footer-left line>")
+    );
+    assert!(
+        deep_html.contains("href=\"../../index.html\""),
+        "depth-2 footer link must climb to the site root; got: {}",
+        deep_html
+            .lines()
+            .find(|l| l.contains("footer-left"))
+            .unwrap_or("<no footer-left line>")
+    );
+
+    assert!(
+        project_dir.join("_site/images/x.svg").exists(),
+        "footer image must be copied to the output tree (decision 5)"
+    );
+}

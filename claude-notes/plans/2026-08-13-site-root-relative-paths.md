@@ -283,27 +283,47 @@ Work items:
       `<img src="../../images/config-logo.svg" … class="navbar-logo">`
       (was verbatim `images/config-logo.svg`); logo copied to
       `_site/images/` without `project.resources`. Output inspected.
-- [ ] Full workspace tests + commit
+- [x] Full workspace tests (11839 green, no snapshot churn) + commit
+      `0b4683fc`
 
 ### Phase 3 — Case C (incentive removal: images + links in nav/footer regions)
 
-- [ ] Failing tests: `push_inline` Image arm (attr passthrough, alt
-      from content, title); footer Text region markdown image →
-      page-relative `<img>` at depth; footer Text region `.qmd` link →
-      page-relative `.html` (inverts footer_render test 42 —
-      deliberate); navbar title region parity
-- [ ] Implement: `Inline::Image` arm in
-      `quarto-navigation/src/render_html.rs::push_inline`
-- [ ] Implement: shared resolver-aware inline walk in quarto-core
-      (Links via `resolve_doc_relative_href`, Images via
-      `resolve_static_resource_href`), applied in
-      `FooterRenderTransform` Text regions + navbar title/text
-      surfaces; survey all `inlines_to_html` render surfaces for
-      coverage or an explicit exclusion comment
-- [ ] Implement: copy intents + missing-file warnings for
-      config-declared images (decision 5)
-- [ ] e2e: footer markdown image + link on deep page through real
-      binary; record snippet
+- [x] Failing tests (9 failed as expected before implementation):
+      `push_inline` Image arm (attr passthrough, alt from content,
+      title, escaping); footer Text region markdown image →
+      page-relative `<img>` at depth (site-root and project-root
+      forms); footer Text region `.qmd` link → page-relative `.html`
+      (inverts footer_render test 42 — deliberate, documented in the
+      test); leading-`/` nav href resolves (`/about.qmd` ≡
+      `about.qmd`); navbar title image parity; footer image copy +
+      missing-file warning pipeline tests
+- [x] Implement: `Inline::Image` arm in
+      `quarto-navigation/src/render_html.rs::push_inline` (src emitted
+      verbatim — the emitter stays resolver-free; new
+      `inlines_plain_text` helper for alt flattening)
+- [x] Implement: `rewrite_config_inlines` walk in `navigation_href`
+      (Links via `resolve_href_for_html` — config-space semantics,
+      surface-tagged Q-13 diagnostics; Images via
+      `resolve_root_relative_resource_href`), applied in
+      `FooterRenderTransform` Text regions and the navbar title.
+      `resolve_href_for_html` now strips a leading `/` before the
+      index lookup (decision 4). Sidebar title / item-text regions
+      deliberately not walked (items are already links; sidebar title
+      is a plain-text surface) — noted here as the exclusion record.
+- [x] Implement: `copy_footer_images` post-render hook (decision 5)
+      beside favicon/logo; parses the project-config scalar with
+      `pampa::pandoc::meta::parse_config_string_as_markdown` (the
+      `ConfigMarkdownTransform` entry point) because markdown-izing
+      happens per-doc, not at config load; warn-and-continue on
+      missing files
+- [x] e2e (real binary): deep page footer emits
+      `<img src="../../images/x.svg" alt="logo"> and
+      <a href="../../index.html">root</a>` from
+      `page-footer.left: "![logo](/images/x.svg) and [root](/index.qmd)"`
+      (was: alt-text flattening + verbatim `/index.qmd`); image copied
+      to `_site/images/`. Output inspected. This is the markdown-native
+      replacement for all four raw-HTML `src=` offenders in the
+      Connect docs.
 - [ ] Full workspace tests + commit
 
 ### Phase 4 — Docs + follow-ups
