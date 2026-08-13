@@ -290,6 +290,14 @@ enum Commands {
         /// --allow-edit, --ui, --data-dir, --preview-dir) don't combine
         /// with it. --port/--host pick where the local proxy listens;
         /// --no-browser and --browser still apply.
+        ///
+        /// When this binary embeds the exact UI asset build the host
+        /// advertises (a manifest hash compared while joining), the UI
+        /// is served from this binary and only the session's dynamic
+        /// traffic crosses the tunnel, so a first join downloads a few
+        /// kilobytes instead of the whole UI. On any mismatch — an
+        /// older or newer q2, or a dev build — everything is tunneled:
+        /// the join still works, it just boots slower.
         #[arg(
             long,
             value_name = "TICKET",

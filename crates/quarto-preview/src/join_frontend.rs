@@ -19,9 +19,16 @@
 //!   `asset_response` builder (header logic is never forked), plus
 //!   `Connection: close`;
 //! - anything else is spliced onto a token-prefixed tunnel stream:
-//!   `open_stream()`, the consumed head bytes written verbatim, then
-//!   `copy_bidirectional`. WebSocket upgrades and keep-alive follow-up
-//!   requests flow through untouched — byte fidelity is total.
+//!   `open_stream()`, the consumed head bytes replayed, then
+//!   `copy_bidirectional`. WebSocket upgrades pass byte-identical.
+//!   Any other head gets `Connection: close` forced in (a hop-by-hop
+//!   header a proxy owns) so the host closes the connection after one
+//!   response: a browser otherwise reuses an idle tunneled keep-alive
+//!   connection for later requests — manifest-hit assets included,
+//!   which then cross the tunnel unrouted (Phase 4 e2e finding,
+//!   bd-2mpka14m). With per-request connections, keep-alive follow-up
+//!   requests simply never happen, and every request gets its own
+//!   routing decision.
 //!
 //! There is deliberately **no local SPA-index fallback**: an unmatched
 //! path tunnels to the host, which stays the single authority on what
@@ -174,7 +181,14 @@ async fn handle_conn(mut tcp: TcpStream, conn: Arc<TunnelConnection>, serving: A
                 serve_local(&mut tcp, &rel, accept_encoding, is_head, ui).await;
             }
             Route::Tunnel => {
-                tunnel(&mut tcp, &conn, consumed).await;
+                // Every accepted connection is accounted for in the
+                // logs: local serves at trace in `serve_local`, tunnels
+                // here — the request line names what crossed the tunnel.
+                let request_line =
+                    String::from_utf8_lossy(consumed.split(|&b| b == b'\r').next().unwrap_or(&[]))
+                        .into_owned();
+                tracing::debug!(%request_line, "join frontend: tunneling");
+                tunnel(&mut tcp, &conn, with_connection_close(&consumed)).await;
             }
         },
         HeadRead::Oversize => {
@@ -249,6 +263,53 @@ async fn read_head(tcp: &mut TcpStream) -> HeadRead {
 /// Index just past the `\r\n\r\n` terminating the request head.
 fn find_header_end(buf: &[u8]) -> Option<usize> {
     buf.windows(4).position(|w| w == b"\r\n\r\n").map(|i| i + 4)
+}
+
+/// Force `Connection: close` into a tunneled head (the tunnel
+/// direction of the mixed-keep-alive mitigation — see the module
+/// docs). Upgrade heads (WebSocket) pass byte-identical: their
+/// connection must stay open. Any other head has its existing
+/// `Connection` lines dropped and a single `Connection: close`
+/// appended; bytes past the head terminator (a request body already
+/// read) are preserved untouched.
+fn with_connection_close(consumed: &[u8]) -> Vec<u8> {
+    let Some(head_end) = find_header_end(consumed) else {
+        return consumed.to_vec();
+    };
+    // Lines keep their trailing `\r`; the head ends with a `"\r"`
+    // blank line plus a final empty segment.
+    let mut lines = consumed[..head_end].split(|&b| b == b'\n');
+    let request_line = lines.next().unwrap_or(&[]);
+    let mut is_upgrade = false;
+    let mut kept: Vec<&[u8]> = Vec::new();
+    for line in lines {
+        if line == b"\r" || line.is_empty() {
+            break;
+        }
+        let name = match line.iter().position(|&b| b == b':') {
+            Some(i) => &line[..i],
+            None => line,
+        };
+        if name.eq_ignore_ascii_case(b"upgrade") {
+            is_upgrade = true;
+        }
+        if !name.eq_ignore_ascii_case(b"connection") {
+            kept.push(line);
+        }
+    }
+    if is_upgrade {
+        return consumed.to_vec();
+    }
+    let mut out = Vec::with_capacity(consumed.len() + 20);
+    out.extend_from_slice(request_line);
+    out.push(b'\n');
+    for line in kept {
+        out.extend_from_slice(line);
+        out.push(b'\n');
+    }
+    out.extend_from_slice(b"Connection: close\r\n\r\n");
+    out.extend_from_slice(&consumed[head_end..]);
+    out
 }
 
 /// The head-peek's routing decision for one connection.
@@ -414,5 +475,50 @@ async fn tunnel(tcp: &mut TcpStream, conn: &TunnelConnection, consumed: Vec<u8>)
         Err(err) => {
             tracing::debug!(%err, "join frontend: tunneled conn ended with error");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::with_connection_close;
+
+    #[test]
+    fn injects_close_into_a_headerless_head() {
+        let head = b"GET /health HTTP/1.1\r\n\r\n";
+        assert_eq!(
+            with_connection_close(head),
+            b"GET /health HTTP/1.1\r\nConnection: close\r\n\r\n"
+        );
+    }
+
+    #[test]
+    fn replaces_keep_alive_and_preserves_the_other_headers() {
+        let head = b"GET / HTTP/1.1\r\nHost: x\r\nConnection: keep-alive\r\nAccept: */*\r\n\r\n";
+        assert_eq!(
+            with_connection_close(head),
+            b"GET / HTTP/1.1\r\nHost: x\r\nAccept: */*\r\nConnection: close\r\n\r\n"
+        );
+    }
+
+    #[test]
+    fn upgrade_heads_pass_verbatim() {
+        let head = b"GET /ws HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: abc\r\n\r\n";
+        assert_eq!(with_connection_close(head), head);
+    }
+
+    #[test]
+    fn bytes_past_the_terminator_are_preserved() {
+        let mut head = b"POST /api/x HTTP/1.1\r\nContent-Length: 4\r\n\r\n".to_vec();
+        head.extend_from_slice(b"BODY");
+        let mut want =
+            b"POST /api/x HTTP/1.1\r\nContent-Length: 4\r\nConnection: close\r\n\r\n".to_vec();
+        want.extend_from_slice(b"BODY");
+        assert_eq!(with_connection_close(&head), want);
+    }
+
+    #[test]
+    fn a_head_without_terminator_passes_verbatim() {
+        let head = b"GET /never-terminated";
+        assert_eq!(with_connection_close(head), head);
     }
 }

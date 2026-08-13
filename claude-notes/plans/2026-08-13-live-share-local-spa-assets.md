@@ -2,13 +2,15 @@
 
 **Epic:** bd-puc7xt6e
 **Date:** 2026-08-13
-**Status:** Phase 3 complete (2026-08-13) — `TunnelClient::connect` +
-the L7 join frontend landed; a hash-matching guest now serves the SPA
-from its own binary and tunnels only the dynamic traffic (e2e-verified
-through the real `--share`/`--join` binaries). Phase 2 landed the
-manifest + config handshake; Phase 1 cut the wire payload 54.67 →
-10.36 MB (5.3×) and slow-link first render 48.0 → 10.0 s. **Next:
-Phase 4 (two-machine e2e + docs + closeout).**
+**Status:** Complete (2026-08-13). Phase 4's real-browser e2e caught
+and fixed a design gap (keep-alive reuse defeated per-connection
+routing — see "Phase 4 results"); with the fix, a hash-matching guest
+serves ~10.77 MB of the boot from its own binary and tunnels ~3 KB,
+and slow-link (10 Mbps / 100 ms) first render is **1.5 s**, measured
+against 9.9 s for the all-tunnel fallback on the identical topology
+(48.0 s at Phase 0). Phase 3 landed `TunnelClient::connect` + the L7
+join frontend; Phase 2 the manifest + config handshake; Phase 1 cut
+the wire payload 54.67 → 10.36 MB (5.3×).
 **Parent context:** `claude-notes/plans/2026-08-03-q2-preview-live-share-iroh.md` (live-share design; spike measured 13.2 s cross-network first-render)
 
 ## Overview
@@ -93,6 +95,14 @@ first-join latency still hurts.
      paths) at the cost of extra loopback accepts, which are microseconds.
      A full per-request proxy with hyper upgrades was considered and
      rejected: far more code for no user-visible gain.
+     **Amended 2026-08-13 (Phase 4):** the local-response header is only
+     half of the mitigation — a browser also reuses an idle *tunneled*
+     keep-alive connection for later requests, which then cross the
+     tunnel unrouted. The frontend now also forces `Connection: close`
+     into every tunneled non-upgrade head (a hop-by-hop header a proxy
+     owns), so each tunneled connection carries exactly one request and
+     every follow-up gets its own routing decision. See "Phase 4
+     results".
 
 4. **Manifest generation at build time, embedded with the dist.** `cargo
    xtask build-q2-preview-spa` writes `spa-manifest.json` for the viewer
@@ -470,14 +480,100 @@ does.
 
 ### Phase 4 — End-to-end verification + docs
 
-- [ ] Real end-to-end per CLAUDE.md: `cargo run --bin q2 -- preview --share`
+- [x] Real end-to-end per CLAUDE.md: `cargo run --bin q2 -- preview --share`
   on one machine/profile, `q2 preview --join` on another, browser session
   inspected; record the exact invocations, the observed asset-serving
   behavior (host log shows no asset fetches), and before/after first-render
-  timings in this file.
-- [ ] `q2 preview --join --help` text mentions embedded-asset serving and the
-  mismatch fallback.
-- [ ] Close out braid strands; snapshot via `cargo xtask braid-snapshot`.
+  timings in this file. *(done 2026-08-13 — see "Phase 4 results"; the
+  browser e2e caught the keep-alive routing gap fixed below)*
+- [x] `q2 preview --join --help` text mentions embedded-asset serving and the
+  mismatch fallback. *(done 2026-08-13 — new paragraph on the `--join`
+  flag in `crates/quarto/src/main.rs`, output inspected)*
+- [x] Close out braid strands; snapshot via `cargo xtask braid-snapshot`.
+  *(done 2026-08-13 — bd-ee0qcq3c closed (leftover from Phase 1),
+  bd-2mpka14m + epic bd-puc7xt6e closed; two follow-ups filed)*
+
+#### Phase 4 results (measured 2026-08-13)
+
+**Headline finding: keep-alive reuse defeated per-connection routing.**
+The first real-Chromium boot through the real `--share`/`--join` pair
+*rendered correctly* (798 ms) but the guest's routing log showed only 6
+local serves while three tunneled connections carried
+`from_host=6,813,012 / 1,066,854 / …` — ~8.7 MB of the ~10.4 MB gz
+payload. Cause: local responses carry `Connection: close`, but
+*tunneled* connections stay keep-alive, and Chromium reuses an idle
+tunneled connection for later requests — including manifest-hit assets,
+which then cross the tunnel unrouted (the first-request head-peek never
+sees them). The integration suite never caught it because its raw
+clients send `Connection: close`. Fix (TDD: red
+`tunneled_head_carries_connection_close`, then implement): the frontend
+forces `Connection: close` into every tunneled non-upgrade head
+(`with_connection_close` — upgrade heads pass byte-identical, pinned by
+`upgrade_head_passes_verbatim` + 5 unit tests), so the host closes each
+tunneled connection after one response and every browser request gets
+its own routing decision. Also added a guest-side `debug!` naming each
+tunneled request line, so the routing log accounts for every
+connection. Post-fix, the same boot: **12 local serves (~10.77 MB),
+tunnels only `/health` ×2, `/api/preview/config`, `/api/preview/deps`,
+`/api/preview/diagnostics`, `/ws` — ~1.2 KB + ~2 KB of WS sync.**
+
+**Leg A — real e2e, two profiles on one machine** (a physical
+two-machine run reuses these exact invocations; the tunnel path is
+iroh either way):
+
+```
+target/debug/q2 preview target/phase4-e2e/fixture --share --no-browser --port 19378
+target/debug/q2 -vvv preview --join q2preview… --no-browser --port 19281
+node scripts/join-boot-baseline/boot-driver.mjs http://127.0.0.1:19281/?page=index.qmd report.json
+```
+
+Fixture: the Phase 0 three-file website. Guest printed `● serving UI
+assets locally (host manifest hash match)` + `● connected via direct
+connection`; **first render 762 ms** (host direct control: 699 ms);
+21 browser requests, zero failures; console showed `WASM module
+initialized successfully` / `Peer connected - online mode`. The host
+has no per-request log (no TraceLayer); "no asset fetches reach the
+host" is evidenced by the guest's complete routing log above plus the
+request-logging-shim integration tests (Phase 3), which assert zero
+asset requests host-side.
+
+**Legs B/C — throttled tunnel path (10 Mbps / 100 ms).** The Phase 0/1
+throttle sat between browser and guest — valid only while every byte
+crossed the tunnel. For Phase 4 the throttle must sit on the *tunnel
+path*: real server (no `--share`) → throttle → Gate-0
+`spike-tunnel-host` (same ALPN + 32-byte token prefix; iroh 1.0.3
+parity verified) → real `q2 preview --join`. The spike's
+`TICKET`/`TOKEN` parts are assembled into a `q2preview…` string by the
+new `crates/quarto-p2p/examples/preview-ticket-from-parts.rs`. Leg C
+(all-tunnel "before") is the identical topology with the server under
+`--preview-dir q2-preview-spa/dist` — config omits `assets`, so the
+guest tunnels everything.
+
+| Leg (10 Mbps / 100 ms on the tunnel) | First render | Tunneled bytes |
+|---|---|---|
+| B: local serving (hash match) | **1,511 ms** | ~3.2 KB |
+| C: all-tunnel fallback (`--preview-dir`) | 9,945 ms | ~10.4 MB |
+| Phase 1 reference (throttle at browser hop) | 10,024 ms | ~10.4 MB |
+
+B vs C is a same-topology A/B isolating the serving mode: **6.6×**.
+Leg C reproduces Phase 1's number within noise, validating the
+topology. Leg B is now RTT-bound (a handful of sequential dynamic
+round trips), not bandwidth-bound — no encoding decision could reach
+it. Epic arc: 48.0 s → 1.5 s at 10 Mbps / 100 ms (**32×**).
+
+**Discovered follow-ups (filed):** (1) the viewer-mode guest boot URL
+is bare `/`, so the SPA lands on the first-in-index doc (the fixture's
+`about.qmd`) instead of the host's `?page=` page — pre-existing join
+wart, not this epic's regression; (2)
+`matching_manifest_serves_assets_locally` is flagged leaky by nextest
+(WS splice task lingers at process exit; pre-existing Phase 3
+behavior, upgrade path untouched by the fix).
+
+**Verification:** full workspace nextest 11,930 passed;
+`cargo xtask verify --skip-hub-build` green, step-13 dist rebuild
+reproduced manifest `885dc318…` (unchanged — the phase is Rust-only).
+`q2 preview --join --help` output inspected: new paragraph names
+embedded-asset serving and the slower-but-working mismatch fallback.
 
 ## Risks / edge cases
 
@@ -603,3 +699,25 @@ does.
   `/api/preview/config` + an unknown path answered by the host through
   the tunnel (config advertised the matching viewer hash
   `885dc318…`), and Ctrl-C shut both sides down cleanly.
+- 2026-08-13: **Phase 4 complete** (bd-2mpka14m; numbers inline above).
+  The real-browser e2e did its job: it caught the keep-alive gap in
+  design decision 3 — Chromium reuses idle *tunneled* keep-alive
+  connections for later requests, so ~8.7 MB of the boot payload
+  crossed the tunnel unrouted despite correct per-connection routing
+  (the curl-based Phase 3 e2e and the `Connection: close`-per-request
+  integration clients could never see it). Fixed by forcing
+  `Connection: close` into tunneled non-upgrade heads
+  (`with_connection_close`; upgrade heads stay byte-identical) — TDD:
+  `tunneled_head_carries_connection_close` red on the timeout, green
+  after; `upgrade_head_passes_verbatim` guards the WS path. Post-fix
+  browser boot: 12 local serves / ~10.77 MB, ~3 KB tunneled, first
+  render 762 ms direct loopback. Throttled-tunnel legs via the Gate-0
+  spike host + the new `preview-ticket-from-parts` example: **1,511 ms
+  local-serving vs 9,945 ms all-tunnel** at 10 Mbps / 100 ms on the
+  identical topology (Phase 1's 10,024 ms reproduced within noise).
+  `--join --help` now documents embedded-asset serving + the mismatch
+  fallback. Full workspace nextest 11,930 passed; `cargo xtask verify
+  --skip-hub-build` green (manifest `885dc318…` unchanged). Two
+  follow-ups filed (viewer guest boot URL lacks `?page=`; leaky WS
+  splice in `matching_manifest_serves_assets_locally`). Epic
+  bd-puc7xt6e closed.

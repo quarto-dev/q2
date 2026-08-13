@@ -71,16 +71,18 @@ async fn wait_for_health(port: u16) {
 
 // ─── Request-logging shim ────────────────────────────────────────────────────
 
-/// Recorded request heads (method + path) crossing the shim.
+/// Recorded request heads (method + path + raw head text) crossing
+/// the shim. The head text lets tests assert on the exact headers the
+/// host received (e.g. the frontend's `Connection: close` rewrite).
 #[derive(Clone, Default)]
-struct RequestLog(Arc<Mutex<Vec<(String, String)>>>);
+struct RequestLog(Arc<Mutex<Vec<(String, String, String)>>>);
 
 impl RequestLog {
-    fn record(&self, method: &str, path: &str) {
+    fn record(&self, method: &str, path: &str, head: &str) {
         self.0
             .lock()
             .unwrap()
-            .push((method.to_string(), path.to_string()));
+            .push((method.to_string(), path.to_string(), head.to_string()));
     }
 
     /// All recorded request lines as `"METHOD path"`.
@@ -89,8 +91,18 @@ impl RequestLog {
             .lock()
             .unwrap()
             .iter()
-            .map(|(m, p)| format!("{m} {p}"))
+            .map(|(m, p, _)| format!("{m} {p}"))
             .collect()
+    }
+
+    /// The raw head text of the first recorded request for `path`.
+    fn head_for(&self, path: &str) -> Option<String> {
+        self.0
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(_, p, _)| p == path)
+            .map(|(_, _, h)| h.clone())
     }
 }
 
@@ -128,7 +140,7 @@ async fn spawn_logging_shim(target: SocketAddr) -> (SocketAddr, RequestLog) {
                     let line = String::from_utf8_lossy(line);
                     let mut parts = line.split_whitespace();
                     if let (Some(method), Some(path)) = (parts.next(), parts.next()) {
-                        log.record(method, path);
+                        log.record(method, path, &String::from_utf8_lossy(&buf[..head_end]));
                     }
                 }
                 let Ok(mut outbound) = TcpStream::connect(target).await else {
@@ -513,6 +525,103 @@ async fn unknown_path_tunnels_and_receives_host_index() {
     assert!(
         entries.iter().any(|e| e == "GET /no-such-path"),
         "the unknown path must have reached the host; log: {entries:?}"
+    );
+
+    rig.shutdown().await;
+}
+
+/// Phase 4 e2e finding (bd-2mpka14m): `Connection: close` on *local*
+/// responses is only half of the mixed-connection mitigation — a real
+/// browser also reuses an idle *tunneled* keep-alive connection for
+/// later requests, and per-connection routing then tunnels whatever
+/// arrives as a follow-up, manifest-hit assets included (a Chromium
+/// boot through the real `--share`/`--join` pair crossed ~8.7 MB of
+/// the ~10 MB gz payload this way). The frontend must force
+/// `Connection: close` into every tunneled head — a hop-by-hop header
+/// a proxy owns — so the host closes the connection after one response
+/// and every follow-up request gets its own routing decision.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn tunneled_head_carries_connection_close() {
+    let rig = boot_rig(PreviewUi::Viewer, LocalServing::Tunnel).await;
+
+    // A browser-style keep-alive request for a dynamic path.
+    let mut stream = TcpStream::connect(rig.guest).await.expect("connect");
+    stream
+        .write_all(
+            b"GET /health HTTP/1.1\r\nHost: join-frontend-test\r\nConnection: keep-alive\r\n\r\n",
+        )
+        .await
+        .expect("write request");
+
+    // The host answers, then closes: with the rewrite in place the
+    // connection cannot be reused for a follow-up request. Without it
+    // this read hangs on the keep-alive connection.
+    let raw = tokio::time::timeout(Duration::from_secs(10), async {
+        let mut raw = Vec::new();
+        stream.read_to_end(&mut raw).await.map(|_| raw)
+    })
+    .await
+    .expect("a tunneled connection must close after its response")
+    .expect("read response");
+    let resp = parse_response(&raw);
+    assert_eq!(resp.status, 200, "the tunneled exchange is intact");
+    let host = raw_http(rig.hub, "GET", "/health", &[]).await;
+    assert_eq!(resp.body, host.body, "body must be the host's own");
+
+    // The wire contract, observed at the host side of the tunnel.
+    let head = rig
+        .log
+        .head_for("/health")
+        .expect("the host saw GET /health");
+    assert!(
+        head.lines()
+            .any(|l| l.eq_ignore_ascii_case("connection: close")),
+        "the tunneled head must carry Connection: close; head: {head:?}"
+    );
+    assert!(
+        !head.to_ascii_lowercase().contains("keep-alive"),
+        "keep-alive must not survive the rewrite; head: {head:?}"
+    );
+
+    rig.shutdown().await;
+}
+
+/// The flip side of the rewrite (bd-2mpka14m): upgrade heads pass
+/// through byte-identical — a WebSocket handshake must keep its
+/// `Connection: Upgrade`, or the rewrite kills the upgrade.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn upgrade_head_passes_verbatim() {
+    let Some(manifest) = matching_manifest(PreviewUi::Viewer) else {
+        eprintln!("placeholder embed (no built dist); nothing to serve locally");
+        return;
+    };
+    let rig = boot_rig(
+        PreviewUi::Viewer,
+        LocalServing::Embedded {
+            ui: PreviewUi::Viewer,
+            manifest,
+        },
+    )
+    .await;
+
+    let (mut ws, response) = tokio_tungstenite::connect_async(format!("ws://{}/ws", rig.guest))
+        .await
+        .expect("ws upgrade through the guest port");
+    assert_eq!(response.status(), 101, "the /ws upgrade must complete");
+    ws.close(None).await.expect("ws close");
+
+    let head = rig
+        .log
+        .head_for("/ws")
+        .expect("the host saw the /ws upgrade");
+    let lower = head.to_ascii_lowercase();
+    assert!(
+        lower.contains("upgrade: websocket"),
+        "the upgrade header must survive verbatim; head: {head:?}"
+    );
+    assert!(
+        !lower.contains("connection: close"),
+        "no Connection: close may be injected into an upgrade; head: {head:?}"
     );
 
     rig.shutdown().await;

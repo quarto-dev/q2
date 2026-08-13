@@ -50,5 +50,18 @@ c. **Slow link**: real stack — `q2 preview <fixture> --share
    on a residential-class link. The CLI's tiny `/health` + config
    preflight runs unthrottled — negligible bytes.)
 
+d. **Slow link on the tunnel path** (Phase 4; valid once the guest
+   serves assets locally — leg (c)'s placement throttles local bytes
+   too): real server `q2 preview <fixture> --no-browser --port 9379`,
+   `throttle-proxy.mjs 9380 9379 10 100`, Gate-0 `spike-tunnel-host
+   127.0.0.1:9380` (same ALPN + 32-byte token prefix as the real
+   tunnel), then assemble a real join string from its `TICKET`/`TOKEN`
+   output with `cargo run -p quarto-p2p --example
+   preview-ticket-from-parts -- <TICKET> <TOKEN>` and join with the
+   real `q2 preview --join <q2preview…> --no-browser --port 9283`;
+   driver against 9283 directly. For the all-tunnel "before", restart
+   the server with `--preview-dir q2-preview-spa/dist` (config omits
+   `assets`, so the guest tunnels everything).
+
 On-demand fonts: add math to `index.qmd` (e.g. `$E=mc^2$`) and re-run
 leg (a) to see the KaTeX woff2 fetches.
