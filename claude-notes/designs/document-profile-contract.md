@@ -57,7 +57,7 @@ produced.
 | `categories`, `keywords` | Arrays of plain-text strings. A single scalar value is lifted into a one-element list. |
 | `draft` | Boolean. Defaults to `false` when the key is missing or non-boolean. |
 | `order` | `Option<i32>` sort key from `order:` frontmatter. `None` when the key is absent or non-integer. Consumed by Phase-2's auto-sidebar sort (`claude-notes/plans/2026-04-24-websites-phase-2.md`). Added v1-additive (no version bump). |
-| `outline` | `Vec<pampa::toc::TocEntry>` built from the raw block sequence at `OUTLINE_MAX_DEPTH = 6`. **Always un-numbered**: `TocEntry::number == None` for every entry and every descendant. |
+| `outline` | `Vec<pampa::toc::TocEntry>` built from the raw block sequence at `OUTLINE_MAX_DEPTH = 6`. **Always un-numbered**: `TocEntry::number == None` for every entry and every descendant. Since v11, `TocEntry::title` is `Inlines`, not `String` — the outline carries the heading's inline markup verbatim. Consumers that want text project it themselves (`pampa::writers::plaintext::inlines_to_string`). |
 | `includes` | `Vec<IncludeEntry { path, content_hash }>` recording every file whose contents were spliced into the parent AST via `{{< include child.qmd >}}`. Populated by `IncludeExpansionStage` via a side-channel on `DocumentAst.recorded_includes`, drained into the profile by `DocumentProfileStage`. Direct + transitive children appear; cycles are pre-truncated. **Phase-8 cache invalidation depends on this field** (`bd-r82e`). Default empty. |
 | `nav_dependencies` | `Vec<PathBuf>` of project-relative `.qmd` paths the user explicitly declares as cross-doc dependencies via `meta.project.nav-dependencies`. The Phase-8 dependency graph adds an edge to each declared target. The escape hatch for Lua filters that walk siblings without using sidebar / link / prev-next channels. Default empty. |
 | `always_render` | `bool` from `meta.project.always-render`. When `true`, Mode B (subset render) pulls this page into the render set if any of its dependents is among the user-named targets. Mode A re-renders every page anyway, so this flag has no Mode-A effect. Default `false`. |
@@ -473,3 +473,34 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   `DocumentProfileError::VersionMismatch` and silently regenerated,
   identical to every prior bump.
   Plan: `claude-notes/plans/2026-08-12-aliases-redirect-stubs.md`.
+
+- **2026-08-13 — v11 (`bd-toc-smart-quotes-6nro57ed`).** Changes
+  `outline`'s entry titles from `String` to `Inlines`
+  (`pampa::toc::TocEntry::title`).
+
+  The flattened title was lossy in a way that produced a visible
+  defect: a heading `## Using a "raw" volume` rendered with curly
+  quotes but its TOC entry rendered `Using a raw volume`, because the
+  flattener recursed into `Inline::Quoted` without emitting the
+  delimiters. Inline code, emphasis, and math spans were dropped the
+  same way — Quarto 1 renders all of them inside TOC entries.
+
+  The fix is to stop flattening at all. `TocEntry::title` now carries
+  the heading's inlines, and each consumer decides what to do with
+  them: the HTML TOC renders them through the inline writer (stripping
+  links and notes, which an `<a>` cannot nest); consumers wanting
+  plain text call `pampa::writers::plaintext::inlines_to_string`.
+
+  This is the profile-side consequence of that decision, and it is
+  deliberate: the outline is meant to be a *faithful semantic
+  outline*, so encoding one renderer's structural constraint (or one
+  consumer's plain-text preference) into the stored shape would be
+  exactly the kind of lossy back-patching the "profiles are read-only"
+  rule exists to prevent.
+
+  **Serialized shape changes**: a title that was `"Top"` is now an
+  array of inline nodes. v10 cache entries on disk are rejected with
+  `DocumentProfileError::VersionMismatch` and silently regenerated,
+  identical to every prior bump — `DOCUMENT_PROFILE_VERSION` is in the
+  cache-key hash domain, so stale entries are never even looked up.
+  Plan: `claude-notes/plans/2026-08-13-toc-smart-quotes.md`.

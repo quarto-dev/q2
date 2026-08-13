@@ -21,7 +21,8 @@
 //!
 //! let config = TocConfig {
 //!     depth: 3,
-//!     title: Some("Contents".to_string()),
+//!     // Inlines, not a String — `toc-title` carries markup.
+//!     title: Some(vec![Inline::Str(Str::from("Contents"))]),
 //! };
 //!
 //! let toc = generate_toc(&document.blocks, &config);
@@ -56,8 +57,10 @@ pub struct TocConfig {
     /// Maximum heading depth to include (1-6, default: 3)
     pub depth: i32,
 
-    /// Title for the TOC (e.g., "Table of Contents")
-    pub title: Option<String>,
+    /// Title for the TOC (e.g. "Table of Contents"), as inlines.
+    ///
+    /// Carries markup — see [`NavigationToc::title`].
+    pub title: Option<Inlines>,
 }
 
 impl Default for TocConfig {
@@ -86,7 +89,7 @@ impl Default for TocConfig {
 ///
 /// Programmatically-constructed values (Lua filters, tests) also arrive
 /// as `Scalar(String)` and get the same literal treatment.
-fn config_value_to_inlines(cv: &ConfigValue) -> Option<Inlines> {
+pub fn config_value_to_inlines(cv: &ConfigValue) -> Option<Inlines> {
     if let ConfigValueKind::PandocInlines(inlines) = &cv.value {
         return Some(inlines.clone());
     }
@@ -96,6 +99,18 @@ fn config_value_to_inlines(cv: &ConfigValue) -> Option<Inlines> {
         text,
         source_info: cv.source_info.clone(),
     })])
+}
+
+/// Wrap literal text as a single `Str` inline.
+///
+/// For values that are genuinely plain text and must stay literal — a
+/// localized term from the language catalog, a built-in English default
+/// — rather than markdown that happens not to contain markup.
+pub fn plain_inlines(text: impl Into<String>) -> Inlines {
+    vec![Inline::Str(Str {
+        text: text.into(),
+        source_info: SourceInfo::generated(By::programmatic_config()),
+    })]
 }
 
 /// A single entry in the TOC.
@@ -224,9 +239,15 @@ impl TocEntry {
 /// Complete TOC structure stored at `navigation.toc` in document metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NavigationToc {
-    /// Title for the TOC (e.g., "Table of Contents")
+    /// Title for the TOC (e.g. "Table of Contents"), as inlines.
+    ///
+    /// Inlines rather than a `String` for the same reason as
+    /// [`TocEntry::title`]: Quarto 1 renders `toc-title` through Pandoc,
+    /// so `toc-title: "On **this** page"` produces markup, and flattening
+    /// it here would silently discard what the metadata layer already
+    /// parsed (bd-toc-smart-quotes-6nro57ed).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
+    pub title: Option<Inlines>,
 
     /// Root entries (top-level headings)
     pub entries: Vec<TocEntry>,
@@ -242,7 +263,7 @@ impl NavigationToc {
             entries.push(ConfigMapEntry {
                 key: "title".to_string(),
                 key_source: source_info.clone(),
-                value: ConfigValue::new_string(title, source_info.clone()),
+                value: ConfigValue::new_inlines(title.clone(), source_info.clone()),
             });
         }
 
@@ -259,7 +280,9 @@ impl NavigationToc {
 
     /// Create a NavigationToc from a ConfigValue.
     pub fn from_config_value(cv: &ConfigValue) -> Option<Self> {
-        let title = cv.get("title").and_then(|v| v.as_str().map(String::from));
+        // `as_str()` would return `None` for the `PandocInlines` a
+        // front-matter `toc-title` produces — the `metadata-as-str` trap.
+        let title = cv.get("title").and_then(config_value_to_inlines);
 
         let entries = if let Some(entries_cv) = cv.get("entries") {
             if let Some(arr) = entries_cv.as_array() {
@@ -725,11 +748,11 @@ mod tests {
 
         let config = TocConfig {
             depth: 3,
-            title: Some("Contents".to_string()),
+            title: Some(plain("Contents")),
         };
         let toc = generate_toc(&blocks, &config);
 
-        assert_eq!(toc.title, Some("Contents".to_string()));
+        assert_eq!(toc.title, Some(plain("Contents")));
         assert_eq!(toc.entries.len(), 1);
     }
 
@@ -792,7 +815,7 @@ mod tests {
     #[test]
     fn test_navigation_toc_to_config_value() {
         let toc = NavigationToc {
-            title: Some("Table of Contents".to_string()),
+            title: Some(plain("Table of Contents")),
             entries: vec![TocEntry {
                 id: "intro".to_string(),
                 title: plain("Introduction"),
@@ -804,7 +827,11 @@ mod tests {
 
         let cv = toc.to_config_value();
 
-        assert_eq!(cv.get("title").unwrap().as_str(), Some("Table of Contents"));
+        // `PandocInlines`, not a scalar — `as_str()` returns `None`.
+        assert_eq!(
+            cv.get("title").map(|v| &v.value),
+            Some(&ConfigValueKind::PandocInlines(plain("Table of Contents")))
+        );
         let entries = cv.get("entries").unwrap().as_array().unwrap();
         assert_eq!(entries.len(), 1);
     }
@@ -812,7 +839,7 @@ mod tests {
     #[test]
     fn test_navigation_toc_roundtrip() {
         let original = NavigationToc {
-            title: Some("Contents".to_string()),
+            title: Some(plain("Contents")),
             entries: vec![
                 TocEntry {
                     id: "a".to_string(),

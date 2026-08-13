@@ -85,3 +85,57 @@ Two things here:
    in q2 TOC entries — the missing quote glyphs are one symptom of that.
 2. `#math-and-a` (q2) vs. `#math-xy-and-a-link` (Q1) is the sibling autoid bug
    again, this time swallowing `Math` and `Link` content.
+
+---
+
+# After the fix — q2 @ phase 3 (2026-08-13)
+
+Same invocations as above. All three fixtures re-rendered and inspected.
+
+## `repro/` — the strand's own case
+
+```html
+<a href="#using-a-volume" class="nav-link" data-scroll-target="#using-a-volume">
+Using a “raw” volume
+</a>
+<a href="#finding-your-repositorys-identifiers" ...>
+Finding your repository’s identifiers
+</a>
+<a href="#whats-in-the-gallery-really" ...>
+What’s in the Gallery – really
+</a>
+```
+
+Matches Quarto 1. (The `#using-a-volume` id is still wrong — sibling strand
+bd-heading-id-drops-inline-content-fl84n3ql, deliberately out of scope.)
+
+## `markup-probe/` — byte-identical to Quarto 1
+
+```html
+<a href="#use-code-and-em-and-strong" ...>
+Use <code>code</code> and <em>em</em> and <strong>strong</strong>
+</a>
+<a href="#math-and-a" ...>
+Math <span class="math inline">\(x+y\)</span> and a link
+</a>
+```
+
+Note `and a link`, not `and a <a href=…>link</a>`: links are unwrapped at render
+time (`strip_links_and_notes`, mirroring pandoc's `deLink`) because the TOC entry
+is itself an `<a>` and anchors cannot nest. Quarto 1 does the same.
+
+## `toc-title-probe/` — the two config sources now agree
+
+```html
+<!-- index.html — _quarto.yml: toc-title: "On **this** page" -->
+<h2 id="toc-title">On <strong>this</strong> page</h2>
+
+<!-- frontmatter.html — front matter: toc-title: "In *this* document" -->
+<h2 id="toc-title">In <em>this</em> document</h2>
+```
+
+Before the fix these diverged: the project-config form rendered the asterisks
+literally (never markdown-parsed, because `toc-title` was not in
+`MARKDOWN_CONFIG_PATHS`), while the front-matter form rendered `On this page`
+with the emphasis silently flattened away by `as_plain_text()`. Same YAML, two
+different failures — the `InterpretationContext` split.

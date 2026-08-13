@@ -120,6 +120,26 @@ impl AstTransform for TocRenderTransform {
             ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
         );
 
+        // The TOC's own heading carries markup too, so it gets the same
+        // treatment as the entries: rendered here and published under
+        // `rendered.*`, rather than left as metadata for each consumer to
+        // stringify. That matters because there are *two* consumers — the
+        // doctemplate (`$rendered.navigation.toc-title$`) and the preview
+        // renderer's `TocSlot` — and the preview reads metadata through
+        // `extractMetaString`, which cannot see `PandocInlines`. One
+        // rendered value keeps `q2 preview` and `q2 render` in agreement
+        // (bd-toc-smart-quotes-6nro57ed).
+        if let Some(ref title) = toc.title {
+            let title_html = render_toc_label(title);
+            ast.meta.insert_path(
+                &["rendered", "navigation", "toc-title"],
+                ConfigValue::new_string(
+                    &title_html,
+                    SourceInfo::generated(By::programmatic_config()),
+                ),
+            );
+        }
+
         Ok(())
     }
 }
@@ -404,7 +424,7 @@ mod tests {
         };
 
         let toc = NavigationToc {
-            title: Some("Contents".to_string()),
+            title: Some(plain_title("Contents")),
             entries: vec![
                 make_toc_entry("intro", "Introduction", 1),
                 make_toc_entry("methods", "Methods", 1),
@@ -730,7 +750,7 @@ mod tests {
         };
 
         let toc = NavigationToc {
-            title: Some("Contents".to_string()),
+            title: Some(plain_title("Contents")),
             entries: vec![], // Empty entries
         };
         ast.meta
@@ -1141,10 +1161,33 @@ mod tests {
         // Should have rendered TOC
         assert!(ast.meta.contains_path(&["rendered", "navigation", "toc"]));
 
-        // The title is stored in navigation.toc.title for the template to use
-        // (the render transform doesn't include it in the HTML output)
+        // The title stays in `navigation.toc.title` as inlines, and is
+        // *also* published pre-rendered at `rendered.navigation.toc-title`
+        // — that rendered value is what both the doctemplate and the
+        // preview's TocSlot read (bd-toc-smart-quotes-6nro57ed). It is
+        // kept out of `rendered.navigation.toc` proper, which is only the
+        // inner `<ul>`.
         let toc = ast.meta.get_path(&["navigation", "toc"]).unwrap();
         let title = toc.get("title").unwrap().as_plain_text().unwrap();
         assert_eq!(title, "Quick Links");
+
+        let rendered_title = ast
+            .meta
+            .get_path(&["rendered", "navigation", "toc-title"])
+            .expect("rendered toc-title")
+            .as_str()
+            .expect("rendered toc-title is a string");
+        assert_eq!(rendered_title, "Quick Links");
+
+        let entries_html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "toc"])
+            .unwrap()
+            .as_str()
+            .unwrap();
+        assert!(
+            !entries_html.contains("Quick Links"),
+            "the title must not be duplicated into the entries markup"
+        );
     }
 }

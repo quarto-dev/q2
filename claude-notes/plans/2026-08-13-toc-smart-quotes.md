@@ -326,10 +326,14 @@ the defect shipped, namely that the TOC had no test coverage at all.
       covering the round-trip and both accepted title shapes).
 - [x] `to_config_value` emits `ConfigValueKind::PandocInlines`.
 - [x] `from_config_value` accepts both shapes, via the new `config_value_to_inlines`.
-- [ ] Bump `profile_version` and add the change-log entry to
-      `claude-notes/designs/document-profile-contract.md`.
-- [ ] Confirm the incremental-rebuild path degrades to a full rebuild on version mismatch
-      rather than erroring.
+- [x] Bump `profile_version` (10 -> **11**) and add the change-log entry to
+      `claude-notes/designs/document-profile-contract.md` (done in Phase 3's commit, as
+      planned).
+- [x] Confirm the incremental-rebuild path degrades to a full rebuild on version mismatch
+      rather than erroring. **It does, two ways:** `DOCUMENT_PROFILE_VERSION` is in the
+      cache-key hash domain (`cache_key.rs:166`), so stale entries are never looked up at
+      all; and if one somehow were, `profile_cache::load` treats a shape mismatch as a miss
+      rather than an error (`load_rejects_corrupt_json_as_miss`).
 
 > **Phases 1 and 2 landed in one commit, deliberately.** `toc_render` is the type's only
 > production consumer, so the tree cannot compile with the type changed and the renderer
@@ -407,52 +411,50 @@ there when it is un-deferred.
 > Scope of the strip, mirroring Pandoc: `Link` unwraps to its content; `Note` and
 > `NoteReference` are dropped. Everything else renders.
 
-### Phase 3 — `toc-title` gets the same treatment (decision 2)
+### Phase 3 — `toc-title` gets the same treatment (decision 2) — **DONE**
 
-- [ ] `NavigationToc.title: Option<Inlines>` (toc.rs:181), read from merged metadata without
-      `as_plain_text()` flattening (toc_generate.rs:125-133, toc.rs:214).
-- [ ] Render it through `write_inlines_to` into `<h2 id="toc-title">`.
-- [ ] Wrap the localized-term fallback (`toc-title-document` via `LanguageTerms`) — it
-      returns a `String` today.
-- [ ] Add `&["toc-title"]` to `MARKDOWN_CONFIG_PATHS` (config_markdown.rs:84-122); test both
-      the front-matter and the `_quarto.yml` source.
-- [ ] Add the "see also, and when to pick which" cross-reference note to *both* registries
-      (`meta_annotations.rs` `ANNOTATIONS` and `config_markdown.rs`
-      `MARKDOWN_CONFIG_PATHS`) — this is `bd-qzn1azon`'s whole scope, and Phase 3 is already
-      editing one of them. Close `bd-qzn1azon` when done.
-- [ ] **Preview parity** (found in Phase 0, see below): emit the *rendered* title HTML into
-      `rendered.navigation.toc-title`, switch `template.rs:213` to it, and switch
-      `PreviewDocument.tsx:184` + `TocSlot` to consume it via `dangerouslySetInnerHTML`.
-- [ ] Extend `PreviewDocument.integration.test.tsx` (the TOC cases at :383-420) for the new
-      shape, and run `npm run build:all` from `hub-client/` — per `CLAUDE.md`, passing tests
-      are not sufficient for TS changes.
+- [x] `NavigationToc.title: Option<Inlines>`, read from merged metadata without
+      `as_plain_text()` flattening (`toc_generate.rs`, `toc.rs`). The two fallbacks
+      (localized `toc-title-document`, English default) are genuinely plain text and get
+      wrapped with the new `plain_inlines`.
+- [x] Render it through `render_toc_label` into `<h2 id="toc-title">`.
+- [x] Add `&["toc-title"]` to `MARKDOWN_CONFIG_PATHS`; both sources tested.
+- [x] Cross-reference note added to *both* registries (`bd-qzn1azon`'s whole scope) — a
+      four-row comparison table in each module header saying when to pick which.
+- [x] **Preview parity**: `rendered.navigation.toc-title` published by `TocRenderTransform`;
+      `template.rs` and `PreviewDocument.tsx` both read it; `TocSlot` takes `titleHtml`.
+- [x] `PreviewDocument.integration.test.tsx` updated, plus a new case asserting markup
+      renders as HTML rather than escaped text. 577 preview tests pass.
 
-> **Preview/render parity constraint (found during Phase 0).**
->
-> The TOC *entries* are safe: `TocRenderTransform` writes the inner `<ul>` as an HTML string
-> to `rendered.navigation.toc`, and the preview injects it with `dangerouslySetInnerHTML`
-> (`chromeSlots.tsx` `TocSlot`). Markup added in Phases 1-2 flows through untouched.
->
-> The **title** does not. `PreviewDocument.tsx:184-186` reads
-> `navigation.toc.title` through `extractMetaString` and passes it to `TocSlot` as a
-> `title: string` prop, rendered as a React *text node*. Turning that metadata value into
-> `Inlines` makes `extractMetaString` return nothing, so the preview would silently drop the
-> `<h2 id="toc-title">` while `q2 render` still emits it — a preview/render divergence of
-> exactly the kind `.claude/skills/preview-render-parity` exists to chase, and invisible to
-> every Rust test.
->
-> Fix: give the title the same treatment the entries already get — render it to HTML in
-> `TocRenderTransform` and publish it under `rendered.navigation.*`. That keeps one seam
-> ("`rendered.*` is HTML produced from metadata") instead of inventing a second, and both
-> consumers read the same value.
+**End-to-end verification** (`cargo run --bin q2 -- render`, output inspected) — the two
+sources that used to disagree now agree:
 
-### Phase 4 — Verification
+```html
+<!-- _quarto.yml: toc-title: "On **this** page" -->
+<h2 id="toc-title">On <strong>this</strong> page</h2>
 
-- [ ] `cargo xtask verify` (full, not `--skip-hub-build` — `quarto-core` and
-      `quarto-pandoc-types` are both touched).
-- [ ] Re-render both investigation fixtures; append the output to `OBSERVED.md` beside the
-      Q1 capture.
-- [ ] Count and summarize snapshot changes per `CLAUDE.md`; flag anything surprising.
+<!-- front matter: toc-title: "In *this* document" -->
+<h2 id="toc-title">In <em>this</em> document</h2>
+```
+
+Before this phase the first rendered literal `**this**` and the second rendered `this` with
+the emphasis silently dropped.
+
+**Design note — why the title is pre-rendered rather than left in metadata.** There are two
+consumers with different capabilities: the doctemplate can interpolate an HTML string, and
+the preview's `TocSlot` reads metadata through `extractMetaString`, which cannot see
+`PandocInlines` at all. Publishing one rendered value under `rendered.*` — the seam that
+already means "HTML produced from metadata", and already how the TOC *entries* reach the
+preview — keeps both consumers reading the same bytes. The alternative (teach the TS side to
+walk inline nodes) would duplicate the HTML writer in TypeScript.
+
+### Phase 4 — Verification — **DONE**
+
+- [x] `cargo xtask verify` (full, including the WASM/hub-client leg) — **all steps passed**.
+- [x] `cargo nextest run --workspace` — **11,846 / 11,846 pass**, 197 skipped.
+- [x] `cargo xtask lint` — clean.
+- [x] Re-rendered all three investigation fixtures; output appended to `OBSERVED.md`.
+- [x] Snapshot changes: **none**, as Phase 0 predicted.
 
 ### Phase 5 — Follow-ups (file, don't implement)
 

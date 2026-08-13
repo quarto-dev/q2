@@ -384,13 +384,15 @@ describe('PreviewDocument chrome injection (Phase F.2)', () => {
         const tocInnerUl =
             '<ul><li data-test="toc-li"><a href="#sec">Section</a></li></ul>';
         const { container } = mount({
-            navigation: metaMap([
-                {
-                    key: 'toc',
-                    value: metaMap([{ key: 'title', value: ms('Contents') }]),
-                },
-            ]),
-            rendered: renderedNavigation({ toc: tocInnerUl }),
+            // The title comes from `rendered.navigation['toc-title']`,
+            // not `navigation.toc.title`: it carries inline markup, so
+            // TocRenderTransform renders it and both the preview and
+            // q2 render's template read the rendered value
+            // (bd-toc-smart-quotes-6nro57ed).
+            rendered: renderedNavigation({
+                toc: tocInnerUl,
+                'toc-title': 'Contents',
+            }),
         });
         // Wrapper structure mirrors template.rs:189-200.
         const margin = container.querySelector(
@@ -408,15 +410,33 @@ describe('PreviewDocument chrome injection (Phase F.2)', () => {
         expect(tocNav!.querySelector('li[data-test="toc-li"]')).not.toBeNull();
     });
 
-    it('TOC: missing navigation.toc.title omits the <h2>', () => {
+    it('TOC: missing rendered toc-title omits the <h2>', () => {
         const tocInnerUl = '<ul><li>Sec</li></ul>';
         const { container } = mount({
-            // No `navigation.toc.title` → tocTitle is empty → no <h2>.
+            // No `rendered.navigation['toc-title']` → empty → no <h2>.
             rendered: renderedNavigation({ toc: tocInnerUl }),
         });
         const tocNav = container.querySelector('#quarto-margin-sidebar nav#TOC');
         expect(tocNav).not.toBeNull();
         expect(tocNav!.querySelector('h2#toc-title')).toBeNull();
+    });
+
+    it('TOC: toc-title markup renders as HTML, not escaped text', () => {
+        // `toc-title: "On **this** page"` reaches the preview as
+        // rendered HTML. Rendering it as a React text node — which is
+        // what reading `navigation.toc.title` used to do — would show
+        // the tags literally, or drop the title entirely once the
+        // metadata value became PandocInlines.
+        const { container } = mount({
+            rendered: renderedNavigation({
+                toc: '<ul><li>Sec</li></ul>',
+                'toc-title': 'On <strong>this</strong> page',
+            }),
+        });
+        const h2 = container.querySelector('#quarto-margin-sidebar h2#toc-title');
+        expect(h2).not.toBeNull();
+        expect(h2!.querySelector('strong')).not.toBeNull();
+        expect(h2!.textContent).toBe('On this page');
     });
 
     it('renders page-navigation INSIDE main, after children', () => {

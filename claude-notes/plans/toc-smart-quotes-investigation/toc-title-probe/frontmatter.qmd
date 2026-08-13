@@ -1,0 +1,9 @@
+---
+title: "Front-matter toc-title"
+toc: true
+toc-title: "In *this* document"
+---
+
+## A section
+
+Body.
