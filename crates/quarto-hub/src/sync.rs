@@ -17,7 +17,7 @@ use std::str::FromStr;
 
 use automerge::{ROOT, ReadDoc, transaction::Transactable};
 use samod::{DocHandle, DocumentId, Repo};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::error::{Error, Result};
 use crate::index::IndexDocument;
@@ -35,6 +35,12 @@ use crate::sync_state::{SyncState, sha256_hash};
 pub enum DiskWritePolicy {
     /// Bidirectional sync (hub default): merged automerge content is written
     /// back to the file when it differs from what's on disk.
+    ///
+    /// Under this policy an index entry whose disk file is missing AND whose
+    /// doc has no sync checkpoint is treated as VFS-created and materialized
+    /// on disk (see `sync_all_documents`). Load-bearing invariant: a
+    /// checkpoint is recorded only after a doc was successfully synced (or
+    /// created) on disk, so "no checkpoint" ⇔ "never on disk" ⇔ VFS-created.
     #[default]
     WriteBack,
     /// The file on disk is authoritative; document changes are never written
@@ -639,14 +645,121 @@ pub async fn sync_all_documents(
             continue;
         };
 
-        // Check if file exists
+        // Check if file exists. A missing disk file under an index entry is
+        // one of two things, distinguished by the sync checkpoint:
+        //
+        // - **VFS-created**: a share guest created the file (New File dialog
+        //   / asset upload). The doc and index entry synced to the hub, but
+        //   no sync ever ran for the doc, so it has no checkpoint. Under
+        //   WriteBack (`--allow-edit`), create the file on disk.
+        // - **Deleted on disk**: the file synced before (a checkpoint
+        //   exists) and was later deleted. Skip — never resurrect it from
+        //   its automerge doc.
+        //
+        // Load-bearing invariant (also pinned on `DiskWritePolicy::WriteBack`):
+        // `SyncState` records a checkpoint only after a doc was successfully
+        // synced or created on disk, so "no checkpoint" ⇔ "never on disk".
+        // If sync-state.json is lost, previously-deleted files are recreated
+        // once — the chosen failure direction (data appears, not disappears).
+        //
+        // Known limitation: a client-side rename reuses the same doc_id under
+        // the new path, so the renamed file HAS a checkpoint and is classified
+        // deleted-on-disk — the new path is not created (unchanged from before
+        // this branch existed).
         if !file_path.exists() {
-            warn!(
-                path = %file_path_str,
-                doc_id = %doc_id_str,
-                "File not found on disk, skipping sync"
-            );
-            result.skipped += 1;
+            if policy == DiskWritePolicy::WriteBack && !sync_state.has_checkpoint(doc_id_str) {
+                // VFS-created file: materialize it on disk. The skip decision
+                // above needed neither parse nor find (deleted entries stay in
+                // the index permanently and must skip cheaply), so the create
+                // branch does its own.
+                let doc_id = match DocumentId::from_str(doc_id_str) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        warn!(
+                            doc_id = %doc_id_str,
+                            error = %e,
+                            "Invalid document ID in index, skipping"
+                        );
+                        result.errors.push(SyncError {
+                            file_path: file_path_str.clone(),
+                            doc_id: doc_id_str.clone(),
+                            error: format!("invalid document ID: {}", e),
+                        });
+                        continue;
+                    }
+                };
+                let doc_handle = match repo.find(doc_id).await {
+                    Ok(Some(handle)) => handle,
+                    Ok(None) => {
+                        warn!(
+                            path = %file_path_str,
+                            doc_id = %doc_id_str,
+                            "Document not found in repo, skipping sync"
+                        );
+                        result.errors.push(SyncError {
+                            file_path: file_path_str.clone(),
+                            doc_id: doc_id_str.clone(),
+                            error: "document not found in repo".to_string(),
+                        });
+                        continue;
+                    }
+                    Err(_stopped) => {
+                        warn!("Repo is stopped, aborting sync");
+                        result.errors.push(SyncError {
+                            file_path: file_path_str.clone(),
+                            doc_id: doc_id_str.clone(),
+                            error: "repo is stopped".to_string(),
+                        });
+                        break;
+                    }
+                };
+                match create_file_from_document(&doc_handle, &file_path, &real_root, sync_state) {
+                    Ok(CreateFileOutcome::Created) => {
+                        info!(
+                            path = %file_path_str,
+                            doc_id = %doc_id_str,
+                            "Created new file on disk from VFS document"
+                        );
+                        result.automerge_changed += 1;
+                    }
+                    Ok(CreateFileOutcome::Rejected) => {
+                        warn!(path = %file_path_str, "Index path resolves outside project root, rejecting");
+                        result.rejected += 1;
+                    }
+                    Err(e) => {
+                        warn!(
+                            path = %file_path_str,
+                            doc_id = %doc_id_str,
+                            error = %e,
+                            "Failed to create file from VFS document"
+                        );
+                        result.errors.push(SyncError {
+                            file_path: file_path_str.clone(),
+                            doc_id: doc_id_str.clone(),
+                            error: e.to_string(),
+                        });
+                    }
+                }
+            } else {
+                // Deleted on disk (has checkpoint) → warn: genuine deletion
+                // signal. VFS-only file under ReadOnly (no checkpoint) →
+                // debug: expected in an ephemeral session where nothing
+                // persists by design.
+                if sync_state.has_checkpoint(doc_id_str) {
+                    warn!(
+                        path = %file_path_str,
+                        doc_id = %doc_id_str,
+                        "File not found on disk, skipping sync"
+                    );
+                } else {
+                    debug!(
+                        path = %file_path_str,
+                        doc_id = %doc_id_str,
+                        "File not found on disk, skipping sync (read-only policy)"
+                    );
+                }
+                result.skipped += 1;
+            }
             continue;
         }
 
@@ -744,6 +857,126 @@ pub async fn sync_all_documents(
     );
 
     result
+}
+
+/// Outcome of [`create_file_from_document`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CreateFileOutcome {
+    /// The file was created on disk and the sync checkpoint set.
+    Created,
+    /// Containment failed: an ancestor symlink resolves outside the project
+    /// root. Nothing was written; the caller counts this as rejected.
+    Rejected,
+}
+
+/// Create a missing disk file from its automerge document (VFS-created files
+/// under `--allow-edit`).
+///
+/// This is a dedicated creation path, not a reuse of [`sync_document`] /
+/// [`sync_binary_document`]: those read the disk file up front, so a
+/// placeholder-then-delegate approach backfires — for binary docs,
+/// filesystem-wins would clobber the doc with the empty placeholder.
+///
+/// Containment matches the existing write-back path's posture: walk up from
+/// `file_path` to the nearest *existing* ancestor, canonicalize it, and
+/// require `starts_with(real_root)` — a pre-existing in-project symlink
+/// pointing outside the root resolves outside and is rejected.
+/// (`contained_join` remains the lexical first pass, in the caller.) The
+/// residual check/use window is the same class the write-back path accepts
+/// and is reachable only by a local process already inside the trust
+/// boundary — the VFS has no symlink concept, so a share guest can neither
+/// plant a symlink nor reach the race.
+///
+/// On success the checkpoint is set from the doc's current heads and the
+/// written content's hash, so the next sync is a `NoChanges` no-op —
+/// including the watcher event the write itself triggers (no write → watch
+/// → sync → write loop).
+fn create_file_from_document(
+    doc_handle: &DocHandle,
+    file_path: &Path,
+    real_root: &Path,
+    sync_state: &mut SyncState,
+) -> Result<CreateFileOutcome> {
+    // Containment: canonicalize the nearest existing ancestor (the file
+    // itself does not exist yet) and require it to stay under the root.
+    // The walk terminates at `project_root` at the latest: `file_path` is
+    // lexically under it (`contained_join`) and the root canonicalized fine
+    // at the top of `sync_all_documents`.
+    let mut ancestor = file_path;
+    let contained = loop {
+        match std::fs::canonicalize(ancestor) {
+            Ok(real) => break real.starts_with(real_root),
+            Err(_) => match ancestor.parent() {
+                Some(parent) => ancestor = parent,
+                None => break false,
+            },
+        }
+    };
+    if !contained {
+        return Ok(CreateFileOutcome::Rejected);
+    }
+
+    // Dispatch text vs. binary exactly as `sync_document_auto` does:
+    // `Invalid` falls back to extension inference.
+    let is_binary = match doc_handle.with_document(|doc| detect_document_type(doc)) {
+        DocumentType::Text => false,
+        DocumentType::Binary => true,
+        DocumentType::Invalid => file_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(resource::is_binary_extension),
+    };
+
+    let (content, hash) = doc_handle.with_document(|doc| -> Result<(Vec<u8>, String)> {
+        if is_binary {
+            let content = read_binary_content(doc).ok_or_else(|| {
+                Error::Sync(format!(
+                    "failed to read binary content from document {}",
+                    doc_handle.document_id()
+                ))
+            })?;
+            let hash = read_content_hash(doc).unwrap_or_else(|| compute_hash(&content));
+            Ok((content, hash))
+        } else {
+            let (_, text_obj) = doc
+                .get(ROOT, "text")
+                .map_err(|e| Error::Sync(format!("failed to get text object: {:?}", e)))?
+                .ok_or_else(|| {
+                    Error::Sync(format!(
+                        "document {} has no text field - was it initialized correctly?",
+                        doc_handle.document_id()
+                    ))
+                })?;
+            let text = doc
+                .text(&text_obj)
+                .map_err(|e| Error::Sync(format!("failed to read text: {:?}", e)))?;
+            let hash = sha256_hash(&text);
+            Ok((text.into_bytes(), hash))
+        }
+    })?;
+
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            Error::Sync(format!(
+                "failed to create parent directories for {}: {}",
+                file_path.display(),
+                e
+            ))
+        })?;
+    }
+    std::fs::write(file_path, &content).map_err(|e| {
+        Error::Sync(format!(
+            "failed to write new file {}: {}",
+            file_path.display(),
+            e
+        ))
+    })?;
+
+    let doc_id = doc_handle.document_id().to_string();
+    let heads = doc_handle.with_document(|doc| doc.get_heads());
+    sync_state.set_checkpoint(&doc_id, &heads, &hash);
+
+    Ok(CreateFileOutcome::Created)
 }
 
 /// Summary of sync results for all documents.
@@ -1243,35 +1476,77 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_sync_all_documents_with_missing_file() {
+    async fn sync_all_skips_deleted_file_under_writeback() {
         let temp = TempDir::new().unwrap();
         let project_root = temp.path();
 
-        // Create only one file
         std::fs::write(project_root.join("existing.qmd"), "I exist").unwrap();
 
         let repo = create_test_repo().await;
-
-        // Create index
         let (index, _) = IndexDocument::create(&repo).await.unwrap();
 
-        // Add existing file
         let doc = create_doc_with_text("I exist");
         let handle = repo.create(doc).await.unwrap();
         index
             .add_file("existing.qmd", &handle.document_id().to_string())
             .unwrap();
 
-        // Add non-existing file to index
-        let doc2 = create_doc_with_text("I don't exist");
-        let handle2 = repo.create(doc2).await.unwrap();
-        index
-            .add_file("missing.qmd", &handle2.document_id().to_string())
-            .unwrap();
+        let mut sync_state = SyncState::load(project_root).unwrap();
+
+        // First sync establishes the checkpoint for the doc.
+        let result = sync_all_documents(
+            &repo,
+            &index,
+            project_root,
+            &mut sync_state,
+            DiskWritePolicy::WriteBack,
+        )
+        .await;
+        assert_eq!(result.total_synced(), 1);
+        assert!(!result.has_errors());
+
+        // Delete the file on disk. The entry has a checkpoint, so this is
+        // the deleted-on-disk case the missing-file guard exists for: the
+        // entry must keep skipping and the file must NOT be resurrected
+        // from its automerge doc.
+        std::fs::remove_file(project_root.join("existing.qmd")).unwrap();
+        let result = sync_all_documents(
+            &repo,
+            &index,
+            project_root,
+            &mut sync_state,
+            DiskWritePolicy::WriteBack,
+        )
+        .await;
+        assert_eq!(result.skipped, 1);
+        assert!(!result.has_errors());
+        assert!(!project_root.join("existing.qmd").exists());
+    }
+
+    // ========== VFS-created file write-back tests ==========
+    //
+    // A share guest who creates a file (New File dialog / asset upload)
+    // produces an index entry + automerge doc with no disk file and no sync
+    // checkpoint. Under WriteBack (`--allow-edit`) the hub must create the
+    // file on disk; under ReadOnly nothing persists by design.
+
+    #[tokio::test]
+    async fn sync_all_creates_vfs_only_text_file_under_writeback() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path();
+
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        // VFS-created file: index entry and doc exist, but nothing is on
+        // disk and no checkpoint was ever recorded for the doc.
+        let doc = create_doc_with_text("# Hello from the VFS\n");
+        let handle = repo.create(doc).await.unwrap();
+        let doc_id = handle.document_id().to_string();
+        index.add_file("guest-notes.qmd", &doc_id).unwrap();
 
         let mut sync_state = SyncState::load(project_root).unwrap();
 
-        // Sync all documents
         let result = sync_all_documents(
             &repo,
             &index,
@@ -1281,10 +1556,173 @@ mod tests {
         )
         .await;
 
-        // 1 synced, 1 skipped
-        assert_eq!(result.total_synced(), 1);
+        let file_path = project_root.join("guest-notes.qmd");
+        assert_eq!(
+            std::fs::read_to_string(&file_path).unwrap(),
+            "# Hello from the VFS\n"
+        );
+        assert_eq!(result.automerge_changed, 1);
+        assert_eq!(result.skipped, 0);
+        assert!(!result.has_errors());
+        assert!(sync_state.has_checkpoint(&doc_id));
+
+        // Creation sets the checkpoint, so the next sync is a no-op — this
+        // also pins the watcher-echo case: the hub's own write must not
+        // re-trigger a sync.
+        let result = sync_all_documents(
+            &repo,
+            &index,
+            project_root,
+            &mut sync_state,
+            DiskWritePolicy::WriteBack,
+        )
+        .await;
+        assert_eq!(result.no_changes, 1);
+        assert!(!result.has_changes());
+    }
+
+    #[tokio::test]
+    async fn sync_all_creates_vfs_only_binary_file_under_writeback() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path();
+
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        // Guest asset upload: binary doc, no disk file, no checkpoint.
+        let content = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]; // PNG header
+        let doc = create_doc_with_binary(&content, "image/png");
+        let handle = repo.create(doc).await.unwrap();
+        index
+            .add_file("upload.png", &handle.document_id().to_string())
+            .unwrap();
+
+        let mut sync_state = SyncState::load(project_root).unwrap();
+
+        let result = sync_all_documents(
+            &repo,
+            &index,
+            project_root,
+            &mut sync_state,
+            DiskWritePolicy::WriteBack,
+        )
+        .await;
+
+        assert_eq!(result.automerge_changed, 1);
+        assert!(!result.has_errors());
+        assert_eq!(
+            std::fs::read(project_root.join("upload.png")).unwrap(),
+            content
+        );
+    }
+
+    #[tokio::test]
+    async fn sync_all_creates_nested_parent_dirs() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path();
+
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        let doc = create_doc_with_text("# New chapter\n");
+        let handle = repo.create(doc).await.unwrap();
+        index
+            .add_file("chapters/new/intro.qmd", &handle.document_id().to_string())
+            .unwrap();
+
+        let mut sync_state = SyncState::load(project_root).unwrap();
+
+        let result = sync_all_documents(
+            &repo,
+            &index,
+            project_root,
+            &mut sync_state,
+            DiskWritePolicy::WriteBack,
+        )
+        .await;
+
+        assert_eq!(result.automerge_changed, 1);
+        assert!(!result.has_errors());
+        assert_eq!(
+            std::fs::read_to_string(project_root.join("chapters/new/intro.qmd")).unwrap(),
+            "# New chapter\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn sync_all_skips_vfs_only_file_under_readonly() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path();
+
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        let doc = create_doc_with_text("ephemeral");
+        let handle = repo.create(doc).await.unwrap();
+        index
+            .add_file("guest-notes.qmd", &handle.document_id().to_string())
+            .unwrap();
+
+        let mut sync_state = SyncState::load(project_root).unwrap();
+
+        // ReadOnly (no `--allow-edit`): nothing persists by design — the
+        // VFS-only file is skipped and never hits disk.
+        let result = sync_all_documents(
+            &repo,
+            &index,
+            project_root,
+            &mut sync_state,
+            DiskWritePolicy::ReadOnly,
+        )
+        .await;
+
         assert_eq!(result.skipped, 1);
         assert!(!result.has_errors());
+        assert!(!project_root.join("guest-notes.qmd").exists());
+    }
+
+    /// A VFS-create whose path traverses an in-root symlink pointing outside
+    /// the root must be rejected (nearest-existing-ancestor canonicalize
+    /// fails the `starts_with(real_root)` check), never created outside.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn sync_all_create_rejects_symlink_escape() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path().join("project");
+        std::fs::create_dir(&project_root).unwrap();
+
+        // Victim dir outside the root; `project/linked` symlinks to it.
+        let outside = temp.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, project_root.join("linked")).unwrap();
+
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        // No `..` in the key — the lexical check passes; only the
+        // canonicalize + starts_with check catches the escape.
+        let doc = create_doc_with_text("PWNED");
+        let handle = repo.create(doc).await.unwrap();
+        index
+            .add_file("linked/evil.qmd", &handle.document_id().to_string())
+            .unwrap();
+
+        let mut sync_state = SyncState::load(&project_root).unwrap();
+
+        let result = sync_all_documents(
+            &repo,
+            &index,
+            &project_root,
+            &mut sync_state,
+            DiskWritePolicy::WriteBack,
+        )
+        .await;
+
+        assert_eq!(result.rejected, 1, "symlink-escape create must be rejected");
+        assert!(
+            !outside.join("evil.qmd").exists(),
+            "nothing may be written outside the project root"
+        );
     }
 
     // ========== Binary file sync tests ==========
