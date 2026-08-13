@@ -252,8 +252,27 @@ in the main checkout.
 - [x] **Phase 5 — Docs.** Document the shorthand and the `auto: <dir>` section
       shape. Re-read `Q-13-6`'s wording for the case where the user wrote
       `contents: <dir>` and never typed `auto:`.
-- [ ] **Phase 6 — Full `cargo xtask verify`** (not `--skip-hub-build`;
+- [x] **Phase 6 — Full `cargo xtask verify`** (not `--skip-hub-build`;
       `quarto-core` is WASM-relevant), then request push approval.
+
+## Phase 6 — verification gate (2026-08-13)
+
+- `cargo xtask lint` — all checks passed (961 files).
+- `cargo nextest run --workspace` — **11834 passed**, 0 failed.
+- `cargo xtask verify` — **fails at step 4/14 on pre-existing tree-sitter
+  grammar failures, unrelated to this branch.** Confirmed by checking out `main`
+  and running `tree-sitter test` in
+  `crates/tree-sitter-qmd/tree-sitter-markdown`: the baseline produces the
+  *identical* result, `601 parses / 590 successful / 11 failed / 98.17%`. The
+  failing cases (`dot run at token start`, `bd-miif1k1z: adjacent definitions`,
+  `multiple punctuation marks`) are grammar tests with no connection to sidebars.
+  This is a condition of the checkout, not a regression — but it does mean
+  **`cargo xtask verify` cannot run clean here until the grammar is regenerated**.
+- `cargo xtask verify --skip-treesitter-tests --skip-treesitter-crlf-tests` —
+  **EXIT=0, all 14 steps passed**, including the WASM/hub-client leg
+  (steps 7-8) that `--skip-hub-build` would have skipped. This is the leg that
+  matters here, since `quarto-core` is in `wasm-quarto-hub-client`'s
+  dependency closure.
 
 ## Phase 4 — end-to-end verification (2026-08-13)
 
