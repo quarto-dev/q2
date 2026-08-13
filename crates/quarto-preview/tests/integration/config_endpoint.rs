@@ -250,3 +250,163 @@ async fn config_reports_editor_boot_when_stashed() {
     handle.abort();
     let _ = handle.await;
 }
+
+// ─── Phase 2 (bd-ee2fqm95): the `assets` manifest handshake ─────────────────
+//
+// Plan `claude-notes/plans/2026-08-13-live-share-local-spa-assets.md`,
+// design decision 5: `GET /api/preview/config` gains
+// `assets: { "viewer": "<sha256…>", "editor": "<sha256…>" }` — the
+// top-level hashes of the embedded bundles' manifests. Fields are
+// omitted when the corresponding embed has no manifest (fresh-clone
+// placeholder), and the whole block is omitted under `SPA_DIR_OVERRIDE`
+// (disk-served bytes are not described by the embedded manifest). The
+// `--join` preflight compares the hash for the session's UI against its
+// own embedded manifest to pick local serving vs. full tunnel.
+
+/// The viewer manifest on disk, if this tree has one (fresh clones and
+/// placeholder embeds do not). The test binary embeds whatever
+/// `build.rs` saw at compile time, and `build.rs` watches the dist
+/// tree, so the on-disk manifest and the embedded one move together.
+fn viewer_manifest_path() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../q2-preview-spa/dist/spa-manifest.json")
+}
+
+fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "Phase 2 skeleton (bd-ee2fqm95): the config `assets` block is not implemented yet"]
+async fn config_reports_embedded_asset_manifest_hashes() {
+    let (port, _ctx, handle, _project, _data) = boot_server_for_test(false).await;
+
+    // Is this process's embedded viewer dist real or the fresh-clone
+    // placeholder? Ask the server: the placeholder page names itself.
+    let index = reqwest::get(format!("http://127.0.0.1:{port}/"))
+        .await
+        .expect("GET /")
+        .text()
+        .await
+        .expect("index body");
+    let placeholder = index.contains("SPA is not built");
+
+    let body = fetch_config(port).await;
+
+    if placeholder {
+        // No manifest exists for a placeholder embed, so no hash can
+        // be advertised — the guest tunnels (self-healing fallback).
+        assert!(
+            body.get("assets").and_then(|a| a.get("viewer")).is_none(),
+            "placeholder viewer embed must not advertise a manifest hash; body was {body:?}"
+        );
+    } else {
+        // Real embed: the config must advertise the viewer manifest's
+        // top-level hash — the exact value the guest compares against.
+        let viewer = body
+            .get("assets")
+            .and_then(|a| a.get("viewer"))
+            .and_then(|v| v.as_str())
+            .expect("a real embedded viewer dist must advertise assets.viewer");
+        assert!(
+            is_sha256_hex(viewer),
+            "assets.viewer must be a lowercase sha256 hex string; got {viewer:?}"
+        );
+        // Strong correspondence once the manifest exists on disk (the
+        // test binary embeds what build.rs saw, and build.rs watches
+        // the dist tree, so they move together). Field name `hash` per
+        // the plan's "top-level hash"; adjust if Phase 2 pins another.
+        let manifest = viewer_manifest_path();
+        if manifest.is_file() {
+            let manifest_json: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(&manifest).expect("read viewer manifest"),
+            )
+            .expect("viewer manifest is JSON");
+            let expected = manifest_json
+                .get("hash")
+                .and_then(|v| v.as_str())
+                .expect("viewer manifest carries a top-level hash");
+            assert_eq!(
+                viewer, expected,
+                "assets.viewer must equal the embedded viewer manifest's top-level hash"
+            );
+        }
+        if let Some(editor) = body
+            .get("assets")
+            .and_then(|a| a.get("editor"))
+            .and_then(|v| v.as_str())
+        {
+            // Presence depends on the editor embed's build state (it is
+            // opt-in), but when present it must be a real hash.
+            assert!(
+                is_sha256_hex(editor),
+                "assets.editor must be a lowercase sha256 hex string; got {editor:?}"
+            );
+        }
+    }
+
+    handle.abort();
+    let _ = handle.await;
+}
+
+/// Design decision 5's carve-out: under `SPA_DIR_OVERRIDE` the served
+/// bytes come from disk and are *not* described by the embedded
+/// manifest, so the config must omit the whole `assets` block (guests
+/// then tunnel everything). Green today (the block does not exist
+/// yet); stays green as Phase 2's guard for the override path.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn config_omits_assets_under_spa_dir_override() {
+    let project = tempfile::TempDir::with_prefix("q2-preview-config-override-").unwrap();
+    std::fs::write(project.path().join("index.qmd"), INITIAL_QMD).unwrap();
+    let data = tempfile::TempDir::with_prefix("q2-preview-config-override-data-").unwrap();
+    let spa = tempfile::TempDir::with_prefix("q2-preview-config-override-spa-").unwrap();
+    std::fs::write(
+        spa.path().join("index.html"),
+        "<!doctype html><div id=\"root\">override</div>",
+    )
+    .unwrap();
+
+    let port = pick_free_port();
+    let config = PreviewConfig {
+        host: "127.0.0.1".to_string(),
+        port,
+        project_root: Some(project.path().to_path_buf()),
+        single_file: None,
+        data_dir: data.path().to_path_buf(),
+        spa_dir_override: Some(spa.path().to_path_buf()),
+        engine_registry: None,
+        engine_policy: Default::default(),
+        resource_html_files: Vec::new(),
+        cache_dir: None,
+        allow_edit: false,
+        share: false,
+        ui: Default::default(),
+    };
+    let handle = tokio::spawn(async move {
+        let _ = quarto_preview::run(config).await;
+    });
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let body = loop {
+        match reqwest::get(format!("http://127.0.0.1:{port}/api/preview/config")).await {
+            Ok(resp) if resp.status().is_success() => {
+                break resp.json::<serde_json::Value>().await.expect("config json");
+            }
+            _ if std::time::Instant::now() < deadline => {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            other => panic!("server didn't come up on port {port}: {other:?}"),
+        }
+    };
+
+    assert!(
+        body.get("assets").is_none(),
+        "SPA_DIR_OVERRIDE sessions serve from disk; the embedded manifest says \
+         nothing about those bytes, so `assets` must be omitted; body was {body:?}"
+    );
+
+    handle.abort();
+    let _ = handle.await;
+}

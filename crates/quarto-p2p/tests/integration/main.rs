@@ -4,6 +4,7 @@
 //! All tests are hermetic: `presets::Minimal`, `RelayMode::Disabled`,
 //! explicit loopback `TransportAddr::Ip` addrs — no n0 infrastructure in CI.
 
+pub mod connect;
 pub mod support;
 pub mod ticket;
 pub mod tunnel;
