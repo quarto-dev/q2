@@ -236,16 +236,16 @@ in the main checkout.
       `sidebar_auto.rs`: add the index-driven bare-directory test; select
       `Scope::All` for such a spec in `collect_candidates`. Rewrite Test 21 to
       the new contract and keep the glob tests green as the regression fence.
-- [ ] **Phase 2 — Parse the shorthand.** *Test first.*
+- [x] **Phase 2 — Parse the shorthand.** *Test first.*
       `sidebar.rs:528`: route a scalar `contents:` that is neither `auto` nor a
       separator to `SidebarEntry::Auto(AutoSpec::Path(s))`. One site covers both
       top-level and nested `contents:`, matching Q1's recursion. Bare strings in
       an *array* are untouched (Q1 parity — they stay `Link`/`Separator`).
-- [ ] **Phase 3 — Selection ordering (D2, `bd-4feoon8u`).** *Test first.*
+- [x] **Phase 3 — Selection ordering (D2, `bd-4feoon8u`).** *Test first.*
       `sidebar_generate.rs`: resolve hrefs + expand every parsed sidebar, then
       `sidebar_for_page`, then enrich + active-state. Per-sidebar diagnostics;
       only the picked sidebar's are emitted.
-- [ ] **Phase 4 — End-to-end verification.** `cargo run --bin q2 -- render` on
+- [x] **Phase 4 — End-to-end verification.** `cargo run --bin q2 -- render` on
       both the minimal repro and the committed multi-sidebar probe; compare the
       sidebar DOM against the repro's `_site-q1/`. Per CLAUDE.md, record the
       exact invocation and observed output in this plan.
@@ -254,6 +254,58 @@ in the main checkout.
       `contents: <dir>` and never typed `auto:`.
 - [ ] **Phase 6 — Full `cargo xtask verify`** (not `--skip-hub-build`;
       `quarto-core` is WASM-relevant), then request push approval.
+
+## Phase 4 — end-to-end verification (2026-08-13)
+
+Both fixtures rendered through the real binary (`cargo build --bin q2`), output
+inspected by hand. Not inferred from test results.
+
+### Minimal repro — `contents: guides`
+
+```
+$ q2 render   # in .../repros/sidebar-contents-dir-shorthand/
+Rendered 3 of 3 files
+```
+
+`_site/guides/first.html` now emits, where it previously emitted a single
+`href="guides"` dead link:
+
+```html
+<li class="sidebar-item sidebar-item-section">
+  <a ... data-bs-target="#quarto-sidebar-section-0" aria-expanded="true">Guides</a>
+  ...
+  <ul id="quarto-sidebar-section-0" class="collapse list-unstyled sidebar-section depth1 show">
+    <li class="sidebar-item"><a href="first.html" class="sidebar-item-text sidebar-link active">
+      <span class="menu-text">First Guide</span></a></li>
+    <li class="sidebar-item"><a href="second.html" class="sidebar-item-text sidebar-link">
+      <span class="menu-text">Second Guide</span></a></li>
+  </ul>
+</li>
+```
+
+Structurally identical to `_site-q1/guides/first.html`: a
+`sidebar-item-section` titled **Guides**, expanded (`aria-expanded="true"`,
+`sidebar-section depth1 show`), both guides nested, current page `active`.
+Remaining cosmetic deltas are pre-existing and unrelated to this fix — Q1 writes
+`../guides/first.html` where q2 writes `first.html` (both resolve), and Q1 wraps
+the section header text in `<span class="menu-text">`.
+
+### Multi-sidebar probe — `bd-4feoon8u`
+
+```
+$ q2 render   # in claude-notes/plans/sidebar-contents-dir-shorthand-investigation/multi-sidebar-auto/
+Rendered 5 of 5 files
+
+how-to/index.html      sidebar=1      (was 0)
+how-to/one.html        sidebar=1      (was 0)
+how-to/two.html        sidebar=1      (was 0)
+other/alpha.html       sidebar=1      (unchanged)
+index.html             sidebar=0      (unchanged — in neither sidebar)
+```
+
+And each page gets the *correct* sidebar, not merely some sidebar:
+`how-to/one.html` carries the **How To** sidebar (How To Index / Guide One /
+Guide Two); `other/alpha.html` still carries **Other**.
 
 ## Known limitation (deliberate, not a regression)
 
