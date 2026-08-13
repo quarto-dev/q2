@@ -59,7 +59,9 @@ fn main() {
     let editor_dist = workspace_root.join("hub-client").join("dist-preview-embed");
     let editor_embed_dir = if editor_dist.join("index.html").is_file() {
         let dedupe_against = viewer_is_real.then_some(real_dist.as_path());
-        make_editor_embed(&editor_dist, dedupe_against)
+        let embed = make_editor_embed(&editor_dist, dedupe_against);
+        write_editor_manifest(&embed, &embed_dir);
+        embed
     } else {
         make_editor_placeholder()
     };
@@ -147,6 +149,21 @@ fn files_byte_identical(a: &Path, b: &Path) -> bool {
         (Ok(a_bytes), Ok(b_bytes)) => a_bytes == b_bytes,
         _ => false,
     }
+}
+
+/// Write the editor embed's `spa-manifest.json` (live-share plan
+/// Phase 2, design decision 4). Only this script knows the
+/// post-dedupe file set, so only it can record the *post-resolution*
+/// view — what `lookup_embedded(Editor, path)` actually returns:
+/// editor-embed files plus the viewer-embed fallback for stripped
+/// duplicates. Fallback sources are listed first so the editor's own
+/// copy wins on conflicts. The placeholder editor embed ships no
+/// manifest (hash `None` → guests tunnel; self-healing).
+fn write_editor_manifest(editor_embed: &Path, viewer_embed: &Path) {
+    let mut files = spa_manifest::list_dir(viewer_embed).expect("list viewer embed dir");
+    files.extend(spa_manifest::list_dir(editor_embed).expect("list editor embed dir"));
+    let manifest = spa_manifest::generate(files).expect("generate editor asset manifest");
+    spa_manifest::write_manifest(editor_embed, &manifest).expect("write editor asset manifest");
 }
 
 fn make_placeholder_dist() -> PathBuf {

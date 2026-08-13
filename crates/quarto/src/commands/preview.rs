@@ -95,6 +95,24 @@ pub fn execute_join(args: JoinArgs) -> Result<()> {
     runtime.block_on(run_join(args))
 }
 
+/// `q2 preview --print-asset-manifest-hashes` (hidden): print the
+/// top-level hash of each embedded SPA asset manifest, one per line.
+/// Release CI runs this on every per-platform build and fails the
+/// release on drift — a cross-platform hash mismatch is safe at
+/// runtime (guests tunnel) but silently disables local asset serving
+/// for cross-platform share pairs (live-share plan Phase 2,
+/// bd-ee2fqm95). `none` means the embed is a placeholder carrying no
+/// manifest.
+pub fn print_asset_manifest_hashes() -> Result<()> {
+    fn fmt(hash: &Option<String>) -> &str {
+        hash.as_deref().unwrap_or("none")
+    }
+    let manifests = quarto_preview::embedded_manifests();
+    println!("viewer: {}", fmt(&manifests.viewer));
+    println!("editor: {}", fmt(&manifests.editor));
+    Ok(())
+}
+
 async fn run(args: PreviewArgs) -> Result<()> {
     // Project mode is the default (epic plan Q5); --no-project is
     // the explicit standalone-server escape hatch. Canonicalize so
@@ -382,8 +400,28 @@ async fn run_join(args: JoinArgs) -> Result<()> {
     const READY_TIMEOUT: Duration = Duration::from_secs(15);
     let url = if wait_until_healthy(bound, READY_TIMEOUT).await {
         info!(local = %bound, "shared session healthy through the tunnel");
-        match fetch_editor_boot(bound).await {
-            Some(boot) => build_guest_editor_url(&bound, &boot),
+        let config = fetch_preview_config(bound).await;
+        let boot = config.as_ref().and_then(|c| c.valid_editor_boot());
+        // Live-share plan Phase 2 (bd-ee2fqm95): decide whether this
+        // guest's embedded SPA bundle is byte-identical to the host's
+        // (manifest hash match) and assets can be served locally. The
+        // session UI is the editor iff the host advertised editorBoot
+        // (design decision 5). Phase 3 acts on the decision; for now
+        // it is logged.
+        let ui = if boot.is_some() {
+            quarto_preview::PreviewUi::Editor
+        } else {
+            quarto_preview::PreviewUi::Viewer
+        };
+        let mode = quarto_preview::decide_asset_mode(
+            config.as_ref().and_then(|c| c.assets.as_ref()),
+            ui,
+            &quarto_preview::embedded_manifests(),
+            quarto_preview::spa_dir_override_active(),
+        );
+        info!(local = %bound, "{}", mode.log_line());
+        match boot {
+            Some(boot) => build_guest_editor_url(&bound, boot),
             None => format!("http://{bound}/"),
         }
     } else {
@@ -524,12 +562,32 @@ async fn health_get_ok(addr: std::net::SocketAddr) -> bool {
     response.starts_with(b"HTTP/1.1 200")
 }
 
+/// The `/api/preview/config` wire shape as the join path consumes it:
+/// the editor-mode boot params (bd-7htq16rx) and the Phase 2 `assets`
+/// manifest-hash block (bd-ee2fqm95). Unknown fields are ignored, so
+/// older/newer hosts inter-operate.
+#[derive(serde::Deserialize)]
+struct PreviewConfigWire {
+    #[serde(rename = "editorBoot")]
+    editor_boot: Option<quarto_preview::EditorBootInfo>,
+    assets: Option<quarto_preview::AssetsBlock>,
+}
+
+impl PreviewConfigWire {
+    /// The editor-mode boot params, when present and usable: a boot
+    /// URL built from an empty doc id or file could never join the
+    /// document.
+    fn valid_editor_boot(&self) -> Option<&quarto_preview::EditorBootInfo> {
+        let boot = self.editor_boot.as_ref()?;
+        (!boot.index_doc_id.is_empty() && !boot.file.is_empty()).then_some(boot)
+    }
+}
+
 /// One raw HTTP/1.1 `GET /api/preview/config` against `addr`; the
-/// parsed `editorBoot` params when the host is an editor-UI session
-/// that stashed them (bd-7htq16rx). Hand-rolled for the same reason as
-/// [`health_get_ok`]. Any failure — connect, non-200, malformed body,
-/// absent field — is `None`, and the caller falls back to the root URL.
-async fn fetch_editor_boot(addr: std::net::SocketAddr) -> Option<quarto_preview::EditorBootInfo> {
+/// parsed body. Hand-rolled for the same reason as [`health_get_ok`].
+/// Any failure — connect, non-200, malformed body — is `None`, and the
+/// caller falls back to the root URL with all assets tunneled.
+async fn fetch_preview_config(addr: std::net::SocketAddr) -> Option<PreviewConfigWire> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let mut stream = tokio::net::TcpStream::connect(addr).await.ok()?;
     stream
@@ -544,26 +602,21 @@ async fn fetch_editor_boot(addr: std::net::SocketAddr) -> Option<quarto_preview:
         return None;
     }
     let body_start = response.windows(4).position(|w| w == b"\r\n\r\n")? + 4;
-    parse_editor_boot(&response[body_start..])
+    parse_preview_config(&response[body_start..])
 }
 
-/// Parse the `editorBoot` field of a `/api/preview/config` body.
-/// `None` for viewer-mode and older hosts (no field), for malformed
-/// JSON, and for a field whose doc id or file is empty — a boot URL
-/// built from those could never join the document.
+/// Parse a `/api/preview/config` body. `None` for malformed JSON.
+fn parse_preview_config(body: &[u8]) -> Option<PreviewConfigWire> {
+    serde_json::from_slice::<PreviewConfigWire>(body).ok()
+}
+
+/// The `editorBoot` field of a `/api/preview/config` body. `None` for
+/// viewer-mode and older hosts (no field), for malformed JSON, and for
+/// a field whose doc id or file is empty — a boot URL built from those
+/// could never join the document.
+#[cfg(test)]
 fn parse_editor_boot(body: &[u8]) -> Option<quarto_preview::EditorBootInfo> {
-    #[derive(serde::Deserialize)]
-    struct PreviewConfigWire {
-        #[serde(rename = "editorBoot")]
-        editor_boot: Option<quarto_preview::EditorBootInfo>,
-    }
-    let boot = serde_json::from_slice::<PreviewConfigWire>(body)
-        .ok()?
-        .editor_boot?;
-    if boot.index_doc_id.is_empty() || boot.file.is_empty() {
-        return None;
-    }
-    Some(boot)
+    parse_preview_config(body)?.valid_editor_boot().cloned()
 }
 
 /// Bind `host:0`, read the OS-assigned port, drop the listener.
@@ -1289,6 +1342,47 @@ mod tests {
             parse_editor_boot(br#"{"editorBoot":{"indexDocId":"4XyZ","file":"","name":"p"}}"#),
             None
         );
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // bd-ee2fqm95 (live-share plan Phase 2): the `assets` manifest
+    // handshake rides the same preflight config fetch as editorBoot.
+    // ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_preview_config_reads_assets_block() {
+        let body = br#"{"allowEdit":false,"assets":{"viewer":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","editor":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}"#;
+        let config = parse_preview_config(body).expect("config parses");
+        let assets = config.assets.expect("assets block present");
+        assert_eq!(
+            assets.viewer.as_deref(),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+        assert_eq!(
+            assets.editor.as_deref(),
+            Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        );
+    }
+
+    #[test]
+    fn parse_preview_config_tolerates_missing_and_partial_assets() {
+        // Older hosts (and placeholder embeds) answer without the
+        // block; hosts with only a real viewer embed advertise just
+        // the viewer hash. Both parse; the mode decision maps the
+        // absences to Tunnel.
+        let config = parse_preview_config(br#"{"allowEdit":false}"#).expect("config parses");
+        assert_eq!(config.assets, None);
+        let config =
+            parse_preview_config(br#"{"assets":{"viewer":"aaaa"}}"#).expect("config parses");
+        let assets = config.assets.expect("assets block present");
+        assert_eq!(assets.viewer.as_deref(), Some("aaaa"));
+        assert_eq!(assets.editor, None);
+    }
+
+    #[test]
+    fn parse_preview_config_rejects_malformed() {
+        assert!(parse_preview_config(b"not json").is_none());
+        assert!(parse_preview_config(b"").is_none());
     }
 
     #[test]

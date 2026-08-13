@@ -5283,6 +5283,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "spa-manifest",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -6698,6 +6699,16 @@ name = "sorted-index-buffer"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea06cc588e43c632923a55450401b8f25e628131571d4e1baea1bdfdb2b5ed06"
+
+[[package]]
+name = "spa-manifest"
+version = "0.20.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+]
 
 [[package]]
 name = "spez"

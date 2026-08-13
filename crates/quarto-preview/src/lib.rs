@@ -23,6 +23,7 @@ use quarto_core::engine::EngineRegistry;
 use quarto_hub::{StorageManager, context::HubConfig, server, watch::WatchFilter};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
+pub mod asset_manifest;
 pub mod cache;
 pub mod capture_driver;
 pub mod config;
@@ -31,6 +32,9 @@ pub mod diagnostics;
 pub mod re_execute;
 pub mod share;
 
+pub use asset_manifest::{
+    AssetMode, AssetsBlock, EmbeddedManifests, TunnelReason, decide_asset_mode, embedded_manifests,
+};
 pub use config::EnginePolicy;
 
 /// The SPA bundle embedded at build time. See `build.rs` for how the
@@ -52,6 +56,15 @@ static EMBEDDED_EDITOR: Dir<'_> = include_dir!("$QUARTO_HUB_CLIENT_EMBED_DIR");
 /// (it composes onto a router whose typed state is `Arc<HubContext>`,
 /// so adding handler state would require nested routers).
 static SPA_DIR_OVERRIDE: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+/// Is a `SPA_DIR_OVERRIDE` disk directory active this session? The
+/// config handler omits the `assets` block when it is (disk-served
+/// bytes are not described by the embedded manifest), and a `--join`
+/// guest tunnels everything (live-share plan Phase 2, design
+/// decision 5).
+pub fn spa_dir_override_active() -> bool {
+    matches!(SPA_DIR_OVERRIDE.get(), Some(Some(_)))
+}
 
 /// Map of `resources:`-declared output-relative paths → their absolute source
 /// file on disk, used by [`artifact_resource_handler`] to SERVE embedded-example
@@ -681,6 +694,21 @@ async fn preview_config_handler() -> Response {
     if let Some(boot) = EDITOR_BOOT.get() {
         body["editorBoot"] = serde_json::to_value(boot).expect("EditorBootInfo always serializes");
     }
+    // Live-share plan Phase 2 (bd-ee2fqm95, design decision 5):
+    // advertise the embedded bundles' manifest hashes so a `--join`
+    // guest can serve byte-identical assets locally. Omitted entirely
+    // under SPA_DIR_OVERRIDE — disk-served bytes are not described by
+    // the embedded manifest. Fields whose embed has no manifest
+    // (placeholder) are absent; a guest treats any absence as
+    // "tunnel everything".
+    if !spa_dir_override_active() {
+        let manifests = asset_manifest::embedded_manifests();
+        body["assets"] = serde_json::to_value(AssetsBlock {
+            viewer: manifests.viewer,
+            editor: manifests.editor,
+        })
+        .expect("AssetsBlock always serializes");
+    }
     axum::Json(body).into_response()
 }
 
@@ -924,25 +952,11 @@ fn accepts_gzip(value: Option<&HeaderValue>) -> bool {
 }
 
 fn content_type_for(path: &str) -> HeaderValue {
-    let ext = std::path::Path::new(path)
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
-    let mime = match ext.to_ascii_lowercase().as_str() {
-        "html" => "text/html; charset=utf-8",
-        "js" => "application/javascript",
-        "css" => "text/css",
-        "json" => "application/json",
-        "wasm" => "application/wasm",
-        "svg" => "image/svg+xml",
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "woff" => "font/woff",
-        "woff2" => "font/woff2",
-        "ttf" => "font/ttf",
-        _ => "application/octet-stream",
-    };
-    HeaderValue::from_static(mime)
+    // The canonical table lives in the spa-manifest crate (the asset
+    // manifest records it, and Phase 3's local serving must reproduce
+    // it exactly — `WebAssembly.compileStreaming` needs
+    // `application/wasm`).
+    HeaderValue::from_static(spa_manifest::content_type_for(path))
 }
 
 #[cfg(test)]

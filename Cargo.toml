@@ -111,6 +111,9 @@ path = "./crates/quarto-core"
 [workspace.dependencies.quarto-util]
 path = "./crates/quarto-util"
 
+[workspace.dependencies.spa-manifest]
+path = "./crates/spa-manifest"
+
 [workspace.dependencies.quarto-yaml]
 version = "0.1.2"
 

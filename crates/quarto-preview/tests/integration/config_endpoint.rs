@@ -279,7 +279,6 @@ fn is_sha256_hex(s: &str) -> bool {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "Phase 2 skeleton (bd-ee2fqm95): the config `assets` block is not implemented yet"]
 async fn config_reports_embedded_asset_manifest_hashes() {
     let (port, _ctx, handle, _project, _data) = boot_server_for_test(false).await;
 

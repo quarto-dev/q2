@@ -273,6 +273,14 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = PreviewUiArg::Viewer)]
         ui: PreviewUiArg,
 
+        /// Print the embedded SPA asset manifest hashes and exit.
+        /// Release CI compares these across the per-platform builds —
+        /// a mismatch silently disables live-share local asset serving
+        /// for cross-platform pairs (live-share plan Phase 2,
+        /// bd-ee2fqm95). Not a user-facing command.
+        #[arg(long, hide = true)]
+        print_asset_manifest_hashes: bool,
+
         /// Join a shared preview session using the `q2preview…` string
         /// printed by `q2 preview --share` on the host machine.
         ///
@@ -854,6 +862,28 @@ mod cli_parse_tests {
     }
 
     #[test]
+    fn preview_print_asset_manifest_hashes_parses() {
+        // Hidden release-CI diagnostic (bd-ee2fqm95): parses on the
+        // host-mode command and defaults off.
+        let Commands::Preview {
+            print_asset_manifest_hashes,
+            ..
+        } = parse_preview(&["preview", "--print-asset-manifest-hashes"])
+        else {
+            unreachable!()
+        };
+        assert!(print_asset_manifest_hashes);
+        let Commands::Preview {
+            print_asset_manifest_hashes,
+            ..
+        } = parse_preview(&["preview"])
+        else {
+            unreachable!()
+        };
+        assert!(!print_asset_manifest_hashes);
+    }
+
+    #[test]
     fn preview_share_conflicts_with_join() {
         // (match instead of expect_err: `Cli` deliberately has no Debug impl)
         let err = match try_parse(&["preview", "--share", "--join", "x"]) {
@@ -1120,9 +1150,14 @@ fn main() -> Result<()> {
             allow_edit,
             share,
             ui,
+            print_asset_manifest_hashes,
             join,
         } => {
-            if let Some(ticket) = join {
+            if print_asset_manifest_hashes {
+                // Binary diagnostic (release CI drift check); answers
+                // without starting anything, in either mode.
+                commands::preview::print_asset_manifest_hashes()
+            } else if let Some(ticket) = join {
                 // Guest mode (live-share plan Phase 3): clap has already
                 // rejected every host-mode flag via conflicts_with_all.
                 commands::preview::execute_join(commands::preview::JoinArgs {

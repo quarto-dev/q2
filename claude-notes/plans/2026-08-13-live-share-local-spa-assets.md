@@ -2,8 +2,10 @@
 
 **Epic:** bd-puc7xt6e
 **Date:** 2026-08-13
-**Status:** Phase 1 complete (2026-08-13) — wire payload 54.67 → 10.36 MB
-(5.3×); slow-link first render 48.0 → 10.0 s; **gate: Phases 2–3 proceed**
+**Status:** Phase 2 complete (2026-08-13) — manifest + config handshake
+landed (`assets` block advertised, guest mode decision logged); Phase 1
+cut the wire payload 54.67 → 10.36 MB (5.3×) and slow-link first render
+48.0 → 10.0 s. **Next: Phase 3 (L7 join frontend).**
 **Parent context:** `claude-notes/plans/2026-08-03-q2-preview-live-share-iroh.md` (live-share design; spike measured 13.2 s cross-network first-render)
 
 ## Overview
@@ -380,24 +382,39 @@ does.
 
 ### Phase 2 — Manifest + config handshake
 
-- [ ] Manifest generation per design decision 4: xtask writes the viewer
-  manifest; `build.rs` writes the editor manifest after the dedupe strip
-  (post-resolution view per UI). Deterministic: sorted entries, stable
-  hash, manifest excludes itself. Unit test: byte-identical regeneration;
-  hash changes when any asset byte changes.
-- [ ] `preview_config_handler`: add the `assets` block per design decision 5.
+- [x] Manifest generation per design decision 4: the viewer manifest is
+  written by the SPA's own npm build (`scripts/manifest-dist.mjs` as the
+  final `npm run build` step — the single-producer move Phase 1 made for
+  precompression, since verify step 13's bare `npm run build` would
+  otherwise wipe an xtask-written manifest; `cargo xtask
+  build-q2-preview-spa` still *produces* it, via npm); `build.rs` writes
+  the editor manifest after the dedupe strip (post-resolution view per
+  UI). The shared generator lives in the new `crates/spa-manifest`
+  (quarto-preview build-dep + runtime parser); the npm script is a
+  mirror pinned by `rust_generator_matches_the_npm_written_viewer_manifest`
+  and a known-answer hash vector. Deterministic: sorted entries, stable
+  hash, manifest excludes itself. *(done 2026-08-13)*
+- [x] `preview_config_handler`: add the `assets` block per design decision 5.
   Test in `crates/quarto-preview/tests/integration/config_endpoint.rs`.
-- [ ] Guest side: parse the `assets` block in the join preflight (extend the
-  hand-rolled fetch in `preview.rs` or move preflight onto a bi-stream — see
-  Phase 3), compare against the embedded manifest for the session UI, and
-  log the decision (`using embedded UI assets (hash match)` / `tunneling
-  assets (hash mismatch)`).
-- [ ] Unit tests: match → Local; mismatch → Tunnel; missing manifest →
-  Tunnel; override active → Tunnel.
-- [ ] CI: compare the viewer/editor manifest hashes across the per-platform
-  release artifacts and fail the release on drift — a cross-platform
-  mismatch is safe at runtime (tunnel fallback) but silently disables
-  local mode for cross-platform share pairs.
+  *(done 2026-08-13 — `config_reports_embedded_asset_manifest_hashes`
+  un-ignored and green; the override carve-out guard stays green)*
+- [x] Guest side: the join preflight's hand-rolled config fetch now parses
+  the `assets` block alongside `editorBoot` (`PreviewConfigWire`), decides
+  the mode for the session UI (viewer unless `editorBoot` is present), and
+  logs it (`info!`: `using embedded UI assets (hash match)` /
+  `tunneling assets (hash mismatch)` + the other reasons). Phase 3 acts
+  on the decision; Phase 2 logs it. *(done 2026-08-13)*
+- [x] Unit tests: match → Local; mismatch → Tunnel; missing manifest →
+  Tunnel; override active → Tunnel. *(done 2026-08-13 — the four
+  `decide_mode_*` tests in `asset_manifest.rs`, incl. editor-UI and
+  cross-UI confusion cases)*
+- [x] CI: compare the viewer/editor manifest hashes across the per-platform
+  release artifacts and fail the release on drift. *(done 2026-08-13 —
+  each build leg records `q2 preview
+  --print-asset-manifest-hashes` (new hidden diagnostic) as an
+  `asset-manifest-hashes-<platform>` artifact (also a placeholder-SPA
+  tripwire); the new `asset-manifest-check` job fails the release unless
+  all five platforms agree)*
 
 ### Phase 3 — L7 join frontend
 
@@ -501,3 +518,31 @@ does.
   green (steps split across runs: 11,896 Rust tests passed; hub-client
   `test:ci` incl. 131 wasm tests against the `-Oz` module; tree-sitter
   601/601 + CRLF parity).
+- 2026-08-13: **Phase 2 complete** (bd-ee2fqm95). New
+  `crates/spa-manifest` owns the manifest format + generator (sorted
+  `(path, sha256, size, contentType, contentEncoding?)` entries;
+  top-level hash = SHA-256 over `\0`-terminated canonical field lines —
+  deliberately not JSON, so any implementation reproduces it; pinned by
+  a known-answer vector computed independently via Python hashlib).
+  **Design decision 4 refined the same way Phase 1 refined
+  precompression:** the viewer manifest's single producer is the npm
+  build (`scripts/manifest-dist.mjs`, final step of q2-preview-spa's
+  `npm run build`), not an xtask post-pass — verify step 13's bare
+  `npm run build` would wipe an xtask-written manifest. `build.rs`
+  writes the editor manifest over the post-resolution view (viewer
+  fallback listed first, editor wins). npm↔Rust agreement is pinned by
+  `rust_generator_matches_the_npm_written_viewer_manifest` on the real
+  dist (74 entries, byte-equal regeneration) plus the shared
+  known-answer vector. `preview_config_handler` advertises
+  `assets.{viewer,editor}` (block omitted under `SPA_DIR_OVERRIDE`,
+  fields omitted for placeholder embeds). The join preflight parses
+  `assets` alongside `editorBoot` from one config fetch
+  (`PreviewConfigWire`), decides the mode, and logs it via `info!`
+  (Phase 3 makes it user-visible when the mode actually takes effect).
+  Release CI: every build leg records `q2 preview
+  --print-asset-manifest-hashes` (new hidden diagnostic) and the new
+  `asset-manifest-check` job fails the release unless all five
+  platforms agree. E2E inspected: `q2 preview` answers
+  `/api/preview/config` with both hashes matching the on-disk manifest
+  and `--print-asset-manifest-hashes`. Full workspace nextest
+  (11,913 passed) + `cargo xtask verify --skip-hub-build` green.
