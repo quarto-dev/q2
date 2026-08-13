@@ -1,0 +1,18 @@
+---
+title: "Home"
+toc: true
+---
+
+## Using a "raw" volume
+
+The failing case: a `Quoted` inline in the heading. The heading renders
+with curly quotes; the TOC entry loses the quote glyphs entirely.
+
+## Finding your repository's identifiers
+
+Control: an apostrophe is smartified inside a `Str`, not a `Quoted`
+node. Both heading and TOC entry get U+2019.
+
+## What's in the Gallery -- really
+
+Control: en dash, also a `Str`-internal transform. Both agree.
