@@ -210,6 +210,10 @@ pub fn is_external(href: &str) -> bool {
         || href.starts_with("tel:")
         || href.starts_with("ftp://")
         || href.starts_with("//")
+        // data: URIs are URL-shaped, not path-shaped — running one
+        // through path normalization would mangle it into a relative
+        // URL (bd-root-relative-paths-design-fc5pvkcv).
+        || href.starts_with("data:")
 }
 
 /// Pass-1 / static counterpart to [`resolve_doc_relative_href`].
@@ -391,6 +395,11 @@ pub fn resolve_static_resource_href(
         Some(i) => (&raw[..i], &raw[i..]),
         None => (raw, ""),
     };
+    // Empty href, or query-only (`?v=2`): no path to normalize.
+    // Inventing one would rewrite degenerate input into a live URL.
+    if path_part.is_empty() {
+        return raw.to_string();
+    }
     match resolver {
         Some(r) => {
             let project_relative = resolve_to_project_root(source_relative, path_part);
@@ -883,6 +892,10 @@ mod tests {
         assert!(is_external("tel:1234"));
         assert!(is_external("ftp://x"));
         assert!(is_external("//x"));
+        // A data: URI is URL-shaped, not path-shaped — without this,
+        // path normalization would mangle it into a live relative URL
+        // (bd-root-relative-paths-design-fc5pvkcv).
+        assert!(is_external("data:image/png;base64,AAAA"));
         assert!(!is_external("about.qmd"));
         assert!(!is_external("docs/api.qmd"));
         assert!(!is_external("#fragment"));
@@ -1593,6 +1606,22 @@ mod tests {
         assert_eq!(
             resolve_static_resource_href("/assets/app.html#top", "docs/api.qmd", Some(&r)),
             "../assets/app.html#top"
+        );
+    }
+
+    /// Empty and query-only hrefs pass through unchanged — there is no
+    /// path to normalize, and inventing one would rewrite degenerate
+    /// input into a live URL (bd-root-relative-paths-design-fc5pvkcv).
+    #[test]
+    fn static_href_empty_and_query_only_pass_through() {
+        let r = website_resolver("docs/api.html");
+        assert_eq!(
+            resolve_static_resource_href("", "docs/api.qmd", Some(&r)),
+            ""
+        );
+        assert_eq!(
+            resolve_static_resource_href("?v=2", "docs/api.qmd", Some(&r)),
+            "?v=2"
         );
     }
 }

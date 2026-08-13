@@ -216,6 +216,21 @@ pub fn render_document_to_file(
 ) -> Result<RenderToFileResult> {
     debug!("Rendering: {}", input_path.display());
 
+    // Canonicalize the input defensively. `ProjectContext::discover`
+    // canonicalizes internally, so a symlinked input path (macOS
+    // `/var/folders` → `/private/var/folders` tempdirs) would
+    // otherwise put the derived `output_path` and the project's roots
+    // on different spellings of the same directory — and
+    // `page_url_for`'s pathdiff then emits `../..`-laden URLs that
+    // escape the site (surfaced by Case B of
+    // bd-root-relative-paths-design-fc5pvkcv, which routed image
+    // targets through pathdiff for the first time). Idempotent for
+    // already-canonical callers like the CLI; on error (runtime
+    // without canonicalization, nonexistent path) keep the caller's
+    // spelling — `file_read` below reports the real problem.
+    let canonical_input = runtime.canonicalize(input_path).ok();
+    let input_path = canonical_input.as_deref().unwrap_or(input_path);
+
     // Read input file
     let input_bytes = runtime.file_read(input_path).map_err(|e| {
         QuartoError::other(format!(

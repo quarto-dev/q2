@@ -196,42 +196,111 @@ emits `<img src="images/config-logo.svg">` verbatim.
 
 ## Phases
 
-- **Phase 0 — Test plan (TDD, failing tests first).**
-  - `link_rewrite`: image target root-absolute → page-relative;
-    relative `../` chain → normalized; external / `data:` / `//` /
-    fragment untouched; query/fragment tails preserved.
-  - Navbar logo at depth: unit (generate + render transforms) and
-    end-to-end (`render_document_to_file`-level) — logo src
-    page-relative at depth 2; missing logo file warns; logo copied.
-  - Footer text regions: markdown image renders as `<img>` with
-    page-relative src (root-absolute and relative sources); markdown
-    link resolves `.qmd` → page-relative `.html`; invert test 42's
-    expectation deliberately.
-  - Resource collector: `/images/x.svg` in body collects a copy intent
-    anchored at project root.
-  - In-tree e2e fixture mirroring the repro (render through the real
-    binary path; inspect output).
-- **Phase 1 — Case B + collector.** Route `Image::target.0` through
-  `resolve_static_resource_href` in `LinkRewriteTransform` (all
-  targets, per decision 2); correct the module docs; make
-  `resource_collector` treat leading `/` as project-root and collect.
-- **Phase 2 — Case A.** Pair `logo` with `SourceInfo` (bd-qor9a
-  pattern), resolve via `resolve_metadata_path` (generate) +
-  page-relative resolution (render); copy logo to output with
-  missing-file warning (decision 5), sharing the favicon copy shape.
-- **Phase 3 — Case C (incentive removal).** `Inline::Image` arm in
-  `push_inline` (attr passthrough); shared resolver-aware inline walk
-  in quarto-core applied to footer Text regions (and navbar
-  title/text regions) before the pure emitters: Links via
-  `resolve_doc_relative_href`, Images via
-  `resolve_static_resource_href`; register copy intents +
-  missing-file warnings for config-declared images (decision 5).
-- **Phase 4 — Docs + follow-ups.** Website docs: path portability
-  (leading-`/` decree, markdown-first guidance for footer imagery,
-  `project.resources:` for raw-HTML-referenced assets, raw-HTML
-  limitation stated plainly). File discovered-from strands for the two
-  listing leading-`/` sites. Update the Connect-docs-side repro READMEs
-  (outside this repo) after landing.
+TDD per phase: each phase writes its failing tests first, verifies they
+fail, implements, verifies green, then runs the full workspace suite.
+
+### Phase 1 — Case B (markdown images) + collector
+
+Implementation notes settled during pre-implementation reading:
+- Pipeline order is `LinkRewriteTransform` (first in Finalization) →
+  `ResourceCollectorTransform` (late Finalization), so in resolver-ful
+  modes the collector sees already-rebased page-relative image URLs.
+  The collector still gets its own leading-`/` handling (anchored at
+  `ctx.project.dir` / `ctx.project.output_dir`) so its correctness does
+  not depend on transform ordering, and so
+  `collect_referenced_asset_urls` (preview single-file asset sync,
+  bd-kpuweafo — runs on raw pre-transform blocks with empty anchors)
+  implements the decree too.
+- `LinkRewriteTransform`'s standalone short-circuit becomes
+  "no index AND no resolver": Link rewriting still requires the index
+  (Decision 7 of phase-6 unchanged); Image rewriting only needs the
+  resolver. In single-doc mode `page_url_for` collapses `/x.png` to
+  `x.png` — decree-correct (project root = doc dir).
+- `is_external` gains `data:` (a data URI is URL-shaped, not
+  path-shaped; today it would be mangled by path normalization).
+  `resolve_static_resource_href` gains an empty-path guard.
+
+Work items:
+- [x] Failing tests: `link_rewrite` image cases (root-absolute →
+      page-relative at depth; `../` normalization; external / `data:` /
+      fragment-only untouched; `#`/`?` tails preserved; image rewrite
+      without index when resolver present) — 7 failed as expected
+      before implementation
+- [x] Failing tests: `is_external("data:…")`; collector root-absolute
+      anchored at project root; `collect_referenced_asset_urls`
+      leading-`/` inversion (deliberate expectation change)
+- [x] Implement: `is_external` + `data:`; empty-path guard in
+      `resolve_static_resource_href`
+- [x] Implement: `link_rewrite` Image arm + gating change (`index`
+      now `Option`; short-circuit only when index AND resolver are
+      both absent) + module-docs correction
+- [x] Implement: collector leading-`/` anchoring via `ctx.project`
+      (`ResourceVisitor` gained root anchors; empty anchors preserve
+      `collect_referenced_asset_urls` semantics)
+- [x] **Discovered + fixed en route:** `render_document_to_file` never
+      canonicalized its input while `ProjectContext::discover` does,
+      so a symlinked input (macOS `/var/folders` tempdirs) put
+      `output_path` and project roots on different spellings and
+      `page_url_for`'s pathdiff emitted `../..`-laden URLs escaping
+      the site. Surfaced by `shortcode_text_contexts::image_src_substitutes`
+      the moment image targets first routed through pathdiff. Fixed
+      with defensive `runtime.canonicalize` at entry (idempotent for
+      the CLI, which pre-canonicalizes). Also improved that test's
+      assertion debug output (`<img` line, not first `src=` line).
+- [x] e2e: rendered the in-tree repro fixture through
+      `cargo run --bin q2 -- render`; deep page now emits
+      `src="../../images/x.svg"` for the markdown image (was
+      `/images/x.svg`), `href="../../index.html"` for the link
+      (unchanged), raw-HTML `src="/images/x.svg"` untouched (Case C,
+      by design). Copy side verified with `project.resources:`
+      removed: `_site/images/x.svg` still created by the collector.
+      Output inspected directly.
+- [ ] Full workspace tests + commit
+
+### Phase 2 — Case A (navbar logo)
+
+- [ ] Failing tests: logo resolution at depth (generate + render
+      transform units); logo copy + missing-file warning; e2e at depth 2
+- [ ] Implement: `logo_source: SourceInfo` pairing in
+      `quarto-navigation` (`navbar.rs`, round-trip included)
+- [ ] Implement: `resolve_metadata_path` in `navbar_generate`;
+      page-relative resolution in `navbar_render` (static-resource
+      helper, since logo is an asset not a doc)
+- [ ] Implement: logo copy-with-warning beside `copy_favicon`
+      (decision 5)
+- [ ] Full workspace tests + commit
+
+### Phase 3 — Case C (incentive removal: images + links in nav/footer regions)
+
+- [ ] Failing tests: `push_inline` Image arm (attr passthrough, alt
+      from content, title); footer Text region markdown image →
+      page-relative `<img>` at depth; footer Text region `.qmd` link →
+      page-relative `.html` (inverts footer_render test 42 —
+      deliberate); navbar title region parity
+- [ ] Implement: `Inline::Image` arm in
+      `quarto-navigation/src/render_html.rs::push_inline`
+- [ ] Implement: shared resolver-aware inline walk in quarto-core
+      (Links via `resolve_doc_relative_href`, Images via
+      `resolve_static_resource_href`), applied in
+      `FooterRenderTransform` Text regions + navbar title/text
+      surfaces; survey all `inlines_to_html` render surfaces for
+      coverage or an explicit exclusion comment
+- [ ] Implement: copy intents + missing-file warnings for
+      config-declared images (decision 5)
+- [ ] e2e: footer markdown image + link on deep page through real
+      binary; record snippet
+- [ ] Full workspace tests + commit
+
+### Phase 4 — Docs + follow-ups
+
+- [ ] Website docs: leading-`/` decree, markdown-first footer imagery,
+      `project.resources:` for raw-HTML assets, raw-HTML limitation
+      stated plainly
+- [ ] File discovered-from strands: listing `is_external_src`
+      leading-`/` site; listing preview-URL substitution site
+- [ ] Update Connect-docs-side repro READMEs (outside this repo) after
+      landing
+- [ ] Final `cargo xtask verify` (full, WASM leg included) + commit
 
 ## Risks / tradeoffs
 
