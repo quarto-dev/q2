@@ -192,6 +192,9 @@ $header-includes$
 $endfor$
 </head>
 <body class="$body-classes$">
+$if(rendered.draft-alert-text)$
+<div id="quarto-draft-alert" class="alert alert-warning"><i class="bi bi-pencil-square"></i>$rendered.draft-alert-text$</div>
+$endif$
 $if(rendered.navigation.navbar)$
 $rendered.navigation.navbar$
 $endif$
