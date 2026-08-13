@@ -124,6 +124,10 @@ pub fn auto_generated_id(inlines: &Inlines) -> String {
         .collect::<Vec<&str>>()
         .join("-");
 
+    // Pandoc's `dropNonLetter`: an identifier starts at its first letter, so
+    // `## 1 leading digit` becomes `leading-digit`, not `1-leading-digit`.
+    let ident = ident.trim_start_matches(|c: char| !c.is_alphabetic());
+
     if ident.is_empty() {
         EMPTY_ID_FALLBACK.to_string()
     } else {

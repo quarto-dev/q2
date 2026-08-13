@@ -6,10 +6,13 @@ title: "Heading auto-id"
 # inline kind *without recursing into it*, so whole words vanished from
 # the anchor — `## Using a "raw" volume` became `using-a-volume`.
 #
-# Also covered here, decided with the same fix: Pandoc's empty-id
-# fallback. A heading that collects to nothing gets `section` (then
-# `section-1`, ...) instead of no id attribute at all, which left the
-# heading unlinkable and handed `-1`/`-2` to its siblings.
+# Also covered here, decided with the same fix:
+#  - Pandoc's dropNonLetter: an id starts at its first letter, so
+#    `## 1 leading digit` is `leading-digit`, not `1-leading-digit`.
+#  - Pandoc's empty-id fallback: a heading that collects to nothing gets
+#    `section` (then `section-1`, ...) instead of no id attribute at all,
+#    which left the heading unlinkable and handed `-1`/`-2` to its
+#    siblings.
 #
 # Every id below was measured against pandoc 3.9.0.2, which is the same
 # algorithm Quarto 1 uses. Table:
@@ -29,6 +32,7 @@ _quarto:
             "<section id=\"math-xy-inline\"",
             "<section id=\"small-caps-here\"",
             "<section id=\"use-emphasis-and-strong-and-code-here\"",
+            "<section id=\"leading-digit\"",
             "<section id=\"section\"",
             "<section id=\"section-1\"",
           ]
@@ -39,6 +43,7 @@ _quarto:
             "<section id=\"use-here\"",
             "<section id=\"math-inline\"",
             "<section id=\"small-here\"",
+            "<section id=\"1-leading-digit\"",
             "<section id=\"-1\"",
             "<section class=\"section level2\">",
           ]
@@ -55,6 +60,8 @@ _quarto:
 ## Small [caps]{.smallcaps} here
 
 ## Use *emphasis* and **strong** and `code` here
+
+## 1 leading digit
 
 ## ![](img.png)
 

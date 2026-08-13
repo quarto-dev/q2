@@ -207,8 +207,29 @@ fn test_auto_id_respects_explicit_id() {
 }
 
 // ============================================================================
-// Slug filter
+// Slug filter: leading non-letters are dropped (Pandoc's `dropNonLetter`)
 // ============================================================================
+
+#[test]
+fn test_auto_id_drops_leading_digit() {
+    assert_eq!(heading_id("## 1 leading digit"), "leading-digit");
+}
+
+#[test]
+fn test_auto_id_drops_leading_dot() {
+    assert_eq!(heading_id("## .leading dot"), "leading-dot");
+}
+
+#[test]
+fn test_auto_id_drops_leading_number_prefix() {
+    assert_eq!(heading_id("## 2026 roadmap"), "roadmap");
+}
+
+#[test]
+fn test_auto_id_keeps_leading_non_ascii_letter() {
+    // `dropNonLetter` drops non-*letters*, and U+00DC is a letter.
+    assert_eq!(heading_id("## Ünicode leading"), "ünicode-leading");
+}
 
 #[test]
 fn test_auto_id_keeps_interior_punctuation() {
@@ -224,6 +245,12 @@ fn test_auto_id_empty_falls_back_to_section() {
     // An image with empty alt collects to the empty string. Before the fix
     // this emitted a heading with no id at all -- an unlinkable section.
     assert_eq!(heading_id("## ![](img.png)"), "section");
+}
+
+#[test]
+fn test_auto_id_all_digits_falls_back_to_section() {
+    // `dropNonLetter` empties the ident, and the fallback then applies.
+    assert_eq!(heading_id("## 123"), "section");
 }
 
 #[test]

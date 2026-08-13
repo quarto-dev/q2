@@ -4,8 +4,10 @@
 **Braid:** `bd-heading-id-drops-inline-content-fl84n3ql` (bug, p3, label `markdown`)
 **Checkout:** main checkout `~/rooms/room-2/q2`, branch `main` @ `b677afd4`.
 No worktree or branch was created — `/investigate-beads` works in place.
-**Status:** Investigation — pending design alignment with user.
-**Do not start implementation until the user gives the go-ahead.**
+**Status:** **Implemented.** Scope settled with the user on 2026-08-13; see
+**Settled scope** and the **Phase log** at the bottom. The "Open design
+questions" section below is kept as the record of what was asked and is
+answered in-line.
 
 Investigative artifacts: `claude-notes/plans/heading-id-drops-inline-content-investigation/`
 (repro copied from upstream, Pandoc/q2 probes, and
@@ -292,3 +294,125 @@ Skeleton only — contents wait on the design discussion below.
   not touch `autoid.rs` or `postprocess.rs`'s header filter. The two can land
   in either order. Doing this one first is cheap and makes the TOC epic's
   "TOC label and the anchor it targets disagree" symptom half-resolved.
+
+---
+
+# Settled scope (2026-08-13)
+
+The user answered all five questions. In order:
+
+1. **Fix in place.** `autoid.rs` gets an exhaustive match; `bd-zzke` absorbs it
+   later if consolidation ever happens. The user agreed that "stuff around
+   slugs is likely to need its own design" — so this helper may well stay
+   separate even post-consolidation. A doc comment on `collect_text` records
+   that reasoning.
+2. **No quote delimiters in `autoid`.** Confirmed. Recorded as a constraint on
+   any future shared helper, in a comment on the `Quoted` arm.
+3. **`dropNonLetter` folded in**, "to avoid forgetting the followup" — in a
+   separate commit so the two diffs stay separable. `bd-sdalit9y`, filed
+   during the investigation, is therefore resolved by this work.
+4. **Empty-id fallback included.**
+5. **`Shortcode` stays excluded**, with the Q1 divergence noted in a comment
+   and filed as **`bd-2wv8431v`** (p4).
+
+## What shipped
+
+`crates/pampa/src/utils/autoid.rs` — the only file changed.
+
+- `collect_text` is now **exhaustive** over `Inline`; the `_` arm is gone, so
+  a new inline kind fails to compile here instead of silently vanishing from
+  anchor ids. Container kinds recurse; `Str`/`Code`/`Math` push text;
+  `Space`/`SoftBreak`/`LineBreak` push a separator; `Note`, `NoteReference`,
+  `RawInline`, `Delete`, `Attr`, `EditComment`, `Custom` and `Shortcode` are
+  explicitly skipped, each with a reason.
+- **`Cite` needed more than recursion.** Pandoc keeps a citation's *source*
+  inlines as `Cite.content`, so `[see @key, p. 33]` stringifies to that
+  literal text. pampa populates `content` only for the author-in-text form;
+  for the bracketed form `content` is empty and everything lives in
+  `citations`. The fix reconstructs from `prefix + id + suffix` per citation
+  when `content` is empty. Prefix/suffix already carry their own spacing —
+  the second citation in `[@a; @b]` has a `Space` prefix — so no separator
+  needs inventing. This was found by the failing test, not predicted.
+- **Empty-id fallback**: `EMPTY_ID_FALLBACK = "section"`, applied inside
+  `auto_generated_id` so both call sites (the reader's header filter and the
+  qmd writer's redundancy check) stay in agreement.
+- **`dropNonLetter`**: `trim_start_matches(|c: char| !c.is_alphabetic())`,
+  applied after slugification and *before* the empty-id fallback — the order
+  Pandoc uses, and the reason `## 123` yields `section` rather than `123`.
+
+## Tests
+
+- `crates/pampa/tests/integration/test_heading_auto_id.rs` — 30 tests, one per
+  inline kind plus the slug-filter and dedup cases. Registered in
+  `tests/integration/main.rs` per the one-binary rule.
+- `crates/quarto/tests/smoke-all/markdown/heading-auto-id.qmd` — drives the
+  **real render path**, asserting on `<section id=…>` in the emitted HTML,
+  with the pre-fix ids as negative patterns.
+
+Every expected value was measured against **pandoc 3.9.0.2**, not derived from
+reading Pandoc's source. Tables in
+`heading-id-drops-inline-content-investigation/observed-2026-08-13.md`.
+
+## Phase log
+
+**Phase 0 — TDD gate. Confirmed.** The 30-test file was written first and run
+against unmodified `autoid.rs`: **20 failed, 7 passed** (the 7 being the
+controls — emphasis/strong/code, note, raw inline, shortcode, explicit id,
+interior punctuation, leading non-ASCII letter). Every failure was exactly the
+predicted delta, including `["using-a-volume", "using-a-volume-1"]` for two
+headings differing only inside a dropped span — the bogus `-1` suffix the
+strand predicted, reproduced as a test. The smoke-all fixture was
+independently checked against the pre-fix collector (restored from `HEAD`)
+and failed there too.
+
+**Phase 1/2/3 — implementation.** As described above. The `Cite` case failed
+on the first run of the fix and drove the `citations` reconstruction.
+
+**Phase 4 — snapshot reconciliation. Nothing to reconcile.**
+`cargo nextest run --workspace`: **11872 passed, 0 failed**, 197 skipped.
+**Zero `.snap` files added, modified or removed**, and no `.snap.new` written.
+The pre-implementation sweep predicted this: only four fixtures in `crates/`
+contain a heading with an at-risk inline, and none of them snapshots the id.
+`07_headers.qmd` round-trips through the qmd writer, which omits
+auto-generated ids, so its output is unchanged even though the id it derives
+moved from `header-with` to `header-with-link`.
+
+**Phase 5 — end-to-end verification through the binary.**
+
+```bash
+cd claude-notes/plans/heading-id-drops-inline-content-investigation
+cargo run --bin q2 -- render .
+grep -oE '<section id="[^"]*"' _site/index.html
+```
+
+Output, inspected, against the upstream repro's Quarto 1 `_site-q1/`:
+
+| q2 after fix | Quarto 1 `data-anchor-id` |
+|---|---|
+| `using-a-raw-volume` | `using-a-raw-volume` |
+| `see-the-docs-now` | `see-the-docs-now` |
+| `use-strike-here` | `use-strike-here` |
+| `math-xy-inline` | `math-xy-inline` |
+| `small-caps-here` | `small-caps-here` |
+| `use-emphasis-and-strong-and-code-here` | `use-emphasis-and-strong-and-code-here` |
+
+All six match. The wider sweep (`probes/`, 37 headings across five files,
+every inline kind plus the dedup sequences `section`/`section-1`/… and
+`first`/`first-1`) is **byte-identical to Pandoc on every row**.
+
+**Phase 6 — user-facing blast radius. Zero.** `docs/` was rendered before and
+after and the full set of `<section id=…>` values diffed: **1250 ids across
+238 files, no change.** The one docs heading that looked at risk
+(`## \`--force\` and \`--trust\` are different permissions`) turns out to be a
+callout title, not a section heading, so it never becomes an anchor.
+
+## Strand outcomes
+
+- `bd-heading-id-drops-inline-content-fl84n3ql` — fixed.
+- `bd-sdalit9y` (filed during investigation: no `dropNonLetter`, no empty-id
+  fallback) — **resolved by this work**, per the user's "fold in" decision.
+- `bd-2wv8431v` (filed during implementation: heading ids do not reflect
+  shortcode expansion) — open, p4, deliberately not addressed.
+- `bd-toc-smart-quotes-6nro57ed` — untouched. Its epic moves
+  `TocEntry.title` and `toc_render`; nothing here overlaps.
+- `bd-zzke` — untouched, still `deferred`.
