@@ -275,46 +275,72 @@ These are why "change `String` to `Inlines`" is not a one-commit change.
    (`template.rs:961`, `revealjs/footer_logo.rs:187`). `toc_render` swapping
    `html_escape(&entry.title)` for `write_inlines_to` follows an established path.
 
-## Proposed phases
+## Work items
 
-Drafted against the settled decisions above. Phase boundaries are commit points (per
-`CLAUDE.md`'s commit-and-continue rule); the work items inside each still want a pass with
-fresh eyes at implementation time.
+Phase boundaries are commit points (per `CLAUDE.md`'s commit-and-continue rule). Checked
+items are done and committed.
 
-- **Phase 0 — Test plan (TDD, failing first).**
-  - End-to-end first, because its absence is why this shipped: a `toc: true` document whose
-    headings carry a quoted span, inline code, emphasis, math and a link, driven through
-    `render_document_to_file` (pattern: `crates/quarto-core/tests/integration/`
-    `render_page_in_project.rs`) — **not** `render_qmd_to_html` with defaults. Assert the TOC
-    anchor's inner HTML against the Q1 shape captured in
-    `toc-smart-quotes-investigation/OBSERVED.md`. There is currently **no e2e TOC test at
-    all**.
-  - Unit: `TocEntry` round-trips through `ConfigValue` preserving inlines;
-    `from_config_value` accepts both `PandocInlines` and `Scalar(String)` (the latter
-    wrapped as a single `Str`).
-  - Measure snapshot churn here rather than discovering it in Phase 2 (see Risks).
-  - Verify all fail at HEAD before touching anything.
-- **Phase 1 — `TocEntry.title: Inlines`.** Change the type; `generate_toc` clones header
-  content instead of flattening. Delete `toc.rs::inlines_to_text` and its two unit tests.
-  Update `to_config_value` to emit `ConfigValueKind::PandocInlines` and `from_config_value`
-  to accept both shapes. Bump `profile_version` and add the change-log entry to the profile
-  contract doc.
-- **Phase 2 — `toc_render` emits markup.** Replace `html_escape(&entry.title)` with
-  `pampa::writers::html::write_inlines_to`. Cross-check against Q1's `<code>` / `<em>` /
-  `<strong>` / `<span class="math inline">` shapes.
-- **Phase 3 — `toc-title` gets the same treatment (decision 2).** Two parts:
-  - `NavigationToc.title: Option<Inlines>` (toc.rs:181), read from merged metadata without
-    `as_plain_text()` flattening (toc_generate.rs:125-133, toc.rs:214), rendered through
-    `write_inlines_to` into `<h2 id="toc-title">`.
-  - Add `&["toc-title"]` to `MARKDOWN_CONFIG_PATHS` (config_markdown.rs:84-122) so a
-    project-level `toc-title` gets the same markdown semantics as a front-matter one.
-    Test both sources. Confirm the localized-term fallback path
-    (`toc-title-document` via `LanguageTerms`) still yields plain text sensibly — it returns
-    a `String` today and will need wrapping.
-- **Phase 4 — Verification.** `cargo xtask verify`, plus a re-render of both investigation
-  fixtures with the output appended to `OBSERVED.md` alongside the Q1 capture.
-- **Phase 5 — Follow-ups (file, don't implement).** Un-defer `bd-zzke` with the corrected
-  ~10-site list; leave bd-heading-id-drops-inline-content-fl84n3ql to its own strand.
+### Phase 0 — Test plan (TDD, failing first)
+
+- [ ] End-to-end test: a `toc: true` document whose headings carry a quoted span, inline
+      code, emphasis, math and a link, driven through `render_document_to_file` (pattern:
+      `crates/quarto-core/tests/integration/render_page_in_project.rs`) — **not**
+      `render_qmd_to_html` with defaults. Assert the TOC anchor's inner HTML against the Q1
+      shape in `toc-smart-quotes-investigation/OBSERVED.md`. There is currently **no e2e TOC
+      test at all**, which is why this shipped.
+- [ ] Unit: `TocEntry` round-trips through `ConfigValue` preserving inlines.
+- [ ] Unit: `from_config_value` accepts both `PandocInlines` and `Scalar(String)` (the
+      latter wrapped as a single `Str`).
+- [ ] Measure snapshot churn now rather than discovering it in Phase 2 (see Risks).
+- [ ] Confirm every new test fails at HEAD, for the expected reason, before touching
+      production code.
+
+### Phase 1 — `TocEntry.title: Inlines`
+
+- [ ] Change the field type; `generate_toc` clones header content instead of flattening.
+- [ ] Delete `toc.rs::inlines_to_text` and its two unit tests.
+- [ ] `to_config_value` emits `ConfigValueKind::PandocInlines`.
+- [ ] `from_config_value` accepts both shapes.
+- [ ] Bump `profile_version` and add the change-log entry to
+      `claude-notes/designs/document-profile-contract.md`.
+- [ ] Confirm the incremental-rebuild path degrades to a full rebuild on version mismatch
+      rather than erroring.
+
+### Phase 2 — `toc_render` emits markup
+
+- [ ] Replace `html_escape(&entry.title)` with `pampa::writers::html::write_inlines_to`.
+- [ ] Cross-check output against Q1's `<code>` / `<em>` / `<strong>` /
+      `<span class="math inline">` shapes.
+- [ ] Rework the `toc_render.rs:422` test: a literal `<b>` typed in a heading arrives as
+      `Str("<b>")` and must still be escaped; a `RawInline` must not be.
+
+### Phase 3 — `toc-title` gets the same treatment (decision 2)
+
+- [ ] `NavigationToc.title: Option<Inlines>` (toc.rs:181), read from merged metadata without
+      `as_plain_text()` flattening (toc_generate.rs:125-133, toc.rs:214).
+- [ ] Render it through `write_inlines_to` into `<h2 id="toc-title">`.
+- [ ] Wrap the localized-term fallback (`toc-title-document` via `LanguageTerms`) — it
+      returns a `String` today.
+- [ ] Add `&["toc-title"]` to `MARKDOWN_CONFIG_PATHS` (config_markdown.rs:84-122); test both
+      the front-matter and the `_quarto.yml` source.
+- [ ] Add the "see also, and when to pick which" cross-reference note to *both* registries
+      (`meta_annotations.rs` `ANNOTATIONS` and `config_markdown.rs`
+      `MARKDOWN_CONFIG_PATHS`) — this is `bd-qzn1azon`'s whole scope, and Phase 3 is already
+      editing one of them. Close `bd-qzn1azon` when done.
+
+### Phase 4 — Verification
+
+- [ ] `cargo xtask verify` (full, not `--skip-hub-build` — `quarto-core` and
+      `quarto-pandoc-types` are both touched).
+- [ ] Re-render both investigation fixtures; append the output to `OBSERVED.md` beside the
+      Q1 capture.
+- [ ] Count and summarize snapshot changes per `CLAUDE.md`; flag anything surprising.
+
+### Phase 5 — Follow-ups (file, don't implement)
+
+- [ ] Un-defer `bd-zzke` with the corrected ~10-site list.
+- [ ] Leave `bd-heading-id-drops-inline-content-fl84n3ql` to its own strand (`related` edge
+      added 2026-08-13).
 
 No docs phase: no new user-facing option — this is q2 catching up to Q1's existing behavior.
 
@@ -343,16 +369,18 @@ Kept for the record, since the reasoning is easy to re-litigate:
   construction, so **wrap it as a single `Str`**. Re-parsing would bypass `ProjectConfig`'s
   deliberate default; the registry (decision 2) is the sanctioned opt-in.
 
-## One gap worth filing separately
+## Adjacent gap — filed as `bd-d7ljiz9q`
 
-The user's standing rationale for blessing more keys is that `!str` / `!path` give authors
-control. That is true in document front matter and **false in project config**: after load,
+The standing rationale for blessing more keys is that `!str` / `!path` give authors control.
+That is true in document front matter and **false in project config**: after load,
 `!str`-tagged and untagged strings are both `Scalar(String)`, so a blessed key cannot be
 opted out of markdown parsing from `_quarto.yml` (documented at config_markdown.rs:40-45).
 
-This is accepted for `toc-title` specifically. But as the blessed set grows — `bd-xygsu15r`
-is the next one queued — the missing opt-out becomes more load-bearing, and it is the one
-mechanism the broader policy leans on. Not filed; offered.
+Accepted for `toc-title` specifically (decision 2). But as the blessed set grows —
+`bd-xygsu15r` is next in the queue — the missing opt-out becomes more load-bearing, and it
+is the one mechanism the broader policy leans on. **Filed 2026-08-13 as `bd-d7ljiz9q`**
+(`bug`, P2, `discovered-from` this strand, `related` to `bd-qzn1azon`), with three
+non-decided fix directions. **Not in this epic's scope.**
 
 ## Risks / tradeoffs (draft)
 
