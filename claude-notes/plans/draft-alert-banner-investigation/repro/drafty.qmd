@@ -1,0 +1,6 @@
+---
+title: "Drafty"
+draft: true
+---
+
+A draft page.
