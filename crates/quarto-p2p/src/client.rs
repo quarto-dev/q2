@@ -1,6 +1,8 @@
-//! Guest side of the tunnel: local loopback TCP proxy, one accepted
-//! connection = one token-prefixed QUIC bi-stream; re-dial loop with
-//! backoff on connection loss.
+//! Guest side of the tunnel: [`TunnelClient::connect`] builds a
+//! supervised connection to the host (one token-prefixed QUIC bi-stream
+//! per `open_stream` call, re-dial loop with backoff on connection
+//! loss); [`TunnelClient::bind`] adds a local loopback TCP proxy that
+//! splices each accepted connection onto one such stream.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -9,7 +11,7 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use iroh::address_lookup::memory::MemoryLookup;
-use iroh::endpoint::{Connection, ConnectionError, PathList, VarInt};
+use iroh::endpoint::{Connection, ConnectionError, PathList, RecvStream, SendStream, VarInt};
 use iroh::{Endpoint, EndpointAddr};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{RwLock, watch};
@@ -37,7 +39,7 @@ const STREAM_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 /// Poll grain while waiting for the supervisor to notice a dead connection.
 const RETRY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
-/// Configuration for [`TunnelClient::bind`].
+/// Configuration for [`TunnelClient::bind`] and [`TunnelClient::connect`].
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TunnelClientConfig {
     /// Endpoint environment (production n0 vs. hermetic loopback).
@@ -55,11 +57,29 @@ impl TunnelClient {
     ///
     /// The initial dial happens here: an unreachable host is an error at
     /// bind time (clear CLI UX), not a background retry.
+    ///
+    /// Equivalent to [`TunnelClient::connect`] followed by
+    /// [`TunnelConnection::bind`].
     pub async fn bind(
         cfg: TunnelClientConfig,
         ticket: PreviewShareTicket,
         local: SocketAddr,
     ) -> Result<(SocketAddr, TunnelClientHandle), TunnelError> {
+        Self::connect(cfg, ticket).await?.bind(local).await
+    }
+
+    /// Dial the ticket's endpoint *without* binding a local listener
+    /// (live-share payload plan Phase 3, design decision 1): the caller
+    /// drives token-prefixed streams itself via
+    /// [`TunnelConnection::open_stream`] — e.g. the join path's
+    /// preflight (`/health` + `/api/preview/config` run before the
+    /// local port exists) and the L7 join frontend's per-connection
+    /// tunnel fallback. The initial dial happens here, same as
+    /// [`bind`](Self::bind).
+    pub async fn connect(
+        cfg: TunnelClientConfig,
+        ticket: PreviewShareTicket,
+    ) -> Result<TunnelConnection, TunnelError> {
         // Seed a MemoryLookup with the ticket's addresses so re-dials
         // re-resolve without n0 infrastructure.
         let lookup = MemoryLookup::new();
@@ -72,9 +92,6 @@ impl TunnelClient {
             .await
             .map_err(|_| TunnelError::Connect("timed out dialing the share host".into()))?
             .map_err(|e| TunnelError::Connect(Box::new(e)))?;
-
-        let listener = TcpListener::bind(local).await.map_err(TunnelError::Proxy)?;
-        let local_addr = listener.local_addr().map_err(TunnelError::Proxy)?;
 
         let (status_tx, status_rx) =
             watch::channel(TunnelStatus::Connected(selected_path_kind(&conn.paths())));
@@ -90,17 +107,96 @@ impl TunnelClient {
         tokio::spawn(watch_paths(conn, shared.clone(), 0));
 
         let supervisor = tokio::spawn(supervise_connection(shared.clone()));
-        let acceptor = tokio::spawn(accept_loop(listener, shared));
+        Ok(TunnelConnection {
+            endpoint,
+            shared,
+            supervisor,
+            status_rx,
+        })
+    }
+}
 
+/// A live connection to the share host: the endpoint, the current QUIC
+/// connection, and the supervisor that re-dials with backoff when it
+/// dies. `open_stream` takes `&self`, so one connection can be shared
+/// across many caller tasks (the L7 join frontend's per-connection
+/// fallback does exactly that).
+pub struct TunnelConnection {
+    endpoint: Endpoint,
+    shared: Arc<Shared>,
+    supervisor: JoinHandle<()>,
+    status_rx: watch::Receiver<TunnelStatus>,
+}
+
+impl TunnelConnection {
+    /// Open one token-prefixed bi-stream to the host, waiting through a
+    /// supervisor re-dial when the connection is down (budget:
+    /// [`STREAM_WAIT_TIMEOUT`], matching the splice path's
+    /// per-connection wait). `None` means the budget ran out or the
+    /// host rejected the token (terminal — the same ticket can never
+    /// succeed); callers drop the local connection they were serving.
+    ///
+    /// The token prefix is written before this returns: it
+    /// authenticates the stream and satisfies iroh's write-first rule
+    /// (the peer's `accept_bi` does not wake until bytes flow), and
+    /// payload bytes pipeline right behind it — no extra RTT.
+    ///
+    /// Never cancel the returned future: dropping it mid-open can reset
+    /// a stream before its token lands, which the host treats as an
+    /// auth failure and answers by closing the whole connection. Pick a
+    /// budget with [`open_stream_with_budget`](Self::open_stream_with_budget)
+    /// instead of racing it against a timeout.
+    pub async fn open_stream(&self) -> Option<(SendStream, RecvStream)> {
+        self.open_stream_with_budget(STREAM_WAIT_TIMEOUT).await
+    }
+
+    /// [`open_stream`](Self::open_stream) with a caller-chosen wait
+    /// budget — the join preflight probes with a short one so a wedged
+    /// host can't park the readiness loop.
+    pub async fn open_stream_with_budget(
+        &self,
+        budget: Duration,
+    ) -> Option<(SendStream, RecvStream)> {
+        open_stream(&self.shared, budget).await
+    }
+
+    /// Watch channel for CLI messaging ("connected via …",
+    /// "reconnecting…", "rejected").
+    pub fn status(&self) -> watch::Receiver<TunnelStatus> {
+        self.status_rx.clone()
+    }
+
+    /// Bind the splice accept loop on `local` (port 0 allowed): one
+    /// accepted TCP connection = one [`open_stream`](Self::open_stream).
+    /// This is [`TunnelClient::bind`]'s accept half, split out so a
+    /// caller that already connected (and maybe ran a preflight over
+    /// raw streams) keeps the connection it dialed.
+    pub async fn bind(
+        self,
+        local: SocketAddr,
+    ) -> Result<(SocketAddr, TunnelClientHandle), TunnelError> {
+        let listener = TcpListener::bind(local).await.map_err(TunnelError::Proxy)?;
+        let local_addr = listener.local_addr().map_err(TunnelError::Proxy)?;
+        let acceptor = tokio::spawn(accept_loop(listener, self.shared));
         Ok((
             local_addr,
             TunnelClientHandle {
-                endpoint,
-                supervisor,
+                endpoint: self.endpoint,
+                supervisor: self.supervisor,
                 acceptor,
-                status_rx,
+                status_rx: self.status_rx,
             },
         ))
+    }
+
+    /// Stop the re-dial supervisor and close the endpoint gracefully.
+    /// Takes `&self` (unlike [`TunnelClientHandle::shutdown`]) so a
+    /// shared connection — e.g. held by the join frontend's
+    /// per-connection tasks — can still be shut down by its owner.
+    pub async fn shutdown(&self) -> Result<(), TunnelError> {
+        self.supervisor.abort();
+        self.endpoint.close().await;
+        Ok(())
     }
 }
 
@@ -245,8 +341,27 @@ async fn accept_loop(listener: TcpListener, shared: Arc<Shared>) {
 
 /// One local TCP connection = one token-prefixed QUIC bi-stream.
 async fn handle_local_conn(mut tcp: TcpStream, shared: Arc<Shared>) {
-    let deadline = tokio::time::Instant::now() + STREAM_WAIT_TIMEOUT;
-    let (send, recv) = loop {
+    let Some((send, recv)) = open_stream(&shared, STREAM_WAIT_TIMEOUT).await else {
+        return; // budget exhausted or terminally rejected: drop the TCP conn
+    };
+    let mut quic = tokio::io::join(recv, send);
+    match tokio::io::copy_bidirectional(&mut tcp, &mut quic).await {
+        Ok((to_host, from_host)) => {
+            tracing::debug!(to_host, from_host, "preview tunnel: local conn closed");
+        }
+        Err(err) => {
+            tracing::debug!(%err, "preview tunnel: local conn ended with error");
+        }
+    }
+}
+
+/// Open one token-prefixed bi-stream on the current connection,
+/// waiting through a supervisor re-dial when it is down. `None` when
+/// the `budget` runs out or the host rejected the token (terminal —
+/// re-dialing with the same ticket can never succeed).
+async fn open_stream(shared: &Shared, budget: Duration) -> Option<(SendStream, RecvStream)> {
+    let deadline = tokio::time::Instant::now() + budget;
+    let (mut send, recv) = loop {
         let conn = shared.conn.read().await.clone();
         match conn.open_bi().await {
             Ok(pair) => break pair,
@@ -259,7 +374,7 @@ async fn handle_local_conn(mut tcp: TcpStream, shared: Arc<Shared>) {
                 tokio::time::sleep(RETRY_POLL_INTERVAL).await;
                 let Some(remaining) = deadline.checked_duration_since(tokio::time::Instant::now())
                 else {
-                    return; // budget exhausted; drop the TCP conn
+                    return None; // budget exhausted
                 };
                 let mut status = shared.status_rx.clone();
                 match timeout(
@@ -271,28 +386,18 @@ async fn handle_local_conn(mut tcp: TcpStream, shared: Arc<Shared>) {
                     // Reconnected: retry open_bi on the swapped connection.
                     Ok(Ok(current)) if matches!(*current, TunnelStatus::Connected(_)) => {}
                     // Rejected (terminal), channel closed, or budget
-                    // exhausted: drop the TCP conn.
-                    _ => return,
+                    // exhausted.
+                    _ => return None,
                 }
             }
         }
     };
 
-    let mut send = send;
     // Token prefix: authenticates the stream and satisfies iroh's
     // write-first rule (the peer's accept_bi does not wake until bytes
     // flow). Payload bytes pipeline right behind it — no extra RTT.
     if send.write_all(&shared.token).await.is_err() {
-        return;
+        return None;
     }
-
-    let mut quic = tokio::io::join(recv, send);
-    match tokio::io::copy_bidirectional(&mut tcp, &mut quic).await {
-        Ok((to_host, from_host)) => {
-            tracing::debug!(to_host, from_host, "preview tunnel: local conn closed");
-        }
-        Err(err) => {
-            tracing::debug!(%err, "preview tunnel: local conn ended with error");
-        }
-    }
+    Some((send, recv))
 }

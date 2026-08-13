@@ -43,6 +43,38 @@ pub async fn spawn_http_target(app: axum::Router) -> SocketAddr {
     addr
 }
 
+/// Raw TCP echo target: every accepted connection gets its own bytes
+/// back. The `connect()` tests use it because `TunnelClient::connect`
+/// is a transport seam — no HTTP involved. Detached like
+/// [`spawn_http_target`].
+pub async fn spawn_tcp_echo_target() -> SocketAddr {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind echo target");
+    let addr = listener.local_addr().expect("echo local_addr");
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut sock, _)) = listener.accept().await else {
+                return;
+            };
+            tokio::spawn(async move {
+                let mut buf = [0u8; 8192];
+                loop {
+                    match sock.read(&mut buf).await {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => {
+                            if sock.write_all(&buf[..n]).await.is_err() {
+                                return;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    });
+    addr
+}
+
 /// Raw HTTP/1.1 GET with `Connection: close`; returns the full response
 /// text (status line + headers + body). Panics on I/O failure.
 pub async fn http_get_close(addr: SocketAddr, path: &str) -> String {

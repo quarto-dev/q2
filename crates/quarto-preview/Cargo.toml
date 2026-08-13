@@ -52,6 +52,12 @@ reqwest = { version = "0.12", features = ["blocking", "json"] }
 # The Phase 3 money test dials samod's `/ws` through the tunnel
 # (`dial_websocket` takes a `url::Url`).
 url = "2"
+# The join-frontend tests drive a WebSocket upgrade through the guest
+# port (tokio-tungstenite client) and stand up a ws echo target behind
+# the tunnel (axum `ws` feature).
+axum = { version = "0.8", features = ["ws"] }
+futures = "0.3"
+tokio-tungstenite = "0.29"
 
 [lints]
 workspace = true

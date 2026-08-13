@@ -7,13 +7,18 @@
 //! ([`PreviewShareTicket`]) carries the host's `EndpointAddr` and a random
 //! 256-bit session token — possession of the string is the capability.
 //!
+//! [`TunnelClient::connect`] is the listener-less half of the guest: a
+//! [`TunnelConnection`] opens raw token-prefixed streams for callers
+//! that speak their own protocol over them (the join path's preflight
+//! and the L7 join frontend; live-share payload plan Phase 3).
+//!
 //! Plan: `claude-notes/plans/2026-08-03-q2-preview-live-share-iroh.md`.
 
 mod client;
 mod host;
 mod ticket;
 
-pub use client::{TunnelClient, TunnelClientConfig, TunnelClientHandle};
+pub use client::{TunnelClient, TunnelClientConfig, TunnelClientHandle, TunnelConnection};
 pub use host::{TunnelHost, TunnelHostConfig, TunnelHostHandle};
 /// Typed error for [`PreviewShareTicket`] parsing (`FromStr`).
 pub use iroh_tickets::ParseError as TicketParseError;

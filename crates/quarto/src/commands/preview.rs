@@ -379,63 +379,90 @@ async fn run_join(args: JoinArgs) -> Result<()> {
     println!();
     println!("  q2 preview — joining a shared session (end-to-end encrypted via iroh)");
 
-    // The initial dial happens inside `bind`: an unreachable host is a
+    // The initial dial happens inside `connect`: an unreachable host is a
     // clear error right here, not a silent background retry.
-    let (bound, handle) =
-        quarto_p2p::TunnelClient::bind(quarto_p2p::TunnelClientConfig::default(), ticket, local)
-            .await
-            .map_err(join_bind_error)?;
+    let conn = quarto_p2p::TunnelClient::connect(quarto_p2p::TunnelClientConfig::default(), ticket)
+        .await
+        .map_err(join_bind_error)?;
 
-    // Resolve the boot URL through the tunnel before printing it.
+    // Preflight over raw bi-streams *before* binding the local port
+    // (live-share payload plan Phase 3, design decision 6 — no browser
+    // connection can arrive before the serving mode is fixed).
     // Readiness = the first successful GET /health *through the
     // tunnel*: a bare TCP accept (host mode's readiness signal) would
     // lie here — the local proxy accepts even when the host is
     // unreachable — so only an end-to-end HTTP roundtrip proves the
-    // session is usable. Editor-UI hosts then carry their share-route
-    // boot params in /api/preview/config (bd-7htq16rx): boot the guest
-    // to the same share URL the host printed, ephemeral flag included,
-    // so hub-client skips project-set onboarding and joins the
-    // document. Viewer-mode and older hosts answer without
-    // `editorBoot` and keep the root URL.
+    // session is usable. The config fetch then carries both the
+    // editor-mode boot params (bd-7htq16rx) and the asset manifest
+    // hashes (bd-ee2fqm95).
     const READY_TIMEOUT: Duration = Duration::from_secs(15);
-    let url = if wait_until_healthy(bound, READY_TIMEOUT).await {
-        info!(local = %bound, "shared session healthy through the tunnel");
-        let config = fetch_preview_config(bound).await;
-        let boot = config.as_ref().and_then(|c| c.valid_editor_boot());
-        // Live-share plan Phase 2 (bd-ee2fqm95): decide whether this
-        // guest's embedded SPA bundle is byte-identical to the host's
-        // (manifest hash match) and assets can be served locally. The
-        // session UI is the editor iff the host advertised editorBoot
-        // (design decision 5). Phase 3 acts on the decision; for now
-        // it is logged.
-        let ui = if boot.is_some() {
-            quarto_preview::PreviewUi::Editor
-        } else {
-            quarto_preview::PreviewUi::Viewer
-        };
-        let mode = quarto_preview::decide_asset_mode(
-            config.as_ref().and_then(|c| c.assets.as_ref()),
-            ui,
-            &quarto_preview::embedded_manifests(),
-            quarto_preview::spa_dir_override_active(),
-        );
-        info!(local = %bound, "{}", mode.log_line());
-        match boot {
-            Some(boot) => build_guest_editor_url(&bound, boot),
-            None => format!("http://{bound}/"),
-        }
+    let config = if wait_until_healthy(&conn, READY_TIMEOUT).await {
+        info!("shared session healthy through the tunnel");
+        fetch_preview_config(&conn).await
     } else {
         // We still consider a >15s startup a bug; printing the root
         // URL anyway (rather than never) preserves the old behavior as
         // a floor, and the warning gives the slow start visibility
-        // instead of leaving it silent.
+        // instead of leaving it silent. The mode decision below maps a
+        // missing config to full tunneling.
         tracing::warn!(
-            local = %bound,
             timeout_secs = READY_TIMEOUT.as_secs(),
             "shared session did not answer /health within the timeout; \
              the URL below may need a manual reload"
         );
-        format!("http://{bound}/")
+        None
+    };
+    // Editor-UI hosts carry their share-route boot params in
+    // /api/preview/config: boot the guest to the same share URL the
+    // host printed, ephemeral flag included, so hub-client skips
+    // project-set onboarding and joins the document. Viewer-mode and
+    // older hosts answer without `editorBoot` and keep the root URL.
+    let boot = config.as_ref().and_then(|c| c.valid_editor_boot());
+    // Live-share plan Phases 2–3 (bd-ee2fqm95, bd-tl2j8js8): decide
+    // whether this guest's embedded SPA bundle is byte-identical to
+    // the host's (manifest hash match) and assets can be served
+    // locally. The session UI is the editor iff the host advertised
+    // editorBoot (design decision 5).
+    let ui = if boot.is_some() {
+        quarto_preview::PreviewUi::Editor
+    } else {
+        quarto_preview::PreviewUi::Viewer
+    };
+    let mode = quarto_preview::decide_asset_mode(
+        config.as_ref().and_then(|c| c.assets.as_ref()),
+        ui,
+        &quarto_preview::embedded_manifests(),
+        quarto_preview::spa_dir_override_active(),
+    );
+    info!("{}", mode.log_line());
+
+    // Bind the local end only now that the mode is fixed: the L7 join
+    // frontend on a hash match (assets served from this binary, only
+    // the dynamic traffic tunneled), the plain splice otherwise.
+    // `Local` implies this binary has a manifest (the decision compared
+    // its hash), but a missing one falls back to the splice regardless.
+    let local_serving = match mode {
+        quarto_preview::AssetMode::Local => quarto_preview::embedded_manifest(ui)
+            .map(|manifest| quarto_preview::join_frontend::LocalServing::Embedded { ui, manifest }),
+        quarto_preview::AssetMode::Tunnel(_) => None,
+    };
+    let (bound, session) = match local_serving {
+        Some(serving) => {
+            let (addr, handle) = quarto_preview::join_frontend::bind(conn, local, serving)
+                .await
+                .map_err(join_bind_error)?;
+            println!("  ● serving UI assets locally (host manifest hash match)");
+            (addr, JoinSession::Frontend(handle))
+        }
+        None => {
+            let (addr, handle) = conn.bind(local).await.map_err(join_bind_error)?;
+            (addr, JoinSession::Tunnel(handle))
+        }
+    };
+
+    let url = match boot {
+        Some(boot) => build_guest_editor_url(&bound, boot),
+        None => format!("http://{bound}/"),
     };
 
     println!("  → {url}");
@@ -449,7 +476,7 @@ async fn run_join(args: JoinArgs) -> Result<()> {
 
     // Report status transitions ("connected via relay", "reconnecting…")
     // until Ctrl-C — or fail fast when the host rejects the token.
-    let mut status = handle.status();
+    let mut status = session.status();
     let status_reporter = async move {
         loop {
             match *status.borrow_and_update() {
@@ -483,10 +510,35 @@ async fn run_join(args: JoinArgs) -> Result<()> {
         reported = status_reporter => reported,
     };
 
-    if let Err(e) = handle.shutdown().await {
+    if let Err(e) = session.shutdown().await {
         tracing::warn!(error = %e, "tunnel client shutdown failed");
     }
     outcome
+}
+
+/// The join session's local serving end (live-share payload plan Phase
+/// 3): either the L7 join frontend (manifest hash match — assets served
+/// from this binary, dynamic traffic tunneled) or the plain splice
+/// (full tunnel). Same status/shutdown surface.
+enum JoinSession {
+    Frontend(quarto_preview::join_frontend::JoinFrontendHandle),
+    Tunnel(quarto_p2p::TunnelClientHandle),
+}
+
+impl JoinSession {
+    fn status(&self) -> tokio::sync::watch::Receiver<quarto_p2p::TunnelStatus> {
+        match self {
+            JoinSession::Frontend(handle) => handle.status(),
+            JoinSession::Tunnel(handle) => handle.status(),
+        }
+    }
+
+    async fn shutdown(self) -> Result<(), quarto_p2p::TunnelError> {
+        match self {
+            JoinSession::Frontend(handle) => handle.shutdown().await,
+            JoinSession::Tunnel(handle) => handle.shutdown().await,
+        }
+    }
 }
 
 /// Map a tunnel bind failure to actionable CLI guidance.
@@ -506,11 +558,11 @@ fn join_bind_error(e: quarto_p2p::TunnelError) -> anyhow::Error {
     }
 }
 
-/// Poll `GET /health` on the local proxy until it answers 200 — i.e. the
-/// host's preview hub answered *through the tunnel* — or `total_timeout`
+/// Poll `GET /health` through the tunnel until it answers 200 — i.e.
+/// the host's preview hub answered end to end — or `total_timeout`
 /// elapses. Join mode's readiness gate; same backoff shape and
 /// open-anyway-on-timeout contract as [`wait_until_accepting`].
-async fn wait_until_healthy(addr: std::net::SocketAddr, total_timeout: Duration) -> bool {
+async fn wait_until_healthy(conn: &quarto_p2p::TunnelConnection, total_timeout: Duration) -> bool {
     const INITIAL_BACKOFF: Duration = Duration::from_millis(50);
     const MAX_BACKOFF: Duration = Duration::from_secs(1);
     // A tunnel roundtrip can legitimately take a relay RTT, but one
@@ -525,9 +577,7 @@ async fn wait_until_healthy(addr: std::net::SocketAddr, total_timeout: Duration)
         if remaining.is_zero() {
             return false;
         }
-        if let Ok(true) =
-            tokio::time::timeout(remaining.min(ATTEMPT_TIMEOUT), health_get_ok(addr)).await
-        {
+        if health_get_ok(conn, remaining.min(ATTEMPT_TIMEOUT)).await {
             return true;
         }
 
@@ -540,26 +590,47 @@ async fn wait_until_healthy(addr: std::net::SocketAddr, total_timeout: Duration)
     }
 }
 
-/// One raw HTTP/1.1 `GET /health` against `addr`; `true` iff the status
-/// line comes back 200. Hand-rolled so the CLI doesn't grow an HTTP
-/// client dependency for a one-line probe.
-async fn health_get_ok(addr: std::net::SocketAddr) -> bool {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let Ok(mut stream) = tokio::net::TcpStream::connect(addr).await else {
-        return false;
-    };
-    if stream
-        .write_all(b"GET /health HTTP/1.1\r\nHost: q2-preview-join\r\nConnection: close\r\n\r\n")
+/// One raw HTTP/1.1 `GET /health` through the tunnel; `true` iff the
+/// status line comes back 200.
+async fn health_get_ok(conn: &quarto_p2p::TunnelConnection, budget: Duration) -> bool {
+    tunnel_get(conn, "/health", budget)
         .await
-        .is_err()
-    {
-        return false;
-    }
-    let mut response = Vec::new();
-    if stream.read_to_end(&mut response).await.is_err() {
-        return false;
-    }
-    response.starts_with(b"HTTP/1.1 200")
+        .is_some_and(|response| response.starts_with(b"HTTP/1.1 200"))
+}
+
+/// One raw HTTP/1.1 GET through the tunnel (a fresh token-prefixed
+/// stream); the full response bytes. Hand-rolled so the CLI doesn't
+/// grow an HTTP client dependency for these one-line probes. Any
+/// failure — open, write, read, timeout — is `None`.
+///
+/// `open_stream_with_budget` runs to completion (never cancelled
+/// mid-open: a stream reset before its token lands is treated by the
+/// host as an auth failure and closes the whole connection); the
+/// timeout races only the HTTP exchange, where a cancel is an ordinary
+/// stream reset.
+async fn tunnel_get(
+    conn: &quarto_p2p::TunnelConnection,
+    path: &str,
+    budget: Duration,
+) -> Option<Vec<u8>> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let (send, recv) = conn.open_stream_with_budget(budget).await?;
+    let mut stream = tokio::io::join(recv, send);
+    let exchange = async move {
+        stream
+            .write_all(
+                format!(
+                    "GET {path} HTTP/1.1\r\nHost: q2-preview-join\r\nConnection: close\r\n\r\n"
+                )
+                .as_bytes(),
+            )
+            .await
+            .ok()?;
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).await.ok()?;
+        Some(response)
+    };
+    tokio::time::timeout(budget, exchange).await.ok()?
 }
 
 /// The `/api/preview/config` wire shape as the join path consumes it:
@@ -583,21 +654,12 @@ impl PreviewConfigWire {
     }
 }
 
-/// One raw HTTP/1.1 `GET /api/preview/config` against `addr`; the
+/// One raw HTTP/1.1 `GET /api/preview/config` through the tunnel; the
 /// parsed body. Hand-rolled for the same reason as [`health_get_ok`].
-/// Any failure — connect, non-200, malformed body — is `None`, and the
+/// Any failure — open, non-200, malformed body — is `None`, and the
 /// caller falls back to the root URL with all assets tunneled.
-async fn fetch_preview_config(addr: std::net::SocketAddr) -> Option<PreviewConfigWire> {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let mut stream = tokio::net::TcpStream::connect(addr).await.ok()?;
-    stream
-        .write_all(
-            b"GET /api/preview/config HTTP/1.1\r\nHost: q2-preview-join\r\nConnection: close\r\n\r\n",
-        )
-        .await
-        .ok()?;
-    let mut response = Vec::new();
-    stream.read_to_end(&mut response).await.ok()?;
+async fn fetch_preview_config(conn: &quarto_p2p::TunnelConnection) -> Option<PreviewConfigWire> {
+    let response = tunnel_get(conn, "/api/preview/config", Duration::from_secs(15)).await?;
     if !response.starts_with(b"HTTP/1.1 200") {
         return None;
     }
@@ -1517,9 +1579,12 @@ mod tests {
 
     // ──────────────────────────────────────────────────────────────
     // Phase 3 (bd-6y0p1bne): wait_until_healthy — join mode's
-    // browser-open gate is an HTTP /health roundtrip through the local
-    // proxy, not a bare TCP accept (which the proxy always grants,
-    // even when the tunnel's far side is gone).
+    // browser-open gate is an HTTP /health roundtrip through the
+    // tunnel, not a bare TCP accept (which the proxy always grants,
+    // even when the tunnel's far side is gone). Since the payload
+    // plan's Phase 3 (bd-tl2j8js8) the preflight runs over raw
+    // `open_stream` bi-streams before the local port exists, so these
+    // tests put a hermetic tunnel pair in front of the canned server.
     // ──────────────────────────────────────────────────────────────
 
     /// Serve a fixed HTTP/1.1 response to every connection on a fresh
@@ -1545,41 +1610,78 @@ mod tests {
         addr
     }
 
-    #[tokio::test]
+    /// A hermetic tunnel pair in front of `target` (no n0
+    /// infrastructure). The host handle is returned so the test keeps
+    /// it alive.
+    async fn hermetic_conn(
+        target: std::net::SocketAddr,
+    ) -> (quarto_p2p::TunnelConnection, quarto_p2p::TunnelHostHandle) {
+        let (ticket, host) = quarto_p2p::TunnelHost::spawn(
+            quarto_p2p::TunnelHostConfig {
+                preset: quarto_p2p::EndpointPreset::HermeticLoopback,
+                ..Default::default()
+            },
+            target,
+        )
+        .await
+        .expect("spawn tunnel host");
+        let conn = quarto_p2p::TunnelClient::connect(
+            quarto_p2p::TunnelClientConfig {
+                preset: quarto_p2p::EndpointPreset::HermeticLoopback,
+            },
+            ticket,
+        )
+        .await
+        .expect("connect");
+        (conn, host)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn wait_until_healthy_true_on_200() {
         let addr = spawn_canned_http(
             "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
         )
         .await;
+        let (conn, host) = hermetic_conn(addr).await;
         assert!(
-            wait_until_healthy(addr, std::time::Duration::from_secs(5)).await,
+            wait_until_healthy(&conn, std::time::Duration::from_secs(5)).await,
             "a 200 /health must count as ready"
         );
+        conn.shutdown().await.expect("connection shutdown");
+        host.shutdown().await.expect("host shutdown");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn wait_until_healthy_false_on_non_200() {
-        // A reachable server that answers 503 (e.g. the proxy is up but
-        // the host hub is not) must NOT count as ready.
+        // A reachable server that answers 503 (e.g. the tunnel is up
+        // but the host hub is not) must NOT count as ready.
         let addr = spawn_canned_http(
             "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
         )
         .await;
+        let (conn, host) = hermetic_conn(addr).await;
         let timeout = std::time::Duration::from_millis(300);
         let start = std::time::Instant::now();
-        let ready = wait_until_healthy(addr, timeout).await;
+        let ready = wait_until_healthy(&conn, timeout).await;
         assert!(!ready, "non-200 answers must not count as healthy");
         assert!(
             start.elapsed() >= timeout,
             "must keep polling until the deadline in case health recovers"
         );
+        conn.shutdown().await.expect("connection shutdown");
+        host.shutdown().await.expect("host shutdown");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn wait_until_healthy_false_when_nothing_listening() {
+        // The tunnel host is up but its target port is closed: the
+        // stream opens, then the host resets it (target unavailable).
         let port = reserve_free_port();
         let addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
-        let ready = wait_until_healthy(addr, std::time::Duration::from_millis(200)).await;
-        assert!(!ready, "no listener → not healthy");
+        let (conn, host) = hermetic_conn(addr).await;
+        let ready = wait_until_healthy(&conn, std::time::Duration::from_millis(200)).await;
+        assert!(!ready, "no listener behind the tunnel → not healthy");
+        conn.shutdown().await.expect("connection shutdown");
+        host.shutdown().await.expect("host shutdown");
     }
 }

@@ -29,11 +29,13 @@ pub mod capture_driver;
 pub mod config;
 pub mod deps;
 pub mod diagnostics;
+pub mod join_frontend;
 pub mod re_execute;
 pub mod share;
 
 pub use asset_manifest::{
-    AssetMode, AssetsBlock, EmbeddedManifests, TunnelReason, decide_asset_mode, embedded_manifests,
+    AssetMode, AssetsBlock, EmbeddedManifests, TunnelReason, decide_asset_mode, embedded_manifest,
+    embedded_manifests,
 };
 pub use config::EnginePolicy;
 
@@ -876,6 +878,18 @@ struct AssetRequestCtx<'a> {
     is_head: bool,
 }
 
+/// The wire parts of an asset response: status, the full header set,
+/// and the (possibly empty, for HEAD) body. The axum handlers wrap
+/// these in a `Response`; Phase 3's join frontend serializes them onto
+/// its raw loopback connection. One builder — header,
+/// encoding-negotiation, and HEAD semantics live here alone (plan
+/// design decisions 2–3: never fork this logic).
+struct AssetResponseParts {
+    status: StatusCode,
+    headers: HeaderMap,
+    body: Vec<u8>,
+}
+
 /// Build the response for a served asset. Owns every header the asset
 /// path sets: Content-Type; the cache contract (mirrors
 /// `scripts/local-prod-server.mjs` — Vite's content-hashed `assets/*`
@@ -888,6 +902,16 @@ fn asset_response(
     gz_bytes: Option<Vec<u8>>,
     ctx: AssetRequestCtx<'_>,
 ) -> Response {
+    let parts = asset_response_parts(rel, bytes, gz_bytes, ctx);
+    (parts.status, parts.headers, parts.body).into_response()
+}
+
+fn asset_response_parts(
+    rel: &str,
+    bytes: Vec<u8>,
+    gz_bytes: Option<Vec<u8>>,
+    ctx: AssetRequestCtx<'_>,
+) -> AssetResponseParts {
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, content_type_for(rel));
     headers.insert(
@@ -916,7 +940,11 @@ fn asset_response(
         HeaderValue::from_str(&body.len().to_string()).expect("valid Content-Length"),
     );
     let body = if ctx.is_head { Vec::new() } else { body };
-    (StatusCode::OK, headers, body).into_response()
+    AssetResponseParts {
+        status: StatusCode::OK,
+        headers,
+        body,
+    }
 }
 
 /// Does the `Accept-Encoding` value permit gzip? Token match is

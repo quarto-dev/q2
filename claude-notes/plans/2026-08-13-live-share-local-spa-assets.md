@@ -2,10 +2,13 @@
 
 **Epic:** bd-puc7xt6e
 **Date:** 2026-08-13
-**Status:** Phase 2 complete (2026-08-13) — manifest + config handshake
-landed (`assets` block advertised, guest mode decision logged); Phase 1
-cut the wire payload 54.67 → 10.36 MB (5.3×) and slow-link first render
-48.0 → 10.0 s. **Next: Phase 3 (L7 join frontend).**
+**Status:** Phase 3 complete (2026-08-13) — `TunnelClient::connect` +
+the L7 join frontend landed; a hash-matching guest now serves the SPA
+from its own binary and tunnels only the dynamic traffic (e2e-verified
+through the real `--share`/`--join` binaries). Phase 2 landed the
+manifest + config handshake; Phase 1 cut the wire payload 54.67 →
+10.36 MB (5.3×) and slow-link first render 48.0 → 10.0 s. **Next:
+Phase 4 (two-machine e2e + docs + closeout).**
 **Parent context:** `claude-notes/plans/2026-08-03-q2-preview-live-share-iroh.md` (live-share design; spike measured 13.2 s cross-network first-render)
 
 ## Overview
@@ -418,16 +421,33 @@ does.
 
 ### Phase 3 — L7 join frontend
 
-- [ ] quarto-p2p: extract `TunnelClient::connect` + `TunnelConnection` per
+- [x] quarto-p2p: extract `TunnelClient::connect` + `TunnelConnection` per
   design decision 1; `bind` reimplemented on top; existing tunnel tests
   unmodified and green. New test: `open_stream` round-trip + token rejection
-  still maps to `TunnelStatus::Rejected`.
-- [ ] quarto-preview `join_frontend.rs`: loopback listener, bounded head-peek,
+  still maps to `TunnelStatus::Rejected`. *(done 2026-08-13 —
+  `connect.rs` un-ignored, 2/2 green; `tunnel.rs` 13/13 green
+  unmodified. `open_stream_with_budget` added after a cancellation
+  analysis: cancelling a future mid-`open_bi` can reset a stream before
+  its token lands, which the host treats as an auth failure and answers
+  by closing the whole connection — so probes pick a budget instead of
+  racing a timeout)*
+- [x] quarto-preview `join_frontend.rs`: loopback listener, bounded head-peek,
   routing per design decision 3, local responses byte-identical to what
   `asset_response` produces (shared helper — do not fork header logic).
-- [ ] `run_join`: preflight-first sequencing (design decision 6); select
-  frontend vs. plain `TunnelClient::bind` by mode.
-- [ ] Integration tests (`crates/quarto-preview/tests/integration/join_tunnel.rs`
+  *(done 2026-08-13 — `asset_response` split into
+  `asset_response_parts` (status + headers + body) + a thin axum
+  wrapper; the frontend serializes the parts and adds `Connection:
+  close`. 431 responses drain the receive buffer after a write-side
+  FIN — closing with unread data makes the kernel RST the response
+  away before the peer reads it)*
+- [x] `run_join`: preflight-first sequencing (design decision 6); select
+  frontend vs. plain `TunnelClient::bind` by mode. *(done 2026-08-13 —
+  `/health` + `/api/preview/config` run over raw `open_stream`
+  bi-streams before the local port exists; the mode line is now
+  user-visible (`● serving UI assets locally (host manifest hash
+  match)`); the three `wait_until_healthy` unit tests moved to
+  hermetic tunnel pairs)*
+- [x] Integration tests (`crates/quarto-preview/tests/integration/join_tunnel.rs`
   harness): matching manifest → host request log shows **zero** asset
   requests, while `/ws` sync, `/auth/me`, and `/api/preview/config` still
   traverse the tunnel; mismatched manifest → all requests tunnel; unknown
@@ -436,11 +456,17 @@ does.
   splice; oversize head → 431 + close; head-peek timeout → close; HEAD
   request → headers only with correct `Content-Length`; editor-UI session
   boots from the locally served editor index (`/` normalizes to an exact
-  `index.html` manifest hit).
-- [ ] Full workspace: `cargo nextest run --workspace` and `cargo xtask
+  `index.html` manifest hit). *(done 2026-08-13 — `join_frontend.rs`
+  un-ignored, 8/8 green; the harness' request log is a TCP shim between
+  the tunnel host and the hub; local-serving tests no-op on
+  placeholder trees per the crate's both-tree-states pattern)*
+- [x] Full workspace: `cargo nextest run --workspace` and `cargo xtask
   verify --skip-hub-build` green (hub-build leg needed only if the embed
   inputs changed — they do in Phase 1, so run full `cargo xtask verify`
-  before committing Phase 1).
+  before committing Phase 1). *(done 2026-08-13 — 11,923 passed; verify
+  green incl. the step-13 dist rebuild, manifest hash unchanged
+  (`885dc318…`), confirming the Rust-only phase didn't move the
+  manifest)*
 
 ### Phase 4 — End-to-end verification + docs
 
@@ -546,3 +572,34 @@ does.
   `/api/preview/config` with both hashes matching the on-disk manifest
   and `--print-asset-manifest-hashes`. Full workspace nextest
   (11,913 passed) + `cargo xtask verify --skip-hub-build` green.
+- 2026-08-13: **Phase 3 complete** (bd-tl2j8js8). quarto-p2p:
+  `TunnelClient::connect` → `TunnelConnection` (endpoint + initial
+  dial + supervisor + status watch; `open_stream` applies the token
+  prefix internally; `bind(self, local)` is the splice accept half, so
+  `TunnelClient::bind` is unchanged in signature and behavior —
+  `tunnel.rs` green unmodified). quarto-preview `join_frontend.rs`:
+  bounded head-peek (64 KiB / 5 s), per-connection routing — exact
+  manifest-hit GET/HEAD served from the embed via the shared
+  `asset_response` builder (split into `asset_response_parts` + a thin
+  axum wrapper; header logic never forked) with `Connection: close`;
+  everything else spliced verbatim (`open_stream` + consumed-head
+  replay + `copy_bidirectional`). No local index fallback; oversize
+  head → 431 + close (with a polite FIN + bounded drain so the kernel
+  doesn't RST the response away); stalled head → close. `run_join`
+  runs the `/health` + config preflight over raw bi-streams *before*
+  binding the port (design decision 6), then binds the frontend on
+  `Local` or the plain splice on `Tunnel`; the mode is now
+  user-visible. Tests: `connect.rs` 2/2, `join_frontend.rs` 8/8 (all
+  green; local-serving tests no-op on placeholder trees). Full
+  workspace nextest 11,923 passed + `cargo xtask verify
+  --skip-hub-build` green (step-13 dist rebuild reproduced manifest
+  `885dc318…` — unchanged). E2E inspected through the real binaries:
+  `target/debug/q2 preview --share --no-browser` on a fixture project,
+  `q2 preview --join <ticket> --no-browser --port 54319`; the guest
+  printed `● serving UI assets locally (host manifest hash match)` +
+  `● connected via direct connection`; curl against the guest port
+  showed `/` and `/assets/main-*.js` answered with the shared-builder
+  headers + `connection: close` (the frontend's marker), `/health` +
+  `/api/preview/config` + an unknown path answered by the host through
+  the tunnel (config advertised the matching viewer hash
+  `885dc318…`), and Ctrl-C shut both sides down cleanly.

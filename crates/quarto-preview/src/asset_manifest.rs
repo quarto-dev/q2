@@ -49,15 +49,26 @@ pub struct EmbeddedManifests {
 /// bundle.
 pub fn embedded_manifests() -> EmbeddedManifests {
     EmbeddedManifests {
-        viewer: embedded_manifest_hash(&EMBEDDED_SPA),
-        editor: embedded_manifest_hash(&EMBEDDED_EDITOR),
+        viewer: embedded_manifest(PreviewUi::Viewer).map(|m| m.hash),
+        editor: embedded_manifest(PreviewUi::Editor).map(|m| m.hash),
     }
 }
 
-fn embedded_manifest_hash(dir: &include_dir::Dir<'_>) -> Option<String> {
+/// This binary's embedded manifest for `ui`, parsed. `None` on a
+/// placeholder embed (fresh clone) — the guest then tunnels, and the
+/// next real build restores local mode. The editor manifest comes from
+/// the *editor embed's own* manifest file — never through
+/// `lookup_embedded`'s viewer fallback (it describes the
+/// post-resolution editor view; the viewer's manifest would describe
+/// the wrong bundle). Phase 3's join frontend routes on the entry set.
+pub fn embedded_manifest(ui: PreviewUi) -> Option<spa_manifest::Manifest> {
+    let dir = match ui {
+        PreviewUi::Viewer => &EMBEDDED_SPA,
+        PreviewUi::Editor => &EMBEDDED_EDITOR,
+    };
     let file = dir.get_file(spa_manifest::MANIFEST_FILENAME)?;
     let text = std::str::from_utf8(file.contents()).ok()?;
-    Some(spa_manifest::parse(text).ok()?.hash)
+    spa_manifest::parse(text).ok()
 }
 
 /// Where a `--join` guest's asset requests go (Phase 3 acts on this;
