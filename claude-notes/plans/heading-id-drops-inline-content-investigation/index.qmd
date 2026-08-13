@@ -1,0 +1,31 @@
+---
+title: "Home"
+---
+
+Headings whose auto-generated id loses content in q2. Each heading's
+expected Pandoc/Quarto 1 id is given underneath.
+
+## Using a "raw" volume
+
+`using-a-raw-volume` — quoted span dropped.
+
+## See [the docs](https://example.com) now
+
+`see-the-docs-now` — link text dropped.
+
+## Use ~~strike~~ here
+
+`use-strike-here` — strikeout dropped.
+
+## Math $x+y$ inline
+
+`math-xy-inline` — math dropped.
+
+## Small [caps]{.smallcaps} here
+
+`small-caps-here` — span dropped.
+
+## Use *emphasis* and **strong** and `code` here
+
+`use-emphasis-and-strong-and-code-here` — control: these three are the
+only container/leaf kinds `collect_text` handles, and they survive.
