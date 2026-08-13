@@ -529,14 +529,30 @@ fn parse_contents(cv: Option<&ConfigValue>) -> Vec<SidebarEntry> {
     let Some(cv) = cv else {
         return Vec::new();
     };
-    // Shorthand: `contents: auto` is Q1-idiomatic.
+    // A **scalar** `contents:` is an `auto:` spec. Q1's
+    // `normalizeSidebarItems` (website-sidebar-auto.ts) rewrites
+    // `contents: <s>` to `[{auto: true}]` when `<s>` is "auto" and to
+    // `[{auto: <s>}]` for every other string — so `contents: guides`
+    // auto-generates the directory's entries, and `contents: intro.qmd`
+    // expands to that one document. There is no file-vs-directory
+    // branch here on purpose; expansion resolves it (D1/D3 of
+    // bd-sidebar-contents-dir-shorthand-z7arvhx8).
+    //
+    // This is deliberately **scalar-only**. A bare string inside a
+    // `contents:` *array* is not an auto spec — Q1 sends those through
+    // `normalizeSidebarItem` (project-config.ts), which yields a link
+    // or a plain label. Those still take the `from_plain_string` route
+    // in `SidebarEntry::from_config_value`.
     if let Some(s) = cv.as_plain_text() {
         if s == "auto" {
             return vec![SidebarEntry::Auto(AutoSpec::All)];
         }
-        // A single path is a single-entry list. The ConfigValue's own
-        // source_info identifies the YAML scalar (bd-qor9a).
-        return vec![SidebarEntry::from_plain_string(&s, cv.source_info.clone())];
+        // A lone separator is not a path; keep it a separator rather
+        // than an auto spec that could only ever match nothing.
+        if is_separator_string(&s) {
+            return vec![SidebarEntry::Separator];
+        }
+        return vec![SidebarEntry::Auto(AutoSpec::Path(s))];
     }
     // Normal case: array of entries.
     if let Some(arr) = cv.as_array() {
@@ -1082,20 +1098,85 @@ mod tests {
         }
     }
 
-    /// Bare string at top-level contents is accepted as a single-entry
-    /// shorthand (matches Q1).
+    /// A scalar `contents:` is an `auto:` spec — Q1's
+    /// `normalizeSidebarItems` turns `contents: <s>` into
+    /// `[{auto: <s>}]` for every string but `auto` itself.
+    ///
+    /// bd-sidebar-contents-dir-shorthand-z7arvhx8: this previously
+    /// asserted a `Link`, which is what made `contents: guides` render
+    /// a dead link. A file-shaped scalar goes down the same path — Q1
+    /// makes no file-vs-directory distinction here, because expansion
+    /// resolves it: a spec naming one document expands to one link.
     #[test]
-    fn parse_sidebar_bare_string_contents_is_single_entry() {
+    fn parse_sidebar_bare_string_contents_is_auto_spec() {
         let cv = map(vec![("contents", s("hello.qmd"))]);
         let list = Sidebar::parse_list_from_config(&cv);
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].contents.len(), 1);
         match &list[0].contents[0] {
-            SidebarEntry::Link { item } => {
-                assert_eq!(item.href.as_deref(), Some("hello.qmd"));
-            }
-            other => panic!("expected single Link, got {:?}", other),
+            SidebarEntry::Auto(AutoSpec::Path(p)) => assert_eq!(p, "hello.qmd"),
+            other => panic!("expected Auto(Path), got {:?}", other),
         }
+    }
+
+    /// The reported bug: `contents: guides` must become an auto spec
+    /// so expansion can generate the directory's entries.
+    #[test]
+    fn parse_sidebar_directory_shorthand_is_auto_spec() {
+        let cv = map(vec![("contents", s("guides"))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        match &list[0].contents[0] {
+            SidebarEntry::Auto(AutoSpec::Path(p)) => assert_eq!(p, "guides"),
+            other => panic!("expected Auto(Path), got {:?}", other),
+        }
+    }
+
+    /// The shorthand reaches nested section `contents:` too — Q1's
+    /// `expandAutoSidebarItems` recurses into `item.contents`.
+    #[test]
+    fn parse_sidebar_directory_shorthand_applies_to_nested_section() {
+        let cv = map(vec![(
+            "contents",
+            arr(vec![map(vec![
+                ("section", s("Guides")),
+                ("contents", s("guides")),
+            ])]),
+        )]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        match &list[0].contents[0] {
+            SidebarEntry::Section { contents, .. } => match &contents[0] {
+                SidebarEntry::Auto(AutoSpec::Path(p)) => assert_eq!(p, "guides"),
+                other => panic!("expected nested Auto(Path), got {:?}", other),
+            },
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// Fence: the shorthand is **scalar-only**. A bare string that is
+    /// an *array element* stays a `Link`, matching Q1, where array
+    /// items go through `normalizeSidebarItem` (project-config.ts) and
+    /// never become an `auto`.
+    #[test]
+    fn parse_sidebar_bare_string_in_array_stays_a_link() {
+        let cv = map(vec![("contents", arr(vec![s("guides"), s("about.qmd")]))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        assert_eq!(list[0].contents.len(), 2);
+        for entry in &list[0].contents {
+            assert!(
+                matches!(entry, SidebarEntry::Link { .. }),
+                "array elements must stay Links, got {:?}",
+                entry
+            );
+        }
+    }
+
+    /// Fence: a scalar separator is still a separator, not an auto
+    /// spec that would match nothing and warn.
+    #[test]
+    fn parse_sidebar_scalar_separator_is_not_auto() {
+        let cv = map(vec![("contents", s("---"))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        assert!(matches!(list[0].contents[0], SidebarEntry::Separator));
     }
 
     /// `contents: auto` shorthand expands to a single `Auto(All)` entry.
