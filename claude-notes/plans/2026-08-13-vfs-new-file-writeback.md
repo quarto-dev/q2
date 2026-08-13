@@ -1,7 +1,7 @@
 # Write VFS-created files to disk under `--allow-edit` (WriteBack)
 
 **Date:** 2026-08-13
-**Status:** Active — reviewed 2026-08-13, ready for implementation
+**Status:** Complete — implemented and e2e-verified 2026-08-13 (bd-1kuiw7sx)
 **Context:** In a `q2 preview --share --ui editor --allow-edit` session, a
 guest who creates a new file (New File dialog / asset upload) gets a
 VFS-only document: `createFile` (`ts-packages/quarto-sync-client/src/client.ts:1255`)
@@ -195,14 +195,14 @@ persists by design; behavior there is unchanged.
 - [x] `cargo nextest run -p quarto-hub` green; full
   `cargo xtask verify --skip-hub-build` green (Rust-only change; the
   hub-build leg is not needed — no embed inputs change).
-- [ ] Real e2e per CLAUDE.md: `q2 preview --share --ui editor
+- [x] Real e2e per CLAUDE.md: `q2 preview --share --ui editor
   --allow-edit` on a fixture project, join from a second profile/browser,
   create a new text file and upload a binary asset as the guest; record
   in this file: file appears on disk at the next sync tick, server logs
   the `info!` creation line (no more repeating `warn!`), host edits to
   the new file sync back to the guest, and deleting the file on disk does
   **not** resurrect it.
-- [ ] File follow-up beads: (a) rename persistence (decision 6);
+- [x] File follow-up beads: (a) rename persistence (decision 6);
   (b) ReadOnly warning spam for expected VFS-only files if the Phase 1
   log tweak was deferred.
 
@@ -261,6 +261,43 @@ persists by design; behavior there is unchanged.
   `create_file_from_document` doesn't reuse `sync_document`, fixed the
   deliberate-red test count (three, not two), and noted the
   directory-collision edge case.
+- 2026-08-13: Implemented (bd-1kuiw7sx, commit cf074894). TDD: four
+  deliberate-red tests failed for the predicted reasons (three creates:
+  file absent / `automerge_changed == 0`; symlink-escape: `skipped`
+  vs `rejected`), two pinning tests green before and after, traversal
+  poison tests untouched and green. `cargo nextest run -p quarto-hub`
+  472/472; `cargo xtask verify --skip-hub-build` all 14 steps green.
+- 2026-08-13: E2E verified with the real binary and a real iroh join.
+  Host: `target/debug/q2 preview --no-browser --allow-edit --ui editor
+  --share --data-dir <tmp> <fixture>` (fixture: `_quarto.yml` +
+  `index.qmd`; `RUST_LOG=quarto_hub=info`). Guest: `q2 preview --join
+  q2preview… --no-browser`, driven by headless Chromium (Playwright)
+  through the guest's tunnel proxy port: New File dialog →
+  `guest-notes.qmd`, typed content into Monaco, asset upload of a 1×1
+  PNG. Observed (8/8 checks):
+  - both files appear on disk at the next sync tick (preview ticks every
+    5 s); the qmd contains the guest-typed text; the PNG bytes
+    round-trip exactly;
+  - host log shows `INFO quarto_hub::sync: Created new file on disk from
+    VFS document path=guest-notes.qmd doc_id=…` (and the same for
+    `logo.png`) and zero `File not found on disk` warns for those paths
+    before creation;
+  - host edit appended on disk reaches the guest's live automerge doc
+    (asserted via `quartoDebug.readFile('guest-notes.qmd')` in the guest
+    page). Note: the visible Monaco did not reflect the remote edit in
+    either headless run even with `visibilityState=visible` — hub-client
+    editor-binding behavior, unchanged by this work; doc-level sync is
+    the contract verified here;
+  - deleting `guest-notes.qmd` on disk does not resurrect it; the host
+    logs the has-checkpoint `File not found on disk, skipping sync`
+    warn each tick (17 warns, all post-deletion).
+  Output inspected in `.tmp-e2e-writeback/host.log` / `guest.log`
+  (scratch dir removed after recording). Unrelated observation filed as
+  bd-969cwvij (uncaught "WASM module not initialized" pageerror during
+  guest boot; self-recovered). Follow-ups filed: bd-5vq3mevj (rename
+  persistence, decision 6), bd-tdttx61g (cap-std for both write paths,
+  decision 7). The ReadOnly log tweak landed in the same commit, so no
+  ReadOnly-spam bead was needed.
 - 2026-08-13: Pre-implementation verification against the code, two
   corrections folded in: (a) **symlink-test classification pinned** —
   asserting `rejected == 1` makes it a fourth deliberate-red test (the
