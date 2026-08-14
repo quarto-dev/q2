@@ -1483,6 +1483,17 @@ pub fn build_transform_pipeline(
     // un-enriched class list. Idempotent.
     pipeline.push(Box::new(TableBootstrapClassTransform::new()));
 
+    // llms markdown capture (bd-llms-txt-unimplemented-oih6z6j7).
+    // Runs after every content-mutating transform — crossref-render
+    // has resolved numbers, link-rewrite has produced output hrefs,
+    // code-block-render has finished — so the captured clone is the
+    // final semantic content. Self-gated on `llms_view_active`
+    // (website + `llms-txt: true` + html target); also the sole
+    // consumer of the `.quarto-llms-{keep,omit}` marker classes
+    // `conditional-content` plants under the same predicate, so it
+    // must run whenever that transform does.
+    pipeline.push(Box::new(crate::transforms::LlmsCaptureTransform::new()));
+
     // Very last transform: bake the per-node attribution lookup and
     // the pruned actors table onto `ctx.format_options`. No-op when
     // `ctx.attribution_data` is None (i.e. no provider was installed,

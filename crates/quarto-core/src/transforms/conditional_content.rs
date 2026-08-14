@@ -47,6 +47,25 @@
 //! `when-*` / `unless-*` attributes on a marker element, and elements
 //! carrying *both* marker classes (treated as hidden), warn with
 //! **Q-2-42**.
+//!
+//! ## The llms view (bd-llms-txt-unimplemented-oih6z6j7)
+//!
+//! When `website.llms-txt: true` is active for an html render
+//! ([`crate::transforms::llms::llms_view_active`]), visibility is
+//! evaluated for **two** views: the html target, and the llms
+//! markdown companion. The llms view's format check matches the
+//! literal `llms` token *or* anything the html target matches — the
+//! companion mirrors the html page, so `when-format="html"` content
+//! stays in it; only explicit `llms` conditions differentiate the
+//! views. Content visible in exactly one view is kept and tagged
+//! (`.quarto-llms-omit` / `.quarto-llms-keep`) instead of resolved;
+//! `LlmsCaptureTransform` at the end of the Finalization phase is
+//! the sole consumer of the markers and removes them from both
+//! views. Caveat (shared with Q1's marker approach): llms-only
+//! content stays in the AST through the Navigation phase, so a
+//! *heading* inside an llms-only div can surface in the html TOC,
+//! and a crossref float inside one is not numbered. Prefer prose in
+//! llms-conditional blocks.
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -54,6 +73,7 @@ use quarto_pandoc_types::{Attr, Block, ConfigValue, Inline};
 
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
+use crate::transforms::llms;
 
 const VISIBLE_CLASS: &str = "content-visible";
 const HIDDEN_CLASS: &str = "content-hidden";
@@ -95,6 +115,14 @@ impl AstTransform for ConditionalContentTransform {
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> crate::Result<()> {
         let lua_format = crate::format::lua_format_for(&ctx.format.target_format).to_string();
+        // When the llms view is active (website + llms-txt: true +
+        // html target), conditions are evaluated for *both* views and
+        // view-specific content is tagged with a marker class instead
+        // of being resolved here; `LlmsCaptureTransform` (end of the
+        // Finalization phase) is the single consumer of the markers
+        // and guarantees they never reach a writer. Same-predicate
+        // contract: see `transforms::llms::llms_view_active`.
+        let llms_view = crate::transforms::llms::llms_view_active(&ast.meta, ctx);
         let active: Vec<&str> = ctx
             .project
             .config
@@ -106,6 +134,7 @@ impl AstTransform for ConditionalContentTransform {
         {
             let env = ConditionEnv {
                 format: &lua_format,
+                llms_view,
                 active_profiles: &active,
                 meta: &ast.meta,
                 diagnostics: &mut diagnostics,
@@ -122,6 +151,9 @@ impl AstTransform for ConditionalContentTransform {
 struct ConditionEnv<'a> {
     /// Canonical Pandoc format (`lua_format_for`), for the alias table.
     format: &'a str,
+    /// When true, also evaluate visibility for the `llms` view and
+    /// tag view-specific content instead of resolving it here.
+    llms_view: bool,
     /// Active project-profile names, activation order.
     active_profiles: &'a [&'a str],
     /// The document's merged metadata.
@@ -141,6 +173,16 @@ enum Verdict {
     Keep,
     /// Remove it entirely.
     Remove,
+    /// Visible in the target format but not the llms view: keep,
+    /// strip conditions, tag `.quarto-llms-omit` so the capture
+    /// clone drops it. Only issued when `llms_view` is active.
+    KeepTargetOnly,
+    /// Hidden in the target format but visible in the llms view:
+    /// keep for the capture, strip conditions, tag
+    /// `.quarto-llms-keep`; `LlmsCaptureTransform` removes it from
+    /// the main AST after cloning. Only issued when `llms_view` is
+    /// active.
+    KeepLlmsOnly,
 }
 
 impl Walker<'_> {
@@ -187,24 +229,41 @@ impl Walker<'_> {
             }
         }
 
-        let conditions_match = self.conditions_match(attr);
         // Both markers present ⇒ hidden semantics (the safe reading).
-        let visible = if hidden_marker {
-            !conditions_match
-        } else {
-            conditions_match
+        let visibility = |conditions_match: bool| {
+            if hidden_marker {
+                !conditions_match
+            } else {
+                conditions_match
+            }
         };
-        if visible {
-            Verdict::Keep
-        } else {
-            Verdict::Remove
+        let visible_target = visibility(self.conditions_match(attr, false));
+        if !self.env.llms_view {
+            return if visible_target {
+                Verdict::Keep
+            } else {
+                Verdict::Remove
+            };
+        }
+        let visible_llms = visibility(self.conditions_match(attr, true));
+        match (visible_target, visible_llms) {
+            (true, true) => Verdict::Keep,
+            (false, false) => Verdict::Remove,
+            (true, false) => Verdict::KeepTargetOnly,
+            (false, true) => Verdict::KeepLlmsOnly,
         }
     }
 
     /// AND across condition kinds; OR across comma/space-separated
     /// values within one condition; `unless-*` negates. No condition
     /// attributes ⇒ vacuously true.
-    fn conditions_match(&self, attr: &Attr) -> bool {
+    /// `llms_view_eval`: evaluate for the llms view instead of the
+    /// target format. The companion is a *mirror of the html page*,
+    /// so its format check matches the literal `llms` token **or**
+    /// anything the html target matches — `when-format="html"`
+    /// content stays in the companion; only the explicit
+    /// `llms`-token conditions differentiate the two views.
+    fn conditions_match(&self, attr: &Attr, llms_view_eval: bool) -> bool {
         #[derive(Clone, Copy)]
         enum Kind {
             Format,
@@ -226,7 +285,7 @@ impl Walker<'_> {
                 .split([',', ' '])
                 .filter(|v| !v.is_empty())
                 .any(|v| match kind {
-                    Kind::Format => self.check_format(v),
+                    Kind::Format => self.check_format(v, llms_view_eval),
                     Kind::Profile => self.check_profile(v),
                     Kind::Meta => self.check_meta(v),
                 });
@@ -235,7 +294,13 @@ impl Walker<'_> {
         result
     }
 
-    fn check_format(&self, query: &str) -> bool {
+    fn check_format(&self, query: &str, llms_view_eval: bool) -> bool {
+        if llms_view_eval {
+            return pampa::lua::quarto_doc::is_format_match(
+                crate::transforms::llms::LLMS_FORMAT,
+                query,
+            ) || pampa::lua::quarto_doc::is_format_match(self.env.format, query);
+        }
         pampa::lua::quarto_doc::is_format_match(self.env.format, query)
     }
 
@@ -272,6 +337,22 @@ impl Walker<'_> {
                 match self.verdict(&div.attr, &div.source_info) {
                     Verdict::Remove => return false,
                     Verdict::Keep => strip_condition_attrs(&mut div.attr, &mut div.attr_source),
+                    Verdict::KeepTargetOnly => {
+                        strip_condition_attrs(&mut div.attr, &mut div.attr_source);
+                        llms::add_marker_class(
+                            &mut div.attr,
+                            &mut div.attr_source,
+                            llms::LLMS_OMIT_CLASS,
+                        );
+                    }
+                    Verdict::KeepLlmsOnly => {
+                        strip_condition_attrs(&mut div.attr, &mut div.attr_source);
+                        llms::add_marker_class(
+                            &mut div.attr,
+                            &mut div.attr_source,
+                            llms::LLMS_KEEP_CLASS,
+                        );
+                    }
                     Verdict::NotConditional => {}
                 }
                 self.filter_blocks(&mut div.content);
@@ -279,6 +360,22 @@ impl Walker<'_> {
             Block::CodeBlock(cb) => match self.verdict(&cb.attr, &cb.source_info) {
                 Verdict::Remove => return false,
                 Verdict::Keep => strip_condition_attrs(&mut cb.attr, &mut cb.attr_source),
+                Verdict::KeepTargetOnly => {
+                    strip_condition_attrs(&mut cb.attr, &mut cb.attr_source);
+                    llms::add_marker_class(
+                        &mut cb.attr,
+                        &mut cb.attr_source,
+                        llms::LLMS_OMIT_CLASS,
+                    );
+                }
+                Verdict::KeepLlmsOnly => {
+                    strip_condition_attrs(&mut cb.attr, &mut cb.attr_source);
+                    llms::add_marker_class(
+                        &mut cb.attr,
+                        &mut cb.attr_source,
+                        llms::LLMS_KEEP_CLASS,
+                    );
+                }
                 Verdict::NotConditional => {}
             },
             Block::Plain(b) => self.filter_inlines(&mut b.content),
@@ -374,6 +471,22 @@ impl Walker<'_> {
                 match self.verdict(&span.attr, &span.source_info) {
                     Verdict::Remove => return false,
                     Verdict::Keep => strip_condition_attrs(&mut span.attr, &mut span.attr_source),
+                    Verdict::KeepTargetOnly => {
+                        strip_condition_attrs(&mut span.attr, &mut span.attr_source);
+                        llms::add_marker_class(
+                            &mut span.attr,
+                            &mut span.attr_source,
+                            llms::LLMS_OMIT_CLASS,
+                        );
+                    }
+                    Verdict::KeepLlmsOnly => {
+                        strip_condition_attrs(&mut span.attr, &mut span.attr_source);
+                        llms::add_marker_class(
+                            &mut span.attr,
+                            &mut span.attr_source,
+                            llms::LLMS_KEEP_CLASS,
+                        );
+                    }
                     Verdict::NotConditional => {}
                 }
                 self.filter_inlines(&mut span.content);
@@ -456,9 +569,20 @@ mod tests {
         active: &[&str],
         meta: &ConfigValue,
     ) -> Vec<DiagnosticMessage> {
+        run_with_llms(blocks, format, active, meta, false)
+    }
+
+    fn run_with_llms(
+        blocks: &mut Vec<Block>,
+        format: &str,
+        active: &[&str],
+        meta: &ConfigValue,
+        llms_view: bool,
+    ) -> Vec<DiagnosticMessage> {
         let mut diagnostics = Vec::new();
         let env = ConditionEnv {
             format,
+            llms_view,
             active_profiles: active,
             meta,
             diagnostics: &mut diagnostics,
@@ -629,5 +753,77 @@ mod tests {
     #[test]
     fn error_code_is_registered_in_catalog() {
         assert!(quarto_error_catalog::ERROR_CATALOG.get("Q-2-42").is_some());
+    }
+
+    /// Four-quadrant llms-view semantics
+    /// (bd-llms-txt-unimplemented-oih6z6j7): with the llms view
+    /// active, view-specific content is tagged instead of resolved.
+    #[test]
+    fn llms_view_tags_view_specific_content() {
+        use crate::transforms::llms::{LLMS_KEEP_CLASS, LLMS_OMIT_CLASS};
+
+        let mut blocks = vec![
+            // Visible in html, hidden in llms → tagged omit.
+            div(&["content-hidden"], &[("when-format", "llms")], "HTMLONLY"),
+            // Hidden in html, visible in llms → tagged keep.
+            div(&["content-visible"], &[("when-format", "llms")], "LLMSONLY"),
+            // Visible in both → plain keep, no marker.
+            div(&["content-visible"], &[("when-format", "html")], "BOTH"),
+            // Hidden in both → removed.
+            div(&["content-hidden"], &[("unless-format", "pdf")], "NEITHER"),
+        ];
+        let meta = empty_meta();
+        let diags = run_with_llms(&mut blocks, "html", &[], &meta, true);
+        assert!(diags.is_empty(), "no diagnostics expected: {diags:?}");
+
+        assert_eq!(blocks.len(), 3, "NEITHER removed: {}", texts(&blocks));
+        let classes_of = |b: &Block| -> Vec<String> {
+            let Block::Div(d) = b else { panic!("div") };
+            d.attr.1.clone()
+        };
+        assert!(
+            classes_of(&blocks[0]).iter().any(|c| c == LLMS_OMIT_CLASS),
+            "HTMLONLY tagged omit"
+        );
+        assert!(
+            classes_of(&blocks[1]).iter().any(|c| c == LLMS_KEEP_CLASS),
+            "LLMSONLY tagged keep"
+        );
+        let both = classes_of(&blocks[2]);
+        assert!(
+            !both.iter().any(|c| c.starts_with("quarto-llms-")),
+            "BOTH carries no marker: {both:?}"
+        );
+        // Condition attributes stripped from every survivor.
+        for b in &blocks {
+            let Block::Div(d) = b else { panic!("div") };
+            assert!(
+                d.attr
+                    .2
+                    .keys()
+                    .all(|k| !k.starts_with("when-") && !k.starts_with("unless-")),
+                "condition attrs stripped"
+            );
+        }
+    }
+
+    /// Without the llms view, `when-format="llms"` behaves like any
+    /// non-matching format: content-visible removed, content-hidden
+    /// kept, no markers.
+    #[test]
+    fn llms_conditions_inert_without_llms_view() {
+        let mut blocks = vec![
+            div(&["content-visible"], &[("when-format", "llms")], "LLMSONLY"),
+            div(&["content-hidden"], &[("when-format", "llms")], "HTMLONLY"),
+        ];
+        let meta = empty_meta();
+        run(&mut blocks, "html", &[], &meta);
+        let text = texts(&blocks);
+        assert!(!text.contains("LLMSONLY"), "visible-when-llms removed");
+        assert!(text.contains("HTMLONLY"), "hidden-when-llms kept");
+        assert!(
+            !text.contains("quarto-llms-"),
+            "no markers without the llms view"
+        );
     }
 }

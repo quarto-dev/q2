@@ -290,7 +290,7 @@ pub trait ProjectType {
     /// the path math themselves.
     async fn post_render(
         &self,
-        _project: &ProjectContext,
+        project: &ProjectContext,
         index: &ProjectIndex,
         _output_paths: &[std::path::PathBuf],
         _project_artifacts: &crate::artifact::ArtifactStore,
@@ -304,6 +304,47 @@ pub trait ProjectType {
         // (bd-aliases-redirects-missing-sch7cd1g): a porting project
         // got no signal that its redirects had disappeared.
         super::aliases::warn_aliases_ignored(index, diagnostics);
+        // Same policy for `website.llms-txt`
+        // (bd-llms-txt-unimplemented-oih6z6j7): only website
+        // projects emit llms.txt + markdown companions, and an
+        // accepted-but-inert key deserves a signal, not silence.
+        if let Some(meta) = project.config.metadata.as_ref()
+            && super::website_config::website_llms_txt_enabled(meta)
+        {
+            diagnostics.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                    "`website.llms-txt: true` has no effect in this project type",
+                )
+                .problem(
+                    "llms.txt and per-page markdown companions are written only for \
+                     `website` projects.",
+                )
+                .add_hint("Set `project: type: website` in `_quarto.yml`?")
+                .build(),
+            );
+        }
+        Ok(())
+    }
+
+    /// Hook that runs **after** the orchestrator's resource-copy pass
+    /// (bd-o8pr) — i.e. after every other producer of output-dir
+    /// files. Native-only in practice: the orchestrator calls it
+    /// inside the same `#[cfg(not(wasm32))]` block as the resource
+    /// copy. Default: no-op.
+    ///
+    /// This late position exists for writes that must consult the
+    /// *complete* set of files on disk before claiming a path — the
+    /// llms companion writes (bd-llms-txt-unimplemented-oih6z6j7)
+    /// refuse to overwrite anything they didn't generate (Q-5-28),
+    /// which is only sound once resource copies have landed.
+    async fn post_resources(
+        &self,
+        _project: &ProjectContext,
+        _index: &ProjectIndex,
+        _project_artifacts: &crate::artifact::ArtifactStore,
+        _runtime: &dyn quarto_system_runtime::SystemRuntime,
+        _diagnostics: &mut Vec<DiagnosticMessage>,
+    ) -> Result<()> {
         Ok(())
     }
 }
@@ -428,6 +469,39 @@ impl ProjectType for WebsiteProjectType {
         #[cfg(target_arch = "wasm32")]
         {
             let _ = (project, index, output_paths, diagnostics);
+        }
+        Ok(())
+    }
+
+    /// llms.txt + markdown companions
+    /// (bd-llms-txt-unimplemented-oih6z6j7). Runs *after* the
+    /// resource-copy pass, deliberately: the companion writes refuse
+    /// to overwrite any output-dir file they didn't generate
+    /// (Q-5-28), and that ledger check is only sound once every
+    /// other producer — rendered pages, site_libs, resource copies —
+    /// has landed. Reads the captures `LlmsCaptureTransform`
+    /// deposited as path-less Project artifacts.
+    async fn post_resources(
+        &self,
+        project: &ProjectContext,
+        index: &ProjectIndex,
+        project_artifacts: &crate::artifact::ArtifactStore,
+        runtime: &dyn quarto_system_runtime::SystemRuntime,
+        diagnostics: &mut Vec<DiagnosticMessage>,
+    ) -> Result<()> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            super::llms_post_render::write_llms_artifacts(
+                project,
+                index,
+                project_artifacts,
+                runtime,
+                diagnostics,
+            )?;
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (project, index, project_artifacts, runtime, diagnostics);
         }
         Ok(())
     }
@@ -1032,6 +1106,25 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                 &manifest,
                 self.runtime.as_ref(),
             )?;
+
+            // Post-resources hook: writes that must see the complete
+            // output dir (rendered pages + artifacts + resource
+            // copies) before claiming paths — see
+            // `ProjectType::post_resources`. Same error-passthrough
+            // rationale as `post_render` above.
+            self.project_type
+                .post_resources(
+                    self.project,
+                    &index,
+                    &self.project_artifacts,
+                    self.runtime.as_ref(),
+                    &mut project_diagnostics,
+                )
+                .await
+                .map_err(|e| match e {
+                    QuartoError::Parse(_) => e,
+                    other => QuartoError::other(format!("post_resources failed: {other}")),
+                })?;
         }
 
         let stopped_early = self.fail_fast && !pass2_failures.is_empty();

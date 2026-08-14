@@ -40,6 +40,7 @@ pub mod language_resolve;
 pub mod link_rewriting_pipeline;
 pub mod listing_glob_resolution;
 pub mod listing_pipeline;
+pub mod llms_txt;
 pub mod math_mode_pipeline;
 pub mod mermaid_bundling_pipeline;
 pub mod metadata_path_resolution;

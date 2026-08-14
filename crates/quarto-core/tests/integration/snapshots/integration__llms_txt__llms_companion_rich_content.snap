@@ -1,0 +1,36 @@
+---
+source: crates/quarto-core/tests/integration/llms_txt.rs
+assertion_line: 694
+expression: md
+---
+# Rich Page
+
+## Getting started
+
+Some *emphasis*, **strong**, and `inline code`.^1^
+
+::: {.callout-note}
+
+Callouts survive as fenced divs.
+
+:::
+
+```python
+print("hello")
+```
+
+::: {#tbl-nums}
+
+| a   | b   |
+| --- | --- |
+| 1   | 2   |
+
+Numbers
+
+:::
+
+See [Table 1](#tbl-nums) for details.
+
+## Footnotes
+
+1.  A footnote body.
