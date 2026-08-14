@@ -161,61 +161,104 @@ phase's tests are written and observed failing before implementation.
 
 ### Phase 0 — Test plan (failing tests first)
 
-- [ ] E2E project-render test: website with `llms-txt: true` produces
+- [x] E2E project-render test: website with `llms-txt: true` produces
       `_site/llms.txt`, per-page `<page>.md` companions, and
       `_site/llms-full.txt`; content assertions on index structure
       (H2 sections, `- [title](href): description` entries)
-- [ ] Snapshot tests for qmd serialization of representative pages:
+      — `crates/quarto-core/tests/integration/llms_txt.rs`, 15 tests
+      written 2026-08-14, observed failing as expected (13 red: missing
+      artifacts / collision render succeeded; 2 absent-by-default guards
+      trivially green). Collision code reserved: **Q-5-28**.
+- [x] Snapshot tests for qmd serialization of representative pages:
       crossrefs (resolved numbers), callouts, footnotes, code cells,
-      section-div unwrapping
-- [ ] Draft-exclusion test (draft page: no companion, absent from index)
-- [ ] 404-page exclusion test
-- [ ] Collision test: resource-copied `<page>.md` at a companion path
-      fails the render with the new `Q-*` code
-- [ ] User-provided `llms.txt` resource collision test
-- [ ] Warn-on-inert test: `llms-txt: true` on a non-website project warns
-- [ ] Incremental-render test: `llms.txt` regenerated from cached
-      profiles; skipped pages' companions persist
-- [ ] Multi-sidebar + straggler test: pages in no sidebar land in
-      "Other"; home page pinned first when uncovered
-- [ ] Conditional-content test: `when-format="llms"` /
+      section-div unwrapping — `llms_companion_rich_content_snapshot`
+      (insta snapshot reviewed + accepted 2026-08-14). Discovered
+      bd-4vbd3b7g while reviewing: `prefix_caption` misses
+      Plain-block captions, so table-caption floats lose their
+      "Table N:" prefix in HTML *and* markdown (pre-existing, filed
+      discovered-from).
+- [x] Draft-exclusion test (draft page: no companion, absent from index)
+- [x] 404-page exclusion test
+- [x] Collision test: resource-copied `<page>.md` at a companion path
+      fails the render with Q-5-28
+- [x] User-provided `llms.txt` resource collision test
+- [x] Warn-on-inert test: `llms-txt: true` on a non-website project warns
+- [x] Incremental-render test: `llms.txt` regenerated from cached
+      profiles; skipped pages' companions persist and llms-full.txt
+      covers them via on-disk read-back
+      (`llms_incremental_render_covers_skipped_pages`)
+- [x] Multi-sidebar + straggler test: pages in no sidebar land in
+      "Other"; home page pinned first when uncovered; flat site (no nav)
+      uses a single `## Pages` section instead of "Other"
+- [x] Conditional-content test: `when-format="llms"` /
       `unless-format="llms"` honored in companions and HTML
 
 ### Phase 1 — Config plumbing + inert-key warning
 
-- [ ] Read `website.llms-txt` boolean (mind the `metadata-as-str` lint /
-      `as_plain_text`)
-- [ ] Warn when set on non-website project types (aliases precedent)
+- [x] Read `website.llms-txt` boolean (`website_llms_txt_enabled`,
+      `website_description` added alongside; unit-tested)
+- [x] Warn when set on non-website project types (default
+      `ProjectType::post_render`, next to `warn_aliases_ignored`)
 
 ### Phase 2 — Per-page markdown capture
 
-- [ ] Finalization-phase capture after `CrossrefRenderTransform`: clone
-      AST, run llms cleanup (unwrap section divs, drop format-only raw
-      blocks), serialize via pampa qmd writer
-- [ ] Run conditional-content transform with `llms` format target on the
-      cloned AST (check the format-alias table accepts `llms`)
-- [ ] Rewrite same-site internal links to `.md` siblings (decision 4)
-- [ ] Thread the string out (likely `RenderOutput.llms_md:
-      Option<String>`) — **touches `RenderOutput` ⇒ full `cargo xtask
-      verify`**; WASM path skips the write (native-only, like sitemap)
-- [ ] Output-ledger claim helper: all companion writes resolve against
-      rendered outputs ∪ resource copies ∪ sibling artifacts; collision ⇒
-      new `Q-*` error + `docs/errors/` page in the same commit
+- [x] Finalization-phase capture after `CrossrefRenderTransform`:
+      `LlmsCaptureTransform` (`transforms/llms.rs`), registered at the
+      tail of Finalization. Cleanup unwraps section divs, float/figure
+      chrome (keeping one `::: {#id}` anchor wrapper per crossref
+      float), code-copy scaffolds, anonymous wrappers; reconstructs
+      callouts back to `::: {.callout-note}` form; drops raw HTML;
+      strips `quarto-*`/`data-*`/`aria-*` presentation attrs;
+      simplifies footnote plumbing; synthesizes the `# title` header
+      (the HTML h1 lives in the template, not the AST)
+- [x] Conditional content: four-quadrant evaluation *inside*
+      `ConditionalContentTransform` (not a re-run) — with the llms view
+      active it evaluates both views and tags one-view-only content
+      with `.quarto-llms-{omit,keep}` markers; `LlmsCaptureTransform`
+      is the sole marker consumer and resolves them for both views.
+      llms-view format check = literal `llms` token OR anything the
+      html target matches (the companion mirrors the html page, so
+      `when-format="html"` content stays in it). Known caveat
+      (shared with Q1): headings inside llms-only divs can surface in
+      the html TOC; floats inside are unnumbered — documented in the
+      module header. (bd-stbdlesy)
+- [x] Rewrite same-site internal links to `.md` siblings (decision 4),
+      draft/404/external/non-page targets untouched, fragments kept;
+      unit-tested (`retarget_rewrites_eligible_links_only`)
+- [x] Thread the string out — **better than planned**: path-less
+      Project-scoped artifacts (`llms-md/<href>` keys) ride the
+      existing artifact channel to post-render; `RenderOutput` is
+      untouched (no wasm API ripple), and path-less artifacts are
+      skipped by every flusher by contract
+- [x] Output ledger: **new `ProjectType::post_resources` hook** runs
+      after the orchestrator's resource-copy pass (post_render runs
+      *before* resource copies — writing there would race them), so
+      companion writes are the last producer and an existence check
+      against `.quarto/llms-manifest.json` (paths we generated last
+      run) is sound. Collision ⇒ Q-5-28 (catalog entry +
+      `docs/errors/project/Q-5-28.qmd` added; `cargo xtask lint`
+      green); all collisions reported together, whole llms write
+      abandoned
 
 ### Phase 3 — `llms.txt` assembly
 
-- [ ] `write_llms_txt` in `website_post_render.rs`, sibling of
-      `write_sitemap`, implementing the set-subtraction algorithm of
-      decision 1 (pure function of `(sidebars, navbar, manifest)`)
-- [ ] Entry format `- [title](href): description` from
+- [x] `write_llms_artifacts` in new `project/llms_post_render.rs`
+      (kept out of `website_post_render.rs` for size), called from
+      `WebsiteProjectType::post_resources`; set-subtraction assembler
+      per decision 1
+- [x] Entry format `- [title](href): description` from
       `DocumentProfile`; absolute URLs when `site-url` set
-- [ ] "Other" catch-all; home page pinned when uncovered
-- [ ] Incremental discipline: regenerate from cached profiles
+- [x] "Other" catch-all; home page pinned when uncovered; flat sites
+      (no sidebar) use a single `## Pages` section; navbar stage only
+      refines sites that declare sidebars
+- [x] Incremental discipline: llms.txt + llms-full.txt regenerate from
+      the full (cached) profile index; skipped pages' companion content
+      read back from disk when the manifest vouches for it
 
 ### Phase 4 — `llms-full.txt`
 
-- [ ] Concatenate per-page markdown in index order with per-page
-      separators (title + canonical URL)
+- [x] Concatenate per-page markdown in **llms.txt reading order** with
+      `---\ntitle: …\nurl: …\n---` separators
 
 ### Phase 5 — E2E verification + docs
 

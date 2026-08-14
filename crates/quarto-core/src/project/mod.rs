@@ -41,6 +41,7 @@ pub mod website_config;
 // per function) — each writes into the on-disk output dir. The one
 // cross-platform member, the Phase 5 project-artifact flush, moved
 // to `crate::artifact_flush` in bd-v8gx.
+pub mod llms_post_render;
 pub mod website_post_render;
 
 use std::path::{Path, PathBuf};
