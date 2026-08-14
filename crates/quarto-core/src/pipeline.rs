@@ -69,15 +69,15 @@ use crate::stage::{
 use crate::transform::TransformPipeline;
 use crate::transforms::{
     AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
-    AuthorsNormalizeTransform, CalloutResolveTransform, CalloutTransform,
-    CategoriesSidebarTransform, CodeBlockGenerateTransform, CodeBlockRenderTransform,
-    ConditionalContentTransform, CrossrefIndexTransform, CrossrefRenderTransform,
-    CrossrefResolveTransform, DateNormalizeTransform, DraftAlertTransform, EquationLabelTransform,
-    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
-    FooterGenerateTransform, FooterRenderTransform, FootnotesTransform, LinkRewriteTransform,
-    ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
-    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
-    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    AuthorsNormalizeTransform, BreadcrumbsRenderTransform, CalloutResolveTransform,
+    CalloutTransform, CategoriesSidebarTransform, CodeBlockGenerateTransform,
+    CodeBlockRenderTransform, ConditionalContentTransform, CrossrefIndexTransform,
+    CrossrefRenderTransform, CrossrefResolveTransform, DateNormalizeTransform, DraftAlertTransform,
+    EquationLabelTransform, ExampleEmbedRenderTransform, ExampleEmbedTransform,
+    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
+    FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
+    MermaidRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
+    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ReferenceLinkDiagnosticsTransform, ResourceCollectorTransform, SectionizeTransform,
     ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
     TableBootstrapClassTransform, TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform,
@@ -1136,6 +1136,8 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 /// 13. `TocRenderTransform` - Render TOC to HTML for template insertion
 /// 14. `NavbarRenderTransform` - Render navbar to HTML for template insertion
 /// 15. `SidebarRenderTransform` - Render sidebar to HTML (w/ .qmd→.html rewrite)
+/// 15a. `BreadcrumbsRenderTransform` - Derive the page's breadcrumb trail from
+///     `navigation.sidebar` into `rendered.navigation.breadcrumbs`
 /// 16. `FooterRenderTransform` - Render page footer to HTML for template insertion
 /// 16a. `AttributionGenerateTransform` - Tail-of-phase: call the installed
 ///     `AttributionSourceProvider` (if any) and merge identities into the
@@ -1413,6 +1415,10 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(TocRenderTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
     pipeline.push(Box::new(SidebarRenderTransform::new()));
+    // Breadcrumbs derive from the resolved `navigation.sidebar`
+    // (bd-breadcrumbs-missing-1vpuqh34); the title-block partial
+    // consumes `rendered.navigation.breadcrumbs`.
+    pipeline.push(Box::new(BreadcrumbsRenderTransform::new()));
     pipeline.push(Box::new(PageNavRenderTransform::new()));
     // Footer *generation* (above) is format-agnostic; footer *rendering* is
     // format-specific — html emits page-footer chrome, revealjs emits a

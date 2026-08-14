@@ -141,21 +141,39 @@ trail + renderer.
 
 ### Phase B — breadcrumbs (bd-breadcrumbs-missing-1vpuqh34)
 
-- [ ] Failing tests: `breadcrumb_trail` units (leaf at depth; section w/o
-      href borrows first child; section w/ own href; unmatched page → empty;
-      current page is final crumb; one-child section duplicate-href rule);
-      `breadcrumbs_to_html` units (markup, escaping, unlinked crumb);
-      pipeline tests (trail renders at depth with resolved hrefs;
-      `bread-crumbs: false` site- and page-level; no sidebar → none;
-      length-1 trail → none; banner placement)
-- [ ] Verify tests fail
-- [ ] Implement trail + renderer + transform + template slots + config gate
-- [ ] SCSS port
-- [ ] Tests green; full workspace run
-- [ ] e2e through the real binary: fixture with nested sidebar sections;
-      inspect deep page for `quarto-title-breadcrumbs` markup + hrefs
-- [ ] Docs (`docs/`): document `website.bread-crumbs`
-- [ ] File discovered strand: quarto-secondary-nav mobile container
+- [x] Failing tests: 6 `breadcrumb_trail` units + 3 `breadcrumbs_to_html`
+      units (8 of 9 failed against stubs; the trivially-empty pin passed
+      by design); 6 pipeline tests (3 positive failed pre-implementation,
+      3 suppression pins passed by design). Banner placement covered by
+      the template slot, exercised via the docs-site render below.
+- [x] Verify tests fail (confirmed both layers)
+- [x] Implement trail (`breadcrumb_trail` + `Crumb` in
+      quarto-navigation/sidebar.rs, Q1's exact borrow rule) + renderer
+      (`breadcrumbs_to_html`, class-parameterized for the future mobile
+      instance) + `BreadcrumbsRenderTransform` (Navigation phase, after
+      SidebarRenderTransform; discarded-diagnostics resolve pass) +
+      title-block partial slots (default + banner branches; `none`
+      branch skipped, Q1 parity) + `resolve_website_bool("bread-crumbs",
+      true)` gate
+- [x] SCSS port into `_bootstrap-rules.scss` (title-block rules only)
+- [x] Unit + integration layers green (quarto-navigation 157/157;
+      breadcrumbs_pipeline 6/6); full `cargo xtask verify` running at
+      wrap-up
+- [x] e2e through the real binary:
+      `cargo run --bin q2 -- render claude-notes/plans/index-miss-relativize-investigation/breadcrumbs`;
+      deep page emits
+      `<nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb">`
+      with `Guide → ../intro.html` (borrowed first child, page-relative),
+      `Advanced → deep.html`, `Deep Page → deep.html` (self as final
+      linked crumb); index page has none (length-1). Compiled theme CSS
+      carries the ported rules. Also dogfooded on the real docs/ site
+      (240 pages): guides/projects/breadcrumbs.html shows its own
+      two-crumb trail. Output inspected.
+- [x] Docs: new `docs/guides/projects/breadcrumbs.qmd`, registered in the
+      docs sidebar; site renders (31 warnings, all pre-existing
+      Q-13-4/Q-5-6 dangling-link/YAML diagnostics unrelated to this work)
+- [x] File discovered strand: bd-26bf3j1y (quarto-secondary-nav mobile
+      container — toggle, mobile breadcrumb instance, search)
 - [ ] Commit; close bd-breadcrumbs-missing-1vpuqh34
 
 ### Wrap-up

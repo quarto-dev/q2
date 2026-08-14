@@ -29,6 +29,7 @@ website:
             - guides/authoring/index.qmd
             - guides/projects/create.qmd
             - guides/projects/paths.qmd
+            - guides/projects/breadcrumbs.qmd
             - guides/projects/render-list.qmd
             - guides/projects/aliases.qmd
             - guides/projects/scripts.qmd
