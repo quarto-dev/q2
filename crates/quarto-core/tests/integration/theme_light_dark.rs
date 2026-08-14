@@ -1,10 +1,12 @@
 //! End-to-end render tests for the Q1 light/dark theme map form
-//! (bd-o76p01wb interim behavior).
+//! (bd-0pic6 epic, phase A2: dual compilation).
 //!
-//! `theme: {light: […], dark: […]}` must render using only the
-//! `light:` half and emit a single Q-14-3 warning that the `dark:`
-//! half is ignored. Full dual-theme support (compile both variants +
-//! toggle) is tracked separately (bd-0pic6).
+//! `theme: {light: […], dark: […]}` must compile BOTH variants: the
+//! light half into the primary theme CSS, the dark half into a
+//! separate `-dark` CSS artifact. No Q-14-3 warning is emitted (the
+//! interim degradation from bd-o76p01wb is retired). Each compiled
+//! variant carries a `color-scheme` declaration derived from its
+//! `$body-bg` darkness (plan D1a).
 //!
 //! Drives the real `render_to_file` API (see CLAUDE.md "End-to-end
 //! verification") against tempdir-based projects, then inspects both
@@ -12,13 +14,12 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tempfile::TempDir;
 
 use quarto_core::render_to_file::{RenderToFileOptions, render_to_file};
-use quarto_error_reporting::DiagnosticKind;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn write(path: &Path, contents: &str) {
@@ -28,29 +29,43 @@ fn write(path: &Path, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
-fn read_css(resources_dir: &Path) -> String {
-    let mut combined = String::new();
-    for entry in walkdir::WalkDir::new(resources_dir)
+/// Collect `(path, contents)` for every CSS file under the resources
+/// dir, so assertions can distinguish which *file* carries a marker,
+/// not just whether it appears anywhere.
+fn css_files(resources_dir: &Path) -> Vec<(PathBuf, String)> {
+    walkdir::WalkDir::new(resources_dir)
         .follow_links(false)
         .into_iter()
         .filter_map(Result::ok)
-    {
-        let p = entry.path();
-        if p.extension().and_then(|e| e.to_str()) == Some("css") {
-            combined.push_str(&std::fs::read_to_string(p).unwrap());
-            combined.push('\n');
-        }
-    }
-    combined
+        .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("css"))
+        .map(|e| {
+            let p = e.path().to_path_buf();
+            let contents = std::fs::read_to_string(&p).unwrap();
+            (p, contents)
+        })
+        .collect()
 }
 
 const LIGHT_SCSS: &str = "/*-- scss:rules --*/\n.q-light-marker { color: #123456; }\n";
 const DARK_SCSS: &str = "/*-- scss:rules --*/\n.q-dark-marker { color: #654321; }\n";
 
+fn assert_no_q14_3(diagnostics: &[quarto_error_reporting::DiagnosticMessage]) {
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|d| d.code.as_deref() == Some("Q-14-3")),
+        "Q-14-3 is retired: the dark half now compiles, nothing is ignored; \
+         diagnostics: {:?}",
+        diagnostics
+    );
+}
+
 /// Project-config path: the map form in `_quarto.yml`
-/// (`format.html.theme`), the way the posit-docs extension ships it.
+/// (`format.html.theme`). Both halves compile; the light and dark
+/// variants land in separate CSS files with matching `color-scheme`
+/// declarations.
 #[test]
-fn project_theme_light_dark_map_renders_light_half_with_q_14_3_warning() {
+fn project_theme_light_dark_map_compiles_both_variants() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     write(
@@ -74,42 +89,49 @@ fn project_theme_light_dark_map_renders_light_half_with_q_14_3_warning() {
         },
         runtime,
     )
-    .expect("light/dark theme map must render, not fail with Q-14-1");
+    .expect("light/dark theme map must render");
 
-    // Only the light half is compiled into the page CSS.
-    let css = read_css(&result.resources_dir);
-    assert!(
-        css.contains(".q-light-marker"),
-        "light half's custom SCSS must be in the compiled CSS"
-    );
-    assert!(
-        !css.contains(".q-dark-marker"),
-        "dark half must be ignored in the interim behavior"
-    );
-
-    // The degradation is loud: exactly one Q-14-3 warning.
-    let diagnostics = &result.render_output.diagnostics;
-    let q14_3: Vec<_> = diagnostics
+    let files = css_files(&result.resources_dir);
+    let light_file = files
         .iter()
-        .filter(|d| d.code.as_deref() == Some("Q-14-3"))
-        .collect();
-    assert_eq!(
-        q14_3.len(),
-        1,
-        "expected exactly one Q-14-3 warning, diagnostics: {:?}",
-        diagnostics
+        .find(|(_, css)| css.contains(".q-light-marker"))
+        .expect("some CSS file must carry the light half's custom rule");
+    let dark_file = files
+        .iter()
+        .find(|(_, css)| css.contains(".q-dark-marker"))
+        .expect("some CSS file must carry the dark half's custom rule (dark now compiles)");
+    assert_ne!(
+        light_file.0, dark_file.0,
+        "light and dark variants must be separate CSS files"
     );
-    assert_eq!(q14_3[0].kind, DiagnosticKind::Warning);
     assert!(
-        q14_3[0].location.is_some(),
-        "Q-14-3 should carry a source location pointing at the dark entry"
+        !light_file.1.contains(".q-dark-marker"),
+        "light variant must not contain dark rules"
     );
+    assert!(
+        !dark_file.1.contains(".q-light-marker"),
+        "dark variant must not contain light rules"
+    );
+
+    // D1a: each variant declares its own color-scheme, derived from
+    // $body-bg darkness (cosmo → light, darkly → dark).
+    assert!(
+        light_file.1.contains("color-scheme:light") || light_file.1.contains("color-scheme: light"),
+        "light variant CSS must declare color-scheme light"
+    );
+    assert!(
+        dark_file.1.contains("color-scheme:dark") || dark_file.1.contains("color-scheme: dark"),
+        "dark variant CSS must declare color-scheme dark"
+    );
+
+    assert_no_q14_3(&result.render_output.diagnostics);
 }
 
 /// Document-frontmatter path: the map form in the document's own
-/// `format.html.theme` (single-file render, no `_quarto.yml`).
+/// `format.html.theme` (single-file render, no `_quarto.yml`). The
+/// single-doc dark artifact is `styles-dark.css` next to `styles.css`.
 #[test]
-fn frontmatter_theme_light_dark_map_renders_light_half_with_q_14_3_warning() {
+fn frontmatter_theme_light_dark_map_compiles_both_variants() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     write(&root.join("light-marker.scss"), LIGHT_SCSS);
@@ -131,23 +153,27 @@ fn frontmatter_theme_light_dark_map_renders_light_half_with_q_14_3_warning() {
     )
     .expect("frontmatter light/dark theme map must render");
 
-    let css = read_css(&result.resources_dir);
-    assert!(css.contains(".q-light-marker"));
-    assert!(!css.contains(".q-dark-marker"));
-
-    let q14_3: Vec<_> = result
-        .render_output
-        .diagnostics
+    let files = css_files(&result.resources_dir);
+    let light_file = files
         .iter()
-        .filter(|d| d.code.as_deref() == Some("Q-14-3"))
-        .collect();
-    assert_eq!(q14_3.len(), 1, "expected exactly one Q-14-3 warning");
+        .find(|(p, _)| p.file_name().and_then(|n| n.to_str()) == Some("styles.css"))
+        .expect("single-doc light variant is styles.css");
+    let dark_file = files
+        .iter()
+        .find(|(p, _)| p.file_name().and_then(|n| n.to_str()) == Some("styles-dark.css"))
+        .expect("single-doc dark variant is styles-dark.css");
+    assert!(light_file.1.contains(".q-light-marker"));
+    assert!(!light_file.1.contains(".q-dark-marker"));
+    assert!(dark_file.1.contains(".q-dark-marker"));
+    assert!(!dark_file.1.contains(".q-light-marker"));
+
+    assert_no_q14_3(&result.render_output.diagnostics);
 }
 
-/// A light-only map is a fully-honored (if redundant) spelling — no
-/// warning (D6 in the plan).
+/// A light-only map is a fully-honored (if redundant) spelling of the
+/// plain form — no dark artifact is produced, no warning.
 #[test]
-fn light_only_theme_map_renders_without_warning() {
+fn light_only_theme_map_renders_without_dark_artifact() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     write(
@@ -172,15 +198,100 @@ fn light_only_theme_map_renders_without_warning() {
     )
     .expect("light-only theme map must render");
 
-    let css = read_css(&result.resources_dir);
-    assert!(css.contains(".q-light-marker"));
-
+    let files = css_files(&result.resources_dir);
     assert!(
-        !result
-            .render_output
-            .diagnostics
-            .iter()
-            .any(|d| d.code.as_deref() == Some("Q-14-3")),
-        "light-only map ignores nothing, so it must not warn"
+        files.iter().any(|(_, css)| css.contains(".q-light-marker")),
+        "light half's custom SCSS must be in the compiled CSS"
+    );
+    assert!(
+        !files.iter().any(|(p, _)| {
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            name.contains("-dark")
+        }),
+        "a light-only map must not produce a dark CSS artifact; files: {:?}",
+        files.iter().map(|(p, _)| p).collect::<Vec<_>>()
+    );
+
+    assert_no_q14_3(&result.render_output.diagnostics);
+}
+
+/// Dark-only map: the light variant falls back to default Bootstrap,
+/// the dark variant compiles the configured themes. No warning.
+#[test]
+fn dark_only_theme_map_compiles_dark_variant_with_default_light() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(&root.join("dark-marker.scss"), DARK_SCSS);
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: Dark Only\nformat:\n  html:\n    theme:\n      dark: [darkly, dark-marker.scss]\n---\n\n# Hi\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("dark-only theme map must render");
+
+    let files = css_files(&result.resources_dir);
+    let light_file = files
+        .iter()
+        .find(|(p, _)| p.file_name().and_then(|n| n.to_str()) == Some("styles.css"))
+        .expect("light variant (default Bootstrap) is styles.css");
+    let dark_file = files
+        .iter()
+        .find(|(p, _)| p.file_name().and_then(|n| n.to_str()) == Some("styles-dark.css"))
+        .expect("dark variant is styles-dark.css");
+    assert!(
+        !light_file.1.contains(".q-dark-marker"),
+        "default-Bootstrap light variant must not carry dark rules"
+    );
+    assert!(dark_file.1.contains(".q-dark-marker"));
+    assert!(
+        dark_file.1.contains("color-scheme:dark") || dark_file.1.contains("color-scheme: dark"),
+        "darkly-based dark variant must declare color-scheme dark"
+    );
+
+    assert_no_q14_3(&result.render_output.diagnostics);
+}
+
+/// D1a bonus: a *single* dark theme (no light/dark pair at all) gets
+/// `color-scheme: dark` from the darkness sentinel, so existing
+/// dark-theme users get correct native scrollbars/controls.
+#[test]
+fn single_dark_theme_declares_dark_color_scheme() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: Darkly\nformat:\n  html:\n    theme: darkly\n---\n\n# Hi\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("single dark theme must render");
+
+    let files = css_files(&result.resources_dir);
+    let styles = files
+        .iter()
+        .find(|(p, _)| p.file_name().and_then(|n| n.to_str()) == Some("styles.css"))
+        .expect("styles.css present");
+    assert!(
+        styles.1.contains("color-scheme:dark") || styles.1.contains("color-scheme: dark"),
+        "single dark theme must declare color-scheme dark"
     );
 }

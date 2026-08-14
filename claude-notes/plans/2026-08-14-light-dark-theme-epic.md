@@ -403,10 +403,29 @@ Integration branch: `feature/light-dark-theme` (created off `main`).
   actually compiles), `bootstrap_js` predicate unchanged (updates when dark
   CSS ships), interim integration tests in `theme_light_dark.rs` unchanged
   (they invert in A2).
-- [ ] **A2 — dual compile + artifacts** (D3, D1a): `bd-ld-a2-dual-compile-ds10l5wa`.
-  Second compile, keys/paths/cache, darkness sentinel, `color-scheme` emission
-  per variant, update single-artifact consumers, parity tests. (related:
-  bd-8oqw)
+- [x] **A2 — dual compile + artifacts** (D3, D1a): `bd-ld-a2-dual-compile-ds10l5wa`.
+  **Done 2026-08-14.** `CompileThemeCssStage` refactored to a per-variant
+  `variant_css()` helper (suppress → fast path → themed path, identical
+  behavior per variant); dark half compiles via `ThemeConfig::dark_variant()`
+  projection into `css:theme-dark:<fp>` / `quarto/quarto-theme-dark-<fp>.css`
+  (single-doc: `styles-dark.css`). Key prefix `css:theme-dark:` deliberately
+  does NOT match the `css:theme:` prefix, so every existing light-only
+  consumer (preview transport, wasm `extract_theme_fingerprint`, tests)
+  needed **zero changes**. D1a landed as one SCSS change: the existing
+  darkness-sentinel block in `_bootstrap-rules.scss` now also emits
+  `:root{color-scheme:light|dark}` — verified surviving grass minification;
+  single dark themes (darkly) get it for free; quarto-web's cosmo-based
+  dark half gets `dark` via its `$body-bg`. Q-14-3 fully retired (emission,
+  catalog entry, docs page, tests). `bootstrap_js` predicate now
+  `!ships_bootstrap()` (per-variant). **Discoveries vs the original plan**:
+  no cache-key variant discriminator needed (the key hashes spec identities;
+  identical inputs correctly share output); no `DEFAULT_CSS_CACHE` two-slot
+  needed yet (default compile is variant-independent until highlight-style
+  doc-vars differ per variant — phase B may revisit); interim link order
+  (dark sorts before light → light wins cascade) keeps pages visually
+  unchanged until A3. Golden-hash baseline re-captured (documented delta:
+  the one color-scheme rule). E2E: real `q2 render` of a quarto-web-shaped
+  project inspected. 12,135 workspace tests green.
 - [ ] **A3 — link emission** (D4, D1a): `bd-ld-a3-link-emission-ruw9kw4v`.
   Artifact attribs, template changes, ordering, trailing-copy emission, meta
   color-scheme tag. Byte-identical output when no dark variant.

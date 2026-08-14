@@ -1133,13 +1133,6 @@
     "docs_url": "https://quarto.org/docs/errors/theme/Q-14-2",
     "since_version": "99.9.9"
   },
-  "Q-14-3": {
-    "subsystem": "theme",
-    "title": "Dark theme variant not yet supported",
-    "message_template": "The `theme:` configuration uses the `light:`/`dark:` map form. This release renders only the `light:` themes; the `dark:` entry is ignored and no dark-mode toggle is emitted. The document still renders, styled by the light themes. Remove the `dark:` entry to silence this warning, or keep it — it will take effect when dual light/dark theme support lands.",
-    "docs_url": "https://quarto.org/docs/errors/theme/Q-14-3",
-    "since_version": "99.9.9"
-  },
   "Q-14-4": {
     "subsystem": "theme",
     "title": "Theme file not found",

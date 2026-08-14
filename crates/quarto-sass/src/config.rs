@@ -143,8 +143,7 @@ pub struct DarkThemeConfig {
     pub is_default: bool,
 
     /// Location of the `dark:` key itself, for diagnostics that need
-    /// to point at the dark half as a whole (e.g. the interim Q-14-3
-    /// warning while dual compilation is not yet wired).
+    /// to point at the dark half as a whole.
     pub key_location: Option<SourceInfo>,
 }
 
@@ -428,6 +427,35 @@ impl ThemeConfig {
             brand_dir,
             dark: self.dark,
         })
+    }
+
+    /// Project the dark half into a standalone, light-shaped
+    /// [`ThemeConfig`] so the entire pure compile pipeline
+    /// (`process_theme_specs` → `assemble_theme_scss` →
+    /// `compile_with_doc_vars`) can run unchanged for the dark
+    /// variant. Whole-config options (`minified`,
+    /// `title_block_layer`, `brand_ref`) carry over; the projection
+    /// has no nested dark half of its own.
+    ///
+    /// Returns `None` when no dark half is configured.
+    pub fn dark_variant(&self) -> Option<ThemeConfig> {
+        self.dark.as_ref().map(|d| ThemeConfig {
+            themes: d.themes.clone(),
+            theme_locations: d.theme_locations.clone(),
+            minified: self.minified,
+            suppress_bootstrap: d.suppress_bootstrap,
+            title_block_layer: self.title_block_layer,
+            brand_ref: self.brand_ref.clone(),
+            dark: None,
+        })
+    }
+
+    /// Whether any configured variant ships Bootstrap. `theme: none`
+    /// suppression is per-variant (`{light: none, dark: darkly}`
+    /// still needs Bootstrap CSS + JS for the dark variant), so the
+    /// Bootstrap-JS decision must consider both halves.
+    pub fn ships_bootstrap(&self) -> bool {
+        !self.suppress_bootstrap || self.dark.as_ref().is_some_and(|d| !d.suppress_bootstrap)
     }
 
     /// Check if this config specifies any themes.
@@ -1688,6 +1716,89 @@ mod tests {
         assert_eq!(dark.themes.len(), 2);
         assert!(dark.themes[0].is_brand(), "explicit token keeps position");
         assert!(dark.themes[1].is_builtin());
+    }
+
+    #[test]
+    fn test_dark_variant_projects_standalone_config() {
+        // `dark_variant()` projects the dark half into a standalone,
+        // light-shaped ThemeConfig so the pure compile pipeline can
+        // run unchanged for the dark variant.
+        let theme_value = map_value(vec![
+            map_entry("light", array_value(&["cosmo", "light.scss"])),
+            map_entry("dark", array_value(&["darkly", "dark.scss"])),
+        ]);
+        let config = map_value(vec![
+            map_entry("theme", theme_value),
+            map_entry("brand", scalar_value("_brand.yml")),
+        ]);
+        let theme_config = ThemeConfig::from_config_value(&config).unwrap();
+
+        let dark_cfg = theme_config
+            .dark_variant()
+            .expect("dark half present ⇒ dark variant config");
+        // dark specs (incl. the auto-injected brand token) become the
+        // top-level list of the projected config.
+        assert_eq!(dark_cfg.themes.len(), 3);
+        assert!(dark_cfg.themes[0].is_builtin());
+        assert!(dark_cfg.themes[1].is_custom());
+        assert!(dark_cfg.themes[2].is_brand());
+        assert_eq!(dark_cfg.theme_locations.len(), 3);
+        // Whole-config options carry over; the projection has no
+        // nested dark half of its own.
+        assert_eq!(dark_cfg.minified, theme_config.minified);
+        assert_eq!(dark_cfg.title_block_layer, theme_config.title_block_layer);
+        assert!(dark_cfg.brand_ref.is_some());
+        assert!(dark_cfg.dark.is_none());
+        assert!(!dark_cfg.suppress_bootstrap);
+
+        // No dark half ⇒ no projection.
+        let light_only =
+            ThemeConfig::from_config_value(&config_with_theme_value(scalar_value("cosmo")))
+                .unwrap();
+        assert!(light_only.dark_variant().is_none());
+    }
+
+    #[test]
+    fn test_dark_variant_carries_dark_none_suppression() {
+        let theme_value = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("none")),
+        ]);
+        let theme_config =
+            ThemeConfig::from_config_value(&config_with_theme_value(theme_value)).unwrap();
+        let dark_cfg = theme_config.dark_variant().unwrap();
+        assert!(dark_cfg.suppress_bootstrap);
+        assert!(dark_cfg.themes.is_empty());
+    }
+
+    #[test]
+    fn test_ships_bootstrap_considers_both_variants() {
+        // Bootstrap ships iff ANY variant ships it.
+        let plain = ThemeConfig::from_config_value(&config_with_theme_value(scalar_value("cosmo")))
+            .unwrap();
+        assert!(plain.ships_bootstrap());
+
+        let none =
+            ThemeConfig::from_config_value(&config_with_theme_value(scalar_value("none"))).unwrap();
+        assert!(!none.ships_bootstrap());
+
+        // {light: none, dark: darkly}: the dark variant still needs
+        // Bootstrap JS.
+        let light_none_dark = map_value(vec![
+            map_entry("light", scalar_value("none")),
+            map_entry("dark", scalar_value("darkly")),
+        ]);
+        let cfg =
+            ThemeConfig::from_config_value(&config_with_theme_value(light_none_dark)).unwrap();
+        assert!(cfg.ships_bootstrap());
+
+        // Both halves none → nothing ships.
+        let both_none = map_value(vec![
+            map_entry("light", scalar_value("none")),
+            map_entry("dark", scalar_value("none")),
+        ]);
+        let cfg = ThemeConfig::from_config_value(&config_with_theme_value(both_none)).unwrap();
+        assert!(!cfg.ships_bootstrap());
     }
 
     #[test]

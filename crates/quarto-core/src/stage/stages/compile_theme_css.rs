@@ -377,131 +377,43 @@ impl PipelineStage for CompileThemeCssStage {
             }
         };
 
-        // Interim light/dark degradation (bd-o76p01wb): the parser
-        // accepts and fully parses the `theme: {light: …, dark: …}`
-        // map, but this stage compiles only the light half until dual
-        // compilation lands (bd-ld-a2-dual-compile-ds10l5wa, which
-        // retires this warning). Make the degradation loud — one
-        // Q-14-3 *warning* per document, anchored at the `dark:` key.
-        // Emitted here (not in `BootstrapJsStage`, which parses the
-        // same config) so each document warns exactly once; the CLI's
-        // source-location coalescer collapses repeats across documents
-        // that share the offending config file.
-        if let Some(dark_loc) = theme_config
-            .dark
-            .as_ref()
-            .and_then(|d| d.key_location.as_ref())
-        {
-            ctx.add_diagnostic(
-                quarto_error_reporting::DiagnosticMessageBuilder::warning(
-                    "Dark theme variant not yet supported",
-                )
-                .with_code("Q-14-3")
-                .problem(
-                    "`theme:` uses the `light:`/`dark:` map form; only the `light:` \
-                     themes are applied. The `dark:` entry is ignored and no \
-                     dark-mode toggle is emitted.",
-                )
-                .add_hint(
-                    "Remove the `dark:` entry to silence this warning, or keep it — \
-                     it will take effect when dual light/dark theme support lands.",
-                )
-                .with_location(dark_loc.clone())
-                .build(),
-            );
-        }
+        // ── Variant-aware compilation (bd-0pic6, phase A2) ─────────
+        // The light variant always compiles. A `theme: {light: …,
+        // dark: …}` map additionally compiles the dark half — through
+        // the exact same pure pipeline, via the projected
+        // `dark_variant()` config — into its own `css:theme-dark:*`
+        // artifact. The interim Q-14-3 warning (bd-o76p01wb) is
+        // retired: nothing is ignored anymore.
 
-        // `theme: none` → ship the static lightweight DEFAULT_CSS without
-        // compiling Bootstrap. This is the explicit opt-out path.
-        if theme_config.suppress_bootstrap {
-            trace_event!(
-                ctx,
-                EventLevel::Debug,
-                "theme: none set, using static DEFAULT_CSS"
-            );
-            store_default_css(ctx);
-            return Ok(PipelineData::DocumentAst(doc));
-        }
-
-        // Ensure the sass namespace matches the current SCSS resources
-        // generation. When this returns `false` the cache layer is
-        // unavailable and we compile without caching.
-        let cache_ok = ensure_sass_cache_ready(ctx.runtime.as_ref()).await;
-
-        // Build the per-document SCSS variables layer (Phase 2 of bd-k8y0).
-        // Today this is just `$sidebar-border` from `website.sidebar.style`,
-        // but the same hook is the home for future `$sidebar-bg`,
-        // `$navbar-bg`, etc. injections — see the plan and `derive_doc_scss_layer`.
+        // Per-document SCSS variables layer (Phase 2 of bd-k8y0),
+        // shared by both variants. Today this is just
+        // `$sidebar-border` from `website.sidebar.style`; the same
+        // hook is the home for future `$sidebar-bg`, `$navbar-bg`,
+        // etc. injections — see `derive_doc_scss_layer`.
         let doc_vars = derive_doc_scss_layer(&doc.ast.meta);
 
-        // Fast path: no themes, no doc-derived variables, and the
-        // default layer set (title-block layer included). Use the
-        // shared, cached default-CSS bundle. This preserves byte-identity
-        // with prior behavior for plain documents (no website / no sidebar).
-        // `title-block-style: plain|none` docs take the fingerprinted
-        // path below so their layer-less bundle gets its own cache key.
-        if !theme_config.has_themes() && doc_vars.is_empty() && theme_config.title_block_layer {
-            // Try the runtime cache first (cross-session persistence).
-            if cache_ok
-                && let Ok(Some(cached)) = cache_get_lru(
-                    ctx.runtime.as_ref(),
-                    SASS_CACHE_NAMESPACE,
-                    default_cache_key(theme_config.minified),
-                )
-                .await
-                && let Ok(css) = String::from_utf8(cached)
-            {
-                trace_event!(ctx, EventLevel::Debug, "cache hit for default CSS");
-                store_css(ctx, css);
-                return Ok(PipelineData::DocumentAst(doc));
-            }
+        // Ensure the sass namespace matches the current SCSS
+        // resources generation — only worth the roundtrip when some
+        // variant actually compiles. `false` → compile without
+        // caching.
+        let cache_ok = if theme_config.ships_bootstrap() {
+            ensure_sass_cache_ready(ctx.runtime.as_ref()).await
+        } else {
+            false
+        };
 
-            trace_event!(
-                ctx,
-                EventLevel::Debug,
-                "no theme / no doc-vars, compiling default Bootstrap + Quarto layer"
-            );
-            match compile_default(ctx, theme_config.minified).await {
-                Ok(css) => {
-                    if cache_ok {
-                        let _ = cache_set_lru(
-                            ctx.runtime.as_ref(),
-                            SASS_CACHE_NAMESPACE,
-                            default_cache_key(theme_config.minified),
-                            css.as_bytes(),
-                            SASS_CACHE_BUDGET_BYTES,
-                        )
-                        .await;
-                    }
-                    store_css(ctx, css);
-                }
-                Err(e) => {
-                    trace_event!(
-                        ctx,
-                        EventLevel::Warn,
-                        "default Bootstrap compilation failed: {}, using static DEFAULT_CSS",
-                        e
-                    );
-                    store_default_css(ctx);
-                }
-            }
-            return Ok(PipelineData::DocumentAst(doc));
-        }
-
-        // Themed and/or doc-vars-bearing path: compute fingerprinted cache
-        // key (factors in theme identities + doc-vars), check the runtime
-        // cache, then compile via `compile_with_doc_vars` on miss.
         let document_dir = doc
             .path
             .parent()
             .map_or_else(|| PathBuf::from("."), |p| p.to_path_buf());
 
-        // Resolve the brand (if any) before building the theme context.
-        // I/O happens here. Failures are user-facing configuration
-        // errors (missing `_brand.yml`, invalid YAML, unknown brand
-        // shape) — propagate them rather than silently shipping
-        // DEFAULT_CSS, same reasoning as the `from_config_value`
-        // error path above.
+        // Resolve the brand (if any) once — it is shared by both
+        // variants until the brand light/dark seam lands
+        // (bd-ld-c-brand-seam-wef8ww3n). I/O happens here. Failures
+        // are user-facing configuration errors (missing `_brand.yml`,
+        // invalid YAML, unknown brand shape) — propagate them rather
+        // than silently shipping DEFAULT_CSS, same reasoning as the
+        // `from_config_value` error path above.
         let resolved = theme_config
             .clone()
             .resolve(ctx.runtime.as_ref(), &ctx.project.dir)
@@ -509,7 +421,11 @@ impl PipelineStage for CompileThemeCssStage {
                 PipelineError::stage_error(self.name(), format!("brand resolution: {e}"))
             })?;
 
-        let mut theme_context = ThemeContext::new(document_dir, ctx.runtime.as_ref());
+        // The ThemeContext borrows a local Arc clone of the runtime
+        // (not `ctx`) so `ctx` stays mutably borrowable inside
+        // `variant_css`.
+        let runtime = ctx.runtime.clone();
+        let mut theme_context = ThemeContext::new(document_dir, runtime.as_ref());
         if let Some(brand) = resolved.brand.as_ref() {
             let brand_dir = resolved
                 .brand_dir
@@ -518,112 +434,201 @@ impl PipelineStage for CompileThemeCssStage {
             theme_context = theme_context.with_brand(brand, brand_dir);
         }
 
-        // Up-front validation: every custom theme entry must resolve
-        // to a real file (bd-of20unsb). Before this check, a dangling
-        // entry surfaced only as a compile failure swallowed by the
-        // DEFAULT_CSS fallback below — silently dropping the *entire*
-        // theme list, valid entries included. A dangling entry is a
-        // user-facing configuration error, so it gets the same
-        // structured hard-error treatment as the `from_config_value`
-        // path above: Q-14-4, with a span at the offending `theme:`
-        // entry.
-        for (i, spec) in theme_config.themes.iter().enumerate() {
-            let Some(path) = spec.as_custom() else {
-                continue;
-            };
-            let resolved_path = theme_context.resolve_path(path);
-            let exists = ctx
-                .runtime
-                .path_exists(&resolved_path, Some(PathKind::File))
-                .unwrap_or(false);
-            if !exists {
-                let err = quarto_sass::SassError::CustomThemeNotFound {
-                    path: resolved_path,
-                    location: theme_config.theme_locations.get(i).cloned().flatten(),
-                };
-                let pe = crate::theme_diagnostic::sass_error_to_parse_error(
-                    &err,
-                    &theme_error_candidates(ctx),
-                );
-                return Err(PipelineError::Structured(pe));
-            }
+        let light_css =
+            variant_css(ctx, &theme_config, &theme_context, &doc_vars, cache_ok).await?;
+        store_css(ctx, light_css);
+
+        if let Some(dark_cfg) = theme_config.dark_variant() {
+            let dark_css = variant_css(ctx, &dark_cfg, &theme_context, &doc_vars, cache_ok).await?;
+            store_dark_css(ctx, dark_css);
         }
 
-        let key = match cache_key(
-            &theme_config,
-            &theme_context,
-            ctx.runtime.as_ref(),
-            &doc_vars,
-        ) {
-            Ok(k) => k,
-            Err(e) => {
-                trace_event!(
-                    ctx,
-                    EventLevel::Warn,
-                    "failed to compute cache key: {}, compiling without cache",
-                    e
-                );
-                // Fall through with no cache key — will compile without caching
-                String::new()
-            }
-        };
+        Ok(PipelineData::DocumentAst(doc))
+    }
+}
 
-        // Check cache (best-effort — errors are non-fatal).
+/// Produce the compiled CSS for ONE variant (the top-level light
+/// config, or the projection `ThemeConfig::dark_variant()` of the
+/// dark half). Pure with respect to artifacts — the caller stores the
+/// result under the variant's key — but reads/writes the runtime CSS
+/// cache and emits trace events.
+///
+/// Error contract mirrors the pre-A2 single-variant behavior:
+/// dangling custom themes are structured Q-14-4 errors; compile
+/// failures degrade to `DEFAULT_CSS` with a warning trace.
+async fn variant_css(
+    ctx: &mut StageContext,
+    variant_config: &ThemeConfig,
+    theme_context: &ThemeContext<'_>,
+    doc_vars: &SassLayer,
+    cache_ok: bool,
+) -> Result<String, PipelineError> {
+    // `theme: none` (for this variant) → the static lightweight
+    // DEFAULT_CSS without compiling Bootstrap. Explicit opt-out.
+    if variant_config.suppress_bootstrap {
+        trace_event!(
+            ctx,
+            EventLevel::Debug,
+            "theme: none set, using static DEFAULT_CSS"
+        );
+        return Ok(DEFAULT_CSS.to_string());
+    }
+
+    // Fast path: no themes, no doc-derived variables, and the
+    // default layer set (title-block layer included). Use the
+    // shared, cached default-CSS bundle. This preserves byte-identity
+    // with prior behavior for plain documents (no website / no sidebar).
+    // `title-block-style: plain|none` docs take the fingerprinted
+    // path below so their layer-less bundle gets its own cache key.
+    if !variant_config.has_themes() && doc_vars.is_empty() && variant_config.title_block_layer {
+        // Try the runtime cache first (cross-session persistence).
         if cache_ok
-            && !key.is_empty()
-            && let Ok(Some(cached)) =
-                cache_get_lru(ctx.runtime.as_ref(), SASS_CACHE_NAMESPACE, &key).await
+            && let Ok(Some(cached)) = cache_get_lru(
+                ctx.runtime.as_ref(),
+                SASS_CACHE_NAMESPACE,
+                default_cache_key(variant_config.minified),
+            )
+            .await
             && let Ok(css) = String::from_utf8(cached)
         {
-            trace_event!(
-                ctx,
-                EventLevel::Debug,
-                "cache hit for theme CSS (key={})",
-                key
-            );
-            store_css(ctx, css);
-            return Ok(PipelineData::DocumentAst(doc));
+            trace_event!(ctx, EventLevel::Debug, "cache hit for default CSS");
+            return Ok(css);
         }
 
         trace_event!(
             ctx,
             EventLevel::Debug,
-            "compiling theme CSS ({} themes, doc_vars={} bytes, key={})",
-            theme_config.themes.len(),
-            doc_vars.defaults.len(),
-            key
+            "no theme / no doc-vars, compiling default Bootstrap + Quarto layer"
         );
-
-        let css =
-            compile_with_doc_vars_via_runtime(ctx, &theme_config, &theme_context, &doc_vars).await;
-
-        match css {
+        return match compile_default(ctx, variant_config.minified).await {
             Ok(css) => {
-                // Store in cache (best-effort, skip if no key or cache unavailable).
-                if cache_ok && !key.is_empty() {
+                if cache_ok {
                     let _ = cache_set_lru(
                         ctx.runtime.as_ref(),
                         SASS_CACHE_NAMESPACE,
-                        &key,
+                        default_cache_key(variant_config.minified),
                         css.as_bytes(),
                         SASS_CACHE_BUDGET_BYTES,
                     )
                     .await;
                 }
-                store_css(ctx, css);
+                Ok(css)
             }
             Err(e) => {
                 trace_event!(
                     ctx,
                     EventLevel::Warn,
-                    "theme CSS compilation failed: {}, using default CSS",
+                    "default Bootstrap compilation failed: {}, using static DEFAULT_CSS",
                     e
                 );
-                store_default_css(ctx);
+                Ok(DEFAULT_CSS.to_string())
             }
-        }
+        };
+    }
 
-        Ok(PipelineData::DocumentAst(doc))
+    // Themed and/or doc-vars-bearing path: compute fingerprinted cache
+    // key (factors in theme identities + doc-vars), check the runtime
+    // cache, then compile via `compile_with_doc_vars` on miss.
+    //
+    // Up-front validation: every custom theme entry must resolve
+    // to a real file (bd-of20unsb). Before this check, a dangling
+    // entry surfaced only as a compile failure swallowed by the
+    // DEFAULT_CSS fallback below — silently dropping the *entire*
+    // theme list, valid entries included. A dangling entry is a
+    // user-facing configuration error, so it gets the same
+    // structured hard-error treatment as the `from_config_value`
+    // path in `run`: Q-14-4, with a span at the offending `theme:`
+    // entry (the dark half's entries carry their own locations).
+    for (i, spec) in variant_config.themes.iter().enumerate() {
+        let Some(path) = spec.as_custom() else {
+            continue;
+        };
+        let resolved_path = theme_context.resolve_path(path);
+        let exists = ctx
+            .runtime
+            .path_exists(&resolved_path, Some(PathKind::File))
+            .unwrap_or(false);
+        if !exists {
+            let err = quarto_sass::SassError::CustomThemeNotFound {
+                path: resolved_path,
+                location: variant_config.theme_locations.get(i).cloned().flatten(),
+            };
+            let pe = crate::theme_diagnostic::sass_error_to_parse_error(
+                &err,
+                &theme_error_candidates(ctx),
+            );
+            return Err(PipelineError::Structured(pe));
+        }
+    }
+
+    let key = match cache_key(
+        variant_config,
+        theme_context,
+        ctx.runtime.as_ref(),
+        doc_vars,
+    ) {
+        Ok(k) => k,
+        Err(e) => {
+            trace_event!(
+                ctx,
+                EventLevel::Warn,
+                "failed to compute cache key: {}, compiling without cache",
+                e
+            );
+            // Fall through with no cache key — will compile without caching
+            String::new()
+        }
+    };
+
+    // Check cache (best-effort — errors are non-fatal).
+    if cache_ok
+        && !key.is_empty()
+        && let Ok(Some(cached)) =
+            cache_get_lru(ctx.runtime.as_ref(), SASS_CACHE_NAMESPACE, &key).await
+        && let Ok(css) = String::from_utf8(cached)
+    {
+        trace_event!(
+            ctx,
+            EventLevel::Debug,
+            "cache hit for theme CSS (key={})",
+            key
+        );
+        return Ok(css);
+    }
+
+    trace_event!(
+        ctx,
+        EventLevel::Debug,
+        "compiling theme CSS ({} themes, doc_vars={} bytes, key={})",
+        variant_config.themes.len(),
+        doc_vars.defaults.len(),
+        key
+    );
+
+    match compile_with_doc_vars_via_runtime(ctx, variant_config, theme_context, doc_vars).await {
+        Ok(css) => {
+            // Store in cache (best-effort, skip if no key or cache unavailable).
+            if cache_ok && !key.is_empty() {
+                let _ = cache_set_lru(
+                    ctx.runtime.as_ref(),
+                    SASS_CACHE_NAMESPACE,
+                    &key,
+                    css.as_bytes(),
+                    SASS_CACHE_BUDGET_BYTES,
+                )
+                .await;
+            }
+            Ok(css)
+        }
+        Err(e) => {
+            trace_event!(
+                ctx,
+                EventLevel::Warn,
+                "theme CSS compilation failed: {}, using default CSS",
+                e
+            );
+            Ok(DEFAULT_CSS.to_string())
+        }
     }
 }
 
@@ -720,13 +725,36 @@ fn theme_artifact_key_and_path(fingerprint: &str, single_doc: bool) -> (String, 
     (key, path)
 }
 
-fn store_default_css(ctx: &mut StageContext) {
-    store_css(ctx, DEFAULT_CSS.to_string());
+/// Dark-variant analog of [`theme_artifact_key_and_path`]. The key
+/// prefix is `css:theme-dark:` — deliberately NOT an extension of
+/// `css:theme:` (`'-' != ':'`), so every existing
+/// `get_by_prefix("css:theme:")` consumer (preview transport, wasm
+/// `extract_theme_fingerprint`, test assertions) keeps selecting the
+/// light variant untouched.
+fn dark_theme_artifact_key_and_path(fingerprint: &str, single_doc: bool) -> (String, PathBuf) {
+    let key = format!("css:theme-dark:{}", fingerprint);
+    let path = if single_doc {
+        PathBuf::from("styles-dark.css")
+    } else {
+        PathBuf::from(format!("quarto/quarto-theme-dark-{}.css", fingerprint))
+    };
+    (key, path)
 }
 
 fn store_css(ctx: &mut StageContext, css: String) {
     let fingerprint = theme_fingerprint(&css);
     let (key, path) = theme_artifact_key_and_path(&fingerprint, ctx.project.is_single_file);
+    ctx.artifacts.store(
+        key,
+        Artifact::from_string(css, "text/css")
+            .with_path(path)
+            .with_scope(ArtifactScope::Project),
+    );
+}
+
+fn store_dark_css(ctx: &mut StageContext, css: String) {
+    let fingerprint = theme_fingerprint(&css);
+    let (key, path) = dark_theme_artifact_key_and_path(&fingerprint, ctx.project.is_single_file);
     ctx.artifacts.store(
         key,
         Artifact::from_string(css, "text/css")
@@ -941,6 +969,23 @@ mod tests {
             entries.len(),
             1,
             "expected exactly one css:theme:* artifact, found {}",
+            entries.len()
+        );
+        let artifact = entries[0].1;
+        assert_eq!(artifact.scope, ArtifactScope::Project);
+        String::from_utf8(artifact.content.clone()).expect("CSS should be valid UTF-8")
+    }
+
+    /// The dark-variant artifact (`css:theme-dark:*`). Note the key
+    /// prefix deliberately does NOT match `css:theme:` — every
+    /// existing light-only consumer keeps selecting the light variant
+    /// untouched.
+    fn get_dark_css_artifact(ctx: &StageContext) -> String {
+        let entries: Vec<_> = ctx.artifacts.get_by_prefix("css:theme-dark:");
+        assert_eq!(
+            entries.len(),
+            1,
+            "expected exactly one css:theme-dark:* artifact, found {}",
             entries.len()
         );
         let artifact = entries[0].1;
@@ -1163,11 +1208,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn light_dark_theme_map_compiles_light_and_warns_q_14_3() {
-        // bd-o76p01wb interim: the Q1 `theme: {light: […], dark: […]}`
-        // map form must not fail the render. The light half compiles;
-        // the ignored dark half surfaces as exactly one Q-14-3
-        // *warning* on the stage context.
+    async fn light_dark_theme_map_compiles_both_variants() {
+        // bd-0pic6 phase A2: the Q1 `theme: {light: […], dark: […]}`
+        // map form compiles BOTH variants — the light half into the
+        // `css:theme:*` artifact, the dark half into `css:theme-dark:*`.
+        // The interim Q-14-3 warning is retired: nothing is ignored.
         let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
             Arc::new(quarto_system_runtime::NativeRuntime::new());
         let mut ctx = make_stage_context(runtime);
@@ -1189,22 +1234,47 @@ mod tests {
             css.contains(".btn"),
             "light half must produce real Bootstrap CSS"
         );
+        assert!(
+            css.contains("color-scheme:light") || css.contains("color-scheme: light"),
+            "cosmo-based light variant must declare color-scheme light (D1a)"
+        );
 
-        let q14_3: Vec<_> = ctx
-            .diagnostics
-            .iter()
-            .filter(|d| d.code.as_deref() == Some("Q-14-3"))
-            .collect();
-        assert_eq!(
-            q14_3.len(),
-            1,
-            "expected exactly one Q-14-3 warning, diagnostics: {:?}",
+        let dark_css = get_dark_css_artifact(&ctx);
+        assert!(
+            dark_css.contains(".btn"),
+            "dark half must produce real Bootstrap CSS"
+        );
+        assert!(
+            dark_css.contains("color-scheme:dark") || dark_css.contains("color-scheme: dark"),
+            "darkly-based dark variant must declare color-scheme dark (D1a)"
+        );
+        assert_ne!(css, dark_css, "the two variants must differ");
+
+        assert!(
+            !ctx.diagnostics
+                .iter()
+                .any(|d| d.code.as_deref() == Some("Q-14-3")),
+            "Q-14-3 is retired: the dark half compiles, nothing is ignored; \
+             diagnostics: {:?}",
             ctx.diagnostics
         );
-        assert_eq!(
-            q14_3[0].kind,
-            quarto_error_reporting::DiagnosticKind::Warning,
-            "Q-14-3 must be warning severity, not error"
+    }
+
+    #[tokio::test]
+    async fn plain_theme_produces_no_dark_artifact() {
+        // A non-map theme must not grow a dark artifact.
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let mut ctx = make_stage_context(runtime);
+        let stage = CompileThemeCssStage::new();
+
+        let input = make_doc_ast(meta_with_theme("cosmo"));
+        stage.run(input, &mut ctx).await.unwrap();
+
+        let _ = get_css_artifact(&ctx); // exactly one light artifact
+        assert!(
+            ctx.artifacts.get_by_prefix("css:theme-dark:").is_empty(),
+            "plain theme must not produce a css:theme-dark:* artifact"
         );
     }
 
