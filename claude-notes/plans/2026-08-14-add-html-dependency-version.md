@@ -3,8 +3,10 @@
 **Date:** 2026-08-14
 **Braid:** `bd-add-html-dependency-version-5tnub5ds`
 **Branch:** `main` @ `3ac596e0` (investigated in place; no worktree created)
-**Status:** Design partially settled (2026-08-14, see § Decisions). **One open
-question remains — the dedup key — before implementation starts.**
+**Status:** Implemented and verified 2026-08-14 (full `cargo xtask verify`
+green, all 14 steps). All design questions settled (§ Decisions, § Settled
+design). One follow-up remains: tell the connect-docs side to drop its
+`Q-11-1: level: off` suppression.
 
 ## Triage verdict
 
@@ -287,50 +289,81 @@ below; check them off as they land.
 
 ### Phase 0 — Tests (TDD: written and failing before any implementation)
 
-- [ ] Unit: two `add_html_dependency` calls for the same dependency emit exactly
+- [x] Unit: two `add_html_dependency` calls for the same dependency emit exactly
       **one** unsupported-field warning (currently two).
-- [ ] Unit: an unknown field still errors on a **repeat** call (pins decision 4 —
+- [x] Unit: an unknown field still errors on a **repeat** call (pins decision 4 —
       the loop split, not a wholesale move).
-- [ ] Unit: `version` no longer warns at all.
-- [ ] Unit: `version` survives into `HtmlDependency` via
+- [x] Unit: `version` no longer warns at all.
+- [x] Unit: `version` survives into `HtmlDependency` via
       `extract_html_dependencies`.
-- [ ] Unit: within one document, a second registration of the same `name` at a
+- [x] Unit: within one document, a second registration of the same `name` at a
       *different* version is first-wins **and warns** (settled question 1).
-- [ ] Unit: versioned dep → `libs/{name}/{version}/{file}`; unversioned dep →
+- [x] Unit: versioned dep → `libs/{name}/{version}/{file}`; unversioned dep →
       `libs/{name}/{file}` (unchanged).
-- [ ] Unit: two versions of one name produce **two** artifacts, not one
+- [x] Unit: two versions of one name produce **two** artifacts, not one
       (the freeze requirement; artifact key carries the version).
-- [ ] End-to-end through the real render path per CLAUDE.md's end-to-end rule:
+- [x] End-to-end through the real render path per CLAUDE.md's end-to-end rule:
       the committed repro renders with **zero** warnings and the asset at the
       versioned path. Inspect the output, do not infer from exit status.
 
 ### Phase 1 — Split the field loop (`quarto_doc.rs:230-262`)
 
-- [ ] Unknown-field hard error stays **before** the dedup early-return.
-- [ ] Unsupported-field warning moves **after** it.
-- [ ] Phase 0's first two tests go green. Independent of Phase 2.
+- [x] Unknown-field hard error stays **before** the dedup early-return.
+- [x] Unsupported-field warning moves **after** it.
+- [x] Phase 0's first two tests go green. Independent of Phase 2.
 
 ### Phase 2 — Implement `version`
 
-- [ ] Move `"version"` from `UNSUPPORTED_FIELDS` to `SUPPORTED_FIELDS`
+- [x] Move `"version"` from `UNSUPPORTED_FIELDS` to `SUPPORTED_FIELDS`
       (`quarto_doc.rs:53-63`).
-- [ ] Add `version: Option<String>` to `HtmlDependency` (`quarto_doc.rs:27-31`).
-- [ ] Store it in the Lua entry (`quarto_doc.rs:269-285`) and read it back in
+- [x] Add `version: Option<String>` to `HtmlDependency` (`quarto_doc.rs:27-31`).
+- [x] Store it in the Lua entry (`quarto_doc.rs:269-285`) and read it back in
       `extract_html_dependencies` (`quarto_doc.rs:364-396`).
-- [ ] Warn on same-name/different-version within one document; keep first-wins.
-- [ ] Version-aware artifact **path** and **key** in `dependency.rs:50-51,78-79`.
+- [x] Warn on same-name/different-version within one document; keep first-wins.
+- [x] Version-aware artifact **path** and **key** in `dependency.rs:50-51,78-79`.
 
 ### Phase 3 — Docs + close-out
 
-- [ ] Fix `dependency.rs`'s doc-comment: it attributes `libs/{name}/` to "Quarto
+- [x] Fix `dependency.rs`'s doc-comment: it attributes `libs/{name}/` to "Quarto
       1's `libs/` convention", true for built-in deps but not Lua-registered ones
       (Finding 3). Document the versioned layout and point at this plan.
-- [ ] Document `version` wherever the `quarto.doc` Lua API is described.
-- [ ] Full `cargo xtask verify` (WASM leg included — `pampa` and `quarto-core`
+- [x] Document `version` wherever the `quarto.doc` Lua API is described.
+- [x] Full `cargo xtask verify` (WASM leg included — `pampa` and `quarto-core`
       are both in hub-client's dependency closure).
 - [ ] Tell the connect-docs side to drop the `Q-11-1: level: off` suppression.
 
 Cross-document diagnostic dedup is **not** a phase here — filed as `bd-k2ox4tqq`.
+
+## End-to-end verification (2026-08-14)
+
+Per CLAUDE.md § "End-to-end verification before declaring success" — tests alone
+are not sufficient, so the feature was exercised through the binary a user runs
+and the output was **inspected**, not inferred from exit status.
+
+```
+$ cargo run --bin q2 -- render claude-notes/plans/add-html-dependency-version-investigation/repro/
+Rendering project: .../repro (type: website)
+Rendered 1 of 1 files to .../repro/_site
+```
+
+**Zero warnings** — before the fix this same invocation printed two identical
+`Q-11-1` warnings and reported `— 2 warnings`.
+
+```
+$ find _site/site_libs -path '*versioned*'
+_site/site_libs/libs/versioned-dep/1.0.0/versioned-dep.js
+
+$ grep -o '<script src="[^"]*versioned[^"]*"' _site/index.html
+<script src="site_libs/libs/versioned-dep/1.0.0/versioned-dep.js"
+```
+
+The asset is at the nested versioned path and the emitted `<script src>` agrees
+with it, so the URL and the on-disk location match.
+
+The docs change was likewise verified through the real renderer
+(`cargo run --bin q2 -- render docs/`, 239/239 files; the 31 warnings are
+pre-existing missing-image warnings on other pages — `lua-filters.qmd` is not
+among the warning sources) and the rendered HTML section was read back.
 
 ## Settled design
 
