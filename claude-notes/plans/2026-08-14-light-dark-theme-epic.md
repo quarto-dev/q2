@@ -426,9 +426,25 @@ Integration branch: `feature/light-dark-theme` (created off `main`).
   unchanged until A3. Golden-hash baseline re-captured (documented delta:
   the one color-scheme rule). E2E: real `q2 render` of a quarto-web-shaped
   project inspected. 12,135 workspace tests green.
-- [ ] **A3 — link emission** (D4, D1a): `bd-ld-a3-link-emission-ruw9kw4v`.
-  Artifact attribs, template changes, ordering, trailing-copy emission, meta
-  color-scheme tag. Byte-identical output when no dark variant.
+- [x] **A3 — link emission** (D4, D1a): `bd-ld-a3-link-emission-ruw9kw4v`.
+  **Done 2026-08-14.** `Artifact` gained typed `link_attribs:
+  Vec<(String,String)>` + `link_order: i32`; `collect_artifact_urls` returns
+  `LinkedResource` sorted by `(link_order, key)` (all order-0 ⇒ pre-existing
+  order preserved byte-identically, guarded by the golden-hash test);
+  attributed entries render as `TemplateValue::Map` with `$if(css.href)$`
+  single-line branches in both built-in templates (plain-string entries keep
+  custom-template compat — matches Q1, whose `$css$` never carried theme
+  links). Theme trio: light (`quarto-color-scheme`, order 10), dark
+  (`quarto-color-scheme quarto-color-alternate`, order 20), and for
+  author-default-light a trailing re-link of the SAME light file
+  (`quarto-color-scheme-extra`, order 30 — class replaces so toggle
+  selectors skip it; needed for the FOUC hard constraint). `data-mode` from
+  each sheet's compiled `/*! dark */` sentinel (`css_is_dark`), not its
+  slot. `<meta name="color-scheme">` emitted in the full template head when
+  a dark variant exists — author default first, both schemes under
+  `respect-user-color-scheme: true` (reader introduced here, reused by A4).
+  E2E: real render inspected (trio + meta exactly Q1-shaped). 12,139 tests
+  green.
 - [ ] **A4 — toggle runtime** (D5): `bd-ld-a4-toggle-runtime-0t9i2rvs`. JS asset
   + before-body injection, body classes, localStorage,
   `respect-user-color-scheme`, hardcoded navbar toggle + floating fallback,

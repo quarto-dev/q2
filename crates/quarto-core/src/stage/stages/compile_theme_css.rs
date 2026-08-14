@@ -436,11 +436,15 @@ impl PipelineStage for CompileThemeCssStage {
 
         let light_css =
             variant_css(ctx, &theme_config, &theme_context, &doc_vars, cache_ok).await?;
-        store_css(ctx, light_css);
 
         if let Some(dark_cfg) = theme_config.dark_variant() {
             let dark_css = variant_css(ctx, &dark_cfg, &theme_context, &doc_vars, cache_ok).await?;
-            store_dark_css(ctx, dark_css);
+            let dark_is_default = theme_config.dark.as_ref().is_some_and(|d| d.is_default);
+            store_variant_pair(ctx, light_css, dark_css, dark_is_default);
+        } else {
+            // Single variant: plain, attribute-free link — byte-identical
+            // to the pre-light/dark output.
+            store_css(ctx, light_css);
         }
 
         Ok(PipelineData::DocumentAst(doc))
@@ -752,14 +756,103 @@ fn store_css(ctx: &mut StageContext, css: String) {
     );
 }
 
-fn store_dark_css(ctx: &mut StageContext, css: String) {
-    let fingerprint = theme_fingerprint(&css);
-    let (key, path) = dark_theme_artifact_key_and_path(&fingerprint, ctx.project.is_single_file);
+/// Whether a compiled theme CSS is dark, per the `/*! dark */`
+/// sentinel comment the vendored `_bootstrap-rules.scss` emits when
+/// `blackness($body-bg)` crosses the threshold (Q1's mechanism —
+/// `cssHasDarkModeSentinel`). Handles custom-SCSS variants that a
+/// `BuiltInTheme::is_dark()` check could not (e.g. quarto-web's
+/// `[cosmo, theme-dark.scss]` dark half).
+fn css_is_dark(css: &str) -> bool {
+    css.contains("/*! dark */")
+}
+
+/// Emission order for the light/dark link trio (see
+/// [`crate::artifact::Artifact::link_order`]): light, then dark, then
+/// the trailing default copy. Everything else stays at order 0.
+const THEME_LINK_ORDER_LIGHT: i32 = 10;
+const THEME_LINK_ORDER_DARK: i32 = 20;
+const THEME_LINK_ORDER_EXTRA: i32 = 30;
+
+/// Store the light/dark variant pair with Q1's link attributes and
+/// FOUC-safe ordering (bd-0pic6 A3):
+///
+/// - light: `class="quarto-color-scheme" id="quarto-bootstrap"
+///   data-mode="…"` — the primary sheet, never disabled by the toggle.
+/// - dark: `class="quarto-color-scheme quarto-color-alternate"` — the
+///   alternate sheet, layered ON TOP of light when active.
+/// - author-default-light additionally re-links the light file LAST
+///   with `class="quarto-color-scheme-extra"` (class replaces, so the
+///   toggle's `.quarto-color-scheme` selectors skip it): pre-toggle
+///   paint and no-JS browsers land on the default variant because the
+///   last enabled sheet wins the cascade. Author-default-dark needs no
+///   copy — dark already loads last.
+///
+/// `data-mode` comes from each sheet's compiled darkness sentinel, not
+/// its slot: the toggle syncs `body.quarto-light`/`quarto-dark` from
+/// the active sheet's actual darkness (Q1 semantics).
+fn store_variant_pair(
+    ctx: &mut StageContext,
+    light_css: String,
+    dark_css: String,
+    dark_is_default: bool,
+) {
+    let single_doc = ctx.project.is_single_file;
+    let light_mode = if css_is_dark(&light_css) {
+        "dark"
+    } else {
+        "light"
+    };
+    let dark_mode = if css_is_dark(&dark_css) {
+        "dark"
+    } else {
+        "light"
+    };
+
+    let light_fp = theme_fingerprint(&light_css);
+    let (light_key, light_path) = theme_artifact_key_and_path(&light_fp, single_doc);
+    let dark_fp = theme_fingerprint(&dark_css);
+    let (dark_key, dark_path) = dark_theme_artifact_key_and_path(&dark_fp, single_doc);
+
+    if !dark_is_default {
+        let extra_key = format!("css:theme-extra:{}", light_fp);
+        ctx.artifacts.store(
+            extra_key,
+            Artifact::from_string(light_css.clone(), "text/css")
+                .with_path(light_path.clone())
+                .with_scope(ArtifactScope::Project)
+                .with_link_attribs([
+                    ("class", "quarto-color-scheme-extra"),
+                    ("id", "quarto-bootstrap"),
+                    ("data-mode", light_mode),
+                ])
+                .with_link_order(THEME_LINK_ORDER_EXTRA),
+        );
+    }
+
     ctx.artifacts.store(
-        key,
-        Artifact::from_string(css, "text/css")
-            .with_path(path)
-            .with_scope(ArtifactScope::Project),
+        light_key,
+        Artifact::from_string(light_css, "text/css")
+            .with_path(light_path)
+            .with_scope(ArtifactScope::Project)
+            .with_link_attribs([
+                ("class", "quarto-color-scheme"),
+                ("id", "quarto-bootstrap"),
+                ("data-mode", light_mode),
+            ])
+            .with_link_order(THEME_LINK_ORDER_LIGHT),
+    );
+
+    ctx.artifacts.store(
+        dark_key,
+        Artifact::from_string(dark_css, "text/css")
+            .with_path(dark_path)
+            .with_scope(ArtifactScope::Project)
+            .with_link_attribs([
+                ("class", "quarto-color-scheme quarto-color-alternate"),
+                ("id", "quarto-bootstrap"),
+                ("data-mode", dark_mode),
+            ])
+            .with_link_order(THEME_LINK_ORDER_DARK),
     );
 }
 

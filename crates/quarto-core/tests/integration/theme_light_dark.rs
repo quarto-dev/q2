@@ -261,6 +261,164 @@ fn dark_only_theme_map_compiles_dark_variant_with_default_light() {
     assert_no_q14_3(&result.render_output.diagnostics);
 }
 
+/// A3: the emitted `<link>` tags carry Q1's classes/id/data-mode, in
+/// the FOUC-safe order (light, dark, trailing light copy for an
+/// author-default-light pair), plus the `<meta name="color-scheme">`
+/// pre-CSS paint hint (D1a).
+#[test]
+fn light_dark_map_emits_attributed_links_and_meta() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(&root.join("light-marker.scss"), LIGHT_SCSS);
+    write(&root.join("dark-marker.scss"), DARK_SCSS);
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: Attributed Links\nformat:\n  html:\n    theme:\n      light: [cosmo, light-marker.scss]\n      dark: [darkly, dark-marker.scss]\n---\n\n# Hi\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("must render");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+
+    // Light link: primary color-scheme sheet, mode from the compiled
+    // CSS's darkness sentinel.
+    let light = html
+        .find(r#"<link rel="stylesheet" href="doc_files/styles.css" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">"#)
+        .expect("attributed light link");
+    // Dark link: alternate sheet.
+    let dark = html
+        .find(r#"<link rel="stylesheet" href="doc_files/styles-dark.css" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">"#)
+        .expect("attributed dark link");
+    // Trailing light copy (author default is light): re-links the SAME
+    // file so no-JS/first-paint lands on the default variant.
+    let extra = html
+        .find(r#"<link rel="stylesheet" href="doc_files/styles.css" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">"#)
+        .expect("trailing light-copy link");
+    assert!(
+        light < dark && dark < extra,
+        "link order must be light ({light}), dark ({dark}), extra ({extra})"
+    );
+
+    // D1a: pre-CSS paint hint matches the author default.
+    assert!(
+        html.contains(r#"<meta name="color-scheme" content="light">"#),
+        "author-default-light pair must emit the light color-scheme meta"
+    );
+}
+
+/// A3: author-default-dark (dark listed first) — two links only
+/// (light, dark; the enabled-last dark wins pre-JS), dark meta.
+#[test]
+fn dark_first_map_emits_dark_default_links_and_meta() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: Dark Default\nformat:\n  html:\n    theme:\n      dark: darkly\n      light: cosmo\n---\n\n# Hi\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("must render");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+
+    let light = html
+        .find(r#"class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light""#)
+        .expect("light link present");
+    let dark = html
+        .find(r#"class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark""#)
+        .expect("dark link present");
+    assert!(light < dark, "light link first, dark (default) last");
+    assert!(
+        !html.contains("quarto-color-scheme-extra"),
+        "author-default-dark must not emit the trailing copy"
+    );
+    assert!(
+        html.contains(r#"<meta name="color-scheme" content="dark">"#),
+        "author-default-dark pair must emit the dark color-scheme meta"
+    );
+}
+
+/// A3 + D1a: `respect-user-color-scheme: true` makes the pre-CSS
+/// paint hint offer both schemes so the UA picks per
+/// `prefers-color-scheme` (author-default first).
+#[test]
+fn respect_user_color_scheme_emits_dual_meta() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: Respect\nformat:\n  html:\n    respect-user-color-scheme: true\n    theme:\n      light: cosmo\n      dark: darkly\n---\n\n# Hi\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("must render");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+    assert!(
+        html.contains(r#"<meta name="color-scheme" content="light dark">"#),
+        "respect-user-color-scheme must offer both schemes, author default first"
+    );
+}
+
+/// A3 back-compat: without a dark variant, links stay exactly as
+/// before — no classes, no id, no data-mode, no meta tag. (The
+/// phase5 golden-hash baseline guards this at the byte level; this
+/// assertion documents it at the feature level.)
+#[test]
+fn single_variant_links_stay_plain() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: Plain\nformat:\n  html:\n    theme: cosmo\n---\n\n# Hi\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("must render");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+    assert!(
+        html.contains(r#"<link rel="stylesheet" href="doc_files/styles.css">"#),
+        "single-variant link must stay attribute-free"
+    );
+    assert!(!html.contains("quarto-color-scheme"));
+    assert!(!html.contains(r#"<meta name="color-scheme""#));
+}
+
 /// D1a bonus: a *single* dark theme (no light/dark pair at all) gets
 /// `color-scheme: dark` from the darkness sentinel, so existing
 /// dark-theme users get correct native scrollbars/controls.

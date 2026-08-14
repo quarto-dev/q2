@@ -76,6 +76,21 @@ pub struct Artifact {
     /// for producers — flipping a producer to `Project` is the
     /// explicit signal that its output is shareable across pages.
     pub scope: ArtifactScope,
+
+    /// Extra HTML attributes for the `<link>` / `<script>` tag this
+    /// artifact is emitted with by `ApplyTemplateStage` (e.g. the
+    /// light/dark theme sheets' `class` / `id` / `data-mode` —
+    /// bd-0pic6 A3). Empty (the default) emits today's plain tag.
+    /// Order-preserving `Vec` rather than a map: attribute order is
+    /// part of the deterministic output.
+    pub link_attribs: Vec<(String, String)>,
+
+    /// Sort priority for `<link>` / `<script>` emission:
+    /// `ApplyTemplateStage` orders entries by `(link_order, key)`.
+    /// `0` (the default) preserves the pre-existing pure
+    /// lexicographic-key order; the theme sheets use positive values
+    /// to pin the FOUC-safe light → dark → default-copy sequence.
+    pub link_order: i32,
 }
 
 impl Artifact {
@@ -87,6 +102,8 @@ impl Artifact {
             path: None,
             metadata: HashMap::new(),
             scope: ArtifactScope::default(),
+            link_attribs: Vec::new(),
+            link_order: 0,
         }
     }
 
@@ -98,6 +115,8 @@ impl Artifact {
             path: None,
             metadata: HashMap::new(),
             scope: ArtifactScope::default(),
+            link_attribs: Vec::new(),
+            link_order: 0,
         }
     }
 
@@ -131,6 +150,8 @@ impl Artifact {
             path: Some(path),
             metadata: HashMap::new(),
             scope: ArtifactScope::default(),
+            link_attribs: Vec::new(),
+            link_order: 0,
         }
     }
 
@@ -160,6 +181,25 @@ impl Artifact {
     /// Set the scope (per-page or project-shared) for this artifact.
     pub fn with_scope(mut self, scope: ArtifactScope) -> Self {
         self.scope = scope;
+        self
+    }
+
+    /// Set the extra HTML attributes for the emitted `<link>` /
+    /// `<script>` tag. See [`Artifact::link_attribs`].
+    pub fn with_link_attribs(
+        mut self,
+        attribs: impl IntoIterator<Item = (impl Into<String>, impl Into<String>)>,
+    ) -> Self {
+        self.link_attribs = attribs
+            .into_iter()
+            .map(|(k, v)| (k.into(), v.into()))
+            .collect();
+        self
+    }
+
+    /// Set the emission sort priority. See [`Artifact::link_order`].
+    pub fn with_link_order(mut self, order: i32) -> Self {
+        self.link_order = order;
         self
     }
 

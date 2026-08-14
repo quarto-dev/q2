@@ -299,10 +299,16 @@ impl PipelineStage for ApplyTemplateStage {
                 // `css:revealjs:*` / `js:revealjs:*` artifacts; we collect just
                 // those (a reveal deck never wants the Bootstrap `css:theme:*`)
                 // and the resolver gives the right per-context URLs.
-                let reveal_css =
-                    collect_artifact_urls(ctx, "css:revealjs:", self.config.resolver.as_ref());
-                let reveal_js =
-                    collect_artifact_urls(ctx, "js:revealjs:", self.config.resolver.as_ref());
+                let reveal_css: Vec<String> =
+                    collect_artifact_urls(ctx, "css:revealjs:", self.config.resolver.as_ref())
+                        .into_iter()
+                        .map(|r| r.url)
+                        .collect();
+                let reveal_js: Vec<String> =
+                    collect_artifact_urls(ctx, "js:revealjs:", self.config.resolver.as_ref())
+                        .into_iter()
+                        .map(|r| r.url)
+                        .collect();
                 let html = crate::revealjs::render_revealjs_document(
                     &rendered.content,
                     &metadata,
@@ -365,9 +371,13 @@ fn collect_artifact_urls(
     ctx: &StageContext,
     prefix: &str,
     resolver: Option<&ResourceResolverContext>,
-) -> Vec<String> {
+) -> Vec<crate::template::LinkedResource> {
     let mut entries: Vec<(&str, &crate::artifact::Artifact)> = ctx.artifacts.get_by_prefix(prefix);
-    entries.sort_by(|a, b| a.0.cmp(b.0));
+    // Sort by (link_order, key): all artifacts default to order 0, so
+    // the pre-existing lexicographic-key order is preserved exactly;
+    // the light/dark theme sheets use positive orders to pin their
+    // FOUC-safe light → dark → default-copy sequence (bd-0pic6 A3).
+    entries.sort_by(|a, b| (a.1.link_order, a.0).cmp(&(b.1.link_order, b.0)));
 
     let mut urls = Vec::with_capacity(entries.len());
     for (_, artifact) in entries {
@@ -376,7 +386,10 @@ fn collect_artifact_urls(
             Some(r) => r.html_url_for(artifact.scope, path),
             None => path.to_string_lossy().replace('\\', "/"),
         };
-        urls.push(url);
+        urls.push(crate::template::LinkedResource {
+            url,
+            attribs: artifact.link_attribs.clone(),
+        });
     }
     urls
 }

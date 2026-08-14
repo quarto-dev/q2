@@ -79,6 +79,61 @@ impl PartialResolver for RuntimeResolver<'_> {
 ///   document contains math; rendered immediately before
 ///   `$for(scripts)$` so the inline config block lands BEFORE the
 ///   loader (what MathJax expects).
+/// A stylesheet or script reference destined for the template's
+/// `$css$` / `$scripts$` list: a URL plus optional extra tag
+/// attributes (bd-0pic6 A3 — the light/dark theme sheets carry
+/// `class` / `id` / `data-mode`).
+///
+/// An attribute-free resource renders as a plain
+/// `TemplateValue::String`, preserving byte-identical output and
+/// compatibility with custom templates that write `$css$` directly.
+/// An attributed resource renders as a `TemplateValue::Map` with the
+/// URL under the given key (`href` / `src`) and the pre-rendered
+/// attribute string under `attribs`; the built-in templates branch on
+/// `$if(css.href)$` / `$if(scripts.src)$`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkedResource {
+    pub url: String,
+    pub attribs: Vec<(String, String)>,
+}
+
+impl LinkedResource {
+    /// An attribute-free resource (today's plain `<link>`/`<script>`).
+    pub fn plain(url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            attribs: Vec::new(),
+        }
+    }
+
+    fn template_value(&self, url_key: &str) -> TemplateValue {
+        if self.attribs.is_empty() {
+            return TemplateValue::String(self.url.clone());
+        }
+        let mut rendered = String::new();
+        for (k, v) in &self.attribs {
+            rendered.push(' ');
+            rendered.push_str(k);
+            rendered.push_str("=\"");
+            rendered.push_str(&escape_html_attr(v));
+            rendered.push('"');
+        }
+        let mut map = std::collections::HashMap::new();
+        map.insert(url_key.to_string(), TemplateValue::String(self.url.clone()));
+        map.insert("attribs".to_string(), TemplateValue::String(rendered));
+        TemplateValue::Map(map)
+    }
+}
+
+/// Minimal HTML-attribute-value escaping for [`LinkedResource`]
+/// attributes (which are producer-controlled, but escaped anyway).
+fn escape_html_attr(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+}
+
 const MINIMAL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <html$if(lang)$ lang="$lang$"$endif$>
 <head>
@@ -88,13 +143,13 @@ $if(pagetitle)$
 <title>$pagetitle$</title>
 $endif$
 $for(css)$
-<link rel="stylesheet" href="$css$">
+$if(css.href)$<link rel="stylesheet" href="$css.href$"$css.attribs$>$else$<link rel="stylesheet" href="$css$">$endif$
 $endfor$
 $if(math)$
 $math$
 $endif$
 $for(scripts)$
-<script src="$scripts$"></script>
+$if(scripts.src)$<script src="$scripts.src$"$scripts.attribs$></script>$else$<script src="$scripts$"></script>$endif$
 $endfor$
 $for(header-includes)$
 $header-includes$
@@ -164,6 +219,9 @@ const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+$if(color-scheme-meta)$
+<meta name="color-scheme" content="$color-scheme-meta$">
+$endif$
 <meta name="generator" content="quarto-rust-$version$">
 $for(author-meta)$
 <meta name="author" content="$author-meta$">
@@ -184,13 +242,13 @@ $if(pagetitle)$
 <title>$pagetitle$</title>
 $endif$
 $for(css)$
-<link rel="stylesheet" href="$css$">
+$if(css.href)$<link rel="stylesheet" href="$css.href$"$css.attribs$>$else$<link rel="stylesheet" href="$css$">$endif$
 $endfor$
 $if(math)$
 $math$
 $endif$
 $for(scripts)$
-<script src="$scripts$"></script>
+$if(scripts.src)$<script src="$scripts.src$"$scripts.attribs$></script>$else$<script src="$scripts$"></script>$endif$
 $endfor$
 $for(header-includes)$
 $header-includes$
@@ -629,8 +687,8 @@ pub fn render_with_compiled_template(
     template: &Template,
     body: &str,
     meta: &ConfigValue,
-    css_paths: &[String],
-    script_paths: &[String],
+    css_paths: &[LinkedResource],
+    script_paths: &[LinkedResource],
 ) -> Result<(String, Vec<DiagnosticMessage>)> {
     let mut ctx = TemplateContext::new();
     ctx.insert("body", TemplateValue::String(body.to_string()));
@@ -655,10 +713,8 @@ pub fn render_with_compiled_template(
     );
 
     // Build combined CSS list: default resources first, then user-specified
-    let mut css_list: Vec<TemplateValue> = css_paths
-        .iter()
-        .map(|p| TemplateValue::String(p.clone()))
-        .collect();
+    let mut css_list: Vec<TemplateValue> =
+        css_paths.iter().map(|r| r.template_value("href")).collect();
 
     // Add any user-specified CSS from metadata
     if let Some(user_css) = extract_css_from_meta(meta) {
@@ -671,9 +727,34 @@ pub fn render_with_compiled_template(
     if !script_paths.is_empty() {
         let scripts_list: Vec<TemplateValue> = script_paths
             .iter()
-            .map(|p| TemplateValue::String(p.clone()))
+            .map(|r| r.template_value("src"))
             .collect();
         ctx.insert("scripts", TemplateValue::List(scripts_list));
+    }
+
+    // Pre-CSS paint hint for light/dark theme pairs (bd-0pic6 D1a):
+    // when a dark variant exists, tell the UA which scheme(s) the page
+    // supports before any stylesheet loads. The author-default scheme
+    // comes first; `respect-user-color-scheme: true` offers both so
+    // the UA picks per `prefers-color-scheme`. Only the full template
+    // emits the tag; setting the variable elsewhere is inert.
+    if let Ok(theme_config) = quarto_sass::ThemeConfig::from_config_value(meta)
+        && let Some(dark) = &theme_config.dark
+    {
+        let respect = meta
+            .get("respect-user-color-scheme")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let content = match (respect, dark.is_default) {
+            (true, false) => "light dark",
+            (true, true) => "dark light",
+            (false, false) => "light",
+            (false, true) => "dark",
+        };
+        ctx.insert(
+            "color-scheme-meta",
+            TemplateValue::String(content.to_string()),
+        );
     }
 
     // Wire `rendered.includes.{header, before-body, after-body}` into the
@@ -813,7 +894,8 @@ pub fn render_with_resources(
     css_paths: &[String],
 ) -> Result<(String, Vec<DiagnosticMessage>)> {
     let template = default_html_template()?;
-    render_with_compiled_template(&template, body, meta, css_paths, &[])
+    let css: Vec<LinkedResource> = css_paths.iter().map(LinkedResource::plain).collect();
+    render_with_compiled_template(&template, body, meta, &css, &[])
 }
 
 /// Render a document with format-based template selection.
@@ -836,7 +918,8 @@ pub fn render_with_format(
     // `author-meta`).
     let mut meta = meta.clone();
     crate::transforms::normalize_authors_meta(&mut meta);
-    render_with_compiled_template(&template, body, &meta, css_paths, &[])
+    let css: Vec<LinkedResource> = css_paths.iter().map(LinkedResource::plain).collect();
+    render_with_compiled_template(&template, body, &meta, &css, &[])
 }
 
 /// Compile the appropriate built-in template (minimal or full) with a custom
@@ -2475,7 +2558,7 @@ mod tests {
             "<p>body</p>",
             &meta,
             &[],
-            &["libs/kbd/kbd.js".to_string()],
+            &[LinkedResource::plain("libs/kbd/kbd.js")],
         )
         .unwrap();
 
