@@ -1,0 +1,6 @@
+project:
+  type: website
+website:
+  title: "add_html_dependency version"
+filters:
+  - versioned-dep

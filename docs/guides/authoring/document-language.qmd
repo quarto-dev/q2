@@ -124,6 +124,36 @@ language:
 ---
 ```
 
+### Table of Contents Title
+
+The table of contents heading comes from one of two terms, chosen by context:
+
+| Term | Used for | English default |
+|------|----------|-----------------|
+| `toc-title-website` | pages of a `type: website` project rendered to HTML | On this page |
+| `toc-title-document` | everything else — standalone documents, books, and non-HTML output | Table of contents |
+
+Override whichever one applies to what you are rendering. On a website, setting
+`toc-title-document` has no effect on your pages:
+
+``` yaml
+---
+lang: es
+language:
+  toc-title-website: "En esta página"
+---
+```
+
+To set the heading for a single document regardless of context, use the `toc-title` option
+instead — it takes precedence over both terms and accepts markdown:
+
+``` yaml
+---
+toc: true
+toc-title: "On **this** page"
+---
+```
+
 ## Custom Translations
 
 To use a language Quarto doesn't ship a translation for:

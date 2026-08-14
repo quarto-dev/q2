@@ -1,0 +1,8 @@
+---
+title: "Dependency with a version"
+---
+
+Two paragraphs, so the filter's Para handler fires twice and the
+per-call nature of the warning is visible.
+
+The second paragraph.

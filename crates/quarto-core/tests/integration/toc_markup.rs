@@ -41,7 +41,17 @@ fn write(path: &Path, contents: &str) {
 /// Build a single-page website project whose `index.qmd` has `toc: true`
 /// and the given body, render it through the real pipeline, and return
 /// the rendered `index.html`.
-fn render_index_with_toc(body: &str, extra_frontmatter: &str, project_yml: Option<&str>) -> String {
+///
+/// `pub(crate)` so `toc_title_context` can drive the same real render
+/// path without cloning ~50 lines of pipeline setup. The two files are
+/// sibling modules of the one `integration` binary (see
+/// `.claude/rules/integration-tests.md`), so this is an ordinary
+/// intra-binary import, not a test depending on another test.
+pub(crate) fn render_index_with_toc(
+    body: &str,
+    extra_frontmatter: &str,
+    project_yml: Option<&str>,
+) -> String {
     let temp = TempDir::new().unwrap();
     let project_dir = temp
         .path()
@@ -97,7 +107,9 @@ fn render_index_with_toc(body: &str, extra_frontmatter: &str, project_yml: Optio
 /// Slice out the `<nav id="TOC">…</nav>` region so assertions cannot
 /// accidentally match the document body (which renders the same markup
 /// correctly today and would mask a TOC regression).
-fn toc_nav(html: &str) -> String {
+///
+/// `pub(crate)` for the same reason as [`render_index_with_toc`].
+pub(crate) fn toc_nav(html: &str) -> String {
     let start = html
         .find("<nav id=\"TOC\"")
         .unwrap_or_else(|| panic!("no <nav id=\"TOC\"> in rendered HTML:\n{html}"));
