@@ -3,7 +3,8 @@
 **Date:** 2026-08-14
 **Braid:** bd-website-toc-title-wn80ymab (bug, p3, label `toc`)
 **Branch:** `braid/bd-website-toc-title-wn80ymab`, off `main` @ `094c0a80`
-**Status:** In progress — Phase 0 (tests) complete and confirmed red. Implementing Phase 1.
+**Status:** **Complete** — all phases done. Full `cargo xtask verify` green (14/14 steps,
+12077/12077 tests). Ready for PR.
 
 ## Triage verdict
 
@@ -29,6 +30,21 @@ full rebuild** (i.e. a `cargo xtask verify` without `--skip-hub-build`). Re-chec
 work's PR goes up.
 
 Nothing in this investigation changed code, so no failure here is attributable to it.
+
+**RESOLVED (Phase 2).** It did *not* survive a full rebuild — **no strand filed**, as agreed.
+
+The initial diagnosis ("stale local dist") was right but incomplete; the *reason* it was stale
+turned out to be specific and recent. `npm run build:wasm` had never succeeded in this checkout
+because it requires `wasm-opt` (binaryen), which was added to the build on **2026-08-13 — one
+day before this work** — by `1eeaae5d` (bd-ee0qcq3c). `dev_setup.rs:211` checks for it but
+deliberately declines to install it, so nothing had provisioned it. With binaryen installed, the
+full chain completed, `q2-preview-spa/dist/spa-manifest.json` was produced, and the test passes:
+
+```
+PASS quarto-preview::integration config_endpoint::config_reports_embedded_asset_manifest_hashes
+```
+
+The underlying toolchain sprawl is filed separately as **bd-aag27gmv**.
 
 ## Issue context
 
@@ -197,23 +213,102 @@ comparison it warns about; and a named function is what a future reader greps fo
 Used `--no-fail-fast` for the workspace run: the first pass cancelled 795 tests after the known
 failure, which would have hidden any second regression behind an already-expected red.
 
-### Phase 2 — End-to-end verification
+### Phase 2 — End-to-end verification — **DONE**
 
-- [ ] `q2 render` the external repro → `<h2 id="toc-title">On this page</h2>`
-- [ ] `q2 render` the no-`website:`-key probe → same
-- [ ] Non-website single doc still renders "Table of contents"
-- [ ] Live `q2 preview` of a website project shows the website title (closes the parity gap
-      that was verified only by reading call sites)
-- [ ] Record invocations + observed output in this plan
+All through the real `q2` binary, output inspected directly (not inferred from exit status).
 
-### Phase 3 — Wrap-up
+- [x] Original repro → `<h2 id="toc-title">On this page</h2>`, byte-matching the committed Q1 reference
+- [x] Website with no `website:` key → same
+- [x] `lang: pt` website → `Nesta página`
+- [x] Default project → `Table of contents`
+- [x] Book project → `Table of contents`
+- [x] Bare single-file render (no project) → `Table of contents`
+- [x] Live `q2 preview` of a website project → `On this page`
+- [x] The q2 docs site (a real website project) → `On this page`
 
-- [ ] Confirm no `docs/` page documents "Table of contents" as the website default
-- [ ] `cargo xtask lint` clean
-- [ ] `cargo xtask verify` (full, incl. hub build) — also re-checks the stale-dist failure
-- [ ] Re-check `config_reports_embedded_asset_manifest_hashes`; file a strand only if it
-      survives the full rebuild
-- [ ] Record final commit hashes here
+```
+$ q2 render .                       # …/repros/website-toc-title  (type: website)
+$ grep -o '<h2 id="toc-title">[^<]*</h2>' _site/index.html
+<h2 id="toc-title">On this page</h2>          # q2   — was "Table of contents"
+$ grep -o '<h2 id="toc-title">[^<]*</h2>' _site-q1/index.html
+<h2 id="toc-title">On this page</h2>          # Q1   — reference, now matched
+
+website-no-website-key   <h2 id="toc-title">On this page</h2>
+website-pt               <h2 id="toc-title">Nesta página</h2>
+default-project          <h2 id="toc-title">Table of contents</h2>
+book-project             <h2 id="toc-title">Table of contents</h2>
+standalone (no project)  <h2 id="toc-title">Table of contents</h2>
+```
+
+**Preview parity — now verified empirically, not by reading call sites.** After the full
+WASM → SPA → binary chain, `q2 preview` on a website project served, inside the
+`q2-preview Renderer` iframe:
+
+```js
+{ tocTitleId: "toc-title", text: "On this page", tag: "H2" }
+```
+
+This closes the risk flagged during design. The check used the no-`website:`-key project, so it
+exercises the `ProjectKind` path rather than a metadata key.
+
+**Trap avoided:** a plain `cargo build --bin q2` would have re-embedded the *old* SPA and shown
+pre-change output while every test passed — the 2026-05-20 incident in `CLAUDE.md`. The
+documented chain (`npm run build:wasm` → `cargo xtask build-q2-preview-spa` →
+`cargo build --bin q2`) was run in full.
+
+**Toolchain detour.** `npm run build:wasm` initially failed: `wasm-opt` (binaryen) was missing.
+Not a stale-environment accident — `wasm-opt` was added to the build **2026-08-13, one day
+before this work**, by `1eeaae5d` (live-share payload reduction, bd-ee0qcq3c); `8024198b` then
+added binaryen to three CI workflows. `dev_setup.rs:211` checks for it but deliberately does not
+install it, so this checkout had never provisioned it. Installed binaryen 132 (matching CI's
+pin) and the chain completed.
+
+That also **resolved the pre-flight failure**: `config_reports_embedded_asset_manifest_hashes`
+now passes. Its cause was the same one — the hub-build leg had never completed here, so
+`q2-preview-spa/dist/` had no manifest. Not a code defect, and **no strand needed** for it.
+
+The wider toolchain sprawl this exposed is filed as **bd-aag27gmv** (p2, discovered-from this
+strand): two parallel toolchains (`wasm-pack` for `wasm-qmd-parser` vs
+cargo + `wasm-bindgen-cli` + `wasm-opt` for `wasm-quarto-hub-client`) and three pinning
+strategies, including a **one-sided binaryen pin** — CI pins `binaryen@132.0.0` with a comment
+claiming it matches local dev, but local dev has no pin at all, so the two agree only by luck
+until Homebrew ships 133.
+
+### Phase 3 — Wrap-up — **DONE**
+
+- [x] Confirm no `docs/` page documents "Table of contents" as the website default — none did.
+      Went further and **added** documentation (see below), since the change makes
+      `toc-title-document` silently ineffective on websites.
+- [x] `cargo xtask lint` — clean, 989 files
+- [x] `cargo xtask verify` (full, incl. hub build + WASM) — **all 14 steps passed**,
+      **12077 tests run, 12077 passed, 0 failed**
+- [x] Re-check `config_reports_embedded_asset_manifest_hashes` — passes; **no strand filed**
+- [x] Record final commit hashes
+
+**Docs.** The plan predicted "probably none". That was wrong in a useful way: nothing documented
+the old default, but the *new* behavior needs documenting, because a user overriding
+`toc-title-document` on a website now gets no effect and no diagnostic. Added a "Table of
+Contents Title" subsection to `docs/guides/authoring/document-language.qmd`, parallel to the
+existing "Cross-Reference Titles and Prefixes" — the page's other context-keyed term family.
+Rendered with q2 (never `quarto render`; docs/ is a Q2 site) and inspected.
+
+### Commits (branch `braid/bd-website-toc-title-wn80ymab`)
+
+| Commit | Contents |
+|--------|----------|
+| `0e02e399` | Investigation + plan skeleton |
+| `4b3e5e99` | Settled design decisions (incl. correction to the question-1 analysis) |
+| `d7e75e34` | Phase 0 — 14 failing tests (5 red, 9 guards) |
+| `38feb52e` | Phase 1 — `toc_title_term(ctx)` implementation |
+| `7875b2ff` | Docs — context-keyed TOC title |
+
+No snapshot files (`.snap`) were added, modified, or removed by this work.
+
+### Follow-up filed
+
+- **bd-aag27gmv** (p2, task, discovered-from this strand) — consolidate the accumulated WASM
+  build toolchains. Two parallel toolchains and three pinning strategies, including a one-sided
+  binaryen pin where CI claims parity with local dev that local dev does not uphold.
 
 ## Design decisions (settled 2026-08-14 with user)
 
