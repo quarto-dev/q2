@@ -1433,5 +1433,12 @@
     "message_template": "An entry under `diagnostics:` could not be understood. Each entry maps an error code to a level — `Q-2-49: off` — or to a map with a `level:` key and an optional `reason:`.",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-27",
     "since_version": "99.9.9"
+  },
+  "Q-13-8": {
+    "subsystem": "navigation",
+    "title": "Unsupported toc-location value",
+    "message_template": "The `toc-location` option has a value Quarto 2 does not support. Supported values are `left`, `right` (the default), and `body`. The `left-body` and `right-body` double-TOC values are not implemented yet and fall back to `left` / `right`; any other value falls back to the default `right`.",
+    "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-8",
+    "since_version": "99.9.9"
   }
 }

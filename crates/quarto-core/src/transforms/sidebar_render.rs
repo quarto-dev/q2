@@ -23,10 +23,22 @@
 //! format-agnostic `Sidebar` is committed to HTML output. See
 //! `claude-notes/plans/2026-04-24-websites-phase-2.md` §Decision 7/8.
 //!
+//! ## `toc-location: left` (bd-e2kpwy7n)
+//!
+//! When `TocLocationTransform` set the `rendered.navigation.toc-in-sidebar`
+//! directive (website regime), the rendered TOC block is appended
+//! inside `nav#quarto-sidebar` after the nav items; with no configured
+//! sidebar, a TOC-only floating sidebar is synthesized (and
+//! body-classes set to `nav-sidebar floating`) — Q1's `sidebar.ejs`
+//! with `sidebar === undefined`.
+//!
 //! ## Skip conditions
 //!
-//! - `sidebar: false` at the document level → neither output is set.
-//! - `navigation.sidebar` absent → neither output is set.
+//! - `sidebar: false` at the document level → the navigation sidebar
+//!   is not rendered (but a `toc-in-sidebar` TOC still synthesizes
+//!   its container, matching Q1's `nav.sidebar || navbarTocLeft`).
+//! - `navigation.sidebar` absent → neither output is set (unless
+//!   `toc-in-sidebar` synthesizes, as above).
 //! - `rendered.navigation.sidebar` already populated → the HTML
 //!   output is left alone (user override). The body-classes output
 //!   is computed independently with its own user-override check, so
@@ -35,7 +47,7 @@
 //!   body-classes output is left alone (user override).
 
 use quarto_error_reporting::DiagnosticMessage;
-use quarto_navigation::{Sidebar, SidebarEntry, render_html::sidebar_to_html};
+use quarto_navigation::{Sidebar, SidebarEntry, render_html::sidebar_to_html_with_appended};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::{By, SourceInfo};
@@ -73,11 +85,37 @@ impl AstTransform for SidebarRenderTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        if is_feature_disabled(&ast.meta, "sidebar") {
-            return Ok(());
-        }
+        // bd-e2kpwy7n: the `toc-in-sidebar` directive written by
+        // `TocLocationTransform` (website regime, `toc-location:
+        // left`). When set, the rendered TOC block is appended inside
+        // `nav#quarto-sidebar` — after the nav items when a sidebar is
+        // configured (Q1's `sidebar.ejs` merge order), or as the sole
+        // content of a synthesized floating sidebar when none is.
+        let toc_block = if ast
+            .meta
+            .get_path(&["rendered", "navigation", "toc-in-sidebar"])
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            toc_block_html(&ast.meta)
+        } else {
+            None
+        };
 
-        let Some(sidebar_cv) = ast.meta.get_path(&["navigation", "sidebar"]) else {
+        // `sidebar: false` disables the *navigation* sidebar, not the
+        // left TOC: Q1's `nav-before-body.ejs` emits the sidebar
+        // partial for `nav.sidebar || navbarTocLeft`, so a disabled
+        // sidebar still synthesizes the TOC-only container.
+        let sidebar_cv = if is_feature_disabled(&ast.meta, "sidebar") {
+            None
+        } else {
+            ast.meta.get_path(&["navigation", "sidebar"])
+        };
+
+        let Some(sidebar_cv) = sidebar_cv else {
+            if let Some(toc_block) = toc_block {
+                synthesize_toc_sidebar(ast, ctx, &toc_block);
+            }
             return Ok(());
         };
 
@@ -137,7 +175,7 @@ impl AstTransform for SidebarRenderTransform {
             .resource_resolver
             .as_ref()
             .map_or_else(|| "./".to_string(), |r| r.page_url_for_site_root_dir());
-        let html = sidebar_to_html(&sidebar, &home_url);
+        let html = sidebar_to_html_with_appended(&sidebar, &home_url, toc_block.as_deref());
 
         ast.meta.insert_path(
             &["rendered", "navigation", "sidebar"],
@@ -146,6 +184,70 @@ impl AstTransform for SidebarRenderTransform {
 
         Ok(())
     }
+}
+
+/// The Rust twin of the template's `toc-block` partial
+/// ([`crate::template::TOC_BLOCK_PARTIAL`] — keep the markup in sync):
+/// the full `nav#TOC` element composed from the rendered TOC metadata.
+/// Needed here because the website-left TOC lives inside the
+/// `rendered.navigation.sidebar` fragment, which the template emits
+/// opaquely.
+fn toc_block_html(meta: &ConfigValue) -> Option<String> {
+    let toc = meta
+        .get_path(&["rendered", "navigation", "toc"])?
+        .as_plain_text()?;
+    if toc.is_empty() {
+        return None;
+    }
+    let mut html = String::from("<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\">\n");
+    if let Some(title) = meta
+        .get_path(&["rendered", "navigation", "toc-title"])
+        .and_then(|v| v.as_plain_text())
+    {
+        html.push_str(&format!("<h2 id=\"toc-title\">{title}</h2>\n"));
+    }
+    html.push_str(&toc);
+    html.push_str("</nav>\n");
+    Some(html)
+}
+
+/// Synthesize the TOC-only floating sidebar for a website page with
+/// `toc-location: left` and no configured navigation sidebar — Q1's
+/// `sidebar.ejs` rendered with `sidebar === undefined`, where the
+/// style ternary falls back to `floating` and the wrapper holds only
+/// the TOC target.
+fn synthesize_toc_sidebar(ast: &mut Pandoc, ctx: &mut RenderContext, toc_block: &str) {
+    if !ast
+        .meta
+        .contains_path(&["rendered", "navigation", "body-classes"])
+    {
+        ast.meta.insert_path(
+            &["rendered", "navigation", "body-classes"],
+            ConfigValue::new_string(
+                "nav-sidebar floating",
+                SourceInfo::generated(By::programmatic_config()),
+            ),
+        );
+    }
+
+    if ast
+        .meta
+        .contains_path(&["rendered", "navigation", "sidebar"])
+    {
+        return;
+    }
+
+    let mut sidebar = Sidebar::with_defaults();
+    sidebar.style = quarto_navigation::SidebarStyle::Floating;
+    let home_url = ctx
+        .resource_resolver
+        .as_ref()
+        .map_or_else(|| "./".to_string(), |r| r.page_url_for_site_root_dir());
+    let html = sidebar_to_html_with_appended(&sidebar, &home_url, Some(toc_block));
+    ast.meta.insert_path(
+        &["rendered", "navigation", "sidebar"],
+        ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
+    );
 }
 
 /// Walk the sidebar, rewriting each entry's href from source-path to

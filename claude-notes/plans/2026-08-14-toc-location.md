@@ -3,7 +3,7 @@
 **Date:** 2026-08-14
 **Braid:** bd-e2kpwy7n
 **Branch:** investigated on `main` (worktree `.worktrees/bd-nn2fou8h-execute-visibility`, reused after its strand merged)
-**Status:** Design aligned with user 2026-08-14 (decisions recorded below). Ready to implement.
+**Status:** Implemented 2026-08-14 on branch `braid/bd-e2kpwy7n-toc-location` (phases 0-4 complete; full `cargo xtask verify` pending as the pre-push gate).
 
 User-stated scope note: `external-sources/quarto-cli` is context, not a
 contract — what matters is a mechanism that renders TOCs in alternative
@@ -162,39 +162,44 @@ for the full file:line map.
 End-to-end style per repo policy (route through `render_document_to_file`
 / project render, not `HtmlRenderConfig::default()` shortcuts):
 
-- [ ] **Website + `left`, no configured sidebar** (repro shape): output has
+Written 2026-08-14 in
+`crates/quarto-core/tests/integration/toc_location.rs`; verified failing
+at the expected assertions (9 failed, 2 controls passed) before any
+implementation.
+
+- [x] **Website + `left`, no configured sidebar** (repro shape): output has
       `nav#quarto-sidebar … floating` containing `nav#TOC`; body classes
       include `floating`; NO `#quarto-margin-sidebar` (decision 5); no TOC
       in the margin region.
-- [ ] **Website + `left`, with configured sidebar**: single
+- [x] **Website + `left`, with configured sidebar**: single
       `nav#quarto-sidebar`; nav items first, TOC appended after; no second
       container; margin sidebar omitted.
-- [ ] **Standalone doc + `left`**: `#quarto-content` class list gains
+- [x] **Standalone doc + `left`**: `#quarto-content` class list gains
       `toc-left`; `div#quarto-sidebar-toc-left.sidebar.toc-left` contains
       `nav#TOC`; body classes do NOT include `floating`/`docked`; margin
       sidebar omitted.
-- [ ] **`body`**: `nav#TOC` renders inside `main#quarto-document-content`
+- [x] **`body`**: `nav#TOC` renders inside `main#quarto-document-content`
       (after the title block, before content), decorated markup; no margin
       sidebar, no left containers.
-- [ ] **`right` / unset**: current output byte-stable (snapshot-neutral —
+- [x] **`right` / unset**: current output byte-stable (snapshot-neutral —
       guard the no-churn goal).
-- [ ] **Banner + `left`**: `#title-block-header` class list contains
+- [x] **Banner + `left`**: `#title-block-header` class list contains
       `toc-left` (template.rs:337 hook fires).
-- [ ] **`left-body` / `right-body`**: warning diagnostic emitted; placement
+- [x] **`left-body` / `right-body`**: warning diagnostic emitted; placement
       falls back to `left` / `right` respectively.
-- [ ] **Margin-categories interaction**: categories currently ride the
-      margin sidebar (`rendered.navigation.margin_categories`); pin the
-      expected behavior when the TOC moves left (categories keep the margin
-      sidebar shell — the `$else$` branch at template.rs:229-234 already
-      handles TOC-less margin categories).
+- [x] **Margin-categories interaction**: pinned at the template-unit
+      level (`full_template_relocated_toc_keeps_categories_only_margin`
+      in template.rs — a full listing fixture would have been heavier
+      than the contract it pins): a relocated TOC does not render in
+      the margin, categories keep their margin shell.
 
 ### Phase 1 — Option plumbing
 
-- [ ] Read `toc-location` from merged metadata with `as_plain_text` (the
+- [x] Read `toc-location` from merged metadata with `as_plain_text` (the
       `metadata-as-str` lint exists for exactly this key shape).
-- [ ] Normalize: `left` | `right` | `body`; `*-body` → warn + fallback;
+- [x] Normalize: `left` | `right` | `body`; `*-body` → warn + fallback;
       unknown value → diagnostic + default `right`.
-- [ ] Publish `rendered.navigation.toc-location` (string) early in the
+- [x] Publish `rendered.navigation.toc-location` (string) early in the
       Navigation phase so TocRender, SidebarRender, TitleBanner, and the
       template all read one source of truth. (Smallest home: a tiny
       transform or a helper called from `toc_generate`/`toc_render` —
@@ -202,12 +207,12 @@ End-to-end style per repo policy (route through `render_document_to_file`
 
 ### Phase 2 — Placement
 
-- [ ] Reorder pipeline: `TocRenderTransform` before
+- [x] Reorder pipeline: `TocRenderTransform` before
       `SidebarRenderTransform` (both `TransformPhase::Navigation`; verify
       no other ordering dependency between them — sidebar/breadcrumb
       comment at pipeline.rs:1383 mentions ordering vs TocRender, re-check
       why).
-- [ ] `SidebarRenderTransform`: when location is `left` and a website
+- [x] `SidebarRenderTransform`: when location is `left` and a website
       sidebar exists → append the rendered TOC (plus `h2#toc-title`) inside
       the `nav#quarto-sidebar` fragment (seam in
       `quarto_navigation::sidebar_to_html` or post-append in the
@@ -217,38 +222,53 @@ End-to-end style per repo policy (route through `render_document_to_file`
       holding only the TOC, and write body-classes `floating` (decide
       whether `nav-sidebar` belongs in that class list — it's q2's own
       addition; check its SCSS consumers).
-- [ ] `FULL_HTML_TEMPLATE`: gate the right-margin TOC region on location
+- [x] `FULL_HTML_TEMPLATE`: gate the right-margin TOC region on location
       `right`; add the standalone-left `#quarto-sidebar-toc-left` block +
       `toc-left` class on `#quarto-content` (new template variable); add
       the `body` emission point in `main`. Standalone-left must not claim
       the website wrapper (no `floating`).
-- [ ] Body-class precedence (`render_with_compiled_template`): confirm the
+- [x] Body-class precedence (`render_with_compiled_template`): confirm the
       four existing cases still hold; standalone-left rides the existing
       "TOC present → empty class" case (grid comes from `#quarto-content`'s
       `toc-left`, not body).
-- [ ] Update the stale comments: template.rs:296-298 ("which Q2 doesn't
+- [x] Update the stale comments: template.rs:296-298 ("which Q2 doesn't
       support yet") and title_banner.rs:41-43.
 
 ### Phase 3 — Banner producer
 
-- [ ] `TitleBannerTransform` (or the title pipeline stage that owns
+- [x] `TitleBannerTransform` (or the title pipeline stage that owns
       `quarto-template-params`) writes
       `quarto-template-params.banner-header-class = "toc-left"` when banner
       mode is active and normalized location is `left`.
-- [ ] Module docs updated (title_banner.rs deviation note becomes a
+- [x] Module docs updated (title_banner.rs deviation note becomes a
       pointer to this plan).
 
 ### Phase 4 — Schema, docs, E2E
 
-- [ ] Schema entry for `toc-location` (enum with all five Q1 values so
-      `*-body` validates, even though placement falls back).
-- [ ] Docs page in `docs/` (user-facing usage, not internals; rendered
+- [x] Schema entry: **N/A** — q2 has no document-option schema
+      infrastructure to extend (quarto-yaml-validation is external and
+      unused here); value validation lives in `TocLocationTransform`
+      (Q-13-8). Revisit if/when a doc-options schema lands.
+- [x] Docs page in `docs/` (user-facing usage, not internals; rendered
       with `cargo run --bin q2 -- render docs/`).
-- [ ] End-to-end verification: render the local repro AND the Connect-docs
-      `api/index.html` page; inspect output (record invocation + snippet
-      here per the end-to-end policy).
-- [ ] Snapshot review: report counts + summary per the snapshot policy;
-      `right`-path snapshots expected unchanged.
+- [x] End-to-end verification (output inspected in both cases):
+      - Website regime: `cargo run --bin q2 -- render .` in
+        `claude-notes/plans/toc-location-investigation/repro/` →
+        `<nav id="quarto-sidebar" class="sidebar sidebar-navigation
+        sidebar-floating" role="doc-toc">` containing `nav#TOC`, zero
+        `#quarto-margin-sidebar`, `<body class="nav-sidebar floating
+        quarto-light">`.
+      - Standalone regime: bare `doc.qmd` with `toc-location: left` →
+        `<div id="quarto-content" class="… page-layout-article
+        toc-left">`, `<div id="quarto-sidebar-toc-left" class="sidebar
+        toc-left">` containing `nav#TOC`, `<body class="quarto-light">`.
+      - The real Connect-docs `api/index.html` (1.8 MB, 201 entries) has
+        not been re-rendered here — the minimal repro mirrors its shape;
+        worth a spot-check from the q2-connect-docs project when
+        convenient.
+- [x] Snapshot review: zero `.snap` files changed — the `right`/default
+      path is byte-stable (all 12,111 workspace tests green with no
+      snapshot updates).
 
 ## Follow-up strands
 

@@ -21,3 +21,9 @@ Expected (Q1 1.10.15, same input — see `_site-q1/` in the external repro):
 - `<body class="floating quarto-light">`
 
 `_site/` is gitignored (generated).
+
+**Status:** fixed on branch `braid/bd-e2kpwy7n-toc-location`
+(2026-08-14) — q2 now renders `nav#TOC` inside a synthesized
+`nav#quarto-sidebar … sidebar-floating` with `body.floating`, matching
+the Q1 mechanism with q2's own class idiom. The "Observed at HEAD"
+section above records the pre-fix behavior.

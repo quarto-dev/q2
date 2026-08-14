@@ -81,7 +81,7 @@ use crate::transforms::{
     ReferenceLinkDiagnosticsTransform, ResourceCollectorTransform, SectionizeTransform,
     ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
     TableBootstrapClassTransform, TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform,
-    TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    TocGenerateTransform, TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
     WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
@@ -1413,6 +1413,12 @@ pub fn build_transform_pipeline(
         crate::project::listing::feed::ListingFeedLinkTransform::new(),
     ));
     pipeline.push(Box::new(TocRenderTransform::new()));
+    // Placement decision for the rendered TOC (bd-e2kpwy7n): must run
+    // after TocRenderTransform (it gates on `rendered.navigation.toc`)
+    // and before SidebarRenderTransform (which consumes the
+    // `toc-in-sidebar` directive to merge the TOC into
+    // `nav#quarto-sidebar` for website pages).
+    pipeline.push(Box::new(TocLocationTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
     pipeline.push(Box::new(SidebarRenderTransform::new()));
     // Breadcrumbs derive from the resolved `navigation.sidebar`
