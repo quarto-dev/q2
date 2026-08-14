@@ -367,9 +367,9 @@ Implementation runs on branch `braid/bd-format-css-not-copied-crn3bjdz`
 ### Phase 4 — end-to-end verification + follow-ups
 
 - [x] `cargo run --bin q2 -- render` on the investigation fixture; inspect output (record snippet in plan)
-- [ ] Re-check the Connect docs repro
-- [ ] Verify `q2 preview` behavior; file preview follow-up strand if broken
-- [ ] Full `cargo xtask verify` green
+- [x] Re-check the Connect docs repro (2026-08-14, branch binary: both css files copied, deep hrefs `../../styles.css` + relocated quarto-contrib path — matches Q1 table)
+- [x] Verify `q2 preview` behavior; filed follow-up **bd-b3oq2fsy** (user css not applied in VFS mode; also fixed a false Q-5-29 in the preview overlay by cfg-gating emission to native)
+- [x] Full `cargo xtask verify` green (14 legs, 2026-08-14; workspace re-run after the wasm cfg fix: 12182 native + 131 wasm)
 - [ ] User-facing docs if applicable
 
 ## Proposed phases (draft)

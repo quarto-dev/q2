@@ -965,7 +965,12 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // Project-config `css:` entries naming missing files warn once
         // per render here — not once per page in the merge, which is
         // where document-layer `css:` mistakes are diagnosed instead
-        // (bd-format-css-not-copied-crn3bjdz).
+        // (bd-format-css-not-copied-crn3bjdz). Native only: in the WASM
+        // preview/hub the runtime probes the VFS, which is not
+        // authoritative for non-qmd project files (a stylesheet that
+        // exists on disk may simply not be synced), so the same check
+        // there produced false Q-5-29 warnings in the preview overlay.
+        #[cfg(not(target_arch = "wasm32"))]
         initial_diagnostics.extend(crate::project::format_css::missing_project_css_diagnostics(
             self.project,
             self.format.identifier.as_str(),

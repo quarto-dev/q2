@@ -384,7 +384,15 @@ impl PipelineStage for MetadataMergeStage {
             &document_dir,
             ctx.runtime.as_ref(),
         ));
+        // Native only: the WASM VFS is not authoritative for non-qmd
+        // project files (an on-disk stylesheet may simply not be
+        // synced), so surfacing these there yields false warnings.
+        // See the matching gate on `missing_project_css_diagnostics`
+        // in the orchestrator.
+        #[cfg(not(target_arch = "wasm32"))]
         ctx.add_diagnostics(css_diagnostics);
+        #[cfg(target_arch = "wasm32")]
+        drop(css_diagnostics);
 
         // Layer 5: Runtime metadata (flattened for base format)
         let runtime_layer = runtime_meta_json
