@@ -543,10 +543,20 @@ Integration branch: `feature/light-dark-theme` (created off `main`).
 - [ ] **D — preview/hub-client** (D8): `bd-ld-d-preview-hub-t4oxv0hf`.
   VFS/iframe dual transport, editor-scheme integration (related: bd-nxe8).
   Uses lessons from A.
-- [ ] **E — cleanup**: `bd-ld-e-cleanup-qxidnkng`. Delete-or-wire
-  `SassBundle{,Dark}` scaffolding, docs (`docs/` user-facing dark-mode page,
-  `light-dark()` idiom, migration notes), audit `bd-36vmz7nk`/`bd-qmpygp02`
-  fallback posture for the dark compile path.
+- [x] **E — cleanup**: `bd-ld-e-cleanup-qxidnkng`. **Done 2026-08-14.**
+  Deleted the never-wired `SassBundle`/`SassBundleDark`/`SassBundleLayers`
+  scaffolding (the epic delivered dark variants through per-variant
+  `ThemeConfig`s instead; module doc records why). Wrote the user-facing
+  `docs/guides/formats/html/themes.qmd` (was a TBD stub): theme basics,
+  light/dark map + key-order default, toggle/persistence,
+  `respect-user-color-scheme`, `color-scheme`/`light-dark()` idiom,
+  `.light-content`/`.dark-content`, highlight-style, brand pairs — with
+  anchors matching the pre-existing links from `brand.qmd`
+  (`#dark-mode`, `#mode-specific-content`); rendered with q2 and
+  inspected. Audit notes recorded on bd-36vmz7nk / bd-qmpygp02: the
+  silent DEFAULT_CSS fallback now applies per variant, where a failed
+  dark compile ships LIGHT css under the dark key — extra weight for the
+  hard-error posture. Q-14-3 retirement was completed in A2.
 
 Follow-up already filed: `bd-ld-toggle-into-tools-hpae7m9r` — fold the
 hardcoded toggle into `tools:` when bd-fod3 lands.

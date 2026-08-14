@@ -3,7 +3,7 @@
 //! Copyright (c) 2025 Posit, PBC
 //!
 //! This crate provides:
-//! - Core types (SassLayer, SassBundleLayers, SassBundle)
+//! - Core types (SassLayer)
 //! - Layer parsing from SCSS content with boundary markers
 //! - Layer merging with correct precedence handling
 //! - Embedded Bootstrap 5.3.1 SCSS resources
@@ -81,4 +81,4 @@ pub use themes::{
     load_quarto_customization_layer, load_theme_layer, process_theme_specs, resolve_theme,
     resolve_theme_spec,
 };
-pub use types::{SassBundle, SassBundleDark, SassBundleLayers, SassLayer};
+pub use types::SassLayer;
