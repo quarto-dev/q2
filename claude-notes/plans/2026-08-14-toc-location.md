@@ -3,7 +3,7 @@
 **Date:** 2026-08-14
 **Braid:** bd-e2kpwy7n
 **Branch:** investigated on `main` (worktree `.worktrees/bd-nn2fou8h-execute-visibility`, reused after its strand merged)
-**Status:** Implemented 2026-08-14 on branch `braid/bd-e2kpwy7n-toc-location` (phases 0-4 complete; full `cargo xtask verify` pending as the pre-push gate).
+**Status:** Implemented 2026-08-14 on branch `braid/bd-e2kpwy7n-toc-location` (phases 0-4 complete; full `cargo xtask verify` passed 2026-08-14, all 14 steps including hub/WASM legs). Awaiting push approval.
 
 User-stated scope note: `external-sources/quarto-cli` is context, not a
 contract — what matters is a mechanism that renders TOCs in alternative
