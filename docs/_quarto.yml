@@ -8,7 +8,9 @@ project:
 
 website:
   title: "Quarto 2"
+  description: "Documentation for Quarto 2, the Rust-based rewrite of the Quarto publishing system"
   logo: quarto.png
+  llms-txt: true
   navbar:
     left:
       - href: index.qmd
