@@ -105,6 +105,11 @@ const CODE_CONFIG_NESTING_TOO_DEEP: &str = "Q-1-27";
 /// consumption time).
 const MARKDOWN_CONFIG_PATHS: &[&[&str]] = &[
     &["website", "title"],
+    // Site description: presentation text like the title — consumed
+    // by the llms.txt header (bd-6m1iyxl6), which needs raw inlines
+    // dropped and shortcodes resolved the same way the browser
+    // `<title>` path resolves `website.title`.
+    &["website", "description"],
     &["website", "navbar", "title"],
     &["navbar", "title"],
     &["website", "sidebar", "title"],
@@ -308,6 +313,37 @@ mod tests {
 
     fn kind_at<'a>(meta: &'a ConfigValue, path: &[&str]) -> &'a ConfigValueKind {
         &meta.get_path(path).expect("path exists").value
+    }
+
+    /// `website.description` is presentation text like the title
+    /// (bd-6m1iyxl6): a scalar string becomes PandocInlines so the
+    /// llms.txt header flattens raw markup away and resolves
+    /// shortcodes.
+    #[test]
+    fn website_description_scalar_becomes_inlines() {
+        let mut meta = map(vec![(
+            "website",
+            map(vec![("description", s("Docs for *My Site*"))]),
+        )]);
+        let mut diags = Vec::new();
+        apply_markdown_config_paths(&mut meta, &mut diags);
+
+        assert!(
+            matches!(
+                kind_at(&meta, &["website", "description"]),
+                ConfigValueKind::PandocInlines(_)
+            ),
+            "expected PandocInlines, got {:?}",
+            kind_at(&meta, &["website", "description"])
+        );
+        assert_eq!(
+            meta.get_path(&["website", "description"])
+                .unwrap()
+                .as_plain_text()
+                .as_deref(),
+            Some("Docs for My Site"),
+            "emphasis flattens to plain text"
+        );
     }
 
     /// `website.title` scalar string becomes PandocInlines; a shortcode
