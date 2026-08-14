@@ -542,7 +542,22 @@ Integration branch: `feature/light-dark-theme` (created off `main`).
   green.
 - [ ] **D — preview/hub-client** (D8): `bd-ld-d-preview-hub-t4oxv0hf`.
   VFS/iframe dual transport, editor-scheme integration (related: bd-nxe8).
-  Uses lessons from A.
+  **Deferred to its own session (2026-08-14)** — the last remaining child.
+  It is the only one touching the TypeScript stack, and it carries a real
+  UX decision the A-lane surfaced: the preview'd document now ships its own
+  inline toggle runtime, so the iframe transport could either (a) inject
+  BOTH variants as `<link>`s carrying the A3 classes/`data-mode`, letting
+  the document's own runtime + toggle work inside the iframe verbatim
+  (elegant; needs care with injection-vs-script timing since the parent
+  posts CSS after the inline script has run), or (b) drive the variant from
+  hub-client's editor `ColorScheme` (ThemeContext.tsx) with no in-preview
+  toggle, or a hybrid (document toggle wins, editor scheme as the initial
+  signal). Recommend (a)+initial-signal hybrid; decide with Carlos at
+  session start. Mechanical inventory: `pass2_renderer.rs` styles.css VFS
+  write → add `styles-dark.css`; wasm `extract_theme_fingerprint` → pair;
+  `Q2PreviewIframe.tsx` `UPDATE_THEME` + `entry.tsx` `applyTheme` →
+  two-slot; q2-preview SPA equivalents; extend
+  `preview_render_css_parity.rs` to the dark artifact.
 - [x] **E — cleanup**: `bd-ld-e-cleanup-qxidnkng`. **Done 2026-08-14.**
   Deleted the never-wired `SassBundle`/`SassBundleDark`/`SassBundleLayers`
   scaffolding (the epic delivered dark variants through per-variant
