@@ -222,78 +222,144 @@ loop — unknown-field error stays before dedup, unsupported-field warning moves
 after — preserves the strictness. Cheap either way, but it is a decision, not an
 implementation detail.
 
-## Proposed phases (draft)
+## Relationship to `freeze` (cross-reference for future design sessions)
 
-Phase 2's internals still hinge on the one open question below; everything else
-is settled.
+**If you are designing `freeze` and found this document by searching for
+`freeze`: this is why `version` is honored on HTML dependencies. That decision
+was made here, by this strand, before `freeze` existed. It is yours to revisit.**
 
-- **Phase 0 — Test plan (TDD, failing first).**
-  - Unit: two `add_html_dependency` calls for the same dependency emit exactly
-    one Q-11-1 for an unsupported field (currently two).
-  - Unit: an unknown field still errors on a *repeat* call (pins decision 4).
-  - Unit: `version` no longer warns at all.
-  - Unit: a versioned dep lands at the versioned path; an unversioned dep keeps
-    `libs/{name}/`.
-  - Unit: two versions of the same name (the freeze case) do not collapse into
-    one artifact — *exact assertion depends on open question 1*.
-  - End-to-end via the committed repro through `render_document_to_file`, per
-    CLAUDE.md's end-to-end rule: zero warnings, asset at the versioned path.
-- **Phase 1 — Split the field loop** (`quarto_doc.rs:230-262`): unknown-field
-  hard error stays *before* the dedup early-return; the unsupported-field warning
-  moves *after* it. Self-contained and independent of Phase 2.
-- **Phase 2 — Implement `version`.**
-  - Drop `"version"` from `UNSUPPORTED_FIELDS` (`quarto_doc.rs:56-63`); add it to
-    `SUPPORTED_FIELDS`.
-  - Add `version: Option<String>` to `HtmlDependency` (`quarto_doc.rs:27-31`),
-    store it in the Lua entry (`quarto_doc.rs:269-285`), read it back in
-    `extract_html_dependencies` (`quarto_doc.rs:364-396`).
-  - Version-aware artifact path and key in `dependency.rs:50-51,78-79`.
-  - Resolve the dedup key per open question 1.
-- **Phase 3 — Docs + close-out.** Fix `dependency.rs`'s doc-comment (it currently
-  attributes `libs/{name}/` to "Quarto 1's `libs/` convention", which holds for
-  built-in deps but not Lua-registered ones — see Finding 3); document `version`
-  wherever the `quarto.doc` Lua API is described; tell the connect-docs side to
-  drop the `Q-11-1: level: off` suppression.
+Survey done 2026-08-14. **There is no `freeze` epic strand** — the skein contains
+exactly one `freeze`-related strand:
+
+- **`bd-mx5x609r`** (task, p4, open) — *"When freeze lands: bind engine canFreeze
+  gating with marimo's canFreeze:false as the test case."* A reminder, not an
+  epic. It records that q2 has **no freeze mechanism at all** today: `canFreeze`
+  arrives on the wire (`ts_protocol.rs:197,208`), is stored
+  (`ts_engine.rs:357`) and readable (`ts_engine.rs:614`), but dead-ends at a
+  `Debug` impl (`registry.rs:316`); `RenderOptions.use_freeze`
+  (`render.rs:421`) is always false.
+
+Where `freeze` is anticipated in the design record:
+
+- `claude-notes/designs/document-profile-contract.md:26` — "the same checkpoint
+  substrate will back `freeze`"; the document-profile checkpoint is the intended
+  foundation. Also `:112`, `:175` (a future `freeze` consumer must handle
+  `DocumentProfileError::VersionMismatch`).
+- `claude-notes/plans/2026-05-11-q2-preview-epic.md:581-584` — once `freeze`
+  lands, preview should honor frozen captures; explicitly out of scope for the
+  preview MVP.
+- `claude-notes/plans/2026-04-27-websites-phase-9.md:1080` — "No `freeze`
+  integration (separate epic)."
+
+### A divergence the freeze design should resolve (not resolved here)
+
+`claude-notes/plans/2026-05-27-multi-engine-execution.md:349-353` records a
+different expected shape than the one described in this strand's design
+discussion:
+
+> **Not a freeze mechanism.** The file-backed engine resembles Quarto 1's
+> freeze, but Quarto 2's freeze will instead reuse the **trace** directly —
+> roughly "`engine: replay` as freeze": commit a trace file into the repo and
+> flag Quarto to replay its recorded `ExecuteResult` instead of running the
+> engine.
+
+The 2026-08-14 discussion instead described reworking the **execution-output
+automerge sidecar** into a more portable format, likely `.ipynb`-based. These may
+converge — a committed trace file could well *be* the portable format — but they
+are not obviously the same plan, and the trace-replay framing is over a year
+older. **Flagging, not resolving:** whichever shape wins, the requirement this
+strand depends on is the same and is the only thing it needs:
+
+> Two renders at different times can produce different versions of the same HTML
+> dependency, and both sets of assets must survive in `_site` so an older frozen
+> page keeps working.
+
+That is what versioned artifact keys buy (see the amendment under Finding 2). If
+the eventual `freeze` design satisfies that requirement differently — or decides
+the layout should be shaped another way — the implementation here is two
+`format!` calls and a key, and is cheap to move. Decision 2 (no `_site` layout
+longevity promise) is what makes that true.
+
+## Phases
+
+All design questions are settled (§ Decisions, § Settled design). Work items
+below; check them off as they land.
+
+### Phase 0 — Tests (TDD: written and failing before any implementation)
+
+- [ ] Unit: two `add_html_dependency` calls for the same dependency emit exactly
+      **one** unsupported-field warning (currently two).
+- [ ] Unit: an unknown field still errors on a **repeat** call (pins decision 4 —
+      the loop split, not a wholesale move).
+- [ ] Unit: `version` no longer warns at all.
+- [ ] Unit: `version` survives into `HtmlDependency` via
+      `extract_html_dependencies`.
+- [ ] Unit: within one document, a second registration of the same `name` at a
+      *different* version is first-wins **and warns** (settled question 1).
+- [ ] Unit: versioned dep → `libs/{name}/{version}/{file}`; unversioned dep →
+      `libs/{name}/{file}` (unchanged).
+- [ ] Unit: two versions of one name produce **two** artifacts, not one
+      (the freeze requirement; artifact key carries the version).
+- [ ] End-to-end through the real render path per CLAUDE.md's end-to-end rule:
+      the committed repro renders with **zero** warnings and the asset at the
+      versioned path. Inspect the output, do not infer from exit status.
+
+### Phase 1 — Split the field loop (`quarto_doc.rs:230-262`)
+
+- [ ] Unknown-field hard error stays **before** the dedup early-return.
+- [ ] Unsupported-field warning moves **after** it.
+- [ ] Phase 0's first two tests go green. Independent of Phase 2.
+
+### Phase 2 — Implement `version`
+
+- [ ] Move `"version"` from `UNSUPPORTED_FIELDS` to `SUPPORTED_FIELDS`
+      (`quarto_doc.rs:53-63`).
+- [ ] Add `version: Option<String>` to `HtmlDependency` (`quarto_doc.rs:27-31`).
+- [ ] Store it in the Lua entry (`quarto_doc.rs:269-285`) and read it back in
+      `extract_html_dependencies` (`quarto_doc.rs:364-396`).
+- [ ] Warn on same-name/different-version within one document; keep first-wins.
+- [ ] Version-aware artifact **path** and **key** in `dependency.rs:50-51,78-79`.
+
+### Phase 3 — Docs + close-out
+
+- [ ] Fix `dependency.rs`'s doc-comment: it attributes `libs/{name}/` to "Quarto
+      1's `libs/` convention", true for built-in deps but not Lua-registered ones
+      (Finding 3). Document the versioned layout and point at this plan.
+- [ ] Document `version` wherever the `quarto.doc` Lua API is described.
+- [ ] Full `cargo xtask verify` (WASM leg included — `pampa` and `quarto-core`
+      are both in hub-client's dependency closure).
+- [ ] Tell the connect-docs side to drop the `Q-11-1: level: off` suppression.
 
 Cross-document diagnostic dedup is **not** a phase here — filed as `bd-k2ox4tqq`.
 
-## Open design questions for the user
+## Settled design
 
-Questions 2–5 from the original investigation are answered in § Decisions. What
-remains is one question the freeze rationale opened up, plus a layout detail.
+Both remaining questions were answered 2026-08-14; recorded here because the
+implementation turns on them.
 
-1. **Does `version` participate in the dedup keys, or only in the path?** This is
-   the question decision 1 forces and Finding 2's amendment sets up. Two keys are
-   involved:
+1. **`version` joins the artifact key, not the Lua-side dedup key.** They serve
+   different purposes:
 
-   - **The Lua-side dedup scan** (`quarto_doc.rs:252-262`), currently
-     `name`-only. Keying on `(name, version)` would let one document register two
-     versions of the same dependency and inject *both* into the page — which for
-     a JS library is usually a bug, not a feature. Keying on `name` alone keeps
-     Q1's first-wins behavior within a document.
-   - **The artifact key** (`dependency.rs:50,78`), currently
-     `js:{name}:{filename}`. This one **must** gain the version, or two renders
-     that produce different versions collapse onto one artifact and the freeze
-     case is lost — which is the whole point of decision 1.
+   - **Lua-side dedup scan** (`quarto_doc.rs:252-262`) stays **`name`-only**. It
+     exists to stop double-injection on a single page; keying it on
+     `(name, version)` would let one document inject two versions of the same JS
+     library, which is a bug rather than a feature. First-wins is retained —
+     **plus a warning** when a document registers the same name at a different
+     version, since that is almost certainly a mistake. (That warning goes
+     through `quarto.warn`, so it carries the existing generic `Q-11-1` code and
+     needs no catalog entry or `docs/errors/` page.)
+   - **Artifact key** (`dependency.rs:50,78`) **gains the version**. Without it,
+     two renders producing different versions collapse onto one artifact and the
+     freeze case is lost — which is the entire point of decision 1.
 
-   My recommendation: **`name`-only for the intra-document Lua dedup, `(name,
-   version)` for the artifact key.** They serve different purposes — the first
-   prevents double-injection on one page, the second preserves coexistence across
-   renders — and freeze needs only the second. A same-name-different-version
-   collision *within* one document is then still first-wins; I'd suggest we
-   additionally warn on it, since it is almost certainly a mistake. Confirm, or
-   tell me you want both keys versioned.
-
-2. **Which versioned layout?** Decision 2 frees us from `quarto-contrib/`, so the
-   realistic candidates are `libs/{name}-{version}/{file}` (Q1's naming, flat) or
-   `libs/{name}/{version}/{file}` (nested). I lean **nested**: it groups a
-   dependency's versions under one directory, which reads better when freeze
-   starts leaving several of them around, and it avoids the mild ambiguity of a
-   dash-joined name+version when the name itself contains dashes. Unversioned
-   deps keep `libs/{name}/{file}` either way — which also keeps the existing
-   smoke-all fixture green
-   (`crates/quarto/tests/smoke-all/extensions/quarto-doc-api-extension/test.qmd:10,15`,
-   whose dep declares no version). Nested or flat?
+2. **Nested layout: `libs/{name}/{version}/{file}`.** It groups a dependency's
+   versions under one directory (which will read better once `freeze` starts
+   leaving several around) and avoids the dash ambiguity of `{name}-{version}`
+   when the name itself contains dashes. **Unversioned deps keep
+   `libs/{name}/{file}` unchanged**, which also keeps the existing smoke-all
+   fixture green
+   (`crates/quarto/tests/smoke-all/extensions/quarto-doc-api-extension/test.qmd:10,15`
+   — its dep declares no version).
 
 ## Risks / tradeoffs (draft)
 
