@@ -384,6 +384,13 @@ impl PipelineStage for EngineExecutionStage {
                 Some(ctx.project.dir.clone())
             })
             .with_engine_config(engine_config)
+            // The document's merged `execute:` scope — the default every
+            // cell option resolves against (bd-nn2fou8h). Read from the
+            // AST being serialized *this* iteration, so a second engine
+            // in a sequence sees the front matter of the input it is
+            // actually given, exactly as the jupyter engine's old
+            // front-matter re-parse did.
+            .with_execute_scope(ast.meta.get("execute").cloned())
             .with_source_info(qmd_source_info, source_context_arc.clone())
             .with_project_env({
                 let mut pairs = crate::project::environment::env_for_subprocess(&ctx.project_env);

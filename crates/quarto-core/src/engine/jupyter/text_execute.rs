@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 
 use regex::Regex;
 
-use quarto_pandoc_types::config_value::{ConfigValue, InterpretationContext};
+use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_source_map::SourceInfo;
 
 use super::daemon::daemon;
@@ -177,10 +177,13 @@ async fn execute_blocks_inner(
         .await?;
 
     // Document-level defaults for cell options (bd-ohvl879u): the
-    // input's front matter is the pipeline's fully merged metadata
-    // (MetadataMergeStage runs before engine execution), so its
-    // `execute` map is the scope cell options merge over.
-    let doc_scope = document_execute_scope(input, ctx);
+    // pipeline's fully merged metadata (MetadataMergeStage runs before
+    // engine execution) carries the `execute` map that cell options
+    // merge over. The stage hands it to us directly (bd-nn2fou8h);
+    // this used to be recovered by re-parsing the front matter of our
+    // own serialized input, which only knitr's JSON-to-R boundary made
+    // untenable to share.
+    let doc_scope = ctx.execute_scope.clone();
 
     // Build output by processing blocks in order
     let mut output = String::new();
@@ -221,7 +224,11 @@ async fn execute_blocks_inner(
                     message: format!("cell options are not valid YAML{at}: {e}"),
                 }
             })?;
-        let allow_errors = resolve_allow_errors(doc_scope.as_ref(), cell.options);
+        let resolved = resolve_cell_options(doc_scope.as_ref(), cell.options);
+        // Q1's default `execute: error: false` — a raising cell aborts
+        // unless something opts in.
+        let allow_errors = resolved_flag(resolved.as_ref(), "error", false);
+        let visibility = CellVisibility::resolve(resolved.as_ref());
 
         // Execute the code — the partitioned code only, without the
         // option lines (Q1 strips them too, so cell magics work).
@@ -246,14 +253,19 @@ async fn execute_blocks_inner(
             });
         }
 
-        // Emit the whole cell — echoed (option-stripped) source plus
-        // outputs — in the Quarto-canonical `::: {.cell}` shape.
+        // Emit the visible parts of the cell — echoed (option-stripped)
+        // source plus outputs — in the Quarto-canonical `::: {.cell}`
+        // shape. `begin_cell` runs for every *executed* cell, visible
+        // or not, so figure file names stay keyed to a cell's position
+        // in the document rather than shifting when an earlier cell is
+        // hidden.
         fig.begin_cell();
         output.push_str(&render_cell(
             &block.language,
             &cell.code,
             &exec_result,
             &mut fig,
+            visibility,
         ));
 
         last_end = block.end;
@@ -272,59 +284,17 @@ async fn execute_blocks_inner(
     Ok(result)
 }
 
-/// The `execute` scope of the document's (already merged) metadata,
-/// read from the engine input's front matter. `None` when the input
-/// has no front matter or no `execute` map.
-fn document_execute_scope(input: &str, ctx: &ExecutionContext) -> Option<ConfigValue> {
-    let (start, end) = front_matter_range(input)?;
-    let parent = SourceInfo::substring(ctx.source_info.clone(), start, end);
-    let parsed = match quarto_yaml::parse_with_parent(&input[start..end], parent) {
-        Ok(parsed) => parsed,
-        Err(e) => {
-            // The front matter was serialized by our own pipeline; a
-            // parse failure here is an internal inconsistency, not a
-            // user error — don't take the render down over defaults.
-            tracing::warn!("engine input front matter did not re-parse: {e}");
-            return None;
-        }
-    };
-    let mut collector = pampa::utils::diagnostic_collector::DiagnosticCollector::new();
-    let config = pampa::pandoc::meta::yaml_to_config_value(
-        parsed,
-        InterpretationContext::DocumentMetadata,
-        &mut collector,
-    );
-    config.get("execute").cloned()
-}
-
-/// Byte range of the YAML between the input's leading `---` fence and
-/// its closing `---` line (exclusive of both delimiter lines).
-fn front_matter_range(input: &str) -> Option<(usize, usize)> {
-    let rest = input.strip_prefix("---")?;
-    let rest = rest
-        .strip_prefix("\r\n")
-        .or_else(|| rest.strip_prefix('\n'))?;
-    let fm_start = input.len() - rest.len();
-    let mut search = 0;
-    while let Some(pos) = rest[search..].find("\n---") {
-        let abs = search + pos;
-        let after = &rest[abs + 4..];
-        if after.is_empty() || after.starts_with('\n') || after.starts_with('\r') {
-            // Include the newline that ends the last YAML line.
-            return Some((fm_start, fm_start + abs + 1));
-        }
-        search = abs + 4;
-    }
-    None
-}
-
-/// Resolve the effective `error:` option for one cell: cell options
-/// merged over the document's `execute` scope (cell wins), absent
-/// everywhere = false (Q1's default `execute: error: false`).
-fn resolve_allow_errors(
+/// One cell's options resolved against the document: the cell's `#|`
+/// map merged *over* the document's `execute` scope, so a cell option
+/// wins wherever both set the same key (Q1's `shouldInclude`, and the
+/// scoped resolution bd-ohvl879u introduced for `error:`).
+///
+/// `None` when neither scope supplied anything — callers then fall
+/// back to per-option defaults.
+fn resolve_cell_options(
     doc_scope: Option<&ConfigValue>,
     options: Option<quarto_yaml::YamlWithSourceInfo>,
-) -> bool {
+) -> Option<ConfigValue> {
     let cell_config = options.map(|o| {
         let (config, diagnostics) = options_to_config(o);
         for d in diagnostics {
@@ -333,10 +303,81 @@ fn resolve_allow_errors(
         config
     });
     merge_cell_over_scope(doc_scope, cell_config.as_ref())
-        .as_ref()
-        .and_then(|merged| merged.get("error"))
+}
+
+/// Read a boolean option out of resolved cell options, falling back to
+/// `default` when the key is absent or not a boolean.
+fn resolved_flag(resolved: Option<&ConfigValue>, key: &str, default: bool) -> bool {
+    resolved
+        .and_then(|merged| merged.get(key))
         .and_then(|v| v.as_bool())
-        .unwrap_or(false)
+        .unwrap_or(default)
+}
+
+/// Which parts of a cell reach the output (bd-nn2fou8h).
+///
+/// Mirrors Q1's `shouldInclude` family (`src/core/jupyter/tags.ts`):
+/// each key is resolved cell-over-document and defaults to `true`, so
+/// a document that says nothing keeps today's fully-visible behaviour.
+///
+/// `include: false` is the master switch — Q1 bails on the whole cell
+/// before consulting anything else (`mdFromCodeCell`'s
+/// `if (!includeCell(...)) return []`), which is why [`Self::resolve`]
+/// collapses the other flags rather than leaving callers to remember
+/// the precedence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CellVisibility {
+    /// Echo the cell's source.
+    echo: bool,
+    /// Emit the cell's outputs.
+    output: bool,
+    /// Keep stderr-stream outputs (Python warnings land there).
+    warning: bool,
+}
+
+impl CellVisibility {
+    /// Everything visible — the default for a cell with no options and
+    /// a document with no `execute:` scope.
+    const VISIBLE: Self = Self {
+        echo: true,
+        output: true,
+        warning: true,
+    };
+
+    /// Nothing at all reaches the output (`include: false`).
+    const HIDDEN: Self = Self {
+        echo: false,
+        output: false,
+        warning: false,
+    };
+
+    fn resolve(resolved: Option<&ConfigValue>) -> Self {
+        // Neither the cell nor the document said anything — the
+        // everything-visible default, which is also what q2 did
+        // before any of these options were honoured.
+        if resolved.is_none() {
+            return Self::VISIBLE;
+        }
+        if !resolved_flag(resolved, "include", true) {
+            return Self::HIDDEN;
+        }
+        Self {
+            echo: resolved_flag(resolved, "echo", true),
+            output: resolved_flag(resolved, "output", true),
+            // Q1 filters stderr under `output: false` too — the option
+            // suppresses every output, warnings included.
+            warning: resolved_flag(resolved, "warning", true)
+                && resolved_flag(resolved, "output", true),
+        }
+    }
+}
+
+/// Whether an output is a "warning" for visibility purposes: a stderr
+/// stream. Mirrors Q1's `isWarningOutput` in
+/// `src/core/jupyter/jupyter.ts` — the kernel gives no richer signal,
+/// so stderr is the whole definition.
+fn is_warning_output(output: &CellOutput) -> bool {
+    matches!(output, CellOutput::Stream { name, .. } if name == "stderr")
 }
 
 /// The first error a cell produced, from its outputs or its status.
@@ -409,17 +450,36 @@ fn ticks_for_code(text: &str) -> String {
 /// engine cell with exactly one wrapper Div, and the Bootstrap CSS
 /// targets `.cell .cell-output-* pre code`. A cell with no outputs
 /// still gets the wrapper (knitr wraps output-less chunks too).
+///
+/// `visibility` (bd-nn2fou8h) decides which halves survive. When it
+/// suppresses *both* the source and every output, the cell emits the
+/// empty string rather than an empty wrapper: `<div class="cell">`
+/// with nothing in it is still a box in the rendered page, and Q1
+/// likewise builds its div opener but writes it only "if there is
+/// actually content in the div" (`jupyter.ts`). knitr behaves the
+/// same way — an `include: false` chunk leaves no wrapper — so this
+/// keeps the two engines agreeing.
 fn render_cell(
     language: &str,
     code: &str,
     result: &KernelExecuteResult,
     fig: &mut FigureWriter,
+    visibility: CellVisibility,
 ) -> String {
-    format!(
-        "::: {{.cell}}\n\n{}\n{}\n:::\n",
-        echoed_source_fence(language, code),
-        format_outputs(result, fig)
-    )
+    let source = if visibility.echo && !code.trim().is_empty() {
+        echoed_source_fence(language, code)
+    } else {
+        String::new()
+    };
+    let outputs = if visibility.output {
+        format_outputs(result, fig, visibility.warning)
+    } else {
+        String::new()
+    };
+    if source.is_empty() && outputs.trim().is_empty() {
+        return String::new();
+    }
+    format!("::: {{.cell}}\n\n{source}\n{outputs}\n:::\n")
 }
 
 /// Reconstruct the echoed source fence for an executed cell.
@@ -565,12 +625,25 @@ impl FigureWriter {
 /// **last** (a matplotlib bundle carries an image plus a text
 /// fallback; the image must win). `text/markdown` and jupyter-widget
 /// payloads remain unhandled (follow-up).
-fn format_outputs(result: &KernelExecuteResult, fig: &mut FigureWriter) -> String {
+fn format_outputs(
+    result: &KernelExecuteResult,
+    fig: &mut FigureWriter,
+    show_warnings: bool,
+) -> String {
     const IMAGE_MIMES: [&str; 3] = ["image/svg+xml", "image/png", "image/jpeg"];
 
     let mut output = String::new();
 
     for cell_output in &result.outputs {
+        // `warning: false` drops stderr streams — where Python's
+        // `warnings` module and most library chatter land. Q1 applies
+        // exactly this filter (`isWarningOutput`: output_type
+        // "stream" with name "stderr") before emitting anything.
+        // Errors are a separate output kind and are never dropped
+        // here; the error *policy* decides those.
+        if !show_warnings && is_warning_output(cell_output) {
+            continue;
+        }
         match cell_output {
             CellOutput::Stream { name, text } => {
                 output.push_str(&fenced_output_div(
@@ -709,6 +782,167 @@ fn strip_ansi_codes(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // === bd-nn2fou8h: execute-visibility resolution ===
+    //
+    // Resolution and emission are unit-testable without a kernel; the
+    // end-to-end matrix (both engines, doc and cell scope) lives in
+    // `tests/integration/engine_visibility.rs`.
+
+    /// Build resolved cell options from YAML source, as
+    /// `resolve_cell_options` would after merging.
+    fn resolved(yaml: &str) -> Option<ConfigValue> {
+        let parsed = quarto_yaml::parse(yaml).expect("test YAML parses");
+        let (config, _) = options_to_config(parsed);
+        Some(config)
+    }
+
+    fn result_with(outputs: Vec<CellOutput>) -> KernelExecuteResult {
+        KernelExecuteResult {
+            status: ExecuteStatus::Ok,
+            outputs,
+            execution_count: Some(1),
+        }
+    }
+
+    fn stream(name: &str, text: &str) -> CellOutput {
+        CellOutput::Stream {
+            name: name.to_string(),
+            text: text.to_string(),
+        }
+    }
+
+    fn render(code: &str, outputs: Vec<CellOutput>, visibility: CellVisibility) -> String {
+        let mut fig = FigureWriter::new(Path::new("/nonexistent/doc.qmd"));
+        render_cell("python", code, &result_with(outputs), &mut fig, visibility)
+    }
+
+    #[test]
+    fn test_visibility_defaults_to_fully_visible() {
+        assert_eq!(CellVisibility::resolve(None), CellVisibility::VISIBLE);
+        assert_eq!(
+            CellVisibility::resolve(resolved("error: true").as_ref()),
+            CellVisibility::VISIBLE,
+            "an unrelated option must not change visibility"
+        );
+    }
+
+    #[test]
+    fn test_visibility_reads_each_key() {
+        assert!(!CellVisibility::resolve(resolved("echo: false").as_ref()).echo);
+        assert!(!CellVisibility::resolve(resolved("output: false").as_ref()).output);
+        assert!(!CellVisibility::resolve(resolved("warning: false").as_ref()).warning);
+        // Independence: hiding one must not hide the others.
+        let v = CellVisibility::resolve(resolved("echo: false").as_ref());
+        assert!(v.output && v.warning);
+    }
+
+    #[test]
+    fn test_include_false_hides_everything() {
+        assert_eq!(
+            CellVisibility::resolve(resolved("include: false").as_ref()),
+            CellVisibility::HIDDEN
+        );
+        // include: false wins even when another key says "show me".
+        assert_eq!(
+            CellVisibility::resolve(resolved("include: false\necho: true").as_ref()),
+            CellVisibility::HIDDEN
+        );
+    }
+
+    /// `output: false` suppresses every output, warnings included — so
+    /// a cell must not leak stderr through the warning channel after
+    /// its outputs were switched off.
+    #[test]
+    fn test_output_false_implies_warnings_hidden() {
+        let v = CellVisibility::resolve(resolved("output: false\nwarning: true").as_ref());
+        assert!(!v.warning, "output: false must also silence warnings");
+    }
+
+    #[test]
+    fn test_render_cell_omits_source_when_echo_false() {
+        let md = render(
+            "print(1)",
+            vec![stream("stdout", "1")],
+            CellVisibility {
+                echo: false,
+                ..CellVisibility::VISIBLE
+            },
+        );
+        assert!(!md.contains(".cell-code"), "no source fence; got:\n{md}");
+        assert!(!md.contains("print(1)"), "no source text; got:\n{md}");
+        assert!(md.contains("::: {.cell}"), "wrapper kept; got:\n{md}");
+        assert!(md.contains("cell-output-stdout"), "output kept; got:\n{md}");
+    }
+
+    #[test]
+    fn test_render_cell_omits_outputs_when_output_false() {
+        let md = render(
+            "print(1)",
+            vec![stream("stdout", "1")],
+            CellVisibility {
+                output: false,
+                ..CellVisibility::VISIBLE
+            },
+        );
+        assert!(md.contains(".cell-code"), "source kept; got:\n{md}");
+        assert!(!md.contains("cell-output"), "no output div; got:\n{md}");
+    }
+
+    #[test]
+    fn test_render_cell_drops_stderr_when_warning_false() {
+        let md = render(
+            "warn()",
+            vec![
+                stream("stderr", "UserWarning: boom"),
+                stream("stdout", "ok"),
+            ],
+            CellVisibility {
+                warning: false,
+                ..CellVisibility::VISIBLE
+            },
+        );
+        assert!(!md.contains("boom"), "stderr dropped; got:\n{md}");
+        assert!(md.contains("ok"), "stdout kept; got:\n{md}");
+    }
+
+    /// Nothing visible ⇒ no wrapper at all. An empty `::: {.cell}`
+    /// still paints a `<div class="cell">` box in the output.
+    #[test]
+    fn test_render_cell_emits_nothing_when_fully_hidden() {
+        assert_eq!(
+            render(
+                "print(1)",
+                vec![stream("stdout", "1")],
+                CellVisibility::HIDDEN
+            ),
+            ""
+        );
+        // Same when echo and output are individually off rather than
+        // via include.
+        assert_eq!(
+            render(
+                "print(1)",
+                vec![stream("stdout", "1")],
+                CellVisibility {
+                    echo: false,
+                    output: false,
+                    warning: false,
+                }
+            ),
+            ""
+        );
+    }
+
+    /// An output-less cell keeps its wrapper as long as the source is
+    /// echoed — knitr wraps output-less chunks too, and the preview
+    /// capture splice pairs cells to wrappers.
+    #[test]
+    fn test_render_cell_keeps_wrapper_for_output_less_cell() {
+        let md = render("x = 1", vec![], CellVisibility::VISIBLE);
+        assert!(md.contains("::: {.cell}"), "wrapper kept; got:\n{md}");
+        assert!(md.contains(".cell-code"), "source kept; got:\n{md}");
+    }
 
     #[test]
     fn test_parse_code_blocks_single() {
@@ -889,7 +1123,7 @@ print("hello")
             text: "Hello, World!\n".to_string(),
         }]);
         assert_eq!(
-            format_outputs(&result, &mut test_fig()),
+            format_outputs(&result, &mut test_fig(), true),
             "\n::: {.cell-output .cell-output-stdout}\n\n```\nHello, World!\n```\n\n:::\n"
         );
     }
@@ -901,7 +1135,7 @@ print("hello")
             text: "warning\n".to_string(),
         }]);
         assert_eq!(
-            format_outputs(&result, &mut test_fig()),
+            format_outputs(&result, &mut test_fig(), true),
             "\n::: {.cell-output .cell-output-stderr}\n\n```\nwarning\n```\n\n:::\n"
         );
     }
@@ -916,7 +1150,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
         assert_eq!(
-            format_outputs(&result, &mut test_fig()),
+            format_outputs(&result, &mut test_fig(), true),
             "\n::: {.cell-output .cell-output-display}\n\n```\n5\n```\n\n:::\n"
         );
     }
@@ -930,7 +1164,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
         assert_eq!(
-            format_outputs(&result, &mut test_fig()),
+            format_outputs(&result, &mut test_fig(), true),
             "\n::: {.cell-output .cell-output-display}\n\n```{=html}\n<b>5</b>\n```\n\n:::\n"
         );
     }
@@ -943,7 +1177,7 @@ print("hello")
             traceback: vec!["Traceback...".to_string()],
         }]);
         assert_eq!(
-            format_outputs(&result, &mut test_fig()),
+            format_outputs(&result, &mut test_fig(), true),
             "\n::: {.cell-output .cell-output-error}\n\n```\nNameError: name 'x' is not defined\nTraceback...\n```\n\n:::\n"
         );
     }
@@ -957,7 +1191,7 @@ print("hello")
             text: "```\n".to_string(),
         }]);
         assert_eq!(
-            format_outputs(&result, &mut test_fig()),
+            format_outputs(&result, &mut test_fig(), true),
             "\n::: {.cell-output .cell-output-stdout}\n\n````\n```\n````\n\n:::\n"
         );
     }
@@ -970,7 +1204,13 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
         assert_eq!(
-            render_cell("python", "2 + 3\n", &result, &mut test_fig()),
+            render_cell(
+                "python",
+                "2 + 3\n",
+                &result,
+                &mut test_fig(),
+                CellVisibility::VISIBLE,
+            ),
             "::: {.cell}\n\n```{.python .cell-code}\n2 + 3\n```\n\n::: {.cell-output .cell-output-display}\n\n```\n5\n```\n\n:::\n\n:::\n"
         );
     }
@@ -1000,7 +1240,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
 
-        let md = format_outputs(&result, &mut test_fig());
+        let md = format_outputs(&result, &mut test_fig(), true);
         assert!(
             !md.contains("<Figure size"),
             "image must beat the text/plain fallback; got:\n{md}"
@@ -1030,7 +1270,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
 
-        let md = format_outputs(&result, &mut fig);
+        let md = format_outputs(&result, &mut fig, true);
         assert_eq!(
             md,
             "\n::: {.cell-output-display}\n\n![](pyfig_files/figure-html/cell-1-output-1.png)\n\n:::\n"
@@ -1067,7 +1307,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
 
-        let md = format_outputs(&result, &mut fig);
+        let md = format_outputs(&result, &mut fig, true);
         assert!(
             md.contains("![](doc_files/figure-html/cell-1-output-1.svg)"),
             "got:\n{md}"
@@ -1095,7 +1335,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
 
-        let md = format_outputs(&result, &mut test_fig());
+        let md = format_outputs(&result, &mut test_fig(), true);
         assert!(md.contains("{=html}"), "html must win; got:\n{md}");
         assert!(!md.contains("![]("), "no image when html wins; got:\n{md}");
     }
@@ -1119,7 +1359,7 @@ print("hello")
         };
         let result = ok_result(vec![png_output(), png_output()]);
 
-        let md = format_outputs(&result, &mut fig);
+        let md = format_outputs(&result, &mut fig, true);
         assert!(md.contains("cell-1-output-1.png"), "got:\n{md}");
         assert!(md.contains("cell-1-output-2.png"), "got:\n{md}");
         assert!(
@@ -1145,7 +1385,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
 
-        let md = format_outputs(&result, &mut test_fig());
+        let md = format_outputs(&result, &mut test_fig(), true);
         assert!(md.contains("fallback"), "got:\n{md}");
         assert!(!md.contains("[Image output]"), "got:\n{md}");
     }
@@ -1161,7 +1401,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
         assert_eq!(
-            format_outputs(&result, &mut test_fig()),
+            format_outputs(&result, &mut test_fig(), true),
             "\n::: {.cell-output .cell-output-display}\n\n[Image output]\n\n:::\n"
         );
     }
@@ -1201,7 +1441,7 @@ print("hello")
             metadata: serde_json::json!({}),
         }]);
         assert_eq!(
-            format_outputs(&result, &mut test_fig()),
+            format_outputs(&result, &mut test_fig(), true),
             "\n::: {.cell-output .cell-output-display}\n\n```\n42\n```\n\n:::\n"
         );
     }
@@ -1214,7 +1454,13 @@ print("hello")
         // too.
         let result = ok_result(vec![]);
         assert_eq!(
-            render_cell("python", "x = 1\n", &result, &mut test_fig()),
+            render_cell(
+                "python",
+                "x = 1\n",
+                &result,
+                &mut test_fig(),
+                CellVisibility::VISIBLE,
+            ),
             "::: {.cell}\n\n```{.python .cell-code}\nx = 1\n```\n\n:::\n"
         );
     }
