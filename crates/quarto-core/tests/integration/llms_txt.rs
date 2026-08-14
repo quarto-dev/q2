@@ -205,6 +205,49 @@ fn llms_txt_emitted_with_sidebar_sections() {
     assert_not_contains(&llms, ".html", "index links .md companions only");
 }
 
+/// A `website.title` / `website.description` written with qmd markup
+/// — raw HTML inlines and shortcodes — flattens cleanly into the
+/// llms.txt header: raws dropped, shortcodes resolved, formatting
+/// reduced to its text (bd-6m1iyxl6). The reference behavior is the
+/// browser `<title>`, which already renders this title clean; the
+/// index header must use the same resolved data.
+#[test]
+fn llms_txt_title_flattens_markup_and_resolves_shortcodes() {
+    let (project_dir, _summary) = render_project(|dir| {
+        write(
+            &dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             sitever: \"9.9\"\n\
+             website:\n\
+             \x20 title: \"My Site `<small>`{=html}v{{< meta sitever >}}`</small>`{=html}\"\n\
+             \x20 description: \"Docs for *My Site*\"\n\
+             \x20 llms-txt: true\n",
+        );
+        write(&dir.join("index.qmd"), "---\ntitle: Home\n---\n\nHi.\n");
+    });
+
+    let llms = read(&project_dir.join("_site/llms.txt"));
+    assert_contains(&llms, "# My Site v9.9\n", "clean resolved title");
+    assert_contains(
+        &llms,
+        "> Docs for My Site\n",
+        "description formatting flattened",
+    );
+    assert_not_contains(&llms, "{=html}", "no raw-inline syntax in llms.txt header");
+    assert_not_contains(&llms, "<small>", "no raw HTML in llms.txt header");
+    assert_not_contains(&llms, "{{<", "no shortcode syntax in llms.txt header");
+
+    // llms-full.txt headers share the same site data path only for
+    // page titles; the site title appears nowhere there — but the
+    // companions must be equally free of leaked site-title syntax.
+    let full = read(&project_dir.join("_site/llms-full.txt"));
+    assert_not_contains(
+        &full,
+        "{=html}",
+        "no raw-inline syntax leaks into llms-full",
+    );
+}
+
 /// With `site-url` set, index hrefs are absolute.
 #[test]
 fn llms_txt_absolute_urls_with_site_url() {

@@ -87,6 +87,18 @@ pub const LLMS_FORMAT: &str = "llms";
 /// is `llms-md/<output_href with .html → .md>`.
 pub const LLMS_ARTIFACT_PREFIX: &str = "llms-md/";
 
+/// Artifact keys for the *resolved* site title / description
+/// (bd-6m1iyxl6). The raw `_quarto.yml` strings may carry qmd markup
+/// (raw HTML inlines, shortcodes) that only the page pipeline knows
+/// how to parse and resolve — the browser `<title>` reads
+/// `website.title` from the merged page metadata *after* shortcode
+/// resolution, and the llms.txt header must use the same data. The
+/// capture transform stores the flattened values here; the
+/// post-render assembler prefers them over re-reading the raw
+/// project config.
+pub const LLMS_SITE_TITLE_KEY: &str = "llms-site-title";
+pub const LLMS_SITE_DESCRIPTION_KEY: &str = "llms-site-description";
+
 /// Output href of the conventional 404 page, excluded from the
 /// companion set and the index.
 pub const HREF_404: &str = "404.html";
@@ -158,6 +170,26 @@ impl AstTransform for LlmsCaptureTransform {
 
         let index = ctx.project_index.clone();
         let capture = capture_target(index.as_deref(), ctx);
+
+        // Stash the *resolved* site title / description for the
+        // llms.txt header (bd-6m1iyxl6): in the merged page metadata
+        // these are inline-parsed with shortcodes already resolved —
+        // the same data the browser `<title>` renders — while the raw
+        // project config the post-render assembler could read may
+        // still carry literal qmd markup. Every page stores the same
+        // values; last write wins.
+        if let Some(title) = crate::project::website_config::website_title(&ast.meta) {
+            ctx.artifacts.store(
+                LLMS_SITE_TITLE_KEY,
+                Artifact::from_string(title, "text/plain").with_scope(ArtifactScope::Project),
+            );
+        }
+        if let Some(desc) = crate::project::website_config::website_description(&ast.meta) {
+            ctx.artifacts.store(
+                LLMS_SITE_DESCRIPTION_KEY,
+                Artifact::from_string(desc, "text/plain").with_scope(ArtifactScope::Project),
+            );
+        }
 
         if let Some((md_href, cur_dir)) = capture {
             let mut view = build_llms_view(
