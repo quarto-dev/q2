@@ -3,7 +3,9 @@
 **Date:** 2026-08-14
 **Braid:** bd-format-css-not-copied-crn3bjdz (bug, p1, label `websites`)
 **Checkout:** main checkout, branch `main` @ `10d86829` (investigation only — no worktree/branch created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Investigation + design alignment complete (2026-08-14, F1–F4
+settled — see "Settled follow-ups"). **Ready to implement on user
+go-ahead; implementation has not started.**
 
 ## Triage verdict
 
@@ -353,24 +355,21 @@ Answers to the questions below, recorded before the quarto-cli evidence pass:
 - **Diagnostic:** new Q-code (Phase 3).
 - **Preview:** verify in Phase 4; follow-up strand if broken.
 
-## Follow-up questions for the user
+## Settled follow-ups (user, 2026-08-14)
 
-- **F1 (mechanism sign-off).** The hybrid in "Synthesis": merge-time
-  Path-kind marking for layer provenance (Q1 performs its rebase at the
-  same point, per layer) + a render-time transform that owns copy intent
-  and per-page href through the resolver. OK to proceed on that shape?
-- **F2 (revealjs).** User `css:` on revealjs is currently dropped entirely
-  (worse than the website bug — not even a broken `<link>` is emitted).
-  Fix it in this strand (Phase 2's transform naturally covers it) or file
-  separately to keep this strand website-focused?
-- **F3 (css `url()` refs).** Q1's `copyResourceFile` chases `url()` /
-  `@import` references inside copied css and copies those files too
-  (`project-resources.ts:110-138`). Real-world css (including the Connect
-  docs port) may rely on this for background images and fonts. In scope
-  here, or an explicit follow-up strand with a documented limitation?
-- **F4 (`format-resources`).** Confirm filing it as its own strand
-  (`discovered-from` this one), suggested p2: it silently no-ops today,
-  and its Q1 consumers are LaTeX/Typst-style sibling-file formats.
+- **F1 — mechanism: hybrid approved.** Merge-time per-layer Path-kind
+  marking (normalization + provenance) + render-time transform owning
+  `ResourceCopyIntent` and per-page hrefs via the resolver.
+- **F2 — revealjs: in this strand.** Phase 2's transform wires the
+  resolved css list into revealjs's `css_urls`, ending the silent drop.
+- **F3 — css `url()`/`@import` chasing: follow-up strand.** Filed as
+  **bd-dxp854dw** (task, p2, discovered-from this strand). Copied user css
+  ships as-is; the limitation gets documented. (Evidence: Connect docs css
+  uses only `data:` URIs in `url()` — verified by grep — so the motivating
+  case is unaffected.)
+- **F4 — `format-resources`: filed as bd-ptb0v2lk** (bug, p2,
+  discovered-from this strand): silent no-op today; minimum fix is a
+  diagnostic, full fix is Q1's basename-flatten copy.
 
 ## Risks / tradeoffs (draft)
 
