@@ -3,10 +3,12 @@
 **Date:** 2026-08-14
 **Braid:** bd-format-css-not-copied-crn3bjdz (bug, p1, label `websites`)
 **Checkout:** main checkout, branch `main` @ `10d86829` (investigation only — no worktree/branch created)
-**Status:** Implementation in progress on branch
-`braid/bd-format-css-not-copied-crn3bjdz` (Phases 0–3 complete, full
-workspace suite green 12182/12182; Phase 4 verification underway — see
-"Phase 4 evidence").
+**Status:** Implementation complete on branch
+`braid/bd-format-css-not-copied-crn3bjdz` (commits `37758160` +
+`86a6f79d` on top of the investigation commits). All phases done; full
+`cargo xtask verify` green; preview verified in a real browser (false
+Q-5-29 fixed, css-application gap filed as bd-b3oq2fsy). Awaiting
+push/PR approval.
 
 ## Phase 4 evidence (end-to-end, real binary)
 
@@ -370,7 +372,7 @@ Implementation runs on branch `braid/bd-format-css-not-copied-crn3bjdz`
 - [x] Re-check the Connect docs repro (2026-08-14, branch binary: both css files copied, deep hrefs `../../styles.css` + relocated quarto-contrib path — matches Q1 table)
 - [x] Verify `q2 preview` behavior; filed follow-up **bd-b3oq2fsy** (user css not applied in VFS mode; also fixed a false Q-5-29 in the preview overlay by cfg-gating emission to native)
 - [x] Full `cargo xtask verify` green (14 legs, 2026-08-14; workspace re-run after the wasm cfg fix: 12182 native + 131 wasm)
-- [ ] User-facing docs if applicable
+- [x] User-facing docs: the Q-5-29 page documents the resolution rules (per-layer anchors, leading `/`); rendered through q2 and inspected. The docs' own `css: styles.css` example (guides/projects/create.qmd) now actually works. No further docs page needed.
 
 ## Proposed phases (draft)
 
