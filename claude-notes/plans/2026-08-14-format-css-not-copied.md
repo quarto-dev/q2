@@ -128,70 +128,265 @@ Observed output (inspected directly):
 
 Both defects confirmed; matches the external repro's table for q2 0.21.0.
 
+## Evidence pass 1: how and why Q1 organizes the output (external-sources/quarto-cli)
+
+Two separate machineries, plus a website-only patch; `css:` straddles them.
+
+**Rebase (metadata-time, not DOM-time).** Q1 runs pandoc with
+`cwd = dirname(input)` (`src/command/render/pandoc.ts:371-372`), so every
+relative path in the defaults file must be input-dir-relative. Project-config
+paths are authored project-relative, so Q1 rewrites them at metadata-merge
+time: `toInputRelativePaths` (`src/project/project-shared.ts:138-207`), called
+from `projectMetadataForInputFile` (`render-contexts.ts:741-757`). It is a
+blind recursive walk over the whole merged config: any non-absolute string
+that names an existing file under the project dir becomes
+`<offset>/<value>` (`offset = relative(inputDir, baseDir)`) — that is the
+entire story of `../../styles.css`. **Existence-driven, layer-aware (the
+same function runs per layer: project config, `_metadata.yml` with the
+metadata file's dir, extension config with the extension dir as base).**
+The HTML template then emits the string verbatim
+(`resources/formats/html/pandoc/html.template:23-24`). The deno-dom
+postprocessor never rewrites a plain relative `css` href — it only records
+it as a resource ref.
+
+**Copy (resource-ref mirror).** The website HTML postprocessor collects every
+resource-tag href; refs are resolved to absolute paths and mirrored:
+`join(formatOutputDir, relative(projDir, file))`
+(`src/command/render/project.ts:735-766`). So project-root css lands at
+`_site/styles.css` purely because resource copying is a project-relative
+mirror. `copyResourceFile` also chases `url()`/`@import` inside copied css
+(`project-resources.ts:110-138`).
+
+**The `_extensions` relocation (website/book-only).**
+`projectExtensionPathResolver` (`src/extension/extension.ts:158-189`) is a
+resolver injected into the website postprocessor: an href resolving under
+`_extensions/` is copied to
+`<lib_dir>/quarto-contrib/quarto-project/<path-with-_extensions-stripped>`
+and the DOM attribute rewritten. Rationale, from the code and introducing
+commits (`364eb9a2d`, `b1e866553`):
+
+1. Underscore-prefixed dirs are systematically non-output
+   (`projectHiddenIgnoreGlob`, `project-context.ts:878-886` — the same list
+   that excludes `README.*`, `CLAUDE.md`, `AGENTS.md`). Publishing
+   `_site/_extensions/` would leak Lua sources, `_extension.yml`, READMEs;
+   relocating means only individually-referenced files ship. This matches
+   the user's stated constraint exactly.
+2. The lib dir is freezer-managed and pruned by a whitelist of known names
+   (`formatLibDirs`, `project-default.ts:23-29`); `quarto-contrib` is the
+   single reserved namespace that protects third-party content without
+   enumerating extension names. `quarto-project` is a fixed literal meaning
+   "the project itself is the contributor" (used when a file is referenced
+   by raw path rather than through a named HTML dependency). There is no
+   per-org namespace logic — the `_extensions` prefix is stripped and the
+   remainder (org segment included) preserved verbatim.
+
+**Book = website machinery** (`book.ts:74` inherits, `book.ts:225-243`
+merges website formatExtras), so the relocation applies there too.
+Single-doc renders never rebase (no project offset) and never relocate;
+lib assets go to `<stem>_files/libs/`. Notably, a *default*-type project
+with an `output-dir` mirrors `_extensions/...` css into the output
+verbatim in Q1 — the relocation is deliberately a website/book behavior.
+
+**Other keys (Q1):** `include-*` files are inlined by pandoc (never
+copied); `format-resources` are flattened **basename-only** next to the
+output — they exist for writers that want sibling files (LaTeX `.cls`,
+Typst), not for `<link>`s; `theme`/SCSS compiles to a cache then ships as a
+FormatDependency under `site_libs/bootstrap|quarto-html` with hrefs built
+from the input-relative lib dir; document `resources:`/`project.resources`
+mirror project-relative paths, no hrefs. Four placement policies for four
+consumption models.
+
+## Evidence pass 2: q2 boundary audit
+
+Per-key status at `main` @ `10d86829` (file:line cites in the agent record;
+load-bearing ones inline):
+
+| key | q2 today |
+|---|---|
+| `format.html.css` | linked verbatim (`extract_css_from_meta`, `template.rs:928`); never copied; only other references are the two extension pattern tables. **On revealjs, user css is dropped entirely** — the scaffold only takes artifact URLs (`revealjs/assemble.rs:369-410`, `apply_template.rs:302-306`), so not even a broken `<link>` is emitted. |
+| `theme` | compiled to Project-scoped artifact `css:theme:<fp>` (`compile_theme_css.rs:707-730`); per-page URL via resolver (`apply_template.rs:166` → `html_url_for`); flushed to `site_libs` (website) or per-page `<stem>_files` (default/book). Healthy. |
+| `include-in-header`/`-before-body`/`-after-body` | inlined by `IncludeResolveStage` into `rendered.includes.*` — Q1 parity. Raw `<script>`/`<link>` written inside them is emitted byte-for-byte (same as Q1; authors own those paths). |
+| `format-resources` | **accepted but never consumed** — only the two pattern tables mention it; silently inert, no diagnostic. (Q1 flattens basename-only next to output for LaTeX/Typst-style consumers.) Follow-up strand. |
+| user js | no `scripts:` metadata key in Q1 either; user js arrives via includes. Parity — no gap beyond includes being verbatim. |
+| favicon / navbar logo / footer images | copied (post-render hooks, website-only) + separately href-resolved per page by their transforms (`apply_favicon` → `page_url_for`; navbar logo → `resolve_root_relative_resource_href`, `navbar_render.rs:121`). |
+| `project.resources` / doc `resources` | glob → mirror copy `copy_resources_to_output_dir` (`project_resources.rs:1093`), all project types, post-render, copy-only. Healthy. |
+| `brand` | styling rides the theme artifact; brand files ride favicon/navbar paths. No separate gap. |
+
+**Structural facts that constrain the fix:**
+
+- **Books don't share `website_post_render.rs`.** `ProjectKind::Book |
+  Manuscript → DefaultProjectType` (`orchestrator.rs:517-522`), which
+  inherits the default no-op-ish `post_render`. A website-only hook leaves
+  books broken. Cross-type channels: (i) per-page `ResourceCopyIntent`
+  (`render.rs:186`, flushed in both `render_to_file.rs:413` and
+  `pass2_renderer.rs:896,1180` — the `title_banner.rs:139-150` precedent,
+  which does copy-intent + href in one transform), or (ii) Project-scoped
+  artifacts.
+- **The artifact route** would give copy + per-page href for free
+  (`collect_artifact_urls` picks up every `css:` key), but relocates
+  everything under `site_libs/` — diverging from Q1's mirror layout for
+  project-root css, and key collisions demand a fingerprint in the key.
+- **`resolve_root_relative_resource_href`** (`navigation_href.rs:467`) is
+  the purpose-built call for config-declared asset hrefs (external-URL
+  passthrough, query/fragment handling, project-root anchoring).
+- **Layer provenance only exists at merge time.** A document-front-matter
+  `css:` entry is authored document-relative; a `_quarto.yml` entry is
+  project-relative. After the merge flattens layers, template-time code
+  cannot tell them apart. Q1 solves this by rebasing per layer inside the
+  merge (each `toInputRelativePaths` call gets the right base dir). q2's
+  equivalent seam is `adjust_paths_to_document_dir`, already applied per
+  layer (`metadata_merge.rs:256,266`) — and `css: !path styles.css`
+  already rebases today (test at `project/mod.rs:2795-2831`).
+
+## Synthesis: proposed mechanism (pending user confirmation)
+
+Q1's evidence cuts both ways on the earlier question 2: Q1 itself uses
+merge-time string rebasing (mechanism (a)) for `css`, but only because its
+pandoc-cwd constraint forces every path to be input-relative; the
+copy side is a separate mirror. q2 has no such constraint, and the user's
+concern (input tree won't always mirror output tree) stands. But pure
+template-time resolution (mechanism (b)) loses layer provenance.
+
+Proposed hybrid — **(a)'s marking, (b)'s emission**:
+
+1. **Merge time (provenance-aware):** existence-driven marking of
+   `format.*.css` entries as Path-kind per layer — normalizing every entry
+   to a *document-dir-relative* value exactly as the existing
+   `adjust_paths_to_document_dir` machinery already does for `!path` and
+   extension-fragment values. Near-zero new code: extend the marking that
+   extension fragments already get to the project's own config layer (and
+   directory metadata), scoped to the audited key list.
+2. **Render time (output-aware):** a transform (Navigation/Finalization
+   phase, all HTML formats) that walks the merged `css` list and, per
+   entry: skips external URLs; resolves to a project-root-relative source;
+   chooses the output location — **mirror of the project-relative path**,
+   except entries under `_extensions/` relocate to
+   `<lib_dir>/quarto-contrib/quarto-project/<rest>` (Q1 parity, and the
+   only way to avoid shipping `_extensions/` paths); pushes a
+   `ResourceCopyIntent` (works for every project type); rewrites the
+   entry to the per-page href via `resolve_root_relative_resource_href` /
+   `page_url_for`; emits the missing-file Q-code when the source doesn't
+   exist. `extract_css_from_meta` then emits pre-resolved values unchanged.
+
+This keeps Q1's output layout (`_site/styles.css`;
+`site_libs/quarto-contrib/quarto-project/acme/widget/widget.css`), works
+for websites *and* books/default projects (copy-intent channel), and keeps
+the resolver as the single source of href truth so a future
+input≠output-tree world only touches step 2.
+
+For books/single-doc, `lib_dir` is empty — the relocation target falls back
+to the resolver's Project scope root (`<stem>_files/`), matching where
+theme css already lands there (Q1 analog: `<stem>_files/libs/`).
+
 ## Proposed phases (draft)
 
-Skeleton only — actual phase contents wait on the design discussion.
+Refined after the two evidence passes; still pending user sign-off on the
+follow-up questions below.
 
-- **Phase 0 — Test plan (TDD).** End-to-end website render tests driving the
-  real project pipeline: (a) `_site/styles.css` exists after render;
-  (b) extension-path css exists at the decided output location; (c) deep
-  page's `<link href>` is depth-correct; (d) missing declared css warns
-  (and root page still renders); (e) external URL entries pass through
-  untouched. Verify each fails at HEAD first.
-- **Phase 1 — Copy.** `copy_format_css` in `website_post_render.rs` on the
-  `copy_asset_file` seam; iterate merged `format.html.css` entries; skip
-  external URLs; warn on missing source (favicon parity).
-- **Phase 2 — Rebase.** Per-page depth-correct hrefs via the chosen
-  mechanism (design question 2).
-- **Phase 3 — Diagnostic.** Warning for missing declared css; decide plain
-  warning vs. Q-code (a Q-code requires the docs page in the same commit —
-  `error-docs-page-missing` lint).
-- **Phase 4 — End-to-end verification + docs.** Render the fixture through
-  `cargo run --bin q2 -- render`, inspect output, re-check the Connect docs
-  repro; user-facing docs if any behavior is documented.
+- **Phase 0 — Test plan (TDD).** End-to-end tests driving the real render
+  path (`render_document_to_file` / project orchestrator, per the
+  end-to-end policy): (a) website render writes `_site/styles.css`;
+  (b) `_extensions/`-owned entry lands at the relocation target and its
+  href points there; (c) deep page's `<link href>` is depth-correct;
+  (d) document-front-matter `css:` in a subdirectory resolves against the
+  document dir, is copied, and links correctly; (e) missing declared css
+  emits the new Q-code and the render completes; (f) external URL entries
+  pass through untouched; (g) book/default-project render copies the css
+  (copy-intent channel, no website hook); (h) `url()`-referenced assets:
+  decide + pin behavior (question F3). Each verified failing at HEAD first.
+- **Phase 1 — Merge-time marking.** Extend existence-driven Path-kind
+  marking to the project's own config layer (and directory metadata) for
+  `format.*.css`, so entries normalize per layer like `!path` values
+  already do (layer provenance).
+- **Phase 2 — Render-time transform.** New transform (all HTML formats):
+  per css entry — external-URL passthrough, output-location choice (mirror
+  of the project-relative path; `_extensions/**` relocates to
+  `<lib_dir>/quarto-contrib/quarto-project/**`), `ResourceCopyIntent`,
+  per-page href rewrite via the resolver, Q-code on missing source. Wire
+  the emitted list into revealjs's `css_urls` too so user css stops being
+  dropped there (question F2).
+- **Phase 3 — Q-code + docs page.** New catalog entry + `docs/errors/`
+  page in the same commit (`error-docs-page-missing` lint enforces).
+- **Phase 4 — End-to-end verification + follow-ups.** Render the
+  investigation fixture and the Connect docs repro through the real
+  binary, inspect output; verify `q2 preview` behavior and file the
+  preview follow-up strand if broken; file the `format-resources` strand;
+  user-facing docs.
 
-## Open design questions for the user
+## Design decisions (user, 2026-08-14)
 
-1. **Output layout for css under `_extensions/`.** Q1 relocates
-   extension-owned css to
-   `site_libs/quarto-contrib/quarto-project/<org>/<ext>/…` and rewrites the
-   href accordingly. The simpler alternative is to copy preserving the
-   project-relative path (`_site/_extensions/acme/widget/widget.css`) and
-   emit the rebased href to that. Q1 parity, or the simpler layout? (Q1
-   avoids copying `_extensions/` into output wholesale; do we care about
-   that convention here?)
-2. **Rebase mechanism.** Two candidates with in-tree precedent:
-   (a) mark project-config `format.*.css` entries as `ConfigValueKind::Path`
-   (existence-driven, like extension fragments) and let the existing
-   `adjust_paths_to_document_dir` merge machinery emit document-relative
-   values — near-zero new code, but couples href shape to the input tree
-   mirroring the output tree; or (b) resolve at template/transform time via
-   the per-page `ResourceResolverContext`, like the favicon and theme
-   bundle — more explicit, and the same seam a later `site_libs` relocation
-   (question 1) would need anyway. Which?
-3. **Scope beyond `css`.** The same boundary presumably affects sibling
-   config-declared assets (`include-in-header` files are inlined so likely
-   fine, but what about `format-resources`, user `js`/`scripts` entries, and
-   document-level `css:` declared in a subdirectory page's front matter —
-   resolved against the document dir?). Fix `css` only here and file
-   follow-ups, or audit the boundary in this strand?
-4. **Diagnostic shape.** Favicon uses a plain `DiagnosticMessage::warning`.
-   Same here, or mint a Q-code (requires `docs/errors/` page + catalog entry
-   in the same commit)?
-5. **Preview parity.** `website_post_render` hooks are native-only. Does the
-   in-browser preview / `q2 preview` serve declared css from the source tree
-   already (VFS), or does preview need its own leg? (Fine to answer "verify
-   during Phase 4 and file a follow-up if broken.")
+Answers to the questions below, recorded before the quarto-cli evidence pass:
+
+1. **Output layout:** never `cp -r _extensions/` into output (authors ship
+   README.md etc. that don't belong). Individual declared assets may be
+   copied "along the same path"; study `external-sources/quarto-cli` for
+   the rationale behind Q1's `site_libs/quarto-contrib/quarto-project/…`
+   relocation before settling the exact layout.
+2. **Rebase mechanism:** leaning (b) (per-page `ResourceResolverContext`),
+   because q2 will not always be able to replicate input-tree paths in the
+   output tree. Not held strongly — check quarto-cli for evidence either
+   way; follow-up question allowed.
+3. **Scope:** audit the whole config-declared-asset boundary in this
+   strand, not just `css`.
+4. **Diagnostic:** mint a new Q-code (project direction: remove plain
+   warnings). Requires catalog entry + `docs/errors/` page in the same
+   commit (`error-docs-page-missing` lint).
+5. **Preview:** this strand targets render parity; verify preview behavior
+   during Phase 4 and file a follow-up strand if broken.
+
+## Resolved by the evidence passes
+
+(The original five questions are preserved with the user's answers in
+"Design decisions" above. The evidence passes resolved their open parts:)
+
+- **Layout:** Q1 parity — mirror project-relative paths; `_extensions/**`
+  relocates to `<lib_dir>/quarto-contrib/quarto-project/**`. Q1's rationale
+  (underscore dirs are systematically non-output; relocation ships only the
+  individually-referenced files; `quarto-contrib` is the reserved,
+  freezer-protected namespace) matches the user's constraint exactly.
+- **Mechanism:** hybrid proposed — merge-time layer-aware Path marking +
+  render-time resolver-driven copy/href transform (see Synthesis). Pending
+  F1.
+- **Scope:** boundary audited (table in Evidence pass 2). Real gaps found:
+  revealjs drops user css entirely (F2); `format-resources` accepted but
+  inert (F4).
+- **Diagnostic:** new Q-code (Phase 3).
+- **Preview:** verify in Phase 4; follow-up strand if broken.
+
+## Follow-up questions for the user
+
+- **F1 (mechanism sign-off).** The hybrid in "Synthesis": merge-time
+  Path-kind marking for layer provenance (Q1 performs its rebase at the
+  same point, per layer) + a render-time transform that owns copy intent
+  and per-page href through the resolver. OK to proceed on that shape?
+- **F2 (revealjs).** User `css:` on revealjs is currently dropped entirely
+  (worse than the website bug — not even a broken `<link>` is emitted).
+  Fix it in this strand (Phase 2's transform naturally covers it) or file
+  separately to keep this strand website-focused?
+- **F3 (css `url()` refs).** Q1's `copyResourceFile` chases `url()` /
+  `@import` references inside copied css and copies those files too
+  (`project-resources.ts:110-138`). Real-world css (including the Connect
+  docs port) may rely on this for background images and fonts. In scope
+  here, or an explicit follow-up strand with a documented limitation?
+- **F4 (`format-resources`).** Confirm filing it as its own strand
+  (`discovered-from` this one), suggested p2: it silently no-ops today,
+  and its Q1 consumers are LaTeX/Typst-style sibling-file formats.
 
 ## Risks / tradeoffs (draft)
 
-- **Book projects** likely share the symptom (same template path); fixing
-  only the website post-render hook would leave books broken. Worth checking
-  where books' post-render lives before committing to the seam.
-- Choosing rebase mechanism (a) silently changes the merged metadata value
-  shape (`Scalar` → `Path`) for a user-visible key; downstream readers of
-  `css` metadata (Lua filters, template contexts) would observe rewritten
-  values. Mechanism (b) keeps metadata untouched.
+- **Books:** confirmed — `ProjectKind::Book → DefaultProjectType` with no
+  post-render of its own, so the fix must use a cross-type channel
+  (`ResourceCopyIntent`), not `website_post_render.rs`. Phase 0(g) pins
+  this.
+- Merge-time Path marking changes the merged metadata value shape
+  (`Scalar` → `Path`) for a user-visible key; downstream readers (Lua
+  filters, template contexts) observe normalized values. Q1 mutates
+  metadata the same way (`toInputRelativePaths`), so filter-visible
+  rewritten paths are Q1-compatible behavior — but worth stating in docs.
+- The relocation choice hard-codes Q1's `quarto-contrib/quarto-project`
+  literal into q2 output layout; freeze does not exist in q2 yet, so the
+  freezer-protection rationale is speculative here — we adopt the layout
+  for output parity, not for freezer semantics.
 - The design strand bd-root-relative-paths-design-fc5pvkcv is still
   in_progress; its remaining case C (raw HTML) is independent, but any
   decision here should cite its Decision 4/5 vocabulary (leading `/` =
