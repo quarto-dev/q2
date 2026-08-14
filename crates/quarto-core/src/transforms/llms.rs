@@ -197,6 +197,7 @@ impl AstTransform for LlmsCaptureTransform {
                 &ViewContext {
                     index: index.as_deref(),
                     cur_dir,
+                    listings: &ctx.resolved_listings,
                 },
             );
             // The HTML `<h1>` title comes from the template, not the
@@ -285,6 +286,11 @@ struct ViewContext<'a> {
     /// Directory prefix of the current page's output href
     /// (forward-slash, no trailing slash; `""` at the site root).
     cur_dir: String,
+    /// Resolved listings for this page (`ListingGenerateTransform`
+    /// output). A rendered listing container whose id matches one of
+    /// these is replaced by a synthesized markdown item list
+    /// (bd-5w81o2dh) instead of carrying the listing DOM chrome.
+    listings: &'a [crate::project::listing::ResolvedListing],
 }
 
 fn has_class(attr: &Attr, class: &str) -> bool {
@@ -361,6 +367,21 @@ fn clean_block_into(mut block: Block, cx: &ViewContext, out: &mut Vec<Block>) {
     match block {
         Block::Div(div) => {
             if has_class(&div.attr, LLMS_OMIT_CLASS) {
+                return;
+            }
+            // A rendered listing container: replace the listing DOM
+            // (thumbnail/metadata chrome, L7 placeholder envelopes)
+            // with a clean list synthesized from the resolved items.
+            // The wrapper keeps its id, minimal, like float anchors.
+            if !div.attr.0.is_empty()
+                && let Some(listing) = cx.listings.iter().find(|l| l.listing.id == div.attr.0)
+            {
+                out.push(Block::Div(quarto_pandoc_types::block::Div {
+                    attr: (div.attr.0.clone(), vec![], hashlink::LinkedHashMap::new()),
+                    content: vec![synthesize_listing_list(listing, cx)],
+                    source_info: div.source_info,
+                    attr_source: AttrSourceInfo::empty(),
+                }));
                 return;
             }
             if has_class(&div.attr, "callout") {
@@ -444,6 +465,81 @@ fn clean_block_into(mut block: Block, cx: &ViewContext, out: &mut Vec<Block>) {
             out.push(block);
         }
     }
+}
+
+/// Synthesize a listing's markdown view: one bullet per item,
+/// `- [title](href) (date, author): description` (each part
+/// optional), links page-relative and retargeted to `.md`
+/// companions where they exist (bd-5w81o2dh).
+fn synthesize_listing_list(
+    listing: &crate::project::listing::ResolvedListing,
+    cx: &ViewContext,
+) -> Block {
+    let gen_si = || quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown());
+    let str_inline = |text: String| {
+        Inline::Str(quarto_pandoc_types::inline::Str {
+            text,
+            source_info: gen_si(),
+        })
+    };
+
+    let items: Vec<Vec<Block>> = listing
+        .items
+        .iter()
+        .map(|item| {
+            let href = retarget_href(&relativize(&cx.cur_dir, &item.output_href), cx);
+            let mut inlines: Vec<Inline> = vec![Inline::Link(quarto_pandoc_types::inline::Link {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![str_inline(item.title.clone())],
+                target: (href, String::new()),
+                source_info: gen_si(),
+                attr_source: AttrSourceInfo::empty(),
+                target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
+            })];
+            let meta_bits: Vec<&str> = [item.date.as_deref(), item.author.as_deref()]
+                .into_iter()
+                .flatten()
+                .filter(|s| !s.trim().is_empty())
+                .collect();
+            if !meta_bits.is_empty() {
+                inlines.push(str_inline(format!(" ({})", meta_bits.join(", "))));
+            }
+            if let Some(desc) = item.description.as_deref().map(str::trim)
+                && !desc.is_empty()
+            {
+                inlines.push(str_inline(format!(": {desc}")));
+            }
+            vec![Block::Plain(quarto_pandoc_types::block::Plain {
+                content: inlines,
+                source_info: gen_si(),
+            })]
+        })
+        .collect();
+
+    Block::BulletList(quarto_pandoc_types::block::BulletList {
+        content: items,
+        source_info: gen_si(),
+    })
+}
+
+/// Page-relative form of a project-relative `target` href as seen
+/// from the directory `from_dir` (both forward-slash; `from_dir`
+/// has no trailing slash and is `""` at the site root).
+fn relativize(from_dir: &str, target: &str) -> String {
+    if from_dir.is_empty() {
+        return target.to_string();
+    }
+    let from: Vec<&str> = from_dir.split('/').collect();
+    let tgt: Vec<&str> = target.split('/').collect();
+    let common = from
+        .iter()
+        .zip(tgt.iter())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let ups = from.len() - common;
+    let mut parts: Vec<&str> = vec![".."; ups];
+    parts.extend(&tgt[common..]);
+    parts.join("/")
 }
 
 /// Rebuild a resolved callout (the HTML scaffold `callout-resolve`
@@ -983,6 +1079,7 @@ mod tests {
         let cx = ViewContext {
             index: Some(&index),
             cur_dir: String::new(),
+            listings: &[],
         };
         // Eligible same-site link, with and without fragment.
         assert_eq!(retarget_href("about.html", &cx), "about.md");
@@ -1006,9 +1103,19 @@ mod tests {
         let cx_sub = ViewContext {
             index: Some(&index),
             cur_dir: "guide".to_string(),
+            listings: &[],
         };
         assert_eq!(retarget_href("../about.html", &cx_sub), "../about.md");
         assert_eq!(retarget_href("intro.html", &cx_sub), "intro.md");
+    }
+
+    #[test]
+    fn relativize_computes_page_relative_hrefs() {
+        assert_eq!(relativize("", "posts/a.html"), "posts/a.html");
+        assert_eq!(relativize("posts", "posts/a.html"), "a.html");
+        assert_eq!(relativize("posts", "index.html"), "../index.html");
+        assert_eq!(relativize("a/b", "a/c/d.html"), "../c/d.html");
+        assert_eq!(relativize("a/b", "a/b/c.html"), "c.html");
     }
 
     #[test]

@@ -713,6 +713,77 @@ fn llms_companion_collision_with_copied_resource_fails() {
 /// anchors, callouts, code blocks, footnotes, tables with crossrefs,
 /// resolved `@ref` text, inline formatting. Snapshot-reviewed so
 /// quality regressions are visible in the diff.
+/// A listing page's companion replaces the rendered listing DOM
+/// (thumbnail/metadata div chrome, L7 placeholder envelopes) with a
+/// clean markdown list synthesized from the resolved listing items:
+/// `- [title](href) (date, author): description` (bd-5w81o2dh). The
+/// HTML keeps its full listing DOM.
+#[test]
+fn llms_listing_page_companion_synthesizes_item_list() {
+    let (project_dir, summary) = render_project(|dir| {
+        write(
+            &dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  title: \"Test Site\"\n  llms-txt: true\n",
+        );
+        write(&dir.join("index.qmd"), "---\ntitle: Home\n---\n\nHi.\n");
+        write(
+            &dir.join("posts/index.qmd"),
+            "---\ntitle: Blog\nlisting: default\n---\n\nRecent posts.\n",
+        );
+        write(
+            &dir.join("posts/a.qmd"),
+            "---\ntitle: First\ndate: 2026-01-15\nauthor: Alice\ndescription: First desc.\n---\n\nFirst body.\n",
+        );
+        write(
+            &dir.join("posts/b.qmd"),
+            "---\ntitle: Second\ndate: 2026-02-20\nauthor: Bob\n---\n\nSecond body.\n",
+        );
+    });
+
+    let md = read(&project_dir.join("_site/posts/index.md"));
+    assert_contains(&md, "# Blog", "listing page title");
+    assert_contains(&md, "Recent posts.", "page prose kept");
+    // Synthesized entries: title link (companion href, page-relative),
+    // date + author parenthetical, description when present.
+    assert_contains(
+        &md,
+        "* [First](a.md) (2026-01-15, Alice): First desc.\n",
+        "first item entry",
+    );
+    assert_contains(
+        &md,
+        "* [Second](b.md) (2026-02-20, Bob)\n",
+        "second item entry, no description",
+    );
+    let p_first = pos(&md, "[First]", "order");
+    let p_second = pos(&md, "[Second]", "order");
+    assert!(p_first < p_second, "items in listing order:\n{md}");
+
+    // None of the rendered listing DOM leaks into the companion.
+    assert_not_contains(&md, "thumbnail", "no thumbnail chrome");
+    assert_not_contains(&md, "listing-title", "no listing-title chrome");
+    assert_not_contains(&md, "listing-description", "no description chrome");
+    assert_not_contains(&md, "no-external", "no link-class chrome");
+    assert_not_contains(&md, ".metadata", "no metadata chrome");
+
+    // The HTML page keeps the real rendered listing.
+    let html = {
+        let path = summary
+            .outputs
+            .iter()
+            .find(|o| {
+                o.output_path.ends_with("posts/index.html")
+                    || o.output_path.ends_with("posts\\index.html")
+            })
+            .expect("posts/index.html output")
+            .output_path
+            .clone();
+        read(&path)
+    };
+    assert_contains(&html, "data-listing-rendered", "html keeps the listing DOM");
+}
+
 #[test]
 fn llms_companion_rich_content_snapshot() {
     let (project_dir, _summary) = render_project(|dir| {
