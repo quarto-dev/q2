@@ -197,3 +197,64 @@ function Meta(meta)
   return meta
 end
 ```
+
+## Attaching scripts and stylesheets: `quarto.doc.add_html_dependency`
+
+A filter that needs JavaScript or CSS in the rendered page registers an
+**HTML dependency**. Quarto copies the files into the output and adds the
+`<script>` and `<link>` tags for you:
+
+``` lua
+function Image(img)
+  quarto.doc.add_html_dependency({
+    name = 'zoom',
+    version = '1.2.0',
+    scripts = { 'zoom.js' },
+    stylesheets = { 'zoom.css' },
+  })
+  return img
+end
+```
+
+Paths are resolved relative to the filter's own directory, so an extension
+can ship its assets alongside its `.lua` file and reference them by bare
+name. An entry may also be written as a table with a `path` field —
+`{ path = 'src/zoom.js' }` — which is equivalent to the bare string. The
+copied file always keeps the base name of its path.
+
+Dependencies are **deduplicated by name**, so it is safe — and intended — to
+call `add_html_dependency` unconditionally from a handler that runs many
+times. The example above fires once per image; only the first registration
+does anything, and the rest are silently ignored.
+
+Only `name` is required. Because the dependency only affects HTML output,
+guard the call when your filter also targets other formats:
+
+``` lua
+if quarto.doc.is_format('html:js') then
+  quarto.doc.add_html_dependency({ name = 'zoom', scripts = { 'zoom.js' } })
+end
+```
+
+### Versions
+
+The optional `version` keeps releases of the same dependency apart on disk.
+Assets land under `site_libs/libs/{name}/`, with a version adding one level:
+
+``` {.default}
+_site/site_libs/libs/zoom/1.2.0/zoom.js   # with version = '1.2.0'
+_site/site_libs/libs/zoom/zoom.js         # without
+```
+
+Declaring a version costs nothing and is worth doing for any dependency you
+expect to update. Within a single document the first registration still
+wins, so registering one name at two different versions reports a warning —
+a page cannot sensibly load two copies of the same library.
+
+### Fields not yet supported
+
+Quarto 1 accepts several other fields on a dependency: `meta`, `links`,
+`resources`, `serviceworkers`, and `head`. Quarto 2 does not implement them
+yet, and warns once per dependency that names one, so a filter carried over
+from Quarto 1 tells you what was dropped rather than failing. Any other
+field is a typo and raises an error.
