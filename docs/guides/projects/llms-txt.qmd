@@ -1,0 +1,120 @@
+---
+title: "llms.txt: a markdown mirror for AI tools"
+---
+
+## Overview
+
+Language-model tools read markdown far better than they read rendered
+HTML. With one line of configuration, Quarto publishes a
+machine-friendly mirror of your website alongside the normal HTML
+output:
+
+```yaml
+# _quarto.yml
+website:
+  llms-txt: true
+```
+
+Rendering the site then produces, in the output directory:
+
+- **A markdown companion for every page.** `about.html` gets an
+  `about.md` sibling — a clean markdown rendering of the page's
+  content, with navigation, scripts, and styling chrome left out.
+- **`llms.txt`** — an organized index of those companions, following
+  the [llms.txt convention](https://llmstxt.org): the site title, a
+  short description, and sections of annotated links.
+- **`llms-full.txt`** — every companion concatenated into a single
+  file, for tools that prefer one big context document.
+
+The feature only applies to **website** projects. In any other
+project type Quarto warns that the key has no effect rather than
+ignoring it.
+
+## What the index looks like
+
+`llms.txt` mirrors your site's navigation. Each sidebar section
+becomes a heading, and each page becomes a link annotated with the
+page's `description:` from its front matter:
+
+```markdown
+# Acme Documentation
+
+> Reference and guides for the Acme toolkit.
+
+## Getting started
+
+- [Installation](install.md): Installing Acme on every platform
+- [First steps](first-steps.md): Your first Acme project
+
+## Reference
+
+- [CLI reference](cli.md): Every command and flag
+```
+
+The organization rules:
+
+- **Sidebar sections** become `##` headings, in the order you
+  declared them. A site with several sidebars gets one heading per
+  sidebar instead.
+- Pages the sidebar doesn't reach are appended under a final
+  `## Other` heading, so every page is always indexed.
+- The **home page** is pinned to the top when no sidebar section
+  covers it.
+- A site with no sidebar at all lists everything under one
+  `## Pages` heading.
+- When `website.site-url` is set, links are absolute URLs; otherwise
+  they're relative.
+
+Give your pages one-line `description:` entries in their front
+matter — they become the annotations that make the index genuinely
+useful to an AI assistant deciding which page to read.
+
+## Links between companions
+
+Inside a companion, links to other pages of your site point at the
+*markdown* siblings, not the HTML — a tool that starts at `llms.txt`
+stays inside the markdown mirror as it follows links. Links to
+drafts, external sites, and non-page files are left untouched.
+
+## Showing content only to AI tools (or only to people)
+
+The markdown mirror is a conditional-content target named `llms`.
+Use it with the standard `.content-visible` / `.content-hidden`
+conditional-content divs (also used for
+[project profiles](profiles.qmd)):
+
+```markdown
+::: {.content-visible when-format="llms"}
+Note for AI assistants: the full API schema is at [api.md](api.md).
+:::
+
+::: {.content-hidden when-format="llms"}
+This interactive demo requires a browser.
+:::
+```
+
+The first block appears only in the markdown companion; the second
+only on the HTML page. Everything else appears in both — the
+companion mirrors the HTML view, so content conditioned
+`when-format="html"` stays in it.
+
+Prefer prose inside these blocks: a heading inside an
+`llms`-only block can still surface in the page's table of contents,
+and cross-referenceable figures inside one are not numbered.
+
+## Drafts and the 404 page
+
+Pages marked `draft: true` and the site's `404.qmd` still render to
+HTML as usual, but get no markdown companion and never appear in
+`llms.txt` or `llms-full.txt`.
+
+## Quarto never overwrites your files
+
+Companion paths share a namespace with your own files: a copied
+resource named `about.md` occupies the exact path where the
+companion of `about.html` wants to live. Quarto keeps a record of the files *it*
+generated (in `.quarto/llms-manifest.json`) and refuses to overwrite
+anything else — the render fails with
+[`Q-5-28`](../../errors/project/Q-5-28.qmd) naming the contested
+path, and you choose: rename the file, drop it from
+`project.resources`, or turn `llms-txt` off.

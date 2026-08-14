@@ -262,12 +262,29 @@ phase's tests are written and observed failing before implementation.
 
 ### Phase 5 — E2E verification + docs
 
-- [ ] `cargo run --bin q2 -- render` on the investigation repro; inspect
-      actual `llms.txt` / companions / `llms-full.txt` (record snippet in
-      plan or transcript per end-to-end policy)
-- [ ] Render the connect-docs port; compare coverage vs Q1's 348
-      companions
-- [ ] User-facing docs page under `docs/` (rendered with q2, not Q1)
+- [x] `cargo run --bin q2 -- render` on the investigation repro; output
+      inspected. Observed `_site/llms.txt`:
+      `# llms-txt repro` / `## Pages` / `- [About](about.md)` /
+      `- [Home](index.md)`; `index.md` companion starts `# Home` with
+      clean body text; `llms-full.txt` carries both pages with
+      `---/title:/url:/---` separators; `.quarto/llms-manifest.json`
+      lists the four generated paths.
+- [x] Rendered the connect-docs port
+      (`~/repos/github/cscheid/q2-connect-docs/docs-quarto-2`, 383
+      inputs): **348 companions — exactly Q1's count** — plus a
+      367-line llms.txt organized into real sidebar sections
+      (`## Admin Guide` …) with absolute site-url links, and a
+      122k-line llms-full.txt. Spot-checked
+      `admin/getting-started/index.md`: clean headings, reconstructed
+      `::: {.callout-important}`, all internal links rewritten to
+      `.md` (zero `.html)` leftovers). The project's own
+      `post-render.sh` fails for unrelated reasons. Two nits filed:
+      bd-6m1iyxl6 (site title leaks raw HTML + unresolved shortcode
+      into the llms.txt H1), and bd-4vbd3b7g (caption prefix,
+      pre-existing).
+- [x] User-facing docs page: `docs/guides/projects/llms-txt.qmd`,
+      added to the Guides sidebar; `q2 render docs/` green
+      (241/241).
 - [x] Child strands filed: bd-stbdlesy (conditional content, in PR
       scope — see Phase 2), bd-to3vh0od (code-annotation preservation,
       deferred until q2 has code annotations)
