@@ -8,7 +8,7 @@
 //! `index.html` can own `/`; that's controlled via
 //! `HubConfig::register_root_ws = false`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -886,17 +886,26 @@ fn embedded_gz(ui: PreviewUi, rel: &str) -> Option<Vec<u8>> {
 /// Lookup-only, never iterated (the coding.md HashMap carve-out).
 static GZ_CACHE: OnceLock<Mutex<HashMap<(PreviewUi, String), Vec<u8>>>> = OnceLock::new();
 
-/// Mirror of `scripts/precompress-dist.mjs`'s SKIP_EXTENSIONS: the
-/// already-compressed containers that never got a `.gz` sibling. The
-/// runtime gzip path must match that set exactly — gzipping a skipped
-/// type would diverge from the disk-served wire contract.
+/// The gzip skip set: already-compressed containers that never got a
+/// `.gz` sibling. Parsed from `scripts/gzip-skip-extensions.txt`, the
+/// single source of truth shared with `scripts/precompress-dist.mjs`
+/// (which reads the same file at build time) — the runtime gzip path
+/// cannot drift from the disk-served wire contract. Lookup-only,
+/// never iterated (the coding.md HashMap carve-out).
+fn gz_skip_extensions() -> &'static HashSet<&'static str> {
+    static SKIP: OnceLock<HashSet<&'static str>> = OnceLock::new();
+    SKIP.get_or_init(|| {
+        include_str!("../../../scripts/gzip-skip-extensions.txt")
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .collect()
+    })
+}
+
 fn gz_compressible(rel: &str) -> bool {
-    const SKIP: &[&str] = &[
-        "br", "gz", "woff", "woff2", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "mp4",
-        "webm", "pdf", "zip",
-    ];
     let ext = rel.rsplit('.').next().unwrap_or("");
-    !SKIP.contains(&ext.to_ascii_lowercase().as_str())
+    !gz_skip_extensions().contains(ext.to_ascii_lowercase().as_str())
 }
 
 /// Serve a `resources:`-declared file from disk at the artifact-rooted path the
@@ -1263,24 +1272,42 @@ mod tests {
 
     #[test]
     fn gz_compressible_mirrors_the_precompress_skip_set() {
-        // The runtime gzip path must match scripts/precompress-dist.mjs's
-        // SKIP_EXTENSIONS exactly: those files never had a `.gz` sibling,
-        // so gzipping them at runtime would change the wire contract.
+        // The runtime gzip path must match the precompress pass's skip
+        // set exactly: those files never had a `.gz` sibling, so
+        // gzipping them at runtime would change the wire contract. Both
+        // sides parse `scripts/gzip-skip-extensions.txt`; derive the
+        // skipped cases from that file so an edit to it is tested
+        // automatically, and assert the precompress script still
+        // consumes the file (guards against someone re-inlining a
+        // private list there).
+        let precompress_src = include_str!("../../../scripts/precompress-dist.mjs");
+        assert!(
+            precompress_src.contains("gzip-skip-extensions.txt"),
+            "precompress-dist.mjs must read the shared skip-set file"
+        );
+        let skip_file = include_str!("../../../scripts/gzip-skip-extensions.txt");
+        let mut skipped_count = 0;
+        for ext in skip_file
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        {
+            skipped_count += 1;
+            assert!(
+                !gz_compressible(&format!("a.{ext}")),
+                "{ext} is an already-compressed container"
+            );
+        }
+        assert!(
+            skipped_count >= 10,
+            "skip file parsed suspiciously few entries ({skipped_count}) — parser broken?"
+        );
         for compressible in [
             "a.js", "a.css", "a.wasm", "a.html", "a.svg", "a.ttf", "a.json",
         ] {
             assert!(
                 gz_compressible(compressible),
                 "{compressible} must be gzipped at runtime"
-            );
-        }
-        for skipped in [
-            "a.woff", "a.woff2", "a.png", "a.jpg", "a.jpeg", "a.gif", "a.webp", "a.avif", "a.ico",
-            "a.mp4", "a.webm", "a.pdf", "a.zip", "a.br", "a.gz",
-        ] {
-            assert!(
-                !gz_compressible(skipped),
-                "{skipped} is an already-compressed container"
             );
         }
     }

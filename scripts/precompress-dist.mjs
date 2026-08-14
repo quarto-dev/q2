@@ -22,10 +22,16 @@ import { join, extname } from 'path';
 import { gzipSync, constants } from 'zlib';
 
 // Already-compressed containers: gzip on these only grows the embed.
-const SKIP_EXTENSIONS = new Set([
-  '.br', '.gz', '.woff', '.woff2', '.png', '.jpg', '.jpeg', '.gif',
-  '.webp', '.avif', '.ico', '.mp4', '.webm', '.pdf', '.zip',
-]);
+// The skip set lives in `gzip-skip-extensions.txt` (next to this
+// script) — the single source of truth shared with the preview
+// server's runtime gzip path (crates/quarto-preview/src/lib.rs), so
+// the two can never drift.
+const SKIP_EXTENSIONS = new Set(
+  readFileSync(new URL('./gzip-skip-extensions.txt', import.meta.url), 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#')),
+);
 
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
@@ -45,7 +51,7 @@ let files = 0;
 let identity = 0;
 let gz = 0;
 for (const path of walk(dist)) {
-  if (SKIP_EXTENSIONS.has(extname(path).toLowerCase())) continue;
+  if (SKIP_EXTENSIONS.has(extname(path).toLowerCase().slice(1))) continue;
   const bytes = readFileSync(path);
   const compressed = gzipSync(bytes, { level: constants.Z_BEST_COMPRESSION });
   writeFileSync(`${path}.gz`, compressed);
