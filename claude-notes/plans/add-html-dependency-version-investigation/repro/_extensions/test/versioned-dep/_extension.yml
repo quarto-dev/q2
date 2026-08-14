@@ -1,0 +1,6 @@
+title: versioned-dep
+author: repro
+version: 1.0.0
+contributes:
+  filters:
+    - versioned-dep.lua
