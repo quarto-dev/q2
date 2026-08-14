@@ -20,6 +20,7 @@ pub mod document_profile_pipeline;
 pub mod engine_error_policy;
 pub mod engine_merge;
 pub mod engine_output_parity;
+pub mod engine_visibility;
 pub mod extension_metadata;
 pub mod fail_fast;
 pub mod get_config_merge;

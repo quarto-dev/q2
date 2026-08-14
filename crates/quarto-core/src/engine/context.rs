@@ -54,6 +54,21 @@ pub struct ExecutionContext {
     /// this would contain the `{ kernel: python3 }` map.
     pub engine_config: Option<ConfigValue>,
 
+    /// The document's merged `execute:` scope, if it has one.
+    ///
+    /// This is the document-level default every cell option resolves
+    /// against: cell `#|` options merge *over* this map, cell wins
+    /// (Q1's `shouldInclude` in `src/core/jupyter/tags.ts`). It comes
+    /// from the fully merged metadata — `MetadataMergeStage` runs
+    /// before engine execution — so project `_quarto.yml` defaults and
+    /// profile overlays are already folded in.
+    ///
+    /// Engines that need it: jupyter resolves `echo`/`output`/
+    /// `warning`/`include`/`error` against it in Rust; knitr forwards
+    /// it to R as `format$execute`, where `execute.R` builds
+    /// `opts_chunk` from it (bd-nn2fou8h).
+    pub execute_scope: Option<ConfigValue>,
+
     /// Source provenance for the input text.
     ///
     /// Maps byte offsets in the engine's input `&str` back to original source
@@ -97,6 +112,7 @@ impl ExecutionContext {
             format: format.into(),
             quiet: false,
             engine_config: None,
+            execute_scope: None,
             // "no source location known yet" sentinel; `with_source_info`
             // overwrites this with the real qmd serialization range before
             // any consumer reads it.
@@ -140,6 +156,12 @@ impl ExecutionContext {
     ) -> Self {
         self.source_info = source_info;
         self.source_context = source_context;
+        self
+    }
+
+    /// Set the document's merged `execute:` scope (bd-nn2fou8h).
+    pub fn with_execute_scope(mut self, execute_scope: Option<ConfigValue>) -> Self {
+        self.execute_scope = execute_scope;
         self
     }
 }
