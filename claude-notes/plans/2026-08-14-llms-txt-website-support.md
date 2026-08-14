@@ -3,7 +3,7 @@
 **Date:** 2026-08-14
 **Braid:** bd-llms-txt-unimplemented-oih6z6j7
 **Checkout:** main @ `3ac596e0` (investigation committed in place; implementation should get its own branch/worktree)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design aligned 2026-08-14 (all six questions resolved — see Resolved design decisions). Ready to implement on a dedicated branch/worktree.
 
 ## Triage verdict
 
@@ -154,42 +154,80 @@ So the de facto standard bundle is: **organized, description-annotated
 `llms.txt`** (sections mirroring site navigation) + **`llms-full.txt`**
 + per-page markdown. Q1 ships only the third piece well.
 
-## Proposed phases (draft)
+## Phases and work items
 
-Skeleton only — contents wait on the design discussion.
+Design is settled (see Resolved design decisions). TDD throughout: each
+phase's tests are written and observed failing before implementation.
 
-- **Phase 0 — Test plan (TDD).** Failing tests first: an e2e test through
-  `render_document_to_file`/project render asserting `_site/llms.txt` +
-  companions exist with expected content; snapshot tests for the qmd
-  serialization of representative pages (crossrefs, code cells, callouts,
-  footnotes); a draft-exclusion test; a warn-on-inert test for non-website
-  project types.
-- **Phase 1 — Config plumbing + inert-key warning.** Read
-  `website.llms-txt` (boolean; mind `as_plain_text` vs `as_str` lint);
-  warn when set on a non-website project (mirror the `aliases` precedent
-  noted in `DocumentProfile`).
-- **Phase 2 — Per-page markdown capture.** Transform/stage in Finalization
-  (after `CrossrefRenderTransform`) that clones the AST, runs llms cleanup
-  (unwrap section divs, drop format-only raw blocks, restore code-cell
-  source), serializes via pampa's qmd writer, and hands the string out —
-  likely `RenderOutput.llms_md: Option<String>` + a write in the
-  render-to-file path. **Touches `RenderOutput` ⇒ full `cargo xtask
-  verify` (wasm-quarto-hub-client depends on it); WASM path skips the
-  write like the other native-only hooks.** All companion writes go
-  through the output-ledger claim helper (resolved decision 2): new
-  `Q-*` collision error + docs page + a TDD test where a resource-copied
-  `<page>.md` collides with a companion path and fails the render.
-- **Phase 3 — `llms.txt` assembly.** New `write_llms_txt` in
-  `website_post_render.rs`, sibling of `write_sitemap`: sections derived
-  from the website sidebar/navbar structure, entries as
-  `- [title](href): description` from `DocumentProfile`, drafts + 404
-  excluded, absolute URLs when `site-url` set. Incremental discipline
-  mirrors sitemap.
-- **Phase 4 — `llms-full.txt`** (pending design question 2): concatenate
-  the per-page markdown in index order with separators.
-- **Phase 5 — E2E verification + docs.** Render the repro and the
-  connect-docs port; inspect actual output; user-facing docs page under
-  `docs/` (rendered with q2, not Q1).
+### Phase 0 — Test plan (failing tests first)
+
+- [ ] E2E project-render test: website with `llms-txt: true` produces
+      `_site/llms.txt`, per-page `<page>.md` companions, and
+      `_site/llms-full.txt`; content assertions on index structure
+      (H2 sections, `- [title](href): description` entries)
+- [ ] Snapshot tests for qmd serialization of representative pages:
+      crossrefs (resolved numbers), callouts, footnotes, code cells,
+      section-div unwrapping
+- [ ] Draft-exclusion test (draft page: no companion, absent from index)
+- [ ] 404-page exclusion test
+- [ ] Collision test: resource-copied `<page>.md` at a companion path
+      fails the render with the new `Q-*` code
+- [ ] User-provided `llms.txt` resource collision test
+- [ ] Warn-on-inert test: `llms-txt: true` on a non-website project warns
+- [ ] Incremental-render test: `llms.txt` regenerated from cached
+      profiles; skipped pages' companions persist
+- [ ] Multi-sidebar + straggler test: pages in no sidebar land in
+      "Other"; home page pinned first when uncovered
+- [ ] Conditional-content test: `when-format="llms"` /
+      `unless-format="llms"` honored in companions and HTML
+
+### Phase 1 — Config plumbing + inert-key warning
+
+- [ ] Read `website.llms-txt` boolean (mind the `metadata-as-str` lint /
+      `as_plain_text`)
+- [ ] Warn when set on non-website project types (aliases precedent)
+
+### Phase 2 — Per-page markdown capture
+
+- [ ] Finalization-phase capture after `CrossrefRenderTransform`: clone
+      AST, run llms cleanup (unwrap section divs, drop format-only raw
+      blocks), serialize via pampa qmd writer
+- [ ] Run conditional-content transform with `llms` format target on the
+      cloned AST (check the format-alias table accepts `llms`)
+- [ ] Rewrite same-site internal links to `.md` siblings (decision 4)
+- [ ] Thread the string out (likely `RenderOutput.llms_md:
+      Option<String>`) — **touches `RenderOutput` ⇒ full `cargo xtask
+      verify`**; WASM path skips the write (native-only, like sitemap)
+- [ ] Output-ledger claim helper: all companion writes resolve against
+      rendered outputs ∪ resource copies ∪ sibling artifacts; collision ⇒
+      new `Q-*` error + `docs/errors/` page in the same commit
+
+### Phase 3 — `llms.txt` assembly
+
+- [ ] `write_llms_txt` in `website_post_render.rs`, sibling of
+      `write_sitemap`, implementing the set-subtraction algorithm of
+      decision 1 (pure function of `(sidebars, navbar, manifest)`)
+- [ ] Entry format `- [title](href): description` from
+      `DocumentProfile`; absolute URLs when `site-url` set
+- [ ] "Other" catch-all; home page pinned when uncovered
+- [ ] Incremental discipline: regenerate from cached profiles
+
+### Phase 4 — `llms-full.txt`
+
+- [ ] Concatenate per-page markdown in index order with per-page
+      separators (title + canonical URL)
+
+### Phase 5 — E2E verification + docs
+
+- [ ] `cargo run --bin q2 -- render` on the investigation repro; inspect
+      actual `llms.txt` / companions / `llms-full.txt` (record snippet in
+      plan or transcript per end-to-end policy)
+- [ ] Render the connect-docs port; compare coverage vs Q1's 348
+      companions
+- [ ] User-facing docs page under `docs/` (rendered with q2, not Q1)
+- [x] Child strands filed: bd-stbdlesy (conditional content, in PR
+      scope — see Phase 2), bd-to3vh0od (code-annotation preservation,
+      deferred until q2 has code annotations)
 
 ## Resolved design decisions
 
@@ -241,26 +279,44 @@ Skeleton only — contents wait on the design discussion.
    - `discovery.rs`'s `*.llms.md` source-side exclusion stays untouched;
      the output dir is already excluded from discovery.
 
+3. **`llms-full.txt` (resolved 2026-08-14): in scope.** Concatenate the
+   per-page markdown in index order (same order as `llms.txt`'s
+   sections), with per-page separators carrying title + canonical URL.
+
+4. **Internal links inside companions (resolved 2026-08-14): rewrite to
+   the `.md` siblings.** In-body links to same-site pages point at each
+   page's markdown companion, keeping an LLM inside the markdown mirror.
+   Links to pages with no companion (drafts, non-manifest targets) and
+   external links stay as-is.
+
+5. **Fidelity bar (resolved 2026-08-14): readable, semantically complete
+   markdown; no Q1 byte-parity.** Capture after
+   `CrossrefRenderTransform`, llms-cleanup pass, snapshot-test on
+   representative fixtures. Gross discrepancies handled in follow-ups as
+   they appear.
+
+6. **Q1 extras (resolved 2026-08-14): wanted in the eventual PR**, filed
+   as child strands to organize the work (split across sessions if the
+   work runs long):
+   - *Conditional content for llms* (**bd-stbdlesy**, in scope for this
+     PR per user) — q2 already has the full
+     `.content-visible`/`.content-hidden` `when-format`/`unless-format`
+     machinery as an AST transform
+     (`crates/quarto-core/src/transforms/conditional_content.rs`), so
+     Q1's `.llms-conditional-content` marker dance collapses into
+     running that transform with an `llms` format target on the cloned
+     AST before serialization. (Check the format-alias table accepts
+     `llms`.)
+   - *Code-annotation preservation* (**bd-to3vh0od**, p4) — **deferred;
+     moot until q2 implements code annotations at all** (no
+     code-annotation machinery exists in crates/ today; user confirmed
+     deferral 2026-08-14). The child strand records the requirement; it
+     activates when code annotations land.
+
 ## Open design questions for the user
-2. **`llms-full.txt`.** Every major SSG now emits it alongside `llms.txt`.
-   Include it in scope (cheap once per-page markdown exists), or file as a
-   follow-up strand?
-4. **Internal links inside companions.** Should in-body links to other
-   pages of the same site point at the `.html` outputs (Q1 behavior) or be
-   rewritten to the `.llms.md` siblings (keeps an LLM inside the markdown
-   mirror)? The index itself links `.llms.md` either way.
-5. **Serialization fidelity bar.** The qmd writer was built for
-   qmd-in/qmd-out round-tripping, not for post-transform ASTs full of
-   `CustomNode`s and HTML raw blocks. I propose: capture after
-   `CrossrefRenderTransform` (so figure/table numbers and `@ref` text are
-   resolved), then an llms-cleanup pass, then snapshot-test the output on
-   representative fixtures and iterate. Is "readable, semantically
-   complete markdown that need not match Q1's output at all" the right
-   acceptance bar?
-6. **Q1 extras scope.** `llms-only`/`llms-hidden` conditional content and
-   code-annotation preservation: defer to follow-up strands filed as
-   `discovered-from` this one? (My recommendation — the MVP is the file
-   set + organized index.)
+
+None — all six resolved above. Next step is implementation, on its own
+branch/worktree.
 
 ## Risks / tradeoffs (draft)
 
