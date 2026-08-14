@@ -2321,6 +2321,38 @@ nav.quarto-secondary-nav.color-navbar .quarto-btn-toggle {
   }
 }
 
+// Website breadcrumbs (bd-breadcrumbs-missing-1vpuqh34): title-block
+// instance only. Ported from Q1 quarto-nav.scss; the narrow-viewport
+// `.quarto-secondary-nav` instance (with the sidebar toggle) is a
+// separate strand. Bootstrap's _breadcrumb.scss supplies the base
+// component; these are Q1's spacing/color refinements.
+.quarto-title-breadcrumbs .breadcrumb {
+  margin-bottom: 0.5em;
+  font-size: 0.9rem;
+
+  li:last-of-type {
+    a {
+      @if variable-exists(text-muted) {
+        color: $text-muted;
+      }
+    }
+  }
+}
+
+.breadcrumb-item {
+  line-height: 1.2rem;
+}
+
+.quarto-page-breadcrumbs .breadcrumb-item + .breadcrumb-item,
+.quarto-page-breadcrumbs .breadcrumb-item {
+  padding-right: 0.33em;
+  padding-left: 0;
+}
+
+.quarto-page-breadcrumbs .breadcrumb-item::before {
+  padding-right: 0.33em;
+}
+
 body.nav-sidebar {
   @include media-breakpoint-down(lg) {
     .quarto-title-banner {

@@ -27,7 +27,7 @@ use crate::footer::{FooterBorder, FooterRegion, PageFooter};
 use crate::item::NavigationItem;
 use crate::navbar::{Navbar, NavbarTitle};
 use crate::page_nav::PageNavigation;
-use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
+use crate::sidebar::{Crumb, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
 
 /// Render a complete navbar element.
 ///
@@ -199,6 +199,57 @@ pub fn page_footer_to_html(footer: &PageFooter) -> String {
 /// Phase 2 emits structurally-correct collapse markup (`data-bs-*`
 /// attributes, `aria-expanded`), but the actual JS glue lives in
 /// Phase 5 (`site_libs/`); until then the chevrons are inert.
+/// Render a breadcrumb trail — Q1's `.quarto-page-breadcrumbs` markup
+/// (bd-breadcrumbs-missing-1vpuqh34):
+///
+/// ```html
+/// <nav class="quarto-page-breadcrumbs …" aria-label="breadcrumb">
+///   <ol class="breadcrumb">
+///     <li class="breadcrumb-item"><a href="…">Text</a></li>
+///     …
+///   </ol>
+/// </nav>
+/// ```
+///
+/// `extra_classes` tags the placement variant — the title-block
+/// instance carries `quarto-title-breadcrumbs d-none d-lg-block`; the
+/// (future) secondary-nav instance carries none. Crumbs without text
+/// are skipped (Q1's `item.text || item.icon` filter, minus icons —
+/// q2 crumbs have no icon field yet); crumbs without an href render
+/// as unlinked text. Pure and resolver-free like its siblings —
+/// callers resolve crumb hrefs before rendering.
+pub fn breadcrumbs_to_html(crumbs: &[Crumb], extra_classes: &[&str]) -> String {
+    let mut classes = String::from("quarto-page-breadcrumbs");
+    for cls in extra_classes {
+        classes.push(' ');
+        classes.push_str(cls);
+    }
+    let mut html = format!(
+        "<nav class=\"{}\" aria-label=\"breadcrumb\"><ol class=\"breadcrumb\">",
+        classes
+    );
+    for crumb in crumbs {
+        let Some(text_cv) = &crumb.text else {
+            continue;
+        };
+        let text = render_text(text_cv);
+        html.push_str("<li class=\"breadcrumb-item\">");
+        match &crumb.href {
+            Some(href) => {
+                html.push_str("<a href=\"");
+                html.push_str(&escape_attr(href));
+                html.push_str("\">");
+                html.push_str(&text);
+                html.push_str("</a>");
+            }
+            None => html.push_str(&text),
+        }
+        html.push_str("</li>");
+    }
+    html.push_str("</ol></nav>");
+    html
+}
+
 pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
     let mut html = String::new();
 
@@ -2099,5 +2150,76 @@ mod tests {
             .unwrap_or("");
         assert!(prev_block.contains("bi-arrow-left-short"));
         assert!(!prev_block.contains("bi-arrow-right-short"));
+    }
+
+    // ---- breadcrumbs_to_html (bd-breadcrumbs-missing-1vpuqh34) ----
+
+    /// Full markup shape, Q1 parity: nav.quarto-page-breadcrumbs with
+    /// extra classes, aria-label, ol.breadcrumb, li.breadcrumb-item,
+    /// linked crumbs.
+    #[test]
+    fn breadcrumbs_markup_shape() {
+        let crumbs = vec![
+            Crumb {
+                text: Some(s("Guide")),
+                href: Some("../intro.html".to_string()),
+            },
+            Crumb {
+                text: Some(s("Deep")),
+                href: Some("deep.html".to_string()),
+            },
+        ];
+        let html = breadcrumbs_to_html(
+            &crumbs,
+            &["quarto-title-breadcrumbs", "d-none", "d-lg-block"],
+        );
+        assert_eq!(
+            html,
+            "<nav class=\"quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block\" \
+             aria-label=\"breadcrumb\"><ol class=\"breadcrumb\">\
+             <li class=\"breadcrumb-item\"><a href=\"../intro.html\">Guide</a></li>\
+             <li class=\"breadcrumb-item\"><a href=\"deep.html\">Deep</a></li>\
+             </ol></nav>"
+        );
+    }
+
+    /// Crumb without href renders unlinked; crumb without text is
+    /// skipped entirely (Q1's text filter).
+    #[test]
+    fn breadcrumbs_unlinked_and_textless_crumbs() {
+        let crumbs = vec![
+            Crumb {
+                text: Some(s("No Link")),
+                href: None,
+            },
+            Crumb {
+                text: None,
+                href: Some("skipped.html".to_string()),
+            },
+        ];
+        let html = breadcrumbs_to_html(&crumbs, &[]);
+        assert!(
+            html.contains("<li class=\"breadcrumb-item\">No Link</li>"),
+            "unlinked crumb renders as bare text; got: {}",
+            html
+        );
+        assert!(!html.contains("skipped.html"), "textless crumb skipped");
+        assert!(html.starts_with("<nav class=\"quarto-page-breadcrumbs\""));
+    }
+
+    /// Text and href are escaped.
+    #[test]
+    fn breadcrumbs_escapes_text_and_href() {
+        let crumbs = vec![Crumb {
+            text: Some(s("A & B")),
+            href: Some("x.html?a=1&b=2".to_string()),
+        }];
+        let html = breadcrumbs_to_html(&crumbs, &[]);
+        assert!(html.contains("A &amp; B"), "text escaped; got {}", html);
+        assert!(
+            html.contains("x.html?a=1&amp;b=2"),
+            "href escaped; got {}",
+            html
+        );
     }
 }

@@ -731,6 +731,97 @@ fn mark_active_in(entries: &mut [SidebarEntry], self_source: &str) -> bool {
 }
 
 // ----------------------------------------------------------------------------
+// Breadcrumb trail (bd-breadcrumbs-missing-1vpuqh34).
+//
+// The trail is the chain of wrapping sections `mark_active_in` proves
+// when it bubbles up from the active leaf, plus the leaf itself —
+// recomputed here as a read-only walk so callers that only have the
+// stored (already-expanded) sidebar can derive it without re-running
+// active-state resolution.
+// ----------------------------------------------------------------------------
+
+/// One entry in a breadcrumb trail. `text` keeps the `ConfigValue`
+/// shape so markdown inlines survive to the renderer; `href` stays in
+/// whatever space the sidebar's hrefs are in when the trail is
+/// computed (source-path space in the render pipeline — the caller
+/// resolves them like any other nav href).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Crumb {
+    pub text: Option<ConfigValue>,
+    pub href: Option<String>,
+}
+
+/// Compute the breadcrumb trail for the page whose project-relative
+/// source path (forward-slash form) is `self_source`, outermost crumb
+/// first, **including the current page as its own final crumb** —
+/// Q1 parity (`website-shared.ts::breadCrumbs`).
+///
+/// A section crumb without an href borrows its **first direct
+/// child's** href (Q1's rule — `contents[0].href`, not a deeper
+/// search); when that's absent too the crumb is unlinked. Returns an
+/// empty vec when the page doesn't appear in the sidebar.
+pub fn breadcrumb_trail(sidebar: &Sidebar, self_source: &str) -> Vec<Crumb> {
+    let mut crumbs = Vec::new();
+    trail_in(&sidebar.contents, self_source, &mut crumbs);
+    // `trail_in` pushes leaf-first on the way back up the recursion;
+    // the trail reads outermost-first (Q1's `crumbs.reverse()`).
+    crumbs.reverse();
+    crumbs
+}
+
+/// Post-order search mirroring [`mark_active_in`]'s matching rule
+/// (`href == self_source`, header checked before contents). Pushes the
+/// matched leaf, then each wrapping section on the way out.
+fn trail_in(entries: &[SidebarEntry], self_source: &str, crumbs: &mut Vec<Crumb>) -> bool {
+    for entry in entries {
+        match entry {
+            SidebarEntry::Link { item } => {
+                if item.href.as_deref() == Some(self_source) {
+                    crumbs.push(Crumb {
+                        text: item.text.clone(),
+                        href: item.href.clone(),
+                    });
+                    return true;
+                }
+            }
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                if href.as_deref() == Some(self_source) {
+                    crumbs.push(Crumb {
+                        text: text.clone(),
+                        href: href.clone(),
+                    });
+                    return true;
+                }
+                if trail_in(contents, self_source, crumbs) {
+                    crumbs.push(Crumb {
+                        text: text.clone(),
+                        href: href.clone().or_else(|| first_entry_href(contents)),
+                    });
+                    return true;
+                }
+            }
+            SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => {}
+        }
+    }
+    false
+}
+
+/// Q1's section-crumb borrow: the first direct child's own href
+/// (`contents[0].href` — deliberately not a deeper search).
+fn first_entry_href(entries: &[SidebarEntry]) -> Option<String> {
+    match entries.first()? {
+        SidebarEntry::Link { item } => item.href.clone(),
+        SidebarEntry::Section { href, .. } => href.clone(),
+        SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => None,
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Page-navigation flatten (Phase 4).
 //
 // Walks the sidebar tree depth-first to produce the linear sequence of
@@ -1843,5 +1934,138 @@ mod tests {
         assert!(item.is_link_with_href("about.qmd"));
         assert!(!item.is_link_with_href("other.qmd"));
         assert!(!FlatEntry::Separator.is_link_with_href("about.qmd"));
+    }
+
+    // ---- breadcrumb_trail (bd-breadcrumbs-missing-1vpuqh34) ----
+
+    fn crumb_link(text: &str, href: &str) -> SidebarEntry {
+        SidebarEntry::Link {
+            item: NavigationItem {
+                href: Some(href.to_string()),
+                text: Some(s(text)),
+                ..NavigationItem::default()
+            },
+        }
+    }
+
+    fn crumb_section(text: &str, href: Option<&str>, contents: Vec<SidebarEntry>) -> SidebarEntry {
+        SidebarEntry::Section {
+            text: Some(s(text)),
+            href: href.map(|h| h.to_string()),
+            href_source: SourceInfo::for_test(),
+            id: None,
+            contents,
+            expanded: false,
+        }
+    }
+
+    fn crumb_sidebar(contents: Vec<SidebarEntry>) -> Sidebar {
+        Sidebar {
+            contents,
+            ..Sidebar::default()
+        }
+    }
+
+    fn crumb_text(c: &Crumb) -> String {
+        c.text.as_ref().unwrap().as_plain_text().unwrap()
+    }
+
+    /// Leaf two sections deep: trail is outermost section, inner
+    /// section, then the page itself as the final crumb (Q1 parity —
+    /// the current page is its own last, linked crumb).
+    #[test]
+    fn trail_nested_leaf_outermost_first_includes_self() {
+        let sidebar = crumb_sidebar(vec![
+            crumb_link("Home", "index.qmd"),
+            crumb_section(
+                "Guide",
+                None,
+                vec![
+                    crumb_link("Intro", "guide/intro.qmd"),
+                    crumb_section(
+                        "Advanced",
+                        None,
+                        vec![crumb_link("Deep", "guide/advanced/deep.qmd")],
+                    ),
+                ],
+            ),
+        ]);
+        let trail = breadcrumb_trail(&sidebar, "guide/advanced/deep.qmd");
+        assert_eq!(trail.len(), 3, "got {:?}", trail);
+        assert_eq!(crumb_text(&trail[0]), "Guide");
+        // Section without href borrows its FIRST DIRECT child's href.
+        assert_eq!(trail[0].href.as_deref(), Some("guide/intro.qmd"));
+        assert_eq!(crumb_text(&trail[1]), "Advanced");
+        assert_eq!(trail[1].href.as_deref(), Some("guide/advanced/deep.qmd"));
+        assert_eq!(crumb_text(&trail[2]), "Deep");
+        assert_eq!(trail[2].href.as_deref(), Some("guide/advanced/deep.qmd"));
+    }
+
+    /// A section with its own href keeps it (no borrowing).
+    #[test]
+    fn trail_section_with_own_href_keeps_it() {
+        let sidebar = crumb_sidebar(vec![crumb_section(
+            "Guide",
+            Some("guide/index.qmd"),
+            vec![crumb_link("Deep", "guide/deep.qmd")],
+        )]);
+        let trail = breadcrumb_trail(&sidebar, "guide/deep.qmd");
+        assert_eq!(trail.len(), 2);
+        assert_eq!(trail[0].href.as_deref(), Some("guide/index.qmd"));
+    }
+
+    /// A section whose own href IS the page: it is the leaf crumb.
+    #[test]
+    fn trail_section_header_match_is_leaf() {
+        let sidebar = crumb_sidebar(vec![crumb_section(
+            "Guide",
+            Some("guide/index.qmd"),
+            vec![crumb_link("Deep", "guide/deep.qmd")],
+        )]);
+        let trail = breadcrumb_trail(&sidebar, "guide/index.qmd");
+        assert_eq!(trail.len(), 1);
+        assert_eq!(trail[0].href.as_deref(), Some("guide/index.qmd"));
+        assert_eq!(crumb_text(&trail[0]), "Guide");
+    }
+
+    /// Page not in the sidebar: empty trail.
+    #[test]
+    fn trail_unmatched_page_is_empty() {
+        let sidebar = crumb_sidebar(vec![crumb_link("Home", "index.qmd")]);
+        assert!(breadcrumb_trail(&sidebar, "elsewhere.qmd").is_empty());
+    }
+
+    /// One-child section: section crumb and page crumb share an href —
+    /// looks odd in a minimal repro but is Q1's actual rule.
+    #[test]
+    fn trail_one_child_section_duplicates_href() {
+        let sidebar = crumb_sidebar(vec![crumb_section(
+            "Section",
+            None,
+            vec![crumb_link("Only", "only.qmd")],
+        )]);
+        let trail = breadcrumb_trail(&sidebar, "only.qmd");
+        assert_eq!(trail.len(), 2);
+        assert_eq!(trail[0].href.as_deref(), Some("only.qmd"));
+        assert_eq!(trail[1].href.as_deref(), Some("only.qmd"));
+    }
+
+    /// Section whose first child is an href-less section: nothing to
+    /// borrow (Q1 takes `contents[0].href` only — no deeper search),
+    /// so the crumb is unlinked.
+    #[test]
+    fn trail_borrow_is_first_child_only_not_deep_search() {
+        let sidebar = crumb_sidebar(vec![crumb_section(
+            "Outer",
+            None,
+            vec![
+                crumb_section("Inner", None, vec![crumb_link("Deep", "deep.qmd")]),
+                crumb_link("Other", "other.qmd"),
+            ],
+        )]);
+        let trail = breadcrumb_trail(&sidebar, "deep.qmd");
+        assert_eq!(trail.len(), 3);
+        assert_eq!(trail[0].href, None, "Outer borrows from href-less Inner");
+        assert_eq!(trail[1].href.as_deref(), Some("deep.qmd"));
     }
 }

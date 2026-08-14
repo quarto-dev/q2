@@ -134,6 +134,12 @@ fn missing_document_warning(
 ///   and the missing target (catalog code per [`NavSurface::code`]).
 ///   The raw href is preserved in the output so the dangling link is
 ///   at least visible to the reader.
+/// - Non-`.qmd` misses (with an index present) are static-resource
+///   references — a pre-rendered `.html`, a PDF, a directory landing
+///   page — and route through
+///   [`resolve_root_relative_resource_href`] so they page-relativize
+///   instead of surviving verbatim (bd-tef2lm9j /
+///   bd-root-absolute-dir-link-58eh8834).
 ///
 /// `surface` identifies the navigation surface for diagnostics (sidebar,
 /// navbar, page-footer, page-nav). `location` carries the YAML
@@ -195,7 +201,16 @@ pub fn resolve_href_for_html(
         // render list), so it passes through silently.
         if path_part.ends_with(".qmd") {
             diagnostics.push(missing_document_warning(&surface, path_part, location));
+            // Keep the raw href so the dangling link stays visible
+            // alongside the Q-13 warning.
+            return raw.to_string();
         }
+        // Non-`.qmd` miss: the target is a static resource (a file
+        // the index doesn't track, or a directory landing page), not
+        // a broken document link — relativize it like any other
+        // static asset so root-absolute forms survive a deploy
+        // subpath (bd-tef2lm9j / bd-root-absolute-dir-link-58eh8834).
+        return resolve_root_relative_resource_href(raw, resolver);
     }
     // Without an index (standalone single-doc render) we can't tell
     // whether a `.qmd` href is broken or intended-as-literal. Skip the
@@ -295,6 +310,11 @@ pub fn resolve_doc_relative_target(raw: &str, source_relative: &str) -> Option<P
 ///    diagnostic (Q-13-4 / [`NavSurface::BodyLink`]) naming the
 ///    missing path; return the raw href verbatim so the dangling link
 ///    is visible.
+/// 5b. Miss + non-`.qmd` shape + index present → the target is a
+///    static resource; route through
+///    [`resolve_static_resource_href`] so it page-relativizes
+///    (root-absolute directory links included —
+///    bd-root-absolute-dir-link-58eh8834).
 /// 6. No index → return the raw href verbatim (standalone render).
 /// 7. No resolver → fall back to the bare `output_href` from the
 ///    profile (no relative-depth math). Defensive — production
@@ -344,18 +364,23 @@ pub fn resolve_doc_relative_href(
 
     // Miss. Surface a warning iff the target *looks like* a
     // renderable document (matches the `.qmd`-only convention from
-    // `resolve_href_for_html`). Non-qmd misses — including `.md`,
-    // deliberately (bd-6d2wj4zp D6) — pass through silent since
-    // they may legitimately be static resources.
+    // `resolve_href_for_html`); the raw href is kept so the dangling
+    // link stays visible alongside the warning. Non-qmd misses —
+    // including `.md`, deliberately (bd-6d2wj4zp D6) — stay silent
+    // since they may legitimately be static resources, and *as*
+    // static resources they relativize like any other asset so
+    // root-absolute forms (e.g. a `/section/` directory link)
+    // survive a deploy subpath (bd-root-absolute-dir-link-58eh8834).
     if path_part.ends_with(".qmd") {
         diagnostics.push(missing_document_warning(
             &NavSurface::BodyLink,
             &project_relative,
             location,
         ));
+        return raw.to_string();
     }
 
-    raw.to_string()
+    resolve_static_resource_href(raw, source_relative, resolver)
 }
 
 /// Resolve a **static-resource** href to a page-relative URL.
@@ -410,7 +435,15 @@ pub fn resolve_static_resource_href(
     match resolver {
         Some(r) => {
             let project_relative = resolve_to_project_root(source_relative, path_part);
-            format!("{}{}", r.page_url_for(&project_relative), tail)
+            let mut url = r.page_url_for(&project_relative);
+            // `resolve_to_project_root` drops a trailing `/` (empty
+            // final segment); put it back so a directory href keeps
+            // its canonical no-redirect form (`[x](/section/)` →
+            // `../../section/`, matching Q1).
+            if path_part.ends_with('/') && !url.ends_with('/') {
+                url.push('/');
+            }
+            format!("{}{}", url, tail)
         }
         None => raw.to_string(),
     }
@@ -1754,6 +1787,225 @@ mod tests {
         assert_eq!(
             resolve_static_resource_href("?v=2", "docs/api.qmd", Some(&r)),
             "?v=2"
+        );
+    }
+
+    // ---- Index-miss relativization (bd-tef2lm9j + ----
+    // ---- bd-root-absolute-dir-link-58eh8834)      ----
+    //
+    // The one question at two call sites: what should a resolver do
+    // when the ProjectIndex does not know the target? Answer: a
+    // non-`.qmd` miss is a static-resource reference, so it routes
+    // through the static-resource helpers (project-root-anchored,
+    // page-relativized) instead of surviving verbatim. `.qmd` misses
+    // keep the Q-13 diagnostic + verbatim return (the dangling link
+    // stays visible); no-index branches stay verbatim (standalone
+    // render, pinned elsewhere).
+
+    /// bd-tef2lm9j: a nav href to a static file (navbar
+    /// `href: assets/report.pdf`) misses the index and must
+    /// page-relativize instead of being emitted verbatim (which 404s
+    /// from any page in a subdirectory).
+    #[test]
+    fn nav_static_miss_relativizes_at_depth() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("docs/internals/page.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html(
+                "assets/report.pdf",
+                Some(&r),
+                Some(&idx),
+                surf(),
+                None,
+                &mut diags
+            ),
+            "../../assets/report.pdf"
+        );
+        assert!(
+            diags.is_empty(),
+            "static miss stays silent; got {:?}",
+            diags
+        );
+    }
+
+    /// bd-tef2lm9j: the root-absolute form of the same miss. A
+    /// leading-`/` href surviving verbatim breaks under a deploy
+    /// subpath; decision 4 says `/x` ≡ `x` in config space.
+    #[test]
+    fn nav_static_miss_root_absolute_relativizes() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("docs/internals/page.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html(
+                "/assets/report.pdf",
+                Some(&r),
+                Some(&idx),
+                surf(),
+                None,
+                &mut diags
+            ),
+            "../../assets/report.pdf"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// bd-root-absolute-dir-link: a directory href keeps its trailing
+    /// slash across relativization (Q1 emits `../../target/`, the
+    /// canonical no-redirect form).
+    #[test]
+    fn nav_dir_miss_preserves_trailing_slash() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("deep/deeper/index.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html("/target/", Some(&r), Some(&idx), surf(), None, &mut diags),
+            "../../target/"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// Tail (`?query` / `#fragment`) survives the miss-routing.
+    #[test]
+    fn nav_static_miss_preserves_tail() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("docs/api.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html(
+                "/assets/app.html#top",
+                Some(&r),
+                Some(&idx),
+                surf(),
+                None,
+                &mut diags
+            ),
+            "../assets/app.html#top"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// Without a resolver there is no page to relativize against —
+    /// the miss keeps the raw href (same degrade as every other
+    /// no-resolver branch in this module).
+    #[test]
+    fn nav_static_miss_without_resolver_stays_verbatim() {
+        let idx = ProjectIndex::new(vec![]);
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html(
+                "assets/report.pdf",
+                None,
+                Some(&idx),
+                surf(),
+                None,
+                &mut diags
+            ),
+            "assets/report.pdf"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// bd-root-absolute-dir-link: the four-row repro from the strand,
+    /// body-link side, page two directories down. The two directory
+    /// forms must rebase like the two source-file controls already do.
+    #[test]
+    fn body_dir_link_root_absolute_relativizes() {
+        let idx = ProjectIndex::new(vec![
+            profile("target/index.md", "target/index.html"),
+            profile("index.qmd", "index.html"),
+        ]);
+        let r = website_resolver("deep/deeper/index.html");
+        let src = "deep/deeper/index.qmd";
+        let mut diags = Vec::new();
+        // The fix: directory links (index misses) rebase.
+        assert_eq!(
+            resolve_doc_relative_href("/target/", src, Some(&r), Some(&idx), None, &mut diags),
+            "../../target/"
+        );
+        assert_eq!(
+            resolve_doc_relative_href("/target", src, Some(&r), Some(&idx), None, &mut diags),
+            "../../target"
+        );
+        // Controls: index hits keep rebasing exactly as before.
+        assert_eq!(
+            resolve_doc_relative_href(
+                "/target/index.md",
+                src,
+                Some(&r),
+                Some(&idx),
+                None,
+                &mut diags
+            ),
+            "../../target/index.html"
+        );
+        assert_eq!(
+            resolve_doc_relative_href("/index.qmd", src, Some(&r), Some(&idx), None, &mut diags),
+            "../../index.html"
+        );
+        assert!(diags.is_empty(), "no diagnostics expected; got {:?}", diags);
+    }
+
+    /// A doc-relative static href round-trips unchanged through the
+    /// miss-routing (output dir mirrors source dir, so normalize +
+    /// relativize is the identity for in-place relative paths).
+    #[test]
+    fn body_relative_static_miss_round_trips() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("docs/api.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_doc_relative_href(
+                "assets/logo.png",
+                "docs/api.qmd",
+                Some(&r),
+                Some(&idx),
+                None,
+                &mut diags
+            ),
+            "assets/logo.png"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// A root-absolute `.md` miss relativizes silently (bd-6d2wj4zp
+    /// D6 keeps `.md` misses diagnostic-free — they may be static
+    /// resources — but static resources are exactly what the routing
+    /// now handles).
+    #[test]
+    fn body_md_miss_root_absolute_relativizes_silently() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("deep/deeper/index.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_doc_relative_href(
+                "/notes.md",
+                "deep/deeper/index.qmd",
+                Some(&r),
+                Some(&idx),
+                None,
+                &mut diags
+            ),
+            "../../notes.md"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// The static helper itself preserves a trailing slash across
+    /// normalization (`resolve_to_project_root` eats the empty final
+    /// segment; the helper must put it back).
+    #[test]
+    fn static_href_preserves_trailing_slash() {
+        let r = website_resolver("deep/deeper/index.html");
+        assert_eq!(
+            resolve_static_resource_href("/target/", "deep/deeper/index.qmd", Some(&r)),
+            "../../target/"
+        );
+        // Relative directory form, with tail (page is two deep).
+        assert_eq!(
+            resolve_static_resource_href("sub/?v=1", "docs/api.qmd", Some(&r)),
+            "../../docs/sub/?v=1"
         );
     }
 }

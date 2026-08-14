@@ -268,5 +268,12 @@
 # compile, unconditionally like Q1. doc.html hash unchanged: no
 # `.quarto-listing*` selector matches anything in a single-doc body,
 # and `<head>` is unaffected.
+# Re-captured 2026-08-14 (bd-breadcrumbs-missing-1vpuqh34): styles.css
+# hash updated because the website-breadcrumb rules (ported from Q1
+# quarto-nav.scss: .quarto-title-breadcrumbs / .quarto-page-breadcrumbs
+# spacing + last-crumb muting) now compile into every HTML theme.
+# doc.html hash unchanged: the title-block partial's breadcrumb slot is
+# an $if$ that emits nothing when `rendered.navigation.breadcrumbs` is
+# absent, which it always is in a single-doc render (no sidebar).
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 701063255f83fe84581ee7b0a02bdd620bfa4365c276d8b6585396d401926200
+doc_files/styles.css aafc6d0b9ffbbe6fb12b50a2fc1c0d845f58b6018476494fea2127609a0bee2a

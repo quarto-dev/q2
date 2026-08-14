@@ -154,6 +154,9 @@ $endfor$
 ///   because the title carries inline markup — see `toc_render`.
 /// - `$rendered.navigation.navbar$` - Rendered navbar HTML (if navbar: set)
 /// - `$rendered.navigation.sidebar$` - Rendered sidebar HTML (if website.sidebar: set)
+/// - `$rendered.navigation.breadcrumbs$` - Rendered breadcrumb trail (consumed
+///   by the title-block partial, not the page template — set only when a
+///   sidebar trail with >1 crumbs exists and `bread-crumbs` isn't false)
 /// - `$rendered.navigation.page_navigation$` - Rendered prev/next page-nav strip
 /// - `$rendered.navigation.footer$` - Rendered page-footer HTML (if page-footer: set)
 const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
@@ -334,6 +337,9 @@ $elseif(rendered.title-block-banner)$
 <header id="title-block-header" class="quarto-title-block default page-columns page-full$if(quarto-template-params.banner-header-class)$ $quarto-template-params.banner-header-class$$endif$">
 <div class="quarto-title-banner page-columns page-full">
 <div class="quarto-title column-body">
+$if(rendered.navigation.breadcrumbs)$
+$rendered.navigation.breadcrumbs$
+$endif$
 $if(title)$
 <h1 class="title">$title$</h1>
 $endif$
@@ -362,6 +368,9 @@ $title-metadata()$
 </header>
 $else$
 <header id="title-block-header" class="quarto-title-block default">
+$if(rendered.navigation.breadcrumbs)$
+$rendered.navigation.breadcrumbs$
+$endif$
 <div class="quarto-title">
 $if(title)$
 <h1 class="title">$title$</h1>
