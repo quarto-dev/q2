@@ -188,15 +188,36 @@ Skeleton only — contents wait on the design discussion.
   connect-docs port; inspect actual output; user-facing docs page under
   `docs/` (rendered with q2, not Q1).
 
-## Open design questions for the user
+## Resolved design decisions
 
-1. **Index organization.** Recommendation: derive `llms.txt` sections from
-   the resolved **sidebar** structure (H2 per top-level sidebar section,
-   nested sections flattened or indented), entries annotated with each
-   page's `description` from its profile; fall back to navbar structure,
-   then to a flat "Pages" list for sites with no nav config. Does that
-   match your intent, and how should pages that appear in *no* sidebar
-   section be handled (an "Other" section? the spec's `## Optional`)?
+1. **Index organization (resolved 2026-08-14).** Set-subtraction
+   algorithm, per user discussion:
+   - Manifest = every `DocumentProfile` with a companion (drafts + 404
+     excluded).
+   - For each **declared** sidebar in config order (via the
+     `sidebar_membership.rs` / resolved-entry machinery, so `auto`
+     expansion is honored), walk the entry tree in author order; each
+     entry resolving to a manifest page emits
+     `- [title](href): description` and **removes** the page from the
+     manifest (first occurrence wins across sidebars). External links and
+     non-manifest targets are skipped.
+   - Then navbar direct links, same emit-and-remove.
+   - Remainder → a final **"Other"** section (not the spec's
+     `## Optional`, whose "skippable" semantics stragglers don't
+     deserve; explicit routing into `## Optional` can be a future config
+     option).
+   - Headings: single-sidebar site → one H2 per top-level sidebar
+     *section*; multi-sidebar site → one H2 per sidebar (title/id),
+     internal sections flattened. Deeper nesting always flattens (the
+     spec only defines flat lists under H2s).
+   - **Home page pinned:** if `index.html` is uncovered by sidebars/
+     navbar, emit it first rather than letting it land in "Other".
+   - Shape constraint: assembler is a pure function
+     `(sidebars, navbar, manifest) → document` so a future explicit
+     `website.llms-txt: {sections: …}` config can substitute its own
+     structure.
+
+## Open design questions for the user
 2. **`llms-full.txt`.** Every major SSG now emits it alongside `llms.txt`.
    Include it in scope (cheap once per-page markdown exists), or file as a
    follow-up strand?
