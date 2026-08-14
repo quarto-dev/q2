@@ -471,10 +471,37 @@ Integration branch: `feature/light-dark-theme` (created off `main`).
   `.light-content`/`.dark-content` swap); reload restores dark before
   paint; toggle back to light restores everything (`default` stored); no
   console errors. 12,145 workspace tests green.
-- [ ] **A5 — quarto-web end-to-end**: `bd-ld-a5-quarto-web-e2e-bzg4o5lc`.
-  Render `external-sources/quarto-web` with the real binary, browser-verify
-  toggle/persistence/prefers-color-scheme, document gaps found. (related:
-  bd-r1y48cx0)
+- [x] **A5 — large-project end-to-end**: `bd-ld-a5-quarto-web-e2e-bzg4o5lc`.
+  **Done 2026-08-14.** Rendered the connect-docs testbed
+  (`~/repos/github/cscheid/q2-connect-docs/docs-quarto-2`, posit-docs
+  extension theme map) with the real binary: **352 of 352 files, zero
+  errors, zero Q-14-3** (the interim run printed one warning; now the dark
+  half compiles). Output verified: exactly one shared light + one dark
+  fingerprinted artifact in `site_libs/quarto/` (deduped across all 352
+  pages), Q1-shaped link trio + `<meta name="color-scheme" content="light">`
+  + inline runtime + navbar toggle on every page. Browser-verified with
+  chrome-devtools MCP: toggle → full posit-docs dark palette (body
+  `#181c25`), root color-scheme dark, localStorage persistence, toggle back
+  restores light. (Testbed's unrelated known caveat unchanged: the
+  quarto-openapi Deno-style pre-render was temporarily disabled during the
+  render — bd-wch2dotq — and restored after.)
+  **Target corrected 2026-08-14 (Carlos):** quarto-web is currently a Quarto 1
+  project and a full q2 render of it is out of scope; the intended large
+  testbed is `~/repos/github/cscheid/q2-connect-docs/docs-quarto-2` (the
+  posit-docs extension ships `theme: {light: [theme.scss], dark:
+  [theme-dark.scss]}` — the same shape, 351 files). quarto-web remains the
+  *config-shape* reference only.
+  **quarto-web findings recorded en route** (scratch checkout probed, then
+  fully restored): (1) two Q-5-24 alias conflicts (`quarto-ast.qmd` aliases
+  collide with prerelease pages that render there; `placeholder.qmd` claims
+  `/docs/prerelease/1.5/lipsum.html` which `lipsum.qmd` also claims — the
+  latter looks like an upstream copy-paste bug); (2) the `_quarto.yml`
+  page-footer logo images write attrs Pandoc-style (`{fig-alt="…" width=65px
+  .light-content}`), violating qmd's classes-before-key-values rule (Q-2-3)
+  and failing every page's profile pass; (3) beyond those, wide Q1-content
+  gaps (grid tables Q-2-39, shortcode/attr strictness Q-2-9/Q-2-35, missing
+  relative filter paths) — confirming quarto-web is not a Q2 render target
+  today.
 - [ ] **B — highlight-style** (D6 stage 1): `bd-ld-b-highlight-style-jnb036fz`.
   Reader + a11y light/dark + variant selection; follow-up strand to be filed
   for the general `.theme` translator.
