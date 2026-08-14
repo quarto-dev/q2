@@ -3,7 +3,7 @@
 **Date:** 2026-08-14
 **Braid:** bd-website-toc-title-wn80ymab (bug, p3, label `toc`)
 **Branch:** investigated on `main` @ `094c0a80` (no worktree created — see "Where this should land")
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled (2026-08-14) — see "Design decisions" below. Ready to implement on a topic branch off `main`. **Awaiting the user's go-ahead to start Phase 0.**
 
 ## Triage verdict
 
@@ -23,6 +23,10 @@ manifest + config handshake", bd-ee2fqm95), so this checkout's dist simply preda
 manifest it now asserts on. No strand filed: CI runs the full build, so I can't tell from here
 whether `verify --skip-hub-build` is self-inconsistent in general or just against this stale
 dist. Flagging for the user rather than guessing.
+
+**Agreed disposition (2026-08-14):** keep an eye on it; **file a strand only if it survives a
+full rebuild** (i.e. a `cargo xtask verify` without `--skip-hub-build`). Re-check before this
+work's PR goes up.
 
 Nothing in this investigation changed code, so no failure here is attributable to it.
 
@@ -111,6 +115,12 @@ $ grep -o '<h2 id="toc-title">[^<]*</h2>' _site-q1/index.html
 <h2 id="toc-title">On this page</h2>               # Q1  — expected
 ```
 
+A second probe — a website project with **no `website:` key at all** (`_quarto.yml` containing
+only `project: {type: website}`) — renders as `type: website` and likewise emits
+`<h2 id="toc-title">Table of contents</h2>`. That case is a Phase 0 test: it is a valid website
+project that Q1 would give "On this page", and it is invisible to any predicate keyed on the
+presence of a `website:` key.
+
 Output inspected directly, not inferred from exit status. Note the CLI itself reports `type: website`, confirming the project kind is resolved and available at render time — the fix's predicate is present, just unconsulted. The re-render left the repro repo byte-identical (`git status` clean), so the committed `_site/` already reflected current behavior.
 
 **Blast radius is small.** `grep -rl "Table of contents" --include="*.snap" crates/` returns **zero** snapshots. Existing `toc-title-document` assertions live in `language_resolve.rs`, `language_catalog.rs`, and `language_pipeline.rs` and test the *catalog*, not the transform's key choice — none should need to change. The transform's own test harness (`make_test_project`, `toc_generate.rs:212`) builds a `ProjectContext` with `ProjectConfig::default()`, so a website variant is a one-line `config.project_kind = ProjectKind::Website` (precedent: `page_nav_generate.rs:532`).
@@ -119,13 +129,73 @@ Output inspected directly, not inferred from exit status. Note the CLI itself re
 
 - **Phase 0 — Test plan (TDD, failing first).**
   - Unit, `toc_generate.rs`: website project → title is the `toc-title-website` term; default project → `toc-title-document`; website + user `toc-title` → user value still wins; website + `lang: pt` → "Nesta página".
-  - Whichever format-gating answer lands (design question 2) gets its own case.
+  - Website project rendering **revealjs** → `toc-title-document` (guards decision 2's strict
+    gate against a later drift to `Format::is_html()`).
+  - Website project with **no `website:` key** in `_quarto.yml` → still `toc-title-website`
+    (pins the project-kind semantics; this case is confirmed broken today, see below).
+  - Book project → `toc-title-document` (Q1 parity via the distinct `ProjectKind` variant).
   - One end-to-end test through `render_document_to_file` on a website fixture, per the repo's end-to-end rule — the unit tests bypass the real project-config path.
-- **Phase 1 — Key selection.** Thread the predicate through the (currently unused) `ctx` and pick the key. Update the precedence-chain comment, which is load-bearing documentation for two prior strands.
+- **Phase 1 — Key selection.** Replace `_ctx` with `ctx` and select the key on
+  `ctx.project.project_kind() == ProjectKind::Website && ctx.format.identifier == FormatIdentifier::Html`.
+  Update the precedence-chain comment, which is load-bearing documentation for two prior
+  strands — extend it, don't rewrite it away.
 - **Phase 2 — End-to-end verification.** `cargo run --bin q2 -- render` on the repro directory; inspect `_site/index.html` for `<h2 id="toc-title">On this page</h2>`; record the invocation + output snippet in this plan.
 - **Phase 3 — Docs.** Probably none: this restores Q1-compatible default behavior rather than adding a user-facing knob. Confirm no `docs/` page documents "Table of contents" as the website default.
 
-## Open design questions for the user
+## Design decisions (settled 2026-08-14 with user)
+
+1. **Detection source: `ctx.project.project_kind() == ProjectKind::Website`.** Both routes
+   were verified viable — see the corrected analysis below. Chosen because the two fail
+   differently: the meta route's failure mode is a silent wrong string, the ctx route's is a
+   compile error.
+2. **Format gating: option (c)** — `identifier == FormatIdentifier::Html`, matching Q1's
+   `isHtmlOutput(strict = true)` exactly (excludes revealjs and epub). Do **not** use
+   `Format::is_html()`, which delegates to `is_html_based()` and includes `Revealjs`.
+3. **English literal fallback: leave `"Table of Contents"` as-is.** Test-only path; changing it
+   invites confusion about which string is canonical.
+4. **Landing: topic branch off `main`**, headed for a PR soon. No worktree, no integration line.
+
+### Correction to the question-1 analysis
+
+The investigation's first pass claimed the `ast.meta` route was *structurally incapable* of
+detecting website-ness, on the assumption that `project:` is stripped from merged metadata.
+**That was wrong.** The strip at `metadata_merge.rs:146` (`.filter(|e| e.key != "project")`)
+applies only to *extension contribution* layers, not the project config layer. Verified by probe:
+
+```
+_quarto.yml:  project: {type: website}, website: {title: "Has Key"}
+index.qmd:    projecttype=[{{< meta project.type >}}]
+
+rendered:     projecttype=website        # project.type IS in merged metadata
+```
+
+`resolve_project_type` (`project/mod.rs:412`) also rewrites a custom `project.type` to its
+built-in base kind before `parse_config`, so the meta route normalizes custom types correctly
+too. Both routes are correct today. The separate empirical finding — that a valid website
+project with `project: type: website` and **no `website:` key** renders as `type: website` and
+still gets the wrong title — rules out only the *weakest* meta variant (presence of a `website:`
+key), not the `project.type` variant.
+
+**Why `ctx` still wins.** Not capability — failure mode:
+
+| | `ast.meta.project.type` | `ctx.project.project_kind()` |
+|---|---|---|
+| Type safety | stringly-typed | typed enum |
+| `as_str()` inlines trap | **live** — front-matter `project.type` is `PandocInlines`; needs `as_plain_text()` (bd-y89ihf0i) | none |
+| `metadata-as-str` lint | fires; needs `lint:allow` | none |
+| Book exclusion | manual | free (distinct variant) |
+| Architectural standing | incidental — merge stage calls `project` "a project-config concern, merged into the project config" | the value `project_type_for()` dispatches on |
+| Failure if upstream changes | **silent** wrong string | compile error |
+
+**Preview/WASM parity checked** (the one real risk to the ctx route): the two WASM call sites
+building `ProjectContext` with `ProjectConfig::default()` — hence `ProjectKind::Default` — are
+`parse_qmd_to_ast_with_attribution` (`lib.rs:789`) and `render_qmd_content` (`lib.rs:1099`), both
+content-string entry points with no project on disk, where `Default` is the correct answer.
+Project-aware entry points use `ProjectContext::discover` (`lib.rs:1010, 1059, 1222, 1252, 1320,
+1341`). No parity hazard found — **verified by reading call sites, not by running a preview**;
+Phase 2 should confirm in a live preview of a website project.
+
+## Original open design questions (superseded by the decisions above)
 
 1. **Detection source: `ctx.project.project_kind()` or `ast.meta`?**
    The strand suggests reading website-ness from `ast.meta` ("website-ness is detectable there"). I'd recommend **against** it and use `ctx.project.project_kind() == ProjectKind::Website` instead. A `website:` key in merged metadata is not the same claim as "this project's type is website" — a standalone document that sets a stray `website:` key would misfire, and custom project types resolve their *base* kind into `project_kind`, so the typed check handles them correctly for free. The cost is touching the transform's currently-unused `_ctx` parameter, which seems like the right trade. Do you agree, or is there a reason the meta route was preferred?
