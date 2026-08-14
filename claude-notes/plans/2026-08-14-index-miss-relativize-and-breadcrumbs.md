@@ -1,0 +1,173 @@
+# Index-miss href relativization (×2) + website breadcrumbs
+
+**Date:** 2026-08-14
+**Braid:**
+- bd-tef2lm9j — nav hrefs to static (non-document) files not page-relativized
+- bd-root-absolute-dir-link-58eh8834 — body links to directories not page-relativized
+- bd-breadcrumbs-missing-1vpuqh34 — website breadcrumbs not rendered (blocked on the two above; the blocks edges encode the required ordering)
+- bd-root-relative-paths-design-fc5pvkcv — parent design (related); its decisions 4/5 and helpers govern this session
+
+**Checkout:** main checkout, `main` @ 3ac596e0. User asked for all three fixes in this session, in the order encoded in the graph.
+
+## Triage verdict
+
+**Ready to implement.** All context gathered; the resolver fix direction is
+recorded identically on both structural strands and the helper it names
+(`resolve_root_relative_resource_href`, `navigation_href.rs:434`) exists on
+main. Breadcrumbs are a well-mapped feature add with one scope decision
+(recorded below) — no unknowns requiring user input before code, but the
+scope decision is flagged for user review in the handoff.
+
+## The one question, two call sites (Phase A)
+
+`crates/quarto-core/src/transforms/navigation_href.rs`:
+
+| function | surface | lookup | miss |
+|---|---|---|---|
+| `resolve_href_for_html` | nav hrefs | :178 | :205 → `raw.to_string()` |
+| `resolve_doc_relative_href` | body links | :334 | :358 → `raw.to_string()` |
+
+Answer (same file, already documented with this exact rationale): on an
+**index miss for a non-`.qmd` path, with an index present**, route through
+the static-resource helpers instead of returning raw:
+
+- `resolve_href_for_html` miss → `resolve_root_relative_resource_href(raw, resolver)`
+  (nav hrefs are project-root-relative; leading `/` means the same thing).
+- `resolve_doc_relative_href` miss → `resolve_static_resource_href(raw, source_relative, resolver)`
+  (body links are doc-relative).
+
+Deliberately unchanged:
+- `.qmd`-shaped misses keep the Q-13 diagnostic **and** the verbatim raw
+  return (pinned by existing tests; the dangling link stays visible, and the
+  author is being told to fix it).
+- No-index (standalone render) branches: verbatim, as today (pinned by
+  tests 27/36/44).
+- `.md` misses stay silent (bd-6d2wj4zp D6) but now relativize like any
+  other static target — relative forms round-trip unchanged; root-absolute
+  forms get fixed. This is the point of the change.
+
+Trailing-slash caveat discovered while scoping: `resolve_to_project_root`
+drops a trailing `/` (empty segment), but Q1 preserves it (`[dir](/target/)`
+→ `../../target/`). `resolve_static_resource_href` must re-append a trailing
+slash the normalizer ate, so directory links keep their canonical no-redirect
+form.
+
+## Breadcrumbs (Phase B)
+
+Q1 behavior (verified in `external-sources/quarto-cli`):
+
+- Trail derivation (`website-shared.ts::breadCrumbs`): find the sidebar entry
+  whose `href` equals the page's href; the trail is that entry plus every
+  wrapping section, outermost first, **including the current page as the
+  final linked crumb**. A section without an href borrows its **first direct
+  child's** href (`contents[0].href`); if that's also absent the crumb is
+  unlinked text. (The "first descendant document" phrasing in the strand is
+  the common case of that rule, not a deeper search.)
+- Two render sites: (1) inside `.quarto-secondary-nav` (the narrow-viewport
+  bar), always when enabled; (2) prepended to the title block as
+  `nav.quarto-page-breadcrumbs.quarto-title-breadcrumbs.d-none.d-lg-block`,
+  only when the trail has **> 1 crumbs**. Markup:
+  `<nav … aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="…">Text</a></li>…</ol></nav>`.
+  In banner mode Q1 prepends inside `.quarto-title-banner .quarto-title`;
+  with `title-block-style: none` there is no `.quarto-title-block` and no
+  breadcrumbs.
+- Config: `website.bread-crumbs`, default **true**; page-level
+  `bread-crumbs: false` also honored.
+
+### Scope decision (flagged for user review)
+
+**This session implements the title-block instance only.** The
+`.quarto-secondary-nav` container is the whole narrow-viewport navigation
+bar — sidebar-collapse toggle (`data-bs-target=".quarto-sidebar-collapse-item"`),
+headroom JS hook, search button. q2 today has **none** of that mobile
+machinery (no `.quarto-sidebar-collapse-item` markup, no
+`quarto-secondary-nav` emitter, near-zero SCSS), so bolting the container on
+would emit a toggle wired to nothing. That subsystem gets its own strand
+(filed as discovered-from bd-breadcrumbs-missing-1vpuqh34 at close), and the
+mobile-instance breadcrumbs land there with it, reusing this session's
+trail + renderer.
+
+### Design
+
+- **Trail computation** in `quarto-navigation/src/sidebar.rs`:
+  `breadcrumb_trail(&Sidebar, page_source) -> Vec<Crumb>` — pure sibling of
+  `resolve_active_state`, same href == page_source matching rule as
+  `mark_active_in`, Q1's borrow-first-child rule for section crumbs.
+  `Crumb { text: String, href: Option<String> }`.
+- **Renderer** in `quarto-navigation/src/render_html.rs`:
+  `breadcrumbs_to_html(&[Crumb]) -> String`, pure, resolver-free, escaped
+  like its siblings; emits the title-block classes.
+- **Transform** (quarto-core): a `BreadcrumbsRenderTransform` beside
+  `SidebarRenderTransform` (Navigation phase): finds the page's sidebar,
+  computes the trail, resolves each crumb href through
+  `resolve_href_for_html` (the now-settled resolver — crumb hrefs grow no
+  path logic of their own), and writes
+  `rendered.navigation.breadcrumbs` (skip when already set — user override,
+  same convention as siblings). Diagnostics: crumb hrefs are the same hrefs
+  sidebar rendering already resolves and warns about — the breadcrumb pass
+  uses a discarded local diagnostics buffer to avoid duplicate Q-13-1s.
+- **Template**: `TITLE_BLOCK_PARTIAL` gains
+  `$if(rendered.navigation.breadcrumbs)$` slots — first child of the header
+  in the default branch, inside `.quarto-title` in the banner branch, absent
+  from the `none` branch (Q1 parity all three).
+- **Gating**: sidebar present & page matched & trail length > 1 &
+  `website.bread-crumbs` not false (default true) & page-level
+  `bread-crumbs` not false.
+- **SCSS**: port the `.quarto-title-breadcrumbs` / `.quarto-page-breadcrumbs`
+  rules from Q1 `quarto-nav.scss` into `resources/scss/bootstrap/_bootstrap-rules.scss`
+  (Bootstrap's own `_breadcrumb.scss` supplies the base component styles).
+
+## Work items
+
+### Phase A — index-miss relativization (bd-tef2lm9j + bd-root-absolute-dir-link-58eh8834)
+
+- [ ] Failing unit tests in `navigation_href.rs`: nav miss static file at
+      depth; nav miss root-absolute dir link w/ + w/o trailing slash; body
+      miss dir link all four repro rows (2 controls); body miss relative
+      static round-trip; trailing-slash preservation in
+      `resolve_static_resource_href`; `.qmd` miss stays verbatim (both fns);
+      no-index stays verbatim (both fns)
+- [ ] Verify tests fail
+- [ ] Implement the two miss-branch routings + trailing-slash preservation
+- [ ] Tests green; full workspace `cargo nextest run --workspace`
+- [ ] e2e through the real binary: in-tree website fixture, deep page with
+      the four-row repro (`/target/`, `/target`, `/target/index.md`,
+      `/index.qmd`) + a nav href to a static pdf; inspect output
+- [ ] Commit; close bd-tef2lm9j and bd-root-absolute-dir-link-58eh8834
+
+### Phase B — breadcrumbs (bd-breadcrumbs-missing-1vpuqh34)
+
+- [ ] Failing tests: `breadcrumb_trail` units (leaf at depth; section w/o
+      href borrows first child; section w/ own href; unmatched page → empty;
+      current page is final crumb; one-child section duplicate-href rule);
+      `breadcrumbs_to_html` units (markup, escaping, unlinked crumb);
+      pipeline tests (trail renders at depth with resolved hrefs;
+      `bread-crumbs: false` site- and page-level; no sidebar → none;
+      length-1 trail → none; banner placement)
+- [ ] Verify tests fail
+- [ ] Implement trail + renderer + transform + template slots + config gate
+- [ ] SCSS port
+- [ ] Tests green; full workspace run
+- [ ] e2e through the real binary: fixture with nested sidebar sections;
+      inspect deep page for `quarto-title-breadcrumbs` markup + hrefs
+- [ ] Docs (`docs/`): document `website.bread-crumbs`
+- [ ] File discovered strand: quarto-secondary-nav mobile container
+- [ ] Commit; close bd-breadcrumbs-missing-1vpuqh34
+
+### Wrap-up
+
+- [ ] `cargo xtask verify` (full — quarto-core changes affect the WASM leg)
+- [ ] Snapshot-change inventory in commit messages per CLAUDE.md policy
+- [ ] Report; ask user before any push
+
+## Risks
+
+- Phase A changes output for every non-.qmd nav/body href miss in website
+  mode — relative forms round-trip identically (verified reasoning above),
+  but snapshot churn is possible; itemize any.
+- VFS-root preview mode: Case B's image rewrite had to be mode-gated off
+  (asset manifest keys on user-written paths). Body-link *href* rewriting
+  already runs in VFS mode (bd-kw93.14), and hrefs are not manifest keys,
+  but check the hub-client preview tests in the full verify.
+- Breadcrumb gating reads website config per-doc; must use `as_plain_text()`
+  not `as_str()` (metadata-as-str lint).
