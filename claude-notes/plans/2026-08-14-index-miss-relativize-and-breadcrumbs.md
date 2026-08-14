@@ -174,13 +174,28 @@ trail + renderer.
       Q-13-4/Q-5-6 dangling-link/YAML diagnostics unrelated to this work)
 - [x] File discovered strand: bd-26bf3j1y (quarto-secondary-nav mobile
       container — toggle, mobile breadcrumb instance, search)
-- [ ] Commit; close bd-breadcrumbs-missing-1vpuqh34
+- [x] Commit (`66bd2284`); closed bd-breadcrumbs-missing-1vpuqh34
 
 ### Wrap-up
 
-- [ ] `cargo xtask verify` (full — quarto-core changes affect the WASM leg)
-- [ ] Snapshot-change inventory in commit messages per CLAUDE.md policy
-- [ ] Report; ask user before any push
+- [x] `cargo xtask verify` (full, WASM leg included): all steps passed.
+      First run failed on exactly one test —
+      `single_doc_render_unchanged_under_scope_refactor`, the
+      byte-identity baseline whose styles.css sha256 legitimately
+      shifted with the new breadcrumb SCSS. Re-captured per the
+      fixture's own convention (annotated in expected_hashes.txt);
+      doc.html hash unchanged, confirming the template slot is inert
+      without a sidebar. Second run green end to end.
+- [x] Snapshot-change inventory: no `.snap` files changed in either
+      commit; the one baseline fixture change is itemized in
+      `66bd2284`'s message.
+- [x] Report to user. **Nothing pushed** — awaiting approval.
+
+### Final commits
+
+- `19b50cdd` — plan skeleton
+- `57f89387` — Phase A (resolver miss-branch fix, both strands)
+- `66bd2284` — Phase B (breadcrumbs)
 
 ## Risks
 
