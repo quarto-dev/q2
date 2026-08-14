@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-14
 **Braid:** bd-website-toc-title-wn80ymab (bug, p3, label `toc`)
-**Branch:** investigated on `main` @ `094c0a80` (no worktree created — see "Where this should land")
-**Status:** Design settled (2026-08-14) — see "Design decisions" below. Ready to implement on a topic branch off `main`. **Awaiting the user's go-ahead to start Phase 0.**
+**Branch:** `braid/bd-website-toc-title-wn80ymab`, off `main` @ `094c0a80`
+**Status:** In progress — Phase 0 (tests) complete and confirmed red. Implementing Phase 1.
 
 ## Triage verdict
 
@@ -125,22 +125,83 @@ Output inspected directly, not inferred from exit status. Note the CLI itself re
 
 **Blast radius is small.** `grep -rl "Table of contents" --include="*.snap" crates/` returns **zero** snapshots. Existing `toc-title-document` assertions live in `language_resolve.rs`, `language_catalog.rs`, and `language_pipeline.rs` and test the *catalog*, not the transform's key choice — none should need to change. The transform's own test harness (`make_test_project`, `toc_generate.rs:212`) builds a `ProjectContext` with `ProjectConfig::default()`, so a website variant is a one-line `config.project_kind = ProjectKind::Website` (precedent: `page_nav_generate.rs:532`).
 
-## Proposed phases (draft)
+## Work items
 
-- **Phase 0 — Test plan (TDD, failing first).**
-  - Unit, `toc_generate.rs`: website project → title is the `toc-title-website` term; default project → `toc-title-document`; website + user `toc-title` → user value still wins; website + `lang: pt` → "Nesta página".
-  - Website project rendering **revealjs** → `toc-title-document` (guards decision 2's strict
-    gate against a later drift to `Format::is_html()`).
-  - Website project with **no `website:` key** in `_quarto.yml` → still `toc-title-website`
-    (pins the project-kind semantics; this case is confirmed broken today, see below).
-  - Book project → `toc-title-document` (Q1 parity via the distinct `ProjectKind` variant).
-  - One end-to-end test through `render_document_to_file` on a website fixture, per the repo's end-to-end rule — the unit tests bypass the real project-config path.
-- **Phase 1 — Key selection.** Replace `_ctx` with `ctx` and select the key on
-  `ctx.project.project_kind() == ProjectKind::Website && ctx.format.identifier == FormatIdentifier::Html`.
-  Update the precedence-chain comment, which is load-bearing documentation for two prior
-  strands — extend it, don't rewrite it away.
-- **Phase 2 — End-to-end verification.** `cargo run --bin q2 -- render` on the repro directory; inspect `_site/index.html` for `<h2 id="toc-title">On this page</h2>`; record the invocation + output snippet in this plan.
-- **Phase 3 — Docs.** Probably none: this restores Q1-compatible default behavior rather than adding a user-facing knob. Confirm no `docs/` page documents "Table of contents" as the website default.
+**Branch:** `braid/bd-website-toc-title-wn80ymab`, off `main` @ `094c0a80`.
+(`main` was reset back to `origin/main` so the two plan commits live only on this branch,
+per the PR #529 convention.)
+
+### Phase 0 — Tests (TDD: written and confirmed failing before any implementation) — **DONE**
+
+Unit tests in `crates/quarto-core/src/transforms/toc_generate.rs` (hand-built `RenderContext`),
+end-to-end tests in `crates/quarto-core/tests/integration/toc_title_context.rs` (real
+`ProjectPipeline` over a temp project, so `project.type` is resolved by
+`ProjectContext::discover` exactly as under `q2 render`).
+
+- [x] Unit: website project + HTML → `toc-title-website` term
+- [x] Unit: default (non-project) → `toc-title-document` (regression guard)
+- [x] Unit: website + user `toc-title` → user value still wins (precedence unchanged)
+- [x] Unit: website + `lang: pt` → "Nesta página" (localization still flows)
+- [x] Unit: website + **revealjs** → `toc-title-document` (guards decision 2's strict gate
+      against a later drift to `Format::is_html()`)
+- [x] Unit: website + **PDF** → `toc-title-document` (the transform runs for every format)
+- [x] Unit: **book** project → `toc-title-document` (Q1 parity via the distinct `ProjectKind`)
+- [x] Unit: website with no catalog → English literal unchanged (pins decision 3)
+- [x] E2E: website project → "On this page"
+- [x] E2E: website with **no `website:` key** → "On this page" (pins project-kind semantics)
+- [x] E2E: default project → "Table of contents"
+- [x] E2E: book project → "Table of contents"
+- [x] E2E: user `toc-title` outranks the website term
+- [x] E2E: `lang: pt` website → "Nesta página"
+- [x] Confirm every new test fails for the right reason
+
+**Red state recorded (pre-implementation).** 5 of 14 fail — exactly the ones encoding the new
+behavior; the other 9 are regression guards that pin currently-correct behavior and must stay
+green through the change. A guard passing before implementation is the point, not a weak test.
+
+```
+unit  website_html_uses_toc_title_website        left: "Table of contents"  right: "On this page"
+unit  website_uses_the_localized_website_term    left: "Índice"             right: "Nesta página"
+e2e   website_project_uses_the_website_term      left: "Table of contents"  right: "On this page"
+e2e   website_project_without_a_website_key_…    left: "Table of contents"  right: "On this page"
+e2e   website_term_is_localized                  left: "Índice"             right: "Nesta página"
+```
+
+The two localized failures report `Índice` — Portuguese for the *document* term — which
+confirms `_language-pt.yml` loads and the tests fail purely on **key selection**, not on a
+broken catalog. Without that check a passing post-fix assertion could have been a false green.
+
+Harness note: `render_index_with_toc` / `toc_nav` in `toc_markup.rs` were widened to
+`pub(crate)` and reused rather than cloning ~50 lines of `ProjectPipeline` setup. Both files are
+sibling modules of the single `integration` binary (`.claude/rules/integration-tests.md`), so
+this is an ordinary intra-binary import.
+
+### Phase 1 — Implementation
+
+- [ ] Replace `_ctx` with `ctx`; select the key on
+      `ctx.project.project_kind() == ProjectKind::Website && ctx.format.identifier == FormatIdentifier::Html`
+- [ ] Extend the precedence-chain comment (load-bearing docs for bd-llhlzd7p,
+      bd-toc-smart-quotes-6nro57ed, bd-y89ihf0i — extend, don't rewrite away)
+- [ ] All Phase 0 tests green
+- [ ] `cargo nextest run --workspace` clean (monorepo rule: crate-local tests are not enough)
+
+### Phase 2 — End-to-end verification
+
+- [ ] `q2 render` the external repro → `<h2 id="toc-title">On this page</h2>`
+- [ ] `q2 render` the no-`website:`-key probe → same
+- [ ] Non-website single doc still renders "Table of contents"
+- [ ] Live `q2 preview` of a website project shows the website title (closes the parity gap
+      that was verified only by reading call sites)
+- [ ] Record invocations + observed output in this plan
+
+### Phase 3 — Wrap-up
+
+- [ ] Confirm no `docs/` page documents "Table of contents" as the website default
+- [ ] `cargo xtask lint` clean
+- [ ] `cargo xtask verify` (full, incl. hub build) — also re-checks the stale-dist failure
+- [ ] Re-check `config_reports_embedded_asset_manifest_hashes`; file a strand only if it
+      survives the full rebuild
+- [ ] Record final commit hashes here
 
 ## Design decisions (settled 2026-08-14 with user)
 

@@ -566,4 +566,219 @@ mod tests {
             "the Strong node must survive; got {inlines:?}"
         );
     }
+
+    // -----------------------------------------------------------------
+    // bd-website-toc-title-wn80ymab: the TOC title term is context-keyed.
+    //
+    // Quarto 1's language catalog carries two keys and picks between them
+    // (`src/command/render/pandoc.ts:493`):
+    //
+    //     projectIsWebsite(project) && !projectIsBook(project)
+    //         && isHtmlOutput(format.pandoc, /* strict */ true)
+    //         ? "toc-title-website"      // "On this page"
+    //         : "toc-title-document"     // "Table of contents"
+    //
+    // q2 needs no `!projectIsBook` equivalent: Q1's `projectIsWebsite` is
+    // true for books (book extends website), whereas `ProjectKind::Book`
+    // is a distinct variant here, so `== Website` excludes it already.
+    //
+    // `strict` matters: it restricts the website title to `html`/`html4`/
+    // `html5` and **excludes revealjs**. `Format::is_html()` delegates to
+    // `is_html_based()`, which *includes* `Revealjs` — so it is the wrong
+    // predicate. These tests pin the identifier check instead.
+    // -----------------------------------------------------------------
+
+    /// The two catalog terms, as `LanguageResolveStage` injects them at
+    /// `quarto.language` (see `LanguageTerms::from_meta`).
+    fn config_language_terms(document: &str, website: &str) -> ConfigValue {
+        config_map(vec![(
+            "language",
+            config_map(vec![
+                ("toc-title-document", config_str(document)),
+                ("toc-title-website", config_str(website)),
+            ]),
+        )])
+    }
+
+    /// `toc: true` plus the English catalog terms — the shape a real
+    /// render reaches this transform with.
+    fn meta_with_terms() -> ConfigValue {
+        config_map(vec![
+            ("toc", config_bool(true)),
+            (
+                "quarto",
+                config_language_terms("Table of contents", "On this page"),
+            ),
+        ])
+    }
+
+    fn make_project_of_kind(kind: crate::project::ProjectKind) -> ProjectContext {
+        let mut project = make_test_project();
+        project.config.project_kind = kind;
+        project.is_single_file = false;
+        project
+    }
+
+    fn two_section_blocks() -> Vec<Block> {
+        vec![
+            make_header(2, "intro", "Introduction"),
+            make_para("Content."),
+            make_header(2, "methods", "Methods"),
+            make_para("More content."),
+        ]
+    }
+
+    /// Flatten the generated `navigation.toc.title` to plain text.
+    ///
+    /// Deliberately local rather than reaching for a shared helper: the
+    /// title is stored as inlines (bd-toc-smart-quotes-6nro57ed), and
+    /// these tests only ever assert on plain-text terms.
+    fn toc_title_text(ast: &Pandoc) -> String {
+        let title = ast
+            .meta
+            .get_path(&["navigation", "toc", "title"])
+            .expect("navigation.toc.title");
+        let inlines = pampa::toc::config_value_to_inlines(title).expect("title inlines");
+        inlines
+            .iter()
+            .map(|i| match i {
+                Inline::Str(s) => s.text.clone(),
+                Inline::Space(_) => " ".to_string(),
+                other => panic!("unexpected inline in a plain-text title: {other:?}"),
+            })
+            .collect()
+    }
+
+    /// Run the transform over `blocks` with the given project + format.
+    async fn title_for(meta: ConfigValue, project: &ProjectContext, format: &Format) -> String {
+        let mut ast = Pandoc {
+            meta,
+            blocks: two_section_blocks(),
+        };
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(project, &doc, format, &binaries);
+
+        TocGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        toc_title_text(&ast)
+    }
+
+    /// The headline case: a website page renders "On this page".
+    #[tokio::test]
+    async fn website_html_uses_toc_title_website() {
+        let project = make_project_of_kind(crate::project::ProjectKind::Website);
+        let title = title_for(meta_with_terms(), &project, &Format::html()).await;
+        assert_eq!(
+            title, "On this page",
+            "a website page must use the `toc-title-website` term"
+        );
+    }
+
+    /// Regression guard for the standalone-document case, which is what
+    /// the transform did unconditionally before this change.
+    #[tokio::test]
+    async fn default_project_uses_toc_title_document() {
+        let project = make_project_of_kind(crate::project::ProjectKind::Default);
+        let title = title_for(meta_with_terms(), &project, &Format::html()).await;
+        assert_eq!(
+            title, "Table of contents",
+            "a standalone document must keep the `toc-title-document` term"
+        );
+    }
+
+    /// A user-supplied `toc-title` keeps top precedence on a website —
+    /// the context split must not disturb the chain decided in
+    /// bd-llhlzd7p.
+    #[tokio::test]
+    async fn user_toc_title_still_wins_on_a_website() {
+        let project = make_project_of_kind(crate::project::ProjectKind::Website);
+        let meta = config_map(vec![
+            ("toc", config_bool(true)),
+            ("toc-title", config_str("My Contents")),
+            (
+                "quarto",
+                config_language_terms("Table of contents", "On this page"),
+            ),
+        ]);
+        let title = title_for(meta, &project, &Format::html()).await;
+        assert_eq!(
+            title, "My Contents",
+            "an explicit `toc-title` must outrank the localized website term"
+        );
+    }
+
+    /// Localization still flows through the website branch: the term is
+    /// read from the catalog, not hardcoded per-context.
+    #[tokio::test]
+    async fn website_uses_the_localized_website_term() {
+        let project = make_project_of_kind(crate::project::ProjectKind::Website);
+        let meta = config_map(vec![
+            ("toc", config_bool(true)),
+            ("lang", config_str("pt")),
+            ("quarto", config_language_terms("Índice", "Nesta página")),
+        ]);
+        let title = title_for(meta, &project, &Format::html()).await;
+        assert_eq!(
+            title, "Nesta página",
+            "the website term must come from the language catalog"
+        );
+    }
+
+    /// Q1 gates on `isHtmlOutput(…, strict = true)`, which excludes
+    /// revealjs. Pins decision 2 against a later drift to
+    /// `Format::is_html()` (which would match `Revealjs` and break this).
+    #[tokio::test]
+    async fn website_revealjs_uses_toc_title_document() {
+        let project = make_project_of_kind(crate::project::ProjectKind::Website);
+        let revealjs = Format::from_format_string("revealjs").expect("revealjs format");
+        let title = title_for(meta_with_terms(), &project, &revealjs).await;
+        assert_eq!(
+            title, "Table of contents",
+            "revealjs is excluded by Q1's strict isHtmlOutput, so it keeps the document term"
+        );
+    }
+
+    /// A non-HTML render of a website project keeps the document term —
+    /// the transform runs for every format (see the Navigation-phase
+    /// comment in `pipeline.rs`), so the gate has to be explicit.
+    #[tokio::test]
+    async fn website_pdf_uses_toc_title_document() {
+        let project = make_project_of_kind(crate::project::ProjectKind::Website);
+        let title = title_for(meta_with_terms(), &project, &Format::pdf()).await;
+        assert_eq!(
+            title, "Table of contents",
+            "a PDF render of a website project must not say \"On this page\""
+        );
+    }
+
+    /// Q1 excludes books explicitly (`!projectIsBook`); q2 gets it free
+    /// from `ProjectKind::Book` being a distinct variant. Pinned so a
+    /// future `is_website_like()` helper cannot silently absorb books.
+    #[tokio::test]
+    async fn book_project_uses_toc_title_document() {
+        let project = make_project_of_kind(crate::project::ProjectKind::Book);
+        let title = title_for(meta_with_terms(), &project, &Format::html()).await;
+        assert_eq!(
+            title, "Table of contents",
+            "a book must keep the document term, matching Q1's !projectIsBook guard"
+        );
+    }
+
+    /// The English literal fallback stays context-free (decision 3): it
+    /// only fires when no catalog is loaded, which is a stage-less
+    /// unit-test path.
+    #[tokio::test]
+    async fn website_without_a_catalog_falls_back_to_the_english_literal() {
+        let project = make_project_of_kind(crate::project::ProjectKind::Website);
+        let meta = config_map(vec![("toc", config_bool(true))]);
+        let title = title_for(meta, &project, &Format::html()).await;
+        assert_eq!(
+            title, "Table of Contents",
+            "with no catalog the transform keeps its English literal, uncontextualized"
+        );
+    }
 }
