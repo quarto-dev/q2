@@ -774,6 +774,70 @@ fn unknown_highlight_style_warns_and_uses_default() {
     assert!(q14_5[0].location.is_some(), "warning carries a location");
 }
 
+/// Phase C: `brand: {light, dark}` — each variant's compile uses its
+/// own brand, and a dark brand alone (plain `theme: cosmo`) enables
+/// the full dark-mode machinery (dual CSS, attributed links, toggle).
+#[test]
+fn brand_pair_drives_per_variant_compiles_and_enables_dark_mode() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("brand-light.yml"),
+        "color:\n  primary: \"#0055aa\"\n",
+    );
+    write(
+        &root.join("brand-dark.yml"),
+        "color:\n  primary: \"#ffaa11\"\n  background: \"#181c25\"\n",
+    );
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: Brand Pair\nformat:\n  html:\n    theme: cosmo\nbrand:\n  light: brand-light.yml\n  dark: brand-dark.yml\n---\n\n# Hi\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("brand pair must render");
+
+    let files = css_files(&result.resources_dir);
+    let light = files
+        .iter()
+        .find(|(p, _)| p.file_name().and_then(|n| n.to_str()) == Some("styles.css"))
+        .expect("light css (dark mode enabled by the dark brand)");
+    let dark = files
+        .iter()
+        .find(|(p, _)| p.file_name().and_then(|n| n.to_str()) == Some("styles-dark.css"))
+        .expect("dark css synthesized from the dark brand");
+    assert!(
+        light.1.contains("0,85,170") || light.1.contains("#0055aa"),
+        "light variant must carry the light brand's primary"
+    );
+    assert!(
+        !light.1.contains("255,170,17") && !light.1.contains("#ffaa11"),
+        "light variant must not carry the dark brand's primary"
+    );
+    assert!(
+        dark.1.contains("255,170,17") || dark.1.contains("#ffaa11"),
+        "dark variant must carry the dark brand's primary"
+    );
+    assert!(
+        dark.1.contains("color-scheme:dark") || dark.1.contains("color-scheme: dark"),
+        "dark brand background #181c25 must make the dark variant dark"
+    );
+
+    // The full dark-mode machinery engages: attributed links + toggle.
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+    assert!(html.contains(r#"class="quarto-color-scheme""#));
+    assert!(html.contains("quartoToggleColorScheme"));
+}
+
 /// D1a bonus: a *single* dark theme (no light/dark pair at all) gets
 /// `color-scheme: dark` from the darkness sentinel, so existing
 /// dark-theme users get correct native scrollbars/controls.

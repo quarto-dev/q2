@@ -160,6 +160,13 @@ pub struct DarkThemeConfig {
     /// [`ThemeConfig::highlight_style`]). `None` → the default
     /// palette.
     pub highlight_style: Option<HighlightStyle>,
+
+    /// The dark variant's brand reference (bd-0pic6 phase C): the
+    /// `dark:` half of a `brand: {light:, dark:}` pair, or a copy of
+    /// the light brand when the brand has no dark half (Q1's
+    /// per-layer fallback — a bundle with no dark opinion contributes
+    /// its light layers to the dark compile).
+    pub brand_ref: Option<BrandRef>,
 }
 
 /// A resolved syntax-highlight palette request for one variant
@@ -273,7 +280,7 @@ impl ThemeConfig {
     pub fn from_config_value(config: &ConfigValue) -> Result<Self, SassError> {
         // Look for top-level `theme` (format-flattened by MetadataMergeStage)
         let theme_value = config.get("theme");
-        let brand_ref = extract_brand_ref(config.get("brand"))?;
+        let brand_refs = extract_brand_refs(config.get("brand"))?;
 
         let mut result = match theme_value {
             None => Self::default_bootstrap(),
@@ -299,6 +306,7 @@ impl ThemeConfig {
                                 is_default: pair.dark_first,
                                 key_location: Some(key_source),
                                 highlight_style: None,
+                                brand_ref: None,
                             })
                         }
                         None => None,
@@ -327,31 +335,44 @@ impl ThemeConfig {
             return Ok(result);
         }
 
+        // A dark brand ENABLES dark mode (Q1's `enablesDarkMode`):
+        // when `brand: {…, dark: …}` exists without a dark theme
+        // half, synthesize the dark variant from the light theme list
+        // — it then flows through dual compilation, link emission,
+        // and the toggle like a `theme:`-declared pair. Synthesis
+        // happens BEFORE brand-token injection so each variant gets
+        // its own marker. The author default falls back to the brand
+        // map's key order (the theme map's order wins when both maps
+        // exist, because a theme-declared pair sets `is_default`
+        // above and this branch is skipped).
+        if brand_refs.dark.is_some() && result.dark.is_none() && !result.suppress_bootstrap {
+            result.dark = Some(DarkThemeConfig {
+                themes: result.themes.clone(),
+                theme_locations: result.theme_locations.clone(),
+                suppress_bootstrap: false,
+                is_default: brand_refs.dark_first,
+                key_location: None,
+                highlight_style: None,
+                brand_ref: None,
+            });
+        }
+
+        // Per-variant brand refs: the dark variant falls back to the
+        // light brand when the brand has no dark half (Q1's per-layer
+        // fallback). Auto-inject the position marker at the end of
+        // each variant's list that doesn't already name it (and isn't
+        // suppressed); naming `brand` in a variant that has no brand
+        // is an error.
+        let light_ref = brand_refs.light;
+        let dark_ref = brand_refs.dark.or_else(|| light_ref.clone());
+
         let light_has_token = result.themes.iter().any(ThemeSpec::is_brand);
-        let dark_has_token = result
-            .dark
-            .as_ref()
-            .is_some_and(|d| d.themes.iter().any(ThemeSpec::is_brand));
-        match brand_ref {
-            Some(br) => {
-                result.brand_ref = Some(br);
-                // Auto-inject the position marker at the end of each
-                // variant's list that doesn't already name it (and
-                // isn't suppressed). Q1 splices brand into light and
-                // dark independently.
-                if !result.suppress_bootstrap && !light_has_token {
-                    result.themes.push(ThemeSpec::Brand);
-                    result.theme_locations.push(None);
-                }
-                if let Some(dark) = result.dark.as_mut()
-                    && !dark.suppress_bootstrap
-                    && !dark_has_token
-                {
-                    dark.themes.push(ThemeSpec::Brand);
-                    dark.theme_locations.push(None);
-                }
+        match (&light_ref, light_has_token) {
+            (Some(_), false) if !result.suppress_bootstrap => {
+                result.themes.push(ThemeSpec::Brand);
+                result.theme_locations.push(None);
             }
-            None if light_has_token || dark_has_token => {
+            (None, true) => {
                 return Err(SassError::InvalidThemeConfig {
                     message: "`theme:` contains `brand` but no `_brand.yml` was configured \
                               via the `brand:` key"
@@ -359,7 +380,28 @@ impl ThemeConfig {
                     location: config.get("theme").map(|v| v.source_info.clone()),
                 });
             }
-            None => {}
+            _ => {}
+        }
+        result.brand_ref = light_ref;
+
+        if let Some(dark) = result.dark.as_mut() {
+            let dark_has_token = dark.themes.iter().any(ThemeSpec::is_brand);
+            match (&dark_ref, dark_has_token) {
+                (Some(_), false) if !dark.suppress_bootstrap => {
+                    dark.themes.push(ThemeSpec::Brand);
+                    dark.theme_locations.push(None);
+                }
+                (None, true) => {
+                    return Err(SassError::InvalidThemeConfig {
+                        message: "`theme:` contains `brand` but no `_brand.yml` was configured \
+                                  via the `brand:` key"
+                            .to_string(),
+                        location: config.get("theme").map(|v| v.source_info.clone()),
+                    });
+                }
+                _ => {}
+            }
+            dark.brand_ref = dark_ref;
         }
 
         // `highlight-style:` (bd-0pic6 phase B) — after theme parsing
@@ -486,7 +528,7 @@ impl ThemeConfig {
             minified: self.minified,
             suppress_bootstrap: d.suppress_bootstrap,
             title_block_layer: self.title_block_layer,
-            brand_ref: self.brand_ref.clone(),
+            brand_ref: d.brand_ref.clone(),
             dark: None,
             highlight_style: d.highlight_style.clone(),
         })
@@ -534,7 +576,10 @@ pub fn resolve_brand(
     runtime: &dyn SystemRuntime,
     base_dir: &Path,
 ) -> Result<Option<ResolvedBrand>, SassError> {
-    let Some(brand_ref) = extract_brand_ref(config.get("brand"))? else {
+    // Single-variant consumers (reveal, favicon fallback) use the
+    // LIGHT brand; per-variant selection is the HTML dual-compile
+    // path's concern (bd-0pic6 phase C).
+    let Some(brand_ref) = extract_brand_refs(config.get("brand"))?.light else {
         return Ok(None);
     };
     // Reuse ThemeConfig's brand resolution (path/inline → typed Brand).
@@ -611,47 +656,78 @@ fn config_value_as_text(value: &ConfigValue) -> Option<String> {
         .or_else(|| value.as_plain_text())
 }
 
-/// Extract a [`BrandRef`] from the value at the `brand:` key, if any.
+/// The per-variant brand references extracted from the `brand:` key
+/// (bd-0pic6 phase C).
+struct BrandRefs {
+    light: Option<BrandRef>,
+    dark: Option<BrandRef>,
+    /// Whether `dark:` is the brand map's first key (or its only
+    /// key) — Q1's fallback author-default rule when the `theme:` map
+    /// doesn't decide (`format-html-info.ts::darkModeDefaultMetadata`).
+    dark_first: bool,
+}
+
+/// Extract the per-variant [`BrandRef`]s from the value at the
+/// `brand:` key, if any.
 ///
-/// - String → [`BrandRef::Path`].
-/// - Map → check for `light`/`dark` keys. If present, emit a soft
-///   warning (light/dark pairs are deferred to a follow-up) and use
-///   the `light` half. Otherwise treat the whole map as an inline
-///   brand block.
-/// - Null / absent → `None`.
-fn extract_brand_ref(value: Option<&ConfigValue>) -> Result<Option<BrandRef>, SassError> {
-    let Some(value) = value else { return Ok(None) };
+/// - String → light [`BrandRef::Path`] (the dark variant falls back
+///   to it at the call site).
+/// - Map with only `light`/`dark` keys → each half extracted as its
+///   own single-brand value (path or inline block).
+/// - Any other map → an inline (light) brand block.
+/// - Null / absent → neither.
+fn extract_brand_refs(value: Option<&ConfigValue>) -> Result<BrandRefs, SassError> {
+    let none = BrandRefs {
+        light: None,
+        dark: None,
+        dark_first: false,
+    };
+    let Some(value) = value else { return Ok(none) };
     if value.is_null() {
-        return Ok(None);
+        return Ok(none);
     }
 
-    // Path form.
-    if let Some(s) = config_value_as_text(value) {
-        return Ok(Some(BrandRef::Path(PathBuf::from(s))));
-    }
-
-    // Light/dark pair, or inline block.
     if let Some(entries) = value.as_map_entries() {
         let light = entries.iter().find(|e| e.key == "light");
         let dark = entries.iter().find(|e| e.key == "dark");
         let other = entries.iter().any(|e| e.key != "light" && e.key != "dark");
         if (light.is_some() || dark.is_some()) && !other {
-            // Treat as a light/dark pair. Light half is used; the dark
-            // side is deferred — see Phase 8 follow-up.
-            // TODO(brand light/dark): wire dark variant once Q2 has a
-            // light/dark seam.
-            if let Some(light_entry) = light {
-                return extract_brand_ref(Some(&light_entry.value));
-            }
-            // Only dark configured — silently ignore for now.
-            return Ok(None);
+            return Ok(BrandRefs {
+                light: match light {
+                    Some(entry) => Some(extract_single_brand_ref(&entry.value)?),
+                    None => None,
+                },
+                dark: match dark {
+                    Some(entry) => Some(extract_single_brand_ref(&entry.value)?),
+                    None => None,
+                },
+                dark_first: entries.first().is_some_and(|e| e.key == "dark"),
+            });
         }
+    }
 
-        // Inline brand block: convert the typed ConfigValue back to a
-        // serde_yaml::Value so we can hand it to serde_yaml::from_value
-        // in `resolve`.
+    Ok(BrandRefs {
+        light: Some(extract_single_brand_ref(value)?),
+        dark: None,
+        dark_first: false,
+    })
+}
+
+/// Extract one [`BrandRef`] from a single brand value (a path string
+/// or an inline brand block) — the halves of a `{light:, dark:}` pair
+/// and the plain single-brand form both go through here.
+fn extract_single_brand_ref(value: &ConfigValue) -> Result<BrandRef, SassError> {
+    // Path form.
+    if let Some(s) = config_value_as_text(value) {
+        return Ok(BrandRef::Path(PathBuf::from(s)));
+    }
+
+    // Inline brand block: convert the typed ConfigValue back to a
+    // serde_yaml::Value so we can hand it to serde_yaml::from_value
+    // in `resolve`.
+    if value.as_map_entries().is_some() {
         let yaml_value = config_value_to_yaml_value(value)?;
-        return Ok(Some(BrandRef::Inline(Box::new(yaml_value))));
+        return Ok(BrandRef::Inline(Box::new(yaml_value)));
     }
 
     // Scalar(Yaml::Hash) — synthesized in tests, or produced when the
@@ -662,7 +738,7 @@ fn extract_brand_ref(value: Option<&ConfigValue>) -> Result<Option<BrandRef>, Sa
     {
         // Only accept if the yaml_value is a mapping; bail otherwise.
         if matches!(yaml_value, serde_yaml::Value::Mapping(_)) {
-            return Ok(Some(BrandRef::Inline(Box::new(yaml_value))));
+            return Ok(BrandRef::Inline(Box::new(yaml_value)));
         }
     }
 
@@ -2086,6 +2162,169 @@ mod tests {
             dark_cfg.highlight_style.as_ref().map(|h| h.name.as_str()),
             Some("a11y-dark")
         );
+    }
+
+    // === brand light/dark seam tests (bd-0pic6 phase C) ===
+
+    #[test]
+    fn test_brand_pair_sets_per_variant_refs() {
+        // `brand: {light: a.yml, dark: b.yml}` + a theme pair: each
+        // variant carries its own BrandRef.
+        let theme = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("darkly")),
+        ]);
+        let brand = map_value(vec![
+            map_entry("light", scalar_value("brand-light.yml")),
+            map_entry("dark", scalar_value("brand-dark.yml")),
+        ]);
+        let config = map_value(vec![map_entry("theme", theme), map_entry("brand", brand)]);
+        let cfg = ThemeConfig::from_config_value(&config).unwrap();
+
+        match cfg.brand_ref.as_ref() {
+            Some(BrandRef::Path(p)) => assert_eq!(p.to_str(), Some("brand-light.yml")),
+            other => panic!("light brand_ref: {:?}", other),
+        }
+        let dark = cfg.dark.as_ref().unwrap();
+        match dark.brand_ref.as_ref() {
+            Some(BrandRef::Path(p)) => assert_eq!(p.to_str(), Some("brand-dark.yml")),
+            other => panic!("dark brand_ref: {:?}", other),
+        }
+        // Brand token auto-injected into both variants.
+        assert!(cfg.themes.iter().any(ThemeSpec::is_brand));
+        assert!(dark.themes.iter().any(ThemeSpec::is_brand));
+    }
+
+    #[test]
+    fn test_single_brand_falls_back_to_light_for_dark_variant() {
+        // A single `brand: a.yml` with a theme pair: the dark variant
+        // uses the same brand (Q1's per-layer fallback — a bundle with
+        // no dark opinion contributes its light layers to the dark
+        // compile).
+        let theme = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("darkly")),
+        ]);
+        let config = map_value(vec![
+            map_entry("theme", theme),
+            map_entry("brand", scalar_value("_brand.yml")),
+        ]);
+        let cfg = ThemeConfig::from_config_value(&config).unwrap();
+        match cfg.dark.as_ref().unwrap().brand_ref.as_ref() {
+            Some(BrandRef::Path(p)) => assert_eq!(p.to_str(), Some("_brand.yml")),
+            other => panic!("dark brand_ref fallback: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_brand_pair_synthesizes_dark_variant() {
+        // A dark brand ENABLES dark mode even when `theme:` has no
+        // dark half (Q1: `enablesDarkMode`): the dark variant is
+        // synthesized from the light theme list + the dark brand.
+        let config = map_value(vec![
+            map_entry("theme", scalar_value("cosmo")),
+            map_entry(
+                "brand",
+                map_value(vec![
+                    map_entry("light", scalar_value("brand-light.yml")),
+                    map_entry("dark", scalar_value("brand-dark.yml")),
+                ]),
+            ),
+        ]);
+        let cfg = ThemeConfig::from_config_value(&config).unwrap();
+
+        let dark = cfg.dark.as_ref().expect("dark variant synthesized");
+        // Same theme list as light (cosmo + auto-injected brand token).
+        assert_eq!(dark.themes.len(), 2);
+        assert!(dark.themes[0].is_builtin());
+        assert!(dark.themes[1].is_brand());
+        assert!(!dark.is_default, "light listed first in the brand map");
+        match dark.brand_ref.as_ref() {
+            Some(BrandRef::Path(p)) => assert_eq!(p.to_str(), Some("brand-dark.yml")),
+            other => panic!("dark brand_ref: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_brand_pair_dark_first_sets_default() {
+        // Q1's fallback rule: when `theme:` doesn't decide the author
+        // default, the `brand:` map's key order does.
+        let config = map_value(vec![
+            map_entry("theme", scalar_value("cosmo")),
+            map_entry(
+                "brand",
+                map_value(vec![
+                    map_entry("dark", scalar_value("brand-dark.yml")),
+                    map_entry("light", scalar_value("brand-light.yml")),
+                ]),
+            ),
+        ]);
+        let cfg = ThemeConfig::from_config_value(&config).unwrap();
+        assert!(cfg.dark.as_ref().unwrap().is_default);
+    }
+
+    #[test]
+    fn test_theme_map_order_wins_over_brand_order() {
+        // When BOTH maps exist, the theme map's key order decides the
+        // author default (Q1 checks the theme map first).
+        let theme = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("darkly")),
+        ]);
+        let brand = map_value(vec![
+            map_entry("dark", scalar_value("brand-dark.yml")),
+            map_entry("light", scalar_value("brand-light.yml")),
+        ]);
+        let config = map_value(vec![map_entry("theme", theme), map_entry("brand", brand)]);
+        let cfg = ThemeConfig::from_config_value(&config).unwrap();
+        assert!(
+            !cfg.dark.as_ref().unwrap().is_default,
+            "theme map wrote light first — brand order must not override"
+        );
+    }
+
+    #[test]
+    fn test_dark_only_brand_synthesizes_dark_default() {
+        // `brand: {dark: b.yml}`: no light brand; the synthesized dark
+        // variant carries the brand and is the author default (dark is
+        // the map's first — only — key).
+        let config = map_value(vec![
+            map_entry("theme", scalar_value("cosmo")),
+            map_entry(
+                "brand",
+                map_value(vec![map_entry("dark", scalar_value("brand-dark.yml"))]),
+            ),
+        ]);
+        let cfg = ThemeConfig::from_config_value(&config).unwrap();
+
+        assert!(cfg.brand_ref.is_none(), "light variant has no brand");
+        assert!(
+            !cfg.themes.iter().any(ThemeSpec::is_brand),
+            "no token in the light list without a light brand"
+        );
+        let dark = cfg.dark.as_ref().expect("dark synthesized");
+        assert!(dark.is_default);
+        assert!(dark.brand_ref.is_some());
+        assert!(dark.themes.iter().any(ThemeSpec::is_brand));
+    }
+
+    #[test]
+    fn test_dark_variant_projection_carries_brand_ref() {
+        let theme = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("darkly")),
+        ]);
+        let brand = map_value(vec![
+            map_entry("light", scalar_value("brand-light.yml")),
+            map_entry("dark", scalar_value("brand-dark.yml")),
+        ]);
+        let config = map_value(vec![map_entry("theme", theme), map_entry("brand", brand)]);
+        let cfg = ThemeConfig::from_config_value(&config).unwrap();
+        let dark_cfg = cfg.dark_variant().unwrap();
+        match dark_cfg.brand_ref.as_ref() {
+            Some(BrandRef::Path(p)) => assert_eq!(p.to_str(), Some("brand-dark.yml")),
+            other => panic!("projected dark brand_ref: {:?}", other),
+        }
     }
 
     #[test]

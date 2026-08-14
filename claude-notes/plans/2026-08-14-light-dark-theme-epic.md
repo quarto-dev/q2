@@ -521,8 +521,25 @@ Integration branch: `feature/light-dark-theme` (created off `main`).
   `bd-hl-theme-translator-2mdgh4k6` (general `.theme` translator, full Q1
   catalog, copy-button color feedback, sentinel-based single-variant
   resolution). E2E via real binary inspected. 12,158 workspace tests green.
-- [ ] **C — brand seam** (D7): `bd-ld-c-brand-seam-wef8ww3n`. Absorbs bd-v5z8w;
-  unified-brand split.
+- [x] **C — brand seam** (D7): `bd-ld-c-brand-seam-wef8ww3n`. **Done
+  2026-08-14.** `extract_brand_refs` extracts BOTH halves of a
+  `brand: {light:, dark:}` pair (the silent light-only TODO is gone);
+  `DarkThemeConfig.brand_ref` carries the dark ref with parse-time fallback
+  to the light brand (Q1's per-layer fallback). **A dark brand ENABLES dark
+  mode**: with a plain `theme:`, the dark variant is synthesized from the
+  light theme list, flowing through all of A2–A4 (dual CSS, attributed
+  links, toggle) automatically; author default falls back to the brand
+  map's key order (theme map order wins when both exist). The stage
+  resolves each variant's brand into its own `ThemeContext`, so cache keys
+  discriminate via the brand hash already in `cache_key`. Single-variant
+  brand consumers (reveal, favicon) keep the light half explicitly.
+  **Scope split**: the unified-`_brand.yml` field-level `{light, dark}`
+  split (Q1 `splitUnifiedBrand`, needs untagged-enum type surgery in
+  quarto-brand) moved to follow-up `bd-unified-brand-split-ep49amad` — the
+  epic's deliverable is the seam, which bd-v5z8w asked for. E2E via real
+  binary: light css `--bs-primary-rgb: 0,85,170` vs dark `255,170,17`,
+  dark brand `#181c25` background → `color-scheme:dark`. 12,166 tests
+  green.
 - [ ] **D — preview/hub-client** (D8): `bd-ld-d-preview-hub-t4oxv0hf`.
   VFS/iframe dual transport, editor-scheme integration (related: bd-nxe8).
   Uses lessons from A.

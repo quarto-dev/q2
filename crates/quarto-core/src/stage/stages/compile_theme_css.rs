@@ -456,10 +456,11 @@ impl PipelineStage for CompileThemeCssStage {
             .parent()
             .map_or_else(|| PathBuf::from("."), |p| p.to_path_buf());
 
-        // Resolve the brand (if any) once — it is shared by both
-        // variants until the brand light/dark seam lands
-        // (bd-ld-c-brand-seam-wef8ww3n). I/O happens here. Failures
-        // are user-facing configuration errors (missing `_brand.yml`,
+        // Resolve each variant's brand (bd-0pic6 phase C: the dark
+        // half of a `brand: {light:, dark:}` pair drives the dark
+        // compile; a single brand is shared by both variants via the
+        // parse-time fallback). I/O happens here. Failures are
+        // user-facing configuration errors (missing `_brand.yml`,
         // invalid YAML, unknown brand shape) — propagate them rather
         // than silently shipping DEFAULT_CSS, same reasoning as the
         // `from_config_value` error path above.
@@ -470,11 +471,11 @@ impl PipelineStage for CompileThemeCssStage {
                 PipelineError::stage_error(self.name(), format!("brand resolution: {e}"))
             })?;
 
-        // The ThemeContext borrows a local Arc clone of the runtime
+        // The ThemeContexts borrow a local Arc clone of the runtime
         // (not `ctx`) so `ctx` stays mutably borrowable inside
         // `variant_css`.
         let runtime = ctx.runtime.clone();
-        let mut theme_context = ThemeContext::new(document_dir, runtime.as_ref());
+        let mut theme_context = ThemeContext::new(document_dir.clone(), runtime.as_ref());
         if let Some(brand) = resolved.brand.as_ref() {
             let brand_dir = resolved
                 .brand_dir
@@ -487,7 +488,21 @@ impl PipelineStage for CompileThemeCssStage {
             variant_css(ctx, &theme_config, &theme_context, &doc_vars, cache_ok).await?;
 
         if let Some(dark_cfg) = theme_config.dark_variant() {
-            let dark_css = variant_css(ctx, &dark_cfg, &theme_context, &doc_vars, cache_ok).await?;
+            let resolved_dark = dark_cfg
+                .clone()
+                .resolve(ctx.runtime.as_ref(), &ctx.project.dir)
+                .map_err(|e| {
+                    PipelineError::stage_error(self.name(), format!("dark brand resolution: {e}"))
+                })?;
+            let mut dark_context = ThemeContext::new(document_dir, runtime.as_ref());
+            if let Some(brand) = resolved_dark.brand.as_ref() {
+                let brand_dir = resolved_dark
+                    .brand_dir
+                    .clone()
+                    .unwrap_or_else(|| ctx.project.dir.clone());
+                dark_context = dark_context.with_brand(brand, brand_dir);
+            }
+            let dark_css = variant_css(ctx, &dark_cfg, &dark_context, &doc_vars, cache_ok).await?;
             let dark_is_default = theme_config.dark.as_ref().is_some_and(|d| d.is_default);
             store_variant_pair(ctx, light_css, dark_css, dark_is_default);
         } else {
