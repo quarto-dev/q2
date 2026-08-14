@@ -175,7 +175,10 @@ Skeleton only — contents wait on the design discussion.
   likely `RenderOutput.llms_md: Option<String>` + a write in the
   render-to-file path. **Touches `RenderOutput` ⇒ full `cargo xtask
   verify` (wasm-quarto-hub-client depends on it); WASM path skips the
-  write like the other native-only hooks.**
+  write like the other native-only hooks.** All companion writes go
+  through the output-ledger claim helper (resolved decision 2): new
+  `Q-*` collision error + docs page + a TDD test where a resource-copied
+  `<page>.md` collides with a companion path and fails the render.
 - **Phase 3 — `llms.txt` assembly.** New `write_llms_txt` in
   `website_post_render.rs`, sibling of `write_sitemap`: sections derived
   from the website sidebar/navbar structure, entries as
@@ -217,15 +220,31 @@ Skeleton only — contents wait on the design discussion.
      `website.llms-txt: {sections: …}` config can substitute its own
      structure.
 
+2. **Companion naming (resolved 2026-08-14, with a gate).** Emit
+   **`<page>.md`** (the ecosystem convention; users find `.llms.md`
+   surprising) — *gated on a collision-safe write mechanism*:
+   - Collision surface: rendered outputs don't collide (pages render to
+     `.html`), but **resource-copied `.md` files do** (a verbatim-copied
+     `about.md` in `_site/` would be overwritten by the companion for
+     `about.html`), and a user-provided `llms.txt` resource collides with
+     the index itself.
+   - Mechanism: the llms subsystem never writes to the filesystem
+     directly. It resolves every desired path against a **project output
+     ledger** (rendered `output_paths` ∪ resource-copy set ∪ sibling
+     post-render artifacts) through a claim-style helper that refuses
+     already-claimed paths. Collision ⇒ render **error** with a new `Q-*`
+     code naming both producers (docs page in the same commit, per the
+     error-docs lint rule). Precedent: `write_alias_redirects` errors on
+     alias collisions (Q-5-23…Q-5-26) for the same "silently wrong file
+     is worse than failing" rationale. Fallback policy if the error
+     proves too harsh in practice: warn + omit the page from the index.
+   - `discovery.rs`'s `*.llms.md` source-side exclusion stays untouched;
+     the output dir is already excluded from discovery.
+
 ## Open design questions for the user
 2. **`llms-full.txt`.** Every major SSG now emits it alongside `llms.txt`.
    Include it in scope (cheap once per-page markdown exists), or file as a
    follow-up strand?
-3. **Companion naming.** Q1 uses `<page>.llms.md` and the connect-docs
-   landing page links assume it; the broader ecosystem trend is
-   `<page>.md` / `<page>.html.md` next to the HTML. Keep `.llms.md` for Q1
-   parity (my recommendation, given discovery.rs already excludes it), or
-   adopt/also-emit the ecosystem convention?
 4. **Internal links inside companions.** Should in-body links to other
    pages of the same site point at the `.html` outputs (Q1 behavior) or be
    rewritten to the `.llms.md` siblings (keeps an LLM inside the markdown
