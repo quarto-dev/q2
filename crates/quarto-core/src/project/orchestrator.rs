@@ -962,6 +962,15 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             &self.project.config.render_patterns,
             &self.project.files,
         ));
+        // Project-config `css:` entries naming missing files warn once
+        // per render here — not once per page in the merge, which is
+        // where document-layer `css:` mistakes are diagnosed instead
+        // (bd-format-css-not-copied-crn3bjdz).
+        initial_diagnostics.extend(crate::project::format_css::missing_project_css_diagnostics(
+            self.project,
+            self.format.identifier.as_str(),
+            self.runtime.as_ref(),
+        ));
 
         let (profiles, pass1_failures) = self.pass_one().await;
         let index = Arc::new(ProjectIndex::new(profiles));

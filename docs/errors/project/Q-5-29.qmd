@@ -1,0 +1,63 @@
+---
+title: "Declared Stylesheet Not Found"
+description: "A `css:` entry names a stylesheet that does not exist, so it was not copied into the output."
+code: Q-5-29
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-29` — Declared Stylesheet Not Found
+
+> A `css:` entry names a stylesheet that does not exist, so it was
+> not copied into the output. Every page linking it will request a
+> file that is not there. The render continues; the (broken) link is
+> still emitted.
+
+## What this means
+
+A document or project can attach extra stylesheets to its HTML
+output with the `css` option:
+
+```yaml
+# _quarto.yml
+format:
+  html:
+    css:
+      - styles.css
+```
+
+Quarto resolves each entry **relative to the file that declares
+it**: entries in `_quarto.yml` resolve against the project root,
+entries in a directory's `_metadata.yml` against that directory, and
+entries in a document's front matter against the document's own
+directory. A leading `/` anchors the path at the project root from
+any of those places.
+
+When the resolved file exists, Quarto copies it into the output
+tree and emits a depth-correct `<link>` on every page. This warning
+fires when the file does **not** exist: nothing is copied, and the
+`<link>` is emitted with the path exactly as you wrote it — visibly
+broken in the browser's network tab rather than silently absent.
+
+## Common causes
+
+- **A typo in the path**, or a file that was moved or renamed
+  without updating the `css` entry.
+- **A path written relative to the wrong anchor** — for example, a
+  document in `posts/2026/` declaring `css: styles.css` for a file
+  that actually lives at the project root. From front matter that
+  entry names `posts/2026/styles.css`; write `/styles.css` (or
+  `../../styles.css`) instead.
+- **A stylesheet that is generated later** by a tool that has not
+  run yet.
+
+## How to fix it
+
+Check the path in the `css` entry against the anchor of the file
+that declares it, or add the missing stylesheet. If the stylesheet
+belongs to the project as a whole, declaring it once in
+`_quarto.yml` (project-root-relative) is usually clearer than
+repeating it per document.

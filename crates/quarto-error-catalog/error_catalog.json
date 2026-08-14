@@ -1441,6 +1441,13 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-28",
     "since_version": "99.9.9"
   },
+  "Q-5-29": {
+    "subsystem": "project",
+    "title": "Declared Stylesheet Not Found",
+    "message_template": "A `css:` entry names a stylesheet that does not exist, so it was not copied into the output. Every page linking it will request a file that is not there. The path is resolved relative to the file that declares it. The render continues; the (broken) link is still emitted.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-29",
+    "since_version": "99.9.9"
+  },
   "Q-13-8": {
     "subsystem": "navigation",
     "title": "Unsupported toc-location value",

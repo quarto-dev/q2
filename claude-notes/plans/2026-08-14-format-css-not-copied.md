@@ -3,9 +3,57 @@
 **Date:** 2026-08-14
 **Braid:** bd-format-css-not-copied-crn3bjdz (bug, p1, label `websites`)
 **Checkout:** main checkout, branch `main` @ `10d86829` (investigation only — no worktree/branch created)
-**Status:** Investigation + design alignment complete (2026-08-14, F1–F4
-settled — see "Settled follow-ups"). **Ready to implement on user
-go-ahead; implementation has not started.**
+**Status:** Implementation in progress on branch
+`braid/bd-format-css-not-copied-crn3bjdz` (Phases 0–3 complete, full
+workspace suite green 12182/12182; Phase 4 verification underway — see
+"Phase 4 evidence").
+
+## Phase 4 evidence (end-to-end, real binary)
+
+Run 2026-08-14 on the implementation branch:
+
+```
+cargo run --bin q2 -- render claude-notes/plans/format-css-not-copied-investigation/repro
+# → "Rendered 2 of 2 files", exit 0
+```
+
+Output inspected directly (matches Q1's expected table from the repro
+README exactly):
+
+- `_site/styles.css` exists (marker property `--repro-project-css` present);
+- `_site/site_libs/quarto-contrib/quarto-project/acme/widget/widget.css`
+  exists (marker `--repro-extension-css` present); no `_site/_extensions/`;
+- `index.html`: `href="styles.css"`,
+  `href="site_libs/quarto-contrib/quarto-project/acme/widget/widget.css"`,
+  linked after the theme bundle;
+- `deep/deeper/index.html`: `href="../../styles.css"`,
+  `href="../../site_libs/quarto-contrib/quarto-project/acme/widget/widget.css"`.
+
+Also verified through the binary: single-doc `fancyfmt-html` extension
+render relocates+copies bundled css to
+`test_files/quarto-contrib/quarto-project/fancyfmt/fmt-style.css` (its
+smoke-all fixture now pins this — previously the link only worked because
+output landed beside the source tree).
+
+## Implementation shape (as landed)
+
+- **Marking** (`crates/quarto-core/src/project/format_css.rs`):
+  `mark_css_path_values` — existence-driven, per layer, called from
+  `MetadataMergeStage` for the project layer (after the `!path`
+  adjustment; diagnostics dropped there), directory-metadata layers, and
+  the document layer (diagnostics pushed per document).
+  `missing_project_css_diagnostics` runs once per project render from
+  `ProjectPipeline::run` into `project_diagnostics` (Q-5-29).
+- **Transform** (`crates/quarto-core/src/transforms/format_css.rs`):
+  `FormatCssTransform` (Normalization phase, self-gated to HTML-family,
+  no-op in VFS mode) — consumes only marked Path entries; mirrors
+  project-relative paths; relocates `_extensions/**` to
+  `quarto-contrib/quarto-project/**` via `ArtifactScope::Project`
+  resolver queries; pushes `ResourceCopyIntent`s (skipping src==dest);
+  rewrites entries to per-page hrefs. Never diagnoses.
+- **Revealjs**: `apply_template.rs` reveal branch appends
+  `user_css_urls(&metadata)` after the vendored deck assets.
+- **Q-5-29**: catalog entry + `docs/errors/project/Q-5-29.qmd`.
 
 ## Triage verdict
 
@@ -279,6 +327,50 @@ input≠output-tree world only touches step 2.
 For books/single-doc, `lib_dir` is empty — the relocation target falls back
 to the resolver's Project scope root (`<stem>_files/`), matching where
 theme css already lands there (Q1 analog: `<stem>_files/libs/`).
+
+## Work items
+
+Implementation runs on branch `braid/bd-format-css-not-copied-crn3bjdz`
+(remote will be `bugfix/bd-format-css-not-copied-crn3bjdz`), branched from
+`main` @ `10d86829` with the investigation commits.
+
+### Phase 0 — failing tests first
+
+- [x] Integration: website render copies project-root css to `_site/styles.css`
+- [x] Integration: hrefs depth-correct (`styles.css` at root, `../../styles.css` two deep)
+- [x] Integration: `_extensions/**` css relocated to `site_libs/quarto-contrib/quarto-project/**`, hrefs point there
+- [x] Integration: document front-matter `css:` in a subdirectory resolves against the document dir (copied + linked)
+- [x] Integration: missing declared css → Q-code diagnostic, link still emitted, render completes
+- [x] Integration: external URL entries pass through verbatim, no copy, no diagnostic
+- [x] Integration: default-project (DefaultProjectType — books' dispatch) render copies css + correct hrefs
+- [x] Integration: revealjs single-doc render links user `css:` (currently dropped)
+- [x] All of the above verified failing at HEAD
+
+### Phase 1 — merge-time marking
+
+- [x] Unit tests: project-config `css` scalar/array/inlines marked Path-kind when file exists; untouched otherwise
+- [x] Mark `format.*.css` in the project's own config layer (existence-driven, base = project dir)
+- [x] Same for directory metadata (`_metadata.yml`) and document front matter layers as applicable
+
+### Phase 2 — render-time transform
+
+- [x] New transform: copy intents + per-page hrefs via resolver; `_extensions/**` relocation; external-URL passthrough
+- [x] Missing-file Q-code emission
+- [x] Revealjs: user css list appended to `css_urls` in the apply-template reveal branch
+- [x] Pipeline wiring + phase-ordering test still green
+
+### Phase 3 — Q-code + docs
+
+- [x] Catalog entry in `quarto-error-catalog/error_catalog.json`
+- [x] `docs/errors/<subsystem>/<code>.qmd` page (same commit; `error-docs-page-missing` lint)
+
+### Phase 4 — end-to-end verification + follow-ups
+
+- [x] `cargo run --bin q2 -- render` on the investigation fixture; inspect output (record snippet in plan)
+- [ ] Re-check the Connect docs repro
+- [ ] Verify `q2 preview` behavior; file preview follow-up strand if broken
+- [ ] Full `cargo xtask verify` green
+- [ ] User-facing docs if applicable
 
 ## Proposed phases (draft)
 
