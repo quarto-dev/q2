@@ -121,19 +121,23 @@ trail + renderer.
 
 ### Phase A — index-miss relativization (bd-tef2lm9j + bd-root-absolute-dir-link-58eh8834)
 
-- [ ] Failing unit tests in `navigation_href.rs`: nav miss static file at
-      depth; nav miss root-absolute dir link w/ + w/o trailing slash; body
-      miss dir link all four repro rows (2 controls); body miss relative
-      static round-trip; trailing-slash preservation in
-      `resolve_static_resource_href`; `.qmd` miss stays verbatim (both fns);
-      no-index stays verbatim (both fns)
-- [ ] Verify tests fail
-- [ ] Implement the two miss-branch routings + trailing-slash preservation
-- [ ] Tests green; full workspace `cargo nextest run --workspace`
-- [ ] e2e through the real binary: in-tree website fixture, deep page with
-      the four-row repro (`/target/`, `/target`, `/target/index.md`,
-      `/index.qmd`) + a nav href to a static pdf; inspect output
-- [ ] Commit; close bd-tef2lm9j and bd-root-absolute-dir-link-58eh8834
+- [x] Failing unit tests in `navigation_href.rs` (9 added; 7 failed as
+      expected — the two round-trip/no-resolver pins passed by design)
+- [x] Verify tests fail (confirmed: exactly the 7 behavior-change tests)
+- [x] Implement the two miss-branch routings + trailing-slash preservation
+      in `resolve_static_resource_href`
+- [x] Tests green (navigation_href 71/71); full workspace
+      `cargo nextest run --workspace` green (11933 tests, exit 0)
+- [x] e2e through the real binary:
+      `cargo run --bin q2 -- render claude-notes/plans/index-miss-relativize-investigation/repro`,
+      then inspected `_site/deep/deeper/index.html`:
+      navbar `assets/report.pdf` → `../../assets/report.pdf`;
+      `[dir slash](/target/)` → `../../target/` (trailing slash kept);
+      `[dir bare](/target)` → `../../target`;
+      control `[root](/index.qmd)` → `../../index.html` unchanged.
+      Root page emits `assets/report.pdf` verbatim (depth 0 correct).
+      Output inspected directly.
+- [x] Commit; close bd-tef2lm9j and bd-root-absolute-dir-link-58eh8834
 
 ### Phase B — breadcrumbs (bd-breadcrumbs-missing-1vpuqh34)
 
