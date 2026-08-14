@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-08-14
 
+- [`9b60bbe2`](https://github.com/quarto-dev/q2/commits/9b60bbe2): Keep the WASM-driven theme/SASS cache in memory during `q2 preview` sessions (viewer and editor alike), so preview origins leave no IndexedDB databases behind at all.
 - [`f2db6bce`](https://github.com/quarto-dev/q2/commits/f2db6bce): Keep all browser storage in memory for `q2 preview --ui editor` sessions, so each ephemeral preview origin no longer accumulates a stale IndexedDB document cache and project entries; reloading the editor now rebuilds the session from the preview server's boot config.
 
 ### 2026-08-12
