@@ -251,6 +251,21 @@ pub fn breadcrumbs_to_html(crumbs: &[Crumb], extra_classes: &[&str]) -> String {
 }
 
 pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
+    sidebar_to_html_with_appended(sidebar, home_url, None)
+}
+
+/// [`sidebar_to_html`] with an extra HTML fragment appended inside the
+/// `nav#quarto-sidebar` element, after the menu.
+///
+/// This is the seam for `toc-location: left` on website pages
+/// (bd-e2kpwy7n): quarto-core's `SidebarRenderTransform` passes the
+/// rendered `nav#TOC` block here so it lands after the nav items —
+/// Q1's `sidebar.ejs` merge order (items first, TOC target last).
+pub fn sidebar_to_html_with_appended(
+    sidebar: &Sidebar,
+    home_url: &str,
+    appended_html: Option<&str>,
+) -> String {
     let mut html = String::new();
 
     let style_class = match sidebar.style {
@@ -291,6 +306,9 @@ pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
         html.push_str("  </div>\n");
     }
 
+    if let Some(extra) = appended_html {
+        html.push_str(extra);
+    }
     html.push_str("</nav>\n");
     html
 }
