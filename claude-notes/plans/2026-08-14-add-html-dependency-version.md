@@ -3,7 +3,8 @@
 **Date:** 2026-08-14
 **Braid:** `bd-add-html-dependency-version-5tnub5ds`
 **Branch:** `main` @ `3ac596e0` (investigated in place; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design partially settled (2026-08-14, see § Decisions). **One open
+question remains — the dedup key — before implementation starts.**
 
 ## Triage verdict
 
@@ -15,6 +16,41 @@ that would suppress the repeat lives in a Lua state that is rebuilt for every
 accept it silently) gets to zero. The two "separable issues" in the strand are
 therefore *less* separable than filed: point 2 alone does not resolve the
 reported symptom.
+
+## Decisions (user, 2026-08-14)
+
+1. **Implement `version` — do not silently ignore it.** Rejecting my (B)
+   recommendation, and for a reason the investigation had not surfaced:
+   **`freeze`**. In Q1, `freeze` lets engine outputs be reused across renders,
+   which matters when a render happened in an environment that is hard to
+   reproduce (old R/Python package versions). Engine outputs can produce
+   dependencies that change over time, and the version tag is what keeps an
+   update from clobbering an older rendering's assets. Q2 has no `freeze` yet —
+   the eventual design is expected to involve reworking the execution-output
+   automerge sidecar into a more portable format, likely `.ipynb`-based — but
+   whatever lands **will need multi-version dependency support**, so the field
+   has to mean something now rather than be trained out of users' extensions.
+
+   This supersedes the "cosmetic parity" framing in Finding 2 below: the
+   requirement is real, it just isn't *Q1's* requirement (see the amendment
+   under Finding 2).
+
+2. **New disk layouts are acceptable.** Q2 makes no longevity promise about
+   `_site` internals, and now is the time to fix this. `quarto-contrib/` is
+   therefore **not** required — we are free to pick the layout that is actually
+   right rather than the one Q1 happens to have.
+
+3. **Cross-document diagnostic dedup is out of scope**, filed for eventual
+   review as **`bd-k2ox4tqq`** (`discovered-from` this strand). The residual
+   N-warnings-per-N-pages behavior is accepted here.
+
+4. **Split the field loop** so unknown-field typos keep erroring on every call.
+
+5. **Keep warning on the other `UNSUPPORTED_FIELDS`.** `meta`/`links`/
+   `resources`/`serviceworkers`/`head` genuinely change output, so the warning is
+   honest. `version` leaves the set because we are implementing it — explicitly
+   *not* because ignoring it is acceptable. We do not want to encourage authors
+   to strip a field their Q1 projects use for good reason.
 
 ## Issue context
 
@@ -122,6 +158,22 @@ as in q2. The version suffix is a *naming* convention, nothing more. Any argumen
 for implementing `version` should rest on path parity, not on collision-avoidance
 — the collision-avoidance benefit does not exist upstream.
 
+> **Amended after the 2026-08-14 design discussion.** The conclusion above is
+> correct about Q1 and wrong about what it implies for q2. Q1's intra-render
+> dedup is by name, so *within one render* two versions cannot coexist — but the
+> case `version` actually serves is **across renders**, under `freeze`: an old
+> frozen page keeps pointing at `foo-1.0.0/` while a freshly rendered page
+> points at `foo-2.0.0/`, and both directories must survive in `_site`. Q1's
+> name-only dedup does not defeat that, because the two registrations happen in
+> different render invocations.
+>
+> The practical consequence for us is the opposite of what this finding first
+> suggested: **q2 should not copy Q1's name-only dedup into the versioned
+> world.** Wherever a key would collapse two versions into one — the Lua-side
+> dedup scan (`quarto_doc.rs:252-262`) and the artifact key
+> (`dependency.rs:50,78`) — we have to decide deliberately whether version
+> participates. See open question 1.
+
 ### Finding 3 — full path parity is a two-part change, not one
 
 Q1's target directory (`pandoc-dependencies-html.ts:388-403`) is
@@ -172,67 +224,89 @@ implementation detail.
 
 ## Proposed phases (draft)
 
-Skeleton only — contents wait on the design discussion, and Phase 2's existence
-depends on question 1.
+Phase 2's internals still hinge on the one open question below; everything else
+is settled.
 
 - **Phase 0 — Test plan (TDD, failing first).**
-  - Unit: two `add_html_dependency` calls with the same name emit exactly one
-    Q-11-1 (currently two).
-  - Unit: unknown field still errors on a *repeat* call (pins Finding 5).
+  - Unit: two `add_html_dependency` calls for the same dependency emit exactly
+    one Q-11-1 for an unsupported field (currently two).
+  - Unit: an unknown field still errors on a *repeat* call (pins decision 4).
+  - Unit: `version` no longer warns at all.
+  - Unit: a versioned dep lands at the versioned path; an unversioned dep keeps
+    `libs/{name}/`.
+  - Unit: two versions of the same name (the freeze case) do not collapse into
+    one artifact — *exact assertion depends on open question 1*.
   - End-to-end via the committed repro through `render_document_to_file`, per
-    CLAUDE.md's end-to-end rule — one warning, not two.
-- **Phase 1 — Fix the per-call warning** (`quarto_doc.rs`): split the field loop
-  per Finding 5. Small, self-contained, correct regardless of question 1.
-- **Phase 2 — `version` handling** — *shape depends entirely on question 1*:
-  - (A) honor it in the path: `HtmlDependency.version`, thread through
-    `extract_html_dependencies`, change `dependency.rs:51,79`;
-  - (B) accept silently: drop `"version"` from `UNSUPPORTED_FIELDS`, no warning,
-    no path change;
-  - (C) leave unimplemented and keep the (now-deduped) warning.
-- **Phase 3 (conditional) — cross-document diagnostic dedup.** Only if question 3
-  says the N-warnings-per-N-pages residue matters. New infrastructure; would be
-  its own strand.
-- **Phase 4 — Docs + close-out.** Update `dependency.rs`'s doc-comment (it
-  currently mis-attributes `libs/{name}/` to Q1 for extension deps); tell the
-  connect-docs side to drop the `Q-11-1: level: off` suppression.
+    CLAUDE.md's end-to-end rule: zero warnings, asset at the versioned path.
+- **Phase 1 — Split the field loop** (`quarto_doc.rs:230-262`): unknown-field
+  hard error stays *before* the dedup early-return; the unsupported-field warning
+  moves *after* it. Self-contained and independent of Phase 2.
+- **Phase 2 — Implement `version`.**
+  - Drop `"version"` from `UNSUPPORTED_FIELDS` (`quarto_doc.rs:56-63`); add it to
+    `SUPPORTED_FIELDS`.
+  - Add `version: Option<String>` to `HtmlDependency` (`quarto_doc.rs:27-31`),
+    store it in the Lua entry (`quarto_doc.rs:269-285`), read it back in
+    `extract_html_dependencies` (`quarto_doc.rs:364-396`).
+  - Version-aware artifact path and key in `dependency.rs:50-51,78-79`.
+  - Resolve the dedup key per open question 1.
+- **Phase 3 — Docs + close-out.** Fix `dependency.rs`'s doc-comment (it currently
+  attributes `libs/{name}/` to "Quarto 1's `libs/` convention", which holds for
+  built-in deps but not Lua-registered ones — see Finding 3); document `version`
+  wherever the `quarto.doc` Lua API is described; tell the connect-docs side to
+  drop the `Q-11-1: level: off` suppression.
+
+Cross-document diagnostic dedup is **not** a phase here — filed as `bd-k2ox4tqq`.
 
 ## Open design questions for the user
 
-1. **Is the unversioned `libs/{name}/` layout deliberate, and does `version`
-   change it?** Given Finding 2 (Q1's version suffix buys naming, not
-   collision-avoidance) and Finding 3 (true parity also needs `quarto-contrib/`,
-   which q2 lacks entirely), my recommendation is **(B): accept `version`
-   silently and ignore it** — it removes the warning at the source, costs almost
-   nothing, and avoids committing to a path change whose only benefit is cosmetic
-   parity. Do you want (A) full path parity, (B) silent accept, or (C) keep the
-   warning?
+Questions 2–5 from the original investigation are answered in § Decisions. What
+remains is one question the freeze rationale opened up, plus a layout detail.
 
-2. **If not (B), should `quarto-contrib/` be introduced at all?** Adopting the
-   version suffix without it produces `libs/{name}-{version}/` — a layout neither
-   Q1 nor q2 has today. Is a third layout acceptable, or is it (A) all the way to
-   `quarto-contrib/{name}-{version}/`, or nothing?
+1. **Does `version` participate in the dedup keys, or only in the path?** This is
+   the question decision 1 forces and Finding 2's amendment sets up. Two keys are
+   involved:
 
-3. **Does the residual N-warnings-per-N-pages flood matter?** Under (C) the
-   reorder still leaves 14 warnings for the Connect docs. Is that acceptable, or
-   should cross-document diagnostic dedup be filed as its own strand? (It is
-   new infrastructure; I would not fold it into this fix.)
+   - **The Lua-side dedup scan** (`quarto_doc.rs:252-262`), currently
+     `name`-only. Keying on `(name, version)` would let one document register two
+     versions of the same dependency and inject *both* into the page — which for
+     a JS library is usually a bug, not a feature. Keying on `name` alone keeps
+     Q1's first-wins behavior within a document.
+   - **The artifact key** (`dependency.rs:50,78`), currently
+     `js:{name}:{filename}`. This one **must** gain the version, or two renders
+     that produce different versions collapse onto one artifact and the freeze
+     case is lost — which is the whole point of decision 1.
 
-4. **Finding 5 — split the loop or move it wholesale?** I recommend splitting so
-   unknown-field typos keep erroring on every call. Confirm, or say you'd rather
-   have the simpler wholesale move.
+   My recommendation: **`name`-only for the intra-document Lua dedup, `(name,
+   version)` for the artifact key.** They serve different purposes — the first
+   prevents double-injection on one page, the second preserves coexistence across
+   renders — and freeze needs only the second. A same-name-different-version
+   collision *within* one document is then still first-wins; I'd suggest we
+   additionally warn on it, since it is almost certainly a mistake. Confirm, or
+   tell me you want both keys versioned.
 
-5. **Should the other `UNSUPPORTED_FIELDS` get the same treatment?**
-   `meta`/`links`/`resources`/`serviceworkers`/`head` warn per call through the
-   identical code path, so Phase 1 fixes them all for free — but if (B) wins for
-   `version`, is there an argument for it applying to any of the others? (I think
-   no: those genuinely change output, so a warning is honest. `version` is the
-   odd one out because ignoring it is invisible.)
+2. **Which versioned layout?** Decision 2 frees us from `quarto-contrib/`, so the
+   realistic candidates are `libs/{name}-{version}/{file}` (Q1's naming, flat) or
+   `libs/{name}/{version}/{file}` (nested). I lean **nested**: it groups a
+   dependency's versions under one directory, which reads better when freeze
+   starts leaving several of them around, and it avoids the mild ambiguity of a
+   dash-joined name+version when the name itself contains dashes. Unversioned
+   deps keep `libs/{name}/{file}` either way — which also keeps the existing
+   smoke-all fixture green
+   (`crates/quarto/tests/smoke-all/extensions/quarto-doc-api-extension/test.qmd:10,15`,
+   whose dep declares no version). Nested or flat?
 
 ## Risks / tradeoffs (draft)
 
-- **(A) is a silent path change for existing sites.** Any project whose extension
-  passes `version` would see its assets move directories on upgrade. Nothing in
-  q2 pins those paths, but user content might reference them.
+- **Assets move for any project that passes `version`.** Accepted under decision
+  2 — q2 promises nothing about `_site` internals, and doing this before `freeze`
+  exists is strictly cheaper than doing it after.
+- **We are building a hook for a system that does not exist yet.** `freeze` is
+  the justification for `version`, and its design (portable execution-output
+  format, likely `.ipynb`-based) is not settled. The risk is that this lands a
+  layout freeze later wants shaped differently. Mitigated by the same fact that
+  makes it cheap now: no longevity promise, so freeze can move it again. Worth
+  stating plainly so the eventual freeze design knows it inherited a decision it
+  did not make — this plan is the record of why the field is honored at all.
 - **Q-11-1's genericity limits any per-code mitigation.** Suppression and any
   future per-code dedup are blunt for this diagnostic (Finding 4); worth
   remembering if question 3 goes toward infrastructure. Giving this warning its
