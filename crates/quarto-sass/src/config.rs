@@ -102,19 +102,50 @@ pub struct ThemeConfig {
     /// [`ThemeConfig::resolve`].
     pub brand_ref: Option<BrandRef>,
 
-    /// Set when the configuration used the `theme: {light: …, dark: …}`
-    /// map form **and** a `dark:` entry was present: the interim
-    /// behavior (bd-o76p01wb) honors only the `light:` half, and this
-    /// field carries the source location of the ignored `dark:` key so
-    /// the caller can emit a user-visible warning (Q-14-3) pointing at
-    /// it. `None` when the theme was not a map or the map had no
-    /// `dark:` entry (a light-only map is fully honored — nothing is
-    /// ignored, so nothing to warn about).
+    /// The dark half of a `theme: {light: …, dark: …}` map, parsed and
+    /// ready for a dark-variant compilation. `None` when the theme was
+    /// not a map or the map had no `dark:` entry (a light-only map is
+    /// an honored, if redundant, spelling of the plain form).
     ///
-    /// quarto-sass itself stays diagnostics-free: this is data, not a
-    /// side channel. `CompileThemeCssStage` turns it into the actual
-    /// diagnostic.
-    pub dark_theme_ignored: Option<SourceInfo>,
+    /// The fields of [`ThemeConfig`] itself always describe the light
+    /// variant; options that apply to the whole configuration
+    /// (`minified`, `title_block_layer`, `brand_ref`) are not
+    /// duplicated here.
+    pub dark: Option<DarkThemeConfig>,
+}
+
+/// The parsed `dark:` half of a `theme: {light: …, dark: …}` pair
+/// (bd-0pic6 light/dark epic, phase A1).
+///
+/// Mirrors the variant-specific subset of [`ThemeConfig`]: its own
+/// spec list, per-entry locations, and `none`-sentinel flag.
+#[derive(Debug, Clone, Default)]
+pub struct DarkThemeConfig {
+    /// Theme specifications for the dark variant. Empty means default
+    /// Bootstrap (no Bootswatch customization) — e.g. `{dark: none}`
+    /// sets `suppress_bootstrap` instead.
+    pub themes: Vec<ThemeSpec>,
+
+    /// Source location of each entry in `themes`, parallel by index
+    /// (same contract as [`ThemeConfig::theme_locations`]).
+    pub theme_locations: Vec<Option<SourceInfo>>,
+
+    /// The dark half used the `none` sentinel (`{…, dark: none}`):
+    /// no Bootstrap output for the dark variant.
+    pub suppress_bootstrap: bool,
+
+    /// Whether dark is the *author-default* variant: true when the
+    /// `dark:` key is written before `light:` in the map (or is the
+    /// only key). This is Q1's key-order rule
+    /// (`format-html-info.ts::darkModeDefaultMetadata`: the first key
+    /// of the map decides). Drives the emitted stylesheet order and
+    /// the toggle's initial state.
+    pub is_default: bool,
+
+    /// Location of the `dark:` key itself, for diagnostics that need
+    /// to point at the dark half as a whole (e.g. the interim Q-14-3
+    /// warning while dual compilation is not yet wired).
+    pub key_location: Option<SourceInfo>,
 }
 
 /// Resolved form of [`ThemeConfig`] with the brand file loaded and
@@ -132,6 +163,11 @@ pub struct ResolvedThemeConfig {
     /// Directory the brand file was loaded from (for resolving
     /// relative `@font-face` URLs). `None` when brand was inline.
     pub brand_dir: Option<PathBuf>,
+    /// The dark variant, carried through unchanged from
+    /// [`ThemeConfig::dark`]. (The brand is resolved once and shared
+    /// by both variants until the brand light/dark seam lands —
+    /// bd-ld-c-brand-seam-wef8ww3n.)
+    pub dark: Option<DarkThemeConfig>,
 }
 
 impl ThemeConfig {
@@ -145,7 +181,7 @@ impl ThemeConfig {
             suppress_bootstrap: false,
             title_block_layer: true,
             brand_ref: None,
-            dark_theme_ignored: None,
+            dark: None,
         }
     }
 
@@ -161,7 +197,7 @@ impl ThemeConfig {
             suppress_bootstrap: false,
             title_block_layer: true,
             brand_ref: None,
-            dark_theme_ignored: None,
+            dark: None,
         }
     }
 
@@ -172,11 +208,10 @@ impl ThemeConfig {
     /// - String: single theme name or path (e.g., `"cosmo"`, `"custom.scss"`)
     /// - Array: multiple themes to layer (e.g., `["cosmo", "custom.scss"]`)
     /// - Map with only `light:`/`dark:` keys (Q1's dual-theme form):
-    ///   the `light:` half is parsed like a top-level theme value; the
-    ///   `dark:` half is **ignored** for now, its location recorded on
-    ///   [`ThemeConfig::dark_theme_ignored`] so the caller can warn
-    ///   (Q-14-3). Interim behavior per bd-o76p01wb; full dual-theme
-    ///   support is bd-0pic6.
+    ///   each half is parsed like a top-level theme value; the light
+    ///   half fills the top-level fields, the dark half becomes
+    ///   [`ThemeConfig::dark`] (with the key-order rule deciding
+    ///   [`DarkThemeConfig::is_default`]).
     /// - Null/absent: use default Bootstrap theme
     ///
     /// # Arguments
@@ -211,18 +246,29 @@ impl ThemeConfig {
             None => Self::default_bootstrap(),
             Some(value) => match light_dark_pair(value) {
                 Some(pair) => {
-                    // The pair form is top-level only: the light half
-                    // goes through the same value parsing as a plain
+                    // The pair form is top-level only: each half goes
+                    // through the same value parsing as a plain
                     // `theme:` (string / array / null / `none`
                     // sentinel), where a nested map is invalid.
                     let mut cfg = match pair.light {
                         Some(light_value) => Self::from_theme_value(light_value)?,
                         // Only `dark:` configured → default Bootstrap
-                        // for the rendered (light) page; the warning
-                        // still fires so the degradation is visible.
+                        // for the light variant.
                         None => Self::default_bootstrap(),
                     };
-                    cfg.dark_theme_ignored = pair.dark_ignored;
+                    cfg.dark = match pair.dark {
+                        Some((dark_value, key_source)) => {
+                            let dark_cfg = Self::from_theme_value(dark_value)?;
+                            Some(DarkThemeConfig {
+                                themes: dark_cfg.themes,
+                                theme_locations: dark_cfg.theme_locations,
+                                suppress_bootstrap: dark_cfg.suppress_bootstrap,
+                                is_default: pair.dark_first,
+                                key_location: Some(key_source),
+                            })
+                        }
+                        None => None,
+                    };
                     cfg
                 }
                 None => Self::from_theme_value(value)?,
@@ -236,27 +282,42 @@ impl ThemeConfig {
         // the layer's presence in the bundle.
         result.title_block_layer = title_block_layer_enabled(config);
 
-        // `theme: none` is mutually exclusive with brand — Q1 would
-        // produce no Bootstrap output anyway, so we mirror that by
-        // dropping the brand_ref. The user intent ("don't generate
-        // Bootstrap CSS") wins.
-        if result.suppress_bootstrap {
+        // `theme: none` is mutually exclusive with brand, per variant —
+        // Q1 would produce no Bootstrap output anyway, so we mirror
+        // that by dropping the brand_ref when *every* configured
+        // variant suppresses Bootstrap. The user intent ("don't
+        // generate Bootstrap CSS") wins.
+        let all_variants_suppressed =
+            result.suppress_bootstrap && result.dark.as_ref().is_none_or(|d| d.suppress_bootstrap);
+        if all_variants_suppressed {
             return Ok(result);
         }
 
-        let has_brand_token = result.themes.iter().any(ThemeSpec::is_brand);
-        match (brand_ref, has_brand_token) {
-            (Some(br), false) => {
-                // Auto-inject brand at the end of the theme list.
+        let light_has_token = result.themes.iter().any(ThemeSpec::is_brand);
+        let dark_has_token = result
+            .dark
+            .as_ref()
+            .is_some_and(|d| d.themes.iter().any(ThemeSpec::is_brand));
+        match brand_ref {
+            Some(br) => {
                 result.brand_ref = Some(br);
-                result.themes.push(ThemeSpec::Brand);
-                result.theme_locations.push(None);
+                // Auto-inject the position marker at the end of each
+                // variant's list that doesn't already name it (and
+                // isn't suppressed). Q1 splices brand into light and
+                // dark independently.
+                if !result.suppress_bootstrap && !light_has_token {
+                    result.themes.push(ThemeSpec::Brand);
+                    result.theme_locations.push(None);
+                }
+                if let Some(dark) = result.dark.as_mut()
+                    && !dark.suppress_bootstrap
+                    && !dark_has_token
+                {
+                    dark.themes.push(ThemeSpec::Brand);
+                    dark.theme_locations.push(None);
+                }
             }
-            (Some(br), true) => {
-                // Token already present at user-specified position.
-                result.brand_ref = Some(br);
-            }
-            (None, true) => {
+            None if light_has_token || dark_has_token => {
                 return Err(SassError::InvalidThemeConfig {
                     message: "`theme:` contains `brand` but no `_brand.yml` was configured \
                               via the `brand:` key"
@@ -264,7 +325,7 @@ impl ThemeConfig {
                     location: config.get("theme").map(|v| v.source_info.clone()),
                 });
             }
-            (None, false) => {}
+            None => {}
         }
 
         Ok(result)
@@ -290,7 +351,7 @@ impl ThemeConfig {
                 suppress_bootstrap: true,
                 title_block_layer: true,
                 brand_ref: None,
-                dark_theme_ignored: None,
+                dark: None,
             });
         }
         let located = extract_theme_specs(value)?;
@@ -305,7 +366,7 @@ impl ThemeConfig {
             suppress_bootstrap: false,
             title_block_layer: true,
             brand_ref: None,
-            dark_theme_ignored: None,
+            dark: None,
         })
     }
 
@@ -365,6 +426,7 @@ impl ThemeConfig {
             suppress_bootstrap: self.suppress_bootstrap,
             brand,
             brand_dir,
+            dark: self.dark,
         })
     }
 
@@ -413,7 +475,7 @@ pub fn resolve_brand(
         suppress_bootstrap: false,
         title_block_layer: true,
         brand_ref: Some(brand_ref),
-        dark_theme_ignored: None,
+        dark: None,
     }
     .resolve(runtime, base_dir)?;
 
@@ -622,10 +684,13 @@ fn brand_err(e: quarto_brand::BrandError) -> SassError {
 struct LightDarkPair<'a> {
     /// The `light:` entry's value, if present.
     light: Option<&'a ConfigValue>,
-    /// Location of the `dark:` key, if present — recorded on
-    /// [`ThemeConfig::dark_theme_ignored`] so the caller's Q-14-3
-    /// warning points at the ignored entry.
-    dark_ignored: Option<SourceInfo>,
+    /// The `dark:` entry's value and its key's location, if present.
+    dark: Option<(&'a ConfigValue, SourceInfo)>,
+    /// Whether `dark:` is the map's first key (or its only key) —
+    /// Q1's key-order rule for the author-default variant
+    /// (`format-html-info.ts::darkModeDefaultMetadata`). Meaningful
+    /// only when `dark` is `Some`.
+    dark_first: bool,
 }
 
 /// Detect Q1's dual-theme pair form: a **non-empty** map whose keys
@@ -640,10 +705,11 @@ fn light_dark_pair(value: &ConfigValue) -> Option<LightDarkPair<'_>> {
     }
     Some(LightDarkPair {
         light: entries.iter().find(|e| e.key == "light").map(|e| &e.value),
-        dark_ignored: entries
+        dark: entries
             .iter()
             .find(|e| e.key == "dark")
-            .map(|e| e.key_source.clone()),
+            .map(|e| (&e.value, e.key_source.clone())),
+        dark_first: entries.first().is_some_and(|e| e.key == "dark"),
     })
 }
 
@@ -1330,14 +1396,14 @@ mod tests {
         }
     }
 
-    // === Light/dark theme map tests (bd-o76p01wb interim) ===
+    // === Light/dark theme map tests (bd-0pic6 epic, phase A1) ===
     //
-    // Q1's `theme: {light: […], dark: […]}` map form. Interim
-    // behavior: the `light:` half is honored (string or array), the
-    // `dark:` half is ignored with its location recorded on
-    // `ThemeConfig::dark_theme_ignored` so the pipeline can warn
-    // (Q-14-3). Maps with keys other than `light`/`dark` stay
-    // Q-14-1 errors.
+    // Q1's `theme: {light: […], dark: […]}` map form. Both halves are
+    // parsed: the light half fills the top-level fields, the dark half
+    // becomes `ThemeConfig::dark` (specs, per-entry locations, `none`
+    // sentinel, key-order `is_default`, and the `dark:` key's own
+    // location for diagnostics). Maps with keys other than
+    // `light`/`dark` stay Q-14-1 errors.
 
     /// Compact scalar ConfigValue builder for map-form tests.
     fn scalar_value(s: &str) -> ConfigValue {
@@ -1381,10 +1447,11 @@ mod tests {
     }
 
     #[test]
-    fn test_theme_map_light_dark_uses_light_half() {
-        // The canonical posit-docs shape: both halves are lists. Only
-        // the light list becomes theme specs; the dark entry's key
-        // location is recorded for the warning.
+    fn test_theme_map_light_dark_parses_both_halves() {
+        // The canonical shape: both halves are lists. The light list
+        // becomes the top-level specs; the dark list is parsed into
+        // `ThemeConfig::dark` with per-entry locations and the dark
+        // key's own location for diagnostics.
         let dark_key_source = SourceInfo::original(quarto_source_map::FileId(9), 40, 44);
         let theme_value = map_value(vec![
             map_entry("light", array_value(&["custom.scss", "cosmo"])),
@@ -1406,11 +1473,22 @@ mod tests {
         );
         assert!(theme_config.themes[1].is_builtin());
         assert!(!theme_config.suppress_bootstrap);
+        let dark = theme_config.dark.as_ref().expect("dark half parsed");
         assert_eq!(
-            theme_config.dark_theme_ignored.as_ref(),
+            dark.key_location.as_ref(),
             Some(&dark_key_source),
-            "dark_theme_ignored should carry the dark entry's key source",
+            "dark.key_location should carry the dark entry's key source",
         );
+        assert_eq!(dark.themes.len(), 1, "dark half spec list parsed");
+        assert!(dark.themes[0].is_custom());
+        assert_eq!(
+            dark.themes[0].as_custom().and_then(|p| p.to_str()),
+            Some("dark.scss")
+        );
+        assert_eq!(dark.theme_locations.len(), 1);
+        assert!(dark.theme_locations[0].is_some());
+        assert!(!dark.suppress_bootstrap);
+        assert!(!dark.is_default, "light listed first ⇒ light is default");
     }
 
     #[test]
@@ -1423,7 +1501,7 @@ mod tests {
 
         assert_eq!(theme_config.themes.len(), 1);
         assert!(theme_config.themes[0].is_builtin());
-        assert!(theme_config.dark_theme_ignored.is_none());
+        assert!(theme_config.dark.is_none());
     }
 
     #[test]
@@ -1439,21 +1517,196 @@ mod tests {
         assert_eq!(theme_config.themes.len(), 2);
         assert!(theme_config.themes[0].is_custom());
         assert!(theme_config.themes[1].is_builtin());
-        assert!(theme_config.dark_theme_ignored.is_none());
+        assert!(theme_config.dark.is_none());
     }
 
     #[test]
-    fn test_theme_map_dark_only_defaults_with_warning() {
-        // Only `dark:` configured → default Bootstrap for the (light)
-        // rendered page, plus the warning. Bootstrap is NOT
-        // suppressed — the page still gets default styling.
+    fn test_theme_map_dark_only_defaults_light_and_is_default_dark() {
+        // Only `dark:` configured → the light variant is default
+        // Bootstrap (NOT suppressed — the page still gets default
+        // styling), the dark variant carries the spec, and dark is the
+        // author default (it is the first — only — key).
         let theme_value = map_value(vec![map_entry("dark", scalar_value("darkly"))]);
         let theme_config =
             ThemeConfig::from_config_value(&config_with_theme_value(theme_value)).unwrap();
 
         assert!(theme_config.themes.is_empty());
         assert!(!theme_config.suppress_bootstrap);
-        assert!(theme_config.dark_theme_ignored.is_some());
+        let dark = theme_config.dark.as_ref().expect("dark half parsed");
+        assert_eq!(dark.themes.len(), 1);
+        assert!(dark.themes[0].is_builtin());
+        assert!(dark.is_default, "dark-only map ⇒ dark is the default");
+    }
+
+    #[test]
+    fn test_theme_map_dark_first_is_default() {
+        // Q1's key-order rule: `{dark: …, light: …}` (dark written
+        // first) makes dark the author-default variant.
+        let theme_value = map_value(vec![
+            map_entry("dark", scalar_value("darkly")),
+            map_entry("light", scalar_value("cosmo")),
+        ]);
+        let theme_config =
+            ThemeConfig::from_config_value(&config_with_theme_value(theme_value)).unwrap();
+
+        assert_eq!(theme_config.themes.len(), 1);
+        assert!(theme_config.themes[0].is_builtin());
+        let dark = theme_config.dark.as_ref().expect("dark half parsed");
+        assert!(dark.is_default, "dark listed first ⇒ dark is default");
+        assert_eq!(dark.themes.len(), 1);
+        assert!(dark.themes[0].is_builtin());
+    }
+
+    #[test]
+    fn test_theme_map_dark_none_suppresses_dark_bootstrap() {
+        // The `none` sentinel is honored inside the dark half, per
+        // variant: the light variant compiles normally, the dark
+        // variant suppresses Bootstrap.
+        let theme_value = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("none")),
+        ]);
+        let theme_config =
+            ThemeConfig::from_config_value(&config_with_theme_value(theme_value)).unwrap();
+
+        assert!(!theme_config.suppress_bootstrap);
+        assert_eq!(theme_config.themes.len(), 1);
+        let dark = theme_config.dark.as_ref().expect("dark half parsed");
+        assert!(dark.suppress_bootstrap);
+        assert!(dark.themes.is_empty());
+    }
+
+    #[test]
+    fn test_theme_map_light_none_dark_still_parsed() {
+        // `{light: none, dark: darkly}`: suppression is per-variant.
+        // The light half suppresses Bootstrap; the dark half still
+        // carries its spec for the dark compile.
+        let theme_value = map_value(vec![
+            map_entry("light", scalar_value("none")),
+            map_entry("dark", scalar_value("darkly")),
+        ]);
+        let theme_config =
+            ThemeConfig::from_config_value(&config_with_theme_value(theme_value)).unwrap();
+
+        assert!(theme_config.suppress_bootstrap);
+        assert!(theme_config.themes.is_empty());
+        let dark = theme_config.dark.as_ref().expect("dark half parsed");
+        assert!(!dark.suppress_bootstrap);
+        assert_eq!(dark.themes.len(), 1);
+        assert!(dark.themes[0].is_builtin());
+    }
+
+    #[test]
+    fn test_theme_map_nested_map_in_dark_errors() {
+        // The pair form is top-level only; a nested map inside `dark:`
+        // is invalid, same as inside `light:`.
+        let inner = map_value(vec![map_entry("dark", scalar_value("darkly"))]);
+        let theme_value = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", inner),
+        ]);
+        match ThemeConfig::from_config_value(&config_with_theme_value(theme_value)) {
+            Err(SassError::InvalidThemeConfig { .. }) => {}
+            other => panic!("expected InvalidThemeConfig error, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_theme_map_unknown_dark_theme_errors() {
+        // The dark half goes through the same spec parsing as the
+        // light half — unknown names error rather than being ignored.
+        let theme_value = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("nosuchtheme")),
+        ]);
+        match ThemeConfig::from_config_value(&config_with_theme_value(theme_value)) {
+            Err(SassError::UnknownTheme { name, .. }) => assert_eq!(name, "nosuchtheme"),
+            other => panic!("expected UnknownTheme error, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_theme_map_dark_pandoc_inlines_scalar() {
+        // Frontmatter path: pampa parses `dark: darkly` as
+        // PandocInlines. The dark half must go through the same text
+        // extraction as the light half.
+        use quarto_pandoc_types::inline::{Inline, Str};
+        let str_node = Inline::Str(Str {
+            text: "darkly".to_string(),
+            source_info: SourceInfo::for_test(),
+        });
+        let dark_value = ConfigValue::new_inlines(vec![str_node], SourceInfo::for_test());
+        let theme_value = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", dark_value),
+        ]);
+
+        let theme_config =
+            ThemeConfig::from_config_value(&config_with_theme_value(theme_value)).unwrap();
+        let dark = theme_config.dark.as_ref().expect("dark half parsed");
+        assert_eq!(dark.themes.len(), 1);
+        assert!(dark.themes[0].is_builtin());
+    }
+
+    #[test]
+    fn test_theme_map_dark_brand_token_without_brand_errors() {
+        // Naming `brand` in the dark list without a `brand:` key is an
+        // error, same as in the light list.
+        let theme_value = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", array_value(&["darkly", "brand"])),
+        ]);
+        match ThemeConfig::from_config_value(&config_with_theme_value(theme_value)) {
+            Err(SassError::InvalidThemeConfig { message, .. }) => {
+                assert!(message.contains("brand"), "message: {message}");
+            }
+            other => panic!("expected InvalidThemeConfig error, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_theme_map_explicit_brand_token_position_in_dark() {
+        // An explicit `brand` token in the dark list controls the
+        // brand layers' position in the dark variant; the light list
+        // (without a token) still gets the auto-injected marker at the
+        // end.
+        let theme_value = map_value(vec![
+            map_entry("light", array_value(&["cosmo"])),
+            map_entry("dark", array_value(&["brand", "darkly"])),
+        ]);
+        let config = map_value(vec![
+            map_entry("theme", theme_value),
+            map_entry("brand", scalar_value("_brand.yml")),
+        ]);
+
+        let theme_config = ThemeConfig::from_config_value(&config).unwrap();
+        assert!(theme_config.brand_ref.is_some());
+        assert_eq!(theme_config.themes.len(), 2);
+        assert!(theme_config.themes[0].is_builtin());
+        assert!(theme_config.themes[1].is_brand(), "auto-injected in light");
+        let dark = theme_config.dark.as_ref().expect("dark half parsed");
+        assert_eq!(dark.themes.len(), 2);
+        assert!(dark.themes[0].is_brand(), "explicit token keeps position");
+        assert!(dark.themes[1].is_builtin());
+    }
+
+    #[test]
+    fn test_resolve_carries_dark_through() {
+        // ThemeConfig::resolve must not drop the dark half — the
+        // compile stage consumes the resolved form.
+        let theme_value = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("darkly")),
+        ]);
+        let theme_config =
+            ThemeConfig::from_config_value(&config_with_theme_value(theme_value)).unwrap();
+        let runtime = quarto_system_runtime::NativeRuntime::new();
+        let resolved = theme_config
+            .resolve(&runtime, Path::new("."))
+            .expect("resolve without brand does no I/O");
+        let dark = resolved.dark.as_ref().expect("dark half carried through");
+        assert_eq!(dark.themes.len(), 1);
+        assert!(dark.themes[0].is_builtin());
     }
 
     #[test]
@@ -1509,9 +1762,10 @@ mod tests {
     }
 
     #[test]
-    fn test_theme_map_with_brand_auto_injects_into_light() {
+    fn test_theme_map_with_brand_auto_injects_into_both_halves() {
         // brand auto-inject composes with the map form: the Brand
-        // token is appended to the honored (light) spec list.
+        // token is appended to each variant's spec list (Q1 splices
+        // brand into light and dark independently).
         let theme_value = map_value(vec![
             map_entry("light", array_value(&["cosmo"])),
             map_entry("dark", array_value(&["darkly"])),
@@ -1526,7 +1780,10 @@ mod tests {
         assert!(theme_config.themes[0].is_builtin());
         assert!(theme_config.themes[1].is_brand());
         assert!(theme_config.brand_ref.is_some());
-        assert!(theme_config.dark_theme_ignored.is_some());
+        let dark = theme_config.dark.as_ref().expect("dark half parsed");
+        assert_eq!(dark.themes.len(), 2);
+        assert!(dark.themes[0].is_builtin());
+        assert!(dark.themes[1].is_brand(), "auto-injected in dark too");
     }
 
     #[test]

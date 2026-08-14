@@ -378,14 +378,20 @@ impl PipelineStage for CompileThemeCssStage {
         };
 
         // Interim light/dark degradation (bd-o76p01wb): the parser
-        // accepted a `theme: {light: …, dark: …}` map but only the
-        // light half is honored. Make the degradation loud — one
-        // Q-14-3 *warning* per document, anchored at the ignored
-        // `dark:` key. Emitted here (not in `BootstrapJsStage`, which
-        // parses the same config) so each document warns exactly once;
-        // the CLI's source-location coalescer collapses repeats across
-        // documents that share the offending config file.
-        if let Some(dark_loc) = &theme_config.dark_theme_ignored {
+        // accepts and fully parses the `theme: {light: …, dark: …}`
+        // map, but this stage compiles only the light half until dual
+        // compilation lands (bd-ld-a2-dual-compile-ds10l5wa, which
+        // retires this warning). Make the degradation loud — one
+        // Q-14-3 *warning* per document, anchored at the `dark:` key.
+        // Emitted here (not in `BootstrapJsStage`, which parses the
+        // same config) so each document warns exactly once; the CLI's
+        // source-location coalescer collapses repeats across documents
+        // that share the offending config file.
+        if let Some(dark_loc) = theme_config
+            .dark
+            .as_ref()
+            .and_then(|d| d.key_location.as_ref())
+        {
             ctx.add_diagnostic(
                 quarto_error_reporting::DiagnosticMessageBuilder::warning(
                     "Dark theme variant not yet supported",

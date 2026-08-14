@@ -389,10 +389,20 @@ A-lane is a `blocks` chain (A1→A2→A3→A4→A5) and is the time-sensitive
 `format: html` + website lane; B and C block on A2; D and E block on A5.
 Integration branch: `feature/light-dark-theme` (created off `main`).
 
-- [ ] **A1 — data model** (D2): `bd-ld-a1-data-model-a12bhj1g`. `DarkTheme` in
-  `ThemeConfig`, both halves parsed, Q-14-3 retired, semantics matrix tests
-  (incl. `none` per-variant, key-order default-dark, order preservation through
-  config merge).
+- [x] **A1 — data model** (D2): `bd-ld-a1-data-model-a12bhj1g`. **Done
+  2026-08-14.** `DarkThemeConfig {themes, theme_locations, suppress_bootstrap,
+  is_default, key_location}` on `ThemeConfig::dark` (replacing
+  `dark_theme_ignored`); both halves parsed via `from_theme_value`; per-variant
+  `none` semantics; brand token auto-injected into both halves (explicit token
+  position honored per-variant; brand-token-without-brand errors for either
+  half); key-order `is_default` rule + two quarto-config materialize tests
+  guarding key-order preservation through the merge; `ResolvedThemeConfig`
+  carries `dark`. TDD: 10 new/extended unit tests confirmed red first.
+  **Deliberate deferrals to A2** (so A1 has zero behavior change): Q-14-3
+  still fires (now keyed off `dark.key_location`; retire when the dark half
+  actually compiles), `bootstrap_js` predicate unchanged (updates when dark
+  CSS ships), interim integration tests in `theme_light_dark.rs` unchanged
+  (they invert in A2).
 - [ ] **A2 — dual compile + artifacts** (D3, D1a): `bd-ld-a2-dual-compile-ds10l5wa`.
   Second compile, keys/paths/cache, darkness sentinel, `color-scheme` emission
   per variant, update single-artifact consumers, parity tests. (related:
