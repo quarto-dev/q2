@@ -1,0 +1,151 @@
+# Website TOC title uses `toc-title-document` instead of `toc-title-website` (bd-website-toc-title-wn80ymab)
+
+**Date:** 2026-08-14
+**Braid:** bd-website-toc-title-wn80ymab (bug, p3, label `toc`)
+**Branch:** investigated on `main` @ `094c0a80` (no worktree created — see "Where this should land")
+**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+
+## Triage verdict
+
+**Ready to design.** The diagnosis in the strand is correct and confirmed at HEAD; the localized data is already shipped; the fix is a two-line key selection in one transform. The only genuinely open questions are *which predicate* gates the key choice — Q1 gates on three conditions, and the strand's suggested source (`ast.meta`) is the weakest of the available options.
+
+## Pre-flight state at HEAD
+
+`cargo xtask verify --skip-hub-build` on `main` @ `094c0a80`: build clean, **11259/12063 tests passed, 1 failed** —
+`quarto-preview::integration config_endpoint::config_reports_embedded_asset_manifest_hashes`
+("a real embedded viewer dist must advertise assets.viewer", `config_endpoint.rs:311`).
+
+Diagnosed as **local build-artifact state, not a code regression, and unrelated to this strand**:
+`q2-preview-spa/dist/` exists and is non-placeholder (so the test takes its strict `else` branch)
+but contains no `viewer/` subdirectory and no manifest file — the artifacts the skipped
+hub-build leg would produce. The test arrived recently with `f366cb5d` ("preview: SPA asset
+manifest + config handshake", bd-ee2fqm95), so this checkout's dist simply predates the
+manifest it now asserts on. No strand filed: CI runs the full build, so I can't tell from here
+whether `verify --skip-hub-build` is self-inconsistent in general or just against this stale
+dist. Flagging for the user rather than guessing.
+
+Nothing in this investigation changed code, so no failure here is attributable to it.
+
+## Issue context
+
+Filed 2026-08-14 by Carlos Scheidegger (same day as this investigation — no staleness risk). Priority 3, type bug, label `toc`.
+
+On a website project, q2 renders the page-TOC heading as "Table of contents" where Q1 renders "On this page". Q1's language catalog carries two keys and picks by context:
+
+```yaml
+toc-title-document: "Table of contents"   # standalone documents
+toc-title-website: "On this page"         # website pages
+```
+
+q2's `TocGenerateTransform` always consults `toc-title-document`.
+
+Real-world impact: every Posit Connect docs page with a TOC (~324 of 352) shows the wrong string. The porting project currently masks it in visual-comparison sweeps with `--mask '^(On this page|Table of contents)$'`.
+
+## Dependency graph
+
+**Empty.** `braid dep list` returns no edges and `braid dep tree` shows the strand alone. No incoming `blocks` pressure, no `discovered-from` parent in this skein.
+
+The context that *would* have come from the graph is carried in the description instead, and it checks out:
+
+- **bd-llhlzd7p** (closed) — "Localization / internationalization support". Established the title precedence chain (user `toc-title` > localized term > English literal) on 2026-07-17. Confirmed: that decision simply never contemplated the website/document split.
+- **bd-toc-smart-quotes-6nro57ed** (closed) — the recent TOC-title markup work (`25866ab0`) that rewrote the same precedence block to read the user value as *inlines* rather than text. Confirmed: it did not touch the key choice, and its comment block is the one this change edits.
+- **br-website-toc-title-q8mgt5gn** — origin strand in the separate connect-docs porting skein (not in this skein, so not linkable here).
+
+Cross-skein origin plus same-day filing means the "why" is intact even without edges; no archaeology needed.
+
+## What the code looks like today
+
+All paths in the description still exist with the described shape.
+
+**The offending block** — `crates/quarto-core/src/transforms/toc_generate.rs:139-146`:
+
+```rust
+let title = ast
+    .meta
+    .get("toc-title")
+    .and_then(config_value_to_inlines)
+    .or_else(|| {
+        crate::language::LanguageTerms::from_meta(&ast.meta)
+            .and_then(|t| t.get("toc-title-document").map(plain_inlines))
+    })
+    .or_else(|| Some(plain_inlines("Table of Contents")));
+```
+
+Note the transform signature takes `_ctx: &mut RenderContext` — **currently unused**. That is the fix's lever (see below).
+
+**The localized data is present.** 34 of 36 files under `resources/language/` define `toc-title-website`; `_language.yml` itself defines it. `LanguageTerms::get` (`crates/quarto-core/src/language.rs:140`) is a free-form map lookup with no key allowlist, so `t.get("toc-title-website")` resolves with no plumbing work.
+
+**Website detection is already idiomatic in this codebase.** `ctx.project.project_kind() == ProjectKind::Website`, with precedent at `crates/quarto-core/src/transforms/website_bootstrap_icons.rs:73` and `crates/quarto-core/src/transforms/page_nav_generate.rs:62`.
+
+**What Q1 actually does** — `external-sources/quarto-cli/src/command/render/pandoc.ts:493-500`:
+
+```ts
+options.format.metadata[kTocTitle] = options.format.language[
+  (projectIsWebsite(options.project) && !projectIsBook(options.project) &&
+      isHtmlOutput(options.format.pandoc, true))
+    ? kTocTitleWebsite
+    : kTocTitleDocument
+];
+```
+
+Three conditions, and two of them matter for us:
+
+1. `projectIsWebsite && !projectIsBook` — Q1's `projectIsWebsite` returns true for books too (book extends website), hence the exclusion. **q2 needs no equivalent**: `ProjectKind::Website` and `ProjectKind::Book` are distinct variants, so `== Website` excludes books for free.
+2. `isHtmlOutput(pandoc, /* strict */ true)` — verified at `external-sources/quarto-cli/src/config/format.ts:57-74`: `strict: true` matches only `html`/`html4`/`html5` (plus dashboards) and **excludes revealjs and epub**. q2's `Format::is_html()` delegates to `is_html_based()`, which *includes* `Revealjs` (`crates/quarto-core/src/format.rs:66`). So `is_html()` is **not** the Q1-equivalent predicate — see design question 2.
+
+**Format gating is not free here.** `TocGenerateTransform` is pushed unconditionally into the pipeline (`crates/quarto-core/src/pipeline.rs:1365`), and the surrounding comment is explicit that this is deliberate: "All generates run before any renders so a future user filter or *non-HTML pipeline* sees a complete `navigation.*` subtree before rendering." So the transform genuinely does run for PDF/DOCX renders of a website project, and an unconditional website-keyed title would put "On this page" into a PDF — which Q1 would not do.
+
+**Reproducible at HEAD — confirmed end-to-end.** Repro at `/Users/cscheid/repos/github/cscheid/q2-connect-docs/llms-info/repros/website-toc-title/` (one-page website; `_site/` and `_site-q1/` both committed for comparison). Not duplicated into this repo — see "Risks" on end-to-end verification below.
+
+Rendered with a binary freshly built from `main` @ `094c0a80`:
+
+```
+$ /Users/cscheid/rooms/room-2/q2/target/debug/q2 render .
+Rendering project: …/repros/website-toc-title (type: website)
+Rendered 1 of 1 files to …/repros/website-toc-title/_site
+
+$ grep -o '<h2 id="toc-title">[^<]*</h2>' _site/index.html
+<h2 id="toc-title">Table of contents</h2>          # q2  — wrong
+
+$ grep -o '<h2 id="toc-title">[^<]*</h2>' _site-q1/index.html
+<h2 id="toc-title">On this page</h2>               # Q1  — expected
+```
+
+Output inspected directly, not inferred from exit status. Note the CLI itself reports `type: website`, confirming the project kind is resolved and available at render time — the fix's predicate is present, just unconsulted. The re-render left the repro repo byte-identical (`git status` clean), so the committed `_site/` already reflected current behavior.
+
+**Blast radius is small.** `grep -rl "Table of contents" --include="*.snap" crates/` returns **zero** snapshots. Existing `toc-title-document` assertions live in `language_resolve.rs`, `language_catalog.rs`, and `language_pipeline.rs` and test the *catalog*, not the transform's key choice — none should need to change. The transform's own test harness (`make_test_project`, `toc_generate.rs:212`) builds a `ProjectContext` with `ProjectConfig::default()`, so a website variant is a one-line `config.project_kind = ProjectKind::Website` (precedent: `page_nav_generate.rs:532`).
+
+## Proposed phases (draft)
+
+- **Phase 0 — Test plan (TDD, failing first).**
+  - Unit, `toc_generate.rs`: website project → title is the `toc-title-website` term; default project → `toc-title-document`; website + user `toc-title` → user value still wins; website + `lang: pt` → "Nesta página".
+  - Whichever format-gating answer lands (design question 2) gets its own case.
+  - One end-to-end test through `render_document_to_file` on a website fixture, per the repo's end-to-end rule — the unit tests bypass the real project-config path.
+- **Phase 1 — Key selection.** Thread the predicate through the (currently unused) `ctx` and pick the key. Update the precedence-chain comment, which is load-bearing documentation for two prior strands.
+- **Phase 2 — End-to-end verification.** `cargo run --bin q2 -- render` on the repro directory; inspect `_site/index.html` for `<h2 id="toc-title">On this page</h2>`; record the invocation + output snippet in this plan.
+- **Phase 3 — Docs.** Probably none: this restores Q1-compatible default behavior rather than adding a user-facing knob. Confirm no `docs/` page documents "Table of contents" as the website default.
+
+## Open design questions for the user
+
+1. **Detection source: `ctx.project.project_kind()` or `ast.meta`?**
+   The strand suggests reading website-ness from `ast.meta` ("website-ness is detectable there"). I'd recommend **against** it and use `ctx.project.project_kind() == ProjectKind::Website` instead. A `website:` key in merged metadata is not the same claim as "this project's type is website" — a standalone document that sets a stray `website:` key would misfire, and custom project types resolve their *base* kind into `project_kind`, so the typed check handles them correctly for free. The cost is touching the transform's currently-unused `_ctx` parameter, which seems like the right trade. Do you agree, or is there a reason the meta route was preferred?
+
+2. **Do we mirror Q1's `isHtmlOutput(…, strict = true)` gate, and how strictly?**
+   Three options, and this is the one real decision:
+   - **(a) No format gate** — website project → website title, all formats. Simplest, but a website project rendered to PDF gets "On this page", diverging from Q1.
+   - **(b) Gate on `Format::is_html()`** — one-liner, but that predicate *includes* revealjs, so a revealjs page in a website project would get "On this page" where Q1 gives it "Table of contents".
+   - **(c) Gate on `identifier == FormatIdentifier::Html`** — exactly Q1's strict semantics. Marginally more code, no new helper needed.
+   I lean **(c)** for bug-for-bug parity, since the whole point of the strand is Q1 fidelity. But (b) is defensible if you'd rather not encode a revealjs distinction nobody has asked about. Which do you want?
+
+3. **Should the English literal fallback change too?**
+   The final fallback is the hardcoded `"Table of Contents"` (note: capital C, unlike the catalog's "Table of contents"). It only fires in stage-less unit tests where no catalog is loaded. Leave it alone, or make it context-aware for symmetry? I lean leave it — it's a test-only path and changing it invites confusion about which string is canonical.
+
+4. **Where should this land?**
+   No worktree or branch was created (per this skill's contract). Given the tiny diff and empty dependency graph, a topic branch off `main` seems right rather than a worktree. Confirm, or point me at an integration line if this should ride along with other connect-docs parity work.
+
+## Risks / tradeoffs (draft)
+
+- **Low risk overall.** One transform, no snapshot churn, localized data already shipped, and the strand is same-day fresh so no staleness.
+- **The comment block is load-bearing.** The precedence-chain comment at `toc_generate.rs:122-138` documents decisions from bd-llhlzd7p and bd-toc-smart-quotes-6nro57ed and the `as_str`/`as_plain_text` trap from bd-y89ihf0i. Extend it; don't rewrite it away.
+- **End-to-end verification needs a website fixture.** The repro lives outside this repo. Per the repo's end-to-end rule, Phase 2 should either render that external directory explicitly or add a small in-repo website fixture. Slight preference for an in-repo fixture so the regression stays testable in CI, but that's a judgment call worth confirming alongside question 4.
+- **`toc-title-website` is currently unreferenced in q2 Rust code** — this change is its first consumer. Checked whether the same latent gap exists elsewhere: `grep -oE '^[a-z0-9-]+-(website|document):' resources/language/_language.yml` returns exactly `toc-title-document` and `toc-title-website`, so **`toc-title` is the catalog's only context-keyed pair**. No follow-up strand needed; this fix closes the category.
