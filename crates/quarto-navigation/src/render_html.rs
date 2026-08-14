@@ -129,6 +129,22 @@ pub fn navbar_to_html(
         }
         html.push_str("      </ul>\n");
     }
+
+    // Navbar tools slot (Q1's `quarto-navbar-tools`). Today it holds
+    // only the dark-mode toggle, emitted when the format has a dark
+    // theme variant (bd-0pic6 A4); general `tools:` support folds in
+    // here later (bd-fod3 / bd-ld-toggle-into-tools-hpae7m9r). Markup
+    // mirrors Q1's `navdarktoggle.ejs`: the `.alternate` class (synced
+    // by the color-mode runtime) drives the on/off icon via CSS.
+    if navbar.dark_mode_toggle {
+        html.push_str("      <div class=\"quarto-navbar-tools\">\n");
+        html.push_str(
+            "        <a href=\"\" class=\"quarto-color-scheme-toggle quarto-navigation-tool px-1\" \
+             onclick=\"window.quartoToggleColorScheme(); return false;\" \
+             title=\"Toggle dark mode\"><i class=\"bi\"></i></a>\n",
+        );
+        html.push_str("      </div>\n");
+    }
     html.push_str("    </div>\n");
 
     html.push_str("  </div>\n");

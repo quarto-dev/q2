@@ -445,10 +445,32 @@ Integration branch: `feature/light-dark-theme` (created off `main`).
   `respect-user-color-scheme: true` (reader introduced here, reused by A4).
   E2E: real render inspected (trio + meta exactly Q1-shaped). 12,139 tests
   green.
-- [ ] **A4 — toggle runtime** (D5): `bd-ld-a4-toggle-runtime-0t9i2rvs`. JS asset
-  + before-body injection, body classes, localStorage,
-  `respect-user-color-scheme`, hardcoded navbar toggle + floating fallback,
-  `_light-dark.scss` dark half (related: bd-l1rx9yzh).
+- [x] **A4 — toggle runtime** (D5): `bd-ld-a4-toggle-runtime-0t9i2rvs`.
+  **Done 2026-08-14.** `quarto-color-mode.js` (de-EJS'd port of Q1's
+  before-body script + after-body floating-toggle fallback, config via
+  `data-*` attrs on its own tag; divergences documented in the file header:
+  no Safari scrollbar hack — `color-scheme` supersedes it — and no giscus)
+  injected INLINE as the first child of `<body>` via the
+  `color-mode-script` template variable. Same localStorage key/values as Q1
+  (`quarto-color-scheme` = `default`/`alternate`) so preferences carry over.
+  `append_color_mode_class` grew its `default_dark` arg (bd-mtzry resolved);
+  `respect-user-color-scheme` wired into the runtime. Navbar toggle:
+  `Navbar.dark_mode_toggle` (set by `NavbarGenerateTransform` from the theme
+  config, round-trips via `dark-mode-toggle` in the stored config map),
+  rendered as Q1's `quarto-navbar-tools` slot markup. bd-l1rx9yzh resolved
+  as a side effect: both content-swap halves were already compiled; the body
+  class flip makes them live. **Bug found by browser verification, fixed
+  with a regression test**: `colorToRGBA()` was never ported to
+  `_bootstrap-functions.scss`, so the toggle icons' SVG fills contained the
+  literal call text (silently invalid — string interpolation doesn't error
+  on unknown functions) and the icon was invisible. Golden hash re-captured
+  for that fix. **Browser-verified end-to-end** (chrome-devtools MCP against
+  a served website fixture): initial light state with dark+extra sheets
+  disabled pre-paint; toggle → dark (rel-swap, body class, root
+  color-scheme, localStorage `alternate`, icon `.alternate` state,
+  `.light-content`/`.dark-content` swap); reload restores dark before
+  paint; toggle back to light restores everything (`default` stored); no
+  console errors. 12,145 workspace tests green.
 - [ ] **A5 — quarto-web end-to-end**: `bd-ld-a5-quarto-web-e2e-bzg4o5lc`.
   Render `external-sources/quarto-web` with the real binary, browser-verify
   toggle/persistence/prefers-color-scheme, document gaps found. (related:

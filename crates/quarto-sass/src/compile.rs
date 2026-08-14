@@ -1091,6 +1091,31 @@ mod tests {
         );
     }
 
+    /// The color-scheme toggle icons are SVG data URIs whose `fill`
+    /// is produced by the `colorToRGBA()` sass function (ported from
+    /// Q1's `_quarto-functions.scss`). Because the call sits inside a
+    /// string interpolation, a missing function does NOT error — sass
+    /// silently emits the literal call text, producing an invalid SVG
+    /// fill and an invisible toggle icon (found in the bd-0pic6 A4
+    /// browser verification). Guard that the function actually
+    /// evaluates.
+    #[test]
+    fn test_compile_theme_css_evaluates_color_to_rgba_in_toggle_icons() {
+        let runtime = NativeRuntime::new();
+        let themes = vec![ThemeSpec::parse("cosmo").unwrap()];
+        let config = ThemeConfig::new(themes, false);
+        let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+        let css = compile_theme_css(&config, &context).unwrap();
+        assert!(
+            !css.contains("colorToRGBA("),
+            "colorToRGBA() must be evaluated, not emitted literally"
+        );
+        assert!(
+            css.contains("fill=rgba(") || css.contains("fill=\"rgba("),
+            "toggle icon SVG fill must be a concrete rgba() color"
+        );
+    }
+
     #[test]
     fn test_compile_theme_css_multiple_themes() {
         let runtime = NativeRuntime::new();

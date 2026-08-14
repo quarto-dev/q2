@@ -347,8 +347,9 @@ fn dark_first_map_emits_dark_default_links_and_meta() {
         .expect("dark link present");
     assert!(light < dark, "light link first, dark (default) last");
     assert!(
-        !html.contains("quarto-color-scheme-extra"),
-        "author-default-dark must not emit the trailing copy"
+        !html.contains(r#"class="quarto-color-scheme-extra""#),
+        "author-default-dark must not emit the trailing-copy link \
+         (the inline runtime's source mentioning the class is fine)"
     );
     assert!(
         html.contains(r#"<meta name="color-scheme" content="dark">"#),
@@ -417,6 +418,190 @@ fn single_variant_links_stay_plain() {
     );
     assert!(!html.contains("quarto-color-scheme"));
     assert!(!html.contains(r#"<meta name="color-scheme""#));
+}
+
+/// A4: the color-mode runtime is injected as an inline synchronous
+/// script at the very top of `<body>` (before any paintable content —
+/// the FOUC hard constraint), configured via data attributes.
+#[test]
+fn light_dark_map_injects_color_mode_script_at_top_of_body() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: Toggle\nformat:\n  html:\n    theme:\n      light: cosmo\n      dark: darkly\n---\n\n# Hi\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("must render");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+
+    let body = html.find("<body").expect("body tag");
+    let script = html
+        .find(r#"<script id="quarto-color-mode" data-author-prefers-dark="false" data-respect-user-color-scheme="false">"#)
+        .expect("inline color-mode script with config data attributes");
+    assert!(script > body, "script must be inside body");
+    // Nothing paintable between <body ...> and the script: only the
+    // body tag itself (and whitespace) may precede it.
+    let between = &html[body..script];
+    let after_tag = &between[between.find('>').unwrap() + 1..];
+    assert!(
+        after_tag.trim().is_empty(),
+        "color-mode script must be the first thing in <body>, found: {after_tag:?}"
+    );
+    assert!(
+        html.contains("window.quartoToggleColorScheme"),
+        "toggle entry point must be defined inline"
+    );
+    // Author default is light → body baked light.
+    assert!(html.contains(r#"quarto-light""#) || html.contains(r#"quarto-light "#));
+}
+
+/// A4: author-default-dark bakes `quarto-dark` on `<body>` and tells
+/// the runtime the author prefers dark.
+#[test]
+fn dark_first_map_bakes_dark_body_class() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: Dark Default\nformat:\n  html:\n    theme:\n      dark: darkly\n      light: cosmo\n---\n\n# Hi\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("must render");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+
+    let body_tag_end = html
+        .find("<body")
+        .and_then(|i| html[i..].find('>').map(|j| i + j))
+        .unwrap();
+    let body_tag = &html[html.find("<body").unwrap()..=body_tag_end];
+    assert!(
+        body_tag.contains("quarto-dark"),
+        "author-default-dark must bake quarto-dark on body, got: {body_tag}"
+    );
+    assert!(!body_tag.contains("quarto-light"));
+    assert!(html.contains(r#"data-author-prefers-dark="true""#));
+}
+
+/// A4: `respect-user-color-scheme: true` reaches the runtime config.
+#[test]
+fn respect_user_color_scheme_reaches_script_config() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: Respect\nformat:\n  html:\n    respect-user-color-scheme: true\n    theme:\n      light: cosmo\n      dark: darkly\n---\n\n# Hi\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("must render");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+    assert!(html.contains(r#"data-respect-user-color-scheme="true""#));
+}
+
+/// A4: no dark variant → no runtime script (byte-identity with the
+/// pre-feature output is separately guarded by the golden-hash test).
+#[test]
+fn single_variant_has_no_color_mode_script() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: Plain\nformat:\n  html:\n    theme: cosmo\n---\n\n# Hi\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("must render");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+    assert!(!html.contains("quarto-color-mode"));
+    assert!(!html.contains("quartoToggleColorScheme"));
+}
+
+/// A4: a website navbar grows the dark-mode toggle (Q1's
+/// `quarto-navbar-tools` slot) when a dark variant exists — and only
+/// then.
+#[test]
+fn website_navbar_gets_dark_toggle_only_with_dark_variant() {
+    let render_site = |theme_yaml: &str| -> String {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        write(
+            &root.join("_quarto.yml"),
+            &format!(
+                "project:\n  type: website\nwebsite:\n  navbar:\n    left:\n      - href: index.qmd\n        text: Home\nformat:\n  html:\n{theme_yaml}"
+            ),
+        );
+        write(
+            &root.join("index.qmd"),
+            "---\ntitle: Home\n---\n\n# Hello\n",
+        );
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let result = render_to_file(
+            &root.join("index.qmd"),
+            "html",
+            &RenderToFileOptions {
+                quiet: true,
+                ..Default::default()
+            },
+            runtime,
+        )
+        .expect("website page must render");
+        std::fs::read_to_string(&result.output_path).unwrap()
+    };
+
+    let with_dark = render_site("    theme:\n      light: cosmo\n      dark: darkly\n");
+    assert!(
+        with_dark.contains(r#"class="quarto-color-scheme-toggle"#),
+        "navbar must carry the dark-mode toggle when a dark variant exists"
+    );
+    assert!(
+        with_dark.contains("window.quartoToggleColorScheme(); return false;"),
+        "toggle anchor must invoke the runtime entry point"
+    );
+
+    let without_dark = render_site("    theme: cosmo\n");
+    assert!(
+        !without_dark.contains("quarto-color-scheme-toggle"),
+        "no dark variant → no toggle"
+    );
 }
 
 /// D1a bonus: a *single* dark theme (no light/dark pair at all) gets

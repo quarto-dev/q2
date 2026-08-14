@@ -284,5 +284,14 @@
 # theme's darkness. Verified the only delta is that one rule: the
 # pre-existing `[data-bs-theme=dark]{color-scheme:dark;…}` block is
 # Bootstrap 5.3 core, unchanged. doc.html hash unchanged: CSS-only.
+# Re-captured 2026-08-14 (bd-ld-a4-toggle-runtime-0t9i2rvs): styles.css
+# hash updated because `colorToRGBA()` was ported into
+# `_bootstrap-functions.scss` (from Q1's `_quarto-functions.scss`).
+# The color-scheme toggle icons' SVG data URIs previously interpolated
+# the literal text `colorToRGBA(#dee2e6)` as their fill (a silently
+# invalid value — sass does not error on unknown functions inside
+# string interpolation), leaving the toggle icon invisible; they now
+# carry concrete `fill="rgba(…)"` values. Verified the only delta is
+# those six data-URI fills. doc.html hash unchanged: CSS-only.
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 4409ed42c2ff93c1f504b4433315bced8ae1ba63faaa6be562105c4f850261bd
+doc_files/styles.css 5228869a7216859350164870ea4a62f40fb59222475530ee59fe796cf6364335

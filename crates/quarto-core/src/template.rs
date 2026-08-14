@@ -255,6 +255,9 @@ $header-includes$
 $endfor$
 </head>
 <body class="$body-classes$">
+$if(color-mode-script)$
+$color-mode-script$
+$endif$
 $if(rendered.draft-alert-text)$
 <div id="quarto-draft-alert" class="alert alert-warning"><i class="bi bi-pencil-square"></i>$rendered.draft-alert-text$</div>
 $endif$
@@ -732,20 +735,30 @@ pub fn render_with_compiled_template(
         ctx.insert("scripts", TemplateValue::List(scripts_list));
     }
 
-    // Pre-CSS paint hint for light/dark theme pairs (bd-0pic6 D1a):
-    // when a dark variant exists, tell the UA which scheme(s) the page
-    // supports before any stylesheet loads. The author-default scheme
-    // comes first; `respect-user-color-scheme: true` offers both so
-    // the UA picks per `prefers-color-scheme`. Only the full template
-    // emits the tag; setting the variable elsewhere is inert.
-    if let Ok(theme_config) = quarto_sass::ThemeConfig::from_config_value(meta)
+    // Light/dark theme pair wiring (bd-0pic6 D1a + A4). When a dark
+    // variant exists:
+    //
+    // - `color-scheme-meta` → `<meta name="color-scheme">` pre-CSS
+    //   paint hint: the author-default scheme first;
+    //   `respect-user-color-scheme: true` offers both so the UA picks
+    //   per `prefers-color-scheme`.
+    // - `color-mode-script` → the inline color-mode runtime, injected
+    //   as the FIRST child of `<body>` so the initial variant
+    //   selection happens synchronously before first paint (the FOUC
+    //   hard constraint). Configured via data attributes.
+    //
+    // Only the full template references these variables; setting them
+    // elsewhere is inert.
+    let dark_theme_default = if let Ok(theme_config) =
+        quarto_sass::ThemeConfig::from_config_value(meta)
         && let Some(dark) = &theme_config.dark
     {
+        let author_prefers_dark = dark.is_default;
         let respect = meta
             .get("respect-user-color-scheme")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        let content = match (respect, dark.is_default) {
+        let content = match (respect, author_prefers_dark) {
             (true, false) => "light dark",
             (true, true) => "dark light",
             (false, false) => "light",
@@ -755,7 +768,17 @@ pub fn render_with_compiled_template(
             "color-scheme-meta",
             TemplateValue::String(content.to_string()),
         );
-    }
+        ctx.insert(
+            "color-mode-script",
+            TemplateValue::String(format!(
+                "<script id=\"quarto-color-mode\" data-author-prefers-dark=\"{author_prefers_dark}\" data-respect-user-color-scheme=\"{respect}\">{}</script>",
+                COLOR_MODE_JS
+            )),
+        );
+        Some(author_prefers_dark)
+    } else {
+        None
+    };
 
     // Wire `rendered.includes.{header, before-body, after-body}` into the
     // Pandoc-native template variable names (kept stable per
@@ -807,9 +830,12 @@ pub fn render_with_compiled_template(
             (None, false) => "fullcontent".to_string(),
         };
         // bd-mtzry: append the color-mode class so theme-conditional CSS
-        // can key off `body.quarto-light` (matches Q1 default). Dark-mode
-        // theme support lands separately; for now we always emit `quarto-light`.
-        let body_classes = append_color_mode_class(&structural);
+        // can key off `body.quarto-light` / `body.quarto-dark`. The
+        // baked class matches the AUTHOR default (Q1 bakes the same
+        // way); under `respect-user-color-scheme` the inline runtime
+        // may flip it before first paint.
+        let body_classes =
+            append_color_mode_class(&structural, dark_theme_default.unwrap_or(false));
         ctx.insert("body-classes", TemplateValue::String(body_classes));
     }
 
@@ -837,27 +863,37 @@ pub fn render_with_compiled_template(
 /// objects, and engine-contributed `PandocIncludes`. If the array is empty
 /// or absent (resolve stage didn't run), the template variable is not set
 /// — `$for(template_var)$` then produces no output.
-/// Append the active color-mode class (today always `quarto-light`)
-/// to a structural body-class string. Empty input → `"quarto-light"`;
-/// non-empty input → `"<structural> quarto-light"`. Idempotent: a
-/// structural that already contains `quarto-light` is returned as-is.
+/// The inline color-mode runtime (bd-0pic6 A4), embedded at build
+/// time and injected into `<body>` via the `color-mode-script`
+/// template variable when a dark theme variant exists.
+const COLOR_MODE_JS: &str = include_str!("../resources/js/quarto-color-mode.js");
+
+/// Append the active color-mode class (`quarto-light`, or
+/// `quarto-dark` when the author-default variant is dark — Q1's
+/// key-order rule) to a structural body-class string. Empty input →
+/// the bare class; non-empty input → `"<structural> <class>"`.
+/// Idempotent: a structural that already contains either color-mode
+/// class is returned as-is.
 ///
-/// bd-mtzry. Light/dark theme detection is not yet wired into the
-/// pipeline (the `theme:` key today is a single Bootswatch name); when
-/// it lands, this helper grows a `mode` argument and the call site
-/// decides which class to emit. Until then `quarto-light` matches
-/// Quarto 1's default body class for documents with no dark theme set.
-fn append_color_mode_class(structural: &str) -> String {
-    const LIGHT: &str = "quarto-light";
+/// bd-mtzry. The baked class reflects the AUTHOR default; the inline
+/// color-mode runtime (A4) re-syncs it from the active stylesheet's
+/// `data-mode` before first paint when a stored preference or
+/// `respect-user-color-scheme` overrides the default.
+fn append_color_mode_class(structural: &str, default_dark: bool) -> String {
+    let class = if default_dark {
+        "quarto-dark"
+    } else {
+        "quarto-light"
+    };
     let already = structural
         .split_whitespace()
-        .any(|tok| tok == LIGHT || tok == "quarto-dark");
+        .any(|tok| tok == "quarto-light" || tok == "quarto-dark");
     if already {
         structural.to_string()
     } else if structural.is_empty() {
-        LIGHT.to_string()
+        class.to_string()
     } else {
-        format!("{structural} {LIGHT}")
+        format!("{structural} {class}")
     }
 }
 
