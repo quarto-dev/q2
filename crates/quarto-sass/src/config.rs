@@ -112,6 +112,15 @@ pub struct ThemeConfig {
     /// (`minified`, `title_block_layer`, `brand_ref`) are not
     /// duplicated here.
     pub dark: Option<DarkThemeConfig>,
+
+    /// Resolved syntax-highlight palette for THIS (light) variant,
+    /// from the `highlight-style:` key (bd-0pic6 phase B). Adaptive
+    /// names are resolved at parse time: a scalar `a11y` becomes
+    /// `a11y-light` here and `a11y-dark` on [`DarkThemeConfig`]; for a
+    /// single-variant config the palette follows the built-in themes'
+    /// darkness (`theme: darkly` + `a11y` → `a11y-dark`). `None` →
+    /// the default palette.
+    pub highlight_style: Option<HighlightStyle>,
 }
 
 /// The parsed `dark:` half of a `theme: {light: …, dark: …}` pair
@@ -145,6 +154,29 @@ pub struct DarkThemeConfig {
     /// Location of the `dark:` key itself, for diagnostics that need
     /// to point at the dark half as a whole.
     pub key_location: Option<SourceInfo>,
+
+    /// Resolved syntax-highlight palette for the dark variant (from
+    /// `highlight-style:`, adaptive names already resolved — see
+    /// [`ThemeConfig::highlight_style`]). `None` → the default
+    /// palette.
+    pub highlight_style: Option<HighlightStyle>,
+}
+
+/// A resolved syntax-highlight palette request for one variant
+/// (bd-0pic6 phase B).
+///
+/// `name` is the palette identifier after adaptive resolution
+/// (`a11y` → `a11y-light` / `a11y-dark` depending on the variant's
+/// darkness). The name is NOT validated here — quarto-sass carries it
+/// as data; the compile falls back to the default palette for unknown
+/// names and `CompileThemeCssStage` emits the user-facing warning
+/// (same division of labor as the theme diagnostics).
+#[derive(Debug, Clone, PartialEq)]
+pub struct HighlightStyle {
+    pub name: String,
+    /// Location of the YAML value that produced this name, for
+    /// diagnostics.
+    pub location: Option<SourceInfo>,
 }
 
 /// Resolved form of [`ThemeConfig`] with the brand file loaded and
@@ -181,6 +213,7 @@ impl ThemeConfig {
             title_block_layer: true,
             brand_ref: None,
             dark: None,
+            highlight_style: None,
         }
     }
 
@@ -197,6 +230,7 @@ impl ThemeConfig {
             title_block_layer: true,
             brand_ref: None,
             dark: None,
+            highlight_style: None,
         }
     }
 
@@ -264,6 +298,7 @@ impl ThemeConfig {
                                 suppress_bootstrap: dark_cfg.suppress_bootstrap,
                                 is_default: pair.dark_first,
                                 key_location: Some(key_source),
+                                highlight_style: None,
                             })
                         }
                         None => None,
@@ -327,6 +362,10 @@ impl ThemeConfig {
             None => {}
         }
 
+        // `highlight-style:` (bd-0pic6 phase B) — after theme parsing
+        // so adaptive-name resolution can consult the variants.
+        parse_highlight_style(config, &mut result)?;
+
         Ok(result)
     }
 
@@ -351,6 +390,7 @@ impl ThemeConfig {
                 title_block_layer: true,
                 brand_ref: None,
                 dark: None,
+                highlight_style: None,
             });
         }
         let located = extract_theme_specs(value)?;
@@ -366,6 +406,7 @@ impl ThemeConfig {
             title_block_layer: true,
             brand_ref: None,
             dark: None,
+            highlight_style: None,
         })
     }
 
@@ -447,6 +488,7 @@ impl ThemeConfig {
             title_block_layer: self.title_block_layer,
             brand_ref: self.brand_ref.clone(),
             dark: None,
+            highlight_style: d.highlight_style.clone(),
         })
     }
 
@@ -504,6 +546,7 @@ pub fn resolve_brand(
         title_block_layer: true,
         brand_ref: Some(brand_ref),
         dark: None,
+        highlight_style: None,
     }
     .resolve(runtime, base_dir)?;
 
@@ -703,6 +746,118 @@ fn brand_err(e: quarto_brand::BrandError) -> SassError {
         message: e.to_string(),
         location: None,
     }
+}
+
+/// Adaptive highlight styles: bare names that resolve to a
+/// variant-specific palette (Q1 ships `<name>-light.theme` /
+/// `<name>-dark.theme` pairs for these). Stage-1 curated set
+/// (bd-0pic6 phase B); the general `.theme`-translator follow-up
+/// grows this list.
+const ADAPTIVE_HIGHLIGHT_STYLES: &[&str] = &["a11y"];
+
+/// Resolve an adaptive highlight-style name for a variant's darkness;
+/// non-adaptive names pass through unchanged (unknown ones fall back
+/// to the default palette at compile time, with a stage-side warning).
+fn resolve_adaptive_highlight(name: &str, dark: bool) -> String {
+    if ADAPTIVE_HIGHLIGHT_STYLES.contains(&name) {
+        format!("{name}-{}", if dark { "dark" } else { "light" })
+    } else {
+        name.to_string()
+    }
+}
+
+/// Darkness of a variant judged by its built-in themes (any dark
+/// Bootswatch theme ⇒ dark), falling back to `fallback` when the list
+/// has no built-ins (custom-SCSS-only variants can't be judged
+/// statically — Q1 greps the compiled CSS's darkness sentinel, which
+/// isn't available before the compile this decision feeds).
+fn builtin_darkness(themes: &[ThemeSpec], fallback: bool) -> bool {
+    let mut saw_builtin = false;
+    let mut any_dark = false;
+    for spec in themes {
+        if let ThemeSpec::BuiltIn(b) = spec {
+            saw_builtin = true;
+            any_dark |= b.is_dark();
+        }
+    }
+    if saw_builtin { any_dark } else { fallback }
+}
+
+/// Parse the `highlight-style:` key (scalar or `{light:, dark:}` map)
+/// into per-variant [`HighlightStyle`] entries on `result`
+/// (bd-0pic6 phase B).
+///
+/// Adaptive-name resolution: with a theme pair, each half's ROLE
+/// decides (the quarto-web shape darkens a cosmo base via custom
+/// SCSS, so built-in darkness would mislead); for a single-variant
+/// config the built-in themes decide (`theme: darkly` + `a11y` →
+/// `a11y-dark`).
+fn parse_highlight_style(config: &ConfigValue, result: &mut ThemeConfig) -> Result<(), SassError> {
+    let Some(value) = config.get("highlight-style") else {
+        return Ok(());
+    };
+    if value.is_null() {
+        return Ok(());
+    }
+
+    let has_pair = result.dark.is_some();
+    let light_is_dark = if has_pair {
+        false
+    } else {
+        builtin_darkness(&result.themes, false)
+    };
+
+    if let Some(pair) = light_dark_pair(value) {
+        if let Some(light_value) = pair.light {
+            let Some(name) = config_value_as_text(light_value) else {
+                return Err(SassError::InvalidThemeConfig {
+                    message: "`highlight-style:` entries must be strings".to_string(),
+                    location: Some(light_value.source_info.clone()),
+                });
+            };
+            result.highlight_style = Some(HighlightStyle {
+                name: resolve_adaptive_highlight(&name, light_is_dark),
+                location: Some(light_value.source_info.clone()),
+            });
+        }
+        if let Some((dark_value, _key_source)) = pair.dark {
+            let Some(name) = config_value_as_text(dark_value) else {
+                return Err(SassError::InvalidThemeConfig {
+                    message: "`highlight-style:` entries must be strings".to_string(),
+                    location: Some(dark_value.source_info.clone()),
+                });
+            };
+            // A dark highlight palette needs a dark theme variant to
+            // ride on; without one it has no compile to affect.
+            if let Some(dark_half) = result.dark.as_mut() {
+                dark_half.highlight_style = Some(HighlightStyle {
+                    name: resolve_adaptive_highlight(&name, true),
+                    location: Some(dark_value.source_info.clone()),
+                });
+            }
+        }
+        return Ok(());
+    }
+
+    let Some(name) = config_value_as_text(value) else {
+        return Err(SassError::InvalidThemeConfig {
+            message: "`highlight-style:` must be a string or a map with only \
+                      `light:`/`dark:` keys"
+                .to_string(),
+            location: Some(value.source_info.clone()),
+        });
+    };
+    result.highlight_style = Some(HighlightStyle {
+        name: resolve_adaptive_highlight(&name, light_is_dark),
+        location: Some(value.source_info.clone()),
+    });
+    if let Some(dark_half) = result.dark.as_mut() {
+        dark_half.highlight_style = Some(HighlightStyle {
+            name: resolve_adaptive_highlight(&name, true),
+            location: Some(value.source_info.clone()),
+        });
+    }
+    Ok(())
 }
 
 /// The recognized halves of a `theme: {light: …, dark: …}` map.
@@ -1799,6 +1954,138 @@ mod tests {
         ]);
         let cfg = ThemeConfig::from_config_value(&config_with_theme_value(both_none)).unwrap();
         assert!(!cfg.ships_bootstrap());
+    }
+
+    // === highlight-style tests (bd-0pic6 phase B) ===
+
+    /// Root config `{ theme: <value>, highlight-style: <value> }`.
+    fn config_with_theme_and_highlight(theme: ConfigValue, highlight: ConfigValue) -> ConfigValue {
+        map_value(vec![
+            map_entry("theme", theme),
+            map_entry("highlight-style", highlight),
+        ])
+    }
+
+    #[test]
+    fn test_highlight_style_scalar_adaptive_resolves_per_variant() {
+        // Q1's adaptive names: a scalar `a11y` resolves to the
+        // variant-matching palette on each half of a theme pair.
+        let theme = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("darkly")),
+        ]);
+        let cfg = ThemeConfig::from_config_value(&config_with_theme_and_highlight(
+            theme,
+            scalar_value("a11y"),
+        ))
+        .unwrap();
+
+        assert_eq!(
+            cfg.highlight_style.as_ref().map(|h| h.name.as_str()),
+            Some("a11y-light")
+        );
+        let dark = cfg.dark.as_ref().unwrap();
+        assert_eq!(
+            dark.highlight_style.as_ref().map(|h| h.name.as_str()),
+            Some("a11y-dark")
+        );
+    }
+
+    #[test]
+    fn test_highlight_style_map_form_per_half() {
+        let theme = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("darkly")),
+        ]);
+        let highlight = map_value(vec![
+            map_entry("light", scalar_value("a11y")),
+            map_entry("dark", scalar_value("othername")),
+        ]);
+        let cfg =
+            ThemeConfig::from_config_value(&config_with_theme_and_highlight(theme, highlight))
+                .unwrap();
+
+        // The light half of the map resolves adaptively for the light
+        // variant; the dark half's raw (non-adaptive) name is carried
+        // as-is (unknown names fall back at compile time + warn).
+        assert_eq!(
+            cfg.highlight_style.as_ref().map(|h| h.name.as_str()),
+            Some("a11y-light")
+        );
+        assert_eq!(
+            cfg.dark
+                .as_ref()
+                .unwrap()
+                .highlight_style
+                .as_ref()
+                .map(|h| h.name.as_str()),
+            Some("othername")
+        );
+    }
+
+    #[test]
+    fn test_highlight_style_single_dark_builtin_resolves_dark() {
+        // No theme pair: the adaptive palette follows the built-in
+        // theme's darkness (theme: darkly → a11y-dark), Q1's
+        // sentinel-driven behavior approximated via
+        // BuiltInTheme::is_dark.
+        let cfg = ThemeConfig::from_config_value(&config_with_theme_and_highlight(
+            scalar_value("darkly"),
+            scalar_value("a11y"),
+        ))
+        .unwrap();
+        assert_eq!(
+            cfg.highlight_style.as_ref().map(|h| h.name.as_str()),
+            Some("a11y-dark")
+        );
+        assert!(cfg.dark.is_none());
+
+        let cfg = ThemeConfig::from_config_value(&config_with_theme_and_highlight(
+            scalar_value("cosmo"),
+            scalar_value("a11y"),
+        ))
+        .unwrap();
+        assert_eq!(
+            cfg.highlight_style.as_ref().map(|h| h.name.as_str()),
+            Some("a11y-light")
+        );
+    }
+
+    #[test]
+    fn test_highlight_style_absent_is_none() {
+        let cfg = ThemeConfig::from_config_value(&config_with_theme_value(scalar_value("cosmo")))
+            .unwrap();
+        assert!(cfg.highlight_style.is_none());
+    }
+
+    #[test]
+    fn test_highlight_style_unknown_name_carried_with_location() {
+        let cfg = ThemeConfig::from_config_value(&config_with_theme_and_highlight(
+            scalar_value("cosmo"),
+            scalar_value("nosuchstyle"),
+        ))
+        .unwrap();
+        let hl = cfg.highlight_style.as_ref().expect("carried");
+        assert_eq!(hl.name, "nosuchstyle");
+        assert!(hl.location.is_some(), "location carried for diagnostics");
+    }
+
+    #[test]
+    fn test_dark_variant_carries_highlight_style() {
+        let theme = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("darkly")),
+        ]);
+        let cfg = ThemeConfig::from_config_value(&config_with_theme_and_highlight(
+            theme,
+            scalar_value("a11y"),
+        ))
+        .unwrap();
+        let dark_cfg = cfg.dark_variant().unwrap();
+        assert_eq!(
+            dark_cfg.highlight_style.as_ref().map(|h| h.name.as_str()),
+            Some("a11y-dark")
+        );
     }
 
     #[test]

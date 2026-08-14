@@ -225,6 +225,15 @@ fn cache_key(
     hasher.update(doc_vars.defaults.as_bytes());
     hasher.update(b"\n");
 
+    // Include the highlight palette (bd-0pic6 phase B): the same theme
+    // list compiles differently under different `highlight-style`
+    // values, so the palette name must discriminate cache entries.
+    hasher.update(b"highlight:");
+    if let Some(style) = &theme_config.highlight_style {
+        hasher.update(style.name.as_bytes());
+    }
+    hasher.update(b"\n");
+
     // Include minification flag
     hasher.update(if theme_config.minified { b"1" } else { b"0" });
 
@@ -385,6 +394,46 @@ impl PipelineStage for CompileThemeCssStage {
         // artifact. The interim Q-14-3 warning (bd-o76p01wb) is
         // retired: nothing is ignored anymore.
 
+        // Unknown `highlight-style:` names fall back to the default
+        // palette inside quarto-sass; make the fallback loud with one
+        // Q-14-5 warning per distinct unknown name (bd-0pic6 phase B —
+        // same data-then-diagnostic split as the theme codes).
+        {
+            let mut warned: Vec<&str> = Vec::new();
+            let variant_styles = [
+                theme_config.highlight_style.as_ref(),
+                theme_config
+                    .dark
+                    .as_ref()
+                    .and_then(|d| d.highlight_style.as_ref()),
+            ];
+            for style in variant_styles.into_iter().flatten() {
+                if quarto_sass::is_known_highlight_palette(&style.name)
+                    || warned.contains(&style.name.as_str())
+                {
+                    continue;
+                }
+                warned.push(style.name.as_str());
+                let mut builder = quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                    "Unknown highlight style",
+                )
+                .with_code("Q-14-5")
+                .problem(format!(
+                    "`highlight-style: {}` does not name a highlight palette \
+                     shipped with Quarto; the default palette is used instead.",
+                    style.name
+                ))
+                .add_hint(format!(
+                    "Available palettes: {}.",
+                    quarto_sass::KNOWN_HIGHLIGHT_PALETTES.join(", ")
+                ));
+                if let Some(loc) = &style.location {
+                    builder = builder.with_location(loc.clone());
+                }
+                ctx.add_diagnostic(builder.build());
+            }
+        }
+
         // Per-document SCSS variables layer (Phase 2 of bd-k8y0),
         // shared by both variants. Today this is just
         // `$sidebar-border` from `website.sidebar.style`; the same
@@ -478,13 +527,18 @@ async fn variant_css(
         return Ok(DEFAULT_CSS.to_string());
     }
 
-    // Fast path: no themes, no doc-derived variables, and the
-    // default layer set (title-block layer included). Use the
-    // shared, cached default-CSS bundle. This preserves byte-identity
-    // with prior behavior for plain documents (no website / no sidebar).
-    // `title-block-style: plain|none` docs take the fingerprinted
-    // path below so their layer-less bundle gets its own cache key.
-    if !variant_config.has_themes() && doc_vars.is_empty() && variant_config.title_block_layer {
+    // Fast path: no themes, no doc-derived variables, no
+    // highlight-style, and the default layer set (title-block layer
+    // included). Use the shared, cached default-CSS bundle. This
+    // preserves byte-identity with prior behavior for plain documents
+    // (no website / no sidebar). `title-block-style: plain|none` docs
+    // and `highlight-style:` docs take the fingerprinted path below so
+    // their non-default bundles get their own cache keys.
+    if !variant_config.has_themes()
+        && doc_vars.is_empty()
+        && variant_config.title_block_layer
+        && variant_config.highlight_style.is_none()
+    {
         // Try the runtime cache first (cross-session persistence).
         if cache_ok
             && let Ok(Some(cached)) = cache_get_lru(

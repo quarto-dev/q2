@@ -54,6 +54,7 @@ pub const SCSS_RESOURCES_HASH: &str =
 pub const CSS_BUILD_ID: &str = include_str!(concat!(env!("OUT_DIR"), "/css_build_id.txt"));
 
 pub use brand_layer::brand_to_layers;
+pub use bundle::{KNOWN_HIGHLIGHT_PALETTES, is_known_highlight_palette};
 pub use bundle::{
     REVEAL_BUILTIN_THEMES, assemble_bootstrap, assemble_reveal_scss, assemble_scss,
     assemble_themes, assemble_with_theme, assemble_with_user_layers, load_bootstrap_framework,
@@ -65,7 +66,8 @@ pub use compile::{
     compile_theme_css, compile_with_doc_vars,
 };
 pub use config::{
-    DarkThemeConfig, ResolvedThemeConfig, ThemeConfig, resolve_brand, resolve_brand_layers,
+    DarkThemeConfig, HighlightStyle, ResolvedThemeConfig, ThemeConfig, resolve_brand,
+    resolve_brand_layers,
 };
 pub use error::SassError;
 pub use layer::{merge_layers, parse_layer, parse_layer_from_parts};

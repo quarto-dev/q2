@@ -604,6 +604,176 @@ fn website_navbar_gets_dark_toggle_only_with_dark_variant() {
     );
 }
 
+/// Phase B: `highlight-style: a11y` selects the variant-matching
+/// palette in each compile — a11y-light colors in the light CSS,
+/// a11y-dark colors (and its code-block background) in the dark CSS.
+#[test]
+fn highlight_style_a11y_selects_palette_per_variant() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: HL\nformat:\n  html:\n    theme:\n      light: cosmo\n      dark: darkly\nhighlight-style: a11y\n---\n\n```python\nprint('hi')\n```\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("must render");
+
+    let files = css_files(&result.resources_dir);
+    let light = files
+        .iter()
+        .find(|(p, _)| p.file_name().and_then(|n| n.to_str()) == Some("styles.css"))
+        .expect("light css");
+    let dark = files
+        .iter()
+        .find(|(p, _)| p.file_name().and_then(|n| n.to_str()) == Some("styles-dark.css"))
+        .expect("dark css");
+    assert!(
+        light.1.contains("#d91e18"),
+        "light variant must use the a11y-light keyword color"
+    );
+    assert!(
+        !light.1.contains("#859900"),
+        "light variant must not keep the solarized keyword color"
+    );
+    assert!(
+        dark.1.contains("#ffa07a"),
+        "dark variant must use the a11y-dark keyword color"
+    );
+    assert!(
+        dark.1.contains("#2b2b2b"),
+        "dark variant must apply a11y-dark's code-block background"
+    );
+
+    assert!(
+        !result
+            .render_output
+            .diagnostics
+            .iter()
+            .any(|d| d.code.as_deref() == Some("Q-14-5")),
+        "known adaptive style must not warn"
+    );
+}
+
+/// Phase B: a single dark built-in theme resolves the adaptive name
+/// to the dark palette (Q1's sentinel-driven behavior, approximated
+/// statically via BuiltInTheme::is_dark).
+#[test]
+fn highlight_style_adaptive_follows_single_dark_theme() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: HL\nformat:\n  html:\n    theme: darkly\nhighlight-style: a11y\n---\n\n```python\nprint('hi')\n```\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("must render");
+
+    let files = css_files(&result.resources_dir);
+    let styles = files
+        .iter()
+        .find(|(p, _)| p.file_name().and_then(|n| n.to_str()) == Some("styles.css"))
+        .expect("styles.css");
+    assert!(
+        styles.1.contains("#ffa07a"),
+        "theme: darkly + a11y must select the a11y-dark palette"
+    );
+}
+
+/// Phase B: `highlight-style` must apply even with NO theme configured
+/// (the default-Bootstrap fast path must not bypass palette
+/// selection).
+#[test]
+fn highlight_style_applies_without_theme() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: HL\nhighlight-style: a11y\n---\n\n```python\nprint('hi')\n```\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("must render");
+
+    let files = css_files(&result.resources_dir);
+    assert!(
+        files.iter().any(|(_, css)| css.contains("#d91e18")),
+        "a11y-light palette must apply to the default-Bootstrap compile"
+    );
+}
+
+/// Phase B: an unknown highlight-style warns (Q-14-5) and falls back
+/// to the default palette.
+#[test]
+fn unknown_highlight_style_warns_and_uses_default() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("doc.qmd"),
+        "---\ntitle: HL\nformat:\n  html:\n    theme: cosmo\nhighlight-style: nosuchstyle\n---\n\n```python\nprint('hi')\n```\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("doc.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("unknown highlight-style must not fail the render");
+
+    let files = css_files(&result.resources_dir);
+    assert!(
+        files.iter().any(|(_, css)| css.contains("#859900")),
+        "unknown style must fall back to the default (solarized) palette"
+    );
+
+    let q14_5: Vec<_> = result
+        .render_output
+        .diagnostics
+        .iter()
+        .filter(|d| d.code.as_deref() == Some("Q-14-5"))
+        .collect();
+    assert_eq!(
+        q14_5.len(),
+        1,
+        "expected exactly one Q-14-5 warning, diagnostics: {:?}",
+        result.render_output.diagnostics
+    );
+    assert!(q14_5[0].location.is_some(), "warning carries a location");
+}
+
 /// D1a bonus: a *single* dark theme (no light/dark pair at all) gets
 /// `color-scheme: dark` from the darkness sentinel, so existing
 /// dark-theme users get correct native scrollbars/controls.

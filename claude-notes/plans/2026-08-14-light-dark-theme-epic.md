@@ -502,9 +502,25 @@ Integration branch: `feature/light-dark-theme` (created off `main`).
   gaps (grid tables Q-2-39, shortcode/attr strictness Q-2-9/Q-2-35, missing
   relative filter paths) — confirming quarto-web is not a Q2 render target
   today.
-- [ ] **B — highlight-style** (D6 stage 1): `bd-ld-b-highlight-style-jnb036fz`.
-  Reader + a11y light/dark + variant selection; follow-up strand to be filed
-  for the general `.theme` translator.
+- [x] **B — highlight-style** (D6 stage 1): `bd-ld-b-highlight-style-jnb036fz`.
+  **Done 2026-08-14.** First `highlight-style` reader in Q2 (in
+  `ThemeConfig::from_config_value`): scalar + `{light, dark}` map, adaptive
+  resolution at parse time (`a11y` → `a11y-light`/`a11y-dark`; pair halves
+  resolve by ROLE — critical for the quarto-web shape where custom SCSS
+  darkens a cosmo base; single-variant configs resolve by
+  `BuiltInTheme::is_dark`). `highlight.scss` split into structural rules +
+  swappable palette files (`highlight-default.scss` + hand-translated
+  `highlight-a11y-{light,dark}.scss` carrying `$code-block-bg`/`-color`
+  defaults); `load_highlight_layer(palette)` composes them, unknown →
+  default. All four default-CSS shortcuts (stage fast path, native/wasm
+  `compile_with_doc_vars`, native/wasm `compile_theme_css`) guarded so a
+  highlight style forces direct assembly and never poisons the shared
+  default cache; stage `cache_key` gained the palette discriminator.
+  Q-14-5 warning (catalog + docs page) for unknown names, deduped per name.
+  LSP legend parity test repointed at the palette file. Follow-up filed:
+  `bd-hl-theme-translator-2mdgh4k6` (general `.theme` translator, full Q1
+  catalog, copy-button color feedback, sentinel-based single-variant
+  resolution). E2E via real binary inspected. 12,158 workspace tests green.
 - [ ] **C — brand seam** (D7): `bd-ld-c-brand-seam-wef8ww3n`. Absorbs bd-v5z8w;
   unified-brand split.
 - [ ] **D — preview/hub-client** (D8): `bd-ld-d-preview-hub-t4oxv0hf`.
