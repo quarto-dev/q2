@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-14
+
+- [`f2db6bce`](https://github.com/quarto-dev/q2/commits/f2db6bce): Keep all browser storage in memory for `q2 preview --ui editor` sessions, so each ephemeral preview origin no longer accumulates a stale IndexedDB document cache and project entries; reloading the editor now rebuilds the session from the preview server's boot config.
+
 ### 2026-08-12
 
 - [`e5769e5b`](https://github.com/quarto-dev/q2/commits/e5769e5b): Bump the samod sync library to 0.13.0 and the JS automerge package to 3.4.1.
