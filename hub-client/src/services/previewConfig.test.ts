@@ -47,12 +47,37 @@ describe('fetchPreviewSessionConfig', () => {
     await expect(fetchPreviewSessionConfig()).resolves.toEqual({ allowEdit: true });
   });
 
-  it('ignores extra fields such as editorBoot', async () => {
+  it('parses editorBoot when present and valid (editor-UI sessions)', async () => {
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse({
         allowEdit: false,
         editorBoot: { indexDocId: 'doc', file: 'index.qmd', name: 'proj' },
       }),
+    );
+
+    await expect(fetchPreviewSessionConfig()).resolves.toEqual({
+      allowEdit: false,
+      editorBoot: { indexDocId: 'doc', file: 'index.qmd', name: 'proj' },
+    });
+  });
+
+  it.each([
+    { editorBoot: null },
+    { editorBoot: 'doc' },
+    { editorBoot: { indexDocId: 42, file: 'index.qmd', name: 'proj' } },
+    { editorBoot: { indexDocId: 'doc', file: 'index.qmd' } },
+    { editorBoot: { indexDocId: '', file: 'index.qmd', name: 'proj' } },
+    { editorBoot: { indexDocId: 'doc', file: '', name: 'proj' } },
+    { editorBoot: { indexDocId: 'doc', file: 'index.qmd', name: '' } },
+  ])('drops a malformed editorBoot: %j', async (extra) => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ allowEdit: true, ...extra }));
+
+    await expect(fetchPreviewSessionConfig()).resolves.toEqual({ allowEdit: true });
+  });
+
+  it('ignores unrelated extra fields', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ allowEdit: false, assets: { manifestHash: 'abc' } }),
     );
 
     await expect(fetchPreviewSessionConfig()).resolves.toEqual({ allowEdit: false });

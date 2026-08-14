@@ -45,7 +45,10 @@ import { useExecutionChannel } from './hooks/useExecutionChannel';
 import { usePreviewSession } from './hooks/usePreviewSession';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
 import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
-import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER, parseHashRoute } from './utils/routing';
+import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER, parseHashRoute, hubPath } from './utils/routing';
+import { isEphemeralStorage } from './services/ephemeralStorage';
+import { fetchPreviewSessionConfig } from './services/previewConfig';
+import type { StorageKind } from '@quarto/quarto-sync-client';
 import './App.css';
 
 /**
@@ -92,7 +95,12 @@ async function connectAndLoadContents(
   // "Path not found" (stage EDITOR_NO_PREVIEW; sometimes the index loses it too
   // → CONNECT_STALL).
   const peerTimeoutMs = import.meta.env.VITE_E2E === '1' ? 15000 : PRODUCTION_PEER_TIMEOUT_MS;
-  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, actorId, screenName, color, peerTimeoutMs);
+  // Ephemeral storage mode (bd-sw4xy1vw): the q2 preview embed build
+  // keeps the automerge document cache in memory — each preview session
+  // is a fresh origin, so a persisted cache could never hit and would
+  // just accumulate in IndexedDB.
+  const storage: StorageKind = isEphemeralStorage() ? 'memory' : 'indexeddb';
+  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, actorId, screenName, color, { peerTimeoutMs, storage });
   const contents = new Map<string, string>();
   for (const file of files) {
     const content = getFileContent(file.path);
@@ -193,8 +201,12 @@ function App() {
   // share handler below clears the hash from the address bar). Only
   // `q2 preview --ui editor` emits it: the serving hub is a throwaway
   // per-session server, so project-set onboarding is skipped entirely
-  // (bd-zf4ryvuq).
+  // (bd-zf4ryvuq). The preview-embed build (VITE_EPHEMERAL_STORAGE=1,
+  // bd-sw4xy1vw) only ever serves such a hub, so the flag holds for the
+  // whole artifact — including after a reload, when the boot URL's
+  // share hash is gone.
   const [ephemeralHub] = useState(() => {
+    if (isEphemeralStorage()) return true;
     const bootRoute = parseHashRoute(window.location.hash);
     return bootRoute.type === 'share' && bootRoute.ephemeral === true;
   });
@@ -448,34 +460,27 @@ function App() {
         return;
       }
 
-      // Handle shareable link URLs
-      if (route.type === 'share') {
-        // SECURITY: Immediately clear the URL to prevent indexDocId from appearing
-        // in browser history, bookmarks, or being accidentally shared.
-        navigateToProjectSelector({ replace: true });
-
-        const shareRoute = route as ShareRoute;
-
-        // Validate required fields
-        if (!shareRoute.syncServer || !shareRoute.filePath || !shareRoute.name) {
-          setConnectionError(
-            'This share link is incomplete. Please ask the sender to share a new link.'
-          );
-          return;
-        }
-
+      // Shared by the share-route branch and the ephemeral
+      // reload-recovery branch below: find-or-create the local project
+      // entry for a shared document, then connect and open the file.
+      const connectToSharedProject = async (share: {
+        indexDocId: string;
+        syncServer: string;
+        name: string;
+        filePath: string;
+      }): Promise<void> => {
         // Normalize the indexDocId (add 'automerge:' prefix if not present)
-        const normalizedIndexDocId = shareRoute.indexDocId.startsWith('automerge:')
-          ? shareRoute.indexDocId
-          : `automerge:${shareRoute.indexDocId}`;
+        const normalizedIndexDocId = share.indexDocId.startsWith('automerge:')
+          ? share.indexDocId
+          : `automerge:${share.indexDocId}`;
 
         // Check if we already have this project locally, or auto-create it
         let targetProject = await projectStorage.getProjectByIndexDocId(normalizedIndexDocId);
         if (!targetProject) {
           targetProject = await projectStorage.addProject(
             normalizedIndexDocId,
-            shareRoute.syncServer,
-            shareRoute.name
+            share.syncServer,
+            share.name
           );
         }
 
@@ -484,8 +489,8 @@ function App() {
           try {
             projectSetActions.addProject({
               indexDocId: normalizedIndexDocId,
-              syncServer: shareRoute.syncServer,
-              description: shareRoute.name,
+              syncServer: share.syncServer,
+              description: share.name,
             });
           } catch {
             // Non-fatal: project set update failed, but project is in IDB
@@ -502,12 +507,36 @@ function App() {
           setFiles(loadedFiles);
           setFileContents(contents);
 
-          navigateToFile(targetProject.id, shareRoute.filePath, { replace: true });
+          navigateToFile(targetProject.id, share.filePath, { replace: true });
         } catch (err) {
           setConnectionError(err instanceof Error ? err.message : String(err));
         } finally {
           setIsConnecting(false);
         }
+      };
+
+      // Handle shareable link URLs
+      if (route.type === 'share') {
+        // SECURITY: Immediately clear the URL to prevent indexDocId from appearing
+        // in browser history, bookmarks, or being accidentally shared.
+        navigateToProjectSelector({ replace: true });
+
+        const shareRoute = route as ShareRoute;
+
+        // Validate required fields
+        if (!shareRoute.syncServer || !shareRoute.filePath || !shareRoute.name) {
+          setConnectionError(
+            'This share link is incomplete. Please ask the sender to share a new link.'
+          );
+          return;
+        }
+
+        await connectToSharedProject({
+          indexDocId: shareRoute.indexDocId,
+          syncServer: shareRoute.syncServer,
+          name: shareRoute.name,
+          filePath: shareRoute.filePath,
+        });
         return;
       }
 
@@ -524,13 +553,32 @@ function App() {
             setProject(targetProject);
             setFiles(loadedFiles);
             setFileContents(contents);
-            
+
           } catch (err) {
             setConnectionError(err instanceof Error ? err.message : String(err));
             navigateToProjectSelector({ replace: true });
           } finally {
             setIsConnecting(false);
           }
+        } else if (isEphemeralStorage()) {
+          // Ephemeral storage mode (bd-sw4xy1vw) keeps no project
+          // records across page reloads. Rebuild the session from the
+          // preview server's boot params (every editor-UI session
+          // serves them at /api/preview/config, bd-7htq16rx) instead of
+          // reporting a missing project. A non-preview server answers
+          // without editorBoot and falls through to the error.
+          const config = await fetchPreviewSessionConfig();
+          if (config?.editorBoot) {
+            await connectToSharedProject({
+              indexDocId: config.editorBoot.indexDocId,
+              syncServer: hubPath('/ws'),
+              name: config.editorBoot.name,
+              filePath: config.editorBoot.file,
+            });
+            return;
+          }
+          setConnectionError(`Project not found. It may have been deleted.`);
+          navigateToProjectSelector({ replace: true });
         } else {
           // Project not found - show error and stay on project selector
           setConnectionError(`Project not found. It may have been deleted.`);
@@ -684,6 +732,8 @@ function App() {
       const result = await createNewProject({
         syncServer: resolveSyncServerUrl(syncServer),
         files,
+        // Ephemeral storage mode (bd-sw4xy1vw): no IndexedDB cache.
+        storage: isEphemeralStorage() ? 'memory' : 'indexeddb',
       }, undefined, screenName, cursorColor, resolveActorId);
 
       // Store the project in IndexedDB

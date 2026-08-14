@@ -266,10 +266,11 @@ enum Commands {
         /// --allow-edit, edits made in the editor drive the live
         /// session for everyone connected but are never written to
         /// your files (and a file change on disk converges the
-        /// session back to the disk content). Two caveats: the editor
-        /// stores a project entry and a local document cache in the
-        /// browser for every preview session, and with --share the
-        /// host's --ui choice is what all guests get.
+        /// session back to the disk content). The editor keeps no
+        /// browser storage across sessions (each preview session is a
+        /// fresh origin, so nothing could be reused anyway). One
+        /// caveat: with --share the host's --ui choice is what all
+        /// guests get.
         #[arg(long, value_enum, default_value_t = PreviewUiArg::Viewer)]
         ui: PreviewUiArg,
 

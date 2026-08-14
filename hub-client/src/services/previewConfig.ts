@@ -18,13 +18,50 @@
 
 import { hubPath } from '../utils/routing';
 
+/**
+ * Editor-mode boot params served as `editorBoot` (bd-7htq16rx): the
+ * share-route coordinates the host's own boot URL was built from.
+ * Present only on editor-UI sessions. Ephemeral storage mode
+ * (bd-sw4xy1vw) uses these to rebuild the session after a page reload,
+ * when the in-memory project entry is gone.
+ */
+export interface EditorBoot {
+  /** Index document id (may carry an `automerge:` prefix). */
+  indexDocId: string;
+  /** The share route's file param — a `.qmd` path in the project. */
+  file: string;
+  /** Project name shown in the editor UI. */
+  name: string;
+}
+
 export interface PreviewSessionConfig {
   /** Mirrors the host's `--allow-edit`: edits persist to disk. */
   allowEdit: boolean;
+  /** Editor-mode boot params; absent on viewer-UI and older servers. */
+  editorBoot?: EditorBoot;
 }
 
 /** Delay before the single retry of a transport-failed config fetch. */
 const RETRY_DELAY_MS = 750;
+
+/**
+ * Validate a raw `editorBoot` value. Anything short of three non-empty
+ * strings is dropped (treated as absent) — a partial boot record would
+ * build a broken share route, and the share handler's own validation
+ * would reject it anyway.
+ */
+function parseEditorBoot(value: unknown): EditorBoot | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { indexDocId, file, name } = value as Record<string, unknown>;
+  if (
+    typeof indexDocId === 'string' && indexDocId.length > 0 &&
+    typeof file === 'string' && file.length > 0 &&
+    typeof name === 'string' && name.length > 0
+  ) {
+    return { indexDocId, file, name };
+  }
+  return undefined;
+}
 
 /**
  * Fetch the preview session config, or null when the serving server is
@@ -56,9 +93,13 @@ export async function fetchPreviewSessionConfig(): Promise<PreviewSessionConfig 
     try {
       const data: unknown = await res.json();
       if (typeof data !== 'object' || data === null) return null;
-      const { allowEdit } = data as { allowEdit?: unknown };
+      const { allowEdit, editorBoot } = data as {
+        allowEdit?: unknown;
+        editorBoot?: unknown;
+      };
       if (typeof allowEdit !== 'boolean') return null;
-      return { allowEdit };
+      const parsedBoot = parseEditorBoot(editorBoot);
+      return parsedBoot ? { allowEdit, editorBoot: parsedBoot } : { allowEdit };
     } catch {
       return null;
     }

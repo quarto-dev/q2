@@ -1248,7 +1248,13 @@ required: `App.tsx:418-423`).
 - [x] Known warts to document in `--help` + here: hub-client persists a
       ProjectEntry + IndexedDB automerge cache per ephemeral session (stale
       entries accumulate across preview restarts — follow-up strand);
-      `--share --ui editor` means the *host* picks the UI for all guests
+      `--share --ui editor` means the *host* picks the UI for all guests.
+      **(storage wart fixed 2026-08-14, bd-sw4xy1vw: the preview-embed
+      build runs with `VITE_EPHEMERAL_STORAGE=1` — memory automerge
+      adapter + in-memory `getDb` facade, nothing persists per session,
+      and the migration-screen wart went with it since in-memory
+      `listProjects()` is always empty on boot. See
+      `claude-notes/plans/2026-08-14-preview-embed-ephemeral-storage.md`.)**
       *(both in the `--ui` help text. One more wart found in the e2e:
       on a fresh origin — which every `q2 preview` port is — the share
       route's auto-added project entry trips hub-client's **project-set
