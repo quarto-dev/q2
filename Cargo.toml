@@ -63,6 +63,10 @@ scraper = "0.26"
 grass = "0.13.4"
 include_dir = "0.7"
 flate2 = "1.1"
+tar = "0.4"
+# zstdmt: multithreaded compression for the build-time embed archiving
+# (quarto-preview build.rs); runtime decode is single-threaded either way.
+zstd = { version = "0.13", features = ["zstdmt"] }
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 walkdir = "2"
@@ -110,6 +114,9 @@ path = "./crates/quarto-core"
 
 [workspace.dependencies.quarto-util]
 path = "./crates/quarto-util"
+
+[workspace.dependencies.spa-manifest]
+path = "./crates/spa-manifest"
 
 [workspace.dependencies.quarto-yaml]
 version = "0.1.2"
@@ -173,6 +180,9 @@ path = "./crates/quarto-hub"
 
 [workspace.dependencies.quarto-navigation]
 path = "./crates/quarto-navigation"
+
+[workspace.dependencies.quarto-p2p]
+path = "./crates/quarto-p2p"
 
 [workspace.dependencies.quarto-publish]
 path = "./crates/quarto-publish"

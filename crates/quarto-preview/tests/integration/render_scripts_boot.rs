@@ -117,6 +117,8 @@ async fn pre_render_scripts_run_once_at_boot() {
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,
+        share: false,
+        ui: Default::default(),
     };
 
     let server = tokio::spawn(async move {

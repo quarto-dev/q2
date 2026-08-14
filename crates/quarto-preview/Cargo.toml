@@ -9,8 +9,7 @@ description = "Local HTTP server hosting the q2-preview SPA. Wraps quarto-hub fo
 [dependencies]
 anyhow.workspace = true
 tracing.workspace = true
-include_dir.workspace = true
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "fs", "sync"] }
 axum = "0.8"
 flate2.workspace = true
 pollster.workspace = true
@@ -28,10 +27,27 @@ samod = { version = "0.13.0", git = "https://github.com/quarto-dev/samod.git", b
 quarto-core.workspace = true
 quarto-error-reporting = { workspace = true, features = ["json"] }
 quarto-hub.workspace = true
+# Live-share tunnel host (`--share`, plan Phase 2). Native-only; keeps
+# all iroh usage behind quarto-p2p's API.
+quarto-p2p.workspace = true
 quarto-pandoc-types.workspace = true
 quarto-source-map.workspace = true
 quarto-system-runtime.workspace = true
 quarto-trace.workspace = true
+spa-manifest.workspace = true
+# The embed format: identity-only tar.zst archives, decoded lazily at
+# runtime (bd-rem4bpee). flate2 (above) regenerates gzip responses.
+tar.workspace = true
+zstd.workspace = true
+
+[build-dependencies]
+# Writes the editor embed's spa-manifest.json over the post-dedupe,
+# post-resolution file view (live-share plan Phase 2, design decision
+# 4 — only this script knows that file set).
+spa-manifest.workspace = true
+# Archives the embed dirs to tar.zst at compile time (bd-rem4bpee).
+tar.workspace = true
+zstd.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
@@ -39,6 +55,15 @@ tower = "0.5"
 http-body-util = "0.1"
 http = "1"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
+# The Phase 3 money test dials samod's `/ws` through the tunnel
+# (`dial_websocket` takes a `url::Url`).
+url = "2"
+# The join-frontend tests drive a WebSocket upgrade through the guest
+# port (tokio-tungstenite client) and stand up a ws echo target behind
+# the tunnel (axum `ws` feature).
+axum = { version = "0.8", features = ["ws"] }
+futures = "0.3"
+tokio-tungstenite = "0.29"
 
 [lints]
 workspace = true

@@ -457,6 +457,9 @@ async fn main() -> anyhow::Result<()> {
         register_root_ws: true,
         // The collaborative hub always persists document changes to disk.
         disk_write_policy: quarto_hub::sync::DiskWritePolicy::WriteBack,
+        // Long-running server: shutdown acknowledgment stays in the
+        // tracing log, nothing user-facing on stdout.
+        shutdown_message: None,
     };
 
     server::run_server(storage, config).await?;

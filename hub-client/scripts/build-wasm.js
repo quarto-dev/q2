@@ -9,6 +9,7 @@
  * Requirements:
  *   - Nightly Rust with rust-src: `rustup component add rust-src`
  *   - wasm-bindgen CLI: `cargo install wasm-bindgen-cli`
+ *   - wasm-opt (binaryen): `brew install binaryen` / `npm install -g binaryen`
  *   - Homebrew LLVM (macOS): `brew install llvm`
  */
 
@@ -38,6 +39,31 @@ function findLlvmClang() {
   }
   // On Linux, system clang typically supports wasm32
   return 'clang';
+}
+
+/**
+ * Locate a wasm-opt binary: PATH first, then the Homebrew binaryen
+ * locations (the formula is not always linked into the bin prefix).
+ * wasm-opt -Oz shrinks the shipped WASM substantially (live-share
+ * payload plan Phase 1), so it is a hard requirement, not a nice-to-have.
+ */
+function findWasmOpt() {
+  const onPath = spawnSync('wasm-opt', ['--version'], { encoding: 'utf-8' });
+  if (!onPath.error && onPath.status === 0) return 'wasm-opt';
+  if (platform() === 'darwin') {
+    const locations = [
+      '/opt/homebrew/opt/binaryen/bin/wasm-opt', // Apple Silicon
+      '/usr/local/opt/binaryen/bin/wasm-opt',     // Intel
+    ];
+    for (const loc of locations) {
+      if (existsSync(loc)) return loc;
+    }
+  }
+  console.error('Error: wasm-opt (binaryen) not found.');
+  console.error('Install with: brew install binaryen     (macOS)');
+  console.error('              npm install -g binaryen   (any OS with node)');
+  console.error('Or run: cargo dev-setup');
+  process.exit(1);
 }
 
 function run(cmd, args, opts = {}) {
@@ -131,7 +157,7 @@ async function buildWasm() {
   env.CFLAGS_wasm32_unknown_unknown = `-isystem ${wasmSysroot}`;
 
   // Step 1: cargo build (uses .cargo/config.toml for -Zbuild-std and rustflags)
-  console.log('Step 1/2: cargo build --target wasm32-unknown-unknown --release');
+  console.log('Step 1/3: cargo build --target wasm32-unknown-unknown --release');
   await run('cargo', [
     'build',
     '--target', 'wasm32-unknown-unknown',
@@ -145,12 +171,19 @@ async function buildWasm() {
     'wasm_quarto_hub_client.wasm',
   );
 
-  console.log('\nStep 2/2: wasm-bindgen --target web');
+  console.log('\nStep 2/3: wasm-bindgen --target web');
   await run('wasm-bindgen', [
     '--target', 'web',
     '--out-dir', pkgDir,
     wasmFile,
   ]);
+
+  // Step 3: wasm-opt -Oz on the bindgen output (the same order wasm-pack
+  // uses). Runs on the *_bg.wasm the SPA actually ships.
+  const wasmOpt = findWasmOpt();
+  const bgWasm = join(pkgDir, 'wasm_quarto_hub_client_bg.wasm');
+  console.log('\nStep 3/3: wasm-opt -Oz');
+  await run(wasmOpt, ['-Oz', bgWasm, '-o', bgWasm]);
 
   console.log(`\nWASM build complete: ${pkgDir}/`);
 }

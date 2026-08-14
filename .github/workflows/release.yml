@@ -170,6 +170,12 @@ jobs:
       - name: npm ci
         run: npm ci
 
+      # wasm-opt (binaryen) is `build:wasm` step 3 (live-share payload
+      # plan Phase 1). Pinned to the version local dev uses (Homebrew
+      # binaryen 132) so CI and dev builds produce the same bytes.
+      - name: Install binaryen (wasm-opt)
+        run: npm install -g binaryen@132.0.0
+
       - name: Build WASM (hub-client)
         run: npm run build:wasm
         working-directory: hub-client
@@ -523,6 +529,33 @@ jobs:
           done
           exit $FAIL
 
+      # Live-share local asset serving (plan Phase 2, bd-ee2fqm95): a
+      # --join guest serves SPA assets locally iff its embedded manifest
+      # hash equals the host's. That is only true cross-platform if every
+      # release binary embeds byte-identical dists — the web-payloads
+      # artifact makes that true by construction, and this step is the
+      # tripwire: record each platform's embedded hashes so the
+      # asset-manifest-check job can fail the release on drift. A missing
+      # viewer hash means the placeholder SPA snuck in, so fail here.
+      - name: Record embedded asset manifest hashes
+        shell: bash
+        run: |
+          BIN="./target/${{ matrix.target }}/release/q2"
+          [ "$RUNNER_OS" = "Windows" ] && BIN="$BIN.exe"
+          OUT="asset-manifest-hashes-${{ matrix.platform }}.txt"
+          "$BIN" preview --print-asset-manifest-hashes | tee "$OUT"
+          if ! grep -Eq '^viewer: [0-9a-f]{64}$' "$OUT"; then
+            echo "::error::release binary embeds no viewer asset manifest (placeholder SPA?)"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: asset-manifest-hashes-${{ matrix.platform }}
+          path: asset-manifest-hashes-${{ matrix.platform }}.txt
+          retention-days: 7
+          if-no-files-found: error
+
       # The no-glibc gate (bd-3b47pxmm). The step above proves the binary
       # runs on the RUNNER, which has glibc — it cannot detect an
       # accidental dynamic link against libc, so it cannot defend the
@@ -640,9 +673,48 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  # Live-share plan Phase 2 (bd-ee2fqm95): every per-platform binary
+  # must embed SPA bundles with identical manifest hashes, or a
+  # cross-platform host/guest pair silently loses local asset serving
+  # (the runtime fallback is safe — full tunneling — but invisible).
+  # The web-payloads artifact already makes the viewer dist identical
+  # by construction; this job is the tripwire for that and for the
+  # per-platform build.rs editor-manifest generation.
+  asset-manifest-check:
+    name: Asset manifests identical across platforms
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: asset-manifest-hashes-*
+          path: asset-hashes
+          merge-multiple: true
+
+      - name: Compare hashes across platforms
+        run: |
+          cd asset-hashes
+          EXPECTED="linux_amd64 linux_arm64 darwin_amd64 darwin_arm64 windows_amd64"
+          for platform in $EXPECTED; do
+            f="asset-manifest-hashes-$platform.txt"
+            if [ ! -f "$f" ]; then
+              echo "::error::missing asset manifest hashes for $platform"
+              exit 1
+            fi
+          done
+          cat asset-manifest-hashes-*.txt
+          # Identical across platforms => exactly one viewer line and
+          # one editor line after dedupe.
+          UNIQUE=$(sort -u asset-manifest-hashes-*.txt | wc -l | tr -d ' ')
+          if [ "$UNIQUE" -ne 2 ]; then
+            echo "::error::embedded asset manifest hashes differ across platforms — cross-platform live-share pairs would tunnel all assets"
+            exit 1
+          fi
+
   release:
     name: Create GitHub Release
-    needs: [preflight, build, hub-mcp-bundle]
+    needs: [preflight, build, hub-mcp-bundle, asset-manifest-check]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

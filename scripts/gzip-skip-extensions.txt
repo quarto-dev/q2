@@ -1,0 +1,26 @@
+# Extensions that are already-compressed containers: gzip only grows
+# them, so they never get a `.gz` precompression sibling and the
+# preview server never gzips them at runtime.
+#
+# Single source of truth for the gzip skip set, consumed by:
+#   - scripts/precompress-dist.mjs (build-time .gz sibling generation)
+#   - crates/quarto-preview/src/lib.rs (runtime gzip for embedded
+#     assets, via include_str!)
+#
+# One extension per line, lowercase, no leading dot. Blank lines and
+# `#` comments are ignored.
+br
+gz
+woff
+woff2
+png
+jpg
+jpeg
+gif
+webp
+avif
+ico
+mp4
+webm
+pdf
+zip

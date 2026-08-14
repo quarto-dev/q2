@@ -57,6 +57,14 @@ const hubTarget = process.env.VITE_HUB_SERVER || 'http://localhost:3000';
 /** Disable service worker in E2E tests to avoid caching interference */
 const isE2E = process.env.VITE_E2E === '1';
 
+/**
+ * Disable the PWA service worker entirely (`build:preview-embed`).
+ * The q2-preview embed serves this app from an ephemeral localhost
+ * origin per `q2 preview` session; a service worker would precache
+ * ~67 MB (WASM included) into Cache Storage for every random port.
+ */
+const disablePwa = process.env.VITE_DISABLE_PWA === '1';
+
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
@@ -95,7 +103,7 @@ export default defineConfig({
       },
     },
     // Disable PWA service worker in E2E tests to avoid caching interference
-    ...(!isE2E ? [VitePWA({
+    ...(!isE2E && !disablePwa ? [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['quarto-icon.svg'],
       manifest: {

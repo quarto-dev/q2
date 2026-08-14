@@ -20,7 +20,7 @@ import { Repo } from '@automerge/automerge-repo';
 import type { DocHandle, DocumentId } from '@automerge/automerge-repo';
 import { from as automergeFrom, save as automergeSerialize } from '@automerge/automerge';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
-import { IndexedDBStorageAdapter } from '@automerge/automerge-repo-storage-indexeddb';
+import { repoStorageAdapter } from './ephemeralStorage';
 import { resolveSyncServerUrl } from '../utils/routing';
 import { fetchAuthMe } from './authService';
 import { CollectionConnectError } from './collectionConnectError';
@@ -326,7 +326,9 @@ function acquireServer(syncServerUrl: string): ServerConnection {
     const wsAdapter = new BrowserWebSocketClientAdapter(resolved);
     const repo = new Repo({
       network: [wsAdapter],
-      storage: new IndexedDBStorageAdapter(),
+      // Ephemeral storage mode (q2 preview embed build) keeps the
+      // document cache in memory — see ephemeralStorage.ts.
+      storage: repoStorageAdapter(),
     });
     const conn: ServerConnection = {
       repo,
