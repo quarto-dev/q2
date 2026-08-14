@@ -176,14 +176,26 @@ Harness note: `render_index_with_toc` / `toc_nav` in `toc_markup.rs` were widene
 sibling modules of the single `integration` binary (`.claude/rules/integration-tests.md`), so
 this is an ordinary intra-binary import.
 
-### Phase 1 — Implementation
+### Phase 1 — Implementation — **DONE**
 
-- [ ] Replace `_ctx` with `ctx`; select the key on
+- [x] Replace `_ctx` with `ctx`; select the key on
       `ctx.project.project_kind() == ProjectKind::Website && ctx.format.identifier == FormatIdentifier::Html`
-- [ ] Extend the precedence-chain comment (load-bearing docs for bd-llhlzd7p,
-      bd-toc-smart-quotes-6nro57ed, bd-y89ihf0i — extend, don't rewrite away)
-- [ ] All Phase 0 tests green
-- [ ] `cargo nextest run --workspace` clean (monorepo rule: crate-local tests are not enough)
+- [x] Extend the precedence-chain comment (load-bearing docs for bd-llhlzd7p,
+      bd-toc-smart-quotes-6nro57ed, bd-y89ihf0i — extended, not rewritten away)
+- [x] All Phase 0 tests green (20 unit incl. 12 pre-existing; 15 e2e across
+      `toc_title_context` + `toc_markup`)
+- [x] `cargo nextest run --workspace --no-fail-fast` — **12077 run, 12076 passed, 1 failed**
+      (only the known stale-dist `config_reports_embedded_asset_manifest_hashes`, identical to
+      the pre-flight baseline)
+
+The predicate lives in a named free function, `toc_title_term(ctx) -> &'static str`, rather than
+inline in the precedence chain. Three reasons: the Q1 provenance and the three-condition
+derivation need somewhere to live; the `is_html_based()` trap deserves a comment attached to the
+comparison it warns about; and a named function is what a future reader greps for when asking
+"why does my PDF say On this page".
+
+Used `--no-fail-fast` for the workspace run: the first pass cancelled 795 tests after the known
+failure, which would have hidden any second regression behind an already-expected red.
 
 ### Phase 2 — End-to-end verification
 

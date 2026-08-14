@@ -40,9 +40,56 @@ use pampa::toc::{TocConfig, config_value_to_inlines, generate_toc, plain_inlines
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
+use crate::format::FormatIdentifier;
+use crate::project::ProjectKind;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::is_feature_disabled;
+
+/// The language-catalog term holding the TOC title for this render.
+///
+/// Quarto 1 keys the title off render context
+/// (`src/command/render/pandoc.ts:493`):
+///
+/// ```text
+/// projectIsWebsite(project) && !projectIsBook(project)
+///     && isHtmlOutput(format.pandoc, /* strict */ true)
+///     ? "toc-title-website"      // "On this page"
+///     : "toc-title-document"     // "Table of contents"
+/// ```
+///
+/// Two of Q1's three conditions carry over; the third is free:
+///
+/// - **Website.** Read from [`ProjectKind`], not from a `website:` key in
+///   merged metadata. A website project need not define `website:` at
+///   all (`project: {type: website}` alone is valid and Q1 still calls it
+///   a website), and a stray `website:` key in a standalone document is
+///   not a claim about project type. `project_kind` also already holds
+///   the *base* kind for custom project types (`resolve_project_type`
+///   rewrites them), so extension-defined website types work unchanged.
+/// - **Not a book.** Free here: Q1's `projectIsWebsite` is true for books
+///   (book extends website), which is why it needs `!projectIsBook`.
+///   [`ProjectKind::Book`] is a distinct variant, so `== Website`
+///   excludes books already.
+/// - **Strict HTML.** `isHtmlOutput(…, strict = true)` matches only
+///   `html`/`html4`/`html5` — it **excludes revealjs and epub**. So this
+///   compares [`FormatIdentifier::Html`] directly and deliberately does
+///   *not* use [`Format::is_html`], which delegates to `is_html_based()`
+///   and would also match [`FormatIdentifier::Revealjs`]. The format
+///   check is load-bearing rather than incidental: `TocGenerateTransform`
+///   is pushed into the pipeline for *every* format (see the
+///   Navigation-phase comment in `pipeline.rs`), so without it a PDF
+///   render of a website project would say "On this page".
+fn toc_title_term(ctx: &RenderContext) -> &'static str {
+    let is_website = ctx.project.project_kind() == ProjectKind::Website;
+    let is_strict_html = ctx.format.identifier == FormatIdentifier::Html;
+
+    if is_website && is_strict_html {
+        "toc-title-website"
+    } else {
+        "toc-title-document"
+    }
+}
 
 /// Transform that generates TOC from document headings.
 ///
@@ -79,7 +126,7 @@ impl AstTransform for TocGenerateTransform {
         TransformPhase::Navigation
     }
 
-    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         // Affirmative disable: `toc: false` in merged metadata suppresses
         // generation. Handled explicitly so the intent is symmetric with the
         // render transform (which also short-circuits on `toc: false`) and
@@ -135,13 +182,24 @@ impl AstTransform for TocGenerateTransform {
         // The two fallbacks are genuinely plain text — a localized term
         // from the language catalog, and an English literal — so they
         // are wrapped in a single `Str`.
+        //
+        // Which localized term depends on context
+        // (bd-website-toc-title-wn80ymab): website pages get
+        // `toc-title-website` ("On this page"), everything else gets
+        // `toc-title-document` ("Table of contents"). See
+        // `toc_title_term` for the predicate and its Q1 provenance. The
+        // *English literal* stays context-free by decision — it only
+        // fires when no catalog is loaded at all, which is a stage-less
+        // unit-test path, and giving it two spellings would just muddy
+        // which string is canonical.
         let title = ast
             .meta
             .get("toc-title")
             .and_then(config_value_to_inlines)
             .or_else(|| {
+                let term = toc_title_term(ctx);
                 crate::language::LanguageTerms::from_meta(&ast.meta)
-                    .and_then(|t| t.get("toc-title-document").map(plain_inlines))
+                    .and_then(|t| t.get(term).map(plain_inlines))
             })
             .or_else(|| Some(plain_inlines("Table of Contents")));
 
