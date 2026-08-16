@@ -19,10 +19,10 @@
 
 | | |
 |---|---|
-| Branch tip | `1445e26d4` (runbook commit) — feature work ends at `89f068364` |
+| Branch tip | `c667fac83` (runbook commit) — feature work ends at `89f068364` |
 | `main` tip | `0dcd7e831` |
 | Merge base | `65a888b0a` (2026-07-24) |
-| Commits ahead / behind | 10 / **340** |
+| Commits ahead / behind | 12 / **340** (10 feature + 2 runbook) |
 | Branch diff | 491 files, +104,835 / −3,498 |
 | — of which conflict | **23 files, +5,326 / −222** (all `crates/quarto-core` + repo files) |
 | — of which clean | 468 files, +99,509 (mostly new `ts-packages/`) |
@@ -125,9 +125,29 @@ with `self.project.config.render_patterns` — the *user's* patterns — so synt
 per-extension globs never reach it and cannot produce spurious `Q-5-13`
 "pattern matched no renderable files" warnings. Preserve that.
 
+Note the signature must change: main's `effective_render_patterns(user: &[RawGlob])`
+(`discovery.rs:124`) takes no config and so cannot reach the extension set.
+
 **Provenance.** Synthetic globs need a `SourceInfo`. Main already has the
 precedent — `effective_render_patterns` builds the default with
 `SourceInfo::generated(By::programmatic_config())`. Use the same.
+
+**Which extensions widen — the fixed/claimed distinction.** Only
+**engine-claimed** extensions emit a synthetic glob. `FIXED_RENDERABLE` members
+must not, or `.md` would become a default pattern and undo bd-6d2wj4zp. Two
+concrete consequences the implementer must handle:
+
+- `RenderableExtensions` (`discovery.rs:48`) is a flat
+  `HashSet<String>` holding `FIXED_RENDERABLE ∪ claims`, so it **cannot answer
+  "which members came from an engine."** Give the newtype a second field holding
+  the engine-claimed list (and an accessor), rather than subtracting
+  `FIXED_RENDERABLE` at the use site — subtraction is fragile and would silently
+  change meaning if the fixed set ever grows.
+- The widening loop must **exclude the native set** (`""`, `qmd`, `md`,
+  `markdown`) **unconditionally** — do not rely on B3 having landed. Phase A ships
+  before Phase B, and in between an engine claiming `md` would otherwise make
+  `**/*.md` a default pattern. Nothing breaks the build and no existing test
+  catches it.
 
 ## D2 — Static claims only participate in discovery; dynamic claimers fall through silently
 
@@ -177,8 +197,20 @@ compatibility concern.
 **The field becomes `Option<SourceType>`.** With only two variants, the existing
 `unwrap_or(SourceType::Markdown)` in `LoadedSource::new` stops being a shrug about
 unknown formats and starts asserting "plain markdown, never executes" about a file
-that is about to be converted and executed. `None` = not yet determined; the
-conversion stage is the only authority.
+that is about to be converted and executed.
+
+The resulting contract, stated precisely so the pass-through case isn't left to
+guesswork:
+
+- `LoadedSource::new` stores `SourceType::from_path(&path)` **directly**, with no
+  fallback. Native files get `Some(Qmd)` / `Some(Markdown)` at load; anything
+  else gets `None`.
+- `None` means "unknown extension, not yet converted."
+- `SourceConversionStage` sets `Some(Qmd)` on the conversion branch and leaves the
+  pass-through branch alone (it is already correct from load).
+- **Invariant:** after the conversion stage, `source_type` is always `Some` — an
+  unclaimed non-native file never gets that far, because the stage hard-errors on
+  it.
 
 ## D4 — Rename the stage for what it does; keep `claims_file` as the predicate
 
@@ -255,7 +287,16 @@ carries it (`TsMappedStringWithMap.source_map`), but Rust drops it at three
 points. `ParseDocumentStage` compensates honestly — it registers converted text
 under `<foo.ipynb (converted by jupyter)>` — so this is a **quality gap, not a
 correctness bug**. Filed as **bd-zlemoc6w** (p1). Gordon's call: **before filing
-the PR, not part of this merge.** Note the drop site in the stage moves under D4.
+the PR, not part of this merge.**
+
+Two notes for whoever picks up bd-zlemoc6w: the Rust-side drop site is
+`ts_engine.rs:1006` (it takes `result.value` and discards `result.source_map`),
+and the stage-side drop site — currently `.map(|(text, _source_info)| text)` in
+`engine_claims_file.rs` — **moves to `source_conversion.rs` under D4**.
+
+This runbook ends when Phase C is green. bd-zlemoc6w is scheduled *after* it and
+*before* the PR; it is deliberately not a checkbox here, because nothing in this
+runbook can satisfy it.
 
 ---
 
@@ -270,10 +311,14 @@ the PR, not part of this merge.** Note the drop site in the stage moves under D4
 
 ## A1. Regenerated files
 
-- [ ] Clear `.braid/snapshot.jsonl` + any lockfile conflict (either side)
-- [ ] `braid export > .braid/snapshot.jsonl`
-- [ ] `npm install` from **repo root** if `package-lock.json` conflicted
-- [ ] `Cargo.lock` regenerates during A8's build — no action here
+- [ ] Clear `.braid/snapshot.jsonl` (either side), then
+      `braid export > .braid/snapshot.jsonl`
+
+> **Lockfiles do not conflict in this merge.** `Cargo.lock`,
+> `crates/wasm-quarto-hub-client/Cargo.lock` and `package-lock.json` all
+> auto-merge — verified against the merge blob. The global constraint about
+> never hand-merging them still stands if that changes; there is just nothing to
+> do here today. `Cargo.lock` refreshes during A8's build.
 
 ## A2. Additive unions (low risk)
 
@@ -307,6 +352,10 @@ there is no hidden dependency.
 - [ ] `extension/types.rs` — `pub title: Option<String>`
 - [ ] `filter_resolve.rs`, `stage/stages/metadata_merge.rs`,
       `transforms/shortcode_resolve.rs` — `title: Some(name.to_string())`
+- [ ] `extension/discover.rs` hunk 1 — the `bad-ext` test fixture. The branch
+      omits `contributes` with a comment saying title "defaults to the id name";
+      main uses unparseable YAML. **Take main's side** (the branch's premise is
+      what A3 is reversing). This file has **7** hunks, not 6.
 - [ ] `extension/discover.rs` hunks 2–7 — `title: Some("…".to_string())`
 - [ ] `extension/read.rs` hunk 1 — main's optional-metadata reads via `as_plain_text()`
 - [ ] `extension/read.rs` hunks 4–6 — **delete** the branch's
@@ -348,19 +397,40 @@ main.
 
 - [ ] **Delete** the branch's superseded hand-rolled glob code: `expand_patterns`,
       `normalize_pattern`, `glob_match`, `glob_match_path`, `segment_match`,
-      `wildcard_match`, `path_to_forward_slashes`, `to_forward_slashes`. Main's
-      `crate::glob::GlobPattern` / `RawGlob` system replaces all of it.
-      **Check for out-of-file callers first** — `glob_match_path` and
-      `path_to_forward_slashes` were `pub`.
+      `wildcard_match`, `path_to_forward_slashes`, `to_forward_slashes`, and
+      **`relative_to_dir`**. Main's `crate::glob::GlobPattern` / `RawGlob` system
+      replaces all of it.
+      **Known out-of-file callers** (these were `pub`; the answer is already
+      established, don't re-derive it): `crates/quarto-core/src/project/dependency_graph.rs:54`
+      and `crates/quarto-core/src/transforms/listing_generate.rs:34` import them
+      on the branch. On main both use `crate::glob` instead
+      (`listing_generate.rs:40` imports `crate::glob::path_to_forward_slashes`).
+      `dependency_graph.rs` is main-only-modified so main's version wins
+      automatically; **`listing_generate.rs` is modified on both sides and
+      auto-merges — check it explicitly after the build.**
 - [ ] Add `renderable_extensions: &'a RenderableExtensions` to main's `DiscoveryConfig`
-- [ ] Make `has_renderable_extension` consult the set (keep main's `.md`
-      membership; the set is a superset)
-- [ ] Keep `RenderableExtensions` + `ext_in_set`, adapted to main's call shape
+- [ ] **Set `FIXED_RENDERABLE = &["qmd", "md"]`.** It is `&["qmd"]` on the branch
+      (`discovery.rs:42`) while main's `has_renderable_extension` is
+      `matches!(ext, Some("qmd" | "md"))`. **This matters:** if
+      `has_renderable_extension` is switched to consult the set while the set
+      still lacks `md`, `.md` drops out of discovery entirely and silently
+      reverts bd-6d2wj4zp. (An earlier draft of this plan said "the set is a
+      superset" — it is not.) Equivalent alternative if you prefer to leave the
+      constant alone: write the predicate as
+      `matches!(ext, Some("qmd" | "md")) || ext_in_set(path, set)`. Pick one and
+      say which in the commit message.
+- [ ] Keep `RenderableExtensions` + `ext_in_set`, adapted to main's call shape,
+      plus the engine-claimed accessor D1 requires
 - [ ] Thread the set through `walk_sources` → `walk_rec` → `is_renderable_source`
-- [ ] **D1:** widen `effective_render_patterns` — when no positive user pattern
-      exists, emit `**/*.qmd` plus one `**/*.<ext>` per **statically** claimed
-      extension (D2), each with `SourceInfo::generated(By::programmatic_config())`.
-      Do **not** touch the `render_pattern_diagnostics` path.
+- [ ] **D1:** widen `effective_render_patterns` (signature change required) —
+      when no positive user pattern exists, emit `**/*.qmd` plus one
+      `**/*.<ext>` per **statically** claimed extension (D2), each with
+      `SourceInfo::generated(By::programmatic_config())`, **excluding the native
+      set unconditionally**. Do **not** touch the `render_pattern_diagnostics`
+      path.
+- [ ] Update `Q-5-13`'s message text — it hard-codes "No renderable source file
+      (`.qmd` or `.md`) in the project matches this pattern", which becomes wrong
+      once engine-claimed extensions are renderable
 - [ ] Re-port the branch's T6/T6b/T7 tests against the new function names, and
       confirm they still bind: the same exclusion rules (underscore, dot,
       output-dir) must apply to a claimed `.echo` as to `.qmd`, and a non-member
@@ -386,8 +456,13 @@ main.
       rebinding, adapt the branch's calls to the non-`Option` `config`.
       (Verified behaviorally equivalent for single-file renders: a default
       `ProjectConfig` yields no tabled engines, same as the old `None`.)
-- [ ] `parse_config` gained `cli_selection: Option<&[String]>` on main — update the
-      branch's 2-arg call sites (5 occurrences)
+- [ ] `parse_config` gained `cli_selection: Option<&[String]>` on main. The branch
+      has exactly **2** call sites (`project/mod.rs:1223`, `:1233`) plus the
+      definition at `:1248` — both sit *outside* the conflict hunks and arrive by
+      auto-merge, so main's 3-arg definition and the branch's 2-arg calls can
+      collide silently. Take main's signature and update both calls. (An earlier
+      draft said 5 occurrences; that count included the definition and doc
+      comments.)
 
 ## A7. Both-added adjacency in the engine/stage cluster
 
@@ -433,6 +508,20 @@ call sites.
       `quarto-brand` wants `quarto_util::is_external_url`
 - [ ] Repeat until `cargo build --workspace` is clean
 
+**Silent collisions in auto-merged files** — these do not conflict, so nothing
+flags them; they surface as test failures in A9 unless you look:
+
+- [ ] **`pipeline.rs` stage-count assertions.** The file auto-merges but both
+      sides hard-code counts: main asserts `stages.len(), 23` / `pipeline.len(), 23`;
+      the branch asserts `24` / `24`. Git silently takes one side and the test
+      fails later. **Do not hand-count the tail.** Run the ordering test, read the
+      sequence it prints on failure, and update each `stages[n]` expectation to
+      the observed order — confirming every entry is a stage you *expect* (both
+      new stages present, none accidentally dropped). Same for the
+      `build_analysis_pipeline` count if it shifts.
+- [ ] **`listing_generate.rs`** — modified on both sides, auto-merges, and imports
+      glob helpers A5 deletes (see A5's note)
+
 ## A9. Commit the merge
 
 - [ ] `cargo nextest run --workspace` (run directly — **never** pipe through `tail`)
@@ -447,23 +536,77 @@ call sites.
 Each of these is a change *on top of* the merge, not a conflict resolution. Keep
 them separate so the merge stays reviewable.
 
-## B1. `SourceType`: drop `Ipynb`/`Rmd`, field becomes `Option`, add the WASM guard
+## B1. `SourceType`: drop `Ipynb`/`Rmd`, field becomes `Option`
 
 Per **D3**.
 
 - [ ] Remove the `Ipynb` and `Rmd` variants and their `from_extension` arms
-- [ ] Update the 3 affected assertions in `stage/data.rs` tests
-- [ ] `LoadedSource.source_type` → `Option<SourceType>`; `LoadedSource::new` stops
-      calling `unwrap_or(SourceType::Markdown)`; the conversion stage is the only
-      authority. Update the two `trace.rs` sites (`:419`, `:505`).
-- [ ] **WASM guard.** `SourceConversionStage` is inserted in the **native**
-      pipeline builders only (single site, `pipeline.rs:276`). Without `Ipynb` in
-      the enum, a `.ipynb` on WASM would be neither converted nor rejected — it
-      would parse as markdown and render raw JSON silently. Add a guard so the
-      WASM pipeline **errors loudly** on a non-native extension. (We may have WASM
-      engines eventually; we do not today.)
-- [ ] Tests: a non-native extension on the WASM path produces a loud error, not
-      silent markdown
+- [ ] Update the affected assertions in `crates/quarto-core/src/stage/data.rs`
+      tests: `:467`, `:468`, `:480`, and **`:488`**
+      (`assert_eq!(source.source_type, SourceType::Qmd)` becomes `Some(…)`)
+- [ ] `LoadedSource.source_type` → `Option<SourceType>` per the D3 contract:
+      `LoadedSource::new` uses `from_path()` directly with no fallback; the
+      conversion stage stamps `Some(Qmd)` only on the conversion branch
+- [ ] Update `crates/quarto-core/src/stage/trace.rs` `:419` and `:505` (Debug
+      formatting of the field), and `:554`
+      (`assert_eq!(json["source_type"], "Qmd")` — decide the rendering for `Some`
+      vs `None` and make the assertion match)
+
+> **There is no WASM guard to write.** An earlier draft of this plan claimed
+> `SourceConversionStage` runs in native builders only, citing the stage's own
+> doc comment. **That comment is stale and the claim was false.**
+> `build_html_pipeline_stages_with_options` (`pipeline.rs:268`) has no `cfg` gate
+> and inserts the stage unconditionally; the live WASM entry points reach it
+> (`crates/wasm-quarto-hub-client/src/lib.rs:1520` → `render_qmd_to_html`, `:1495`
+> → `render_qmd_to_preview_ast` → `build_q2_preview_pipeline_stages`, which is
+> itself a filtered call to the shared builder). WASM already converts, and
+> already hard-errors on unclaimed non-native extensions. See B1b for the real
+> residue.
+
+## B1b. Delete the obsolete `build_wasm_html_pipeline`
+
+`build_wasm_html_pipeline` (`pipeline.rs:539`) is the one builder that lacks the
+conversion stage. Git archaeology (2026-08-16) establishes it is **dead code, not
+a seam**:
+
+- Added by Carlos in `094c62a4a` (2026-01-28) for "a 4-stage pipeline without
+  engine execution."
+- **It has never had a production caller**, at origin or since — verified across
+  all refs; nothing in `crates/wasm-quarto-hub-client/` or `hub-client/` has ever
+  referenced it. Callers today are two integration tests, one unit test, and a
+  re-export at `lib.rs:80`.
+- Its own originating plan (`claude-notes/plans/2026-01-28-unify-hub-client-pipeline.md`)
+  marks Phase 4 "Update WASM Entry Points" as **already done** — the browser path
+  already went through `render_qmd_to_html` on the shared builder. It was born
+  redundant.
+- The canonical way to give the browser a pruned pipeline is now
+  `build_q2_preview_pipeline_stages`, which *derives* from the shared builder
+  (calls it, then filters by stage name) instead of hand-maintaining a parallel
+  list.
+- It has already silently drifted: `d66f4f0eb` (Task 10, 2026-06-30) added
+  `EngineClaimsFileStage` to the shared builder and did not touch this one; no
+  test caught it. Its unit test's rationale for keeping `math-js` also
+  contradicts the real preview pipeline, which excludes `math-js` for unrelated
+  architectural reasons — it encodes a superseded design.
+
+- [ ] Delete `build_wasm_html_pipeline` and its re-export at
+      `crates/quarto-core/src/lib.rs:80`
+- [ ] Delete `test_build_wasm_html_pipeline` (`pipeline.rs:2094`)
+- [ ] Retarget the two integration call sites —
+      `tests/integration/document_profile_pipeline.rs:91` and
+      `tests/integration/language_pipeline.rs:89` — at the shared builder.
+      **No unique coverage is lost:** both files already assert the identical
+      invariant against `build_html_pipeline_stages` a few lines away, so the
+      retargeted assertions become duplicates and may simply be dropped.
+- [ ] Fix the stale doc comment on the conversion stage that claims it is
+      inserted "in the **native** pipeline builders only" — it is in the shared
+      builder and runs on WASM too. That comment is what produced the false
+      premise in the first place; leaving it would re-mislead the next reader.
+
+> **One honest gap:** the originating work was tracked as `kyoto-5hi`, which
+> predates both the beads and braid trackers and appears in neither. Whether
+> removal was ever explicitly considered and declined is unknowable from the
+> repo. Everything else points one way.
 
 ## B2. Rename to `SourceConversionStage`
 
@@ -482,8 +625,13 @@ Per **D4**.
 Per **D5**.
 
 - [ ] In the claims loop, if the extension is in the native set (`""`, `qmd`,
-      `md`, `markdown`) and an engine claims it: emit the warning, `continue`,
+      `md`, `markdown`) and an engine claims it: refuse the claim, `continue`,
       fall through to pass-through
+- [ ] **Emit `Q-2-50` once per file, not once per claiming engine.** The refusal
+      sits inside `for engine in &engines`, so a naive `continue` with an inline
+      warning produces N diagnostics for one file when N engines claim it.
+      Collect the refused engine names and emit a single diagnostic after the
+      loop, naming them all.
 - [ ] Add `Q-2-50` to `crates/quarto-error-catalog/error_catalog.json`
       (subsystem `markdown`; `Q-2-49` is the current highest in both the catalog
       and `docs/errors/markdown/`)
@@ -520,8 +668,20 @@ no environment at all, so merged as-is TS engines see neither.
 
 # Phase C — verification and PR prep
 
+> **Prerequisite: `deno` must be on `PATH`.** The engine e2e suites are
+> deno-gated and **skip silently** when it is absent
+> (`crates/quarto-core/tests/integration/echo_engine_e2e.rs:41`, and siblings),
+> and `ensure_bundle` (`tests/integration/engine_fixture_build.rs:62`)
+> regenerates fixture bundles at test time. Without deno, `cargo nextest run
+> --workspace` can be **fully green with every test that binds D1, D2 and D5
+> skipped** — i.e. green while proving nothing about this merge's actual subject.
+
+- [ ] `deno --version` succeeds
 - [ ] `cargo build --workspace` clean
 - [ ] `cargo nextest run --workspace` green (run directly, not piped)
+- [ ] **Zero SKIP lines in the engine suites.** Grep the nextest output for
+      skipped tests in `echo_engine_e2e`, `julia_engine_e2e` and siblings; a skip
+      here means the D1/D2/D5 work is unverified, not passing.
 - [ ] `cargo xtask lint`
 - [ ] **`cargo xtask verify`** — full, **not** `--skip-hub-build`: `quarto-core`
       and `wasm-quarto-hub-client` both change
@@ -529,10 +689,15 @@ no environment at all, so merged as-is TS engines see neither.
       user-visible feature). At minimum:
   - `cargo run --bin q2 -- render docs/` — inspect output
   - a project with a claimed `.echo` extension and **no** `project.render` key,
-    confirming the `.echo` file renders (this exercises D1 through the real binary)
+    confirming the `.echo` file renders (this exercises D1 through the real
+    binary — it is the single most important check in Phase C, because D1 is the
+    decision with the least existing test coverage). Build the fixture from
+    `crates/quarto-core/tests/fixtures/extensions/echo-engine`; note its `dist/`
+    is deliberately uncommitted and is regenerated by `ensure_bundle`, so build
+    the extension first (`q2 call build-ts-extension`) or copy the fixture into a
+    scratch project the test harness has already bundled.
   - record the exact invocations and output snippets below
 - [ ] Report snapshot changes (count, summary, surprises)
-- [ ] Confirm bd-zlemoc6w (D7) is done **before** the PR is filed
 - [ ] **Ask Gordon for push permission.** Stop here.
 
 ```
