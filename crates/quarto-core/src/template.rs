@@ -79,6 +79,61 @@ impl PartialResolver for RuntimeResolver<'_> {
 ///   document contains math; rendered immediately before
 ///   `$for(scripts)$` so the inline config block lands BEFORE the
 ///   loader (what MathJax expects).
+/// A stylesheet or script reference destined for the template's
+/// `$css$` / `$scripts$` list: a URL plus optional extra tag
+/// attributes (bd-0pic6 A3 — the light/dark theme sheets carry
+/// `class` / `id` / `data-mode`).
+///
+/// An attribute-free resource renders as a plain
+/// `TemplateValue::String`, preserving byte-identical output and
+/// compatibility with custom templates that write `$css$` directly.
+/// An attributed resource renders as a `TemplateValue::Map` with the
+/// URL under the given key (`href` / `src`) and the pre-rendered
+/// attribute string under `attribs`; the built-in templates branch on
+/// `$if(css.href)$` / `$if(scripts.src)$`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkedResource {
+    pub url: String,
+    pub attribs: Vec<(String, String)>,
+}
+
+impl LinkedResource {
+    /// An attribute-free resource (today's plain `<link>`/`<script>`).
+    pub fn plain(url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            attribs: Vec::new(),
+        }
+    }
+
+    fn template_value(&self, url_key: &str) -> TemplateValue {
+        if self.attribs.is_empty() {
+            return TemplateValue::String(self.url.clone());
+        }
+        let mut rendered = String::new();
+        for (k, v) in &self.attribs {
+            rendered.push(' ');
+            rendered.push_str(k);
+            rendered.push_str("=\"");
+            rendered.push_str(&escape_html_attr(v));
+            rendered.push('"');
+        }
+        let mut map = std::collections::HashMap::new();
+        map.insert(url_key.to_string(), TemplateValue::String(self.url.clone()));
+        map.insert("attribs".to_string(), TemplateValue::String(rendered));
+        TemplateValue::Map(map)
+    }
+}
+
+/// Minimal HTML-attribute-value escaping for [`LinkedResource`]
+/// attributes (which are producer-controlled, but escaped anyway).
+fn escape_html_attr(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+}
+
 const MINIMAL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <html$if(lang)$ lang="$lang$"$endif$>
 <head>
@@ -88,13 +143,13 @@ $if(pagetitle)$
 <title>$pagetitle$</title>
 $endif$
 $for(css)$
-<link rel="stylesheet" href="$css$">
+$if(css.href)$<link rel="stylesheet" href="$css.href$"$css.attribs$>$else$<link rel="stylesheet" href="$css$">$endif$
 $endfor$
 $if(math)$
 $math$
 $endif$
 $for(scripts)$
-<script src="$scripts$"></script>
+$if(scripts.src)$<script src="$scripts.src$"$scripts.attribs$></script>$else$<script src="$scripts$"></script>$endif$
 $endfor$
 $for(header-includes)$
 $header-includes$
@@ -174,6 +229,9 @@ const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+$if(color-scheme-meta)$
+<meta name="color-scheme" content="$color-scheme-meta$">
+$endif$
 <meta name="generator" content="quarto-rust-$version$">
 $for(author-meta)$
 <meta name="author" content="$author-meta$">
@@ -194,19 +252,22 @@ $if(pagetitle)$
 <title>$pagetitle$</title>
 $endif$
 $for(css)$
-<link rel="stylesheet" href="$css$">
+$if(css.href)$<link rel="stylesheet" href="$css.href$"$css.attribs$>$else$<link rel="stylesheet" href="$css$">$endif$
 $endfor$
 $if(math)$
 $math$
 $endif$
 $for(scripts)$
-<script src="$scripts$"></script>
+$if(scripts.src)$<script src="$scripts.src$"$scripts.attribs$></script>$else$<script src="$scripts$"></script>$endif$
 $endfor$
 $for(header-includes)$
 $header-includes$
 $endfor$
 </head>
 <body class="$body-classes$">
+$if(color-mode-script)$
+$color-mode-script$
+$endif$
 $if(rendered.draft-alert-text)$
 <div id="quarto-draft-alert" class="alert alert-warning"><i class="bi bi-pencil-square"></i>$rendered.draft-alert-text$</div>
 $endif$
@@ -670,8 +731,8 @@ pub fn render_with_compiled_template(
     template: &Template,
     body: &str,
     meta: &ConfigValue,
-    css_paths: &[String],
-    script_paths: &[String],
+    css_paths: &[LinkedResource],
+    script_paths: &[LinkedResource],
 ) -> Result<(String, Vec<DiagnosticMessage>)> {
     let mut ctx = TemplateContext::new();
     ctx.insert("body", TemplateValue::String(body.to_string()));
@@ -696,10 +757,8 @@ pub fn render_with_compiled_template(
     );
 
     // Build combined CSS list: default resources first, then user-specified
-    let mut css_list: Vec<TemplateValue> = css_paths
-        .iter()
-        .map(|p| TemplateValue::String(p.clone()))
-        .collect();
+    let mut css_list: Vec<TemplateValue> =
+        css_paths.iter().map(|r| r.template_value("href")).collect();
 
     // Add any user-specified CSS from metadata
     if let Some(user_css) = extract_css_from_meta(meta) {
@@ -712,10 +771,55 @@ pub fn render_with_compiled_template(
     if !script_paths.is_empty() {
         let scripts_list: Vec<TemplateValue> = script_paths
             .iter()
-            .map(|p| TemplateValue::String(p.clone()))
+            .map(|r| r.template_value("src"))
             .collect();
         ctx.insert("scripts", TemplateValue::List(scripts_list));
     }
+
+    // Light/dark theme pair wiring (bd-0pic6 D1a + A4). When a dark
+    // variant exists:
+    //
+    // - `color-scheme-meta` → `<meta name="color-scheme">` pre-CSS
+    //   paint hint: the author-default scheme first;
+    //   `respect-user-color-scheme: true` offers both so the UA picks
+    //   per `prefers-color-scheme`.
+    // - `color-mode-script` → the inline color-mode runtime, injected
+    //   as the FIRST child of `<body>` so the initial variant
+    //   selection happens synchronously before first paint (the FOUC
+    //   hard constraint). Configured via data attributes.
+    //
+    // Only the full template references these variables; setting them
+    // elsewhere is inert.
+    let dark_theme_default = if let Ok(theme_config) =
+        quarto_sass::ThemeConfig::from_config_value(meta)
+        && let Some(dark) = &theme_config.dark
+    {
+        let author_prefers_dark = dark.is_default;
+        let respect = meta
+            .get("respect-user-color-scheme")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let content = match (respect, author_prefers_dark) {
+            (true, false) => "light dark",
+            (true, true) => "dark light",
+            (false, false) => "light",
+            (false, true) => "dark",
+        };
+        ctx.insert(
+            "color-scheme-meta",
+            TemplateValue::String(content.to_string()),
+        );
+        ctx.insert(
+            "color-mode-script",
+            TemplateValue::String(format!(
+                "<script id=\"quarto-color-mode\" data-author-prefers-dark=\"{author_prefers_dark}\" data-respect-user-color-scheme=\"{respect}\">{}</script>",
+                COLOR_MODE_JS
+            )),
+        );
+        Some(author_prefers_dark)
+    } else {
+        None
+    };
 
     // Wire `rendered.includes.{header, before-body, after-body}` into the
     // Pandoc-native template variable names (kept stable per
@@ -767,9 +871,12 @@ pub fn render_with_compiled_template(
             (None, false) => "fullcontent".to_string(),
         };
         // bd-mtzry: append the color-mode class so theme-conditional CSS
-        // can key off `body.quarto-light` (matches Q1 default). Dark-mode
-        // theme support lands separately; for now we always emit `quarto-light`.
-        let body_classes = append_color_mode_class(&structural);
+        // can key off `body.quarto-light` / `body.quarto-dark`. The
+        // baked class matches the AUTHOR default (Q1 bakes the same
+        // way); under `respect-user-color-scheme` the inline runtime
+        // may flip it before first paint.
+        let body_classes =
+            append_color_mode_class(&structural, dark_theme_default.unwrap_or(false));
         ctx.insert("body-classes", TemplateValue::String(body_classes));
     }
 
@@ -797,27 +904,37 @@ pub fn render_with_compiled_template(
 /// objects, and engine-contributed `PandocIncludes`. If the array is empty
 /// or absent (resolve stage didn't run), the template variable is not set
 /// — `$for(template_var)$` then produces no output.
-/// Append the active color-mode class (today always `quarto-light`)
-/// to a structural body-class string. Empty input → `"quarto-light"`;
-/// non-empty input → `"<structural> quarto-light"`. Idempotent: a
-/// structural that already contains `quarto-light` is returned as-is.
+/// The inline color-mode runtime (bd-0pic6 A4), embedded at build
+/// time and injected into `<body>` via the `color-mode-script`
+/// template variable when a dark theme variant exists.
+const COLOR_MODE_JS: &str = include_str!("../resources/js/quarto-color-mode.js");
+
+/// Append the active color-mode class (`quarto-light`, or
+/// `quarto-dark` when the author-default variant is dark — Q1's
+/// key-order rule) to a structural body-class string. Empty input →
+/// the bare class; non-empty input → `"<structural> <class>"`.
+/// Idempotent: a structural that already contains either color-mode
+/// class is returned as-is.
 ///
-/// bd-mtzry. Light/dark theme detection is not yet wired into the
-/// pipeline (the `theme:` key today is a single Bootswatch name); when
-/// it lands, this helper grows a `mode` argument and the call site
-/// decides which class to emit. Until then `quarto-light` matches
-/// Quarto 1's default body class for documents with no dark theme set.
-fn append_color_mode_class(structural: &str) -> String {
-    const LIGHT: &str = "quarto-light";
+/// bd-mtzry. The baked class reflects the AUTHOR default; the inline
+/// color-mode runtime (A4) re-syncs it from the active stylesheet's
+/// `data-mode` before first paint when a stored preference or
+/// `respect-user-color-scheme` overrides the default.
+fn append_color_mode_class(structural: &str, default_dark: bool) -> String {
+    let class = if default_dark {
+        "quarto-dark"
+    } else {
+        "quarto-light"
+    };
     let already = structural
         .split_whitespace()
-        .any(|tok| tok == LIGHT || tok == "quarto-dark");
+        .any(|tok| tok == "quarto-light" || tok == "quarto-dark");
     if already {
         structural.to_string()
     } else if structural.is_empty() {
-        LIGHT.to_string()
+        class.to_string()
     } else {
-        format!("{structural} {LIGHT}")
+        format!("{structural} {class}")
     }
 }
 
@@ -854,7 +971,8 @@ pub fn render_with_resources(
     css_paths: &[String],
 ) -> Result<(String, Vec<DiagnosticMessage>)> {
     let template = default_html_template()?;
-    render_with_compiled_template(&template, body, meta, css_paths, &[])
+    let css: Vec<LinkedResource> = css_paths.iter().map(LinkedResource::plain).collect();
+    render_with_compiled_template(&template, body, meta, &css, &[])
 }
 
 /// Render a document with format-based template selection.
@@ -877,7 +995,8 @@ pub fn render_with_format(
     // `author-meta`).
     let mut meta = meta.clone();
     crate::transforms::normalize_authors_meta(&mut meta);
-    render_with_compiled_template(&template, body, &meta, css_paths, &[])
+    let css: Vec<LinkedResource> = css_paths.iter().map(LinkedResource::plain).collect();
+    render_with_compiled_template(&template, body, &meta, &css, &[])
 }
 
 /// Compile the appropriate built-in template (minimal or full) with a custom
@@ -2516,7 +2635,7 @@ mod tests {
             "<p>body</p>",
             &meta,
             &[],
-            &["libs/kbd/kbd.js".to_string()],
+            &[LinkedResource::plain("libs/kbd/kbd.js")],
         )
         .unwrap();
 

@@ -85,7 +85,8 @@ pub fn assemble_theme_scss(
     // (like TS Quarto's order for built-in user layers), then any theme
     // layers from the config. User themes can override any `.hl-*` or
     // title-block rule by declaring the same selector in a later layer.
-    let highlight_layer = load_highlight_layer()?;
+    let highlight_layer =
+        load_highlight_layer(config.highlight_style.as_ref().map(|h| h.name.as_str()))?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
     let listing_layer = load_listing_layer()?;
@@ -152,8 +153,8 @@ pub fn compile_theme_css(
 ) -> Result<String, SassError> {
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
-    if !config.has_themes() {
-        // No custom themes - use default Bootstrap
+    if !config.has_themes() && config.highlight_style.is_none() {
+        // No custom themes and default palette - use default Bootstrap
         return compile_default_css(context.runtime(), config.minified);
     }
 
@@ -219,7 +220,11 @@ pub fn compile_with_doc_vars(
         if config.has_themes() {
             return compile_theme_css(config, context);
         }
-        if config.title_block_layer {
+        // The shared default bundle is palette-agnostic; a
+        // `highlight-style:` (bd-0pic6 phase B) needs a direct
+        // assembly so its palette layer composes (and so the OnceLock
+        // cache never holds a non-default palette).
+        if config.title_block_layer && config.highlight_style.is_none() {
             return compile_default_css(context.runtime(), config.minified);
         }
     }
@@ -229,7 +234,8 @@ pub fn compile_with_doc_vars(
     // matching `compile_default_css` and `assemble_theme_scss`, then any
     // theme layers, then doc_vars LAST so it lands at the top of the
     // merged-defaults section and wins the `!default` race.
-    let highlight_layer = load_highlight_layer()?;
+    let highlight_layer =
+        load_highlight_layer(config.highlight_style.as_ref().map(|h| h.name.as_str()))?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
     let listing_layer = load_listing_layer()?;
@@ -369,7 +375,7 @@ pub fn compile_default_css(
     // Load built-in user layers: title block styling + default syntax-
     // highlight colors. Both ship with Quarto and are always included.
     let title_block_layer = load_title_block_layer()?;
-    let highlight_layer = load_highlight_layer()?;
+    let highlight_layer = load_highlight_layer(None)?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
     let listing_layer = load_listing_layer()?;
@@ -467,8 +473,8 @@ pub async fn compile_theme_css(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
 ) -> Result<String, SassError> {
-    if !config.has_themes() {
-        // No custom themes - use default Bootstrap
+    if !config.has_themes() && config.highlight_style.is_none() {
+        // No custom themes and default palette - use default Bootstrap
         return compile_default_css(context.runtime(), config.minified).await;
     }
 
@@ -505,12 +511,15 @@ pub async fn compile_with_doc_vars(
         if config.has_themes() {
             return compile_theme_css(config, context).await;
         }
-        if config.title_block_layer {
+        // See the native variant: a `highlight-style:` needs a direct
+        // assembly so its palette layer composes.
+        if config.title_block_layer && config.highlight_style.is_none() {
             return compile_default_css(context.runtime(), config.minified).await;
         }
     }
 
-    let highlight_layer = load_highlight_layer()?;
+    let highlight_layer =
+        load_highlight_layer(config.highlight_style.as_ref().map(|h| h.name.as_str()))?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
     let listing_layer = load_listing_layer()?;
@@ -608,7 +617,7 @@ pub async fn compile_default_css(
     // entry would render code blocks with `hl-*` span classes but no
     // associated colors.
     let title_block_layer = load_title_block_layer()?;
-    let highlight_layer = load_highlight_layer()?;
+    let highlight_layer = load_highlight_layer(None)?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
     let listing_layer = load_listing_layer()?;
@@ -1088,6 +1097,95 @@ mod tests {
         assert!(
             !cosmo_css.contains("border: solid #6c757d 1px"),
             "cosmo must not inherit darkly's chip border"
+        );
+    }
+
+    /// The color-scheme toggle icons are SVG data URIs whose `fill`
+    /// is produced by the `colorToRGBA()` sass function (ported from
+    /// Q1's `_quarto-functions.scss`). Because the call sits inside a
+    /// string interpolation, a missing function does NOT error — sass
+    /// silently emits the literal call text, producing an invalid SVG
+    /// fill and an invisible toggle icon (found in the bd-0pic6 A4
+    /// browser verification). Guard that the function actually
+    /// evaluates.
+    #[test]
+    fn test_compile_theme_css_evaluates_color_to_rgba_in_toggle_icons() {
+        let runtime = NativeRuntime::new();
+        let themes = vec![ThemeSpec::parse("cosmo").unwrap()];
+        let config = ThemeConfig::new(themes, false);
+        let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+        let css = compile_theme_css(&config, &context).unwrap();
+        assert!(
+            !css.contains("colorToRGBA("),
+            "colorToRGBA() must be evaluated, not emitted literally"
+        );
+        assert!(
+            css.contains("fill=rgba(") || css.contains("fill=\"rgba("),
+            "toggle icon SVG fill must be a concrete rgba() color"
+        );
+    }
+
+    /// bd-0pic6 phase B: `highlight-style` selects the `.hl-*` palette
+    /// composed into the compile. `a11y-light` replaces the default
+    /// (solarized) palette; unknown names fall back to the default
+    /// (the stage warns separately).
+    #[test]
+    fn test_compile_theme_css_a11y_light_palette() {
+        let runtime = NativeRuntime::new();
+        let mut config = ThemeConfig::new(vec![ThemeSpec::parse("cosmo").unwrap()], false);
+        config.highlight_style = Some(crate::config::HighlightStyle {
+            name: "a11y-light".to_string(),
+            location: None,
+        });
+        let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+        let css = compile_theme_css(&config, &context).unwrap();
+        assert!(
+            css.contains("#d91e18"),
+            "a11y-light keyword color must be present"
+        );
+        assert!(
+            !css.contains("#859900"),
+            "solarized keyword color must be replaced"
+        );
+        // Structural code rules stay regardless of palette.
+        assert!(css.contains("pre > code"));
+    }
+
+    #[test]
+    fn test_compile_theme_css_a11y_dark_palette() {
+        let runtime = NativeRuntime::new();
+        let mut config = ThemeConfig::new(vec![ThemeSpec::parse("cosmo").unwrap()], false);
+        config.highlight_style = Some(crate::config::HighlightStyle {
+            name: "a11y-dark".to_string(),
+            location: None,
+        });
+        let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+        let css = compile_theme_css(&config, &context).unwrap();
+        assert!(
+            css.contains("#ffa07a"),
+            "a11y-dark keyword color must be present"
+        );
+        // The palette's $code-block-bg default flows into the
+        // code-block background rule.
+        assert!(
+            css.contains("#2b2b2b"),
+            "a11y-dark code-block background must apply"
+        );
+    }
+
+    #[test]
+    fn test_compile_theme_css_unknown_palette_falls_back_to_default() {
+        let runtime = NativeRuntime::new();
+        let mut config = ThemeConfig::new(vec![ThemeSpec::parse("cosmo").unwrap()], false);
+        config.highlight_style = Some(crate::config::HighlightStyle {
+            name: "nosuchstyle".to_string(),
+            location: None,
+        });
+        let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+        let css = compile_theme_css(&config, &context).unwrap();
+        assert!(
+            css.contains("#859900"),
+            "unknown style must fall back to the default (solarized) palette"
         );
     }
 

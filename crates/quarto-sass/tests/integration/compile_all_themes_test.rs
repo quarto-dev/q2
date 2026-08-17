@@ -251,7 +251,7 @@ fn test_compiled_css_resets_source_code_pre_margin() {
     // passes it as an always-present user layer. Mirror that here.
     use quarto_sass::bundle::{assemble_with_user_layers, load_highlight_layer};
 
-    let highlight = load_highlight_layer().expect("highlight layer should load");
+    let highlight = load_highlight_layer(None).expect("highlight layer should load");
     let scss = assemble_with_user_layers(&[highlight]).expect("assembly should succeed");
 
     let load_paths = default_load_paths();

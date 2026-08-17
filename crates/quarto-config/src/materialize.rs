@@ -313,6 +313,60 @@ mod tests {
     }
 
     #[test]
+    fn test_materialize_preserves_single_layer_map_key_order() {
+        // YAML map key order is *semantic* for `theme: {dark:…, light:…}`:
+        // quarto-sass's light/dark parsing treats "dark written first"
+        // as "dark is the author-default variant" (Q1's key-order rule,
+        // `DarkThemeConfig::is_default`). Materialization must not
+        // reorder a single layer's entries.
+        let config = map(vec![(
+            "theme",
+            map(vec![("dark", scalar("darkly")), ("light", scalar("cosmo"))]),
+        )]);
+        let merged = MergedConfig::new(vec![&config]);
+
+        let result = merged.materialize().unwrap();
+        let theme = result.get("theme").unwrap();
+        let ConfigValueKind::Map(entries) = &theme.value else {
+            panic!("theme should materialize as a map");
+        };
+        let keys: Vec<&str> = entries.iter().map(|e| e.key.as_str()).collect();
+        assert_eq!(keys, vec!["dark", "light"], "entry order must be preserved");
+    }
+
+    #[test]
+    fn test_materialize_map_key_order_is_first_seen_across_layers() {
+        // When several layers contribute to the same map, keys appear
+        // in first-seen order (earlier layer first), with later layers
+        // only overriding values. Consequence for the light/dark rule:
+        // a document overriding just the `dark:` half of a project's
+        // `{light:…, dark:…}` map does NOT flip the author default.
+        let project = map(vec![(
+            "theme",
+            map(vec![("light", scalar("cosmo")), ("dark", scalar("darkly"))]),
+        )]);
+        let document = map(vec![("theme", map(vec![("dark", scalar("slate"))]))]);
+        let merged = MergedConfig::new(vec![&project, &document]);
+
+        let result = merged.materialize().unwrap();
+        let theme = result.get("theme").unwrap();
+        let ConfigValueKind::Map(entries) = &theme.value else {
+            panic!("theme should materialize as a map");
+        };
+        let keys: Vec<&str> = entries.iter().map(|e| e.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            vec!["light", "dark"],
+            "first-seen order: light stays first even though the doc layer only wrote dark"
+        );
+        // ... while the value itself is overridden by the later layer.
+        assert_eq!(
+            theme.get("dark").unwrap().as_yaml().unwrap().as_str(),
+            Some("slate")
+        );
+    }
+
+    #[test]
     fn test_materialize_merged_layers() {
         let layer1 = map(vec![("a", scalar("1")), ("b", scalar("2"))]);
         let layer2 = map(vec![("b", scalar("3")), ("c", scalar("4"))]);

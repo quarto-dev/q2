@@ -182,8 +182,29 @@ pub(super) fn write_llms_artifacts(
 
     // ── Assemble. ─────────────────────────────────────────────────
     let site_url = website_site_url(meta).map(|u| u.trim_end_matches('/').to_string());
-    let (llms_txt, reading_order) =
-        assemble_llms_txt(meta, index, &pages, site_url.as_deref(), diagnostics);
+    // Site title / description: prefer the resolved values the
+    // capture transform stashed from the merged page metadata
+    // (inline-parsed, shortcodes resolved — bd-6m1iyxl6); fall back
+    // to the raw project config for e.g. all-draft renders where no
+    // page captured.
+    let site_title = project_artifacts
+        .get(crate::transforms::llms::LLMS_SITE_TITLE_KEY)
+        .map(|a| a.as_string())
+        .or_else(|| website_title(meta))
+        .unwrap_or_else(|| "Untitled".to_string());
+    let site_description = project_artifacts
+        .get(crate::transforms::llms::LLMS_SITE_DESCRIPTION_KEY)
+        .map(|a| a.as_string())
+        .or_else(|| website_description(meta));
+    let (llms_txt, reading_order) = assemble_llms_txt(
+        meta,
+        index,
+        &pages,
+        &site_title,
+        site_description.as_deref(),
+        site_url.as_deref(),
+        diagnostics,
+    );
     let llms_full = assemble_llms_full(&pages, &reading_order, &contents, site_url.as_deref());
 
     // ── Write. ────────────────────────────────────────────────────
@@ -323,6 +344,8 @@ fn assemble_llms_txt(
     meta: &ConfigValue,
     index: &ProjectIndex,
     pages: &[LlmsPage],
+    site_title: &str,
+    site_description: Option<&str>,
     site_url: Option<&str>,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> (String, Vec<String>) {
@@ -445,11 +468,10 @@ fn assemble_llms_txt(
     }
 
     // ── Emit. ─────────────────────────────────────────────────────
-    let site_title = website_title(meta).unwrap_or_else(|| "Untitled".to_string());
     let mut out = String::new();
     let mut reading_order: Vec<String> = Vec::new();
     out.push_str(&format!("# {site_title}\n"));
-    if let Some(desc) = website_description(meta).map(|d| d.trim().to_string())
+    if let Some(desc) = site_description.map(str::trim)
         && !desc.is_empty()
     {
         out.push('\n');
