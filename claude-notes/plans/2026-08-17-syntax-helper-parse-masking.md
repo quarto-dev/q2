@@ -3,7 +3,7 @@
 **Date:** 2026-08-17
 **Braid:** bd-syntax-helper-parse-masking-w88mhedp
 **Checkout:** main checkout, branch `main` (investigation only — no implementation branch yet)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design aligned 2026-08-17 (see "Design decisions" below) — **pending user go-ahead to implement.**
 
 ## Triage verdict
 
@@ -104,58 +104,102 @@ apostrophe escaped). Observed with
 
 (Repro transcript in `repro-transcript.txt` in the same directory.)
 
-## Proposed phases (draft)
+## Design decisions (aligned with user, 2026-08-17)
 
-Skeleton only — actual phase contents wait on the design discussion.
+1. **One synthesized per-file result** when requires-parse rules are skipped,
+   not one per rule. (User: needed given #2; otherwise indifferent.)
+2. **Third summary state, declared per rule.** "Unanalyzable" is tracked as a
+   distinct state, but refusal is **opt-in per rule**: many rules *expect*
+   unparseable input (grid-tables; every diagnostic-driven `q_2_*` rule reads
+   the parse error stream as its input) and must keep running on unparseable
+   files. Only rules that need a successful AST declare that they require one.
+3. **Hard per-file refusal for requires-parse rules in convert**, never
+   aborting the multi-file sweep; refusal is judged **at convergence** (an
+   earlier rule in the same run may repair the parse, after which the AST rule
+   runs normally — the compounding is preserved by re-probing each iteration).
+4. **`q-2-30` folded in** — it becomes a requires-parse rule like the two
+   bracket rules.
+5. **No wire-shape compatibility requirement.** Verified: no JSON schema for
+   `check --json` exists anywhere in the repo (the output is undocumented
+   serde-serialized `CheckResult` lines), so there is nothing to keep fresh
+   and we don't create one here. New optional fields are fine.
 
-- **Phase 0 — Test plan (TDD).** Integration tests in
-  `tests/integration/bracket_analysis_test.rs` (+ a new
-  parse-masking test module): unparseable file under `check -r
-  literal-brackets` / `-r reference-links` / `-r q-2-30` must NOT be reported
-  clean; summary counts must not include it in the success rate; convert must
-  not silently no-op; `convert -r all`-style iteration where an earlier rule
-  repairs the parse must still apply the AST rule afterward.
-- **Phase 1 — Make `analyze()` honest.** Return the parse failure (e.g.
-  `Result<Analysis, AnalyzeError>` or `Ok(AnalysisOutcome::Unparseable(codes))`)
-  instead of defaulting to empty; carry the Q-codes for the message.
-- **Phase 2 — Check-side surfacing.** Per design answer: synthesized
-  `CheckResult` ("file failed to parse; rule not applied") and/or a third
-  summary bucket ("Unanalyzable files: N") excluded from clean count and
-  success rate. Dedup when several AST rules run on the same file.
-- **Phase 3 — Convert-side behavior.** Skip-with-warning per iteration, final
-  post-convergence check: if the file still fails to parse and an AST rule was
-  requested, report it (non-✓) without aborting the multi-file sweep.
-- **Phase 4 — `q-2-30` alignment.** Apply the same treatment to its
-  independent `Err(_) => clean` site.
-- **Phase 5 — Docs.** Helper's user-facing docs / `--help` note: AST-based
-  rules require a parsing file; run `parse` / fix parse errors first.
+### Mechanism (assessed: moderate, fits existing architecture)
 
-## Open design questions for the user
+The `Rule` trait already has the "rule declares a property, driver interprets
+it" precedent in `opt_in_only()`. The change follows the same shape:
 
-1. **Check-output shape.** When an AST rule can't run, should each requested
-   AST rule emit its own `CheckResult` ("literal-brackets: file failed to
-   parse; rule not applied"), or should the file get **one** synthesized
-   parse-failure result regardless of how many AST rules were requested?
-   (One-per-rule is simpler to wire through `Rule::check`; one-per-file reads
-   better and doesn't inflate "Total issues".)
-2. **Summary bucket.** Is "file failed to parse" just another *issue* (file
-   counted in "Files with issues", success rate drops — minimal change), or a
-   genuine third state ("Unanalyzable: N" line, excluded from both clean and
-   issue counts)? The strand's option (b) implies the third state; it touches
-   `CheckResult`'s serialized JSON shape, which external consumers (the
-   connect-docs sweep scripts) may parse.
-3. **Convert semantics.** For `convert -r literal-brackets` on an unparseable
-   file: hard per-file refusal with a non-zero note in output (but *not*
-   aborting the rest of the sweep), or current silent no-op plus a
-   warning? And do you agree the check should be "still unparseable at
-   convergence" rather than "unparseable at iteration 1" (to preserve the
-   fix-then-apply compounding with e.g. `apostrophe-quotes`)?
-4. **Scope: `q-2-30`.** The strand names only `analyze()`-based rules; q-2-30
-   has the identical masking independently. Fold it into this fix (my
-   recommendation) or file it separately?
-5. **JSON stability.** `check --json` emits `CheckResult` lines consumed by
-   scripts. May we add a new optional field (e.g. `"unanalyzable": true`) /
-   new rule_name value, or must the wire shape stay byte-compatible?
+- **`Rule::requires_parse(&self) -> bool { false }`** — overridden to `true`
+  by `reference-links`, `literal-brackets`, `q-2-30`.
+- **Shared parse probe.** Hoist `ParseChecker::check_parse` into a shared
+  helper (it already returns the diagnostics). The check driver probes once
+  per file *only when* at least one requested rule requires parse; the convert
+  driver probes once per iteration under the same condition.
+- **Check driver** (`main.rs`): on probe failure, skip requires-parse rules,
+  run everything else normally, and synthesize one per-file `CheckResult`:
+  `has_issue: false`, new fields `unanalyzable: true` +
+  `skipped_rules: [names]`, `error_codes` from the probe, message
+  "file failed to parse (Q-2-10); N rule(s) not applied: …".
+- **Summary** (`print_check_summary`): new "Unanalyzable" bucket.
+  Clean = no findings AND nothing skipped; success rate = clean/total. A file
+  with both findings and skipped rules counts as with-issues *and* is listed
+  in the unanalyzable line (the two lines answer different questions:
+  "what needs fixing" vs "what did the sweep actually cover").
+- **Convert driver**: skip requires-parse rules while the probe fails in the
+  current iteration; after convergence, if any requested requires-parse rule
+  was never applied because the file still doesn't parse, print a per-file
+  `✗ … not applied: file does not parse (Q-2-10)` and continue the sweep.
+- **`analyze()` hardening**: change `Err(_) => Ok(Analysis::default())` to
+  propagate the parse diagnostics as an `Err` carrying the Q-codes, so no
+  future caller can silently reintroduce the masking. In driver flow the
+  probe runs first, so the rules only hit this path on direct library use.
+- **Secondary fix (discovered):** the check loop's `Err` arm
+  (`main.rs:116-125`) prints to stderr but still counts the file **clean** in
+  the summary — same masking family. Fold in: rule-error files get their own
+  small "Errors: N" accounting, excluded from clean.
+
+## Phases
+
+- **Phase 0 — Test plan (TDD, failing first).** In
+  `crates/qmd-syntax-helper/tests/integration/` (new `parse_masking_test.rs`,
+  registered in `main.rs`, alphabetized):
+  1. `check -r literal-brackets` on unparseable fixture → not clean; one
+     synthesized unanalyzable result with `skipped_rules` containing both the
+     rule name and the probe's Q-codes; summary shows Unanalyzable: 1,
+     success rate 0%.
+  2. Same for `-r reference-links` and `-r q-2-30`.
+  3. `check -r grid-tables` (non-requires-parse) on the same fixture → rule
+     still runs; no unanalyzable synthesis when no requires-parse rule was
+     requested.
+  4. `check -r all` → parse rule reports the failure AND requires-parse rules
+     are skipped (one synthesized result), diagnostic-driven rules still run.
+  5. `--json` output includes `unanalyzable`/`skipped_rules` fields.
+  6. Convert: `convert -r literal-brackets` on unparseable file → no edit,
+     per-file refusal note, sweep continues to next file (multi-file test).
+  7. Convert compounding: `convert -r apostrophe-quotes -r literal-brackets`
+     on a fixture whose only parse error is the apostrophe → iteration 1
+     fixes the parse, a later iteration applies literal-brackets; no refusal
+     note.
+  8. `analyze()` unit test: unparseable source → `Err` with Q-codes.
+- **Phase 1 — `analyze()` + trait.** `requires_parse()` on `Rule`; `analyze()`
+  returns `Err` with diagnostics; shared parse-probe helper; q-2-30 and the
+  two bracket rules override `requires_parse()`.
+- **Phase 2 — Check driver + summary.** Probe, skip, synthesize, new
+  `CheckResult` fields, summary buckets incl. the rule-error accounting fix.
+- **Phase 3 — Convert driver.** Per-iteration probe/skip + at-convergence
+  refusal report; multi-file sweep never aborts on refusal.
+- **Phase 4 — Docs.** `README.md` + `list-rules` note: requires-parse rules
+  and the "fix parse errors first (e.g. `convert -r apostrophe-quotes`)"
+  workflow, mirroring the connect-docs lesson.
+
+## Work items
+
+- [ ] Phase 0: failing integration tests (`parse_masking_test.rs`) + `analyze()` unit test
+- [ ] Phase 1: `Rule::requires_parse()`, `analyze()` → `Err`, shared parse probe, rule overrides
+- [ ] Phase 2: check driver skip/synthesize, `CheckResult` fields, summary buckets + rule-error accounting
+- [ ] Phase 3: convert per-iteration probe + at-convergence refusal
+- [ ] Phase 4: docs (README, list-rules note)
+- [ ] Full workspace tests + `cargo xtask verify --skip-hub-build`; end-to-end repro transcript re-run showing the fix
 
 ## Risks / tradeoffs (draft)
 
