@@ -293,5 +293,10 @@
 # string interpolation), leaving the toggle icon invisible; they now
 # carry concrete `fill="rgba(…)"` values. Verified the only delta is
 # those six data-URI fills. doc.html hash unchanged: CSS-only.
-doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
+#
+# Re-captured 2026-08-17 (bd-toc-tabset-titles-zq93gjvf): doc.html hash
+# updated because every Bootstrap-themed page now ships the grouped-tabset
+# sync module (`<script src="doc_files/tabsets.js">`, TabsetsJsStage).
+# doc_files/styles.css hash unchanged: template/script-list change only.
+doc.html a0540297514ad41734a23e91c9511134b1fa469281ec470339571ffd5d404494
 doc_files/styles.css 5228869a7216859350164870ea4a62f40fb59222475530ee59fe796cf6364335

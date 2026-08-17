@@ -1,0 +1,94 @@
+---
+title: Tabsets
+---
+
+Tabsets present alternative versions of content — for example, the same
+instructions for different languages or operating systems — as clickable
+tabs, with one tab's content visible at a time.
+
+## Creating a tabset
+
+Wrap the content in a div with the `panel-tabset` class. Each top-level
+heading inside the div becomes a tab; the content that follows it, up to
+the next heading of the same level, becomes that tab's pane:
+
+````markdown
+::: {.panel-tabset}
+
+## R
+
+```r
+fizz_buzz <- function(fbnums = 1:50) {
+  output <- dplyr::case_when(
+    fbnums %% 15 == 0 ~ "FizzBuzz",
+    fbnums %% 3 == 0 ~ "Fizz",
+    fbnums %% 5 == 0 ~ "Buzz",
+    TRUE ~ as.character(fbnums)
+  )
+  print(output)
+}
+```
+
+## Python
+
+```python
+def fizz_buzz(num):
+  if num % 15 == 0:
+    print("FizzBuzz")
+  elif num % 5 == 0:
+    print("Buzz")
+  elif num % 3 == 0:
+    print("Fizz")
+  else:
+    print(num)
+```
+
+:::
+````
+
+This renders as:
+
+::: {.panel-tabset}
+
+## R
+
+```r
+fizz_buzz(1:15)
+```
+
+## Python
+
+```python
+fizz_buzz(15)
+```
+
+:::
+
+The first tab is selected by default. To pre-select a different tab, add
+the `active` class to its heading:
+
+```markdown
+## Python {.active}
+```
+
+Headings that define tabs do not appear in the page's table of contents —
+only regular section headings do. Deeper headings inside a tab stay part
+of that tab's content.
+
+## Tab groups
+
+Tabsets can be linked so that selecting a tab in one switches every other
+tabset in the same group. Give each tabset a `group` attribute:
+
+```markdown
+::: {.panel-tabset group="language"}
+```
+
+When a reader picks a tab (say, **Python**), every `group="language"`
+tabset on the page with a matching tab name follows, and the choice is
+remembered in the browser — pages visited later start with the same tab
+selected. This is ideal for documentation that offers parallel
+instructions per language, operating system, or framework.
+
+Tabsets are supported in HTML formats with a Bootstrap theme. In other
+formats the tab headings render as ordinary stacked sections.

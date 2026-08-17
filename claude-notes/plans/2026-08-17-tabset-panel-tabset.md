@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-17
 **Braid:** bd-toc-tabset-titles-zq93gjvf (feature, p2, label `html`)
-**Branch:** written on `main` @ `60cc579e` (investigation only — implementation branch/worktree TBD by user)
-**Status:** Design aligned 2026-08-17 (all six questions answered by user — see § Design decisions). Ready to implement.
+**Branch:** `braid/bd-toc-tabset-titles-zq93gjvf-panel-tabset-support` (in the main checkout, off `main` @ `a29b22ca`, per user)
+**Status:** Implemented 2026-08-17 — all phases complete, verified end-to-end (see § E2E evidence). Pending review/merge.
 
 ## Triage verdict
 
@@ -51,54 +51,102 @@ Symptom confirmed current: strand description re-verified failing on q2 0.20.0/0
 
 ### Phase 0 — Test plan (TDD: failing tests first)
 
-- [ ] Copy the repro into `crates/quarto-core/tests/fixtures/tabsets/` (basic project) plus a **grouped** variant (two tabsets sharing `group="language"`).
-- [ ] New integration test `crates/quarto-core/tests/integration/tabset_pipeline.rs`, registered (alphabetized) in `tests/integration/main.rs`, driving the end-to-end render path (`render_page_in_project`-style helper, realistic config — not `HtmlRenderConfig::default()`). Assertions:
+- [x] Repro + grouped variant as test fixtures. *(Done as inline qmd bodies in the test file, matching `bootstrap_js_pipeline.rs` conventions, rather than a `tests/fixtures/tabsets/` directory — the fixtures are single documents, and the website-fixture directory pattern is for multi-file projects.)*
+- [x] New integration test `crates/quarto-core/tests/integration/tabset_pipeline.rs`, registered (alphabetized) in `tests/integration/main.rs`, driving the end-to-end render path (`render_page_in_project`-style helper, realistic config — not `HtmlRenderConfig::default()`). Assertions:
   - TOC has exactly 2 entries (`Real heading`, `Another real heading`; no `Tab Alpha`/`Tab Beta`),
   - output contains the captured Q1 markup shape: outer `div.panel-tabset` wrapping `ul.nav.nav-tabs[role=tablist]` (nav-link ids `tabset-1-1-tab` …, `data-bs-toggle="tab"`, aria attrs) + `div.tab-content` with `div.tab-pane` panes,
   - first tab is `active` on both nav-link and pane; an explicit `.active` header wins over first-tab default,
   - grouped variant emits `data-group="language"` on the outer div,
   - page `<head>`/scripts include the tabsets JS alongside bootstrap JS.
-- [ ] Unit tests colocated in the transform files: parse (tab boundaries by first-Header level, deeper headers stay inside tab content, nested tabsets, `.active` class, no-Header degenerate case warns + passes through), resolve (markup, per-document id counter, aria wiring).
-- [ ] Run the integration test and **verify it fails** at HEAD.
+- [x] Unit tests colocated in the transform files: parse (tab boundaries by first-Header level, deeper headers stay inside tab content, nested tabsets, `.active` class, no-Header degenerate case warns + passes through), resolve (markup, per-document id counter, aria wiring).
+- [x] Run the integration test and **verify it fails** at HEAD.
 
 ### Phase 1 — `PanelTabsetTransform` (parse)
 
-- [ ] `crates/quarto-core/src/transforms/panel_tabset.rs`: Div with class `panel-tabset` → `CustomNode("Tabset")`. Slots: per-tab title Inlines + content Blocks; `plain_data`: level, actives, `group` (from the Div's `group` attribute). Recurse into nested blocks first (as callout.rs does) so nested tabsets work.
-- [ ] Degenerate case (no Header inside): warn (mirror Q1's warning) and leave the Div untouched.
-- [ ] Register in `build_transform_pipeline` immediately after `CalloutTransform`/`CalloutResolveTransform` (pipeline.rs:1232-1233), phase `Normalization`; keep the phase-ordering test green.
+- [x] `crates/quarto-core/src/transforms/panel_tabset.rs`: Div with class `panel-tabset` → `CustomNode("Tabset")`. Slots: per-tab title Inlines + content Blocks; `plain_data`: level, actives, `group` (from the Div's `group` attribute). Recurse into nested blocks first (as callout.rs does) so nested tabsets work.
+- [x] Degenerate case (no Header inside): warn (mirror Q1's warning) and leave the Div untouched.
+- [x] Register in `build_transform_pipeline` immediately after `CalloutTransform`/`CalloutResolveTransform` (pipeline.rs:1232-1233), phase `Normalization`; keep the phase-ordering test green.
 
 ### Phase 2 — `PanelTabsetResolveTransform` (render)
 
-- [ ] `panel_tabset_resolve.rs`: CustomNode → the captured Q1 markup (`q1-target-markup.html` is the contract): outer `Div.panel-tabset` (+`data-group` when present) containing `Plain[RawInline <ul>…nav…]` with title inlines spliced between RawInlines, then `Div.tab-content` of `Div.tab-pane` panes with `tabset-N-M` ids.
-- [ ] Per-document tabset counter (reset per render — idempotence tests must stay green).
-- [ ] Self-gate to Bootstrap HTML (`ctx.format.is_html_based()` + not minimal); non-HTML/minimal formats: transform doesn't run → passthrough per decision 2. (Check whether the *parse* half should also self-gate so passthrough keeps the original Div; simplest consistent choice: gate both halves identically.)
+- [x] `panel_tabset_resolve.rs`: CustomNode → the captured Q1 markup (`q1-target-markup.html` is the contract): outer `Div.panel-tabset` (+`data-group` when present) containing `Plain[RawInline <ul>…nav…]` with title inlines spliced between RawInlines, then `Div.tab-content` of `Div.tab-pane` panes with `tabset-N-M` ids.
+- [x] Per-document tabset counter (reset per render — idempotence tests must stay green).
+- [x] Self-gate to Bootstrap HTML (`ctx.format.is_html_based()` + not minimal); non-HTML/minimal formats: transform doesn't run → passthrough per decision 2. (Check whether the *parse* half should also self-gate so passthrough keeps the original Div; simplest consistent choice: gate both halves identically.)
 
 ### Phase 3 — Tabsets sync JS
 
-- [ ] Port `q1-tabsets-sync-reference.js` to `resources/js/tabsets/tabsets.js`, converted from ES module to self-initializing script (mirror `resources/js/clipboard/code-copy-init.js`).
-- [ ] New `TabsetsJsStage` mirroring `BootstrapJsStage`/`ClipboardJsStage`: `include_bytes!`, Project-scoped artifact `js:tabsets`, gate = same predicate as `BootstrapJsStage` (`!is_minimal_html`), path `tabsets.js` / `quarto/tabsets.js`. (`js:bootstrap` < `js:tabsets` sorts correctly for load order.)
-- [ ] Register the stage where the other JS stages live; unit tests mirroring `bootstrap_js_pipeline.rs`.
+- [x] Port `q1-tabsets-sync-reference.js` to `resources/js/tabsets/tabsets.js`, converted from ES module to self-initializing script (mirror `resources/js/clipboard/code-copy-init.js`).
+- [x] New `TabsetsJsStage` mirroring `BootstrapJsStage`/`ClipboardJsStage`: `include_bytes!`, Project-scoped artifact `js:tabsets`, gate = same predicate as `BootstrapJsStage` (`!is_minimal_html`), path `tabsets.js` / `quarto/tabsets.js`. (`js:bootstrap` < `js:tabsets` sorts correctly for load order.)
+- [x] Register the stage where the other JS stages live; unit tests mirroring `bootstrap_js_pipeline.rs`.
 
 ### Phase 4 — End-to-end verification
 
-- [ ] `cargo run --bin q2 -- render` on the repro; diff `_site/index.html` TOC + tabset markup against `_site-q1`. Record invocation + output snippet here.
-- [ ] Render a grouped page (e.g. the Connect docs upgrade page fixture shape) and inspect `data-group` output.
-- [ ] Browser check (chrome-devtools): tabs click-switch via bootstrap; same-group tabsets sync; choice persists in localStorage (`quarto-persistent-tabsets-data`) across reload.
-- [ ] Full workspace: `cargo nextest run --workspace`, `cargo xtask verify` (WASM leg affected — quarto-core changed). Snapshot-change report per CLAUDE.md policy.
+- [x] `cargo run --bin q2 -- render` on the repro; diff `_site/index.html` TOC + tabset markup against `_site-q1`. Record invocation + output snippet here.
+- [x] Render a grouped page (e.g. the Connect docs upgrade page fixture shape) and inspect `data-group` output.
+- [x] Browser check (chrome-devtools): tabs click-switch via bootstrap; same-group tabsets sync; choice persists in localStorage (`quarto-persistent-tabsets-data`) across reload.
+- [x] Full workspace: `cargo nextest run --workspace` green (12253 passed) after one intentional baseline recapture (see §E2E evidence). Full `cargo xtask verify` run at phase end. No `.snap` files changed.
 
 ### Phase 5 — Visual parity (chrome-devtools)
 
-- [ ] Side-by-side Q1 vs q2 render of the repro in the browser; compare computed styles on `.nav-tabs`, `.nav-link[.active]`, `.tab-pane` (borders, active underline/background, spacing).
-- [ ] If divergent: locate Q1's tabset-specific SCSS (if any beyond stock Bootstrap) and port it into `resources/scss/` following the existing vendoring layout.
+- [x] Side-by-side Q1 vs q2 render of the repro in the browser; computed styles on `.panel-tabset .nav-tabs` / `.nav-link.active` / `.nav-link` / `.tab-pane` are **identical on every checked property** (border widths/colors, radius, padding, font-size, colors, margins). Screenshots visually indistinguishable in the tabset region.
+- [x] No divergence — stock Bootstrap SCSS (already vendored) covers tabsets fully; no new SCSS needed.
 
 ### Phase 6 — Docs
 
-- [ ] User-facing tabsets page under `docs/` (usage + `group=` sync; rendered with q2, not Q1).
-- [ ] If Phase 1's degenerate-case warning gets a `Q-*` catalog code, add `docs/errors/<subsystem>/<code>.qmd` in the same commit (error-docs-page-missing lint).
+- [x] User-facing tabsets page at `docs/guides/authoring/tabsets.qmd` (usage, `.active`, `group=` sync; includes a live demo tabset), registered in the docs sidebar; rendered with q2 and inspected (TOC clean, nav-tabs + tabsets.js present).
+- [x] The two parse warnings (no-tabs-found; leading-content-dropped) ship **without** `Q-*` catalog codes, matching existing codeless-warning precedent (e.g. `categories_sidebar.rs`); no error-docs pages required.
+
+## E2E evidence (2026-08-17)
+
+Invocation: `cargo run --bin q2 -- render <scratch>/tabset-e2e` (the repro
+project copied from the investigation dir). Observed `_site/index.html`:
+
+- TOC `<nav id="TOC">` contains exactly `Real heading` + `Another real
+  heading` (no tab titles) — matches Q1's committed render.
+- Tabset markup matches the captured Q1 contract byte-shape:
+  `<ul class="nav nav-tabs" role="tablist">` … `<a class="nav-link active"
+  id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1"
+  role="tab" aria-controls="tabset-1-1" aria-selected="true" href="">Tab
+  Alpha</a>` … `<div class="tab-content">` with `tab-pane` panes carrying
+  `role="tabpanel"`/`aria-labelledby`.
+- Scripts: `site_libs/quarto/bootstrap.bundle.min.js` and
+  `site_libs/quarto/tabsets.js` both present; both files on disk.
+
+Grouped check (two `group="language"` tabsets, real render + Chrome via
+devtools MCP): initial state one active tab per tabset with inactive panes
+`display:none`; clicking the second tabset's "R" tab switched **both**
+tabsets (bootstrap toggle + sync), localStorage
+`quarto-persistent-tabsets-data` = `{"language":"R"}`; after reload the R
+tab remained selected in both. Output inspected directly.
+
+Workspace suite: 12253 passed / 0 failed. One intentional baseline update:
+`crates/quarto-core/tests/fixtures/phase5-single-doc-baseline/expected_hashes.txt`
+doc.html hash re-captured because every Bootstrap-themed page now ships the
+tabsets.js script tag (recapture note added in the fixture; verified the
+only delta is that one `<script>` line; styles.css hash unchanged). No
+`.snap` snapshot files changed.
+
+## Post-implementation decision: q2-preview exclusion
+
+The tabset pair is **excluded from the q2-preview transform pipeline**
+(`Q2_PREVIEW_TRANSFORM_EXCLUDED`). The resolve half builds its nav from
+split RawInlines (Q1's exact technique, correct for the string-concatenating
+HTML writer), but q2-preview's React `RawInline` component renders each
+fragment via its own `dangerouslySetInnerHTML` span — unbalanced fragments
+auto-close and the tab structure collapses. Excluding both halves keeps the
+hub preview at the pre-tabset passthrough (stacked headings). This fits the
+deny-list's stated criterion ("opt out only when the output is HTML-only")
+and the mermaid-render/crossref-render precedent. The WASM `format: html`
+preview pipeline (full HTML string) is unaffected and renders tabs
+statically (bootstrap-js is excluded from WASM, so no click behavior there —
+pre-existing policy shared with callout-collapse/code-copy).
 
 ## Follow-ups
 
 - **Revealjs tabsets** — filed as **bd-y5j0m776** (`discovered-from` this strand), p3.
+- **q2-preview React Tabset component** — filed as **bd-47afd5ro**
+  (`discovered-from` this strand), p2: keep the parse half in preview and
+  render `CustomNode("Tabset")` with a real React component.
 
 ## Risks / tradeoffs (draft)
 
