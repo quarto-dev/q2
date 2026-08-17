@@ -272,6 +272,47 @@ meant. Guarded by
 which fails on any `max-width` rule that hides by `doc-toc` without naming
 `#TOC`. The `#TOC` qualifier stays correct whichever way `bd-eczdzfqo` goes.
 
+### F4 — the drawer was transparent; q2 never had a sidebar background (2026-08-17)
+
+Found by **looking at a screenshot**, after F3 was fixed and every computed
+style reported the drawer open and correctly sized. Page text showed straight
+through the open drawer, interleaved with the sidebar's own links.
+
+Q1 has `nav.sidebar.sidebar-navigation:not(.rollup) { background-color:
+$sidebar-bg }` (`quarto-nav.scss:543-551`). q2 never ported it, and nothing
+noticed: docked or floating, the sidebar sits in its own grid column and
+overlaps nothing, so a transparent background is indistinguishable from an
+opaque one. The drawer overlays the article, and there the difference is the
+whole thing.
+
+This is a **visible change on desktop too** — sidebars now paint `$sidebar-bg`
+instead of inheriting the page. Checked before shipping: Q1 emits the same
+rule with the same selector list, and both projects define
+`$sidebar-bg: if(variable-exists(light), $light, #fff) !default` *identically*
+(q2 `_bootstrap-variables.scss:161`, Q1 same file/line). So this is parity, and
+any resolved-color difference between the two is a pre-existing theme-variable
+question, not something this strand introduced.
+
+Guarded by `test_sidebar_has_an_opaque_background`.
+
+### F5 — three loose-substring test proxies had to be tightened (2026-08-17)
+
+Not a product bug, but a pattern worth naming, because it happened three times
+in one strand and each instance looked at first like "my change broke a test":
+
+| test | proxy | what broke it |
+|---|---|---|
+| `sidebar_render_auto_is_dropped_if_not_expanded` | `!html.contains("auto")` | `overflow-auto` on the nav |
+| `breadcrumbs_absent_on_top_level_page` | `!html.contains("quarto-page-breadcrumbs")` | the mobile instance shares that base class |
+| 4× `$sidebar-border` tests | `css.contains(".sidebar.sidebar-navigation:not(.rollup)")` | the new background rule's selector *contains* that substring |
+
+In every case the property under test was still true and still worth pinning;
+only the proxy had gone ambiguous. Each was rewritten to assert the actual
+property — count the rendered items, name the title-block-only class, find the
+rule by its `border-right` declaration — rather than adjusted to dodge the
+collision. Worth resisting the reflex to just tweak the string: the tightened
+versions are strictly better tests than the originals.
+
 ### F2 — Q1's duplicate `role` attribute does not survive to output (2026-08-17)
 
 `nav-before-body.ejs:74` and `:79` set `role="navigation"` **and** `role="link"`
@@ -417,18 +458,75 @@ bar shows the title and the document shows it again right below.
       transform and consumed by all three `TITLE_BLOCK_PARTIAL` branches
       (Q1's postprocessor targets the first `h1.title` regardless of branch).
 
-### Phase 6 — E2E verification + docs
+### Phase 6 — E2E verification + docs — **DONE** (`7fc239e7`)
 
-- [ ] `cargo run --bin q2 -- render <fixture>` with the output **inspected** and
-      the invocation + snippet recorded here (per `CLAUDE.md`).
-- [ ] Browser check at narrow width: toggle actually opens the sidebar; sidebar
-      still present at lg+ (the cliff).
-- [ ] Dogfood on `docs/` (`cargo run --bin q2 -- render docs/`).
-- [ ] Cross-check against `docs-quarto-1/_site` for Connect parity.
-- [ ] `cargo xtask verify` (full, not `--skip-hub-build` — `quarto-core` changes).
-- [ ] User-facing docs only if author-visible behavior changes.
-- [ ] Close `bd-xva3f8uy` (folded in); confirm `bd-ersobfbt` (headroom) still
-      reads correctly against what shipped.
+- [x] `cargo run --bin q2 -- render /tmp/q2-secnav-fixture` (3-page website with
+      navbar + two-level sidebar), output inspected — see below.
+- [x] Browser check at narrow width. **This is what earned the phase**: it found
+      F3 and F4, two bugs that left the drawer unusable while every phase-0
+      assertion passed.
+- [x] Dogfood on `docs/`: 243 pages rendered; all 243 carry `#quarto-header`,
+      and the 182 with a sidebar carry the bar and `quarto-sidebar-collapse-item`.
+      The 61 without a sidebar correctly get a navbar-only header and no bar.
+- [x] Cross-check against `docs-quarto-1/_site` — markup structure matches Q1's
+      rendered secondary nav; the Q1 site also supplied the single-crumb and
+      title-block-not-hidden evidence (F1) and the `$sidebar-bg` check (F4).
+- [x] `cargo xtask verify` (full, including the WASM/hub leg).
+- [x] User-facing docs: **none needed.** Nothing here is author-visible — no new
+      config key, no changed default. `bread-crumbs` already has a page at
+      `docs/guides/projects/breadcrumbs.qmd` and its behavior is unchanged; the
+      bar simply appears on narrow viewports.
+- [x] Close `bd-xva3f8uy` (folded in); `bd-ersobfbt` re-read against what
+      shipped.
+
+**End-to-end record** (per `CLAUDE.md`'s requirement to record the invocation,
+a snippet, and an explicit note that output was inspected).
+
+Invocation: `cargo run --bin q2 -- render /tmp/q2-secnav-fixture`, then
+`cargo run --bin q2 -- render docs/`. Output of both **was inspected**, in the
+file and in a browser.
+
+`_site/guide/advanced/deep.html`, inside `<header id="quarto-header">`:
+
+```html
+<nav class="quarto-secondary-nav">
+  <div class="container-fluid d-flex">
+    <button type="button" class="quarto-btn-toggle btn" role="button"
+      data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"
+      aria-controls="quarto-sidebar" aria-expanded="false"
+      aria-label="Toggle sidebar navigation">
+      <i class="bi bi-layout-text-sidebar-reverse"></i>
+    </button>
+    <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb">…</ol></nav>
+    <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse"
+       data-bs-target=".quarto-sidebar-collapse-item" …></a>
+  </div>
+</nav>
+```
+
+and the sidebar it targets:
+
+```html
+<nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal
+  quarto-sidebar-collapse-item sidebar-navigation sidebar-floating overflow-auto"
+  role="doc-toc">
+…
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item"
+  data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+```
+
+Headless-browser measurements on the **real docs site**
+(`docs/_site/guides/projects/breadcrumbs.html`), after the F3/F4 fixes:
+
+| viewport | `#quarto-sidebar` | `nav.quarto-secondary-nav` | after clicking the toggle |
+|---|---|---|---|
+| 1400px | `display:flex`, 250px wide | `display:none` | n/a (bar hidden) |
+| 900px | `display:none` | `display:block` | drawer `display:block`, 245px, glass active |
+| 620px | `display:none` | `display:block`, 620×41 | drawer `display:block`, 349px, bg `rgb(248,249,250)`, glass 620×900 |
+
+Title-block breadcrumbs are visible only at 1400px; the mobile instance only
+below `lg` — the two never show together. The title block itself stays visible
+at every width (F1 parity). Screenshots were inspected at 620px and 1400px.
 
 ## Design questions as posed (all answered above)
 
