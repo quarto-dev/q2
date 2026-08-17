@@ -2,11 +2,11 @@
 
 **Date:** 2026-08-17
 **Braid:** bd-26bf3j1y
-**Checkout:** `/Users/cscheid/rooms/room-3/q2`, branch `main` @ `cf3318c6` (no worktree created — the skill works in the checkout it was invoked in)
-**Status:** Design settled 2026-08-17 (all six questions answered — see
-**Resolved decisions**). Phases are drafted against those answers but have not
-been detailed or started. **Do not start implementation until the user gives the
-go-ahead.**
+**Checkout:** `/Users/cscheid/rooms/room-3/q2`, branch
+`braid/bd-26bf3j1y-website-mobile-secondary-nav` off `main` @ `7de02ea2`
+**Status:** In progress. Design settled 2026-08-17 (all seven questions answered
+— see **Resolved decisions**); implementation started with Carlos's go-ahead the
+same day. Work items below are the live tracker.
 
 ## Triage verdict
 
@@ -201,50 +201,114 @@ against.
    to that `h1`) in the `bread-crumbs: false` branch. Both emitted
    declaratively — no DOM postprocessor.
 
-**One item left at my discretion, flagged rather than assumed:** `bd-xva3f8uy`
-(add `.quarto-banner` to `#quarto-header` in banner mode) is a single CSS class
-in the exact template region Phase 1 introduces, and its only styling consumer is
-the `.quarto-banner nav.quarto-secondary-nav` rule Phase 4 ports. Default is to
-fold it into Phase 1 and close it with this work; say so if you'd rather keep it
-separate.
+**7. `bd-xva3f8uy` — folded in** (Carlos, 2026-08-17). Adding `.quarto-banner` to
+`#quarto-header` in banner mode is a single CSS class in the exact template
+region Phase 1 introduces, and its only styling consumer is the
+`.quarto-banner nav.quarto-secondary-nav` rule Phase 4 ports. It lands in Phase 1
+and `bd-xva3f8uy` closes with this work.
 
-## Proposed phases (draft)
+## Work items
 
-Drafted against the resolved decisions. Contents are still sketches — the phases
-have not been broken down into work items.
+Branch: `braid/bd-26bf3j1y-website-mobile-secondary-nav`, off `main` @ `7de02ea2`.
 
-- **Phase 0 — Test plan.** Failing tests first: `sidebar_to_html` class
-  assertions; `secondary_nav_to_html` unit tests (toggle wiring, both the
-  breadcrumb and `bread-crumbs: false` branches); a `secondary_nav_pipeline.rs`
-  integration test driving `render_document_to_file` and asserting on real
-  output; template tests for the title-block `d-none d-lg-block` gating; a test
-  that pins the `media-breakpoint-up(lg)` sidebar-display overrides (see Risks —
-  a class-presence test cannot catch that cliff).
-- **Phase 1 — `#quarto-header` wrapper.** Introduce `<header id="quarto-header">`
-  in `template.rs` around navbar + secondary nav. Static: no `headroom`, no
-  `fixed-top`, no `body.nav-fixed`. Folds in `bd-xva3f8uy`'s `.quarto-banner`
-  unless told otherwise.
-- **Phase 2 — Secondary-nav renderer.** New emitter in `quarto-navigation`
-  beside `navbar.rs`, plus a Navigation-phase transform writing
-  `rendered.navigation.secondary-nav`. Reuses `breadcrumb_trail` /
-  `breadcrumbs_to_html` with no extra classes and no >1-crumb gate;
-  `bread-crumbs: false` emits the collapsed title instead. No search button.
-  Gated off under `wasm32`.
-- **Phase 3 — Sidebar collapse plumbing.** `collapse collapse-horizontal
-  quarto-sidebar-collapse-item overflow-auto` on `nav#quarto-sidebar`, plus the
-  `#quarto-sidebar-glass` sibling. (Was `bd-yxlh`.)
-- **Phase 4 — SCSS.** The `media-breakpoint-down(lg)` rollup *and* the
-  `media-breakpoint-up(lg)` display overrides, in the same commit; **replace**
-  the Decision-A `display: none` at `_bootstrap-rules.scss:181-183` rather than
-  stacking on it; port the `.quarto-secondary-nav*` rules. Floating-only.
-  Retire or repurpose the vestigial Q1 copies at `_bootstrap-rules.scss:635-642`
-  and `2129+`. (Was `bd-yxlh`.)
-- **Phase 5 — Title-block visibility.** The two Q1 postprocessor behaviors as
-  template conditionals (decision 6).
-- **Phase 6 — E2E + docs.** `q2 render` on a fixture, output inspected at narrow
-  width per `CLAUDE.md`'s end-to-end rule; dogfood on `docs/`; cross-check
-  against `docs-quarto-1/_site` for the Connect target. User-facing docs only if
-  author-visible behavior changes.
+Phase ordering is deliberate: Phase 1 (header wrapper) is the DOM change with the
+widest snapshot blast radius, so it goes first and alone. Phases 3+4 must land
+**in the same commit** — the sidebar `collapse` class without the
+`media-breakpoint-up(lg)` overrides breaks every page at every width (see Risks).
+
+### Phase 0 — Test plan (TDD: failing tests first)
+
+- [ ] `quarto-navigation` unit tests for `secondary_nav_to_html`: toggle button
+      wiring (`data-bs-toggle="collapse"`, `data-bs-target=".quarto-sidebar-collapse-item"`,
+      `aria-controls="quarto-sidebar"`, `aria-expanded="false"`), the
+      breadcrumb branch, the `bread-crumbs: false` collapsed-title branch, and
+      the absence of any search button.
+- [ ] `quarto-navigation` unit tests for `sidebar_to_html`: the four added
+      classes and the `#quarto-sidebar-glass` sibling.
+- [ ] `quarto-core` template tests: `#quarto-header` wraps navbar + secondary
+      nav; `.quarto-banner` present in banner mode and absent otherwise; no
+      `headroom` / `fixed-top` / `body.nav-fixed`.
+- [ ] `quarto-core` template tests for decision 6: title block carries
+      `d-none d-lg-block` when the secondary nav is present and does not when it
+      is absent; `h1.title` likewise in the `bread-crumbs: false` branch.
+- [ ] New `crates/quarto-core/tests/integration/secondary_nav_pipeline.rs`
+      (registered in `main.rs`, alphabetized) driving `render_document_to_file`
+      on a real fixture — per `CLAUDE.md`, not `render_qmd_to_html` with
+      defaults.
+- [ ] A test that pins the `media-breakpoint-up(lg)` sidebar-display overrides.
+      **Design this one carefully** — a class-presence assertion cannot catch
+      the cliff described in Risks. Candidate: assert on the *compiled* CSS from
+      the SCSS pipeline, not on the markup.
+- [ ] Verify every new test fails for the right reason before implementing.
+
+### Phase 1 — `#quarto-header` wrapper (widest blast radius; commit alone)
+
+- [ ] Emit `<header id="quarto-header">` in `template.rs` around the navbar and
+      the (not-yet-existing) secondary-nav slot. No `headroom`, no `fixed-top`.
+- [ ] Add `.quarto-banner` in banner mode (`bd-xva3f8uy`, decision 7).
+- [ ] Port the Q1 SCSS that selects through the wrapper: `#quarto-header > nav`
+      padding (`quarto-nav.scss:63-66`).
+- [ ] Update `title_banner.rs`'s module doc, which currently states q2 has no
+      `#quarto-header`.
+- [ ] Re-run snapshots; **document counts and diffs per `CLAUDE.md`**.
+
+### Phase 2 — Secondary-nav renderer
+
+- [ ] New emitter in `quarto-navigation` beside `navbar.rs`.
+- [ ] Navigation-phase transform in `quarto-core` writing
+      `rendered.navigation.secondary-nav`; skip when already set (sibling
+      convention).
+- [ ] Reuse `breadcrumb_trail` / `breadcrumbs_to_html` with **no extra classes**
+      and **no >1-crumb gate** (differs from the title-block instance).
+- [ ] `bread-crumbs: false` → collapsed `h1.quarto-secondary-nav-title` from the
+      page title.
+- [ ] No search button (decision 4).
+- [ ] `wasm32` gate (decision 3) **with a comment naming this plan**, so the
+      `preview-render-parity` skill's next user finds the rationale.
+- [ ] Template slot for `rendered.navigation.secondary-nav` inside
+      `#quarto-header`.
+
+### Phase 3 + 4 — Sidebar collapse plumbing and SCSS (ONE commit)
+
+- [ ] `collapse collapse-horizontal quarto-sidebar-collapse-item overflow-auto`
+      on `nav#quarto-sidebar`.
+- [ ] `#quarto-sidebar-glass` sibling div.
+- [ ] `media-breakpoint-up(lg)` display overrides — **the cliff guard**;
+      Q1 `quarto-nav.scss:640-656`.
+- [ ] `media-breakpoint-down(lg)` rollup — Q1 `quarto-nav.scss:558-590`.
+- [ ] **Replace** (not stack on) the Decision-A `display: none` at
+      `_bootstrap-rules.scss:181-183`; update its comment, which points at the
+      2026-05-01 plan.
+- [ ] Port `.quarto-secondary-nav*` rules — Q1 `quarto-nav.scss:411-450`,
+      `470-520`, `592-610`.
+- [ ] Resolve the open Risks question: does the WASM path share this compiled
+      stylesheet? If Phase 2's markup gate suffices, no SCSS gate is needed —
+      **confirm, don't assume**.
+- [ ] Retire or repurpose the vestigial Q1 copies at
+      `_bootstrap-rules.scss:635-642` and `2129+`.
+- [ ] Update `claude-notes/plans/2026-05-01-website-sidebar-breakpoints.md`:
+      Decision A superseded; `docked`/`toc-left` deferrals still stand.
+
+### Phase 5 — Title-block visibility (decision 6)
+
+- [ ] `header > .quarto-title-block` gains `d-none d-lg-block` when the
+      secondary nav is present — all three `TITLE_BLOCK_PARTIAL` branches
+      considered (`none` has no title block; check banner).
+- [ ] `bread-crumbs: false`: `h1.title` gains `d-none d-lg-block`, its content
+      feeding the collapsed secondary-nav title.
+
+### Phase 6 — E2E verification + docs
+
+- [ ] `cargo run --bin q2 -- render <fixture>` with the output **inspected** and
+      the invocation + snippet recorded here (per `CLAUDE.md`).
+- [ ] Browser check at narrow width: toggle actually opens the sidebar; sidebar
+      still present at lg+ (the cliff).
+- [ ] Dogfood on `docs/` (`cargo run --bin q2 -- render docs/`).
+- [ ] Cross-check against `docs-quarto-1/_site` for Connect parity.
+- [ ] `cargo xtask verify` (full, not `--skip-hub-build` — `quarto-core` changes).
+- [ ] User-facing docs only if author-visible behavior changes.
+- [ ] Close `bd-xva3f8uy` (folded in); confirm `bd-ersobfbt` (headroom) still
+      reads correctly against what shipped.
 
 ## Design questions as posed (all answered above)
 
