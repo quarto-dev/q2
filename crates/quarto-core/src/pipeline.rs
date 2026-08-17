@@ -3422,6 +3422,44 @@ mod tests {
         );
     }
 
+    /// bd-26bf3j1y: the secondary nav is registered on native builds and
+    /// suppressed under WASM (decision 3 — the hub-client preview ships
+    /// no Bootstrap JS, so the toggle would be inert).
+    ///
+    /// The suppression itself is a `#[cfg(not(target_arch = "wasm32"))]`
+    /// on the `pipeline.push`, which no native test can observe. What
+    /// this pins is the other half: that the push exists at all, and in
+    /// the Navigation phase. Without it a refactor could silently drop
+    /// the bar from every website and only the integration tests would
+    /// notice.
+    #[test]
+    fn test_secondary_nav_registered_in_navigation_phase() {
+        use crate::transform::TransformPhase;
+
+        let runtime = make_test_runtime();
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
+        let found = pipeline
+            .iter()
+            .find(|t| t.name() == "secondary-nav-render")
+            .map(|t| t.phase());
+
+        assert_eq!(
+            found,
+            Some(TransformPhase::Navigation),
+            "secondary-nav-render must be registered in the Navigation phase; \
+             pipeline was: {:?}",
+            pipeline.iter().map(|t| t.name()).collect::<Vec<_>>()
+        );
+    }
+
     /// Format-neutral pipeline phase-ordering invariant (bd-w0c6d38k).
     ///
     /// Every transform in `build_transform_pipeline` must (1) declare a real
