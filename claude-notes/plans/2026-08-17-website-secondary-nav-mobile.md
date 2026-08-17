@@ -3,7 +3,10 @@
 **Date:** 2026-08-17
 **Braid:** bd-26bf3j1y
 **Checkout:** `/Users/cscheid/rooms/room-3/q2`, branch `main` @ `cf3318c6` (no worktree created — the skill works in the checkout it was invoked in)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled 2026-08-17 (all six questions answered — see
+**Resolved decisions**). Phases are drafted against those answers but have not
+been detailed or started. **Do not start implementation until the user gives the
+go-ahead.**
 
 ## Triage verdict
 
@@ -19,8 +22,8 @@ ships no Bootstrap JS**, so a toggle rendered there is inert by construction —
 the exact "toggle wired to nothing" objection that deferred this work in the
 first place, now relocated from render to preview.
 
-None of that blocks design; all of it changes what the phases are. Three
-questions below need the user's call before phases can be pinned.
+None of that blocked design; all of it changed what the phases are. The six
+questions were answered on 2026-08-17 and are recorded below.
 
 ## Issue context
 
@@ -146,41 +149,104 @@ the surrounding facts it does not mention are the interesting ones.
 No repro fixture was captured: this is missing-feature work, not a bug, and the
 "symptom" is simply the absence of the markup, which the greps above establish.
 
+## Resolved decisions (2026-08-17)
+
+All six investigation questions were answered by Carlos. The questions as posed
+are kept verbatim further down as the record of what was actually decided
+against.
+
+1. **Merge with `bd-yxlh` — option (a).** `bd-yxlh` is closed as superseded;
+   this strand owns the whole mobile-navigation subsystem, sidebar rollup SCSS
+   included. Rationale accepted: the two halves cannot be tested independently.
+   Carlos's added context: `bd-26bf3j1y` was filed by an agent auditing Posit
+   Connect's docs for missing features, so its scope was framed from the
+   symptom side; the subsystem view is the right one.
+
+2. **`#quarto-header` — option (b), static wrapper.** Emit
+   `<header id="quarto-header">` with **no** `headroom` and **no** `fixed-top`.
+   Headroom (scroll-away header) becomes its own follow-up strand.
+   *Consequence not raised at question time:* Q1 also sets `body.nav-fixed`
+   whenever `#quarto-header.fixed-top nav.navbar` exists, and its sole consumer
+   is `quarto-nav.scss:822` — `body.nav-fixed { padding-top:
+   navbar-default-offset($theme-name) }`, pure compensation for the fixed
+   header. With a static header q2 needs neither the class nor the padding, so
+   omitting both is self-consistent. The headroom follow-up must add
+   `fixed-top`, `nav-fixed`, and that padding rule *together*, or the header
+   will overlap content.
+
+3. **Preview — skip entirely.** Suppress the secondary nav under
+   `target_arch = "wasm32"`, matching `bootstrap_js.rs`'s existing gate, and
+   leave Decision A's `display: none` in force there. Carlos's rationale: the
+   near-term goal is dogfooding q2 on Posit Connect's docs, and a period without
+   mobile nav in preview is acceptable given q2's speed advantage over Q1. No
+   new strand — `bd-e7b7` already owns the hub-client JS story.
+
+4. **Search button — omit.** Not emitted until `bd-6cme` lands. Q1's
+   `onclick="window.quartoOpenSearch()"` is unguarded and q2 defines no such
+   function, so emitting it would ship a button that throws.
+
+5. **Floating-only — confirmed by inspection.** Census of every rendered page in
+   `~/repos/github/cscheid/q2-connect-docs/docs-quarto-1/_site` (451 HTML files,
+   350 carrying body classes): `floating` × 342, `nav-sidebar` × 341,
+   **`docked` × 0**, **`toc-left` × 0**. Neither `_quarto.yml` nor any page's
+   front matter in `docs-quarto-1` or `docs-quarto-2` sets `style:` or
+   `toc-location:` at all — both sites take the default. Floating-only is
+   therefore sufficient for the dogfooding target; `docked` and `toc-left` stay
+   recorded deferrals in
+   `claude-notes/plans/2026-05-01-website-sidebar-breakpoints.md`.
+
+6. **Title-block hiding — full Q1 parity.** Hide `header > .quarto-title-block`
+   below `lg` when the secondary nav is present, and fill the collapsed
+   `h1.quarto-secondary-nav-title` from `h1.title` (adding `d-none d-lg-block`
+   to that `h1`) in the `bread-crumbs: false` branch. Both emitted
+   declaratively — no DOM postprocessor.
+
+**One item left at my discretion, flagged rather than assumed:** `bd-xva3f8uy`
+(add `.quarto-banner` to `#quarto-header` in banner mode) is a single CSS class
+in the exact template region Phase 1 introduces, and its only styling consumer is
+the `.quarto-banner nav.quarto-secondary-nav` rule Phase 4 ports. Default is to
+fold it into Phase 1 and close it with this work; say so if you'd rather keep it
+separate.
+
 ## Proposed phases (draft)
 
-Skeleton only — contents depend on the answers below, especially Q1 (merge with
-`bd-yxlh`) and Q3 (preview behavior).
+Drafted against the resolved decisions. Contents are still sketches — the phases
+have not been broken down into work items.
 
 - **Phase 0 — Test plan.** Failing tests first: `sidebar_to_html` class
-  assertions; `secondary_nav_to_html` unit tests (toggle wiring, both
-  breadcrumb/no-breadcrumb branches, search-button gating); a
-  `secondary_nav_pipeline.rs` integration test driving `render_document_to_file`
-  and asserting on real output; a template test for the title-block
-  `d-none d-lg-block` gating.
-- **Phase 1 — `#quarto-header` wrapper.** Introduce it in `template.rs` around
-  navbar + secondary nav; decide `headroom fixed-top` (Q1) vs. static. Absorbs
-  `bd-xva3f8uy` (`.quarto-banner`) if we take it.
+  assertions; `secondary_nav_to_html` unit tests (toggle wiring, both the
+  breadcrumb and `bread-crumbs: false` branches); a `secondary_nav_pipeline.rs`
+  integration test driving `render_document_to_file` and asserting on real
+  output; template tests for the title-block `d-none d-lg-block` gating; a test
+  that pins the `media-breakpoint-up(lg)` sidebar-display overrides (see Risks —
+  a class-presence test cannot catch that cliff).
+- **Phase 1 — `#quarto-header` wrapper.** Introduce `<header id="quarto-header">`
+  in `template.rs` around navbar + secondary nav. Static: no `headroom`, no
+  `fixed-top`, no `body.nav-fixed`. Folds in `bd-xva3f8uy`'s `.quarto-banner`
+  unless told otherwise.
 - **Phase 2 — Secondary-nav renderer.** New emitter in `quarto-navigation`
-  (`secondary_nav.rs` or beside `navbar.rs`), plus a Navigation-phase transform
-  writing `rendered.navigation.secondary-nav`. Consumes the existing
-  `breadcrumb_trail` / `breadcrumbs_to_html` with no extra classes and no >1
-  gate; `bread-crumbs: false` fallback emits the collapsed title.
+  beside `navbar.rs`, plus a Navigation-phase transform writing
+  `rendered.navigation.secondary-nav`. Reuses `breadcrumb_trail` /
+  `breadcrumbs_to_html` with no extra classes and no >1-crumb gate;
+  `bread-crumbs: false` emits the collapsed title instead. No search button.
+  Gated off under `wasm32`.
 - **Phase 3 — Sidebar collapse plumbing.** `collapse collapse-horizontal
-  quarto-sidebar-collapse-item overflow-auto` on `nav#quarto-sidebar`,
-  `#quarto-sidebar-glass` sibling. **Overlaps `bd-yxlh`.**
+  quarto-sidebar-collapse-item overflow-auto` on `nav#quarto-sidebar`, plus the
+  `#quarto-sidebar-glass` sibling. (Was `bd-yxlh`.)
 - **Phase 4 — SCSS.** The `media-breakpoint-down(lg)` rollup *and* the
-  `media-breakpoint-up(lg)` display overrides; replace (not stack on) the
-  Decision-A `display: none`; port `.quarto-secondary-nav*` rules. Decide the
-  `docked` / `toc-left` blast radius. **Overlaps `bd-yxlh`.**
+  `media-breakpoint-up(lg)` display overrides, in the same commit; **replace**
+  the Decision-A `display: none` at `_bootstrap-rules.scss:181-183` rather than
+  stacking on it; port the `.quarto-secondary-nav*` rules. Floating-only.
+  Retire or repurpose the vestigial Q1 copies at `_bootstrap-rules.scss:635-642`
+  and `2129+`. (Was `bd-yxlh`.)
 - **Phase 5 — Title-block visibility.** The two Q1 postprocessor behaviors as
-  template conditionals.
-- **Phase 6 — Preview story.** Per Q3: gate, ship-inert, or a preview-specific
-  affordance.
-- **Phase 7 — E2E + docs.** `q2 render` on a fixture at narrow width with the
-  output inspected (per `CLAUDE.md`); dogfood on `docs/`; user-facing docs only
-  if behavior changes for authors.
+  template conditionals (decision 6).
+- **Phase 6 — E2E + docs.** `q2 render` on a fixture, output inspected at narrow
+  width per `CLAUDE.md`'s end-to-end rule; dogfood on `docs/`; cross-check
+  against `docs-quarto-1/_site` for the Connect target. User-facing docs only if
+  author-visible behavior changes.
 
-## Open design questions for the user
+## Design questions as posed (all answered above)
 
 1. **`bd-yxlh` overlap — merge, or split along a seam?** `bd-yxlh` (p3) already
    owns Phases 3–4 verbatim, including the instruction to *replace* the
@@ -236,10 +302,18 @@ Skeleton only — contents depend on the answers below, especially Q1 (merge wit
 
 ## Risks / tradeoffs (draft)
 
-- **Two strands, one SCSS rule.** The Decision-A `display: none` at
-  `_bootstrap-rules.scss:181-183` is named as "the thing to replace" by
-  `bd-yxlh`. Whoever touches it must close the other strand or the next session
-  will re-litigate. This is the single most likely source of drift.
+- ~~**Two strands, one SCSS rule.**~~ Resolved by decision 1: `bd-yxlh` closed as
+  superseded, this strand owns `_bootstrap-rules.scss:181-183`.
+- **Decision A is still live under WASM.** Decision 3 keeps `display: none` in
+  force for the preview while Phase 4 replaces it for native renders. That is
+  one SCSS rule that must now be conditional on the build target, which SCSS
+  cannot express on its own — the gate has to live wherever the stylesheet is
+  assembled. Worth resolving early in Phase 4; if it turns out the two paths
+  share one compiled stylesheet, decision 3 may need revisiting (a
+  preview-only suppression would then have to be markup-side, i.e. simply not
+  emitting the secondary nav and leaving the sidebar hidden as today — which is
+  what Phase 2's `wasm32` gate already does, so the SCSS may not need a gate at
+  all. Confirm rather than assume.)
 - **Sidebar `collapse` is a cliff, not a slope.** Adding the class without the
   `media-breakpoint-up(lg)` overrides removes the sidebar from *every* website
   page at *every* width. It will be obvious in a browser and invisible to any
@@ -250,10 +324,11 @@ Skeleton only — contents depend on the answers below, especially Q1 (merge wit
   and the Q1 SCSS both select through it; introducing it changes the DOM every
   website page emits, so navbar/banner snapshots will churn. Expect a
   snapshot-heavy diff and document the counts per `CLAUDE.md`.
-- **Preview/render divergence either way.** Whichever way Q3 goes, `q2 preview`
-  and `q2 render` will differ at narrow widths — in DOM (option b) or in
-  behavior (option a). Worth writing down wherever the `preview-render-parity`
-  skill will find it.
+- **Preview/render divergence is now deliberate.** Decision 3 makes `q2 preview`
+  and `q2 render` differ in DOM at narrow widths, on purpose and indefinitely.
+  The `preview-render-parity` skill exists to treat exactly that as a bug, so
+  the divergence must be recorded where that skill's next user will find it —
+  a comment at the `wasm32` gate naming this plan, at minimum.
 - **No DOM postprocessor.** Two Q1 behaviors here are postprocessor mutations;
   re-expressing them declaratively is the kind of thing that invites a "just add
   a small postprocess step" shortcut. `CLAUDE.md` forbids it; if the declarative
