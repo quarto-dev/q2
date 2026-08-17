@@ -258,7 +258,20 @@ main.page-columns > header > h1.title {
     }
   }
 
-  nav[role="doc-toc"] {
+  // Hide the table of contents on narrow screens.
+  //
+  // Scoped to `#TOC` deliberately. `role="doc-toc"` alone is NOT a
+  // safe hook: q2 also puts that role on `nav#quarto-sidebar` (a
+  // divergence from Q1, tracked in bd-eczdzfqo). While the sidebar was
+  // simply hidden below `lg` that overlap was invisible; once
+  // bd-26bf3j1y made it a collapse drawer it became a real bug — the
+  // toggle latched `.show` and the glass pane dimmed, but the drawer
+  // stayed `display: none`, because `.show` only defeats Bootstrap's
+  // own `.collapse:not(.show)` rule, not an unrelated one.
+  // `test_narrow_viewport_hiding_does_not_catch_the_sidebar` guards
+  // this. If bd-eczdzfqo removes the role from the sidebar, the
+  // `#TOC` qualifier can stay — it is correct either way.
+  nav#TOC[role="doc-toc"] {
     display: none;
   }
 }
@@ -338,6 +351,23 @@ body.docked {
 // follows `$table-border-color` so any Bootswatch / user theme that
 // retints table borders retints the separator automatically. Ported
 // from quarto-cli `quarto-nav.scss:552-556`.
+// Opaque background for the navigation sidebar. Ported from
+// quarto-cli `quarto-nav.scss:543-551` (the `div.sidebar…rollup` half
+// of Q1's selector list is omitted — q2 emits no `.rollup` sidebar).
+//
+// This looks cosmetic and is not. In its own grid column the sidebar
+// overlaps nothing, so a transparent background is invisible; but the
+// bd-26bf3j1y mobile drawer overlays the article, and without this the
+// page text shows straight through the open drawer. Guarded by
+// `test_sidebar_has_an_opaque_background`.
+nav.sidebar.sidebar-navigation:not(.rollup) {
+  @if $sidebar-bg {
+    background-color: $sidebar-bg;
+  } @else {
+    background-color: $body-bg;
+  }
+}
+
 @if $sidebar-border {
   .sidebar.sidebar-navigation:not(.rollup) {
     border-right: 1px solid $table-border-color !important;

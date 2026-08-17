@@ -325,5 +325,34 @@
 # doc.html hash unchanged: none of the new selectors match a single-doc body
 # (no sidebar, no secondary nav), and SecondaryNavRenderTransform skips when
 # `navigation.sidebar` is absent, so the header partial emits nothing.
+# Re-captured 2026-08-17 (bd-26bf3j1y, doc-toc scoping fix):
+# styles.css hash updated because the narrow-viewport TOC-hiding rule was
+# scoped from `nav[role="doc-toc"]` to `nav#TOC[role="doc-toc"]`. q2 puts
+# role="doc-toc" on BOTH nav#TOC and nav#quarto-sidebar (the latter a
+# divergence from Q1, tracked in bd-eczdzfqo), so the bare-role selector also
+# hid the navigation sidebar below md. That was invisible while the sidebar
+# was hidden below lg anyway, and a real bug once it became a collapse drawer:
+# the toggle latched .show and the glass pane dimmed, but the drawer stayed
+# display:none, because .show only defeats Bootstrap's own
+# `.collapse:not(.show)` rule, not an unrelated one. Found in a headless
+# browser; guarded now by quarto-sass's
+# test_narrow_viewport_hiding_does_not_catch_the_sidebar.
+# doc.html hash unchanged: CSS-only change.
+# Re-captured 2026-08-17 (bd-26bf3j1y, sidebar background):
+# styles.css hash updated because Q1's `nav.sidebar.sidebar-navigation:not(
+# .rollup) { background-color: $sidebar-bg }` (quarto-nav.scss:543-551) was
+# ported. q2 had never applied it: in its own grid column the sidebar overlaps
+# nothing, so a transparent background was invisible. The mobile drawer
+# overlays the article, where it is not — page text showed straight through the
+# open drawer. Found by looking at a screenshot; computed styles reported the
+# drawer open and correctly sized. Guarded by
+# test_sidebar_has_an_opaque_background.
+#
+# This is a VISIBLE change on desktop too: sidebars now paint $sidebar-bg
+# instead of inheriting the page. That is Q1 parity, not a new look — Q1 emits
+# the same rule, and both projects define `$sidebar-bg: if(variable-exists(
+# light), $light, #fff) !default` identically, so any color difference is a
+# pre-existing theme-variable question rather than something introduced here.
+# doc.html hash unchanged: CSS-only change (the fixture has no sidebar).
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 8980d3d7060a074c6eb125781045e44c15730a79e032ef240eacacceffdb0232
+doc_files/styles.css 8de4e546dab01d3a04e713987e89c8796e218edd1cb30207bc6dda73c58ff845

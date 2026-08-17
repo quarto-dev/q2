@@ -241,6 +241,37 @@ filled from `h1.title`, and that `h1.title` gains `d-none d-lg-block`
 `if (secondaryNavTitleEl)` guard, and the `showBreadCrumbs: false` template
 branch does emit the `h1`, so it runs.
 
+### F3 — `role="doc-toc"` on the sidebar silently disabled the drawer (2026-08-17)
+
+**The bug the whole phase-0 test suite could not see, found in a headless
+browser on the first try.**
+
+`_bootstrap-rules.scss` hid the TOC on narrow screens with
+`@include media-breakpoint-down(md) { nav[role="doc-toc"] { display: none } }`.
+q2 puts `role="doc-toc"` on **two** elements: the real TOC (`nav#TOC`) and —
+as a divergence from Q1, already tracked in `bd-eczdzfqo` — the navigation
+sidebar. So that rule hid the sidebar too.
+
+That overlap was harmless while Decision A hid the sidebar below `lg` anyway.
+It became a real bug the moment the sidebar turned into a collapse drawer:
+below 768px the toggle latched `.show` on `nav#quarto-sidebar` and the glass
+pane dimmed correctly, but the drawer stayed at `display: none` and zero
+width. **Nothing appeared.** `.show` only defeats Bootstrap's own
+`.collapse:not(.show)` rule; it does not override an unrelated `display: none`
+from somewhere else in the cascade.
+
+Why no test caught it: every markup assertion passed (the element, its
+classes, the toggle's target — all correct), and the SCSS cliff test asked
+about `min-width: 992px`, where the sidebar is fine. The failure lived at
+`max-width: 767px`, in a rule that predates this work and mentions neither
+`collapse` nor `#quarto-sidebar`.
+
+Fix: scope the rule to `nav#TOC[role="doc-toc"]`, which is what it always
+meant. Guarded by
+`quarto-sass::compile::tests::test_narrow_viewport_hiding_does_not_catch_the_sidebar`,
+which fails on any `max-width` rule that hides by `doc-toc` without naming
+`#TOC`. The `#TOC` qualifier stays correct whichever way `bd-eczdzfqo` goes.
+
 ### F2 — Q1's duplicate `role` attribute does not survive to output (2026-08-17)
 
 `nav-before-body.ejs:74` and `:79` set `role="navigation"` **and** `role="link"`
@@ -324,50 +355,67 @@ in the partial; putting it inside the partial would have duplicated the opening
 tag and its banner-class conditional instead. It also gives users the Q1-style
 `quarto-header.html` override seam for free.
 
-### Phase 2 — Secondary-nav renderer
+### Phase 2 — Secondary-nav renderer — **DONE** (`cdbf8478`)
 
-- [ ] New emitter in `quarto-navigation` beside `navbar.rs`.
-- [ ] Navigation-phase transform in `quarto-core` writing
+- [x] New emitter in `quarto-navigation` beside `navbar.rs`.
+- [x] Navigation-phase transform in `quarto-core` writing
       `rendered.navigation.secondary-nav`; skip when already set (sibling
       convention).
-- [ ] Reuse `breadcrumb_trail` / `breadcrumbs_to_html` with **no extra classes**
+- [x] Reuse `breadcrumb_trail` / `breadcrumbs_to_html` with **no extra classes**
       and **no >1-crumb gate** (differs from the title-block instance).
-- [ ] `bread-crumbs: false` → collapsed `h1.quarto-secondary-nav-title` from the
+- [x] `bread-crumbs: false` → collapsed `h1.quarto-secondary-nav-title` from the
       page title.
-- [ ] No search button (decision 4).
-- [ ] `wasm32` gate (decision 3) **with a comment naming this plan**, so the
+- [x] No search button (decision 4).
+- [x] `wasm32` gate (decision 3) **with a comment naming this plan**, so the
       `preview-render-parity` skill's next user finds the rationale.
-- [ ] Template slot for `rendered.navigation.secondary-nav` inside
+- [x] Template slot for `rendered.navigation.secondary-nav` inside
       `#quarto-header`.
 
-### Phase 3 + 4 — Sidebar collapse plumbing and SCSS (ONE commit)
+### Phase 3 + 4 — Sidebar collapse plumbing and SCSS (ONE commit) — **DONE** (`d45253c3`)
 
-- [ ] `collapse collapse-horizontal quarto-sidebar-collapse-item overflow-auto`
+- [x] `collapse collapse-horizontal quarto-sidebar-collapse-item overflow-auto`
       on `nav#quarto-sidebar`.
-- [ ] `#quarto-sidebar-glass` sibling div.
-- [ ] `media-breakpoint-up(lg)` display overrides — **the cliff guard**;
+- [x] `#quarto-sidebar-glass` sibling div.
+- [x] `media-breakpoint-up(lg)` display overrides — **the cliff guard**;
       Q1 `quarto-nav.scss:640-656`.
-- [ ] `media-breakpoint-down(lg)` rollup — Q1 `quarto-nav.scss:558-590`.
-- [ ] **Replace** (not stack on) the Decision-A `display: none` at
-      `_bootstrap-rules.scss:181-183`; update its comment, which points at the
-      2026-05-01 plan.
-- [ ] Port `.quarto-secondary-nav*` rules — Q1 `quarto-nav.scss:411-450`,
+- [x] `media-breakpoint-down(lg)` rollup — Q1 `quarto-nav.scss:558-590`.
+- [x] **Replaced** (not stacked on) the Decision-A `display: none`; its comment
+      now records the supersession and the floating-only rationale.
+- [x] Port `.quarto-secondary-nav*` rules — Q1 `quarto-nav.scss:411-450`,
       `470-520`, `592-610`.
-- [ ] Resolve the open Risks question: does the WASM path share this compiled
-      stylesheet? If Phase 2's markup gate suffices, no SCSS gate is needed —
-      **confirm, don't assume**.
-- [ ] Retire or repurpose the vestigial Q1 copies at
-      `_bootstrap-rules.scss:635-642` and `2129+`.
-- [ ] Update `claude-notes/plans/2026-05-01-website-sidebar-breakpoints.md`:
+- [x] Resolved the open Risks question: **no SCSS gate is needed.** Phase 2's
+      `wasm32` gate means the preview emits no secondary nav, and with no bar
+      the drawer is simply never opened — the sidebar behaves as it did under
+      Decision A without any build-target-conditional CSS. One compiled
+      stylesheet serves both, as suspected. Confirmed, not assumed.
+- [x] Vestigial Q1 copies triaged. `#quarto-sidebar.collapse` (z-index) is
+      **no longer vestigial** — the sidebar now carries `.collapse`, so it does
+      its Q1 job; commented as live. `.quarto-sidebar-toggle*` **is still
+      unreferenced**: it styles Q1's separate rollup accordion, not this
+      drawer. Kept with a note rather than deleted, since a future rollup
+      feature would want it verbatim.
+- [x] Update `claude-notes/plans/2026-05-01-website-sidebar-breakpoints.md`:
       Decision A superseded; `docked`/`toc-left` deferrals still stand.
 
-### Phase 5 — Title-block visibility (decision 6, amended by F1)
+**Bug found after this commit, in the browser:** see finding **F3** —
+`nav[role="doc-toc"] { display: none }` below `md` was also hiding the
+sidebar, so the drawer never opened below 768px. Fixed by scoping to `#TOC`,
+with a new regression test.
+
+### Phase 5 — Title-block visibility (decision 6, amended by F1) — **DONE** (`cdbf8478`)
+
+Shipped inside the phase-2 commit: the collapsed title and the `h1.title`
+hiding are one behavior, and splitting them would have left a commit where the
+bar shows the title and the document shows it again right below.
 
 - [x] ~~`header > .quarto-title-block` gains `d-none d-lg-block`~~ — **dropped.**
       F1 shows Q1's selector never matches, so parity means emitting nothing.
       A regression pin lives in Phase 0 instead.
-- [ ] `bread-crumbs: false`: `h1.title` gains `d-none d-lg-block`, its content
-      feeding the collapsed secondary-nav title.
+- [x] `bread-crumbs: false`: `h1.title` gains `d-none d-lg-block`, its content
+      feeding the collapsed secondary-nav title. Implemented via a
+      `rendered.navigation.secondary-nav-collapsed-title` flag set by the
+      transform and consumed by all three `TITLE_BLOCK_PARTIAL` branches
+      (Q1's postprocessor targets the first `h1.title` regardless of branch).
 
 ### Phase 6 — E2E verification + docs
 
