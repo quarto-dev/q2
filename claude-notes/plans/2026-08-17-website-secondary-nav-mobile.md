@@ -287,16 +287,42 @@ and become load-bearing once the markup exists.
       than the build).
 - [x] `cargo clippy --all-targets` clean on the three touched crates.
 
-### Phase 1 — `#quarto-header` wrapper (widest blast radius; commit alone)
+### Phase 1 — `#quarto-header` wrapper — **DONE**
 
-- [ ] Emit `<header id="quarto-header">` in `template.rs` around the navbar and
+- [x] Emit `<header id="quarto-header">` in `template.rs` around the navbar and
       the (not-yet-existing) secondary-nav slot. No `headroom`, no `fixed-top`.
-- [ ] Add `.quarto-banner` in banner mode (`bd-xva3f8uy`, decision 7).
-- [ ] Port the Q1 SCSS that selects through the wrapper: `#quarto-header > nav`
-      padding (`quarto-nav.scss:63-66`).
-- [ ] Update `title_banner.rs`'s module doc, which currently states q2 has no
+- [x] Add `.quarto-banner` in banner mode (`bd-xva3f8uy`, decision 7).
+- [x] Port the Q1 SCSS that selects through the wrapper: `#quarto-header > nav`
+      padding (`quarto-nav.scss:63-66`) — ported as the paired rule Q1 writes,
+      alongside `footer.footer .nav-footer`.
+- [x] Update `title_banner.rs`'s module doc, which currently states q2 has no
       `#quarto-header`.
-- [ ] Re-run snapshots; **document counts and diffs per `CLAUDE.md`**.
+- [x] Re-run snapshots; **documented per `CLAUDE.md`** — see below.
+
+**Snapshot / baseline churn (Phase 1): 0 `.snap` files changed, 1 baseline hash
+updated.** The risk section predicted "a snapshot-heavy diff"; it did not
+materialize, for a reason worth recording. The header partial is invoked from
+inside an `$if$`/`$elseif$` gate at the call site rather than as a bare
+`$quarto-header()$` line. A bare call emits the template line's trailing
+newline even when the partial expands to nothing, which shifted every rendered
+document by one blank line — caught by
+`attribution_baseline_snapshot::attribution_off_html_baseline`. Moving the gate
+to the call site makes the no-header case emit nothing at all, so non-website
+renders are byte-identical.
+
+The one update is `tests/fixtures/phase5-single-doc-baseline/expected_hashes.txt`:
+`doc_files/styles.css` only, because of the new `#quarto-header > nav` padding
+rule. **`doc.html` is unchanged**, which is the useful signal — it confirms the
+template restructure is byte-neutral for every render that has no navbar and no
+secondary nav.
+
+**Design note — why the gate is split from the markup.** The template language
+has no boolean `or`, so "navbar OR secondary-nav" has to be an
+`$if$`/`$elseif$` pair somewhere. Putting the pair at the call site (two
+identical `$quarto-header()$` lines) keeps the `<header>` markup single-sourced
+in the partial; putting it inside the partial would have duplicated the opening
+tag and its banner-class conditional instead. It also gives users the Q1-style
+`quarto-header.html` override seam for free.
 
 ### Phase 2 — Secondary-nav renderer
 

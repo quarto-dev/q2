@@ -272,7 +272,9 @@ $if(rendered.draft-alert-text)$
 <div id="quarto-draft-alert" class="alert alert-warning"><i class="bi bi-pencil-square"></i>$rendered.draft-alert-text$</div>
 $endif$
 $if(rendered.navigation.navbar)$
-$rendered.navigation.navbar$
+$quarto-header()$
+$elseif(rendered.navigation.secondary-nav)$
+$quarto-header()$
 $endif$
 $for(include-before)$
 $include-before$
@@ -611,6 +613,46 @@ $rendered.navigation.toc$
 </nav>
 "#;
 
+/// The site header: `<header id="quarto-header">` wrapping the navbar
+/// and the narrow-viewport secondary nav (bd-26bf3j1y).
+///
+/// Q1's equivalent (`nav-before-body.ejs:13`) gates on
+/// `nav.navbar || nav.sidebar || nav.announcement` and emits
+/// `class="headroom fixed-top"`. Two deliberate differences:
+///
+/// - **Static, not fixed.** No `headroom` / `fixed-top`, and
+///   correspondingly no `body.nav-fixed` (whose only Q1 consumer is a
+///   `padding-top` compensating for the fixed header). Those three go
+///   together; adding one without the others overlaps content. Deferred
+///   as a unit to bd-ersobfbt.
+/// - **Gated on content, not on config.** q2 emits the wrapper when
+///   there is a navbar or a secondary nav to put in it. Q1's extra
+///   `nav.sidebar` term covers the case of a sidebar whose secondary
+///   nav is suppressed, which for q2 would produce an empty header with
+///   no styling consumer.
+///
+/// `.quarto-banner` in banner mode is Q1's
+/// `format-html-title.ts:278-281`; its only styling consumer is
+/// `.quarto-banner nav.quarto-secondary-nav` (bd-xva3f8uy, folded in
+/// here).
+///
+/// The partial holds only the markup; the "is there a header at all?"
+/// gate lives at the **call site** in [`FULL_HTML_TEMPLATE`]. That split
+/// is deliberate: the template language has no boolean `or`, so the
+/// two-way gate has to be an `$if$`/`$elseif$` pair somewhere, and
+/// putting it around the call keeps the `<header>` markup
+/// single-sourced. It also keeps the no-header case emitting *nothing* —
+/// a bare `$quarto-header()$` line would leave a stray blank line in
+/// every document that has no navbar.
+pub const QUARTO_HEADER_PARTIAL: &str = r#"<header id="quarto-header"$if(rendered.title-block-banner)$ class="quarto-banner"$endif$>
+$if(rendered.navigation.navbar)$
+$rendered.navigation.navbar$
+$endif$
+$if(rendered.navigation.secondary-nav)$
+$rendered.navigation.secondary-nav$
+$endif$
+</header>"#;
+
 /// Resolver holding the built-in HTML template partials.
 ///
 /// Each partial is registered under both its bare name
@@ -624,6 +666,7 @@ pub fn builtin_html_partials() -> MemoryResolver {
         ("title-metadata", TITLE_METADATA_PARTIAL),
         ("_title-meta-author", TITLE_META_AUTHOR_PARTIAL),
         ("toc-block", TOC_BLOCK_PARTIAL),
+        ("quarto-header", QUARTO_HEADER_PARTIAL),
     ] {
         resolver.add(name, content);
         resolver.add(format!("{name}.html"), content);

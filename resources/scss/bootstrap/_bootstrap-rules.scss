@@ -2732,6 +2732,16 @@ a {
   }
 }
 
+// Horizontal gutter shared by the site footer and the site header's
+// navs. Ported from `quarto-nav.scss:63-66`, which pairs the two
+// selectors in one rule — q2 gained the `#quarto-header` wrapper with
+// bd-26bf3j1y, so the header half applies now.
+footer.footer .nav-footer,
+#quarto-header > nav {
+  padding-left: 1em;
+  padding-right: 1em;
+}
+
 body .nav-footer {
   @if variable-exists(footer-border) and $footer-border {
     @if variable-exists(footer-border-color) {

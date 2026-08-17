@@ -293,5 +293,17 @@
 # string interpolation), leaving the toggle icon invisible; they now
 # carry concrete `fill="rgba(…)"` values. Verified the only delta is
 # those six data-URI fills. doc.html hash unchanged: CSS-only.
+# Re-captured 2026-08-17 (bd-26bf3j1y, phase 1 — #quarto-header wrapper):
+# styles.css hash updated because the shared horizontal gutter rule from Q1's
+# `quarto-nav.scss:63-66` — `footer.footer .nav-footer, #quarto-header > nav
+# { padding-left: 1em; padding-right: 1em }` — was ported into
+# `_bootstrap-rules.scss`. Q1 pairs both selectors in one rule; q2 could only
+# use the footer half until this strand introduced the `#quarto-header`
+# wrapper. doc.html hash UNCHANGED, and that is the interesting part: the new
+# `$quarto-header()$` partial is gated on `rendered.navigation.navbar` /
+# `rendered.navigation.secondary-nav`, neither of which a single-doc render
+# sets, so the template change is byte-neutral outside websites. (An earlier
+# draft called the partial from a bare line and DID shift doc.html by one
+# blank line; the gate was moved to the call site precisely to avoid that.)
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 5228869a7216859350164870ea4a62f40fb59222475530ee59fe796cf6364335
+doc_files/styles.css 8a50eac93ae81dea7a439f7a66a1f62db1db5c9f40ae9bb4c33de10c61b1ffc6
