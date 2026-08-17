@@ -1,0 +1,11 @@
+---
+title: "Parse-masking repro (parseable control)"
+---
+
+The admins\' console shows no parse error.
+
+Diagram key: [1] is the gateway node.
+
+See [the docs][gcc] for details.
+
+[gcc]: https://example.com/gcc
