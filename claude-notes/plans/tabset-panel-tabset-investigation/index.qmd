@@ -1,0 +1,22 @@
+---
+title: "Home"
+toc: true
+---
+
+## Real heading
+
+::: {.panel-tabset}
+
+## Tab Alpha
+
+Alpha content.
+
+## Tab Beta
+
+Beta content.
+
+:::
+
+## Another real heading
+
+Text.
