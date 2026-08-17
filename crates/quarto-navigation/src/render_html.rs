@@ -279,12 +279,68 @@ pub enum SecondaryNavContent<'a> {
 }
 
 /// Render `nav.quarto-secondary-nav` — the whole narrow-viewport
-/// navigation bar (bd-26bf3j1y).
+/// navigation bar (bd-26bf3j1y). Hidden at `lg`+ by SCSS.
 ///
-/// STUB: signature only, so the Phase 0 tests compile and fail on
-/// their assertions. Implemented in Phase 2.
-pub fn secondary_nav_to_html(_content: SecondaryNavContent<'_>, _toggle_label: &str) -> String {
-    String::new()
+/// Ported from Q1 `nav-before-body.ejs:64-93`, checked against the
+/// rendered output of a Q1 site rather than the template alone. Three
+/// deliberate differences, each recorded in the plan:
+///
+/// - **No search button.** Q1's calls `window.quartoOpenSearch()`
+///   unguarded; q2 has no search yet (bd-6cme), so the button would
+///   throw on click.
+/// - **No `onclick="…quartoToggleHeadroom…"` hooks.** Headroom is
+///   deferred to bd-ersobfbt. Q1 guards the call, so omitting it is
+///   safe; emitting a handler for a function that does not exist is not
+///   useful.
+/// - **`role="navigation"` only.** Q1's template sets both
+///   `role="navigation"` and `role="link"` on the same anchor; its own
+///   DOM postprocessor drops the duplicate, so one attribute is
+///   byte-parity with Q1's *output*.
+///
+/// The toggle targets `.quarto-sidebar-collapse-item`, which
+/// [`sidebar_to_html`] puts on `nav#quarto-sidebar` and on the glass
+/// pane beside it. Both halves must ship together — a toggle pointed at
+/// markup that doesn't exist is why this work was split out of
+/// bd-breadcrumbs-missing-1vpuqh34 in the first place.
+pub fn secondary_nav_to_html(content: SecondaryNavContent<'_>, toggle_label: &str) -> String {
+    let label = escape_attr(toggle_label);
+    // Shared by the button and the click-anywhere link: both open the
+    // same Bootstrap collapse target.
+    let collapse_attrs = format!(
+        "data-bs-toggle=\"collapse\" data-bs-target=\".quarto-sidebar-collapse-item\" \
+         aria-controls=\"quarto-sidebar\" aria-expanded=\"false\" aria-label=\"{label}\""
+    );
+
+    let mut html = String::from("<nav class=\"quarto-secondary-nav\">\n");
+    html.push_str("  <div class=\"container-fluid d-flex\">\n");
+    html.push_str(&format!(
+        "    <button type=\"button\" class=\"quarto-btn-toggle btn\" role=\"button\" {collapse_attrs}>\n      \
+         <i class=\"bi bi-layout-text-sidebar-reverse\"></i>\n    </button>\n"
+    ));
+
+    match content {
+        SecondaryNavContent::Breadcrumbs(breadcrumbs_html) => {
+            html.push_str("    ");
+            html.push_str(breadcrumbs_html);
+            html.push('\n');
+            // Q1 follows the trail with a full-width link so tapping
+            // the empty space in the bar also opens the sidebar.
+            html.push_str(&format!(
+                "    <a class=\"flex-grow-1\" role=\"navigation\" {collapse_attrs}></a>\n"
+            ));
+        }
+        SecondaryNavContent::CollapsedTitle(title) => {
+            html.push_str(&format!(
+                "    <a class=\"flex-grow-1 no-decor\" role=\"navigation\" {collapse_attrs}>\n      \
+                 <h1 class=\"quarto-secondary-nav-title\">{}</h1>\n    </a>\n",
+                render_text(title)
+            ));
+        }
+    }
+
+    html.push_str("  </div>\n");
+    html.push_str("</nav>\n");
+    html
 }
 
 pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {

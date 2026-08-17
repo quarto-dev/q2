@@ -400,7 +400,7 @@ $endif$
 pub const TITLE_BLOCK_PARTIAL: &str = r#"$if(rendered.has-title-block)$
 $if(rendered.title-block-none)$
 <header id="title-block-header">
-$if(title)$<h1 class="title">$title$</h1>
+$if(title)$<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
 $endif$
 $if(subtitle)$
 <p class="subtitle">$subtitle$</p>
@@ -426,7 +426,7 @@ $if(rendered.navigation.breadcrumbs)$
 $rendered.navigation.breadcrumbs$
 $endif$
 $if(title)$
-<h1 class="title">$title$</h1>
+<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
 $endif$
 $if(subtitle)$
 <p class="subtitle lead">$subtitle$</p>
@@ -458,7 +458,7 @@ $rendered.navigation.breadcrumbs$
 $endif$
 <div class="quarto-title">
 $if(title)$
-<h1 class="title">$title$</h1>
+<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
 $endif$
 $if(subtitle)$
 <p class="subtitle lead">$subtitle$</p>

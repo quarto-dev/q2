@@ -1425,6 +1425,23 @@ pub fn build_transform_pipeline(
     // (bd-breadcrumbs-missing-1vpuqh34); the title-block partial
     // consumes `rendered.navigation.breadcrumbs`.
     pipeline.push(Box::new(BreadcrumbsRenderTransform::new()));
+    // The narrow-viewport secondary nav (bd-26bf3j1y) derives its own
+    // trail from the same sidebar — Q1 gates the two breadcrumb
+    // instances differently, so they don't share a result. See the
+    // comparison table in `transforms/secondary_nav_render.rs`.
+    //
+    // NATIVE ONLY, deliberately (decision 3 in the plan). The bar's
+    // only purpose is the sidebar toggle, which needs Bootstrap's
+    // collapse JS; `BootstrapJsStage` is gated the same way because
+    // the hub-client preview reinitializes its iframe every render
+    // tick. Rendering an inert toggle in preview is worse than
+    // rendering none. This means preview and render differ in DOM at
+    // narrow widths ON PURPOSE — `bd-e7b7` owns the preview JS story,
+    // and when it lands this `cfg` comes off.
+    #[cfg(not(target_arch = "wasm32"))]
+    pipeline.push(Box::new(
+        crate::transforms::SecondaryNavRenderTransform::new(),
+    ));
     pipeline.push(Box::new(PageNavRenderTransform::new()));
     // Footer *generation* (above) is format-agnostic; footer *rendering* is
     // format-specific — html emits page-footer chrome, revealjs emits a
