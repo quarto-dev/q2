@@ -366,8 +366,22 @@ pub fn sidebar_to_html_with_appended(
         SidebarStyle::Floating => "sidebar-floating",
     };
 
+    // `collapse collapse-horizontal quarto-sidebar-collapse-item` make
+    // this a Bootstrap collapse target for the narrow-viewport toggle in
+    // `secondary_nav_to_html` (bd-26bf3j1y); `overflow-auto` lets a long
+    // menu scroll inside the drawer. Class order follows Q1's
+    // `sidebar.ejs:1`.
+    //
+    // NOTE: `collapse` alone would hide the sidebar at EVERY width —
+    // Bootstrap ships `.collapse:not(.show) { display: none }`. What
+    // keeps it visible on desktop is the `media-breakpoint-up(lg)`
+    // `#quarto-sidebar` display override in `_bootstrap-rules.scss`.
+    // The two must stay together; `test_sidebar_stays_visible_at_lg_
+    // despite_collapse_class` in quarto-sass guards the pairing,
+    // because no markup assertion can see it.
     html.push_str(&format!(
-        "<nav id=\"quarto-sidebar\" class=\"sidebar sidebar-navigation {}\" \
+        "<nav id=\"quarto-sidebar\" class=\"sidebar collapse collapse-horizontal \
+         quarto-sidebar-collapse-item sidebar-navigation {} overflow-auto\" \
          role=\"doc-toc\">\n",
         style_class
     ));
@@ -403,6 +417,15 @@ pub fn sidebar_to_html_with_appended(
         html.push_str(extra);
     }
     html.push_str("</nav>\n");
+    // Click-catching glass pane, a SIBLING of the sidebar (Q1
+    // `sidebar.ejs:100`). It shares the collapse-item class, so tapping
+    // the dimmed area outside an open drawer closes it — the only way
+    // out on a phone besides the toggle. SCSS gives it a z-index and a
+    // tint only below `lg`; at `lg`+ it is `display: none`.
+    html.push_str(
+        "<div id=\"quarto-sidebar-glass\" class=\"quarto-sidebar-collapse-item\" \
+         data-bs-toggle=\"collapse\" data-bs-target=\".quarto-sidebar-collapse-item\"></div>\n",
+    );
     html
 }
 
@@ -1760,7 +1783,12 @@ mod tests {
         };
         let html = sidebar_to_html(&sb, "./");
         assert!(html.contains("<nav id=\"quarto-sidebar\""));
-        assert!(html.contains("class=\"sidebar sidebar-navigation sidebar-floating\""));
+        // bd-26bf3j1y added the Bootstrap-collapse classes so the
+        // narrow-viewport toggle has a target.
+        assert!(html.contains(
+            "class=\"sidebar collapse collapse-horizontal quarto-sidebar-collapse-item \
+             sidebar-navigation sidebar-floating overflow-auto\""
+        ));
         assert!(html.contains("<div class=\"sidebar-menu-container\">"));
         assert!(html.contains("<ul class=\"list-unstyled mt-1\">"));
         assert!(html.contains("class=\"sidebar-item\""));
@@ -1986,8 +2014,18 @@ mod tests {
         // Still contains the real links.
         assert!(html.contains(">A<"));
         assert!(html.contains(">B<"));
-        // No auto artifact leaks out.
-        assert!(!html.contains("auto"));
+        // No auto artifact leaks out. This used to assert
+        // `!html.contains("auto")`, which stopped meaning anything once
+        // bd-26bf3j1y put `overflow-auto` on the nav — and was always a
+        // loose proxy, since it would have been tripped by any entry
+        // whose text happened to contain "auto". Counting the rendered
+        // items tests the actual property: the `Auto` entry contributed
+        // no item, so exactly the two real links are present.
+        assert_eq!(
+            html.matches("class=\"sidebar-item\"").count(),
+            2,
+            "expected exactly the two manual links; got: {html}"
+        );
     }
 
     // --- SidebarTitle rendering (sidebar-default-title) -----------------

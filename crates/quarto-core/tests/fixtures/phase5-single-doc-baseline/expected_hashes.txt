@@ -305,5 +305,25 @@
 # sets, so the template change is byte-neutral outside websites. (An earlier
 # draft called the partial from a bare line and DID shift doc.html by one
 # blank line; the gate was moved to the call site precisely to avoid that.)
+# Re-captured 2026-08-17 (bd-26bf3j1y, phases 3+4 — mobile nav):
+# styles.css hash updated because the narrow-viewport navigation SCSS was
+# ported from Q1 `quarto-nav.scss`: the media-breakpoint-down(lg) sidebar
+# rollup (558-590), the `.quarto-secondary-nav` rules (411-450, 470-520,
+# 592-610), the media-breakpoint-up(lg) display overrides (640-656), and the
+# `#quarto-sidebar-glass` rules (665-693), plus two new variables
+# ($sidebar-glass-bg, $sidebar-anim-duration). It also REPLACES the Decision-A
+# rule `body.floating .sidebar.sidebar-navigation { display: none }` added
+# 2026-05-01 — that entry above is now superseded.
+#
+# The lg+ `#quarto-sidebar { display: flex }` override is load-bearing, not
+# cosmetic: nav#quarto-sidebar now carries Bootstrap's `collapse` class, and
+# without the override `.collapse:not(.show){display:none}` would hide the
+# sidebar at every width on every website page. quarto-sass's
+# test_sidebar_stays_visible_at_lg_despite_collapse_class reads the compiled
+# CSS to guard exactly that pairing.
+#
+# doc.html hash unchanged: none of the new selectors match a single-doc body
+# (no sidebar, no secondary nav), and SecondaryNavRenderTransform skips when
+# `navigation.sidebar` is absent, so the header partial emits nothing.
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 8a50eac93ae81dea7a439f7a66a1f62db1db5c9f40ae9bb4c33de10c61b1ffc6
+doc_files/styles.css 8980d3d7060a074c6eb125781045e44c15730a79e032ef240eacacceffdb0232
