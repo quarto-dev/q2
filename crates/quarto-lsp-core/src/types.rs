@@ -623,7 +623,7 @@ pub struct SemanticTokensJson {
 /// names stay unprefixed; [`capture_to_token_type`] adds the prefix.
 ///
 /// The `qmd.code.*` group **must** mirror the `.hl-*` roots in
-/// `resources/scss/html/templates/highlight.scss` (24 roots) so editor and
+/// `resources/scss/html/templates/highlight-default.scss` (24 roots) so editor and
 /// render colour the same captures — pinned by the `code_legend_covers_render_css`
 /// test (Phase 7, Defence 3).
 pub static QMD_TOKEN_LEGEND: &[&str] = &[
@@ -651,7 +651,7 @@ pub static QMD_TOKEN_LEGEND: &[&str] = &[
     "qmd.punctuation.delimiter.fence",
     "qmd.punctuation.delimiter.frontmatter",
     "qmd.attribute.specifier",
-    // --- embedded code (the 24 `hl-*` roots in highlight.scss) ---
+    // --- embedded code (the 24 `hl-*` roots in highlight-default.scss) ---
     "qmd.code.attribute",
     "qmd.code.boolean",
     "qmd.code.character",
@@ -883,9 +883,15 @@ mod tests {
         // the editor on the `code.*` legend. A root present in one but not the
         // other is a silent parity break, so lock them together: the set of
         // `code.<root>` legend roots must equal the set of `.hl-<root>` roots.
+        //
+        // The color rules live in the DEFAULT palette file — the
+        // light/dark epic's phase B (bd-0pic6) split the palette out
+        // of the structural `highlight.scss` so `highlight-style:`
+        // can swap it. Every shipped palette styles the same class
+        // vocabulary, so checking the default one suffices.
         const SCSS: &str = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../resources/scss/html/templates/highlight.scss"
+            "/../../resources/scss/html/templates/highlight-default.scss"
         ));
 
         // CSS roots: the first hyphen-segment after `.hl-` in each selector.

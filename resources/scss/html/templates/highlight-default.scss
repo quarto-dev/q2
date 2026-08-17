@@ -1,0 +1,150 @@
+/*-- scss:rules --*/
+
+// -- Keywords -------------------------------------------------------------
+
+.hl-keyword,
+.hl-keyword-control,
+.hl-keyword-operator,
+.hl-keyword-directive,
+.hl-keyword-function,
+.hl-keyword-storage,
+.hl-keyword-conditional,
+.hl-keyword-repeat {
+  color: #859900; // solarized green
+  font-weight: 600;
+}
+
+// -- Strings / characters / escapes ---------------------------------------
+
+.hl-string,
+.hl-string-escape,
+.hl-string-regexp,
+.hl-string-special,
+.hl-string-special-symbol,
+.hl-character {
+  color: #2aa198; // solarized cyan
+}
+
+.hl-string-escape,
+.hl-escape {
+  color: #b58900; // solarized yellow
+}
+
+// -- Numbers / booleans / constants --------------------------------------
+
+.hl-number,
+.hl-boolean,
+.hl-constant,
+.hl-constant-builtin,
+.hl-constant-character,
+.hl-constant-numeric {
+  color: #d33682; // solarized magenta
+}
+
+// -- Comments --------------------------------------------------------------
+
+.hl-comment,
+.hl-comment-line,
+.hl-comment-block,
+.hl-comment-documentation,
+.hl-comment-unused {
+  color: #93a1a1; // solarized base1
+  font-style: italic;
+}
+
+// -- Functions -------------------------------------------------------------
+
+.hl-function,
+.hl-function-method,
+.hl-function-builtin,
+.hl-function-special,
+.hl-function-macro,
+.hl-constructor,
+.hl-constructor-builtin {
+  color: #268bd2; // solarized blue
+}
+
+// -- Types / namespaces / modules -----------------------------------------
+
+.hl-type,
+.hl-type-builtin,
+.hl-type-parameter,
+.hl-type-enum,
+.hl-namespace,
+.hl-module {
+  color: #b58900; // solarized yellow
+}
+
+// -- Variables / properties -----------------------------------------------
+
+.hl-variable,
+.hl-variable-builtin,
+.hl-variable-parameter,
+.hl-variable-other,
+.hl-variable-mutable,
+.hl-variable-member {
+  color: #657b83; // solarized base00
+}
+
+.hl-property,
+.hl-property-builtin,
+.hl-attribute,
+.hl-label {
+  color: #6c71c4; // solarized violet
+}
+
+// -- Operators / punctuation ----------------------------------------------
+
+.hl-operator,
+.hl-operator-word,
+.hl-punctuation,
+.hl-punctuation-bracket,
+.hl-punctuation-delimiter,
+.hl-punctuation-special {
+  color: #657b83; // solarized base00
+}
+
+// -- Tags / markup ---------------------------------------------------------
+
+.hl-tag {
+  color: #dc322f; // solarized red
+}
+
+.hl-markup-heading {
+  color: #268bd2;
+  font-weight: 700;
+}
+
+.hl-markup-bold {
+  font-weight: 700;
+}
+
+.hl-markup-italic {
+  font-style: italic;
+}
+
+.hl-markup-strikethrough {
+  text-decoration: line-through;
+}
+
+.hl-markup-link,
+.hl-markup-link-url {
+  color: #268bd2;
+  text-decoration: underline;
+}
+
+.hl-markup-raw {
+  color: #2aa198;
+}
+
+// -- Special / embedded / errors ------------------------------------------
+
+.hl-special,
+.hl-embedded {
+  color: #cb4b16; // solarized orange
+}
+
+.hl-error {
+  color: #dc322f;
+  text-decoration: underline wavy;
+}

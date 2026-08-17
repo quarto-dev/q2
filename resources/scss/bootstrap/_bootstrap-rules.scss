@@ -2384,11 +2384,22 @@ code a:hover {
 }
 
 // This is a sentinel value that renderers can use to determine
-// whether the theme is dark or light
+// whether the theme is dark or light. Alongside the sentinel we
+// declare the matching `color-scheme` so UA-drawn chrome (scrollbars,
+// form-control internals, picker popups) follows the theme's darkness
+// — an improvement over Quarto 1, which never sets it (light/dark
+// epic bd-0pic6, design D1a). `light-dark()` in user CSS resolves
+// against this declaration.
 @if (quarto-color.blackness($body-bg) > $code-block-theme-dark-threshhold) {
   /*! dark */
+  :root {
+    color-scheme: dark;
+  }
 } @else {
   /*! light */
+  :root {
+    color-scheme: light;
+  }
 }
 
 // observable UI element tweaks to support light-mode vs dark-mode

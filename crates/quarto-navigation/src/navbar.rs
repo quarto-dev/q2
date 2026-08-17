@@ -126,6 +126,12 @@ pub struct Navbar {
     pub tools_collapse: bool,
     pub left: Vec<NavigationItem>,
     pub right: Vec<NavigationItem>,
+    /// Whether to render the dark-mode toggle in the navbar's tools
+    /// slot. Not parsed from `navbar:` YAML — set by
+    /// `NavbarGenerateTransform` when the format has a dark theme
+    /// variant (bd-0pic6 A4; folds into general `tools:` support when
+    /// bd-fod3 lands — bd-ld-toggle-into-tools-hpae7m9r).
+    pub dark_mode_toggle: bool,
 }
 
 impl Navbar {
@@ -148,6 +154,7 @@ impl Navbar {
             tools_collapse: false,
             left: Vec::new(),
             right: Vec::new(),
+            dark_mode_toggle: false,
         }
     }
 
@@ -217,6 +224,13 @@ impl Navbar {
 
         nav.left = parse_item_list(cv.get("left"));
         nav.right = parse_item_list(cv.get("right"));
+
+        // Internal round-trip field (not authored YAML): written by
+        // `to_config_value` so the flag survives the
+        // generate-transform → metadata → render-transform trip.
+        if let Some(v) = cv.get("dark-mode-toggle").and_then(|v| v.as_bool()) {
+            nav.dark_mode_toggle = v;
+        }
 
         nav
     }
@@ -290,6 +304,9 @@ impl Navbar {
         }
         if !self.right.is_empty() {
             entries.push(item_list_entry("right", &self.right, &info));
+        }
+        if self.dark_mode_toggle {
+            entries.push(bool_entry("dark-mode-toggle", true, &info));
         }
 
         ConfigValue::new_map(entries, info)

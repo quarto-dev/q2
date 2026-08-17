@@ -1,0 +1,50 @@
+---
+title: "Unknown highlight style"
+description: "The `highlight-style:` value does not name a syntax-highlight palette shipped with Quarto; the default palette is used instead."
+code: Q-14-5
+subsystem: theme
+status: stub
+since: "99.9.9"
+categories:
+  - theme
+---
+
+# `Q-14-5` — Unknown Highlight Style
+
+> The `highlight-style:` value does not name a syntax-highlight
+> palette shipped with Quarto; the default palette is used
+> instead.
+
+## What this means
+
+The `highlight-style:` option selects the color palette used for
+syntax highlighting in code blocks. The configured name is not one
+of the palettes shipped with Quarto, so the document renders with
+the default palette. This is a warning, not an error — the render
+completes.
+
+## Why this happens
+
+Common causes:
+
+- **A typo in the style name.**
+- **A Quarto 1 style that has not yet been ported.** Quarto's
+  highlighting is tree-sitter based, and its palettes are being
+  ported incrementally. Currently available: `default`, `a11y`
+  (adaptive — resolves to a light or dark variant per theme),
+  `a11y-light`, and `a11y-dark`.
+
+## How to fix
+
+Pick one of the available palettes, or remove `highlight-style:`
+to use the default. The adaptive form pairs naturally with a
+light/dark theme configuration:
+
+```yaml
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+highlight-style: a11y
+```
