@@ -257,7 +257,7 @@ widest snapshot blast radius, so it goes first and alone. Phases 3+4 must land
 **in the same commit** — the sidebar `collapse` class without the
 `media-breakpoint-up(lg)` overrides breaks every page at every width (see Risks).
 
-### Phase 0 — Test plan (TDD: failing tests first) — **DONE** (`<pending>`)
+### Phase 0 — Test plan (TDD: failing tests first) — **DONE** (`4b1ee305`)
 
 22 tests added; 15 fail for the right reason, 7 are absence-pins that pass now
 and become load-bearing once the markup exists.
