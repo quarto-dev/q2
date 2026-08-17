@@ -211,7 +211,8 @@ it" precedent in `opt_in_only()`. The change follows the same shape:
       `syntax-helper-parse-masking-investigation/post-fix-transcript.txt`
       (unparseable → "Unanalyzable files: 1", success rate 0.0%, JSON record;
       control → both findings). Crate suite 176/176.
-- [ ] Full workspace tests + `cargo xtask verify --skip-hub-build` before PR.
+- [x] Full workspace tests (12259/12259) + `cargo xtask verify
+      --skip-hub-build` green ("All verification steps passed", 2026-08-17).
 
 ## Implementation notes
 
