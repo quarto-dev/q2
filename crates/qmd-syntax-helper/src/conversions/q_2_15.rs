@@ -118,6 +118,7 @@ impl Rule for Q215Converter {
                 location: v.error_location,
                 error_code: Some("Q-2-15".to_string()),
                 error_codes: None,
+                ..Default::default()
             })
             .collect();
 

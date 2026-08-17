@@ -164,6 +164,7 @@ impl Rule for Q233Converter {
                 location: v.error_location,
                 error_code: Some("Q-2-33".to_string()),
                 error_codes: None,
+                ..Default::default()
             })
             .collect();
 

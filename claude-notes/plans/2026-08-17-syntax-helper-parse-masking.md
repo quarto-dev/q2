@@ -194,12 +194,35 @@ it" precedent in `opt_in_only()`. The change follows the same shape:
 
 ## Work items
 
-- [ ] Phase 0: failing integration tests (`parse_masking_test.rs`) + `analyze()` unit test
-- [ ] Phase 1: `Rule::requires_parse()`, `analyze()` → `Err`, shared parse probe, rule overrides
-- [ ] Phase 2: check driver skip/synthesize, `CheckResult` fields, summary buckets + rule-error accounting
-- [ ] Phase 3: convert per-iteration probe + at-convergence refusal
-- [ ] Phase 4: docs (README, list-rules note)
-- [ ] Full workspace tests + `cargo xtask verify --skip-hub-build`; end-to-end repro transcript re-run showing the fix
+- [x] Phase 0: failing integration tests (`parse_masking_test.rs`) + `analyze()` unit test
+      — 12 tests written first; verified red 8/12 pre-fix (4 green guards:
+      control fixtures, no-probe case, compounding).
+- [x] Phase 1: `Rule::requires_parse()`, `analyze()` → `Err`, shared parse probe
+      (`utils/parse_probe.rs`), rule overrides (literal-brackets,
+      reference-links, q-2-30; `parse` refactored onto the probe).
+- [x] Phase 2: check driver skip/synthesize, `CheckResult.unanalyzable`/
+      `skipped_rules` fields, summary buckets ("Unanalyzable files",
+      "Files with errors") + rule-error accounting.
+- [x] Phase 3: convert per-iteration probe + at-convergence refusal (stderr,
+      per file, sweep continues).
+- [x] Phase 4: docs (README "Rules that require a parsing file" section,
+      `list-rules` † marker).
+- [x] End-to-end verification through the binary: post-fix transcript at
+      `syntax-helper-parse-masking-investigation/post-fix-transcript.txt`
+      (unparseable → "Unanalyzable files: 1", success rate 0.0%, JSON record;
+      control → both findings). Crate suite 176/176.
+- [ ] Full workspace tests + `cargo xtask verify --skip-hub-build` before PR.
+
+## Implementation notes
+
+- The parse rule's JSON `error_codes` are now **deduplicated** (previously one
+  entry per diagnostic, so 3× Q-2-10 appeared three times). Wire-shape change
+  allowed per design decision 5.
+- `q-2-30::convert` now propagates the parse failure instead of returning a
+  0-fix "File does not parse" ConvertResult; in driver flow it is skipped
+  before convert is called.
+- A file whose *probe read* fails (unreadable) is accounted in
+  "Files with errors" and its rules are not run.
 
 ## Risks / tradeoffs (draft)
 

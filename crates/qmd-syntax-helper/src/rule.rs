@@ -14,7 +14,7 @@ pub struct SourceLocation {
 
 /// Result of checking a file for a specific rule
 /// Each CheckResult represents a single violation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CheckResult {
     pub rule_name: String,
     pub file_path: String,
@@ -29,6 +29,17 @@ pub struct CheckResult {
     /// All error codes found (for parse rule with multiple errors)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_codes: Option<Vec<String>>,
+    /// True on the synthesized per-file record (`rule_name: "unanalyzable"`)
+    /// emitted when requires-parse rules were skipped because the file does
+    /// not parse. Not an issue — the file was *not checked* by those rules,
+    /// and the summary counts it separately from both clean and has-issue
+    /// (bd-syntax-helper-parse-masking-w88mhedp).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unanalyzable: bool,
+    /// The requires-parse rules that were skipped, sorted by name. Only set
+    /// on the synthesized `unanalyzable` record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skipped_rules: Option<Vec<String>>,
 }
 
 /// Result of converting/fixing a file
@@ -61,6 +72,20 @@ pub trait Rule {
         check_mode: bool,
         verbose: bool,
     ) -> Result<ConvertResult>;
+
+    /// Whether this rule needs the file to parse into an AST before it can
+    /// say anything about it.
+    ///
+    /// Most rules read parse *failures* as their input (the diagnostic-driven
+    /// `q-2-*` rules) or work on raw text (`grid-tables`), so they run on any
+    /// file. A rule that walks the parsed AST instead — `reference-links`,
+    /// `literal-brackets`, `q-2-30` — can only report "no findings" when it
+    /// actually saw an AST; on an unparseable file the check/convert drivers
+    /// skip it and account for the file as *unanalyzable* rather than clean
+    /// (bd-syntax-helper-parse-masking-w88mhedp).
+    fn requires_parse(&self) -> bool {
+        false
+    }
 
     /// Whether `convert --rule all` applies this rule.
     ///

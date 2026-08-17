@@ -64,10 +64,15 @@ impl Q230Checker {
             None,
         );
 
-        // If parse fails, return empty violations (let parse rule handle it)
+        // A parse failure is an error, never an empty (= clean) result — an
+        // unparseable file was not checked (bd-syntax-helper-parse-masking-w88mhedp).
         let (pandoc_doc, _ast_context, _diagnostics) = match parse_result {
             Ok(result) => result,
-            Err(_) => return Ok(Vec::new()),
+            Err(diags) => {
+                return Err(
+                    crate::utils::parse_probe::ParseFailure::from_diagnostics(&diags).into(),
+                );
+            }
         };
 
         let mut violations = Vec::new();
@@ -144,12 +149,14 @@ impl Rule for Q230Checker {
         "Detect multi-paragraph footnotes using Pandoc indentation syntax"
     }
 
+    /// Detection walks the parsed AST's block sequence; without one there is
+    /// nothing to say, and "no findings" must not read as clean.
+    fn requires_parse(&self) -> bool {
+        true
+    }
+
     fn check(&self, file_path: &Path, _verbose: bool) -> Result<Vec<CheckResult>> {
-        // If file doesn't parse, return empty (let parse rule handle it)
-        let violations = match self.get_violations(file_path) {
-            Ok(v) => v,
-            Err(_) => return Ok(vec![]),
-        };
+        let violations = self.get_violations(file_path)?;
 
         let results: Vec<CheckResult> = violations
             .into_iter()
@@ -168,7 +175,7 @@ impl Rule for Q230Checker {
                 }),
                 error_code: Some("Q-2-30".to_string()),
                 error_codes: None,
-            })
+            ..Default::default() })
             .collect();
 
         Ok(results)
@@ -181,17 +188,7 @@ impl Rule for Q230Checker {
         _check_mode: bool,
         _verbose: bool,
     ) -> Result<ConvertResult> {
-        let violations = match self.get_violations(file_path) {
-            Ok(v) => v,
-            Err(_) => {
-                return Ok(ConvertResult {
-                    rule_name: self.name().to_string(),
-                    file_path: file_path.to_string_lossy().to_string(),
-                    fixes_applied: 0,
-                    message: Some("File does not parse - cannot check for Q-2-30".to_string()),
-                });
-            }
-        };
+        let violations = self.get_violations(file_path)?;
 
         // This is a linting diagnostic - no auto-fix available
         // Requires manual conversion to div syntax

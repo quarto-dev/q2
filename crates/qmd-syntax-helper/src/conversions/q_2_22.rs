@@ -141,6 +141,7 @@ impl Rule for Q222Converter {
                 location: v.error_location,
                 error_code: Some("Q-2-22".to_string()),
                 error_codes: None,
+                ..Default::default()
             })
             .collect();
 

@@ -1,34 +1,14 @@
-use anyhow::{Context, Result};
-use std::fs;
+use anyhow::Result;
 use std::path::Path;
 
 use crate::rule::{CheckResult, ConvertResult, Rule};
+use crate::utils::parse_probe::probe_file;
 
 pub struct ParseChecker {}
 
 impl ParseChecker {
     pub fn new() -> Result<Self> {
         Ok(Self {})
-    }
-
-    /// Check if a file parses successfully and return diagnostic messages if it fails
-    fn check_parse(
-        &self,
-        file_path: &Path,
-    ) -> Result<Option<Vec<quarto_error_reporting::DiagnosticMessage>>> {
-        let content = fs::read_to_string(file_path)
-            .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
-
-        let mut sink = std::io::sink();
-        let filename = file_path.to_string_lossy();
-
-        let result =
-            pampa::readers::qmd::read(content.as_bytes(), false, &filename, &mut sink, true, None);
-
-        match result {
-            Ok(_) => Ok(None),
-            Err(diagnostics) => Ok(Some(diagnostics)),
-        }
     }
 }
 
@@ -42,38 +22,29 @@ impl Rule for ParseChecker {
     }
 
     fn check(&self, file_path: &Path, _verbose: bool) -> Result<Vec<CheckResult>> {
-        let diagnostics = self.check_parse(file_path)?;
-
-        match diagnostics {
+        match probe_file(file_path)? {
             None => Ok(vec![]),
-            Some(diags) => {
-                // Extract error codes from all diagnostics
-                let error_codes: Vec<String> =
-                    diags.iter().filter_map(|d| d.code.clone()).collect();
-
-                // Create a message that includes information about all errors
-                let message = if diags.len() == 1 {
+            Some(failure) => {
+                let message = if failure.error_count == 1 {
                     "File failed to parse (1 error)".to_string()
                 } else {
-                    format!("File failed to parse ({} errors)", diags.len())
+                    format!("File failed to parse ({} errors)", failure.error_count)
                 };
-
-                // Use the first error code as the primary one, or None if no codes
-                let primary_error_code = error_codes.first().cloned();
 
                 Ok(vec![CheckResult {
                     rule_name: self.name().to_string(),
                     file_path: file_path.to_string_lossy().to_string(),
                     has_issue: true,
-                    issue_count: diags.len(),
+                    issue_count: failure.error_count,
                     message: Some(message),
                     location: None, // Parse errors don't have a single location
-                    error_code: primary_error_code,
-                    error_codes: if error_codes.is_empty() {
+                    error_code: failure.error_codes.first().cloned(),
+                    error_codes: if failure.error_codes.is_empty() {
                         None
                     } else {
-                        Some(error_codes)
+                        Some(failure.error_codes)
                     },
+                    ..Default::default()
                 }])
             }
         }

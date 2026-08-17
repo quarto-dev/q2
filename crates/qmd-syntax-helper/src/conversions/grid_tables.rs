@@ -185,6 +185,7 @@ impl Rule for GridTableConverter {
                 }),
                 error_code: None,
                 error_codes: None,
+                ..Default::default()
             });
         }
 

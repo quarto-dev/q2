@@ -242,6 +242,7 @@ impl Rule for AttributeOrderingConverter {
                 location: v.error_location,
                 error_code: None,
                 error_codes: None,
+                ..Default::default()
             })
             .collect();
 
