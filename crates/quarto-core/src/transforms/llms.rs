@@ -46,14 +46,18 @@
 //! - retargets same-site `.html` links to their `.md` siblings when
 //!   the target page has a companion (non-draft, non-404 pages in
 //!   the project index), keeping fragments. Links to drafts, the
-//!   404 page, external URLs, and non-page resources are untouched.
+//!   404 page, external URLs, and non-page resources are untouched —
+//!   as are links the author pinned with `link-format="html"`
+//!   (bd-llms-link-target-annotation-0zo2ppgx; the pin rides through
+//!   `LinkRewriteTransform` and is consumed here).
 //!
 //! The main-AST cleanup ([`resolve_marker_classes`]) then removes
 //! `.quarto-llms-keep` subtrees (they were retained solely for the
 //! capture) and strips the `.quarto-llms-omit` marker class from
-//! nodes that stay in the HTML. This cleanup runs even when the
-//! page itself is skipped (draft / 404): the markers must never
-//! reach the HTML writer.
+//! nodes that stay in the HTML, along with any surviving
+//! `link-format` pins. This cleanup runs even when the page itself
+//! is skipped (draft / 404): the markers must never reach the HTML
+//! writer.
 
 use std::path::Path;
 
@@ -115,8 +119,18 @@ pub const HREF_404: &str = "404.html";
 /// first only plants marker classes when it is true, and the second
 /// is the only thing that cleans them up.
 pub fn llms_view_active(meta: &ConfigValue, ctx: &RenderContext) -> bool {
-    ctx.project.config.project_kind == ProjectKind::Website
+    llms_companions_enabled(meta, ctx)
         && crate::format::lua_format_for(&ctx.format.target_format) == "html"
+}
+
+/// Config-level half of [`llms_view_active`]: this project generates
+/// markdown companions (website + `llms-txt: true`), regardless of
+/// the current page's own format. This is the gate for *targeting* a
+/// companion (`link-format="llms"` in `LinkRewriteTransform`): a
+/// revealjs deck gets no companion itself, but can legitimately link
+/// another page's.
+pub fn llms_companions_enabled(meta: &ConfigValue, ctx: &RenderContext) -> bool {
+    ctx.project.config.project_kind == ProjectKind::Website
         && crate::project::website_config::website_llms_txt_enabled(meta)
 }
 
@@ -129,10 +143,16 @@ pub fn companion_href(output_href: &str) -> Option<String> {
 }
 
 /// Does this profile get a companion? Non-draft, non-404, `.html`
-/// output. The single answer shared by capture (link retargeting)
-/// and post-render (index assembly) so they can't drift.
+/// output, **plain html format** (a revealjs deck renders to `.html`
+/// but capture never runs for it — see [`llms_view_active`] — so it
+/// has no companion). The single answer shared by capture (link
+/// retargeting), `link-format` resolution, and post-render (index
+/// assembly) so they can't drift.
 pub fn profile_has_companion(profile: &crate::document_profile::DocumentProfile) -> bool {
-    !profile.draft && profile.output_href != HREF_404 && profile.output_href.ends_with(".html")
+    !profile.draft
+        && profile.output_href != HREF_404
+        && profile.output_href.ends_with(".html")
+        && crate::format::lua_format_for(&profile.format_id) == "html"
 }
 
 /// See the module docs. Registered at the tail of the Finalization
@@ -343,7 +363,13 @@ fn sanitize_attr(attr: &mut Attr, attr_source: &mut AttrSourceInfo) {
     attr.1.retain(|c| !class_noise(c));
 
     let kv_noise = |k: &str| {
-        k.starts_with("data-") || k.starts_with("aria-") || matches!(k, "role" | "tabindex")
+        k.starts_with("data-")
+            || k.starts_with("aria-")
+            || matches!(k, "role" | "tabindex")
+            // Pipeline-internal link-output selector; its consumers
+            // (LinkRewriteTransform and the Link arm of
+            // `clean_inline`) read it before this strip.
+            || k == crate::transforms::link_rewrite::LINK_FORMAT_ATTR
     };
     if attr.2.len() == attr_source.attributes.len() {
         let keep: Vec<bool> = attr.2.keys().map(|k| !kv_noise(k)).collect();
@@ -763,9 +789,21 @@ fn clean_inline_into(mut inline: Inline, cx: &ViewContext, out: &mut Vec<Inline>
                 out.extend(children);
                 return;
             }
+            // An authored `link-format="html"` pin opts this link out
+            // of the companion retarget
+            // (bd-llms-link-target-annotation-0zo2ppgx). Read it
+            // before `sanitize_attr`, which consumes the attribute —
+            // it is pipeline-internal and never reaches the writer.
+            let html_pinned = link
+                .attr
+                .2
+                .get(crate::transforms::link_rewrite::LINK_FORMAT_ATTR)
+                .is_some_and(|v| v == "html");
             sanitize_attr(&mut link.attr, &mut link.attr_source);
             clean_inlines(&mut link.content, cx);
-            link.target.0 = retarget_href(&link.target.0, cx);
+            if !html_pinned {
+                link.target.0 = retarget_href(&link.target.0, cx);
+            }
             out.push(Inline::Link(link));
         }
         Inline::Image(mut image) => {
@@ -1003,7 +1041,17 @@ fn keep_inline_in_html(inline: &mut Inline) -> bool {
         Inline::SmallCaps(i) => resolve_marker_inlines(&mut i.content),
         Inline::Quoted(i) => resolve_marker_inlines(&mut i.content),
         Inline::Cite(i) => resolve_marker_inlines(&mut i.content),
-        Inline::Link(i) => resolve_marker_inlines(&mut i.content),
+        Inline::Link(i) => {
+            // A surviving `link-format="html"` pin (left in place by
+            // LinkRewriteTransform for the llms view's benefit) is
+            // consumed here so it never reaches the HTML writer.
+            strip_kv(
+                &mut i.attr,
+                &mut i.attr_source,
+                crate::transforms::link_rewrite::LINK_FORMAT_ATTR,
+            );
+            resolve_marker_inlines(&mut i.content);
+        }
         Inline::Image(i) => resolve_marker_inlines(&mut i.content),
         Inline::Note(note) => resolve_marker_classes(&mut note.content),
         _ => {}
@@ -1023,6 +1071,22 @@ fn strip_class(attr: &mut Attr, attr_source: &mut AttrSourceInfo, class: &str) {
         attr_source.classes.clear();
     }
     attr.1.retain(|c| c != class);
+}
+
+/// Remove one key-value attribute, keeping the parallel
+/// `AttrSourceInfo.attributes` aligned (same discipline as
+/// [`strip_class`]). Shared with `LinkRewriteTransform`, which
+/// consumes `link-format` attributes on every path but the one that
+/// deliberately leaves the pin for [`LlmsCaptureTransform`].
+pub(crate) fn strip_kv(attr: &mut Attr, attr_source: &mut AttrSourceInfo, key: &str) {
+    if attr.2.len() == attr_source.attributes.len() {
+        let keep: Vec<bool> = attr.2.keys().map(|k| k != key).collect();
+        let mut it = keep.iter();
+        attr_source.attributes.retain(|_| *it.next().unwrap());
+    } else if attr.2.keys().any(|k| k == key) {
+        attr_source.attributes.clear();
+    }
+    attr.2.retain(|k, _| k != key);
 }
 
 /// Add a marker class, keeping `AttrSourceInfo.classes` aligned.
@@ -1063,8 +1127,19 @@ mod tests {
         DocumentProfile {
             source_path: std::path::PathBuf::from(href.replace(".html", ".qmd")),
             output_href: href.to_string(),
+            format_id: "html".to_string(),
             draft,
             ..Default::default()
+        }
+    }
+
+    /// A revealjs page: renders to `.html` like any slide deck, but
+    /// never gets a companion (capture only runs for the plain html
+    /// format).
+    fn slides_profile(href: &str) -> DocumentProfile {
+        DocumentProfile {
+            format_id: "revealjs".to_string(),
+            ..profile(href, false)
         }
     }
 
@@ -1124,5 +1199,135 @@ mod tests {
         assert!(!profile_has_companion(&profile("about.html", true)));
         assert!(!profile_has_companion(&profile("404.html", false)));
         assert!(!profile_has_companion(&profile("feed.xml", false)));
+    }
+
+    /// A revealjs page renders to `.html` but capture never runs for
+    /// it (`llms_view_active` requires the plain html format), so no
+    /// companion exists — the predicate must say so, or companions
+    /// would carry dead `.md` links to slide decks.
+    #[test]
+    fn profile_has_companion_excludes_non_html_formats() {
+        assert!(!profile_has_companion(&slides_profile("slides.html")));
+        // The preview pseudo-format maps to html and does get one.
+        let preview = DocumentProfile {
+            format_id: "q2-preview".to_string(),
+            ..profile("about.html", false)
+        };
+        assert!(profile_has_companion(&preview));
+    }
+
+    /// Links to a revealjs page keep their `.html` target in the
+    /// companion — its `.md` sibling is never written.
+    #[test]
+    fn retarget_leaves_revealjs_targets_alone() {
+        let index = ProjectIndex::new(vec![
+            profile("about.html", false),
+            slides_profile("slides.html"),
+        ]);
+        let cx = ViewContext {
+            index: Some(&index),
+            cur_dir: String::new(),
+            listings: &[],
+        };
+        assert_eq!(retarget_href("slides.html", &cx), "slides.html");
+        assert_eq!(retarget_href("about.html", &cx), "about.md");
+    }
+
+    // ---- link-format attribute (bd-llms-link-target-annotation-0zo2ppgx) ----
+
+    use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+    use quarto_pandoc_types::block::Paragraph;
+    use quarto_pandoc_types::inline::{Link, Str};
+    use quarto_source_map::SourceInfo;
+
+    fn attr_link(url: &str, kv: &[(&str, &str)]) -> Inline {
+        let mut map = hashlink::LinkedHashMap::new();
+        for (k, v) in kv {
+            map.insert(k.to_string(), v.to_string());
+        }
+        Inline::Link(Link {
+            attr: (String::new(), vec![], map),
+            content: vec![Inline::Str(Str {
+                text: "x".to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    fn para(content: Vec<Inline>) -> Block {
+        Block::Paragraph(Paragraph {
+            content,
+            source_info: SourceInfo::for_test(),
+        })
+    }
+
+    fn collect_links(blocks: &[Block]) -> Vec<&Link> {
+        let mut links = Vec::new();
+        for b in blocks {
+            if let Block::Paragraph(p) = b {
+                for i in &p.content {
+                    if let Inline::Link(l) = i {
+                        links.push(l);
+                    }
+                }
+            }
+        }
+        links
+    }
+
+    /// A `link-format="html"` pin keeps the `.html` target inside the
+    /// llms view (no companion retarget), and the attribute itself is
+    /// consumed — it must not leak into the emitted markdown. An
+    /// undecorated sibling link still retargets (control).
+    #[test]
+    fn link_format_html_pin_keeps_html_in_llms_view() {
+        let index = ProjectIndex::new(vec![profile("about.html", false)]);
+        let cx = ViewContext {
+            index: Some(&index),
+            cur_dir: String::new(),
+            listings: &[],
+        };
+        let blocks = vec![para(vec![
+            attr_link("about.html", &[("link-format", "html")]),
+            attr_link("about.html", &[]),
+        ])];
+        let out = build_llms_view(blocks, &cx);
+        let links = collect_links(&out);
+        assert_eq!(links.len(), 2, "both links survive into the view");
+        assert_eq!(
+            links[0].target.0, "about.html",
+            "pinned link keeps its .html target in the companion"
+        );
+        assert!(
+            !links[0].attr.2.contains_key("link-format"),
+            "the link-format attribute is consumed, not emitted"
+        );
+        assert_eq!(
+            links[1].target.0, "about.md",
+            "undecorated control link still retargets"
+        );
+    }
+
+    /// The html-view scrub (`resolve_marker_classes`) removes a
+    /// surviving `link-format` attribute so it never reaches the HTML
+    /// writer; the link target is untouched.
+    #[test]
+    fn link_format_attr_scrubbed_from_html_view() {
+        let mut blocks = vec![para(vec![attr_link(
+            "about.html",
+            &[("link-format", "html")],
+        )])];
+        resolve_marker_classes(&mut blocks);
+        let links = collect_links(&blocks);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].target.0, "about.html", "target untouched");
+        assert!(
+            !links[0].attr.2.contains_key("link-format"),
+            "link-format must be scrubbed from the HTML-bound AST"
+        );
     }
 }

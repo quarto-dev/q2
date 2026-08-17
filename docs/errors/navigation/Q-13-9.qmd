@@ -1,0 +1,72 @@
+---
+title: "link-format request cannot be honored"
+description: "A link carries a link-format attribute that names an unknown value or targets a page the requested output format does not cover."
+code: Q-13-9
+subsystem: navigation
+status: complete
+since: "99.9.9"
+categories:
+  - navigation
+  - websites
+---
+
+# `Q-13-9` — link-format request cannot be honored
+
+> A link carries a `link-format` attribute that names an unknown
+> value or targets a page the requested output format does not
+> cover. The attribute is ignored and the link resolves as if it
+> were undecorated.
+
+## What this means
+
+The `link-format` attribute selects which *output* of a target page
+a link should point at. On a website with `llms-txt: true`, every
+page has two outputs: the HTML page and its markdown companion.
+
+``` markdown
+[View as Markdown](guide/index.qmd){link-format="llms"}
+[Interactive demo](demo.qmd){link-format="html"}
+```
+
+The first form makes the rendered HTML page link to the target's
+markdown companion (`guide/index.md`). The second keeps a link
+pointing at the HTML page even inside markdown companions, which
+otherwise rewrite same-site links to their `.md` siblings.
+
+This warning fires when the request cannot be satisfied. The render
+still succeeds: the attribute is dropped and the link resolves
+exactly as it would without it.
+
+## Why this happens
+
+Common causes:
+
+- **`link-format="llms"` without `llms-txt: true`.** Markdown
+  companions only exist when the website sets
+  `website.llms-txt: true` in `_quarto.yml`.
+- **The target has no markdown companion.** Draft pages and the 404
+  page are excluded from companion generation, so a `llms` pin on a
+  link to them cannot be honored.
+- **The link target is not a project source path.** `link-format`
+  only applies to links written against a source file in the
+  project (`guide/index.qmd`-style). External URLs, anchors, and
+  static resources have a single form — there is no alternate
+  output to select.
+- **An unknown value.** Only `html` and `llms` are recognized
+  today.
+
+## How to fix
+
+- To link markdown companions, set `llms-txt: true` under `website:`
+  in `_quarto.yml`.
+- Write the link target as the target page's *source* path
+  (`guide/index.qmd`), not its output path or an external URL.
+- If the target is a draft, the companion does not exist — remove
+  the pin or publish the page.
+- Check the attribute value for typos: `link-format="html"` or
+  `link-format="llms"`.
+
+## Related
+
+- `Q-13-4` — body link referencing a missing document (the
+  undecorated-link counterpart of this diagnostic).

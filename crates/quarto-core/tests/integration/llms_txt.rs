@@ -926,3 +926,174 @@ fn llms_user_provided_llms_txt_collision_fails() {
         "diagnostic should name the contested path; got:\n{rendered}"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// link-format attribute (bd-llms-link-target-annotation-0zo2ppgx)
+// ═══════════════════════════════════════════════════════════════════
+
+/// Read a summary output's rendered HTML by output file name.
+fn html_output(summary: &ProjectRenderSummary, name: &str) -> String {
+    let path = summary
+        .outputs
+        .iter()
+        .find(|o| o.output_path.file_name().and_then(|s| s.to_str()) == Some(name))
+        .unwrap_or_else(|| panic!("{name} output not found"))
+        .output_path
+        .clone();
+    read(&path)
+}
+
+/// All per-page diagnostic codes across the summary's outputs.
+fn output_diag_codes(summary: &ProjectRenderSummary) -> Vec<String> {
+    summary
+        .outputs
+        .iter()
+        .flat_map(|o| o.render_output.diagnostics.iter())
+        .filter_map(|d| d.code.clone())
+        .collect()
+}
+
+/// Two-page llms site whose index body carries the given markdown.
+fn two_page_site(index_body: &str) -> impl FnOnce(&Path) + '_ {
+    move |dir: &Path| {
+        write(
+            &dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  title: \"Test Site\"\n  llms-txt: true\n",
+        );
+        write(
+            &dir.join("index.qmd"),
+            &format!("---\ntitle: Home\n---\n\n{index_body}\n"),
+        );
+        write(
+            &dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout body.\n",
+        );
+    }
+}
+
+/// `link-format="html"` keeps the link on the HTML page even inside
+/// the markdown companion; the attribute never reaches either output.
+#[test]
+fn llms_link_format_html_pins_link_in_companion() {
+    let (project_dir, summary) = render_project(two_page_site(
+        "See [pinned](about.qmd){link-format=\"html\"} and [normal](about.qmd).",
+    ));
+
+    let companion = read(&project_dir.join("_site/index.md"));
+    assert_contains(
+        &companion,
+        "[pinned](about.html)",
+        "html-pinned link keeps .html in the companion",
+    );
+    assert_contains(
+        &companion,
+        "[normal](about.md)",
+        "undecorated link still retargets to the companion",
+    );
+    assert_not_contains(&companion, "link-format", "attr consumed in companion");
+
+    let html = html_output(&summary, "index.html");
+    assert_contains(&html, "href=\"about.html\"", "html page links html");
+    assert_not_contains(&html, "link-format", "attr consumed in HTML");
+    assert!(
+        output_diag_codes(&summary).is_empty(),
+        "satisfied pins must not diagnose; got {:?}",
+        output_diag_codes(&summary)
+    );
+}
+
+/// `link-format="llms"` points the HTML page at the target's markdown
+/// companion — including a self-link, the "view this page as
+/// markdown" affordance.
+#[test]
+fn llms_link_format_llms_links_companion_from_html() {
+    let (project_dir, summary) = render_project(two_page_site(
+        "[View as Markdown](index.qmd){link-format=\"llms\"} or read \
+         [about's markdown](about.qmd){link-format=\"llms\"}.",
+    ));
+
+    let html = html_output(&summary, "index.html");
+    assert_contains(
+        &html,
+        "href=\"index.md\"",
+        "self-link targets this page's companion",
+    );
+    assert_contains(
+        &html,
+        "href=\"about.md\"",
+        "cross-page llms pin targets the sibling companion",
+    );
+    assert_not_contains(&html, "link-format", "attr consumed in HTML");
+
+    // Inside the companion the links already point at .md and stay put.
+    let companion = read(&project_dir.join("_site/index.md"));
+    assert_contains(
+        &companion,
+        "(index.md)",
+        "companion keeps the .md self-link",
+    );
+    assert_contains(&companion, "(about.md)", "companion keeps the .md link");
+    assert_not_contains(&companion, "link-format", "attr consumed in companion");
+    assert!(
+        output_diag_codes(&summary).is_empty(),
+        "satisfied pins must not diagnose; got {:?}",
+        output_diag_codes(&summary)
+    );
+}
+
+/// `link-format="llms"` with `llms-txt` disabled cannot be honored:
+/// the render succeeds, the link falls back to the `.html` output,
+/// and a Q-13-9 warning names the problem.
+#[test]
+fn llms_link_format_warns_when_llms_txt_off() {
+    let (_dir, summary) = render_project(|dir| {
+        write(
+            &dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  title: \"Test Site\"\n",
+        );
+        write(
+            &dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\n\
+             [md](about.qmd){link-format=\"llms\"}\n",
+        );
+        write(
+            &dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout body.\n",
+        );
+    });
+
+    let html = html_output(&summary, "index.html");
+    assert_contains(
+        &html,
+        "href=\"about.html\"",
+        "falls back to the html output",
+    );
+    assert_not_contains(&html, "link-format", "attr consumed even when llms is off");
+    let codes = output_diag_codes(&summary);
+    assert!(
+        codes.iter().any(|c| c == "Q-13-9"),
+        "expected Q-13-9 for an unsatisfiable llms pin; got {codes:?}"
+    );
+}
+
+/// Pin of bd-6d2wj4zp D6: an *undecorated* literal `.md` link in a
+/// `.qmd`-source project still falls through silently as a static
+/// resource — the link-format feature must not change that.
+#[test]
+fn llms_undecorated_md_link_stays_static() {
+    let (_dir, summary) = render_project(two_page_site("A [raw md link](about.md)."));
+
+    let html = html_output(&summary, "index.html");
+    assert_contains(
+        &html,
+        "href=\"about.md\"",
+        "undecorated .md link passes through as a static resource",
+    );
+    assert!(
+        output_diag_codes(&summary).is_empty(),
+        "undecorated .md links stay silent (D6); got {:?}",
+        output_diag_codes(&summary)
+    );
+}

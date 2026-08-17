@@ -1,0 +1,11 @@
+project:
+  type: website
+  render:
+    - "**/*.md"
+website:
+  title: Companion namespace
+  llms-txt: true
+  sidebar:
+    contents:
+      - index.md
+      - guide/index.md
