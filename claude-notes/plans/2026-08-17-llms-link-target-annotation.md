@@ -261,8 +261,9 @@ green pins — attr-survival and the D6 static fallthrough).
       worktree. Filed **bd-u7kdy6fy** (discovered-from this strand);
       worked around by copying the main checkout's staged
       `docs/examples/` (gitignored).
-- [ ] Full `cargo xtask verify` before push (quarto-core change → WASM
-      leg).
+- [x] Full `cargo xtask verify` green in the worktree, 2026-08-17
+      (all 14 steps, including the WASM/hub-client legs), after
+      commit `d33e82c3`. Ready for push pending user approval.
 
 ## Risks / tradeoffs (draft)
 
