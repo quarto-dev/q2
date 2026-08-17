@@ -241,8 +241,10 @@ impl PipelineStage for MetadataMergeStage {
             ctx.format.identifier.as_str()
         };
         // target_format is the full format string (e.g., "acm-html") used
-        // to look up extension metadata.
-        let target_format = &ctx.format.target_format;
+        // to look up extension metadata. Cloned so `ctx` stays mutably
+        // borrowable for the css-marking diagnostics below.
+        let target_format = ctx.format.target_format.clone();
+        let target_format = target_format.as_str();
 
         // Layer 1: Project metadata (flattened for format)
         // Adjust !path values to be relative to document directory
@@ -254,6 +256,20 @@ impl PipelineStage for MetadataMergeStage {
         let project_layer = ctx.project.config.metadata.as_ref().map(|m| {
             let mut flattened = resolve_format_config(m, base_format);
             adjust_paths_to_document_dir(&mut flattened, &ctx.project.dir, &document_dir);
+            // Mark user-declared stylesheets that name existing files as
+            // document-relative Path values (bd-format-css-not-copied-crn3bjdz).
+            // Runs after the `!path` adjustment so explicit Path values are
+            // rebased exactly once. Missing-file diagnostics for the project
+            // layer are dropped here — the orchestrator reports them once per
+            // project render (`missing_project_css_diagnostics`), not once
+            // per page.
+            let _ = crate::project::format_css::mark_css_path_values(
+                &mut flattened,
+                &ctx.project.dir,
+                &ctx.project.dir,
+                &document_dir,
+                ctx.runtime.as_ref(),
+            );
             flattened
         });
 
@@ -335,13 +351,48 @@ impl PipelineStage for MetadataMergeStage {
             }
         }
 
+        // Directory-metadata and front-matter `css:` entries resolve
+        // against their declaring file's directory; marking normalizes
+        // existing files to document-relative Path values and returns a
+        // Q-5-29 per missing file, surfaced through this document's own
+        // diagnostics (bd-format-css-not-copied-crn3bjdz).
+        let mut css_diagnostics: Vec<quarto_error_reporting::DiagnosticMessage> = Vec::new();
         let dir_layers: Vec<_> = dir_layer_entries
             .into_iter()
-            .map(|(_, m)| resolve_format_config(&m, base_format))
+            .map(|(path, m)| {
+                let mut flattened = resolve_format_config(&m, base_format);
+                let layer_base = path
+                    .parent()
+                    .map_or_else(|| ctx.project.dir.clone(), |p| p.to_path_buf());
+                css_diagnostics.extend(crate::project::format_css::mark_css_path_values(
+                    &mut flattened,
+                    &layer_base,
+                    &ctx.project.dir,
+                    &document_dir,
+                    ctx.runtime.as_ref(),
+                ));
+                flattened
+            })
             .collect();
 
         // Layer 4: Document metadata (flattened for base format)
-        let doc_layer = resolve_format_config(&doc.ast.meta, base_format);
+        let mut doc_layer = resolve_format_config(&doc.ast.meta, base_format);
+        css_diagnostics.extend(crate::project::format_css::mark_css_path_values(
+            &mut doc_layer,
+            &document_dir,
+            &ctx.project.dir,
+            &document_dir,
+            ctx.runtime.as_ref(),
+        ));
+        // Native only: the WASM VFS is not authoritative for non-qmd
+        // project files (an on-disk stylesheet may simply not be
+        // synced), so surfacing these there yields false warnings.
+        // See the matching gate on `missing_project_css_diagnostics`
+        // in the orchestrator.
+        #[cfg(not(target_arch = "wasm32"))]
+        ctx.add_diagnostics(css_diagnostics);
+        #[cfg(target_arch = "wasm32")]
+        drop(css_diagnostics);
 
         // Layer 5: Runtime metadata (flattened for base format)
         let runtime_layer = runtime_meta_json

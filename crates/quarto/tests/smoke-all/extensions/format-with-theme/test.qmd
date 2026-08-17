@@ -8,7 +8,8 @@ _quarto:
       ensureCssRegexMatches:
         - ["fmt-theme-marker", "#0a1b2c"]
       ensureFileRegexMatches:
-        - ["_extensions/fancyfmt/fmt-style\\.css"]
+        - ["quarto-contrib/quarto-project/fancyfmt/fmt-style\\.css"]
+        - ["_extensions/fancyfmt"]
 ---
 
 ## Format With Theme
@@ -17,6 +18,9 @@ A format extension bundling a theme SCSS (`fmt-theme.scss`) and a CSS
 file (`fmt-style.css`) next to its `_extension.yml`. The compiled CSS
 must contain the bundled theme's rule (rebased ext-dir → doc-dir,
 bd-of20unsb), and the rendered HTML must link the bundled CSS at its
-rebased path.
+**relocated** path — `_extensions/` files ship via
+`quarto-contrib/quarto-project/` and never at their source path
+(bd-format-css-not-copied-crn3bjdz), so the link keeps working when
+output is written to a separate `output-dir`.
 
 A [span]{.fmt-theme-marker} using the theme rule.

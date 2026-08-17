@@ -3,3 +3,33 @@ title: Computations
 ---
 
 TBD.
+
+## Displaying code cells without running them
+
+To show readers an executable cell — for example, in a document that
+teaches Quarto itself — wrap the cell in a fenced code block with more
+backticks:
+
+`````markdown
+````markdown
+```{python}
+1 + 1
+```
+````
+`````
+
+Fenced code blocks are displayed verbatim, so the inner cell is shown
+exactly as written (single braces and all) and is not executed.
+
+::: callout-note
+## Migrating from Quarto 1
+
+Quarto 1 used doubled curly braces for this — a cell written as
+`{{python}}` was displayed, with single braces, instead of running.
+Quarto 2 does not support this escape: doubled braces in a fence
+header produce a warning ([`Q-2-50`](../../errors/markdown/Q-2-50.qmd)),
+and the fix is the `markdown` code block shown above. Dropping the
+escape also means code blocks that genuinely contain doubled braces —
+Jinja or Mustache templates, GitHub Actions expressions — render
+correctly, where Quarto 1 would collapse them.
+:::

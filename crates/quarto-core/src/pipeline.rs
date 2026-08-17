@@ -338,6 +338,12 @@ pub fn build_html_pipeline_stages_with_options(
     // companion init handler is added in Phase 2 Commit 3.
     #[cfg(not(target_arch = "wasm32"))]
     stages.push(Box::new(ClipboardJsStage::new()));
+    // Inject the grouped-tabset sync module alongside Bootstrap JS
+    // (bd-toc-tabset-titles-zq93gjvf, design decision 4: ships
+    // whenever Bootstrap does — inert on pages without grouped
+    // tabsets). Same WASM-exclusion reasoning as the two above.
+    #[cfg(not(target_arch = "wasm32"))]
+    stages.push(Box::new(crate::stage::stages::TabsetsJsStage::new()));
     // Attribution-generate runs *before* user filters so the
     // `quarto.attribution.*` Lua host binding sees a populated
     // sidecar in both `pre` and `post` filter passes. No-op when
@@ -1231,6 +1237,16 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(ReferenceLinkDiagnosticsTransform::new()));
     pipeline.push(Box::new(CalloutTransform::new()));
     pipeline.push(Box::new(CalloutResolveTransform::new()));
+    // Panel-tabset pair (bd-toc-tabset-titles-zq93gjvf), mirroring the
+    // callout pair above. Position is load-bearing: the parse half
+    // consumes the tab-title Headers *before* SectionizeTransform and
+    // TocGenerateTransform run, which is what keeps tab titles out of
+    // sections and the TOC (Q1 does the same by filter ordering).
+    // Both self-gate to non-reveal, non-minimal HTML.
+    pipeline.push(Box::new(crate::transforms::PanelTabsetTransform::new()));
+    pipeline.push(Box::new(
+        crate::transforms::PanelTabsetResolveTransform::new(),
+    ));
     // Markdown-parse blessed website presentation config strings
     // (website.title, page-footer regions, …) so the shortcode
     // transform's metadata walk — registered immediately after — sees
@@ -1284,6 +1300,12 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(WebsiteFaviconTransform::new()));
     pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
     pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
+    // User-declared stylesheets (bd-format-css-not-copied-crn3bjdz):
+    // copy `css:` files into the output tree and rewrite the entries
+    // to per-page hrefs. Not website-scoped — default projects (and
+    // books, which ride the same dispatch) and single-doc renders get
+    // the same treatment. Self-gates to HTML-family formats.
+    pipeline.push(Box::new(crate::transforms::FormatCssTransform::new()));
     // Draft marking (bd-draft-banner-missing-hgx1gkqm). Not website-scoped
     // — a standalone `draft: true` document gets the banner too — but it
     // belongs with the metadata producers above: it only writes
@@ -1610,6 +1632,18 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     // mermaid component (ts-packages/preview-renderer) renders the
     // diagram live for both q2-preview and q2-slides (bd-5m4ga0s1).
     "mermaid-render",
+    // The tabset pair (bd-toc-tabset-titles-zq93gjvf) builds its nav
+    // as *split* RawInlines (`<ul…>`, `<li…><a…>`, title inlines,
+    // `</a></li>`, `</ul>`) — correct for the string-concatenating
+    // HTML writer, but q2-preview's React `RawInline` component
+    // renders each fragment via its own `dangerouslySetInnerHTML`
+    // span, where unbalanced fragments get auto-closed and the tab
+    // structure collapses. Excluding BOTH halves keeps the preview at
+    // the passthrough (stacked headings) it showed before tabsets
+    // existed. A React Tabset component consuming the CustomNode is
+    // the proper preview story — tracked as a follow-up strand.
+    "panel-tabset",
+    "panel-tabset-resolve",
 ];
 
 /// Build the q2-preview transform pipeline (Plan 1).
@@ -2118,7 +2152,7 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        assert_eq!(stages.len(), 23);
+        assert_eq!(stages.len(), 24);
         assert_eq!(stages[0].name(), "parse-document");
         assert_eq!(stages[1].name(), "metadata-merge");
         // Localized-term resolution (bd-llhlzd7p) directly follows the
@@ -2152,29 +2186,33 @@ mod tests {
         // gated on minimal-HTML. clipboard-js additionally gates on
         // `code-copy != false`.
         assert_eq!(stages[13].name(), "clipboard-js");
+        // TabsetsJsStage (bd-toc-tabset-titles-zq93gjvf) ships the
+        // grouped-tabset sync module whenever Bootstrap does — same
+        // gate as bootstrap-js, so it sits in the same JS block.
+        assert_eq!(stages[14].name(), "tabsets-js");
         // Attribution-generate runs before user filters so the
         // `quarto.attribution.*` Lua host binding sees a populated
         // sidecar (bd-0fd0). No-op when no provider is installed.
-        assert_eq!(stages[14].name(), "attribution-generate");
-        assert_eq!(stages[15].name(), "user-filters-pre");
-        assert_eq!(stages[16].name(), "ast-transforms");
-        assert_eq!(stages[17].name(), "user-filters-post");
+        assert_eq!(stages[15].name(), "attribution-generate");
+        assert_eq!(stages[16].name(), "user-filters-pre");
+        assert_eq!(stages[17].name(), "ast-transforms");
+        assert_eq!(stages[18].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[18].name(), "resource-report");
-        assert_eq!(stages[19].name(), "code-highlight");
+        assert_eq!(stages[19].name(), "resource-report");
+        assert_eq!(stages[20].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, crossref `\tag{N}`) is visible.
-        assert_eq!(stages[20].name(), "math-js");
-        assert_eq!(stages[21].name(), "render-html-body");
-        assert_eq!(stages[22].name(), "apply-template");
+        assert_eq!(stages[21].name(), "math-js");
+        assert_eq!(stages[22].name(), "render-html-body");
+        assert_eq!(stages[23].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        assert_eq!(pipeline.len(), 23);
+        assert_eq!(pipeline.len(), 24);
     }
 
     #[test]
@@ -2209,6 +2247,14 @@ mod tests {
         assert!(
             !names.contains(&"clipboard-js"),
             "wasm pipeline must not include clipboard-js (hub-client iframe reinit)"
+        );
+        // Same reasoning again for tabsets-js
+        // (bd-toc-tabset-titles-zq93gjvf): localStorage-backed group
+        // sync is a page-runtime behavior; the iframe preview reloads
+        // per render.
+        assert!(
+            !names.contains(&"tabsets-js"),
+            "wasm pipeline must not include tabsets-js (hub-client iframe reinit)"
         );
         // bd-w5ov: math display IS safe under iframe reinit (each load
         // gets a fresh DOM and the engine typesets once). The hub-client

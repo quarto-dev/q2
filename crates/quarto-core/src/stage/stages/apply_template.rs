@@ -299,11 +299,17 @@ impl PipelineStage for ApplyTemplateStage {
                 // `css:revealjs:*` / `js:revealjs:*` artifacts; we collect just
                 // those (a reveal deck never wants the Bootstrap `css:theme:*`)
                 // and the resolver gives the right per-context URLs.
-                let reveal_css: Vec<String> =
+                let mut reveal_css: Vec<String> =
                     collect_artifact_urls(ctx, "css:revealjs:", self.config.resolver.as_ref())
                         .into_iter()
                         .map(|r| r.url)
                         .collect();
+                // User-declared `css:` entries, already resolved to
+                // per-page hrefs by `FormatCssTransform`. Linked after
+                // the vendored deck assets so user rules win the
+                // cascade — previously they were dropped entirely
+                // (bd-format-css-not-copied-crn3bjdz).
+                reveal_css.extend(crate::transforms::user_css_urls(&metadata));
                 let reveal_js: Vec<String> =
                     collect_artifact_urls(ctx, "js:revealjs:", self.config.resolver.as_ref())
                         .into_iter()

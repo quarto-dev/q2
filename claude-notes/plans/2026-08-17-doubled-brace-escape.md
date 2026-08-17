@@ -1,0 +1,189 @@
+# Quarto 1's doubled-brace escape for showing a cell (bd-escaped-executable-fence-uuvv37pk)
+
+**Date:** 2026-08-17 (investigation); design aligned with user same day
+**Braid:** bd-escaped-executable-fence-uuvv37pk
+**Checkout:** main worktree `q2` (branch `main` @ `60cc579e`)
+**Status:** Design settled — ready to implement on user go-ahead.
+
+## Design decisions (2026-08-17, aligned with Carlos)
+
+1. **q2 does NOT adopt `{{...}}` as an escape.** It was a necessary hack in
+   the regex world of RMarkdown/knitr; fence bodies in q2 are verbatim and
+   single braces are already the right spelling. Rip the bandaid.
+2. **Mint a sibling error code (Q-2-50) rather than reusing Q-2-41** for the
+   prose case. This migration hit will be common on complicated websites, so
+   the messaging must be obvious: name Quarto 1's doubled-brace idiom and the
+   working spellings.
+3. **No qmd-syntax-helper rule.** Deliberate non-goal: qmd-syntax-helper is
+   reserved for rewrites we're confident are correct, and Q1's treatment of
+   nested/mixed double- and triple-braced cells has always been heuristic.
+   Accepting an (at most) temporary defeat here; a converter rule gets a full
+   design only if overwhelming evidence of necessity accumulates. We don't
+   want brittle rules to erode trust in the tool.
+4. **Render-time diagnostic for the fence case: yes.** A top-level
+   ```` ```{{python}} ```` should produce something like "multiple braces are
+   not supported in Quarto 2" with an info hint: single braces to execute the
+   cell, or wrap in a `markdown` code block to display it.
+
+## Triage verdict
+
+**Ready to design.** (Resolved — see decisions above.) Both failure modes
+reproduce at HEAD exactly as the strand describes and the mechanisms are
+understood.
+
+## Issue context
+
+Filed 2026-08-12 by "Claude (q2-connect-docs)" (origin strand `br-xa5oawj0` in
+the q2-connect-docs skein), priority 2, type bug, label `parser`. Quarto 1 lets
+authors *show* an executable cell instead of running it by doubling the braces
+in the fence opener (```` ```{{python}} ````), collapsing them to single braces
+on render. q2 has no equivalent, and the two contexts where the Q1 spelling
+appears fail differently:
+
+1. **Inside a displayed fence** — silently wrong output: the doubled braces
+   survive verbatim, so the reader is shown ```` ```{{python}} ````, which is
+   not valid Quarto syntax, presented as the thing to copy. No diagnostic.
+2. **In prose** — `X {{python}} Y` fails the whole file with a bare,
+   uncoded "Parse error … unexpected character or token here", while the
+   single-brace form `X {python} Y` gets the much better [Q-2-41] with an
+   actionable escape hint. The form a porter's source actually contains gets
+   the *worst* diagnostic q2 has.
+
+The strand notes real-world impact: 8 blocks across 3 pages of the Connect docs
+(pages whose subject IS how to write Quarto cells), 5 of the ~47 pages still
+differing from the Q1 reference render.
+
+**Counter-case that shaped decision 1:** `user/fastapi/index.qmd` shows a
+Jinja template containing a genuine `{{ request.headers[...] }}`. Quarto 1's
+blanket collapse *breaks* that page (reader needs both braces); q2's verbatim
+output is correct there.
+
+## Dependency graph
+
+**Empty.** No `blocks`, `related`, or `discovered-from` edges in this skein.
+The discovered-from context lives in a *different* skein (q2-connect-docs,
+`br-xa5oawj0`) and is summarized in the description.
+
+## What the code looks like today
+
+Everything the strand points at still exists with the described shape;
+both symptoms reproduce at HEAD (60cc579e). Repro fixtures + full observed
+outputs: `claude-notes/plans/doubled-brace-escape-investigation/`
+(`observed-behavior.md` has the table and mechanism notes).
+
+Summary of mechanisms:
+
+- **Fence path:** `process_code_fence_content`
+  (`crates/pampa/src/pandoc/treesitter_utils/code_fence_content.rs`) assembles
+  fence bodies verbatim from source bytes. No unescaping happens anywhere, so
+  `{{python}}` survives to output — and ```` ```{python} ```` inside an outer
+  ` ````markdown ` fence already renders exactly right (verified).
+- **Top-level doubled-brace fence** (verified during design session): a
+  document-level ```` ```{{python}} ```` **parses successfully** as
+  `CodeBlock ("", ["{{python}}"], []) "1 + 1"` — the doubled-brace info
+  string becomes a literal class. So the render-time diagnostic (decision 4)
+  is an **AST-level semantic check on the code-block class**, not a parse
+  error. Precedents for AST-level coded diagnostics: Q-2-35 warning in
+  `crates/pampa/src/pandoc/treesitter_utils/postprocess.rs:871`
+  (`DiagnosticCollector` + `DiagnosticMessageBuilder::warning(...).with_code(...)`)
+  and Q-2-9 in `treesitter_utils/uri_autolink.rs:233`.
+- **Prose path:** parse errors map to `Q-*` codes via the merr-style
+  (LR state, sym) table (`crates/pampa/resources/error-corpus/_autogen-table.json`,
+  regenerated by `crates/pampa/scripts/build_error_table.ts`, looked up in
+  `crates/pampa/src/readers/qmd_error_message_table.rs`). `Q-2-41.json` has two
+  cases (states 2613 and 2589). `{{` errors at the second `{` in a (state, sym)
+  pair the table doesn't cover, falling through to the uncoded fallback in
+  `crates/quarto-parse-errors/src/error_generation.rs:247`.
+- **Error code numbering:** highest existing markdown code is Q-2-49, so the
+  new code is **Q-2-50**.
+
+A key structural safety property for the fence check: a class literally
+containing braces (`{{python}}`) can **only** arise from a doubled-brace fence
+opener — attribute-form openers (`{python}`, `{.foo}`) parse into real
+classes, and fence *content* (including the Jinja counter-case and displayed
+inner fences) is never a class. Matching on the class string has no
+false-positive surface.
+
+## Work plan
+
+One code, both contexts: **Q-2-50 "Doubled braces are not supported"** —
+emitted as a parse error in prose (merr corpus) and as a render-time
+diagnostic on doubled-brace fence openers (AST check). One docs page then
+tells the whole Q1-migration story at a single URL. Fence-side severity is
+drafted as **warning** (render proceeds, friendlier for bulk ports;
+flag to user if this should be a hard error instead).
+
+### Phase 0 — Test plan (TDD: failing tests first)
+
+- [x] Failing tests written in
+      `crates/pampa/tests/integration/test_doubled_brace.rs` (registered in
+      `main.rs`): prose + link-text Q-2-50 errors; fence Q-2-50 warning for
+      doubled and triple braces (CodeBlock left as-is, location present).
+      Verified failing as expected (4 fail: the two prose-code tests and two
+      fence-warning tests; got no code / no warning respectively).
+- [x] Negative tests pass at HEAD: single-brace prose keeps Q-2-41 (and no
+      Q-2-50), `{python}` executable cell, plain ```` ```python ````,
+      displayed-fence content, Jinja-style fence content — none warn.
+      (Corpus cases themselves land in Phase 1; the collision check on the
+      regenerated `_autogen-table.json` diff happens there.)
+
+### Phase 1 — Prose diagnostic (Q-2-50 via merr corpus)
+
+- [x] `crates/pampa/resources/error-corpus/Q-2-50.json` with `prose` and
+      `link-text` cases; message names the Q1 idiom, hint points at the
+      `markdown`-code-block spelling. Table regenerated
+      (`./scripts/build_error_table.ts`); new entries are (2601, `{`) and
+      (2604, `{`) — verified unique in `_autogen-table.json` (no cross-code
+      collisions; Q-2-41 guard test passes). Stray root `deno.lock` from the
+      deno script deleted (repo removed it deliberately in a258b2ae).
+- [x] Catalog entry in `crates/quarto-error-catalog/error_catalog.json`
+      (after Q-2-49; subsystem `markdown`).
+- [x] Docs page `docs/errors/markdown/Q-2-50.qmd` (status `stub`, covers
+      both contexts, related-link to Q-2-41). `cargo xtask lint` passes;
+      page renders via `cargo run --bin q2 -- render` and was inspected.
+
+### Phase 2 — Fence render-time diagnostic
+
+- [x] `.with_code_block` arm in `postprocess()`
+      (`crates/pampa/src/pandoc/treesitter_utils/postprocess.rs`, next to
+      the Q-2-35 div check): any class starting with `{{` gets a Q-2-50
+      warning. Location comes from `attr_source.classes[i]` (points at the
+      info string), falling back to the block's source_info. Block left
+      unchanged.
+- [x] Message: "Doubled curly braces are not supported" + problem naming
+      the literal class; hints: single braces to execute (with the actual
+      language extracted when clean), wrap in a `markdown` code block to
+      display.
+- [x] End-to-end verified through the real binary:
+      `cargo run --bin q2 -- render fence-toplevel.qmd` prints the Q-2-50
+      warning anchored at `1:5` on the `{{python}}` info string with both
+      hints; output HTML inspected
+      (`<pre class="{{python}} code-with-copy"><code>1 + 1</code></pre>` —
+      literal, as designed). Prose fixture via `q2 render` prints the
+      Q-2-50 error with the migration hint.
+
+### Phase 3 — Docs + close-out
+
+- [x] Migration note: "Displaying code cells without running them" section
+      in `docs/guides/authoring/computations.qmd` (the natural home; page
+      was a bare TBD stub) with a "Migrating from Quarto 1" callout linking
+      to the Q-2-50 error page. Rendered with q2 and inspected — link
+      resolves, no page-specific warnings.
+- [x] No-helper-rule decision recorded: design decision 3 above, plus the
+      braid comment c-69bevrbr on the strand.
+- [x] Full workspace tests green (12237 passed) and full `cargo xtask
+      verify` green (WASM leg included: pampa changed, which hub-client
+      depends on). Committed as 761e9ccd on `main`.
+- [ ] `braid close` with reason — pending user confirmation.
+
+## Risks / tradeoffs
+
+- **Merr-table state collisions.** The `{{` error state is whatever LR state
+  follows shifting the first `{`; if that (state, sym) pair is shared with
+  unrelated malformed input, the new case could relabel other errors. Phase 0
+  explicitly checks the regenerated table diff.
+- **Fence-check severity.** Drafted as warning; a hard error is defensible
+  (a literal `{{python}}` class is never intended). User veto point.
+- **Divergence from Quarto 1 is deliberate** (decision 1). Q1 sources render
+  differently until migrated; the diagnostics + docs note are the mitigation,
+  and the decision is recorded in user-facing docs, not just here.

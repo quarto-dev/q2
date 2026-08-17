@@ -1427,6 +1427,13 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-49",
     "since_version": "99.9.9"
   },
+  "Q-2-50": {
+    "subsystem": "markdown",
+    "title": "Doubled curly braces are not supported",
+    "message_template": "Quarto 2 does not treat doubled curly braces (`{{...}}`) as an escape. To write literal braces in text, escape each brace as `\\{...\\}` or use a code span.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-50",
+    "since_version": "99.9.9"
+  },
   "Q-5-27": {
     "subsystem": "project",
     "title": "Invalid `diagnostics:` Entry",
@@ -1441,11 +1448,25 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-28",
     "since_version": "99.9.9"
   },
+  "Q-5-29": {
+    "subsystem": "project",
+    "title": "Declared Stylesheet Not Found",
+    "message_template": "A `css:` entry names a stylesheet that does not exist, so it was not copied into the output. Every page linking it will request a file that is not there. The path is resolved relative to the file that declares it. The render continues; the (broken) link is still emitted.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-29",
+    "since_version": "99.9.9"
+  },
   "Q-13-8": {
     "subsystem": "navigation",
     "title": "Unsupported toc-location value",
     "message_template": "The `toc-location` option has a value Quarto 2 does not support. Supported values are `left`, `right` (the default), and `body`. The `left-body` and `right-body` double-TOC values are not implemented yet and fall back to `left` / `right`; any other value falls back to the default `right`.",
     "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-8",
+    "since_version": "99.9.9"
+  },
+  "Q-13-9": {
+    "subsystem": "navigation",
+    "title": "link-format request cannot be honored",
+    "message_template": "A link carries a `link-format` attribute that names an unknown value or targets a page the requested output format does not cover. `link-format=\"llms\"` needs `website.llms-txt: true` on an HTML website render, a target written as a project source path, and a target page that gets a markdown companion (drafts and the 404 page do not). The attribute is ignored and the link resolves as if it were undecorated.",
+    "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-9",
     "since_version": "99.9.9"
   }
 }
