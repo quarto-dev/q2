@@ -207,6 +207,47 @@ region Phase 1 introduces, and its only styling consumer is the
 `.quarto-banner nav.quarto-secondary-nav` rule Phase 4 ports. It lands in Phase 1
 and `bd-xva3f8uy` closes with this work.
 
+## Findings during implementation
+
+### F1 — Q1's title-block hiding is dead code; "parity" means *don't* hide (2026-08-17)
+
+Decision 6 said "full Q1 parity: hide `header > .quarto-title-block` below `lg`
+when the secondary nav is present." Checking Q1's *rendered output* rather than
+its source shows Q1 never actually does this.
+
+`website-navigation.ts:497-501` runs
+`doc.querySelector("header > .quarto-title-block")` — a `.quarto-title-block`
+whose **parent** is a `<header>`. But every Q1 emitter puts that class on the
+`<header>` element itself:
+
+- `formats/html/templates/title-block.html:1` — `<header id="title-block-header" class="quarto-title-block default">`
+- `formats/html/templates/banner/title-block.html:2` — same shape
+- `formats/html/templates/manuscript/title-block.html:1` — same shape
+
+So the selector can only match a `<header>` nested inside another `<header>`,
+which the HTML format never produces. Empirically confirmed across the Connect
+site: of 350 pages carrying a `.quarto-title-block`, **0** have `d-none` on it,
+and the class string is `quarto-title-block default` on 349 of them — including
+pages that *do* render the secondary nav with breadcrumbs.
+
+**Consequence:** the first half of decision 6 is a no-op. Q1's real mobile
+appearance shows the secondary-nav breadcrumbs *and* the full title block. Since
+Carlos asked for parity with Q1, Phase 5 implements nothing for it.
+
+The second half of decision 6 is **live** and still applies: in the
+`bread-crumbs: false` branch the collapsed `h1.quarto-secondary-nav-title` is
+filled from `h1.title`, and that `h1.title` gains `d-none d-lg-block`
+(`website-navigation.ts:483-493`). That code sits inside the
+`if (secondaryNavTitleEl)` guard, and the `showBreadCrumbs: false` template
+branch does emit the `h1`, so it runs.
+
+### F2 — Q1's duplicate `role` attribute does not survive to output (2026-08-17)
+
+`nav-before-body.ejs:74` and `:79` set `role="navigation"` **and** `role="link"`
+on the same `<a>`. Q1's own DOM postprocessor drops the second — the rendered
+Connect pages carry only `role="navigation"`. Emitting just `role="navigation"`
+is therefore byte-parity with Q1's output, not a deviation from it.
+
 ## Work items
 
 Branch: `braid/bd-26bf3j1y-website-mobile-secondary-nav`, off `main` @ `7de02ea2`.
@@ -216,30 +257,35 @@ widest snapshot blast radius, so it goes first and alone. Phases 3+4 must land
 **in the same commit** — the sidebar `collapse` class without the
 `media-breakpoint-up(lg)` overrides breaks every page at every width (see Risks).
 
-### Phase 0 — Test plan (TDD: failing tests first)
+### Phase 0 — Test plan (TDD: failing tests first) — **DONE** (`<pending>`)
 
-- [ ] `quarto-navigation` unit tests for `secondary_nav_to_html`: toggle button
-      wiring (`data-bs-toggle="collapse"`, `data-bs-target=".quarto-sidebar-collapse-item"`,
-      `aria-controls="quarto-sidebar"`, `aria-expanded="false"`), the
-      breadcrumb branch, the `bread-crumbs: false` collapsed-title branch, and
-      the absence of any search button.
-- [ ] `quarto-navigation` unit tests for `sidebar_to_html`: the four added
-      classes and the `#quarto-sidebar-glass` sibling.
-- [ ] `quarto-core` template tests: `#quarto-header` wraps navbar + secondary
-      nav; `.quarto-banner` present in banner mode and absent otherwise; no
-      `headroom` / `fixed-top` / `body.nav-fixed`.
-- [ ] `quarto-core` template tests for decision 6: title block carries
-      `d-none d-lg-block` when the secondary nav is present and does not when it
-      is absent; `h1.title` likewise in the `bread-crumbs: false` branch.
-- [ ] New `crates/quarto-core/tests/integration/secondary_nav_pipeline.rs`
-      (registered in `main.rs`, alphabetized) driving `render_document_to_file`
-      on a real fixture — per `CLAUDE.md`, not `render_qmd_to_html` with
-      defaults.
-- [ ] A test that pins the `media-breakpoint-up(lg)` sidebar-display overrides.
-      **Design this one carefully** — a class-presence assertion cannot catch
-      the cliff described in Risks. Candidate: assert on the *compiled* CSS from
-      the SCSS pipeline, not on the markup.
-- [ ] Verify every new test fails for the right reason before implementing.
+22 tests added; 15 fail for the right reason, 7 are absence-pins that pass now
+and become load-bearing once the markup exists.
+
+- [x] `quarto-navigation` unit tests for `secondary_nav_to_html` (9 in
+      `render_html.rs::secondary_nav_tests`): toggle wiring, aria-label
+      escaping, mobile-instance classes, collapsed-title branch, markdown
+      title, no search button, no headroom hooks, sidebar collapse classes,
+      glass pane. 7 fail / 2 absence-pins pass.
+- [x] `quarto-core` template tests (5 in `template.rs::tests`): `#quarto-header`
+      wraps navbar + secondary nav, static (no `headroom`/`fixed-top`/
+      `nav-fixed`), absent when there's nothing to hold, `.quarto-banner` in
+      banner mode, and the F1 title-block pin. 2 fail / 3 absence-pins pass.
+- [x] `crates/quarto-core/tests/integration/secondary_nav_pipeline.rs` (7 tests,
+      registered in `main.rs`), driving the real `ProjectPipeline` on temp-dir
+      website fixtures per `CLAUDE.md`'s end-to-end rule. 5 fail / 2 pass.
+- [x] The SCSS cliff test —
+      `quarto-sass::compile::tests::test_sidebar_stays_visible_at_lg_despite_collapse_class`.
+      Compiles the real default CSS, brace-matches every `min-width:992px`
+      media block, and asserts some `#quarto-sidebar` rule in one of them sets
+      `display` to non-`none`. It also asserts Bootstrap's
+      `.collapse:not(.show)` is in the bundle, so the test fails loudly if the
+      thing it guards against ever stops being a threat. A markup assertion
+      cannot catch this: the element and all its classes are still emitted.
+- [x] Verified every new test fails for the right reason (stub
+      `secondary_nav_to_html` returns `String::new()` so assertions fail rather
+      than the build).
+- [x] `cargo clippy --all-targets` clean on the three touched crates.
 
 ### Phase 1 — `#quarto-header` wrapper (widest blast radius; commit alone)
 
@@ -289,11 +335,11 @@ widest snapshot blast radius, so it goes first and alone. Phases 3+4 must land
 - [ ] Update `claude-notes/plans/2026-05-01-website-sidebar-breakpoints.md`:
       Decision A superseded; `docked`/`toc-left` deferrals still stand.
 
-### Phase 5 — Title-block visibility (decision 6)
+### Phase 5 — Title-block visibility (decision 6, amended by F1)
 
-- [ ] `header > .quarto-title-block` gains `d-none d-lg-block` when the
-      secondary nav is present — all three `TITLE_BLOCK_PARTIAL` branches
-      considered (`none` has no title block; check banner).
+- [x] ~~`header > .quarto-title-block` gains `d-none d-lg-block`~~ — **dropped.**
+      F1 shows Q1's selector never matches, so parity means emitting nothing.
+      A regression pin lives in Phase 0 instead.
 - [ ] `bread-crumbs: false`: `h1.title` gains `d-none d-lg-block`, its content
       feeding the collapsed secondary-nav title.
 

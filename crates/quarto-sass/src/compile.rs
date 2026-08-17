@@ -679,6 +679,121 @@ mod tests {
     use quarto_system_runtime::NativeRuntime;
     use std::path::PathBuf;
 
+    /// Split `css` into `(prelude, body)` pairs for every top-level
+    /// `@media` block, by brace matching. Nested braces inside the body
+    /// are preserved.
+    fn media_blocks(css: &str) -> Vec<(String, String)> {
+        let bytes = css.as_bytes();
+        let mut out = Vec::new();
+        let mut search = 0usize;
+        while let Some(rel) = css[search..].find("@media") {
+            let at = search + rel;
+            let Some(brace_rel) = css[at..].find('{') else {
+                break;
+            };
+            let open = at + brace_rel;
+            let prelude = css[at..open].to_string();
+            let mut depth = 0i32;
+            let mut i = open;
+            let mut close = None;
+            while i < bytes.len() {
+                match bytes[i] {
+                    b'{' => depth += 1,
+                    b'}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            close = Some(i);
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                i += 1;
+            }
+            let Some(close) = close else { break };
+            out.push((prelude, css[open + 1..close].to_string()));
+            search = close + 1;
+        }
+        out
+    }
+
+    /// Split a media-block body into `(selector, declarations)` pairs.
+    fn rules(body: &str) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        let mut rest = body;
+        while let Some(open) = rest.find('{') {
+            let selector = rest[..open].trim().to_string();
+            let Some(close) = rest[open..].find('}') else {
+                break;
+            };
+            let close = open + close;
+            out.push((selector, rest[open + 1..close].to_string()));
+            rest = &rest[close + 1..];
+        }
+        out
+    }
+
+    /// bd-26bf3j1y: the sidebar carries Bootstrap's `collapse` class so
+    /// the narrow-viewport toggle can open it. Bootstrap ships
+    /// `.collapse:not(.show) { display: none }`, which — without an
+    /// override — hides the sidebar at EVERY width, on every website
+    /// page. Q1 beats it at `lg`+ with an `#quarto-sidebar` rule
+    /// (`quarto-nav.scss:640-656`); id specificity (1,0,0) wins over
+    /// the class pair (0,2,0).
+    ///
+    /// This failure mode is invisible to markup tests: the `<nav
+    /// id="quarto-sidebar">` element is still emitted, still carries
+    /// every expected class, and every DOM assertion still passes. Only
+    /// the compiled cascade shows it. Hence a CSS-level test.
+    #[test]
+    fn test_sidebar_stays_visible_at_lg_despite_collapse_class() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+
+        // Sanity: the Bootstrap rule this override has to beat.
+        assert!(
+            css.contains(".collapse:not(.show)"),
+            "expected Bootstrap's .collapse:not(.show) rule in the bundle"
+        );
+
+        let lg_blocks: Vec<_> = media_blocks(&css)
+            .into_iter()
+            .filter(|(prelude, _)| prelude.replace(' ', "").contains("min-width:992px"))
+            .collect();
+        assert!(
+            !lg_blocks.is_empty(),
+            "expected at least one min-width:992px (lg) media block"
+        );
+
+        let mut found = Vec::new();
+        for (_, body) in &lg_blocks {
+            for (selector, decls) in rules(body) {
+                if !selector.contains("#quarto-sidebar") {
+                    continue;
+                }
+                for decl in decls.split(';') {
+                    let Some((prop, value)) = decl.split_once(':') else {
+                        continue;
+                    };
+                    if prop.trim() == "display" {
+                        found.push((selector.clone(), value.trim().to_string()));
+                    }
+                }
+            }
+        }
+
+        assert!(
+            !found.is_empty(),
+            "no `#quarto-sidebar` rule sets `display` inside a min-width:992px \
+             block — the sidebar's `collapse` class will hide it at every width. \
+             Port Q1 quarto-nav.scss:640-656."
+        );
+        assert!(
+            found.iter().any(|(_, value)| value != "none"),
+            "every #quarto-sidebar display rule at lg+ resolves to `none`: {found:?}"
+        );
+    }
+
     #[test]
     fn test_compile_default_css() {
         let runtime = NativeRuntime::new();

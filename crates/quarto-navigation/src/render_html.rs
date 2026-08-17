@@ -266,6 +266,27 @@ pub fn breadcrumbs_to_html(crumbs: &[Crumb], extra_classes: &[&str]) -> String {
     html
 }
 
+/// What the narrow-viewport bar shows between the sidebar toggle and
+/// the right edge — Q1's two `nav-before-body.ejs` branches.
+pub enum SecondaryNavContent<'a> {
+    /// `bread-crumbs` enabled: already-rendered `nav.quarto-page-breadcrumbs`
+    /// markup. The mobile instance takes **no** extra classes (the
+    /// title-block instance is the one carrying `quarto-title-breadcrumbs
+    /// d-none d-lg-block`).
+    Breadcrumbs(&'a str),
+    /// `bread-crumbs: false`: the page title, collapsed into the bar.
+    CollapsedTitle(&'a ConfigValue),
+}
+
+/// Render `nav.quarto-secondary-nav` — the whole narrow-viewport
+/// navigation bar (bd-26bf3j1y).
+///
+/// STUB: signature only, so the Phase 0 tests compile and fail on
+/// their assertions. Implemented in Phase 2.
+pub fn secondary_nav_to_html(_content: SecondaryNavContent<'_>, _toggle_label: &str) -> String {
+    String::new()
+}
+
 pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
     sidebar_to_html_with_appended(sidebar, home_url, None)
 }
@@ -2254,6 +2275,251 @@ mod tests {
             html.contains("x.html?a=1&amp;b=2"),
             "href escaped; got {}",
             html
+        );
+    }
+}
+
+#[cfg(test)]
+mod secondary_nav_tests {
+    use super::*;
+    use crate::sidebar::{Sidebar, SidebarStyle};
+    use quarto_pandoc_types::config_value::ConfigValue;
+    use quarto_pandoc_types::inline::{Inline, Str, Strong};
+    use quarto_source_map::SourceInfo;
+
+    fn s(x: &str) -> ConfigValue {
+        ConfigValue::new_string(x, SourceInfo::for_test())
+    }
+
+    fn str_inline(text: &str) -> Inline {
+        Inline::Str(Str {
+            text: text.to_string(),
+            source_info: SourceInfo::for_test(),
+        })
+    }
+
+    /// The toggle button is the only way to open the sidebar on a
+    /// phone; every one of these attributes is load-bearing for
+    /// Bootstrap's collapse plugin or for assistive tech. Verbatim
+    /// from Q1 `nav-before-body.ejs:66-71`, confirmed against
+    /// rendered Connect output.
+    #[test]
+    fn secondary_nav_toggle_button_wiring() {
+        let html = secondary_nav_to_html(
+            SecondaryNavContent::Breadcrumbs("<nav class=\"quarto-page-breadcrumbs\"></nav>"),
+            "Toggle sidebar navigation",
+        );
+
+        assert!(
+            html.starts_with("<nav class=\"quarto-secondary-nav\">"),
+            "container must be nav.quarto-secondary-nav; got: {html}"
+        );
+        assert!(
+            html.contains("<div class=\"container-fluid d-flex\">"),
+            "Q1 wraps the row in .container-fluid.d-flex; got: {html}"
+        );
+        for needle in [
+            "type=\"button\"",
+            "class=\"quarto-btn-toggle btn\"",
+            "data-bs-toggle=\"collapse\"",
+            "data-bs-target=\".quarto-sidebar-collapse-item\"",
+            "aria-controls=\"quarto-sidebar\"",
+            "aria-expanded=\"false\"",
+            "aria-label=\"Toggle sidebar navigation\"",
+            "<i class=\"bi bi-layout-text-sidebar-reverse\"></i>",
+        ] {
+            assert!(
+                html.contains(needle),
+                "toggle button missing {needle:?}; got: {html}"
+            );
+        }
+    }
+
+    /// The aria-label is localized (Q1's `language['toggle-sidebar']`),
+    /// so it must be attribute-escaped rather than interpolated raw.
+    #[test]
+    fn secondary_nav_toggle_label_is_escaped() {
+        let html = secondary_nav_to_html(
+            SecondaryNavContent::Breadcrumbs("<nav></nav>"),
+            "Basculer \"la barre\"",
+        );
+        assert!(
+            html.contains("aria-label=\"Basculer &quot;la barre&quot;\""),
+            "aria-label must be attribute-escaped; got: {html}"
+        );
+    }
+
+    /// The mobile breadcrumb instance carries NO extra classes — the
+    /// title-block instance is the one that gets
+    /// `quarto-title-breadcrumbs d-none d-lg-block`. Emitting those
+    /// here would hide the trail at exactly the widths it exists for.
+    #[test]
+    fn secondary_nav_breadcrumb_instance_has_no_extra_classes() {
+        let crumbs = vec![
+            Crumb {
+                text: Some(s("Guide")),
+                href: Some("guide/intro.html".to_string()),
+            },
+            Crumb {
+                text: Some(s("Deep")),
+                href: Some("guide/deep.html".to_string()),
+            },
+        ];
+        let breadcrumbs = breadcrumbs_to_html(&crumbs, &[]);
+        let html = secondary_nav_to_html(
+            SecondaryNavContent::Breadcrumbs(&breadcrumbs),
+            "Toggle sidebar navigation",
+        );
+
+        assert!(
+            html.contains("<nav class=\"quarto-page-breadcrumbs\" aria-label=\"breadcrumb\">"),
+            "mobile instance takes no extra classes; got: {html}"
+        );
+        assert!(
+            !html.contains("quarto-title-breadcrumbs"),
+            "title-block class must not leak into the mobile instance; got: {html}"
+        );
+        assert!(
+            !html.contains("d-lg-block"),
+            "the mobile instance must not be desktop-only; got: {html}"
+        );
+        assert!(
+            html.contains("<a class=\"flex-grow-1\""),
+            "Q1 follows the trail with a flex-grow-1 toggle link; got: {html}"
+        );
+    }
+
+    /// `bread-crumbs: false` swaps the trail for Q1's collapsed page
+    /// title inside an `a.flex-grow-1.no-decor`.
+    #[test]
+    fn secondary_nav_no_breadcrumbs_emits_collapsed_title() {
+        let title = s("Server Installation");
+        let html = secondary_nav_to_html(
+            SecondaryNavContent::CollapsedTitle(&title),
+            "Toggle sidebar navigation",
+        );
+
+        assert!(
+            html.contains("<a class=\"flex-grow-1 no-decor\""),
+            "collapsed-title branch uses the no-decor link; got: {html}"
+        );
+        assert!(
+            html.contains("<h1 class=\"quarto-secondary-nav-title\">Server Installation</h1>"),
+            "collapsed title must carry the page title; got: {html}"
+        );
+        assert!(
+            !html.contains("quarto-page-breadcrumbs"),
+            "no breadcrumbs in this branch; got: {html}"
+        );
+    }
+
+    /// A markdown title must survive as inline HTML, matching how the
+    /// sidebar title is rendered.
+    #[test]
+    fn secondary_nav_collapsed_title_renders_markdown() {
+        let title = ConfigValue::new_inlines(
+            vec![Inline::Strong(Strong {
+                content: vec![str_inline("Bold")],
+                source_info: SourceInfo::for_test(),
+            })],
+            SourceInfo::for_test(),
+        );
+        let html = secondary_nav_to_html(
+            SecondaryNavContent::CollapsedTitle(&title),
+            "Toggle sidebar navigation",
+        );
+        assert!(
+            html.contains("<h1 class=\"quarto-secondary-nav-title\"><strong>Bold</strong></h1>"),
+            "markdown title must render as inline HTML; got: {html}"
+        );
+    }
+
+    /// Decision 4: no search button until bd-6cme lands. Q1's markup
+    /// calls `window.quartoOpenSearch()` unguarded and q2 defines no
+    /// such function, so a button here would throw on click.
+    #[test]
+    fn secondary_nav_omits_search_button() {
+        let html = secondary_nav_to_html(
+            SecondaryNavContent::Breadcrumbs("<nav></nav>"),
+            "Toggle sidebar navigation",
+        );
+        assert!(
+            !html.contains("quarto-search-button"),
+            "search button is out of scope (bd-6cme); got: {html}"
+        );
+        assert!(
+            !html.contains("quartoOpenSearch"),
+            "must not reference an undefined function; got: {html}"
+        );
+    }
+
+    /// Decision 2 defers headroom to bd-ersobfbt, so the inline
+    /// `quartoToggleHeadroom` hooks Q1 emits are not ported yet.
+    #[test]
+    fn secondary_nav_omits_headroom_hooks() {
+        let html = secondary_nav_to_html(
+            SecondaryNavContent::Breadcrumbs("<nav></nav>"),
+            "Toggle sidebar navigation",
+        );
+        assert!(
+            !html.contains("quartoToggleHeadroom"),
+            "headroom is deferred to bd-ersobfbt; got: {html}"
+        );
+    }
+
+    /// The toggle targets `.quarto-sidebar-collapse-item`, so the
+    /// sidebar has to carry that class — plus Bootstrap's own
+    /// `collapse collapse-horizontal` and Q1's `overflow-auto`.
+    /// Q1 `sidebar.ejs:1`.
+    #[test]
+    fn sidebar_html_carries_collapse_classes() {
+        let sidebar = Sidebar {
+            style: SidebarStyle::Floating,
+            ..Default::default()
+        };
+        let html = sidebar_to_html(&sidebar, "index.html");
+
+        let open_tag = html
+            .split_once('>')
+            .map(|(t, _)| t.to_string())
+            .unwrap_or_default();
+        for cls in [
+            "collapse",
+            "collapse-horizontal",
+            "quarto-sidebar-collapse-item",
+            "overflow-auto",
+            "sidebar-navigation",
+        ] {
+            assert!(
+                open_tag.contains(cls),
+                "nav#quarto-sidebar must carry {cls:?}; got: {open_tag}"
+            );
+        }
+    }
+
+    /// Q1 emits a click-catching glass pane as a SIBLING of the
+    /// sidebar (`sidebar.ejs:100`); it shares the collapse-item class
+    /// so tapping outside closes the drawer.
+    #[test]
+    fn sidebar_glass_pane_is_emitted_after_the_nav() {
+        let sidebar = Sidebar {
+            style: SidebarStyle::Floating,
+            ..Default::default()
+        };
+        let html = sidebar_to_html(&sidebar, "index.html");
+
+        assert!(
+            html.contains(
+                "<div id=\"quarto-sidebar-glass\" class=\"quarto-sidebar-collapse-item\" \
+                 data-bs-toggle=\"collapse\" data-bs-target=\".quarto-sidebar-collapse-item\"></div>"
+            ),
+            "expected the Q1 glass pane; got: {html}"
+        );
+        let nav_close = html.find("</nav>").expect("sidebar nav closes");
+        let glass = html.find("quarto-sidebar-glass").expect("glass present");
+        assert!(
+            glass > nav_close,
+            "glass must be a sibling AFTER the nav, not a child; got: {html}"
         );
     }
 }
