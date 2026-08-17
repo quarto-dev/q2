@@ -3,7 +3,7 @@
 **Date:** 2026-08-17
 **Braid:** bd-llms-link-target-annotation-0zo2ppgx
 **Checkout:** main (investigation committed in place; implementation should get its own branch/worktree)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design aligned 2026-08-17 (all five questions resolved — see Resolved design decisions). Ready to implement on a dedicated branch/worktree.
 
 ## Triage verdict
 
@@ -12,7 +12,7 @@ strand describes, the attribute slot (`Link::attr` kv pairs) is already
 plumbed through the parser, and the transform ordering (link-rewrite at the
 start of Finalization, llms capture at the tail) happens to be exactly the
 order the feature needs. One genuine design wrinkle surfaced (attribute
-stripping when llms-txt is *off* — see question 4); the rest is scoping and
+stripping when llms-txt is *off* — resolved as decision 4); the rest was scoping and
 naming.
 
 ## Issue context
@@ -47,7 +47,7 @@ on `window.location.pathname` in client-side JS, because Quarto (1 and 2)
 exposes no way to obtain a companion href. It hardcodes Q1's `.llms.md` and
 404s against q2's `.md` companions. Note: the *button* itself is an
 `include-in-header` HTML fragment, which a body-link attribute cannot serve
-— see design question 5.
+— resolved as decision 5 (follow-up bd-3n4fpr3g).
 
 Origin context: first proposed as a fix for companion-shadows-source-path
 namespace overlap, and rejected for that (measured ~100% false-positive rate
@@ -104,76 +104,121 @@ All verified at HEAD (main, post-`0ff7d795`):
   be emitted verbatim into the HTML `<a>` (the writer emits kv attrs), and
   `sanitize_attr` (llms.rs:331) only strips `data-*`/`aria-*`/`role`/
   `tabindex`, so it would leak into the companion too. Both consumers must
-  strip it; when llms is **off**, nothing currently would — question 4.
+  strip it; when llms is **off**, nothing currently would — decision 4.
 - **Repro** copied to
   `claude-notes/plans/llms-link-target-annotation-investigation/repro/`
   (`.md`-source 2-page website with `llms-txt: true`; render and compare
   `_site/index.html` vs `_site/index.md` to see the blanket retarget with no
   available override).
 
-## Proposed phases (draft)
+## Resolved design decisions (2026-08-17)
 
-Skeleton only — contents wait on the design discussion.
+1. **Attribute stays `link-format`, values `html` | `llms` — deliberately
+   general.** The generality is a feature, not a leak: Quarto 1 has long
+   lacked a facility for multi-output documents (`format: {html, docx,
+   pdf}`) to cross-link between their own output formats (Q1 does it
+   hackily in sidebars). Under this framing llms-txt is the "md" output of
+   a website, and `link-format` is the seed of a general
+   pick-the-output-format-of-a-link facility that can later grow a `pdf`
+   (etc.) value. The value `llms` also matches the conditional-content
+   format token (`when-format="llms"`).
 
-- **Phase 0 — Test plan (TDD).** Unit tests at both call sites
-  (retarget-skip with the html pin; companion resolution with the llms pin,
-  including draft/404/llms-off/unknown-target misses); e2e additions to
-  `crates/quarto-core/tests/integration/llms_txt.rs` (pinned links in both
-  outputs; attribute stripped from both outputs; attr inert when llms-txt
-  off); docs-page + catalog tests for any new Q-code.
-- **Phase 1 — `link-format="html"`** (opt out of companion retarget):
-  attr check at llms.rs:768, strip after consumption.
-- **Phase 2 — `link-format="llms"`** (target the companion from HTML):
-  resolution in `LinkRewriteTransform`/`resolve_doc_relative_href` mapping
-  output href through `companion_href`, gated on companion eligibility;
-  strip after consumption; diagnostics for unsatisfiable pins (question 3).
-- **Phase 3 — attribute hygiene when llms-txt is off** (per question 4's
-  answer).
-- **Phase 4 — Docs**: `docs/guides/projects/llms-txt.qmd` section; error
-  pages for new Q-codes in the same commit (error-docs lint).
+2. **Target spelling: source paths only (max-DRY).** Link *targets* are
+   always authored as source paths (`guide/index.qmd` / `guide/index.md`),
+   as body links are today; the *attribute* alone determines which output
+   format the link resolves to. The attribute's material purpose is to
+   steer the rewrite; its diagnostic purpose is to check the request is
+   consistent and warn otherwise. No fragment-only/self-link spelling; no
+   output-path (`.html`) spelling blessed for the attribute. Links inside
+   `RawBlock`/`RawInline` get no help — standard "you may do it, but
+   you're breaking the warranty" territory.
 
-## Open design questions for the user
+3. **Diagnostics: warn on unsatisfiable pins, fall back to the html
+   output.** A decorated link that cannot be honored warns with one new
+   Q-code (docs page in the same commit, per the error-docs lint):
+   `link-format="llms"` when llms-txt is disabled; target is a
+   draft/404/non-page or not resolvable as a source path; value neither
+   `html` nor `llms`. Undecorated links stay diagnostic-free, exactly as
+   today.
 
-1. **Attribute name and values.** The strand proposes
-   `link-format="html" | "llms"`. The value `llms` matches the existing
-   conditional-content format token (`when-format="llms"`), which argues
-   for it over `md`/`companion`. Is `link-format` the right key? (It reads
-   as "format of the link target", but a future reader might expect it to
-   affect e.g. PDF output too — it is llms-specific today. Alternative:
-   `llms-link="keep-html" | "target"`-style naming that wears its scope.)
-2. **Target spelling under `link-format="llms"`.** What may the author
-   write? (a) a source path (`guide/index.md` / `guide/index.qmd`),
-   resolved through the index then mapped to the companion — consistent
-   with how all body links are authored today (recommended); (b) also
-   accept the output spelling (`guide/index.html`); (c) also accept it on
-   a *fragment-only or self* link (e.g. `[](){link-format="llms"}`) as
-   "this page's companion"? The Connect-docs button wants the *current*
-   page's companion, so (c) is the only spelling that serves it from
-   markdown — but see question 5.
-3. **Diagnostics for unsatisfiable pins.** The strand promises "no new
-   diagnostics" for undecorated links, but a *decorated* link that cannot
-   be honored seems worth a warning: `link-format="llms"` when llms-txt is
-   disabled, when the target is a draft/404/non-page, or when the value is
-   neither `html` nor `llms`. Warn-and-fall-back-to-`.html` with one new
-   Q-code (docs page same commit)? Or stay fully silent to keep the
-   feature diagnostic-free?
-4. **Attribute stripping when llms-txt is off.** `link-format="html"` must
-   *survive* link-rewrite (start of Finalization) so capture (tail) can
-   honor it — but when llms is off, capture self-gates out and the attr
-   would leak into the emitted HTML. Options: (a) `LinkRewriteTransform`
-   strips it eagerly when `llms_view_active` is false (it already walks
-   every link; near-zero cost); (b) let `LlmsCaptureTransform`'s disabled
-   path do a cheap link-only scrub walk; (c) accept the leak (rejected —
-   it's author-visible noise in the DOM). I lean (a).
-5. **Is the "current page's companion href" affordance in scope?** The
-   real-world case-2 motivator (Connect docs button) lives in an
-   `include-in-header` HTML fragment, which cannot carry a Pandoc link
-   attribute. Serving it needs the companion href exposed another way — a
-   template variable / metadata field (e.g. `quarto.doc.llms-href`) or a
-   shortcode. Should this strand (a) stay attribute-only and file the
-   href-exposure as a separate discovered-from strand, or (b) include it?
-   (a) keeps this strand small; the strand text itself only asks for the
-   attribute.
+4. **Attribute hygiene: `LinkRewriteTransform` strips `link-format`
+   eagerly when `llms_view_active` is false** (it already walks every
+   link; near-zero cost). When llms *is* active, the attr survives to
+   `LlmsCaptureTransform`, which consumes it for the llms view and must
+   also scrub it from the original (HTML-bound) AST after cloning.
+
+5. **Companion-href exposure is a follow-up: bd-3n4fpr3g**
+   (discovered-from this strand). Shortcode, metadata/template variable,
+   and a Lua API entry point are all wanted, but there is not enough
+   context to design the exposure surface well yet. This strand stays
+   attribute-only.
+
+## Phases and work items
+
+TDD throughout: each phase's tests written and observed failing before
+implementation.
+
+### Phase 0 — Test plan (failing tests first)
+
+- [ ] Unit tests, capture side (llms.rs): a Link carrying
+      `link-format="html"` is not retargeted in the llms view and the
+      attr is absent from both views; undecorated sibling link still
+      retargets (control).
+- [ ] Unit tests, rewrite side (link_rewrite.rs): source-path link with
+      `link-format="llms"` resolves to the companion href (page-relative,
+      depth ≥ 1 case included); attr stripped; fragment/query tails
+      preserved.
+- [ ] Unit tests, diagnostics: `link-format="llms"` with llms-txt off /
+      draft target / 404 / unresolvable source path / unknown attr value
+      each warn with the new Q-code and fall back to the html resolution;
+      undecorated links never warn (pin).
+- [ ] Unit test, hygiene: with llms-txt off, `link-format` (both values)
+      is stripped by `LinkRewriteTransform` and behavior is exactly
+      today's.
+- [ ] E2E additions to `crates/quarto-core/tests/integration/llms_txt.rs`:
+      render the investigation repro extended with decorated links; assert
+      the html page links the `.md` companion under `link-format="llms"`,
+      the companion keeps `.html` under `link-format="html"`, and neither
+      output contains the string `link-format`.
+- [ ] Pinning test: in a `.qmd`-source project a literal
+      `[x](guide/index.md)` (undecorated) still falls through silently as
+      a static resource (bd-6d2wj4zp D6 — must not regress).
+- [ ] Q-code catalog entry + `docs/errors/` page (error-docs lint green).
+
+### Phase 1 — `link-format="html"` (opt out of companion retarget)
+
+- [ ] Attr check at the Link call site (llms.rs:768) — skip
+      `retarget_href`, strip the attr (both views; original AST scrub per
+      decision 4).
+- [ ] Listing synthesizer call site (llms.rs:490) untouched (no authored
+      attrs — verify with a comment/test).
+
+### Phase 2 — `link-format="llms"` (target the companion from HTML)
+
+- [ ] `LinkRewriteTransform`: on a decorated link, resolve the source path
+      via `ProjectIndex::lookup_by_source`, gate on llms enabled +
+      `profile_has_companion`, map through `companion_href`, relativize
+      via the resolver; strip the attr; emit the Phase-0 diagnostics on
+      any miss and fall back to normal resolution.
+- [ ] Confirm the capture pass leaves the resulting `.md` link untouched
+      in the companion (retarget only touches `.html` paths — pin with a
+      test).
+
+### Phase 3 — Attribute hygiene when llms-txt is off
+
+- [ ] Eager strip in `LinkRewriteTransform` when `llms_view_active` is
+      false (decision 4), including the warn-on-`llms`-value diagnostic
+      from Phase 0.
+
+### Phase 4 — E2E verification + docs
+
+- [ ] `cargo run --bin q2 -- render` on the investigation repro; inspect
+      `_site/index.html` and `_site/index.md`; record invocation + output
+      snippet here.
+- [ ] User-facing docs: `docs/guides/projects/llms-txt.qmd` section on
+      `link-format` (rendered with `cargo run --bin q2 -- render docs/`).
+- [ ] Full `cargo xtask verify` before push (quarto-core change → WASM
+      leg).
 
 ## Risks / tradeoffs (draft)
 
@@ -181,7 +226,7 @@ Skeleton only — contents wait on the design discussion.
   site (llms.rs:768), not inside the pure helper — keeps the existing unit
   tests (`retarget_rewrites_eligible_links_only`) valid and the listing
   synthesizer unaffected.
-- **New Q-code cost.** Any diagnostic decision in question 3 drags in a
+- **New Q-code cost.** Decision 3's warning drags in a
   catalog entry + `docs/errors/` page in the same commit (error-docs lint
   enforces this).
 - **WASM surface.** No `RenderOutput`/wire-shape changes anticipated — this
