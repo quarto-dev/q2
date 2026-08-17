@@ -1,0 +1,109 @@
+---
+title: "Doubled curly braces are not supported"
+description: "Quarto 1's doubled-brace escape (`{{...}}`) is not part of Quarto 2; literal braces are written with backslash escapes, and displayed code cells with single braces."
+code: Q-2-50
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-50` — Doubled curly braces are not supported
+
+> Quarto 2 does not treat doubled curly braces (`{{...}}`) as an
+> escape. To write literal braces in text, escape each brace as
+> `\{...\}` or use a code span.
+
+## What this means
+
+Quarto 1 (and RMarkdown/knitr before it) used doubled curly braces as
+an escape: writing a code cell header as `{{python}}` *displayed* the
+cell — with single braces — instead of running it. Quarto 2 does not
+have this escape, in either place it used to appear:
+
+- **In prose**, `{{python}}` is a parse error (this error). Curly
+  braces are reserved for attribute syntax (see
+  [`Q-2-41`](Q-2-41.qmd)), and doubling them does not escape them.
+- **In a code fence header**, ```` ```{{python}} ```` is not an
+  executable cell and not an escape: the fence renders as a literal
+  code block whose language reads `{{python}}`, and Quarto 2 reports
+  this error so the doubled braces don't silently end up in your
+  output.
+
+## Why this happens
+
+- **Porting documents from Quarto 1.** Documentation *about* Quarto —
+  pages that show readers how to write executable cells — commonly
+  uses the Quarto 1 escape ```` ```{{python}} ```` to display a cell.
+  This is by far the most common source.
+- **Template languages in prose.** Text that quotes Jinja, Mustache,
+  or GitHub Actions expressions (`{{ expr }}`) outside a code block
+  hits the same parse error.
+
+## How to fix
+
+**To display a code cell** (the Quarto 1 `{{...}}` use case): wrap
+the cell in a fenced code block with more backticks, and write the
+cell with **single** braces. Fenced code blocks are displayed
+verbatim in Quarto 2, so no escape is needed:
+
+`````markdown
+````markdown
+```{python}
+1 + 1
+```
+````
+`````
+
+This shows the reader exactly what they should type.
+
+**To write literal braces in prose**, escape each brace, or use a
+code span:
+
+```markdown
+the pipeline interpolates \{\{ .Release.Name \}\} at deploy time.
+the pipeline interpolates `{{ .Release.Name }}` at deploy time.
+```
+
+**To run the cell**, write single braces: ```` ```{python} ````.
+
+Note that doubled braces *inside* a code block's body need no change
+at all — fence bodies are verbatim, so a code block quoting a Jinja
+template keeps its `{{ expr }}` exactly as written. (This is also why
+Quarto 2 dropped the Quarto 1 escape rather than collapsing doubled
+braces everywhere: collapsing would corrupt code blocks that genuinely
+mean `{{`.)
+
+## Example
+
+Bad input (Quarto 1 idiom):
+
+`````markdown
+```{{python}}
+1 + 1
+```
+`````
+
+Corrected (display the cell):
+
+`````markdown
+````markdown
+```{python}
+1 + 1
+```
+````
+`````
+
+Corrected (run the cell):
+
+`````markdown
+```{python}
+1 + 1
+```
+`````
+
+## Related errors
+
+- [`Q-2-41`](Q-2-41.qmd) — single curly braces in prose (the general
+  "braces are reserved for attribute syntax" error).
