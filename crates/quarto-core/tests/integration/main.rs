@@ -24,6 +24,7 @@ pub mod engine_output_parity;
 pub mod engine_visibility;
 pub mod extension_metadata;
 pub mod fail_fast;
+pub mod format_css;
 pub mod get_config_merge;
 pub mod idempotence;
 pub mod include_code_fence;

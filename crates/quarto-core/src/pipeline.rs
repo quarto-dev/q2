@@ -1284,6 +1284,12 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(WebsiteFaviconTransform::new()));
     pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
     pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
+    // User-declared stylesheets (bd-format-css-not-copied-crn3bjdz):
+    // copy `css:` files into the output tree and rewrite the entries
+    // to per-page hrefs. Not website-scoped — default projects (and
+    // books, which ride the same dispatch) and single-doc renders get
+    // the same treatment. Self-gates to HTML-family formats.
+    pipeline.push(Box::new(crate::transforms::FormatCssTransform::new()));
     // Draft marking (bd-draft-banner-missing-hgx1gkqm). Not website-scoped
     // — a standalone `draft: true` document gets the banner too — but it
     // belongs with the metadata producers above: it only writes

@@ -1,0 +1,5 @@
+---
+title: Deep page
+---
+
+Two directories below the site root.
