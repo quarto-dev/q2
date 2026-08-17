@@ -1,0 +1,23 @@
+{
+  "code": "Q-2-50",
+  "title": "Doubled curly braces are not supported",
+  "message": "Quarto 2 does not treat doubled curly braces (`{{...}}`) as an escape. To write literal braces in text, escape each brace as `\\{...\\}` or use a code span.",
+  "notes": [],
+  "hints": [
+    "Quarto 1 used `{{lang}}` in a code cell header to display the cell instead of running it. Quarto 2 displays fenced code verbatim: wrap the cell in a `markdown` code block and write single braces."
+  ],
+  "cases": [
+    {
+      "name": "prose",
+      "description": "Doubled braces in prose (Quarto 1's display-escape idiom, verbatim from bd-escaped-executable-fence-uuvv37pk). Fails at the second `{`, a different LR state than Q-2-41's single-brace form.",
+      "content": "X {{python}} Y\n",
+      "captures": []
+    },
+    {
+      "name": "link-text",
+      "description": "Doubled braces inside link text; mirrors Q-2-41's link-text case, which fails at a different LR state than the bare-paragraph form.",
+      "content": "see [the {{guid}} link](https://example.com) here.\n",
+      "captures": []
+    }
+  ]
+}

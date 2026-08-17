@@ -19074,6 +19074,40 @@
     "name": "Q-2-5/at-start-31"
   },
   {
+    "column": 3,
+    "row": 0,
+    "state": 2601,
+    "sym": "{",
+    "errorInfo": {
+      "code": "Q-2-50",
+      "title": "Doubled curly braces are not supported",
+      "message": "Quarto 2 does not treat doubled curly braces (`{{...}}`) as an escape. To write literal braces in text, escape each brace as `\\{...\\}` or use a code span.",
+      "captures": [],
+      "notes": [],
+      "hints": [
+        "Quarto 1 used `{{lang}}` in a code cell header to display the cell instead of running it. Quarto 2 displays fenced code verbatim: wrap the cell in a `markdown` code block and write single braces."
+      ]
+    },
+    "name": "Q-2-50/prose"
+  },
+  {
+    "column": 10,
+    "row": 0,
+    "state": 2604,
+    "sym": "{",
+    "errorInfo": {
+      "code": "Q-2-50",
+      "title": "Doubled curly braces are not supported",
+      "message": "Quarto 2 does not treat doubled curly braces (`{{...}}`) as an escape. To write literal braces in text, escape each brace as `\\{...\\}` or use a code span.",
+      "captures": [],
+      "notes": [],
+      "hints": [
+        "Quarto 1 used `{{lang}}` in a code cell header to display the cell instead of running it. Quarto 2 displays fenced code verbatim: wrap the cell in a `markdown` code block and write single braces."
+      ]
+    },
+    "name": "Q-2-50/link-text"
+  },
+  {
     "column": 1,
     "row": 0,
     "state": 751,

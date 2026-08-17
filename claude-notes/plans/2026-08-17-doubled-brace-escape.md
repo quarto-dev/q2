@@ -115,53 +115,66 @@ flag to user if this should be a hard error instead).
 
 ### Phase 0 — Test plan (TDD: failing tests first)
 
-- [ ] Corpus cases for Q-2-50 (`crates/pampa/resources/error-corpus/Q-2-50.json`):
-      `prose` (`X {{python}} Y`) and `link-text` (mirroring Q-2-41's two
-      contexts). Run `./scripts/build_error_table.ts`; verify cases map and
-      the regenerated `_autogen-table.json` diff introduces no (state, sym)
-      collisions with existing codes.
-- [ ] Failing Rust test: top-level ```` ```{{python}} ```` parse yields a
-      Q-2-50 diagnostic (and the CodeBlock is left as-is). Also triple-brace
-      `{{{python}}}`.
-- [ ] Negative tests: `{python}` executable cell, plain ```` ```python ````,
-      and ```` ```{{python}} ```` *inside* a displayed ` ````markdown ` fence
-      (content, not a class — must NOT warn).
+- [x] Failing tests written in
+      `crates/pampa/tests/integration/test_doubled_brace.rs` (registered in
+      `main.rs`): prose + link-text Q-2-50 errors; fence Q-2-50 warning for
+      doubled and triple braces (CodeBlock left as-is, location present).
+      Verified failing as expected (4 fail: the two prose-code tests and two
+      fence-warning tests; got no code / no warning respectively).
+- [x] Negative tests pass at HEAD: single-brace prose keeps Q-2-41 (and no
+      Q-2-50), `{python}` executable cell, plain ```` ```python ````,
+      displayed-fence content, Jinja-style fence content — none warn.
+      (Corpus cases themselves land in Phase 1; the collision check on the
+      regenerated `_autogen-table.json` diff happens there.)
 
 ### Phase 1 — Prose diagnostic (Q-2-50 via merr corpus)
 
-- [ ] Q-2-50 message text: name Quarto 1's doubled-brace display idiom
-      explicitly; point at the working spellings (`\{...\}` escape, code
-      span). Wording distinct from Q-2-41's generic brace message.
-- [ ] Catalog entry in `crates/quarto-error-catalog/error_catalog.json`
-      (subsystem `markdown`, `docs_url` per convention).
-- [ ] Docs page `docs/errors/markdown/Q-2-50.qmd` — **same commit** (the
-      `error-docs-page-missing` lint enforces this). Page covers both the
-      prose and fence contexts.
+- [x] `crates/pampa/resources/error-corpus/Q-2-50.json` with `prose` and
+      `link-text` cases; message names the Q1 idiom, hint points at the
+      `markdown`-code-block spelling. Table regenerated
+      (`./scripts/build_error_table.ts`); new entries are (2601, `{`) and
+      (2604, `{`) — verified unique in `_autogen-table.json` (no cross-code
+      collisions; Q-2-41 guard test passes). Stray root `deno.lock` from the
+      deno script deleted (repo removed it deliberately in a258b2ae).
+- [x] Catalog entry in `crates/quarto-error-catalog/error_catalog.json`
+      (after Q-2-49; subsystem `markdown`).
+- [x] Docs page `docs/errors/markdown/Q-2-50.qmd` (status `stub`, covers
+      both contexts, related-link to Q-2-41). `cargo xtask lint` passes;
+      page renders via `cargo run --bin q2 -- render` and was inspected.
 
 ### Phase 2 — Fence render-time diagnostic
 
-- [ ] AST-level check where the CodeBlock's class matches a doubled-brace
-      info string (`^\{\{+…\}\}+$` shape; 2-or-more braces catches Q1's
-      triple form too). Hook alongside the existing postprocess checks
-      (`postprocess.rs` pattern: `DiagnosticCollector`,
-      `DiagnosticMessageBuilder::warning`, `.with_code("Q-2-50")`,
-      location from the CodeBlock's source_info).
-- [ ] Message per design: "Multiple braces are not supported in Quarto 2",
-      hints: use single braces to execute the cell; wrap the content in a
-      `markdown` code block to display it.
-- [ ] End-to-end verification per CLAUDE.md: `cargo run --bin q2 -- render`
-      on a fixture; inspect stderr for the diagnostic and the HTML output.
+- [x] `.with_code_block` arm in `postprocess()`
+      (`crates/pampa/src/pandoc/treesitter_utils/postprocess.rs`, next to
+      the Q-2-35 div check): any class starting with `{{` gets a Q-2-50
+      warning. Location comes from `attr_source.classes[i]` (points at the
+      info string), falling back to the block's source_info. Block left
+      unchanged.
+- [x] Message: "Doubled curly braces are not supported" + problem naming
+      the literal class; hints: single braces to execute (with the actual
+      language extracted when clean), wrap in a `markdown` code block to
+      display.
+- [x] End-to-end verified through the real binary:
+      `cargo run --bin q2 -- render fence-toplevel.qmd` prints the Q-2-50
+      warning anchored at `1:5` on the `{{python}}` info string with both
+      hints; output HTML inspected
+      (`<pre class="{{python}} code-with-copy"><code>1 + 1</code></pre>` —
+      literal, as designed). Prose fixture via `q2 render` prints the
+      Q-2-50 error with the migration hint.
 
 ### Phase 3 — Docs + close-out
 
-- [ ] Migration note in the user-facing docs (find the right home under
-      `docs/` — syntax notes / migration guidance): fence bodies are
-      verbatim; write single braces; `{{...}}` is not an escape in q2.
-- [ ] Record the no-helper-rule decision (this plan + strand comment) so a
-      future "why doesn't qmd-syntax-helper fix this?" has an answer.
-- [ ] Full workspace tests + `cargo xtask verify --skip-hub-build`
-      (full `verify` if anything touches quarto-core/pandoc-types), then
-      `braid close` with reason.
+- [x] Migration note: "Displaying code cells without running them" section
+      in `docs/guides/authoring/computations.qmd` (the natural home; page
+      was a bare TBD stub) with a "Migrating from Quarto 1" callout linking
+      to the Q-2-50 error page. Rendered with q2 and inspected — link
+      resolves, no page-specific warnings.
+- [x] No-helper-rule decision recorded: design decision 3 above, plus the
+      braid comment c-69bevrbr on the strand.
+- [x] Full workspace tests green (12237 passed) and full `cargo xtask
+      verify` green (WASM leg included: pampa changed, which hub-client
+      depends on). Committed as 761e9ccd on `main`.
+- [ ] `braid close` with reason — pending user confirmation.
 
 ## Risks / tradeoffs
 

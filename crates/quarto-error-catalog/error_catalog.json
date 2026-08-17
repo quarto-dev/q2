@@ -1427,6 +1427,13 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-49",
     "since_version": "99.9.9"
   },
+  "Q-2-50": {
+    "subsystem": "markdown",
+    "title": "Doubled curly braces are not supported",
+    "message_template": "Quarto 2 does not treat doubled curly braces (`{{...}}`) as an escape. To write literal braces in text, escape each brace as `\\{...\\}` or use a code span.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-50",
+    "since_version": "99.9.9"
+  },
   "Q-5-27": {
     "subsystem": "project",
     "title": "Invalid `diagnostics:` Entry",
