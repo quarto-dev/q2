@@ -491,6 +491,12 @@ impl TsEngine {
     fn translate_html_dep(dep: TsHtmlDependency) -> HtmlDependency {
         HtmlDependency {
             name: dep.name,
+            // The `TsHtmlDependency` wire type carries no version field, so
+            // a TS engine cannot declare one today. `None` keeps the flat
+            // `libs/{name}/` layout, which is exactly the pre-versioning
+            // behavior (bd-add-html-dependency-version-5tnub5ds). Adding a
+            // wire field would be a protocol change, out of scope here.
+            version: None,
             stylesheets: dep.stylesheets.into_iter().map(PathBuf::from).collect(),
             scripts: dep.scripts.into_iter().map(PathBuf::from).collect(),
         }

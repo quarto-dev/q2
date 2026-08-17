@@ -1,0 +1,21 @@
+---
+title: Reference links and literal brackets
+---
+
+## A: full and collapsed reference links
+
+For more information, see [the RedHat documentation][gcc-toolset].
+
+You may wish to override the mount's [`noexec`][noexec] option.
+
+## B: bracketed text with no matching definition
+
+Multiple email support requires Posit Connect [Version TBD] or later.
+
+Upon an initial user session [1], the server creates a cookie
+(RSC-XSRF) [2] containing a random token.
+
+The default subject prefix is "[Posit Connect]".
+
+[gcc-toolset]: https://example.com/gcc-toolset
+[noexec]: https://example.com/noexec

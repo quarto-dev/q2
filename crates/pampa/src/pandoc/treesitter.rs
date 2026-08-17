@@ -15,6 +15,7 @@ use crate::pandoc::treesitter_utils::document::process_document;
 use crate::pandoc::treesitter_utils::editorial_marks::{
     process_delete, process_editcomment, process_highlight, process_insert,
 };
+use crate::pandoc::treesitter_utils::entity_reference::process_entity_reference;
 use crate::pandoc::treesitter_utils::fenced_code_block::process_fenced_code_block;
 use crate::pandoc::treesitter_utils::fenced_div_block::process_fenced_div_block;
 use crate::pandoc::treesitter_utils::info_string::process_info_string;
@@ -845,7 +846,8 @@ fn native_visitor<T: Write>(
         "numeric_character_reference" => {
             process_numeric_character_reference(node, input_bytes, context)
         }
-        "autolink" => process_uri_autolink(node, input_bytes, context),
+        "entity_reference" => process_entity_reference(node, input_bytes, context),
+        "autolink" => process_uri_autolink(node, input_bytes, context, error_collector),
         "pandoc_space" => PandocNativeIntermediate::IntermediateInline(Inline::Space(Space {
             source_info: node_source_info_with_context(node, context),
         })),

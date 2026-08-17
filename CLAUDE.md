@@ -40,6 +40,8 @@ This applies even at the end of sessions. Prepare the commit but wait for approv
 
 When asked to 'stage and commit everything' or 'commit all changes', stage ALL modified/untracked files (`git add -A`), not just the files Claude edited in the current session.
 
+**Commit-and-continue during approved plan execution:** when executing a plan the user has already approved, commit at each clean phase boundary (pre-commit checklist in `claude-notes/instructions/review.md` passed, full workspace tests green) without stopping to ask, and report the commit in the running summary. Waiting for approval is only required for commits outside approved plan execution, for dirty states, and always for pushing.
+
 ### Snapshot Test Changes
 
 When a commit includes updated or new snapshot files (`.snap` files under `snapshots/`), **always explicitly document these changes** in the commit message and in conversation with the user. Snapshot changes can hide unwanted regressions. Specifically:
@@ -568,6 +570,8 @@ cargo xtask lint --quiet   # Only show errors
 ### Current Lint Rules
 
 - **external-sources-in-macro**: Detects references to `external-sources/` in compile-time macros like `include_dir!`, `include_str!`, `include_bytes!`. These break builds because `external-sources/` is not version-controlled.
+- **add-file-with-id**: Restricts `SourceContext::add_file_with_id` to blessed modules (`config_sources.rs`, `metadata_merge.rs`, `span_assert.rs`, plus two temporarily-blessed files pending PR #478 / bd-x113wg9v). The API pairs an arbitrary FileId with arbitrary content; binding an *assumed* file to a diagnostic's resolved id renders byte offsets against the wrong text (bd-m6wmztln). Use `quarto_core::config_sources::bind_config_source` instead. Test code is skipped. Suppress a provably-safe use with `// lint:allow(add-file-with-id)` on the line or the line above, with a reason. Introduced with bd-jrq4hroi (audit: bd-nv4p0eb1).
+- **error-docs-page-missing**: Every code in `crates/quarto-error-catalog/error_catalog.json` must have a page at `docs/errors/<subsystem>/<code>.qmd`, and its `docs_url` must be `https://quarto.org/docs/errors/<subsystem>/<code>`. Diagnostics print the `docs_url` unconditionally, so a code without a page ships a 404 — which happened repeatedly (28 codes had accumulated by 2026-08-11, each added by a feature PR that stopped at the catalog). **When you add an error code, add its page in the same commit**; see `docs/errors/README.md` for the template. This is a *repo-level* rule — unlike the others here it reconciles whole trees rather than grepping one Rust file, and it anchors violations at the catalog entry's line. Orphan/misplaced pages and front-matter drift are deliberately out of scope (bd-8otua's `cargo xtask error-docs` audit owns those); a page `title` may differ from the catalog `title`. Introduced with bd-u2qj4y29.
 - **metadata-as-str**: Detects `meta.get("key")…as_str()` reads of document metadata. A bare YAML string in front-matter context is stored as `ConfigValueKind::PandocInlines`, for which `ConfigValue::as_str()` returns `None` — silently dropping the option. Use `as_plain_text()` instead (handles both `Scalar(String)` and `PandocInlines`). Only flags chains whose `.get(<string literal>)` receiver is a metadata expression (final identifier `meta`/`metadata`); internal map reads and test code are skipped. Suppress a deliberate scalar-only read with a `// lint:allow(metadata-as-str)` comment on the line or the line above. Introduced with bd-y89ihf0i.
 
 ### Adding New Lint Rules

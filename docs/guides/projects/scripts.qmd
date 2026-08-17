@@ -1,0 +1,135 @@
+---
+title: "Pre and Post Render Scripts"
+---
+
+Projects can run scripts before and after each render. Use them to
+generate input files, fetch data, clean up artifacts, or notify other
+systems when a render completes.
+
+## Configuration
+
+Declare scripts under the `project` key in `_quarto.yml`, as a single
+entry or a list:
+
+``` yaml
+project:
+  type: website
+  pre-render: prepare.py
+  post-render:
+    - cleanup.R
+    - tools/notify.sh
+```
+
+Scripts run in declaration order, for every project type. An entry can
+also be a full command line (double quotes group arguments):
+
+``` yaml
+project:
+  pre-render: python3 tools/gen.py --label "site build"
+```
+
+Scripts run on every project render, including a render of a single
+file inside the project. A single-file render outside any project
+(no `_quarto.yml`) never runs scripts. Pass `--no-render-scripts` to
+`q2 render` to skip both script phases for one invocation.
+
+## How scripts are run
+
+Each entry's first token selects the interpreter by file extension:
+
+| Extension | Runs with | Override |
+|---|---|---|
+| `.py` | `python3` (or `python`) from `PATH` | `QUARTO_PYTHON` |
+| `.r`, `.R` | `Rscript` | `QUARTO_R` |
+| `.ts`, `.js` | `node` from `PATH` | `QUARTO_NODE` |
+| anything else | executed directly | — |
+
+A directly-executed script (e.g. `.sh`) needs a shebang line and the
+executable bit on Unix; on Windows, `.bat`/`.cmd` files work directly.
+For anything unusual, write an explicit command line
+(`pre-render: my-interpreter tools/gen.xyz`), which bypasses extension
+dispatch entirely.
+
+All scripts run with the **project root as the working directory**.
+
+If a script exits with a non-zero status, the render is aborted with a
+diagnostic pointing at the script's entry in `_quarto.yml`
+([`Q-5-8`](/errors/index.qmd)); remaining scripts in the list do not
+run.
+
+## Environment variables
+
+Scripts receive the following environment variables in addition to the
+parent environment:
+
+| Variable | Value |
+|---|---|
+| `QUARTO_PROJECT_DIR` | Absolute path of the project directory |
+| `QUARTO_PROJECT_OUTPUT_DIR` | Absolute path of the output directory |
+| `QUARTO_PROJECT_RENDER_ALL` | `1` when the whole project is being rendered; **absent** otherwise (e.g. `q2 render page.qmd`) |
+| `QUARTO_PROJECT_INPUT_FILES` | Pre-render only: newline-separated project-relative paths of the files about to render |
+| `QUARTO_PROJECT_OUTPUT_FILES` | Post-render only: newline-separated project-relative paths of the produced outputs (e.g. `_site/index.html`) |
+| `QUARTO_PROJECT_SCRIPT_PROGRESS` | `1` when it is appropriate for the script to print progress (multi-file render, not `--quiet`), else `0` |
+| `QUARTO_PROJECT_SCRIPT_QUIET` | `1` under `--quiet`, else `0` |
+
+For example, a script that only wants to act on full renders:
+
+``` python
+import os
+
+if not os.getenv("QUARTO_PROJECT_RENDER_ALL"):
+    exit()
+
+# ... work that should only happen on full project renders
+```
+
+Very large projects can overflow the environment size limit with the
+file lists. Set `QUARTO_USE_FILE_FOR_PROJECT_INPUT_FILES=<path>`
+(resp. `QUARTO_USE_FILE_FOR_PROJECT_OUTPUT_FILES`) before invoking
+`q2 render` and the list is written to that file instead of the
+environment variable.
+
+## Modifying the project from a pre-render script
+
+Pre-render scripts may modify the project: create new `.qmd` input
+files, edit `_quarto.yml`, update data files. Quarto reads the project
+**after** the pre-render scripts finish, so generated files are
+rendered in the same pass and appear in navigation.
+
+Two settings are fixed once the scripts start: `project.type` and
+`project.output-dir`. A pre-render script that changes either aborts
+the render ([`Q-5-9`](/errors/index.qmd)) — the scripts already
+received `QUARTO_PROJECT_OUTPUT_DIR`, so a change would hand them a
+stale value.
+
+## Preview
+
+`q2 preview` runs pre-render scripts **once, when the preview server
+starts**. They are not re-run on file changes or configuration edits —
+restart the preview to re-run them. Post-render scripts never run in
+preview. A script failure at preview boot is reported but the preview
+keeps serving.
+
+In the browser-based Quarto Hub preview, scripts cannot run at all; a
+one-time warning is shown and pages render without them.
+
+## Differences from Quarto 1
+
+If you are porting a project from Quarto 1:
+
+- **`.ts`/`.js` scripts** run with `node` from `PATH` (or
+  `QUARTO_NODE`). Quarto 1's bundled Deno and its import-map scheme
+  are not carried forward. TypeScript entries only work where `node`
+  can execute them; otherwise name an interpreter explicitly in the
+  command line.
+- **`.lua` scripts** are no longer special-cased (Quarto 1 ran them as
+  Pandoc Lua filters). Use an explicit interpreter if you need them.
+- **Preview cadence**: Quarto 1 re-ran scripts on every preview
+  re-render; Quarto 2 runs pre-render scripts at preview boot only.
+- **`QUARTO_PROJECT_OUTPUT_FILES` is computed fresh** after the render
+  from the actual outputs (in Quarto 1 the shared environment was
+  computed once before the render and could be stale).
+- **Script failures produce a real diagnostic** with the script name,
+  exit code, and the `_quarto.yml` location (Quarto 1 raised an
+  empty error).
+- **`--no-render-scripts`** is new.

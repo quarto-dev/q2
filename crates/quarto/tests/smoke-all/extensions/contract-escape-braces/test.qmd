@@ -1,0 +1,12 @@
+---
+title: Escaped shortcode with extra braces
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["fakename"]
+---
+
+Literal: {{{< fakename >}}}

@@ -37,9 +37,19 @@ pub struct Listing {
     pub kind: ListingType,
     pub contents: Vec<ListingContents>,
     pub fields: Vec<String>,
+    /// `true` when the author supplied a non-empty `fields:` list.
+    /// Author-explicit fields are used verbatim; defaulted fields are
+    /// presence-filtered against the hydrated items at render time
+    /// (Q1 parity, bd-listing-table-fields-peg1w3b3).
+    pub fields_explicit: bool,
     pub field_display_names: BTreeMap<String, String>,
     pub field_types: BTreeMap<String, ColumnType>,
-    pub field_links: Vec<String>,
+    /// Fields whose cell/entry value links to the item. `None` means
+    /// the author didn't specify; [`apply_type_defaults`] then fills
+    /// the Q1 default (`[title, filename]` for table listings, empty
+    /// otherwise). An author-explicit `field-links: []` stays `Some`
+    /// and disables linking entirely.
+    pub field_links: Option<Vec<String>>,
     pub field_sort: Vec<String>,
     pub field_filter: Vec<String>,
     pub field_required: Vec<String>,
@@ -85,9 +95,10 @@ impl Default for Listing {
             kind: ListingType::Default,
             contents: Vec::new(),
             fields: Vec::new(),
+            fields_explicit: false,
             field_display_names: BTreeMap::new(),
             field_types: BTreeMap::new(),
-            field_links: Vec::new(),
+            field_links: None,
             field_sort: Vec::new(),
             field_filter: Vec::new(),
             field_required: Vec::new(),
@@ -129,12 +140,28 @@ pub enum ListingType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ListingContents {
-    /// Glob pattern resolved against the project file set; see
-    /// L3 D10 (host-relative globs filtered through ProjectIndex).
-    Glob(String),
+    /// Glob pattern, kept as the user wrote it (a leading `!` marks
+    /// a negation). `source` is the provenance of the YAML scalar —
+    /// [`glob_resolve::resolve_content_globs`](super::glob_resolve::resolve_content_globs)
+    /// uses it to recover the declaring file's directory, which is
+    /// the base the pattern resolves against (GH #456,
+    /// bd-v7ixzsp5).
+    Glob { pattern: String, source: SourceInfo },
     /// Inline metadata record. Schema accepts; L3 emits `Q-12-2`
     /// and skips the entry until a follow-up bd issue lands.
     Inline(BTreeMap<String, ConfigValue>),
+}
+
+impl ListingContents {
+    /// Test/construction convenience: a glob entry with programmatic
+    /// (no-file) provenance, which resolves against the host
+    /// directory.
+    pub fn glob_no_source(pattern: impl Into<String>) -> Self {
+        ListingContents::Glob {
+            pattern: pattern.into(),
+            source: SourceInfo::generated(By::programmatic_config()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -341,7 +368,12 @@ pub fn parse_listings(
                             "Duplicate listing id `{}`; later occurrences are dropped.",
                             l.id
                         ),
-                        item,
+                        // Blame the offending `id:` value, not the whole
+                        // listing map — see `template_source` in
+                        // `parse_one_listing` for why a map's span is not
+                        // its own. A synthesized id has no `id:` entry to
+                        // point at, so fall back to the entry itself.
+                        map_entry_value(item, "id").unwrap_or(item),
                     );
                     continue;
                 }
@@ -400,6 +432,21 @@ fn parse_one_listing(
         ..Default::default()
     };
 
+    // Span to blame for the cross-field `template:`/`type:` check below.
+    // Captured here rather than reusing the enclosing map's `source_info`,
+    // which is not the map's span at all: `materialize_cursor` synthesizes
+    // it from the map's *first entry's value*
+    // (`quarto-config/src/materialize.rs:142-158`), so blaming `value`
+    // underlines whichever key happens to come first — `sort: false` in
+    // the report that opened bd-9yh3pzfu.
+    //
+    // Even once materialization preserves real container spans, blaming
+    // the map would still be wrong here: quarto-yaml spans a mapping from
+    // its first key to `MappingEnd`, so the caret would cover the whole
+    // `listing:` block. A diagnostic about `template:` points at
+    // `template:`.
+    let mut template_source: Option<&ConfigValue> = None;
+
     for entry in map {
         match entry.key.as_str() {
             "id" => {
@@ -429,6 +476,9 @@ fn parse_one_listing(
             }
             "fields" => {
                 l.fields = parse_string_list(&entry.value);
+                // Explicit-but-empty `fields: []` falls through to
+                // the type defaults, same as omitting the key.
+                l.fields_explicit = !l.fields.is_empty();
             }
             "field-display-names" => {
                 l.field_display_names = parse_string_string_map(&entry.value, diagnostics);
@@ -436,7 +486,7 @@ fn parse_one_listing(
             "field-types" => {
                 l.field_types = parse_field_types(&entry.value, diagnostics);
             }
-            "field-links" => l.field_links = parse_string_list(&entry.value),
+            "field-links" => l.field_links = Some(parse_string_list(&entry.value)),
             "field-sort" => l.field_sort = parse_string_list(&entry.value),
             "field-filter" => l.field_filter = parse_string_list(&entry.value),
             "field-required" => l.field_required = parse_string_list(&entry.value),
@@ -458,9 +508,10 @@ fn parse_one_listing(
                 l.image_placeholder = entry.value.as_plain_text();
             }
             "sort" => {
-                l.sort = Some(parse_sort(&entry.value, diagnostics));
+                l.sort = parse_sort(&entry.value, diagnostics);
             }
             "template" => {
+                template_source = Some(&entry.value);
                 if let Some(path) = entry.value.as_plain_text() {
                     if path.ends_with(".ejs.md") {
                         push_diag(
@@ -531,12 +582,18 @@ fn parse_one_listing(
 
     // Cross-field validation: `template:` set without `type: custom`
     // should warn (per Q-12-7) and leave the type alone.
+    //
+    // Blame the `template:` value, not the enclosing map — see the
+    // `template_source` declaration above. `template_source` is always
+    // `Some` here, since `l.template` is only set from that same entry;
+    // the fallback keeps the diagnostic alive rather than silently
+    // dropping it if that ever stops holding.
     if l.template.is_some() && l.kind != ListingType::Custom {
         push_diag(
             diagnostics,
             "Q-12-7",
             "`template:` was set but `type:` is not `custom`; falling back to the built-in template for the declared type.",
-            value,
+            template_source.unwrap_or(value),
         );
     }
 
@@ -575,36 +632,52 @@ fn parse_contents(
     value: &ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Vec<ListingContents> {
-    // Quarto YAML routinely parses bare frontmatter strings as
-    // `PandocInlines` (e.g. when a glob like `posts/*.qmd` confuses
-    // the markdown sublexer and lands as a `Span` carrying the
-    // `yaml-markdown-syntax-error` class). Route through
-    // `as_plain_text` first so any string-shaped variant becomes a
-    // glob, mirroring `parse_listings`'s top-level shorthand
-    // handling. The bug that surfaced when L5's snapshot fixture
-    // used `contents: "posts/*.qmd"` and the broader audit of
-    // sibling parser branches is tracked under bd-nwyp.
+    // Since bd-v7ixzsp5, front-matter `contents:` strings arrive as
+    // `ConfigValueKind::Glob` — the key-path annotation table in
+    // pampa (`meta_annotations.rs`) types them at parse time, so
+    // they never take the markdown-parsing path (which used to warn
+    // Q-1-20 and could silently corrupt patterns whose asterisks
+    // parsed as emphasis). The `as_plain_text` route below is kept
+    // as a defensive fallback for string-shaped values from other
+    // sources (programmatic construction, runtime metadata, legacy
+    // `PandocInlines` values — the original bd-nwyp shape).
     if let Some(s) = value.as_plain_text() {
-        return vec![ListingContents::Glob(s)];
+        return vec![ListingContents::Glob {
+            pattern: s,
+            source: value.source_info.clone(),
+        }];
     }
     match &value.value {
         ConfigValueKind::Scalar(Yaml::String(s)) => {
-            vec![ListingContents::Glob(s.clone())]
+            vec![ListingContents::Glob {
+                pattern: s.clone(),
+                source: value.source_info.clone(),
+            }]
         }
         ConfigValueKind::Glob(pattern) => {
-            vec![ListingContents::Glob(pattern.clone())]
+            vec![ListingContents::Glob {
+                pattern: pattern.clone(),
+                source: value.source_info.clone(),
+            }]
         }
         ConfigValueKind::Array(items) => items
             .iter()
             .filter_map(|item| {
                 if let Some(s) = item.as_plain_text() {
-                    return Some(ListingContents::Glob(s));
+                    return Some(ListingContents::Glob {
+                        pattern: s,
+                        source: item.source_info.clone(),
+                    });
                 }
                 match &item.value {
-                    ConfigValueKind::Scalar(Yaml::String(s)) => {
-                        Some(ListingContents::Glob(s.clone()))
-                    }
-                    ConfigValueKind::Glob(pattern) => Some(ListingContents::Glob(pattern.clone())),
+                    ConfigValueKind::Scalar(Yaml::String(s)) => Some(ListingContents::Glob {
+                        pattern: s.clone(),
+                        source: item.source_info.clone(),
+                    }),
+                    ConfigValueKind::Glob(pattern) => Some(ListingContents::Glob {
+                        pattern: pattern.clone(),
+                        source: item.source_info.clone(),
+                    }),
                     ConfigValueKind::Map(entries) => {
                         push_diag(
                             diagnostics,
@@ -691,23 +764,40 @@ fn parse_field_types(
     out
 }
 
-fn parse_sort(value: &ConfigValue, diagnostics: &mut Vec<DiagnosticMessage>) -> Vec<ListingSort> {
+/// Parse the `sort:` value. `None` means "apply the default sort" —
+/// `sort: true` is Q1's explicit spelling of the default, so it
+/// parses the same as an absent key. `Some(vec![])` means sorting is
+/// explicitly disabled (`sort: false`); `Some(keys)` is an author
+/// sort spec.
+fn parse_sort(
+    value: &ConfigValue,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Option<Vec<ListingSort>> {
+    if let ConfigValueKind::Scalar(Yaml::Boolean(b)) = &value.value {
+        return if *b { None } else { Some(Vec::new()) };
+    }
+    // String-shaped values (including the routine PandocInlines
+    // wrapping of front-matter strings) flatten via `as_plain_text`,
+    // mirroring `parse_contents` — see bd-2qjnd / bd-nwyp.
+    if let Some(s) = value.as_plain_text() {
+        return Some(vec![parse_one_sort_key(&s)]);
+    }
     match &value.value {
-        ConfigValueKind::Scalar(Yaml::Boolean(false)) => Vec::new(),
-        ConfigValueKind::Scalar(Yaml::String(s)) => vec![parse_one_sort_key(s)],
-        ConfigValueKind::Array(items) => items
-            .iter()
-            .filter_map(|v| v.as_plain_text())
-            .map(|s| parse_one_sort_key(&s))
-            .collect(),
+        ConfigValueKind::Array(items) => Some(
+            items
+                .iter()
+                .filter_map(|v| v.as_plain_text())
+                .map(|s| parse_one_sort_key(&s))
+                .collect(),
+        ),
         _ => {
             push_diag(
                 diagnostics,
                 "Q-12-3",
-                "`sort:` must be a string, array of strings, or `false`.",
+                "`sort:` must be a string, array of strings, or a boolean.",
                 value,
             );
-            Vec::new()
+            Some(Vec::new())
         }
     }
 }
@@ -852,6 +942,16 @@ pub fn apply_type_defaults(l: &mut Listing) {
         .map(String::from)
         .collect();
     }
+    // Q1's `kDefaultFieldLinks`: table listings link title +
+    // filename cells; other types link nothing by default. An
+    // author-explicit `field-links:` (even `[]`) is already `Some`
+    // and wins.
+    if l.field_links.is_none() {
+        l.field_links = Some(match l.kind {
+            ListingType::Table => vec!["title".to_string(), "filename".to_string()],
+            _ => Vec::new(),
+        });
+    }
     // Type-specific knobs (only fill None).
     match l.kind {
         ListingType::Default => {
@@ -877,45 +977,43 @@ pub fn apply_type_defaults(l: &mut Listing) {
     // host page (Q1 default; the host file itself gets excluded
     // during item discovery, not here).
     if l.contents.is_empty() {
-        l.contents.push(ListingContents::Glob("*.qmd".to_string()));
+        l.contents.push(ListingContents::glob_no_source("*.qmd"));
     }
 }
 
-/// Extract just the content-glob strings from a host page's
-/// `meta.listing:` value, ignoring all other listing config.
+/// Flatten every `contents:` glob entry across all listings declared
+/// on a host page's `meta.listing:` value, ignoring all other listing
+/// config. Inline-record entries (`Q-12-2` at render time) contribute
+/// nothing.
 ///
-/// Used by [`crate::project::dependency_graph::ProjectDependencyGraph::build`]
-/// (Phase-8 / L6, `bd-xbnf`) to discover which sibling files this
-/// page's listings reference, so Mode B can re-render the host
-/// when any of those siblings is in the user-named target set.
-///
-/// Globs are flattened across all listings declared on the page —
-/// the dep graph cares about edges, not which listing produced
-/// them. Inline-record `contents:` entries (`Q-12-2` at render
-/// time) contribute nothing to the dep graph.
-///
-/// **Implementation note (`bd-bqf2`):** today this routes through
-/// [`parse_listings`] and discards the resulting diagnostics, so
-/// shape-handling stays in lockstep with the L3 generate transform
-/// without any duplicated walker logic. If profiling ever shows
-/// the redundant work as a hotspot, `bd-bqf2` tracks the refactor
-/// to a shared shape walker. For now: one source of truth, no
-/// drift risk.
-pub fn extract_content_globs(meta: &ConfigValue) -> Vec<String> {
+/// Consumers resolve the returned entries with
+/// [`super::glob_resolve::resolve_content_globs`] — see that module
+/// for the base-directory semantics. Routes through
+/// [`parse_listings`] (diagnostics discarded) so shape-handling
+/// stays in lockstep with the L3 generate transform (`bd-bqf2`).
+pub fn flatten_content_globs(meta: &ConfigValue) -> Vec<ListingContents> {
     let Some(listing_value) = meta.get("listing") else {
         return Vec::new();
     };
     let mut throwaway_diagnostics: Vec<DiagnosticMessage> = Vec::new();
     let listings = parse_listings(listing_value, &mut throwaway_diagnostics);
-    let mut out: Vec<String> = Vec::new();
-    for listing in listings {
-        for content in listing.contents {
-            if let ListingContents::Glob(g) = content {
-                out.push(g);
-            }
-        }
+    listings
+        .into_iter()
+        .flat_map(|l| l.contents)
+        .filter(|c| matches!(c, ListingContents::Glob { .. }))
+        .collect()
+}
+
+/// The value of `key` in `value`, if `value` is a map containing it.
+///
+/// Used to blame a specific entry rather than its enclosing map. A map's
+/// `source_info` is not the map's span — see `template_source` in
+/// [`parse_one_listing`].
+fn map_entry_value<'a>(value: &'a ConfigValue, key: &str) -> Option<&'a ConfigValue> {
+    match &value.value {
+        ConfigValueKind::Map(entries) => entries.iter().find(|e| e.key == key).map(|e| &e.value),
+        _ => None,
     }
-    out
 }
 
 fn push_diag(
@@ -968,6 +1066,184 @@ mod tests {
         (listings, diags)
     }
 
+    /// The glob pattern strings of a contents list, ignoring the
+    /// per-entry provenance (which tests can't reproduce exactly).
+    fn glob_patterns(contents: &[ListingContents]) -> Vec<String> {
+        contents
+            .iter()
+            .filter_map(|c| match c {
+                ListingContents::Glob { pattern, .. } => Some(pattern.clone()),
+                ListingContents::Inline(_) => None,
+            })
+            .collect()
+    }
+
+    // ── real-source fixtures (bd-9yh3pzfu) ──────────────────────────
+    //
+    // The helpers above stamp every value with `SourceInfo::for_test()`,
+    // so a diagnostic pointing at the wrong key is indistinguishable
+    // from one pointing at the right key — the span bug is invisible by
+    // construction. Tests that assert on *where* a diagnostic points
+    // must parse real text and travel the real path.
+    //
+    // That path matters: production reads `ast.meta.get("listing")`
+    // (see `transforms/listing_generate.rs:72`), and `ast.meta` is the
+    // *materialized* merge output — `MetadataMergeStage` replaces it
+    // wholesale at `stage/stages/metadata_merge.rs:266-288`. Skipping
+    // materialization would skip the defect.
+
+    const FIXTURE_FILE: &str = "index.qmd";
+
+    /// Parse YAML front-matter text the way the render pipeline does:
+    /// YAML → `ConfigValue` → merge → **materialize**, then hand back
+    /// the `listing:` value plus a `SourceContext` that can resolve the
+    /// spans it carries.
+    fn parse_from_yaml(
+        yaml: &str,
+    ) -> (
+        Vec<Listing>,
+        Vec<DiagnosticMessage>,
+        quarto_source_map::SourceContext,
+    ) {
+        use pampa::pandoc::yaml_to_config_value;
+        use pampa::utils::diagnostic_collector::DiagnosticCollector;
+        use quarto_config::{InterpretationContext, MergedConfig};
+
+        let parsed = quarto_yaml::parse_file(yaml, FIXTURE_FILE).expect("valid yaml");
+        let mut collector = DiagnosticCollector::new();
+        let doc_config = yaml_to_config_value(
+            parsed,
+            InterpretationContext::DocumentMetadata,
+            &mut collector,
+        );
+
+        let merged = MergedConfig::new(vec![&doc_config])
+            .materialize()
+            .expect("materialize");
+        let listing_value = merged.get("listing").expect("`listing:` key present");
+
+        let mut diags = Vec::new();
+        let listings = parse_listings(listing_value, &mut diags);
+        (
+            listings,
+            diags,
+            quarto_config::span_assert::context_for(FIXTURE_FILE, yaml),
+        )
+    }
+
+    fn diag_with_code<'a>(diags: &'a [DiagnosticMessage], code: &str) -> &'a DiagnosticMessage {
+        diags
+            .iter()
+            .find(|d| d.code.as_deref() == Some(code))
+            .unwrap_or_else(|| panic!("expected a {code} diagnostic; got: {diags:?}"))
+    }
+
+    // bd-9yh3pzfu: Q-12-7 talks about `template:` but blamed whichever
+    // key happened to come first in the map — here `sort:`. The key
+    // order below is load-bearing: putting `template:` first would mask
+    // the bug.
+    #[test]
+    fn q_12_7_underlines_the_template_key_not_a_sibling() {
+        let yaml = "\
+title: Vanity URLs
+listing:
+    sort: false
+    template: ../template.ejs
+    contents:
+    - ./a.qmd
+";
+        let (_listings, diags, ctx) = parse_from_yaml(yaml);
+        let q127 = diag_with_code(&diags, "Q-12-7");
+
+        quarto_config::span_assert::assert_diagnostic_underlines(q127, &ctx, "../template.ejs");
+    }
+
+    // bd-9yh3pzfu: Q-12-4 named the duplicate id in its message but
+    // blamed the whole listing map, so the caret landed on whichever
+    // key came first. `contents:` is first here to keep that visible.
+    #[test]
+    fn q_12_4_underlines_the_duplicate_id_not_a_sibling() {
+        let yaml = "\
+listing:
+    - contents: ./a.qmd
+      id: dupe
+    - contents: ./b.qmd
+      id: dupe
+";
+        let (_listings, diags, ctx) = parse_from_yaml(yaml);
+        let q124 = diag_with_code(&diags, "Q-12-4");
+
+        quarto_config::span_assert::assert_diagnostic_underlines(q124, &ctx, "dupe");
+    }
+
+    // bd-2mxo: L5 captures the `categories:` *key* span here purely to
+    // anchor Q-12-12 ("categories enabled but no item has any"; see
+    // `transforms/categories_sidebar.rs:213`). Materialization used to
+    // replace every `key_source` with a programmatic-config sentinel,
+    // which left that anchor inert — the feature existed but could
+    // never point anywhere. This pins it to the real key.
+    #[test]
+    fn categories_source_anchors_the_real_categories_key() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    categories: true
+";
+        let (listings, _diags, ctx) = parse_from_yaml(yaml);
+        let listing = listings.first().expect("one listing");
+
+        let span = quarto_config::span_assert::resolve_span(&listing.categories_source, &ctx)
+            .expect("categories_source should be a real key span, not a sentinel");
+        assert_eq!(span.text, "categories");
+    }
+
+    // The two sites the Phase A audit deliberately left alone: each
+    // already blamed the semantically correct value, and read wrong only
+    // because that value was a container carrying a synthesized span.
+    // Fixing materialization (bd-2mxo) is what makes them right, so
+    // these assert the fix reaches beyond the call sites Phase A
+    // touched.
+
+    #[test]
+    fn q_12_2_underlines_the_whole_inline_contents_record() {
+        let yaml = "\
+listing:
+    contents:
+    - title: Inline
+      path: ./a.qmd
+";
+        let (_listings, diags, ctx) = parse_from_yaml(yaml);
+        let q122 = diag_with_code(&diags, "Q-12-2");
+
+        let span = quarto_config::span_assert::resolve_diagnostic_span(q122, &ctx)
+            .expect("Q-12-2 should resolve to a real span");
+        assert!(
+            span.text.contains("title: Inline") && span.text.contains("path: ./a.qmd"),
+            "expected the whole inline record, got {:?}",
+            span.text
+        );
+    }
+
+    #[test]
+    fn q_12_3_underlines_the_whole_sort_value() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    sort:
+        field: title
+";
+        let (_listings, diags, ctx) = parse_from_yaml(yaml);
+        let q123 = diag_with_code(&diags, "Q-12-3");
+
+        let span = quarto_config::span_assert::resolve_diagnostic_span(q123, &ctx)
+            .expect("Q-12-3 should resolve to a real span");
+        assert!(
+            span.text.contains("field: title"),
+            "expected the offending `sort:` value, got {:?}",
+            span.text
+        );
+    }
+
     // 1. config_parses_minimal — `listing: default` parses to a
     //    Listing with id synthesized, type Default, defaults applied.
     #[test]
@@ -977,10 +1253,7 @@ mod tests {
         assert_eq!(listings[0].id, "listing-1");
         assert_eq!(listings[0].kind, ListingType::Default);
         // Default contents glob filled in.
-        assert_eq!(
-            listings[0].contents,
-            vec![ListingContents::Glob("*.qmd".to_string())]
-        );
+        assert_eq!(glob_patterns(&listings[0].contents), vec!["*.qmd"]);
         // Default fields set.
         assert!(listings[0].fields.contains(&"title".to_string()));
         assert!(listings[0].fields.contains(&"date".to_string()));
@@ -1060,10 +1333,7 @@ mod tests {
             ("type", s("default")),
             ("contents", arr(vec![s("posts/**/*.qmd")])),
         ]));
-        assert_eq!(
-            listings[0].contents,
-            vec![ListingContents::Glob("posts/**/*.qmd".to_string())]
-        );
+        assert_eq!(glob_patterns(&listings[0].contents), vec!["posts/**/*.qmd"]);
     }
 
     // 6b. Quarto YAML often parses globs like `posts/*.qmd` as
@@ -1088,8 +1358,8 @@ mod tests {
             ("contents", contents_val),
         ]));
         assert_eq!(
-            listings[0].contents,
-            vec![ListingContents::Glob("posts/*.qmd".to_string())],
+            glob_patterns(&listings[0].contents),
+            vec!["posts/*.qmd"],
             "expected `posts/*.qmd` glob; diags: {:?}",
             diags
         );
@@ -1114,11 +1384,8 @@ mod tests {
         );
         let (listings, _) = parse(map(vec![("type", s("default")), ("contents", arr_val)]));
         assert_eq!(
-            listings[0].contents,
-            vec![
-                ListingContents::Glob("posts/*.qmd".to_string()),
-                ListingContents::Glob("notes/*.qmd".to_string()),
-            ]
+            glob_patterns(&listings[0].contents),
+            vec!["posts/*.qmd", "notes/*.qmd"]
         );
     }
 
@@ -1153,6 +1420,25 @@ mod tests {
         assert_eq!(sort[0].direction, SortDirection::Asc);
     }
 
+    // 8b. sort: false → Some([]) — sorting explicitly disabled,
+    // declared contents order preserved downstream.
+    #[test]
+    fn sort_false_parses_to_empty_spec() {
+        let (listings, diags) = parse(map(vec![("sort", b(false))]));
+        assert_eq!(listings[0].sort.as_deref(), Some(&[][..]));
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    }
+
+    // 8c. sort: true → None — Q1's explicit spelling of "apply the
+    // default sort"; same as an absent key, and NOT a field named
+    // "true".
+    #[test]
+    fn sort_true_parses_like_absent() {
+        let (listings, diags) = parse(map(vec![("sort", b(true))]));
+        assert_eq!(listings[0].sort, None);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    }
+
     // 9. sort: ["date desc"] → Desc
     #[test]
     fn sort_parses_field_with_direction() {
@@ -1160,6 +1446,29 @@ mod tests {
         let sort = listings[0].sort.as_ref().unwrap();
         assert_eq!(sort[0].field, "date");
         assert_eq!(sort[0].direction, SortDirection::Desc);
+    }
+
+    // 9b. A scalar `sort: "date desc"` routinely arrives as
+    // `PandocInlines` (front-matter strings hit the markdown
+    // sublexer). The scalar arm must route through `as_plain_text`
+    // like the array arm does, instead of falling through to the
+    // Q-12-3 diagnostic with an empty sort. See bd-2qjnd.
+    #[test]
+    fn sort_pandoc_inlines_scalar_parses() {
+        use quarto_pandoc_types::inline::{Inline, Str};
+        let inlines: quarto_pandoc_types::inline::Inlines = vec![Inline::Str(Str {
+            text: "date desc".to_string(),
+            source_info: SourceInfo::for_test(),
+        })];
+        let sort_val = ConfigValue::new_inlines(inlines, SourceInfo::for_test());
+        let (listings, diags) = parse(map(vec![("sort", sort_val)]));
+        let sort = listings[0]
+            .sort
+            .as_ref()
+            .unwrap_or_else(|| panic!("sort dropped; diags: {diags:?}"));
+        assert_eq!(sort[0].field, "date");
+        assert_eq!(sort[0].direction, SortDirection::Desc);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
     }
 
     // 10. multi-key sort preserves order
@@ -1190,6 +1499,76 @@ mod tests {
         assert!(listings[0].sort_ui);
         assert!(listings[0].filter_ui);
         assert_eq!(listings[0].page_size, 30);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // bd-listing-table-fields-peg1w3b3: field-links defaults +
+    // explicit-fields tracking (Q1 parity for table listings).
+    // ─────────────────────────────────────────────────────────────
+
+    // Q1 `kDefaultFieldLinks` applies to table listings only.
+    #[test]
+    fn field_links_defaults_to_title_filename_for_table() {
+        let (listings, _) = parse(s("table"));
+        assert_eq!(
+            listings[0].field_links,
+            Some(vec!["title".to_string(), "filename".to_string()])
+        );
+    }
+
+    #[test]
+    fn field_links_defaults_to_empty_for_non_table_types() {
+        let (listings, _) = parse(s("default"));
+        assert_eq!(listings[0].field_links, Some(Vec::new()));
+        let (listings, _) = parse(s("grid"));
+        assert_eq!(listings[0].field_links, Some(Vec::new()));
+    }
+
+    // Author-explicit `field-links: []` disables linking; the table
+    // default must not overwrite it.
+    #[test]
+    fn field_links_explicit_empty_survives_table_defaults() {
+        let (listings, _) = parse(map(vec![
+            ("type", s("table")),
+            ("field-links", arr(vec![])),
+        ]));
+        assert_eq!(listings[0].field_links, Some(Vec::new()));
+    }
+
+    #[test]
+    fn field_links_explicit_list_parses() {
+        let (listings, _) = parse(map(vec![
+            ("type", s("table")),
+            ("field-links", arr(vec![s("author")])),
+        ]));
+        assert_eq!(listings[0].field_links, Some(vec!["author".to_string()]));
+    }
+
+    // `fields_explicit` gates render-time presence filtering: only
+    // *defaulted* field sets are filtered against the items.
+    #[test]
+    fn fields_explicit_true_when_author_supplies_fields() {
+        let (listings, _) = parse(map(vec![
+            ("type", s("table")),
+            ("fields", arr(vec![s("title")])),
+        ]));
+        assert!(listings[0].fields_explicit);
+        assert_eq!(listings[0].fields, vec!["title"]);
+    }
+
+    #[test]
+    fn fields_explicit_false_when_fields_defaulted() {
+        let (listings, _) = parse(s("table"));
+        assert!(!listings[0].fields_explicit);
+    }
+
+    // Explicit-but-empty `fields: []` falls back to the type default
+    // set and is treated as non-explicit (same as today).
+    #[test]
+    fn fields_empty_list_treated_as_defaulted() {
+        let (listings, _) = parse(map(vec![("type", s("table")), ("fields", arr(vec![]))]));
+        assert!(!listings[0].fields_explicit);
+        assert_eq!(listings[0].fields, vec!["date", "title", "author"]);
     }
 
     // template + non-custom type → Q-12-7
@@ -1256,11 +1635,12 @@ mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // L6 (bd-xbnf): extract_content_globs
+    // L6 (bd-xbnf): flatten_content_globs
     //
-    // The dep-graph builder calls this to read just the glob strings
-    // out of `meta.listing`, ignoring all the other listing config.
-    // It must agree with `parse_listings` on every accepted shape so
+    // The profile stage calls this to read just the glob entries
+    // out of `meta.listing` (before resolving them via
+    // `glob_resolve`), ignoring all the other listing config. It
+    // must agree with `parse_listings` on every accepted shape so
     // graph edges line up with what the L3 generate transform
     // resolves at render time.
     // ─────────────────────────────────────────────────────────────
@@ -1273,7 +1653,7 @@ mod tests {
     #[test]
     fn extract_globs_from_single_listing_default_shorthand() {
         let meta = meta_with_listing(b(true));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 
     /// Explicit `contents:` glob list.
@@ -1281,8 +1661,8 @@ mod tests {
     fn extract_globs_from_single_listing_with_explicit_contents() {
         let meta = meta_with_listing(map(vec![("contents", arr(vec![s("posts/*.qmd")]))]));
         assert_eq!(
-            extract_content_globs(&meta),
-            vec!["posts/*.qmd".to_string()]
+            glob_patterns(&flatten_content_globs(&meta)),
+            vec!["posts/*.qmd"]
         );
     }
 
@@ -1291,7 +1671,7 @@ mod tests {
     #[test]
     fn extract_globs_from_single_listing_no_contents_shorthand() {
         let meta = meta_with_listing(map(vec![("type", s("grid"))]));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 
     /// Array of listings; globs flatten across listings.
@@ -1302,12 +1682,8 @@ mod tests {
             map(vec![("contents", arr(vec![s("b/*.qmd"), s("c/*.qmd")]))]),
         ]));
         assert_eq!(
-            extract_content_globs(&meta),
-            vec![
-                "a/*.qmd".to_string(),
-                "b/*.qmd".to_string(),
-                "c/*.qmd".to_string(),
-            ]
+            glob_patterns(&flatten_content_globs(&meta)),
+            vec!["a/*.qmd", "b/*.qmd", "c/*.qmd"]
         );
     }
 
@@ -1319,7 +1695,7 @@ mod tests {
             "contents",
             arr(vec![map(vec![("title", s("foo"))]), s("*.qmd")]),
         )]));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 
     /// `listing: false` → no globs (parse_listings emits Q-12-6
@@ -1327,21 +1703,21 @@ mod tests {
     #[test]
     fn extract_globs_listing_false_is_empty() {
         let meta = meta_with_listing(b(false));
-        assert!(extract_content_globs(&meta).is_empty());
+        assert!(flatten_content_globs(&meta).is_empty());
     }
 
     /// Meta with no `listing:` key → empty globs.
     #[test]
     fn extract_globs_no_listing_key_is_empty() {
         let meta = map(vec![("title", s("Hello"))]);
-        assert!(extract_content_globs(&meta).is_empty());
+        assert!(flatten_content_globs(&meta).is_empty());
     }
 
     /// `contents:` as a single string (not an array) — `parse_contents`
-    /// accepts this shape; `extract_content_globs` must agree.
+    /// accepts this shape; `flatten_content_globs` must agree.
     #[test]
     fn extract_globs_handles_string_shorthand_contents() {
         let meta = meta_with_listing(map(vec![("contents", s("*.qmd"))]));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 }

@@ -13,15 +13,19 @@
 //! walks the *block-level* shortcodes for the same shape
 //! [`IncludeExpansionStage`] uses:
 //!
-//!   - a `Block::Paragraph` containing exactly one inline,
+//!   - a `Block::Paragraph` or `Block::Plain` containing exactly one
+//!     inline (`Plain` covers tight list items and table cells),
 //!   - that inline is an `Inline::Shortcode`,
 //!   - the shortcode's `name` is `"include"`,
-//!   - the first positional argument is a string.
+//!   - the first positional argument is a string,
+//!   - at **any block-list position** — top level or nested inside
+//!     divs, blockquotes, list items, tables, … (bd-1fz3vh99).
 //!
-//! Reusing [`extract_include_path`](quarto_core::stage::stages::extract_include_path)
-//! keeps the recognition rules in lock-step with what the renderer
-//! actually treats as an include — no drift between "this file is a
-//! dep" and "this include actually expands at render time." Going
+//! Reusing [`collect_include_paths`](quarto_core::stage::stages::collect_include_paths)
+//! keeps both the recognition rules and the traversal in lock-step
+//! with what the renderer actually treats as an include — no drift
+//! between "this file is a dep" and "this include actually expands
+//! at render time." Going
 //! through the AST (rather than regex over raw text) is also what
 //! the Q1→Q2 migration is about: operate on the parsed syntax, not
 //! on substrings.
@@ -46,7 +50,7 @@
 //! that includes too many is just the pre-D.6 behaviour, so we'd
 //! rather over-broadcast than fail closed.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use axum::{
     Json,
@@ -54,7 +58,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use quarto_core::stage::stages::extract_include_path;
+use quarto_core::stage::stages::collect_include_paths;
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_hub::context::SharedContext;
 use serde::{Deserialize, Serialize};
@@ -134,11 +138,15 @@ pub async fn deps_handler(
 /// Extract include-shortcode dependencies from a qmd source.
 ///
 /// Parses `source` into a Pandoc AST via `pampa::readers::qmd::read`,
-/// then walks the top-level blocks for the same "is this an include
-/// shortcode?" shape [`IncludeExpansionStage`] uses (via the shared
-/// [`extract_include_path`] helper). Paths are resolved relative to
-/// `page_rel`'s directory and emitted as forward-slash
-/// project-relative strings, deduplicated and sorted.
+/// then walks every block-list position for the same "is this an
+/// include shortcode?" shape [`IncludeExpansionStage`] uses (via the
+/// shared [`collect_include_paths`] walker, which mirrors the
+/// expander's traversal exactly). That includes the *text* of code
+/// fences, where a lone `{{< include … >}}` line embeds a source file
+/// as a listing (bd-include-in-code-block-f8mvtczn) — those targets are
+/// dependencies too. Paths are resolved relative to `page_rel`'s
+/// directory and emitted as forward-slash project-relative strings,
+/// deduplicated and sorted.
 ///
 /// On parse failure, returns an empty list — see the module-level
 /// fail-open rationale.
@@ -158,7 +166,7 @@ pub fn extract_include_deps(source: &[u8], page_rel: &str) -> Vec<String> {
         None,  // parent SourceInfo
     );
 
-    let Ok((pandoc, _ast_context, _warnings)) = parse_result else {
+    let Ok((mut pandoc, _ast_context, _warnings)) = parse_result else {
         // bd-b9kzg: parse failures surface to the SPA via the
         // per-page sink in addition to the existing tracing line.
         // Pampa's parser is robust enough that this branch is
@@ -194,17 +202,27 @@ pub fn extract_include_deps(source: &[u8], page_rel: &str) -> Vec<String> {
         .map(Path::to_path_buf)
         .unwrap_or_default();
 
-    let mut deps: Vec<String> = pandoc
-        .blocks
-        .iter()
-        .filter_map(extract_include_path)
+    // `collect_include_paths` takes `&mut` so it can share the
+    // expander's container-position accessor (see its docs); we own
+    // this freshly-parsed AST, so that costs nothing.
+    let mut deps: Vec<String> = collect_include_paths(&mut pandoc.blocks)
+        .into_iter()
         .map(|raw| {
-            // Resolve relative to the page's directory and emit a
-            // forward-slash project-relative path. We don't
-            // canonicalize against the filesystem — the SPA matches
-            // these strings against paths from `onFileContent`,
-            // which arrive in the same forward-slash form.
-            let joined = page_dir.join(&raw);
+            // Resolve to a forward-slash project-relative path,
+            // mirroring `IncludeExpansionStage`'s anchors
+            // (bd-w9koo1i2): a leading `/` (or `\`) is
+            // project-root-relative — dep strings are already
+            // project-relative, so the root anchor means dropping the
+            // slash, NOT prepending the page dir. Anything else is
+            // page-relative. We don't canonicalize against the
+            // filesystem — the SPA matches these strings against
+            // paths from `onFileContent`, which arrive in the same
+            // forward-slash form.
+            let joined = if raw.starts_with('/') || raw.starts_with('\\') {
+                PathBuf::from(raw.replace('\\', "/").trim_start_matches('/'))
+            } else {
+                page_dir.join(&raw)
+            };
             normalize_forward_slash(&joined)
         })
         .collect();
@@ -283,6 +301,20 @@ mod tests {
     }
 
     #[test]
+    fn project_absolute_include_is_project_relative_dep() {
+        // bd-w9koo1i2: a leading `/` is project-root-relative (Quarto
+        // path convention), and dep strings are project-relative
+        // forward-slash paths — so the leading slash strips and the
+        // page directory is NOT prepended.
+        let src = "# Post\n\n{{< include /sub/_includes/x.qmd >}}\n";
+        assert_eq!(
+            deps_for(src, "sub/doc.qmd"),
+            vec!["sub/_includes/x.qmd"],
+            "leading-/ include must anchor at the project root, not the page dir"
+        );
+    }
+
+    #[test]
     fn multiple_includes_deduped_and_sorted() {
         let src = "# Mix\n\n{{< include z.qmd >}}\n\n{{< include a.qmd >}}\n\n{{< include z.qmd >}}\n\n{{< include \"m.qmd\" >}}\n";
         assert_eq!(deps_for(src, "index.qmd"), vec!["a.qmd", "m.qmd", "z.qmd"]);
@@ -312,13 +344,48 @@ mod tests {
     }
 
     #[test]
-    fn include_inside_code_block_is_not_a_dep() {
-        // Shortcode syntax inside a fenced code block is just text;
-        // the AST walker only sees a `Block::CodeBlock`, no
-        // shortcode inlines. (The regex implementation we replaced
-        // would have incorrectly matched this — that's the bug the
-        // AST-based approach fixes.)
-        let src = "# A\n\n```\n{{< include foo.qmd >}}\n```\n";
+    fn includes_nested_in_containers_are_deps() {
+        // bd-1fz3vh99: the renderer expands includes at every
+        // block-list position (divs, blockquotes, list items), so the
+        // dep filter must see them too — otherwise nested includes
+        // mean stale previews, the exact bug class this module
+        // exists to prevent.
+        let src = "# A\n\n\
+            ::: {.callout-note}\n{{< include in-div.qmd >}}\n:::\n\n\
+            > {{< include in-quote.qmd >}}\n\n\
+            - {{< include in-list.qmd >}}\n- other\n";
+        assert_eq!(
+            deps_for(src, "index.qmd"),
+            vec!["in-div.qmd", "in-list.qmd", "in-quote.qmd"]
+        );
+    }
+
+    #[test]
+    fn include_inside_code_block_is_a_dep() {
+        // bd-include-in-code-block-f8mvtczn: a lone include inside a
+        // fence splices the target's text into the listing (the Q1
+        // idiom for embedding a source file), so the embedded file is
+        // a real dependency — editing it must rebuild the page that
+        // shows it. This reverses the earlier contract, when a fence
+        // include was inert text.
+        let src = "# A\n\n```{.python}\n{{< include app.py >}}\n```\n";
+        assert_eq!(deps_for(src, "index.qmd"), vec!["app.py"]);
+    }
+
+    #[test]
+    fn include_inside_opted_out_code_block_is_not_a_dep() {
+        // `shortcodes="false"` means the fence displays the syntax
+        // rather than expanding it, so there is nothing to depend on.
+        let src = "# A\n\n```{.markdown shortcodes=\"false\"}\n{{< include app.py >}}\n```\n";
+        assert!(deps_for(src, "index.qmd").is_empty());
+    }
+
+    #[test]
+    fn mid_line_include_inside_code_block_is_not_a_dep() {
+        // Recognition is line-strict (Q1's `isBlockShortcode`), so a
+        // shortcode sharing its line with code is inert text and
+        // contributes no dependency.
+        let src = "# A\n\n```{.python}\nx = 1  {{< include app.py >}}\n```\n";
         assert!(deps_for(src, "index.qmd").is_empty());
     }
 

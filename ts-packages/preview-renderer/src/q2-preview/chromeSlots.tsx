@@ -94,21 +94,35 @@ FooterSlot.displayName = 'FooterSlot';
  * into `meta.rendered.navigation.toc`. The wrapping
  * `<div id="quarto-margin-sidebar"><nav id="TOC"><h2>...</h2>`
  * is supplied by the template (template.rs:189-200), so this slot
- * only fills the inner `<ul>`. Memo keyed on (html, title) so a
+ * only fills the inner `<ul>`. Memo keyed on (html, titleHtml) so a
  * `toc-title:` edit re-renders correctly without tearing the DOM
  * for content edits.
+ *
+ * `titleHtml` is HTML, not text: `toc-title` carries inline markup
+ * (`toc-title: "On **this** page"`), so `TocRenderTransform` renders
+ * it to `meta.rendered.navigation.toc-title` and both this slot and
+ * `q2 render`'s template read that one value
+ * (bd-toc-smart-quotes-6nro57ed). It is writer output, escaped at the
+ * source, which is the same trust boundary as `html` above.
  */
-export const TocSlot = memo(({ html, title }: SlotProps & { title: string }) => (
-    <div
-        id="quarto-margin-sidebar"
-        className="sidebar margin-sidebar"
-    >
-        <nav id="TOC" role="doc-toc" className="toc-active">
-            {title && <h2 id="toc-title">{title}</h2>}
-            <div dangerouslySetInnerHTML={{ __html: html }} />
-        </nav>
-    </div>
-));
+export const TocSlot = memo(
+    ({ html, titleHtml }: SlotProps & { titleHtml: string }) => (
+        <div
+            id="quarto-margin-sidebar"
+            className="sidebar margin-sidebar"
+        >
+            <nav id="TOC" role="doc-toc" className="toc-active">
+                {titleHtml && (
+                    <h2
+                        id="toc-title"
+                        dangerouslySetInnerHTML={{ __html: titleHtml }}
+                    />
+                )}
+                <div dangerouslySetInnerHTML={{ __html: html }} />
+            </nav>
+        </div>
+    ),
+);
 TocSlot.displayName = 'TocSlot';
 
 interface HeaderIncludesProps {

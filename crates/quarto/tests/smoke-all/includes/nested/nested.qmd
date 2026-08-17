@@ -1,0 +1,24 @@
+---
+title: Nested Include Expansion
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["div.callout-note p", "ul li p, ul li"]
+      ensureFileRegexMatches:
+        - ["NESTED-DIV-MARKER-XYZ", "NESTED-DIV-SECOND-XYZ", "NESTED-LIST-MARKER-XYZ"]
+        - ["Q-17-4", "not expanded"]
+---
+
+Include inside a callout:
+
+::: {.callout-note}
+{{< include _snippet.qmd >}}
+:::
+
+Include inside a list item:
+
+- {{< include _item.qmd >}}
+- plain second item

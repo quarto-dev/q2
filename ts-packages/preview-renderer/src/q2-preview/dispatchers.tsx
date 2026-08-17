@@ -376,7 +376,7 @@ function EditTextarea({
             }}
             onCompositionStart={() => { isComposingRef.current = true; }}
             onCompositionEnd={() => { isComposingRef.current = false; }}
-            onBlur={() => {
+            onBlur={(e) => {
                 // Do not commit mid-IME-composition (e.g. mobile dismiss before compositionend).
                 if (isComposingRef.current) return;
                 // A rich/plain surface swap is not a commit (Phase 1a) — the swap
@@ -387,6 +387,14 @@ function EditTextarea({
                 // the editor — all in one shot. Returns true when consumed (skip normal path).
                 if (ctx.handleClickSwitchBlur?.(draft)) {
                     return; // dirty click-switch handled — do NOT also focus-restore or commitIfDirty
+                }
+                // Focus moved into UI that owns its focus (e.g. the
+                // comment popup, marked [data-q2-owns-focus]) — commit,
+                // but do NOT arm the focus-restore timer that would
+                // steal focus back from it.
+                if ((e.relatedTarget as Element | null)?.closest?.('[data-q2-owns-focus]')) {
+                    commitIfDirty(draft);
+                    return;
                 }
                 // P2.4c: stash focus restore BEFORE commitIfDirty closes the editor.
                 // requestFocusRestore only stashes the landing + arms the timer;

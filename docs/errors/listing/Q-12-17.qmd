@@ -1,0 +1,45 @@
+---
+title: "Listing Contents Pattern Outside Project"
+description: "A listing `contents:` pattern resolves outside the project directory; it matches nothing."
+code: Q-12-17
+subsystem: listing
+status: stub
+since: "99.9.9"
+categories:
+  - listing
+---
+
+# `Q-12-17` — Listing Contents Pattern Outside Project
+
+> A listing `contents:` pattern resolves outside the project
+> directory and matches nothing.
+
+## What this means
+
+Each pattern in a listing's `contents:` list resolves relative to
+the directory of the file it is written in — the listing page's
+own directory for front-matter patterns, the directory holding a
+`_metadata.yml`, or the project root for patterns in
+`_quarto.yml`. A pattern may climb toward the project root with
+`..` segments (for example `../posts/*.qmd`), but it may not
+climb *above* the project root. A pattern that does — say
+`../../*.qmd` written next to `_quarto.yml` — cannot refer to any
+project document, so it matches nothing and this warning fires.
+
+## Why this happens
+
+Usually one `..` too many: the pattern was written for a
+different directory layout, or moved along with its file into a
+shallower directory.
+
+## How to fix
+
+Count the `..` segments against the location of the file the
+pattern is written in, and adjust the pattern so it stays within
+the project directory. Files outside the project cannot appear in
+a listing; if the content you want to list lives outside the
+project, move it into the project's directory tree.
+
+## Related
+
+- `Q-12-2` — inline `contents:` records are not yet supported.

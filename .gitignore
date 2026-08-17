@@ -72,3 +72,6 @@ CLAUDE.local.md
 # already-tracked file.
 crates/quarto-core/tests/fixtures/extensions/*/dist/
 resources/extension-build/deno.lock
+
+# Posit Assistant per-machine settings
+.posit/assistant/settings.json

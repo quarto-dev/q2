@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="quarto-rust-0.10.0">
+<meta name="author" content="Someone">
+<meta name="dcterms.date" content="2026-07-21">
+<title>Audit fixture</title>
+<link rel="stylesheet" href="kitchen-sink_files/styles.css">
+<script src="kitchen-sink_files/bootstrap.bundle.min.js"></script>
+<script src="kitchen-sink_files/clipboard.min.js"></script>
+<script src="kitchen-sink_files/code-copy-init.js"></script>
+</head>
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Audit fixture</h1>
+</div>
+<div class="quarto-title-meta">
+<div>
+<div class="quarto-title-meta-heading">Author</div>
+<div class="quarto-title-meta-contents">
+<p>Someone</p>
+</div>
+</div>
+<div>
+<div class="quarto-title-meta-heading">Published</div>
+<div class="quarto-title-meta-contents">
+<p class="date">July 21, 2026</p>
+</div>
+</div>
+</div>
+<div>
+<div class="abstract">
+<div class="block-title">Abstract</div>
+<p>An abstract paragraph.</p>
+</div>
+</div>
+
+</header>
+
+
+<section id="sec-figs" class="section level2">
+<h2>Figures</h2>
+<div id="fig-a" class="quarto-float quarto-figure quarto-figure-center">
+<figure class="quarto-float quarto-float-fig">
+<div aria-describedby="fig-a-caption">
+<img src="img.png" alt="A figure caption" />
+</div>
+<figcaption id="fig-a-caption" class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig">
+A figure caption
+</figcaption>
+</figure>
+</div>
+<p>Section 1: See <a href="#fig-a" class="quarto-xref">Figure 1</a>, <a href="#tbl-t" class="quarto-xref">Table 1</a>, and the unresolved <a href="#fig-nope" class="quarto-xref">?fig-nope?</a>.</p>
+</section>
+<section id="tables" class="section level2">
+<h2>Tables</h2>
+<div id="tbl-t" class="quarto-float quarto-figure quarto-figure-center">
+<figure class="quarto-float quarto-float-tbl">
+<div aria-describedby="tbl-t-caption">
+<table class="caption-top table">
+<caption>
+A table caption
+</caption>
+<thead>
+<tr class="header">
+<th>a
+</th>
+<th>b
+</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1
+</td>
+<td>2
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figcaption id="tbl-t-caption" class="quarto-float-caption-bottom quarto-float-caption quarto-float-tbl">
+A table caption
+</figcaption>
+</figure>
+</div>
+</section>
+<section id="code" class="section level2">
+<h2>Code</h2>
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode code-with-copy"><pre class="sourceCode python"><code class="sourceCode python"><span class="hl-function-builtin">print</span>(<span class="hl-string">&quot;hello&quot;</span>)</code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+<p>Inline <code>code span</code> and a <a href="https://example.com">link</a>.</p>
+</section>
+<section id="task-list" class="section level2">
+<h2>Task list</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />todo item</label></li>
+<li><label><input type="checkbox" checked="" />done item</label></li>
+</ul>
+</section>
+<section id="footnote" class="section level2">
+<h2>Footnote</h2>
+<p>Text with a footnote.<span id="fnref1"><sup><a href="#fn1" class="footnote-ref" role="doc-noteref">1</a></sup></span></p>
+</section>
+<section id="columns" class="section level2">
+<h2>Columns</h2>
+<div class="columns">
+<div class="column" width="50%">
+<p>left column</p>
+</div>
+<div class="column" width="50%">
+<p>right column</p>
+</div>
+</div>
+</section>
+<section id="layout-panel" class="section level2">
+<h2>Layout panel</h2>
+<div data-layout-ncol="2">
+<figure>
+<img src="img.png" alt="left fig" />
+<figcaption>
+left fig
+</figcaption>
+</figure>
+<figure>
+<img src="img.png" alt="right fig" />
+<figcaption>
+right fig
+</figcaption>
+</figure>
+</div>
+</section>
+<section id="callout" class="section level2">
+<h2>Callout</h2>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>A callout with code:</p>
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode code-with-copy"><pre class="sourceCode r"><code class="sourceCode r"><span class="hl-variable">x</span> <span class="hl-operator">&lt;-</span> <span class="hl-number">1</span></code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+</div>
+</div>
+</section>
+<section id="mermaid" class="section level2">
+<h2>Mermaid</h2>
+<pre class="mermaid">
+flowchart LR
+  a --&gt; b
+</pre>
+</section>
+<section id="raw-details" class="section level2">
+<h2>Raw details</h2>
+<p><details><summary>More</summary>
+Hidden content.
+</details></p>
+</section>
+<section id="dark-content" class="section level2">
+<h2>Dark content</h2>
+<div class="dark-content">
+<p>Only in dark mode.</p>
+</div>
+</section>
+<div id="quarto-appendix" class="default">
+<section id="footnotes" class="footnotes section" role="doc-endnotes">
+<hr />
+<ol type="1">
+<li><div id="fn1">
+<p>The footnote body.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p>
+</div>
+</li>
+</ol>
+</section>
+</div>
+
+</main>
+</div>
+<!-- quarto-mermaid-js -->
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: false });
+mermaid.run({ querySelector: 'pre.mermaid' });
+</script>
+</body>
+</html>

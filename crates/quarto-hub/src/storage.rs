@@ -193,6 +193,43 @@ fn decode_secret_hex(hex: &str, source: &str) -> Result<[u8; 32]> {
     })
 }
 
+/// Generate a fresh random 32-byte secret.
+fn generate_secret() -> [u8; 32] {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    bytes
+}
+
+/// How a [`StorageManager`] treats the two signing secrets it resolves at
+/// startup (the server secret for actor-id derivation and the session
+/// secret for session-cookie signing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SecretPolicy {
+    /// Resolve from env / `hub.json`, auto-generating **and persisting** on
+    /// first run with a loud warning: the secret is now pinned to the data
+    /// directory, so multi-instance deployments must keep it in sync. The
+    /// right policy for real hub servers.
+    Persist,
+    /// Resolve from env if set, else generate fresh per process. Never
+    /// persisted to `hub.json`, never warned about: the data directory is
+    /// per-session, so pinning is meaningless. The right policy for
+    /// short-lived embedded hubs (`q2 preview`).
+    Ephemeral,
+}
+
+/// Ephemeral secret resolution: the env var if set (same highest-priority
+/// override as the persistent path), else fresh random bytes. Never touches
+/// `hub.json`, never warns — see [`SecretPolicy::Ephemeral`].
+fn resolve_ephemeral_secret(env_var: &str) -> Result<[u8; 32]> {
+    if let Ok(hex) = std::env::var(env_var) {
+        return decode_secret_hex(&hex, env_var);
+    }
+    let bytes = generate_secret();
+    debug!(env_var, "generated ephemeral secret (not persisted)");
+    Ok(bytes)
+}
+
 /// Resolve the server secret for HMAC actor ID derivation.
 ///
 /// Resolution order (highest priority first):
@@ -215,11 +252,20 @@ pub fn resolve_server_secret(config: &mut HubStorageConfig, hub_dir: &Path) -> R
     }
 
     // 3. Auto-generate, persist, and return
-    use rand::RngCore;
-    let mut bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
+    let bytes = generate_secret();
     config.server_secret = Some(hex::encode(bytes));
     config.save(hub_dir)?;
+    // Loud because it is now pinned to *this* data directory: a second
+    // instance with its own generated secret derives a different actor ID
+    // for the same user in the same project. The value itself is never
+    // logged.
+    warn!(
+        hub_dir = %hub_dir.display(),
+        "generated a new server secret and persisted it to hub.json. \
+         Multi-instance deployments must set QUARTO_HUB_SERVER_SECRET to \
+         the same value on every instance; otherwise each derives its own \
+         actor IDs."
+    );
     Ok(bytes)
 }
 
@@ -245,11 +291,22 @@ pub fn resolve_session_secret(config: &mut HubStorageConfig, hub_dir: &Path) -> 
     }
 
     // 3. Auto-generate, persist, and return
-    use rand::RngCore;
-    let mut bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
+    let bytes = generate_secret();
     config.session_secret = Some(hex::encode(bytes));
     config.save(hub_dir)?;
+    // The multi-instance hazard this warns about is genuinely hard to
+    // diagnose from symptoms: two hubs with divergent generated secrets
+    // reject each other's session cookies and sealed login blobs, so
+    // sign-in fails intermittently and heals itself on retry. Its audit
+    // signature is a run of `*_kid_mismatch`. The value itself is never
+    // logged.
+    warn!(
+        hub_dir = %hub_dir.display(),
+        "generated a new session secret and persisted it to hub.json — it is \
+         now pinned to this data directory. Multi-instance deployments must \
+         set QUARTO_HUB_SESSION_SECRET to the same value on every instance; \
+         otherwise instances reject each other's session cookies."
+    );
     Ok(bytes)
 }
 
@@ -384,7 +441,7 @@ impl StorageManager {
 
         let hub_dir = project_root.join(".quarto").join("hub");
 
-        Self::init(Some(project_root), hub_dir)
+        Self::init(Some(project_root), hub_dir, SecretPolicy::Persist)
     }
 
     /// Create a StorageManager for standalone mode (no local project).
@@ -396,7 +453,7 @@ impl StorageManager {
     pub fn new_standalone(data_dir: impl AsRef<Path>) -> Result<Self> {
         let hub_dir = data_dir.as_ref().to_path_buf();
 
-        Self::init(None, hub_dir)
+        Self::init(None, hub_dir, SecretPolicy::Persist)
     }
 
     /// Create a StorageManager for project mode with an explicit data dir.
@@ -416,11 +473,48 @@ impl StorageManager {
             return Err(Error::ProjectNotFound(project_root));
         }
         let hub_dir = data_dir.as_ref().to_path_buf();
-        Self::init(Some(project_root), hub_dir)
+        Self::init(Some(project_root), hub_dir, SecretPolicy::Persist)
+    }
+
+    /// Create a StorageManager for standalone mode (no local project)
+    /// with **ephemeral secrets**: the server and session secrets are
+    /// resolved per process — from the `QUARTO_HUB_SERVER_SECRET` /
+    /// `QUARTO_HUB_SESSION_SECRET` env vars when set, otherwise freshly
+    /// generated — and are never persisted to `hub.json`.
+    ///
+    /// Use this for short-lived embedded hubs (e.g. `q2 preview`) whose
+    /// data directory is deleted on exit: a persisted secret would pin
+    /// nothing, so the multi-instance warning emitted by
+    /// [`new_standalone`](Self::new_standalone) would be noise.
+    pub fn new_standalone_ephemeral(data_dir: impl AsRef<Path>) -> Result<Self> {
+        let hub_dir = data_dir.as_ref().to_path_buf();
+
+        Self::init(None, hub_dir, SecretPolicy::Ephemeral)
+    }
+
+    /// Create a StorageManager for project mode with an explicit data dir
+    /// and **ephemeral secrets** — see
+    /// [`new_standalone_ephemeral`](Self::new_standalone_ephemeral) for the
+    /// secret semantics. Used by `q2 preview`, which watches the project
+    /// but keeps samod storage in a per-session `TempDir`.
+    pub fn new_with_data_dir_ephemeral(
+        project_root: impl AsRef<Path>,
+        data_dir: impl AsRef<Path>,
+    ) -> Result<Self> {
+        let project_root = project_root.as_ref().to_path_buf();
+        if !project_root.exists() {
+            return Err(Error::ProjectNotFound(project_root));
+        }
+        let hub_dir = data_dir.as_ref().to_path_buf();
+        Self::init(Some(project_root), hub_dir, SecretPolicy::Ephemeral)
     }
 
     /// Shared initialization logic for both project and standalone modes.
-    fn init(project_root: Option<PathBuf>, hub_dir: PathBuf) -> Result<Self> {
+    fn init(
+        project_root: Option<PathBuf>,
+        hub_dir: PathBuf,
+        secret_policy: SecretPolicy,
+    ) -> Result<Self> {
         fs::create_dir_all(&hub_dir).map_err(Error::CreateHubDir)?;
 
         // The hub dir holds signing secrets (`hub.json`). In project mode it
@@ -453,11 +547,20 @@ impl StorageManager {
         // Load or create hub config
         let mut config = HubStorageConfig::load_or_create(&hub_dir)?;
 
-        // Resolve and cache the server secret for HMAC actor ID derivation.
-        let server_secret = resolve_server_secret(&mut config, &hub_dir)?;
-
-        // Resolve and cache the session-token signing secret.
-        let session_secret = resolve_session_secret(&mut config, &hub_dir)?;
+        // Resolve and cache the server secret (HMAC actor ID derivation)
+        // and the session-token signing secret. Ephemeral hubs keep both
+        // in memory only: nothing is persisted to hub.json, and the
+        // multi-instance pinning warning does not apply.
+        let (server_secret, session_secret) = match secret_policy {
+            SecretPolicy::Persist => (
+                resolve_server_secret(&mut config, &hub_dir)?,
+                resolve_session_secret(&mut config, &hub_dir)?,
+            ),
+            SecretPolicy::Ephemeral => (
+                resolve_ephemeral_secret("QUARTO_HUB_SERVER_SECRET")?,
+                resolve_ephemeral_secret("QUARTO_HUB_SESSION_SECRET")?,
+            ),
+        };
 
         if let Some(ref project_root) = project_root {
             info!(
@@ -1041,5 +1144,257 @@ mod tests {
         // Should have generated a new secret
         assert_eq!(secret.len(), 32);
         assert!(config.server_secret.is_some());
+    }
+
+    // ── auto-generation is loud (E3, bd-sx7k3vid) ─────────────────
+
+    /// Run `f` under a scoped subscriber that captures formatted output,
+    /// so we can assert on what an operator would actually see.
+    fn capture_logs(f: impl FnOnce()) -> String {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone)]
+        struct BufWriter(Arc<Mutex<Vec<u8>>>);
+        impl Write for BufWriter {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for BufWriter {
+            type Writer = BufWriter;
+            fn make_writer(&'a self) -> Self::Writer {
+                self.clone()
+            }
+        }
+
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(BufWriter(buf.clone()))
+            .with_ansi(false)
+            .with_max_level(tracing::Level::TRACE)
+            .finish();
+        tracing::subscriber::with_default(subscriber, f);
+        String::from_utf8(buf.lock().unwrap().clone()).unwrap()
+    }
+
+    fn fresh_hub_dir() -> (TempDir, PathBuf) {
+        let temp = TempDir::new().unwrap();
+        let hub_dir = temp.path().join("hub");
+        fs::create_dir_all(&hub_dir).unwrap();
+        (temp, hub_dir)
+    }
+
+    /// Two hubs that each auto-generate their own session secret reject
+    /// each other's cookies and sealed login blobs — an intermittent,
+    /// self-healing sign-in failure whose audit signature
+    /// (`login_state_kid_mismatch`) gives no hint about the cause. The
+    /// warning is the only thing that surfaces it at the moment the
+    /// secret gets pinned to one data directory.
+    #[test]
+    fn resolve_session_secret_warns_when_it_generates_one() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        let (_temp, hub_dir) = fresh_hub_dir();
+        let mut config = HubStorageConfig::new();
+        let logs = capture_logs(|| {
+            resolve_session_secret(&mut config, &hub_dir).unwrap();
+        });
+
+        assert!(logs.contains("WARN"), "must be a warning: {logs}");
+        assert!(
+            logs.contains("QUARTO_HUB_SESSION_SECRET"),
+            "must name the way out: {logs}"
+        );
+        assert!(
+            logs.contains(&hub_dir.display().to_string()),
+            "must name the directory the secret is now pinned to: {logs}"
+        );
+
+        // Token contents are never logged, and neither is this.
+        let generated = config.session_secret.as_deref().unwrap();
+        assert!(
+            !logs.contains(generated),
+            "the secret value must never reach the log"
+        );
+    }
+
+    #[test]
+    fn resolve_session_secret_is_silent_when_a_secret_is_configured() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let (_temp, hub_dir) = fresh_hub_dir();
+
+        // Source 1: the env var — the multi-instance mechanism itself.
+        unsafe { std::env::set_var("QUARTO_HUB_SESSION_SECRET", hex::encode([3u8; 32])) };
+        let mut config = HubStorageConfig::new();
+        let env_logs = capture_logs(|| {
+            resolve_session_secret(&mut config, &hub_dir).unwrap();
+        });
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        // Source 2: an existing hub.json value — already pinned, nothing
+        // new to warn about.
+        let mut config = HubStorageConfig::new();
+        config.session_secret = Some(hex::encode([5u8; 32]));
+        let config_logs = capture_logs(|| {
+            resolve_session_secret(&mut config, &hub_dir).unwrap();
+        });
+
+        assert!(!env_logs.contains("WARN"), "env branch: {env_logs}");
+        assert!(
+            !config_logs.contains("WARN"),
+            "config branch: {config_logs}"
+        );
+    }
+
+    #[test]
+    fn resolve_server_secret_warns_when_it_generates_one() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
+
+        let (_temp, hub_dir) = fresh_hub_dir();
+        let mut config = HubStorageConfig::new();
+        let logs = capture_logs(|| {
+            resolve_server_secret(&mut config, &hub_dir).unwrap();
+        });
+
+        assert!(logs.contains("WARN"), "must be a warning: {logs}");
+        assert!(
+            logs.contains("QUARTO_HUB_SERVER_SECRET"),
+            "must name the way out: {logs}"
+        );
+
+        let generated = config.server_secret.as_deref().unwrap();
+        assert!(
+            !logs.contains(generated),
+            "the secret value must never reach the log"
+        );
+    }
+
+    #[test]
+    fn resolve_server_secret_is_silent_when_a_secret_is_configured() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let (_temp, hub_dir) = fresh_hub_dir();
+
+        unsafe { std::env::set_var("QUARTO_HUB_SERVER_SECRET", hex::encode([4u8; 32])) };
+        let mut config = HubStorageConfig::new();
+        let env_logs = capture_logs(|| {
+            resolve_server_secret(&mut config, &hub_dir).unwrap();
+        });
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
+
+        let mut config = HubStorageConfig::new();
+        config.server_secret = Some(hex::encode([6u8; 32]));
+        let config_logs = capture_logs(|| {
+            resolve_server_secret(&mut config, &hub_dir).unwrap();
+        });
+
+        assert!(!env_logs.contains("WARN"), "env branch: {env_logs}");
+        assert!(
+            !config_logs.contains("WARN"),
+            "config branch: {config_logs}"
+        );
+    }
+
+    // ── ephemeral secret policy (bd-tp1l6a0w) ─────────────────────
+    //
+    // Short-lived embedded hubs (`q2 preview`) resolve secrets per
+    // process: never persisted to `hub.json`, never warned about. The
+    // multi-instance warning only makes sense for secrets pinned to a
+    // data directory.
+
+    #[test]
+    fn ephemeral_secrets_are_not_persisted_and_do_not_warn() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        // SAFETY: test-only env mutation, serialized by ENV_MUTEX.
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        let (_temp, hub_dir) = fresh_hub_dir();
+        let logs = capture_logs(|| {
+            let manager = StorageManager::new_standalone_ephemeral(&hub_dir).unwrap();
+            assert_eq!(manager.server_secret().len(), 32);
+            assert_eq!(manager.session_secret().len(), 32);
+        });
+
+        assert!(
+            !logs.contains("WARN"),
+            "ephemeral mode must not warn: {logs}"
+        );
+
+        // hub.json exists (load_or_create writes it) but carries no secrets.
+        let content = fs::read_to_string(hub_dir.join("hub.json")).unwrap();
+        let on_disk: HubStorageConfig = serde_json::from_str(&content).unwrap();
+        assert!(on_disk.server_secret.is_none());
+        assert!(on_disk.session_secret.is_none());
+    }
+
+    #[test]
+    fn ephemeral_secrets_are_distinct() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        // SAFETY: test-only env mutation, serialized by ENV_MUTEX.
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        let (_temp, hub_dir) = fresh_hub_dir();
+        let manager = StorageManager::new_standalone_ephemeral(&hub_dir).unwrap();
+        assert_ne!(
+            manager.server_secret(),
+            manager.session_secret().as_slice(),
+            "session secret must never equal the actor-id server secret"
+        );
+    }
+
+    #[test]
+    fn ephemeral_respects_env_override() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        let expected = [17u8; 32];
+        let hex = hex::encode(expected);
+        // SAFETY: test-only env mutation, serialized by ENV_MUTEX.
+        unsafe { std::env::set_var("QUARTO_HUB_SERVER_SECRET", &hex) };
+
+        let (_temp, hub_dir) = fresh_hub_dir();
+        let logs = capture_logs(|| {
+            let manager = StorageManager::new_standalone_ephemeral(&hub_dir).unwrap();
+            assert_eq!(manager.server_secret(), expected.as_slice());
+        });
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
+
+        assert!(!logs.contains("WARN"), "env override must not warn: {logs}");
+        let content = fs::read_to_string(hub_dir.join("hub.json")).unwrap();
+        let on_disk: HubStorageConfig = serde_json::from_str(&content).unwrap();
+        assert!(
+            on_disk.server_secret.is_none(),
+            "an env-provided secret must not be persisted"
+        );
+    }
+
+    #[test]
+    fn ephemeral_generates_fresh_secrets_each_boot() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        // SAFETY: test-only env mutation, serialized by ENV_MUTEX.
+        unsafe { std::env::remove_var("QUARTO_HUB_SERVER_SECRET") };
+        unsafe { std::env::remove_var("QUARTO_HUB_SESSION_SECRET") };
+
+        let (_temp, hub_dir) = fresh_hub_dir();
+
+        let (first_session, first_server) = {
+            let manager = StorageManager::new_standalone_ephemeral(&hub_dir).unwrap();
+            (*manager.session_secret(), manager.server_secret().to_vec())
+        }; // manager dropped → lock released
+
+        let manager = StorageManager::new_standalone_ephemeral(&hub_dir).unwrap();
+        assert_ne!(first_session, *manager.session_secret());
+        assert_ne!(first_server.as_slice(), manager.server_secret());
+
+        let content = fs::read_to_string(hub_dir.join("hub.json")).unwrap();
+        let on_disk: HubStorageConfig = serde_json::from_str(&content).unwrap();
+        assert!(on_disk.server_secret.is_none());
+        assert!(on_disk.session_secret.is_none());
     }
 }

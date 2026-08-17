@@ -28,7 +28,7 @@ use async_trait::async_trait;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use quarto_error_reporting::DiagnosticMessage;
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 
 use std::time::Duration;
 
@@ -37,7 +37,7 @@ use crate::engine::{
 };
 use crate::stage::{
     DocumentAst, EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage,
-    StageContext,
+    SourceType, StageContext,
 };
 use crate::trace_event;
 
@@ -194,6 +194,42 @@ impl Default for EngineExecutionStage {
     }
 }
 
+/// `Q-2-40`: a `.md` document asked for an engine it will never get.
+fn md_engine_ignored_diagnostic(
+    ignored: &[&str],
+    meta: &quarto_pandoc_types::ConfigValue,
+) -> DiagnosticMessage {
+    let plural = if ignored.len() == 1 { "" } else { "s" };
+    let mut builder =
+        DiagnosticMessageBuilder::warning("Engine Specification Ignored for Markdown Input")
+            .with_code("Q-2-40")
+            .problem(
+                "`.md` documents never execute engines; the engine specification \
+                 has no effect.",
+            )
+            .add_detail(format!("Requested engine{plural}: {}.", ignored.join(", ")))
+            .add_hint("Rename the file to `.qmd` if you need executable code.");
+    if let Some(source) = engine_spec_source(meta, ignored) {
+        builder = builder.with_location(source);
+    }
+    builder.build()
+}
+
+/// The metadata key to anchor `Q-2-40` at: the explicit `engine:`
+/// key if present, else the first engine-specific top-level key
+/// (`jupyter:` / `knitr:`) that put an engine in the sequence.
+fn engine_spec_source(
+    meta: &quarto_pandoc_types::ConfigValue,
+    ignored: &[&str],
+) -> Option<quarto_source_map::SourceInfo> {
+    let entries = meta.as_map_entries()?;
+    entries
+        .iter()
+        .find(|e| e.key == "engine")
+        .or_else(|| entries.iter().find(|e| ignored.contains(&e.key.as_str())))
+        .map(|e| e.key_source.clone())
+}
+
 #[async_trait(?Send)]
 impl PipelineStage for EngineExecutionStage {
     fn name(&self) -> &str {
@@ -269,6 +305,46 @@ impl PipelineStage for EngineExecutionStage {
                 .join(", ")
         );
 
+        // `.md` inputs never execute engines (bd-6d2wj4zp S5): the qmd
+        // dialect is fully supported in `.md`, but execution requires
+        // the `.qmd` extension. Any non-trivial engine spec — anything
+        // in the **detected** sequence other than the no-op `markdown` —
+        // is ignored with `Q-2-40`.
+        //
+        // Declared, not resolved, and the distinction is load-bearing:
+        // `resolve_engines` above derives its sequence from the languages
+        // actually present in the document, so a `.md` file with
+        // `engine: jupyter` but no code cells resolves to an *empty*
+        // sequence. Q-2-40 is about the spec the author wrote being
+        // ignored, so it reads the declared engines instead — covering
+        // both `engine:` and the top-level shorthand (`jupyter: …`), which
+        // this branch resolves against registry names rather than main's
+        // hardcoded KNOWN_ENGINES.
+        //
+        // Placement: after Step 1's *pure* resolver (no I/O, no engine
+        // load) but before Step 2 resolves each engine to an
+        // implementation. That is the merge-time equivalent of main's
+        // "before engine resolution" — Step 2 is where the
+        // availability-fallback warnings main wanted to avoid are raised.
+        if SourceType::from_path(&ctx.document.input) == Some(SourceType::Markdown) {
+            let declared =
+                crate::engine::explicitly_declared_engines(&doc_ast.ast.meta, &ctx.registry);
+            let ignored: Vec<&str> = declared
+                .iter()
+                .filter(|e| !e.is_markdown())
+                .map(|e| e.name.as_str())
+                .collect();
+            if !ignored.is_empty() {
+                ctx.add_diagnostic(md_engine_ignored_diagnostic(&ignored, &doc_ast.ast.meta));
+            }
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "`.md` input — engine execution skipped"
+            );
+            return Ok(PipelineData::DocumentAst(doc_ast));
+        }
+
         // Resolve the execute.timeout tri-state from metadata.
         let execute_timeout = resolve_execute_timeout(&doc_ast.ast.meta);
 
@@ -320,8 +396,12 @@ impl PipelineStage for EngineExecutionStage {
 
         // Thread the AST, the merged (multi-slot) ASTContext, and warnings
         // through the sequence. Slot 0 is the original `.qmd`; each engine
-        // appends one intermediate slot. `merged_context.filenames.len()`
-        // is the next FileId (files are added in lock-step with filenames).
+        // appends one intermediate slot. Note `filenames` and
+        // `source_context.files` are NOT in lock-step: MetadataMergeStage
+        // registers config files into `source_context` only (sparse hash
+        // ids), so intermediate FileIds must come from the source context's
+        // own `add_file*` return value, never from `filenames.len()`
+        // (bd-itj2mjkr).
         let DocumentAst {
             path,
             ast,
@@ -377,6 +457,13 @@ impl PipelineStage for EngineExecutionStage {
                 Some(ctx.project.dir.clone())
             })
             .with_engine_config(engine_config)
+            // The document's merged `execute:` scope — the default every
+            // cell option resolves against (bd-nn2fou8h). Read from the
+            // AST being serialized *this* iteration, so a second engine
+            // in a sequence sees the front matter of the input it is
+            // actually given, exactly as the jupyter engine's old
+            // front-matter re-parse did.
+            .with_execute_scope(ast.meta.get("execute").cloned())
             .with_source_info(qmd_source_info, source_context_arc.clone())
             .with_handled_languages(handled_languages)
             .with_cancellation(ctx.cancellation.clone())
@@ -384,7 +471,24 @@ impl PipelineStage for EngineExecutionStage {
             // P2-13: loud "owned-but-unrunnable" gate in partition_cells
             // fires only in a multi-engine sequence (|sequence| > 1).
             .with_multi_engine(multi_engine)
-            .with_metadata(document_metadata.clone());
+            .with_metadata(document_metadata.clone())
+            .with_project_env({
+                let mut pairs = crate::project::environment::env_for_subprocess(&ctx.project_env);
+                // QUARTO_PROFILE is applied unconditionally (it may
+                // override an inherited value): engine cells must see
+                // the normalized active set, exactly as Q1's env
+                // write-back guaranteed (bd-fu16z22k).
+                if let Some(value) = crate::project::project_profile::quarto_profile_env_value(
+                    &ctx.project.config.active_config_profiles,
+                ) {
+                    pairs.retain(|(k, _)| k != crate::project::project_profile::QUARTO_PROFILE_VAR);
+                    pairs.push((
+                        crate::project::project_profile::QUARTO_PROFILE_VAR.to_string(),
+                        value,
+                    ));
+                }
+                pairs
+            });
 
             trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
             let mut result = engine
@@ -516,11 +620,15 @@ impl PipelineStage for EngineExecutionStage {
                     PipelineError::stage_error_with_diagnostics(self.name(), diagnostics)
                 })?;
 
-            // Register this engine's intermediate as a new file slot. The
-            // next FileId is the current file count; `filenames` grows in
-            // lock-step with the source context.
-            let new_slot = quarto_source_map::FileId(merged_context.filenames.len());
-            if let Some(intermediate_file) = executed_ast_context
+            // Register this engine's intermediate as a new file slot, using
+            // the FileId the source context actually assigns. Deriving it
+            // from `filenames.len()` is wrong: sparse registrations —
+            // MetadataMergeStage's config files, added via
+            // `add_file_with_id` — grow `source_context.files` without
+            // growing `ast_context.filenames`, so in a project render the
+            // two counts diverge and the derived id lands on `_quarto.yml`'s
+            // dense slot (bd-itj2mjkr).
+            let new_slot = if let Some(intermediate_file) = executed_ast_context
                 .source_context
                 .get_file(quarto_source_map::FileId(0))
                 .cloned()
@@ -528,17 +636,17 @@ impl PipelineStage for EngineExecutionStage {
                 if let Some(info) = intermediate_file.file_info {
                     merged_context
                         .source_context
-                        .add_file_with_info(intermediate_name.clone(), info);
+                        .add_file_with_info(intermediate_name.clone(), info)
                 } else {
                     merged_context
                         .source_context
-                        .add_file(intermediate_name.clone(), None);
+                        .add_file(intermediate_name.clone(), None)
                 }
             } else {
                 merged_context
                     .source_context
-                    .add_file(intermediate_name.clone(), None);
-            }
+                    .add_file(intermediate_name.clone(), None)
+            };
             merged_context.filenames.push(intermediate_name);
             // Carry the executed parse's example-list counter forward; the
             // last engine's value wins so downstream numbering is coherent.
@@ -547,10 +655,18 @@ impl PipelineStage for EngineExecutionStage {
                 .set(executed_ast_context.example_list_counter.get());
 
             // Remap the executed AST's `FileId(0)` to this engine's slot.
-            // Kept original blocks keep their (lower) FileIds; new blocks
-            // reference `new_slot`.
+            // Kept original blocks keep their FileIds; new blocks reference
+            // `new_slot`. The remap is conditional (not additive): the
+            // executed AST is a fresh single-file parse, so `FileId(0)` is
+            // the only id it can legitimately contain — any other id (e.g. a
+            // quarto-yaml hash id that leaked in) must pass through
+            // untouched rather than be shifted into garbage.
             quarto_ast_reconcile::remap_file_ids(&mut executed_ast, &|id| {
-                quarto_source_map::FileId(id.0 + new_slot.0)
+                if id == quarto_source_map::FileId(0) {
+                    new_slot
+                } else {
+                    id
+                }
             });
 
             // Reconcile: keep unchanged content's source locations, take
@@ -819,7 +935,7 @@ mod tests {
         }
     }
 
-    fn make_test_context() -> StageContext {
+    fn make_test_context_for(input: &str) -> StageContext {
         use crate::format::Format;
         use crate::project::{DocumentInfo, ProjectContext};
         use std::sync::Arc;
@@ -834,10 +950,14 @@ mod tests {
 
             ..Default::default()
         };
-        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let doc = DocumentInfo::from_path(input);
         let format = Format::html();
 
         StageContext::new(runtime, format, project, doc).unwrap()
+    }
+
+    fn make_test_context() -> StageContext {
+        make_test_context_for("/project/test.qmd")
     }
 
     fn parse_qmd_to_ast(content: &[u8], path: &str) -> DocumentAst {
@@ -967,6 +1087,228 @@ mod tests {
             "expected a warning-severity diagnostic naming the unknown \
              override engine 'ghost'; got: {:?}",
             ctx.diagnostics
+        );
+    }
+
+    // ── `.md` inputs never execute engines (bd-6d2wj4zp S5) ──────
+    //
+    // An engine specification on a `.md` document is ignored with
+    // warning `Q-2-40`; execution is skipped entirely (no fallback
+    // warnings, no engine runs). A `.md` without engine metadata —
+    // or with the explicit no-op `engine: markdown` — stays silent.
+
+    #[tokio::test]
+    async fn md_with_engine_key_warns_and_skips_execution() {
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context_for("/project/notes.md");
+
+        let content = b"---\ntitle: Test\nengine: jupyter\n---\n\n# Hello\n\nWorld";
+        let doc_ast = parse_qmd_to_ast(content, "/project/notes.md");
+        let original_block_count = doc_ast.ast.blocks.len();
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().expect("Should be DocumentAst");
+
+        assert_eq!(
+            result.ast.blocks.len(),
+            original_block_count,
+            "AST passes through unexecuted"
+        );
+        assert_eq!(ctx.diagnostics.len(), 1, "{:?}", ctx.diagnostics);
+        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-2-40"));
+        let text = format!("{:?}", ctx.diagnostics[0]);
+        assert!(text.contains("jupyter"), "names the ignored engine: {text}");
+    }
+
+    #[tokio::test]
+    async fn md_with_engine_toplevel_key_warns() {
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context_for("/project/notes.md");
+
+        let content = b"---\ntitle: Test\njupyter:\n  kernel: python3\n---\n\n# Hello";
+        let doc_ast = parse_qmd_to_ast(content, "/project/notes.md");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        stage.run(input, &mut ctx).await.unwrap();
+
+        assert_eq!(ctx.diagnostics.len(), 1, "{:?}", ctx.diagnostics);
+        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-2-40"));
+    }
+
+    #[tokio::test]
+    async fn md_without_engine_metadata_is_silent() {
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context_for("/project/notes.md");
+
+        let content = b"---\ntitle: Test\n---\n\n# Hello\n\nWorld";
+        let doc_ast = parse_qmd_to_ast(content, "/project/notes.md");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        stage.run(input, &mut ctx).await.unwrap();
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+    }
+
+    #[tokio::test]
+    async fn md_with_explicit_markdown_engine_is_silent() {
+        // `engine: markdown` asks for exactly what `.md` does anyway;
+        // warning would be noise.
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context_for("/project/notes.md");
+
+        let content = b"---\ntitle: Test\nengine: markdown\n---\n\n# Hello";
+        let doc_ast = parse_qmd_to_ast(content, "/project/notes.md");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        stage.run(input, &mut ctx).await.unwrap();
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+    }
+
+    #[tokio::test]
+    async fn md_with_unknown_engine_gets_q_2_40_not_fallback_warning() {
+        // The `.md` skip happens before engine resolution, so the
+        // "not available in this build" fallback warning must not
+        // also fire.
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context_for("/project/notes.md");
+
+        let content = b"---\ntitle: Test\nengine: unknown-engine\n---\n\n# Hello";
+        let doc_ast = parse_qmd_to_ast(content, "/project/notes.md");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        stage.run(input, &mut ctx).await.unwrap();
+        assert_eq!(ctx.diagnostics.len(), 1, "{:?}", ctx.diagnostics);
+        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-2-40"));
+    }
+
+    // bd-itj2mjkr: engine-produced blocks must attribute to the engine
+    // intermediate's slot even when `MetadataMergeStage` has already
+    // registered config files into the SourceContext. Those hash-id
+    // registrations grow `source_context.files` without growing
+    // `ast_context.filenames`, so deriving the intermediate's FileId from
+    // `filenames.len()` points the remapped executed AST at whatever file
+    // occupies that dense slot (in a project render: `_quarto.yml`).
+    #[tokio::test]
+    async fn engine_blocks_attribute_to_intermediate_after_config_registration() {
+        use crate::engine::{EngineRegistry, ExecuteResult, ExecutionContext, ExecutionEngine};
+        use std::sync::Arc;
+
+        struct StubEngine;
+        impl ExecutionEngine for StubEngine {
+            fn name(&self) -> &str {
+                "stub"
+            }
+            fn execute(
+                &self,
+                input: &str,
+                _ctx: &ExecutionContext,
+            ) -> std::result::Result<ExecuteResult, crate::engine::ExecutionError> {
+                // Append a paragraph so reconcile yields engine-attributed
+                // blocks alongside kept originals.
+                Ok(ExecuteResult::new(format!(
+                    "{input}\n\nEngineProducedParagraph\n"
+                )))
+            }
+            fn claims_language(
+                &self,
+                language: &str,
+                _first_class: Option<&str>,
+            ) -> crate::engine::LanguageClaim {
+                if language == "stub" {
+                    crate::engine::LanguageClaim::Primary(1)
+                } else {
+                    crate::engine::LanguageClaim::None
+                }
+            }
+            fn is_available(&self) -> bool {
+                true
+            }
+        }
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(StubEngine));
+        // The stage is stateless on this branch: it reads the registry from
+        // `ctx.registry` rather than owning one, so main's
+        // `EngineExecutionStage::with_registry(...)` becomes `new()` plus an
+        // injected context registry.
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+
+        // The document needs a real code cell. On this branch a document with
+        // no computational languages short-circuits to a markdown passthrough
+        // with an *empty* engine sequence (`prepare_resolution`'s empty-scan
+        // return), so an `engine:` key alone no longer causes execution the
+        // way it did on main. The cell is incidental to what this test pins —
+        // the FileId attribution of engine-produced blocks — but without it
+        // the engine never runs and there is nothing to attribute.
+        // A `{stub}` cell is required: on this branch a document with no
+        // computational languages short-circuits to a markdown passthrough
+        // with an empty engine sequence (`prepare_resolution`'s empty-scan
+        // return), so an `engine:` key alone no longer causes execution the
+        // way it did on main. Same shape as
+        // `test_engine_execution_remaps_new_blocks_to_intermediate`: the cell
+        // language matches the engine name, which `claims_language` claims.
+        // The cell is incidental to what this test pins — FileId attribution
+        // of engine-produced blocks after a config registration — but without
+        // it the engine never runs and there is nothing to attribute.
+        let content =
+            b"---\ntitle: Test\nengine: stub\n---\n\n# Hello\n\n```{stub}\nx\n```\n\nWorld";
+        let mut doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        // Simulate MetadataMergeStage's project-config registration: a
+        // quarto-yaml hash FileId bound via add_file_with_id. This is the
+        // state every project render is in when the engine stage runs.
+        let config_path = "/project/_quarto.yml";
+        let config_id = quarto_yaml::file_id_for_filename(config_path);
+        doc_ast.ast_context.source_context.add_file_with_id(
+            config_id,
+            config_path.to_string(),
+            Some("project:\n  type: default\n".to_string()),
+        );
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage.run(input, &mut ctx).await.unwrap();
+        let result = output.into_document_ast().expect("Should be DocumentAst");
+
+        let engine_block = result
+            .ast
+            .blocks
+            .iter()
+            .find(|b| format!("{b:?}").contains("EngineProducedParagraph"))
+            .expect("engine-produced paragraph must be present");
+        let fid = engine_block
+            .source_info()
+            .root_file_id()
+            .expect("engine block must carry a resolvable FileId");
+        let file = result
+            .ast_context
+            .source_context
+            .get_file(fid)
+            .expect("engine block FileId must resolve in the source context");
+        assert!(
+            file.path.contains(".stub.rmarkdown"),
+            "engine-produced block must attribute to the engine intermediate, \
+             not `{}`",
+            file.path
+        );
+
+        // Control: a kept original block still attributes to the document.
+        let kept_block = result
+            .ast
+            .blocks
+            .iter()
+            .find(|b| format!("{b:?}").contains("Hello"))
+            .expect("original heading must be kept");
+        let kept_fid = kept_block.source_info().root_file_id().unwrap();
+        let kept_file = result
+            .ast_context
+            .source_context
+            .get_file(kept_fid)
+            .unwrap();
+        assert_eq!(
+            kept_file.path, "/project/test.qmd",
+            "kept original block must still attribute to the document"
         );
     }
 

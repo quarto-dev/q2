@@ -6,111 +6,117 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, render, cleanup } from '@testing-library/react';
-
-import type { SilentRenewalOpts } from './AuthProvider';
+import { render, cleanup, screen, waitFor } from '@testing-library/react';
 
 // Capture mock state at module scope so each test can inspect / drive it.
 let lastGoogleLoginProps: {
   ux_mode?: string;
   login_uri?: string;
+  nonce?: string;
 } | null = null;
 
-let lastOneTapOpts: {
-  onSuccess?: (response: { credential?: string }) => void;
-  onError?: () => void;
-  disabled?: boolean;
-  auto_select?: boolean;
-} | null = null;
+let googleLoginRenderCount = 0;
 
 const mockGoogleLogout = vi.fn();
 
 vi.mock('@react-oauth/google', () => ({
   GoogleLogin: (props: typeof lastGoogleLoginProps) => {
     lastGoogleLoginProps = props;
-    return null;
-  },
-  useGoogleOneTapLogin: (opts: typeof lastOneTapOpts) => {
-    lastOneTapOpts = opts;
+    googleLoginRenderCount += 1;
+    return <div data-testid="gis-button" />;
   },
   googleLogout: () => mockGoogleLogout(),
 }));
 
 import { googleAuthProvider } from './GoogleAuthProvider';
 
+/** Stub `fetch` with a successful `/auth/nonce` response. */
+function stubNonce(nonce: string) {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ nonce }),
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
 beforeEach(() => {
   lastGoogleLoginProps = null;
-  lastOneTapOpts = null;
+  googleLoginRenderCount = 0;
   mockGoogleLogout.mockClear();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe('GoogleAuthProvider.SignInButton', () => {
-  it('renders GoogleLogin in redirect mode with the given loginUri', () => {
+  it('renders GoogleLogin in redirect mode with the given loginUri', async () => {
+    stubNonce('nonce-abc');
     render(<googleAuthProvider.SignInButton loginUri="/auth/callback" />);
 
-    expect(lastGoogleLoginProps).not.toBeNull();
+    await waitFor(() => expect(lastGoogleLoginProps).not.toBeNull());
     expect(lastGoogleLoginProps?.ux_mode).toBe('redirect');
     expect(lastGoogleLoginProps?.login_uri).toBe('/auth/callback');
   });
+
+  it('fetches a nonce from the hub and passes it to GIS', async () => {
+    // Server-verified nonce (H2): GIS puts this in the ID token, and the
+    // hub's /auth/callback requires it to match the sealed cookie the
+    // same pre-flight set.
+    const fetchMock = stubNonce('nonce-xyz');
+    render(<googleAuthProvider.SignInButton loginUri="/auth/callback" />);
+
+    await waitFor(() => expect(lastGoogleLoginProps?.nonce).toBe('nonce-xyz'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('/auth/nonce');
+  });
+
+  it('does not render GIS before the nonce arrives', async () => {
+    // Load-bearing: @react-oauth/google forwards `nonce` into
+    // `google.accounts.id.initialize` from an effect whose dependency
+    // list does NOT include it. A nonce that arrives after the first
+    // render would therefore never reach GIS, and every login would fail
+    // the server check. Gating the render is what makes the prop stick.
+    let resolveFetch: (value: unknown) => void = () => {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockReturnValue(new Promise((resolve) => {
+        resolveFetch = resolve;
+      })),
+    );
+
+    render(<googleAuthProvider.SignInButton loginUri="/auth/callback" />);
+    expect(googleLoginRenderCount).toBe(0);
+    expect(lastGoogleLoginProps).toBeNull();
+
+    resolveFetch({ ok: true, json: async () => ({ nonce: 'late' }) });
+    await waitFor(() => expect(lastGoogleLoginProps?.nonce).toBe('late'));
+  });
+
+  it('shows an error instead of a nonce-less button when the pre-flight fails', async () => {
+    // Rendering GIS without a nonce would produce a login that always
+    // fails at the callback — worse than saying so up front.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    render(<googleAuthProvider.SignInButton loginUri="/auth/callback" />);
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeDefined());
+    expect(googleLoginRenderCount).toBe(0);
+  });
+
+  it('treats a non-OK pre-flight response as a failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    render(<googleAuthProvider.SignInButton loginUri="/auth/callback" />);
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeDefined());
+    expect(googleLoginRenderCount).toBe(0);
+  });
 });
 
-describe('GoogleAuthProvider.useSilentRenewal', () => {
-  function renderProviderHook(opts: SilentRenewalOpts) {
-    return renderHook(() => googleAuthProvider.useSilentRenewal(opts));
-  }
-
-  it('calls useGoogleOneTapLogin with auto_select:true and disabled:false when enabled', () => {
-    renderProviderHook({
-      enabled: true,
-      onCredential: vi.fn(),
-      onError: vi.fn(),
-    });
-
-    expect(lastOneTapOpts).not.toBeNull();
-    expect(lastOneTapOpts?.auto_select).toBe(true);
-    expect(lastOneTapOpts?.disabled).toBe(false);
-  });
-
-  it('calls useGoogleOneTapLogin with disabled:true when not enabled', () => {
-    renderProviderHook({
-      enabled: false,
-      onCredential: vi.fn(),
-      onError: vi.fn(),
-    });
-
-    expect(lastOneTapOpts?.disabled).toBe(true);
-  });
-
-  it('forwards onCredential when one-tap success carries a credential', () => {
-    const onCredential = vi.fn();
-    const onError = vi.fn();
-    renderProviderHook({ enabled: true, onCredential, onError });
-
-    lastOneTapOpts?.onSuccess?.({ credential: 'jwt-token' });
-    expect(onCredential).toHaveBeenCalledExactlyOnceWith('jwt-token');
-    expect(onError).not.toHaveBeenCalled();
-  });
-
-  it('forwards onError when one-tap success carries no credential', () => {
-    const onCredential = vi.fn();
-    const onError = vi.fn();
-    renderProviderHook({ enabled: true, onCredential, onError });
-
-    lastOneTapOpts?.onSuccess?.({});
-    expect(onError).toHaveBeenCalledTimes(1);
-    expect(onCredential).not.toHaveBeenCalled();
-  });
-
-  it('forwards onError on one-tap error', () => {
-    const onCredential = vi.fn();
-    const onError = vi.fn();
-    renderProviderHook({ enabled: true, onCredential, onError });
-
-    lastOneTapOpts?.onError?.();
-    expect(onError).toHaveBeenCalledTimes(1);
-    expect(onCredential).not.toHaveBeenCalled();
+describe('GoogleAuthProvider', () => {
+  it('exposes no silent-renewal hook (One-Tap renewal retired, bd-s042qcxj)', () => {
+    expect('useSilentRenewal' in googleAuthProvider).toBe(false);
   });
 });
 

@@ -1,0 +1,29 @@
+---
+title: Document-level shortcodes key
+format: html
+shortcodes:
+  - shorty.lua
+_quarto:
+  tests:
+    html:
+      ensureFileRegexMatches:
+        # `strong[^>]*>` not `strong>`: the hub preview renders with
+        # `source-location: full`, which puts data-sid/data-loc on the opening
+        # tag, so the text no longer sits flush against `>`. Both renderers
+        # must satisfy this pattern.
+        #
+        # The `!str` tag is load-bearing: assertion strings are otherwise
+        # parsed as markdown, and the `*` quantifier reads as an unclosed
+        # emphasis marker — [Q-1-20] Failed to parse metadata value as
+        # markdown. This fixture asserts noErrorsOrWarnings by default, so that
+        # warning fails it. (Verified: the same pattern with `+` instead of `*`
+        # parses clean, so the `*` is the trigger — not the brackets, which are
+        # fine on their own.)
+        - [!str "strong[^>]*>_bringit_", "Shortcode Error \\(shorty\\): error message", "Shortcode Error \\(shorty\\): error_args"]
+---
+
+{{< shorty _bringit_ >}}
+
+{{< shorty error >}}
+
+{{< shorty error_args >}}

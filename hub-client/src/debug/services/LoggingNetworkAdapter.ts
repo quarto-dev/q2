@@ -25,16 +25,19 @@ export class LoggingNetworkAdapter extends NetworkAdapter {
   #onMessage: MessageCallback
   #onConnection: ConnectionCallback
   #remotePeerId?: PeerId
+  #includeData: boolean
 
   constructor(
     wrapped: NetworkAdapter,
     onMessage: MessageCallback,
     onConnection: ConnectionCallback,
+    options?: { includeData?: boolean },
   ) {
     super()
     this.#wrapped = wrapped
     this.#onMessage = onMessage
     this.#onConnection = onConnection
+    this.#includeData = options?.includeData ?? false
     this.#setupEventForwarding()
   }
 
@@ -75,6 +78,9 @@ export class LoggingNetworkAdapter extends NetworkAdapter {
       targetId: msg.targetId,
       documentId: msg.documentId,
       dataSize: msg.data?.byteLength,
+    }
+    if (this.#includeData && msg.data) {
+      entry.data = msg.data
     }
     this.#onMessage(entry)
   }

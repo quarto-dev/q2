@@ -140,9 +140,13 @@ impl AstTransform for AttributionRenderTransform {
         // lookup).
         let mut slice: Vec<Option<AttributionRecord>> = Vec::new();
         let mut by_node: HashMap<usize, AttributionRecord> = HashMap::new();
-        slice.push(query_attribution(&ast.meta.source_info, &data.runs));
+        slice.push(query_attribution(
+            &ast.meta.source_info,
+            &data.runs,
+            data.file_id,
+        ));
         for block in &ast.blocks {
-            walk_block(block, &data.runs, &mut slice, &mut by_node);
+            walk_block(block, &data.runs, data.file_id, &mut slice, &mut by_node);
         }
 
         let slice_arc: Arc<[Option<AttributionRecord>]> = Arc::from(slice.into_boxed_slice());
@@ -168,13 +172,20 @@ impl AstTransform for AttributionRenderTransform {
 
 /// Query `runs` for the most-recent `(actor, time)` hit covering the
 /// given SourceInfo, applying the v1 single-doc invariant: if the
-/// node resolves to `file_id != 0` (e.g. spliced in via
-/// `{{< include other.qmd >}}`), return `None` without querying. This
-/// prevents silent misattribution by byte-range collision against
-/// the primary doc's runs.
-fn query_attribution(si: &SourceInfo, runs: &AttributionMap) -> Option<AttributionRecord> {
+/// node does not resolve into `blamed` — the file the provider
+/// actually blamed, carried on [`AttributionData::file_id`] — return
+/// `None` without querying (e.g. content spliced in via
+/// `{{< include other.qmd >}}`). Comparing against the carried
+/// identity rather than the literal slot `0` prevents silent
+/// misattribution by byte-range collision if slot assignment ever
+/// changes (bd-vmlhw7nx).
+fn query_attribution(
+    si: &SourceInfo,
+    runs: &AttributionMap,
+    blamed: quarto_source_map::FileId,
+) -> Option<AttributionRecord> {
     let (file_id, start, end) = resolve_byte_range(si)?;
-    if file_id != 0 || start >= end {
+    if quarto_source_map::FileId(file_id) != blamed || start >= end {
         return None;
     }
     runs.query_byte_range(start, end)
@@ -183,11 +194,12 @@ fn query_attribution(si: &SourceInfo, runs: &AttributionMap) -> Option<Attributi
 fn visit_block(
     block: &Block,
     runs: &AttributionMap,
+    blamed: quarto_source_map::FileId,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
     let source_info = block.source_info();
-    let record = query_attribution(source_info, runs);
+    let record = query_attribution(source_info, runs, blamed);
     if let Some(r) = record.as_ref() {
         let key = source_info as *const SourceInfo as usize;
         by_node.insert(key, r.clone());
@@ -198,11 +210,12 @@ fn visit_block(
 fn visit_inline(
     inline: &Inline,
     runs: &AttributionMap,
+    blamed: quarto_source_map::FileId,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
     let source_info = inline.source_info();
-    let record = query_attribution(source_info, runs);
+    let record = query_attribution(source_info, runs, blamed);
     if let Some(r) = record.as_ref() {
         let key = source_info as *const SourceInfo as usize;
         by_node.insert(key, r.clone());
@@ -213,64 +226,67 @@ fn visit_inline(
 fn walk_block(
     block: &Block,
     runs: &AttributionMap,
+    blamed: quarto_source_map::FileId,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
-    visit_block(block, runs, slice, by_node);
+    visit_block(block, runs, blamed, slice, by_node);
     match block {
-        Block::Plain(b) => walk_inlines(&b.content, runs, slice, by_node),
-        Block::Paragraph(b) => walk_inlines(&b.content, runs, slice, by_node),
+        Block::Plain(b) => walk_inlines(&b.content, runs, blamed, slice, by_node),
+        Block::Paragraph(b) => walk_inlines(&b.content, runs, blamed, slice, by_node),
         Block::LineBlock(b) => {
             for line in &b.content {
-                walk_inlines(line, runs, slice, by_node);
+                walk_inlines(line, runs, blamed, slice, by_node);
             }
         }
-        Block::BlockQuote(b) => walk_blocks(&b.content, runs, slice, by_node),
+        Block::BlockQuote(b) => walk_blocks(&b.content, runs, blamed, slice, by_node),
         Block::OrderedList(b) => {
             for item in &b.content {
-                walk_blocks(item, runs, slice, by_node);
+                walk_blocks(item, runs, blamed, slice, by_node);
             }
         }
         Block::BulletList(b) => {
             for item in &b.content {
-                walk_blocks(item, runs, slice, by_node);
+                walk_blocks(item, runs, blamed, slice, by_node);
             }
         }
         Block::DefinitionList(b) => {
             for (term, defs) in &b.content {
-                walk_inlines(term, runs, slice, by_node);
+                walk_inlines(term, runs, blamed, slice, by_node);
                 for def in defs {
-                    walk_blocks(def, runs, slice, by_node);
+                    walk_blocks(def, runs, blamed, slice, by_node);
                 }
             }
         }
-        Block::Header(b) => walk_inlines(&b.content, runs, slice, by_node),
-        Block::Figure(b) => walk_blocks(&b.content, runs, slice, by_node),
-        Block::Div(b) => walk_blocks(&b.content, runs, slice, by_node),
+        Block::Header(b) => walk_inlines(&b.content, runs, blamed, slice, by_node),
+        Block::Figure(b) => walk_blocks(&b.content, runs, blamed, slice, by_node),
+        Block::Div(b) => walk_blocks(&b.content, runs, blamed, slice, by_node),
         Block::Table(t) => {
             if let Some(short) = &t.caption.short {
-                walk_inlines(short, runs, slice, by_node);
+                walk_inlines(short, runs, blamed, slice, by_node);
             }
             if let Some(long) = &t.caption.long {
-                walk_blocks(long, runs, slice, by_node);
+                walk_blocks(long, runs, blamed, slice, by_node);
             }
             for row in t.head.rows.iter().chain(t.foot.rows.iter()) {
                 for cell in &row.cells {
-                    walk_blocks(&cell.content, runs, slice, by_node);
+                    walk_blocks(&cell.content, runs, blamed, slice, by_node);
                 }
             }
             for body in &t.bodies {
                 for row in &body.body {
                     for cell in &row.cells {
-                        walk_blocks(&cell.content, runs, slice, by_node);
+                        walk_blocks(&cell.content, runs, blamed, slice, by_node);
                     }
                 }
             }
         }
-        Block::NoteDefinitionPara(b) => walk_inlines(&b.content, runs, slice, by_node),
-        Block::NoteDefinitionFencedBlock(b) => walk_blocks(&b.content, runs, slice, by_node),
-        Block::CaptionBlock(b) => walk_inlines(&b.content, runs, slice, by_node),
-        Block::Custom(c) => walk_custom_node(c, runs, slice, by_node),
+        Block::NoteDefinitionPara(b) => walk_inlines(&b.content, runs, blamed, slice, by_node),
+        Block::NoteDefinitionFencedBlock(b) => {
+            walk_blocks(&b.content, runs, blamed, slice, by_node)
+        }
+        Block::CaptionBlock(b) => walk_inlines(&b.content, runs, blamed, slice, by_node),
+        Block::Custom(c) => walk_custom_node(c, runs, blamed, slice, by_node),
         Block::CodeBlock(_)
         | Block::RawBlock(_)
         | Block::HorizontalRule(_)
@@ -281,40 +297,42 @@ fn walk_block(
 fn walk_blocks(
     blocks: &[Block],
     runs: &AttributionMap,
+    blamed: quarto_source_map::FileId,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
     for b in blocks {
-        walk_block(b, runs, slice, by_node);
+        walk_block(b, runs, blamed, slice, by_node);
     }
 }
 
 fn walk_inline(
     inline: &Inline,
     runs: &AttributionMap,
+    blamed: quarto_source_map::FileId,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
-    visit_inline(inline, runs, slice, by_node);
+    visit_inline(inline, runs, blamed, slice, by_node);
     match inline {
-        Inline::Emph(e) => walk_inlines(&e.content, runs, slice, by_node),
-        Inline::Underline(u) => walk_inlines(&u.content, runs, slice, by_node),
-        Inline::Strong(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Strikeout(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Superscript(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Subscript(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::SmallCaps(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Quoted(q) => walk_inlines(&q.content, runs, slice, by_node),
-        Inline::Cite(c) => walk_inlines(&c.content, runs, slice, by_node),
-        Inline::Link(l) => walk_inlines(&l.content, runs, slice, by_node),
-        Inline::Image(i) => walk_inlines(&i.content, runs, slice, by_node),
-        Inline::Note(n) => walk_blocks(&n.content, runs, slice, by_node),
-        Inline::Span(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Insert(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Delete(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Highlight(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::EditComment(s) => walk_inlines(&s.content, runs, slice, by_node),
-        Inline::Custom(c) => walk_custom_node(c, runs, slice, by_node),
+        Inline::Emph(e) => walk_inlines(&e.content, runs, blamed, slice, by_node),
+        Inline::Underline(u) => walk_inlines(&u.content, runs, blamed, slice, by_node),
+        Inline::Strong(s) => walk_inlines(&s.content, runs, blamed, slice, by_node),
+        Inline::Strikeout(s) => walk_inlines(&s.content, runs, blamed, slice, by_node),
+        Inline::Superscript(s) => walk_inlines(&s.content, runs, blamed, slice, by_node),
+        Inline::Subscript(s) => walk_inlines(&s.content, runs, blamed, slice, by_node),
+        Inline::SmallCaps(s) => walk_inlines(&s.content, runs, blamed, slice, by_node),
+        Inline::Quoted(q) => walk_inlines(&q.content, runs, blamed, slice, by_node),
+        Inline::Cite(c) => walk_inlines(&c.content, runs, blamed, slice, by_node),
+        Inline::Link(l) => walk_inlines(&l.content, runs, blamed, slice, by_node),
+        Inline::Image(i) => walk_inlines(&i.content, runs, blamed, slice, by_node),
+        Inline::Note(n) => walk_blocks(&n.content, runs, blamed, slice, by_node),
+        Inline::Span(s) => walk_inlines(&s.content, runs, blamed, slice, by_node),
+        Inline::Insert(s) => walk_inlines(&s.content, runs, blamed, slice, by_node),
+        Inline::Delete(s) => walk_inlines(&s.content, runs, blamed, slice, by_node),
+        Inline::Highlight(s) => walk_inlines(&s.content, runs, blamed, slice, by_node),
+        Inline::EditComment(s) => walk_inlines(&s.content, runs, blamed, slice, by_node),
+        Inline::Custom(c) => walk_custom_node(c, runs, blamed, slice, by_node),
         Inline::Str(_)
         | Inline::Code(_)
         | Inline::Space(_)
@@ -331,26 +349,87 @@ fn walk_inline(
 fn walk_inlines(
     inlines: &[Inline],
     runs: &AttributionMap,
+    blamed: quarto_source_map::FileId,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
     for i in inlines {
-        walk_inline(i, runs, slice, by_node);
+        walk_inline(i, runs, blamed, slice, by_node);
     }
 }
 
 fn walk_custom_node(
     node: &CustomNode,
     runs: &AttributionMap,
+    blamed: quarto_source_map::FileId,
     slice: &mut Vec<Option<AttributionRecord>>,
     by_node: &mut HashMap<usize, AttributionRecord>,
 ) {
     for (_name, slot) in &node.slots {
         match slot {
-            Slot::Block(b) => walk_block(b, runs, slice, by_node),
-            Slot::Blocks(bs) => walk_blocks(bs, runs, slice, by_node),
-            Slot::Inline(i) => walk_inline(i, runs, slice, by_node),
-            Slot::Inlines(is) => walk_inlines(is, runs, slice, by_node),
+            Slot::Block(b) => walk_block(b, runs, blamed, slice, by_node),
+            Slot::Blocks(bs) => walk_blocks(bs, runs, blamed, slice, by_node),
+            Slot::Inline(i) => walk_inline(i, runs, blamed, slice, by_node),
+            Slot::Inlines(is) => walk_inlines(is, runs, blamed, slice, by_node),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::attribution::AttributionDataBuilder;
+    use quarto_source_map::FileId;
+
+    fn runs_covering_0_100() -> AttributionMap {
+        let mut b = AttributionDataBuilder::new();
+        b.push_run(0, 100, "alice@example.com", 1000);
+        b.build().runs
+    }
+
+    // bd-vmlhw7nx: the gate must compare the node's resolved FileId
+    // against the blamed file's identity carried on AttributionData —
+    // not against the literal 0. A raw-usize `0` gate silently
+    // misattributes the moment the blamed document occupies any other
+    // slot, and silently skips it too.
+    #[test]
+    fn node_in_blamed_file_matches_regardless_of_slot() {
+        let runs = runs_covering_0_100();
+        let si = SourceInfo::original(FileId(5), 10, 20);
+        assert!(
+            query_attribution(&si, &runs, FileId(5)).is_some(),
+            "a node in the blamed file must attribute even when the blamed \
+             file is not slot 0"
+        );
+    }
+
+    #[test]
+    fn node_in_other_file_is_skipped() {
+        let runs = runs_covering_0_100();
+        // Blamed file is slot 5; a slot-0 node (e.g. an engine
+        // intermediate or another document) must NOT collide into the
+        // blamed file's runs.
+        let si = SourceInfo::original(FileId(0), 10, 20);
+        assert!(query_attribution(&si, &runs, FileId(5)).is_none());
+    }
+
+    #[test]
+    fn default_blamed_slot_zero_keeps_v1_behavior() {
+        let runs = runs_covering_0_100();
+        let in_doc = SourceInfo::original(FileId(0), 10, 20);
+        let included = SourceInfo::original(FileId(3), 10, 20);
+        assert!(query_attribution(&in_doc, &runs, FileId(0)).is_some());
+        assert!(
+            query_attribution(&included, &runs, FileId(0)).is_none(),
+            "include-spliced nodes must not attribute against the primary \
+             doc's runs"
+        );
+    }
+
+    #[test]
+    fn empty_range_is_skipped() {
+        let runs = runs_covering_0_100();
+        let si = SourceInfo::original(FileId(0), 10, 10);
+        assert!(query_attribution(&si, &runs, FileId(0)).is_none());
     }
 }

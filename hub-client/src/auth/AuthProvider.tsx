@@ -10,6 +10,13 @@
  * disabled (no IdP configured). Consumers never need to branch — they
  * always receive a valid `AuthProvider`.
  *
+ * Session *renewal* is not part of this interface: it is entirely
+ * server-side (sliding re-issue, bd-ey6jg70f). The GIS One-Tap silent
+ * renewal that this interface once exposed via `useSilentRenewal` was
+ * retired in bd-s042qcxj; a session that hits a hard boundary
+ * (revocation / absolute cap / idle) ends definitively and the user
+ * re-logs-in through `SignInButton`.
+ *
  * See `claude-notes/plans/2026-05-20-auth-provider-interface.md`
  * for the design rationale.
  */
@@ -33,21 +40,6 @@ export interface AuthProvider {
   readonly SignInButton: ComponentType<SignInButtonProps>;
 
   /**
-   * Hook that enables/disables silent credential renewal.
-   *
-   * When `enabled` becomes true, the provider attempts to obtain a
-   * fresh JWT without user interaction and invokes `onCredential`
-   * with the JWT. If renewal fails or no IdP session exists,
-   * `onError` is invoked.
-   *
-   * Providers without a silent-renewal capability MUST still
-   * implement the hook as a no-op: enabling it never invokes either
-   * callback. Consumers detect that scenario via timeout, not via a
-   * return value — keeps the interface symmetric across capabilities.
-   */
-  useSilentRenewal(opts: SilentRenewalOpts): void;
-
-  /**
    * Best-effort IdP-side sign-out. For Google this calls
    * `googleLogout()` which revokes the GIS session (no network round
    * trip). Synchronous on purpose — callers should not block UI on it.
@@ -65,19 +57,12 @@ export interface SignInButtonProps {
   loginUri: string;
 }
 
-export interface SilentRenewalOpts {
-  enabled: boolean;
-  onCredential: (jwt: string) => void;
-  onError: () => void;
-}
-
 /**
  * No-op provider used when auth is disabled (no `VITE_GOOGLE_CLIENT_ID`).
- * `SignInButton` renders nothing; the hook and `signOut` do nothing.
+ * `SignInButton` renders nothing; `signOut` does nothing.
  */
 export const noopAuthProvider: AuthProvider = {
   SignInButton: () => null,
-  useSilentRenewal: () => {},
   signOut: () => {},
 };
 

@@ -61,6 +61,21 @@ pub struct NavigationItem {
     /// Nested menu items. Only populated for dropdown entries; typically empty.
     pub menu: Vec<NavigationItem>,
 
+    /// For a page-footer item authored as a *bare scalar*: the original
+    /// `ConfigValue`, retained so the item can fall back to display text
+    /// when its provisional `href` turns out not to name a project
+    /// document (bd-page-footer-items-f4th80mj, defect 2 — see
+    /// [`BareScalar::TextIfUnresolved`]).
+    ///
+    /// `None` for every other shape, including navbar/sidebar bare
+    /// scalars, which are unconditionally hrefs. Boxed to keep
+    /// `NavigationItem` small — this field is set on a minority of items.
+    ///
+    /// Consumed by the footer transform's demotion pass; it does not
+    /// roundtrip through `to_config_value` because demotion happens
+    /// before serialization.
+    pub bare_text: Option<Box<ConfigValue>>,
+
     /// Whether this item represents the currently-rendered page.
     /// Set by the `mark_active` pass in Generate transforms; read by
     /// Render transforms when emitting the `active` class on the anchor.
@@ -70,18 +85,64 @@ pub struct NavigationItem {
     pub active: bool,
 }
 
+/// How a *bare scalar* item (`- something`) should be read.
+///
+/// The two navigation regions disagree, and both readings are right for
+/// their context (bd-page-footer-items-f4th80mj, defect 2):
+///
+/// - Navbars and sidebars: `- about.qmd` always means "link to this
+///   page", so a bare scalar is an **href**.
+/// - Page-footer regions: Q1 decides by *resolution*. A bare scalar that
+///   names a project document becomes a link carrying that document's
+///   title; anything else — `Copyright © 2026 …`, a bare external URL,
+///   a path that matches no document — is display text. Measured
+///   against Q1 (see the plan's "Q1's bare-scalar rule" section).
+///
+/// Because that decision needs the project index, the parser cannot make
+/// it. [`BareScalar::TextIfUnresolved`] therefore records the scalar in
+/// [`NavigationItem::bare_text`] *and* keeps it as a provisional href, so
+/// enrichment can run normally; the footer transform then demotes any
+/// item enrichment failed to resolve.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BareScalar {
+    /// A bare scalar is always a link target (navbar, sidebar).
+    #[default]
+    Href,
+    /// A bare scalar is a link target if it resolves to a project
+    /// document, and display text otherwise (page-footer regions).
+    TextIfUnresolved,
+}
+
 impl NavigationItem {
     /// Parse a single item from a `ConfigValue` in one of the three accepted
     /// shapes. Returns `None` if the shape is unrecognisable (e.g. a number).
+    ///
+    /// Bare scalars are read as hrefs; see
+    /// [`from_config_value_with`](Self::from_config_value_with) for the
+    /// page-footer reading.
     pub fn from_config_value(cv: &ConfigValue) -> Option<Self> {
-        // Bare path form: `- about.qmd`. The source_info travels with
-        // the bare ConfigValue itself (no wrapping map node).
+        Self::from_config_value_with(cv, BareScalar::Href)
+    }
+
+    /// Like [`from_config_value`](Self::from_config_value), but with an
+    /// explicit policy for bare scalars.
+    pub fn from_config_value_with(cv: &ConfigValue, bare: BareScalar) -> Option<Self> {
+        // Bare form: `- about.qmd` (href) or `- Copyright © …` (text).
+        // The source_info travels with the bare ConfigValue itself (no
+        // wrapping map node).
         if let Some(s) = cv.as_plain_text() {
-            // Only treat as a path if it isn't a map or array. `as_plain_text`
-            // already narrows to scalar-ish shapes, so this is safe.
+            // Only a scalar-ish shape reaches here — `as_plain_text`
+            // already narrows out maps and arrays.
             return Some(NavigationItem {
                 href: Some(s),
                 href_source: cv.source_info.clone(),
+                // Keep the whole `ConfigValue`, not the flattened string:
+                // by this point `ConfigMarkdownTransform` may have turned
+                // it into `PandocInlines`, and `render_text` needs those.
+                bare_text: match bare {
+                    BareScalar::Href => None,
+                    BareScalar::TextIfUnresolved => Some(Box::new(cv.clone())),
+                },
                 ..NavigationItem::default()
             });
         }
@@ -146,6 +207,9 @@ impl NavigationItem {
             target,
             menu,
             active,
+            // Object form: the author wrote explicit keys, so there is no
+            // bare scalar to fall back to.
+            bare_text: None,
         })
     }
 

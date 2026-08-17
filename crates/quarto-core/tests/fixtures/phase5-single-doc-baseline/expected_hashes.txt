@@ -262,5 +262,18 @@
 # the compiled CSS (this branch's title-block/tables/code/print/misc/13g rules +
 # #407's ul.task-list/checkbox rules), so styles.css is re-captured to reflect
 # BOTH rule sets. doc.html unchanged.
+# Re-captured 2026-07-29 (bd-57y4): styles.css hash updated because the
+# listing SCSS layer (Q1's quarto-listing.scss — cards, table layout,
+# category chips, pagination) is now composed into every HTML theme
+# compile, unconditionally like Q1. doc.html hash unchanged: no
+# `.quarto-listing*` selector matches anything in a single-doc body,
+# and `<head>` is unaffected.
+# Re-captured 2026-08-14 (bd-breadcrumbs-missing-1vpuqh34): styles.css
+# hash updated because the website-breadcrumb rules (ported from Q1
+# quarto-nav.scss: .quarto-title-breadcrumbs / .quarto-page-breadcrumbs
+# spacing + last-crumb muting) now compile into every HTML theme.
+# doc.html hash unchanged: the title-block partial's breadcrumb slot is
+# an $if$ that emits nothing when `rendered.navigation.breadcrumbs` is
+# absent, which it always is in a single-doc render (no sidebar).
 doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css a54a2e6e2cf7beb3b74e1579ed08eb0af881ed9de390a582143a0d58ea34ca99
+doc_files/styles.css aafc6d0b9ffbbe6fb12b50a2fc1c0d845f58b6018476494fea2127609a0bee2a

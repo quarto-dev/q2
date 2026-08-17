@@ -159,10 +159,26 @@ fn coarsen(
     for (result_idx, alignment) in plan.block_alignments.iter().enumerate() {
         let entry = match alignment {
             BlockAlignment::KeepBefore(orig_idx) => {
-                let span = block_source_span(&original_ast.blocks[*orig_idx]);
-                CoarsenedEntry::Verbatim {
-                    byte_range: span,
-                    orig_idx: *orig_idx,
+                // A kept block is Verbatim-copied out of `original_qmd`, so
+                // it must have a byte preimage in the target file. Foreign
+                // provenance (include-spliced blocks) and gappy Concat spans
+                // have none — `preimage_in` returns `None` — and the old raw
+                // `start_offset()..end_offset()` fallback sliced
+                // `original_qmd` at the foreign file's offsets
+                // (bd-f6h40a9r). Rewrite such blocks instead.
+                match original_ast.blocks[*orig_idx]
+                    .source_info()
+                    .preimage_in(target_file_id)
+                {
+                    Some(span) if original_qmd.get(span.clone()).is_some() => {
+                        CoarsenedEntry::Verbatim {
+                            byte_range: span,
+                            orig_idx: *orig_idx,
+                        }
+                    }
+                    _ => CoarsenedEntry::Rewrite {
+                        new_idx: result_idx,
+                    },
                 }
             }
             BlockAlignment::UseAfter(_after_idx) => CoarsenedEntry::Rewrite {
@@ -253,6 +269,7 @@ fn assemble(
     new_ast: &Pandoc,
     coarsened: &[CoarsenedEntry],
 ) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let target_file_id = derive_target_file_id(&original_ast.blocks);
     let mut result = String::new();
 
     // 2a. Metadata prefix
@@ -275,6 +292,7 @@ fn assemble(
                 prev_entry,
                 entry,
                 prev_block_text.as_deref(),
+                target_file_id,
             );
             result.push_str(separator);
         }
@@ -379,6 +397,7 @@ fn compute_separator<'a>(
     prev_entry: Option<&CoarsenedEntry>,
     curr_entry: &CoarsenedEntry,
     prev_block_text: Option<&str>,
+    target_file_id: FileId,
 ) -> &'a str {
     // Try to use original gap for consecutive blocks that preserve original positions
     let prev_orig_idx = match prev_entry {
@@ -393,11 +412,20 @@ fn compute_separator<'a>(
     };
     if let (Some(prev_idx), Some(curr_idx)) = (prev_orig_idx, curr_orig_idx)
         && curr_idx == prev_idx + 1
+        // Consecutive in original — use the original gap, but only when both
+        // block spans have a real preimage in the target file and the gap is
+        // well-formed. Raw offsets on foreign/Concat provenance sliced
+        // arbitrary bytes here (bd-f6h40a9r).
+        && let Some(prev_span) = original_ast.blocks[prev_idx]
+            .source_info()
+            .preimage_in(target_file_id)
+        && let Some(curr_span) = original_ast.blocks[curr_idx]
+            .source_info()
+            .preimage_in(target_file_id)
+        && prev_span.end <= curr_span.start
+        && let Some(gap) = original_qmd.get(prev_span.end..curr_span.start)
     {
-        // Consecutive in original — use original gap
-        let prev_span = block_source_span(&original_ast.blocks[prev_idx]);
-        let curr_span = block_source_span(&original_ast.blocks[curr_idx]);
-        return &original_qmd[prev_span.end..curr_span.start];
+        return gap;
     }
 
     // Standard separator — but check if previous block already ends with \n\n
@@ -667,14 +695,19 @@ fn assemble_inline_splice(
         return Ok(None);
     };
 
-    // Assemble the new inline content
-    let inline_content = assemble_inline_content(
+    // Assemble the new inline content. `None` means some kept inline (or
+    // container boundary) has no usable preimage in the target file — the
+    // whole block falls back to re-serialization.
+    let Some(inline_content) = assemble_inline_content(
         original_qmd,
         orig_inlines,
         new_inlines,
         plan,
         target_file_id,
-    )?;
+    )?
+    else {
+        return Ok(None);
+    };
 
     Ok(Some(format!("{}{}{}", prefix, inline_content, suffix)))
 }
@@ -685,27 +718,39 @@ fn assemble_inline_splice(
 /// - KeepBefore: copying the original inline's bytes verbatim
 /// - UseAfter: writing the new inline to a string
 /// - RecurseIntoContainer: preserving delimiters, recursing into children
+///
+/// Returns `Ok(None)` when some kept inline or container boundary has no
+/// usable byte preimage in the target file — foreign provenance
+/// (include-spliced nodes), gappy Concats, or synthetic nodes. The caller
+/// must then fall back to re-serializing the whole block; slicing
+/// `original_qmd` at a foreign file's offsets copied wrong bytes or
+/// panicked (bd-f6h40a9r).
 fn assemble_inline_content(
     original_qmd: &str,
     orig_inlines: &[Inline],
     new_inlines: &[Inline],
     plan: &InlineReconciliationPlan,
     target_file_id: FileId,
-) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
+) -> Result<Option<String>, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let mut result = String::new();
 
     for (result_idx, alignment) in plan.inline_alignments.iter().enumerate() {
         match alignment {
             InlineAlignment::KeepBefore(orig_idx) => {
-                // Use preimage_in so Concat/Generated inlines (which return the
-                // sentinel 0 from start_offset()/end_offset()) copy the correct
-                // byte hull rather than an empty slice. Falls back to
-                // inline_source_span for Original inlines (identical bytes).
-                let range = orig_inlines[*orig_idx]
+                // preimage_in resolves the real byte hull (Concat-led inlines
+                // report the sentinel 0 from start_offset()/end_offset()) and
+                // returns None when the bytes are not in the target file at
+                // all — in which case the splice cannot proceed.
+                let Some(range) = orig_inlines[*orig_idx]
                     .source_info()
                     .preimage_in(target_file_id)
-                    .unwrap_or_else(|| inline_source_span(&orig_inlines[*orig_idx]));
-                result.push_str(&original_qmd[range]);
+                else {
+                    return Ok(None);
+                };
+                let Some(text) = original_qmd.get(range) else {
+                    return Ok(None);
+                };
+                result.push_str(text);
             }
             InlineAlignment::UseAfter(after_idx) => {
                 let text = write_inline_to_string(&new_inlines[*after_idx])?;
@@ -715,38 +760,49 @@ fn assemble_inline_content(
                 before_idx,
                 after_idx,
             } => {
-                let text = assemble_recursed_container(
+                let Some(text) = assemble_recursed_container(
                     original_qmd,
                     &orig_inlines[*before_idx],
                     &new_inlines[*after_idx],
                     plan.inline_container_plans.get(&result_idx),
                     target_file_id,
-                )?;
+                )?
+                else {
+                    return Ok(None);
+                };
                 result.push_str(&text);
             }
         }
     }
 
-    Ok(result)
+    Ok(Some(result))
 }
 
 /// Assemble the text for a recursed container inline.
 ///
 /// Preserves the container's delimiters from the original source and
 /// recursively assembles the children from the nested plan.
+///
+/// Returns `Ok(None)` when the container or its boundary children have no
+/// usable byte preimage in the target file (foreign provenance, gappy
+/// Concat, synthetic nodes) — the caller falls back to re-serializing the
+/// whole block. The old raw-offset spans sliced `original_qmd` at another
+/// file's coordinates (bd-f6h40a9r).
 fn assemble_recursed_container(
     original_qmd: &str,
     orig_inline: &Inline,
     new_inline: &Inline,
     nested_plan: Option<&InlineReconciliationPlan>,
     target_file_id: FileId,
-) -> Result<String, Vec<quarto_error_reporting::DiagnosticMessage>> {
-    let orig_span = inline_source_span(orig_inline);
+) -> Result<Option<String>, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let Some(orig_span) = orig_inline.source_info().preimage_in(target_file_id) else {
+        return Ok(None);
+    };
 
     let Some(plan) = nested_plan else {
         // No nested plan — container content is structurally identical.
         // Keep the original container bytes verbatim.
-        return Ok(original_qmd[orig_span].to_string());
+        return Ok(original_qmd.get(orig_span).map(str::to_string));
     };
 
     let orig_children = inline_children(orig_inline);
@@ -754,27 +810,49 @@ fn assemble_recursed_container(
 
     if orig_children.is_empty() {
         // No children to recurse into — keep original verbatim
-        return Ok(original_qmd[orig_span].to_string());
+        return Ok(original_qmd.get(orig_span).map(str::to_string));
     }
 
-    // Opening delimiter: bytes from container start to first child start
-    let first_child_start = inline_source_span(&orig_children[0]).start;
-    let opening = &original_qmd[orig_span.start..first_child_start];
-
-    // Closing delimiter: bytes from last child end to container end
-    let last_child_end = inline_source_span(orig_children.last().unwrap()).end;
-    let closing = &original_qmd[last_child_end..orig_span.end];
+    // Delimiters: bytes from container start to first child start, and from
+    // last child end to container end — both derived from preimages, with
+    // ordering guarded so a stray provenance can never produce a reversed
+    // slice.
+    let (Some(first_range), Some(last_range)) = (
+        orig_children[0].source_info().preimage_in(target_file_id),
+        orig_children
+            .last()
+            .unwrap()
+            .source_info()
+            .preimage_in(target_file_id),
+    ) else {
+        return Ok(None);
+    };
+    if orig_span.start > first_range.start
+        || last_range.end > orig_span.end
+        || first_range.start > last_range.end
+    {
+        return Ok(None);
+    }
+    let (Some(opening), Some(closing)) = (
+        original_qmd.get(orig_span.start..first_range.start),
+        original_qmd.get(last_range.end..orig_span.end),
+    ) else {
+        return Ok(None);
+    };
 
     // Recursively assemble children
-    let children_text = assemble_inline_content(
+    let Some(children_text) = assemble_inline_content(
         original_qmd,
         orig_children,
         new_children,
         plan,
         target_file_id,
-    )?;
+    )?
+    else {
+        return Ok(None);
+    };
 
-    Ok(format!("{}{}{}", opening, children_text, closing))
+    Ok(Some(format!("{}{}{}", opening, children_text, closing)))
 }
 
 // =============================================================================

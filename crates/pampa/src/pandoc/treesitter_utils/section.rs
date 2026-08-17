@@ -122,20 +122,15 @@ pub fn process_section(
                         source_info: caption_source_info.clone(),
                     };
 
-                    // Extend table's source_info to include the caption
-                    let table_start_offset = table.source_info.start_offset();
-                    let caption_end_offset = caption_source_info.end_offset();
-                    // Extract file_id from table's source info; root_file_id
-                    // walks every nesting level, so nested Substrings resolve
-                    // correctly (the previous shallow match returned FileId(0)).
-                    let file_id = table
-                        .source_info
-                        .root_file_id()
-                        .unwrap_or(quarto_source_map::FileId(0));
-                    table.source_info = quarto_source_map::SourceInfo::original(
-                        file_id,
-                        table_start_offset,
-                        caption_end_offset,
+                    // Extend table's source_info to include the caption via
+                    // the same-file, preimage-based hull (bd-t3enk8gq). The
+                    // previous manual construction paired raw offsets
+                    // (parent-relative for Substrings) with root_file_id()
+                    // .unwrap_or(FileId(0)), fabricating a mis-anchored
+                    // Original under a parent_source_info context.
+                    table.source_info = super::postprocess::hull_source_infos(
+                        &table.source_info,
+                        &caption_source_info,
                     );
                 }
 

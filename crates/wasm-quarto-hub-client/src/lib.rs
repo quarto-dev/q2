@@ -19,6 +19,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 
+use quarto_core::project::render_scripts::RenderHost;
 use quarto_core::{
     BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
     QuartoError, RenderContext, RenderOptions, ResourceResolverContext, render_qmd_to_html,
@@ -1262,6 +1263,7 @@ pub async fn render_page_in_project_with_attribution(
         project,
         user_grammars,
         false,
+        RenderHost::HubClient,
         captures,
         attribution_json,
     )
@@ -1350,6 +1352,7 @@ pub async fn render_page_for_preview(
         project,
         user_grammars,
         true,
+        RenderHost::NativePreview,
         captures,
         None,
     )
@@ -1602,6 +1605,11 @@ async fn render_project_active_page_to_response(
     mut project: ProjectContext,
     user_grammars: Option<JsUserGrammars>,
     prefer_preview_format: bool,
+    // bd-pq72bplh: which application is driving this render. Decides
+    // host-dependent diagnostics (Q-5-12) — deliberately separate from
+    // `prefer_preview_format`, which is about format substitution and
+    // only happens to correlate with the caller today.
+    host: RenderHost,
     // bd-lucp / bd-5yff4: recorded engine capture sequence attached to
     // the q2-preview pass-2 renderer (one per engine, in order).
     // `RenderToPreviewAstRenderer::with_captures` threads them into every
@@ -1754,8 +1762,8 @@ async fn render_project_active_page_to_response(
 
     // Populate VFS with the active page's Page-scoped artifacts.
     // (Project-scoped artifacts were already flushed to VFS by
-    // `WebsiteProjectType::post_render` → `flush_site_libs` via
-    // the WASM renderer's vfs_root resolver.)
+    // `WebsiteProjectType::post_render` → `flush_project_artifacts`
+    // via the WASM renderer's vfs_root resolver.)
     //
     // The shared flush carries the bd-3gtn empty-content skip and the
     // bd-q3bxnq2e byte-identical-skip; see
@@ -1772,6 +1780,13 @@ async fn render_project_active_page_to_response(
     // converts these to Monaco markers.
     let mut all_diags = active_output.diagnostics.clone();
     all_diags.extend(summary.project_diagnostics);
+    // bd-w348iu63: project render scripts can't run in the browser —
+    // surface a one-time warning instead of silently ignoring them.
+    // bd-pq72bplh: host-dependent — `q2 preview`'s native server runs
+    // pre-render scripts at boot, so only the hub host warns.
+    if let Some(diag) = render_scripts_unsupported_once(host, &project.config) {
+        all_diags.push(diag);
+    }
     let warnings = diagnostics_to_json(&all_diags, &active_output.source_context);
 
     // Plan 2A item 11: theme fingerprint is captured at the
@@ -1843,6 +1858,31 @@ async fn render_project_active_page_to_response(
         theme_fingerprint: theme_fingerprint_from_output,
     })
     .unwrap()
+}
+
+/// bd-w348iu63 / bd-pq72bplh: once-per-session Q-5-12 warning when the
+/// project declares `project.pre-render` / `project.post-render`
+/// scripts the current host cannot run. The host-dependent decision
+/// and message live in
+/// [`quarto_core::project::render_scripts::render_scripts_unsupported_diagnostic`]
+/// (pure: [`RenderHost::NativePreview`] never warns, because `q2
+/// preview`'s native server ran the pre-render scripts at boot); this
+/// wrapper adds the once-per-session gate. Returns `None` when the
+/// host/config combination doesn't warrant a warning or the warning
+/// already fired. WASM is single-threaded, but `AtomicBool` keeps the
+/// static safe by construction.
+fn render_scripts_unsupported_once(
+    host: RenderHost,
+    config: &ProjectConfig,
+) -> Option<DiagnosticMessage> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static WARNED: AtomicBool = AtomicBool::new(false);
+    let diag =
+        quarto_core::project::render_scripts::render_scripts_unsupported_diagnostic(host, config)?;
+    if WARNED.swap(true, Ordering::Relaxed) {
+        return None;
+    }
+    Some(diag)
 }
 
 /// Build a `success: false` response with no diagnostics.

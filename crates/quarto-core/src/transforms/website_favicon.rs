@@ -35,7 +35,7 @@ use quarto_pandoc_types::config_value::ConfigValueKind;
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
-use crate::project::website_config::{normalize_favicon_path, website_favicon};
+use crate::project::website_config::resolved_website_favicon;
 use crate::render::RenderContext;
 use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::{AstTransform, TransformPhase};
@@ -67,31 +67,46 @@ impl AstTransform for WebsiteFaviconTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        apply_favicon(&mut ast.meta, ctx.resource_resolver.as_ref());
+        let favicon = resolved_website_favicon(&ast.meta, ctx.project).map(|f| f.path);
+        apply_favicon(&mut ast.meta, favicon, ctx.resource_resolver.as_ref());
         Ok(())
     }
 }
 
-/// Append a `<link rel="icon">` tag for `website.favicon` to the
-/// `rendered.includes.header` list. No-op if the key is absent or
+/// Append a `<link rel="icon">` tag for the resolved favicon to the
+/// `rendered.includes.header` list. No-op when there is no favicon or
 /// `meta` is not a map.
-fn apply_favicon(meta: &mut ConfigValue, resolver: Option<&ResourceResolverContext>) {
-    let Some(raw_favicon) = website_favicon(meta) else {
+///
+/// `favicon` comes from
+/// [`resolved_website_favicon`](crate::project::website_config::resolved_website_favicon)
+/// — a project-relative path or an absolute URL.
+fn apply_favicon(
+    meta: &mut ConfigValue,
+    favicon: Option<String>,
+    resolver: Option<&ResourceResolverContext>,
+) {
+    let Some(favicon) = favicon else {
         return;
     };
-    let normalized = normalize_favicon_path(&raw_favicon);
-    if normalized.is_empty() {
-        return;
-    }
 
-    // Compute the page-relative href via the resolver (Phase 5).
-    // No-resolver fallback: the path verbatim.
-    let href = match resolver {
-        Some(r) => r.page_url_for(&normalized),
-        None => normalized.clone(),
+    // A URL is already the final href. Running it through the
+    // resolver would be actively wrong: `page_url_for` does
+    // `site_root.join(..)` + `pathdiff`, turning
+    // `https://example.com/logo.png` into `../https:/example.com/logo.png`.
+    let href = if quarto_util::is_external_url(&favicon) {
+        favicon.clone()
+    } else {
+        match resolver {
+            Some(r) => r.page_url_for(&favicon),
+            // No-resolver fallback: the path verbatim.
+            None => favicon.clone(),
+        }
     };
 
-    let link = build_favicon_link(&href, &normalized);
+    // The MIME type comes from the *source* path, not the href: both
+    // carry the extension, but the href may be a `..`-prefixed
+    // page-relative form.
+    let link = build_favicon_link(&href, &favicon);
     append_to_rendered_header(meta, link);
 }
 
@@ -240,12 +255,22 @@ mod tests {
         )
     }
 
-    /// Plan test 13: no `website.favicon` → `header-includes`
-    /// untouched.
+    /// Convenience: `apply_favicon` takes an owned `Option<String>`.
+    fn favicon(path: &str) -> Option<String> {
+        Some(path.to_string())
+    }
+
+    // These exercise link *emission* only. Deciding *which* path is
+    // the favicon — explicit key vs. brand fallback, normalization,
+    // project-kind gating — belongs to
+    // `project::website_config::resolved_website_favicon` and is
+    // tested there (bd-97yc).
+
+    /// Plan test 13: no favicon → `header-includes` untouched.
     #[test]
-    fn favicon_no_op_without_website_favicon() {
+    fn favicon_no_op_without_favicon() {
         let mut meta = map(vec![("title", s("Doc"))]);
-        apply_favicon(&mut meta, Some(&root_page_resolver()));
+        apply_favicon(&mut meta, None, Some(&root_page_resolver()));
         assert!(header_includes_strings(&meta).is_empty());
     }
 
@@ -254,8 +279,12 @@ mod tests {
     /// correct MIME type.
     #[test]
     fn favicon_appends_link_with_resolved_href() {
-        let mut meta = map(vec![("website", map(vec![("favicon", s("favicon.ico"))]))]);
-        apply_favicon(&mut meta, Some(&nested_page_resolver()));
+        let mut meta = map(vec![("title", s("Doc"))]);
+        apply_favicon(
+            &mut meta,
+            favicon("favicon.ico"),
+            Some(&nested_page_resolver()),
+        );
         let includes = header_includes_strings(&meta);
         assert_eq!(includes.len(), 1);
         assert_eq!(
@@ -268,8 +297,12 @@ mod tests {
     /// the `type` attribute.
     #[test]
     fn favicon_appends_without_type_for_unknown_extension() {
-        let mut meta = map(vec![("website", map(vec![("favicon", s("favicon.foo"))]))]);
-        apply_favicon(&mut meta, Some(&root_page_resolver()));
+        let mut meta = map(vec![("title", s("Doc"))]);
+        apply_favicon(
+            &mut meta,
+            favicon("favicon.foo"),
+            Some(&root_page_resolver()),
+        );
         let includes = header_includes_strings(&meta);
         assert_eq!(includes.len(), 1);
         assert_eq!(includes[0], r#"<link rel="icon" href="favicon.foo">"#);
@@ -280,8 +313,8 @@ mod tests {
     /// a resolver still produce a valid `<link>`.
     #[test]
     fn favicon_falls_back_to_path_verbatim_without_resolver() {
-        let mut meta = map(vec![("website", map(vec![("favicon", s("favicon.ico"))]))]);
-        apply_favicon(&mut meta, None);
+        let mut meta = map(vec![("title", s("Doc"))]);
+        apply_favicon(&mut meta, favicon("favicon.ico"), None);
         let includes = header_includes_strings(&meta);
         assert_eq!(includes.len(), 1);
         assert_eq!(
@@ -294,11 +327,12 @@ mod tests {
     /// resolver, with the right MIME type for `.svg`.
     #[test]
     fn favicon_handles_subdirectory_path() {
-        let mut meta = map(vec![(
-            "website",
-            map(vec![("favicon", s("assets/favicon.svg"))]),
-        )]);
-        apply_favicon(&mut meta, Some(&nested_page_resolver()));
+        let mut meta = map(vec![("title", s("Doc"))]);
+        apply_favicon(
+            &mut meta,
+            favicon("assets/favicon.svg"),
+            Some(&nested_page_resolver()),
+        );
         let includes = header_includes_strings(&meta);
         assert_eq!(includes.len(), 1);
         assert_eq!(
@@ -312,7 +346,7 @@ mod tests {
     /// preserved; the new `<link>` is appended.
     #[test]
     fn favicon_appends_to_existing_header_includes() {
-        let mut meta = map(vec![("website", map(vec![("favicon", s("favicon.ico"))]))]);
+        let mut meta = map(vec![("title", s("Doc"))]);
         // Simulate IncludeResolveStage having already populated the
         // canonical location with one prior entry.
         meta.insert_path(
@@ -322,7 +356,11 @@ mod tests {
                 SourceInfo::for_test(),
             ),
         );
-        apply_favicon(&mut meta, Some(&root_page_resolver()));
+        apply_favicon(
+            &mut meta,
+            favicon("favicon.ico"),
+            Some(&root_page_resolver()),
+        );
         let includes = header_includes_strings(&meta);
         assert_eq!(includes.len(), 2);
         assert_eq!(includes[0], r#"<meta name="foo" content="bar">"#);
@@ -332,28 +370,48 @@ mod tests {
         );
     }
 
-    /// Open-question 4 (resolved): a leading-slash favicon path is
-    /// normalized to project-relative before resolving.
+    /// A URL must bypass the resolver entirely (bd-97yc). Running it
+    /// through `page_url_for` would produce
+    /// `../https:/cdn.example.com/logo.png` — `site_root.join` treats
+    /// the scheme as a path segment.
     #[test]
-    fn favicon_strips_leading_slash_in_path() {
-        let mut meta = map(vec![("website", map(vec![("favicon", s("/favicon.ico"))]))]);
-        apply_favicon(&mut meta, Some(&nested_page_resolver()));
+    fn favicon_external_url_bypasses_the_resolver() {
+        let mut meta = map(vec![("title", s("Doc"))]);
+        apply_favicon(
+            &mut meta,
+            favicon("https://cdn.example.com/logo.png"),
+            Some(&nested_page_resolver()),
+        );
         let includes = header_includes_strings(&meta);
         assert_eq!(includes.len(), 1);
-        // Without normalization, page_url_for would have received
-        // a leading-slash path and returned an unrooted absolute
-        // result. With normalization it produces page-relative.
         assert_eq!(
             includes[0],
-            r#"<link rel="icon" href="../favicon.ico" type="image/x-icon">"#
+            r#"<link rel="icon" href="https://cdn.example.com/logo.png" type="image/png">"#
+        );
+    }
+
+    /// Protocol-relative URLs get the same treatment — and must not
+    /// have a slash stripped on the way through.
+    #[test]
+    fn favicon_protocol_relative_url_bypasses_the_resolver() {
+        let mut meta = map(vec![("title", s("Doc"))]);
+        apply_favicon(
+            &mut meta,
+            favicon("//cdn.example.com/logo.svg"),
+            Some(&nested_page_resolver()),
+        );
+        let includes = header_includes_strings(&meta);
+        assert_eq!(
+            includes[0],
+            r#"<link rel="icon" href="//cdn.example.com/logo.svg" type="image/svg+xml">"#
         );
     }
 
     /// HTML-escape: a path with `&` doesn't produce broken HTML.
     #[test]
     fn favicon_escapes_ampersand_in_path() {
-        let mut meta = map(vec![("website", map(vec![("favicon", s("a&b.ico"))]))]);
-        apply_favicon(&mut meta, Some(&root_page_resolver()));
+        let mut meta = map(vec![("title", s("Doc"))]);
+        apply_favicon(&mut meta, favicon("a&b.ico"), Some(&root_page_resolver()));
         let includes = header_includes_strings(&meta);
         assert_eq!(includes.len(), 1);
         assert!(

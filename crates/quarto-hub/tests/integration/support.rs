@@ -223,6 +223,10 @@ pub struct ClaimsBuilder {
     iat: Option<i64>,
     nbf: Option<i64>,
     exp: i64,
+    /// OIDC `nonce`, echoed by the IdP from the authorization request.
+    /// Omitted from the payload when `None`, which is what a pre-H2
+    /// client (or a replayed token from another login) looks like.
+    nonce: Option<String>,
 }
 
 impl ClaimsBuilder {
@@ -240,6 +244,7 @@ impl ClaimsBuilder {
             iat: Some(now - 5),
             nbf: None,
             exp: now + 600,
+            nonce: None,
         }
     }
 
@@ -277,8 +282,21 @@ impl ClaimsBuilder {
         self.iat = Some(iat);
         self
     }
+    /// Omit the `iat` claim entirely — OIDC requires it and Google
+    /// always sends it, but `OidcClaims.iat` is `Option<i64>`, so the
+    /// fail-closed revocation anchor needs this shape covered.
+    pub fn no_iat(mut self) -> Self {
+        self.iat = None;
+        self
+    }
     pub fn exp(mut self, exp: i64) -> Self {
         self.exp = exp;
+        self
+    }
+    /// Set the OIDC `nonce` claim (H2). Leave unset to model a token
+    /// that carries none.
+    pub fn nonce(mut self, nonce: impl Into<String>) -> Self {
+        self.nonce = Some(nonce.into());
         self
     }
     pub fn to_value(&self) -> JsonValue {
@@ -306,6 +324,9 @@ impl ClaimsBuilder {
         if let Some(nbf) = self.nbf {
             m.insert("nbf".into(), JsonValue::Number(nbf.into()));
         }
+        if let Some(nonce) = &self.nonce {
+            m.insert("nonce".into(), JsonValue::String(nonce.clone()));
+        }
         v
     }
 }
@@ -316,6 +337,22 @@ impl ClaimsBuilder {
 /// session tokens out-of-band via `quarto_hub::session` and have the
 /// hub accept them.
 pub const TEST_SESSION_SECRET: [u8; 32] = [0x42; 32];
+
+/// Session-cookie name in secure (TLS) mode — `__Host-` prefixed (H3).
+pub const AUTH_COOKIE_NAME_SECURE: &str = "__Host-quarto_hub_token";
+
+/// Session-cookie name under `--allow-insecure-auth`, and the
+/// pre-H3 name everywhere. `__Host-` requires `Secure`, which requires
+/// TLS, so insecure mode cannot use the prefixed form.
+pub const AUTH_COOKIE_NAME_LEGACY: &str = "quarto_hub_token";
+
+/// Sealed login-state cookie name in secure mode (H2). `__Secure-`
+/// rather than `__Host-` because the cookie is scoped to `Path=/auth`,
+/// which `__Host-` forbids.
+pub const LOGIN_STATE_COOKIE_SECURE: &str = "__Secure-quarto_hub_login";
+
+/// Sealed login-state cookie name under `--allow-insecure-auth`.
+pub const LOGIN_STATE_COOKIE_LEGACY: &str = "quarto_hub_login";
 
 pub struct TestHub {
     pub base_url: String,
@@ -335,7 +372,9 @@ pub struct TestHubBuilder {
     session_secret: Option<[u8; 32]>,
     previous_session_secret: Option<[u8; 32]>,
     google_provider: bool,
+    auth_disabled: bool,
     banned_subs: Vec<String>,
+    not_before_subs: Vec<(String, i64)>,
 }
 
 impl Default for TestHubBuilder {
@@ -352,8 +391,18 @@ impl TestHubBuilder {
             session_secret: None,
             previous_session_secret: None,
             google_provider: false,
+            auth_disabled: false,
             banned_subs: Vec::new(),
+            not_before_subs: Vec::new(),
         }
+    }
+
+    /// Start the hub with `auth_config: None` — the no-auth deployment
+    /// shape. Auth-conditional routes (`/auth/session`,
+    /// `/auth/callback`) must not be registered.
+    pub fn auth_disabled(mut self) -> Self {
+        self.auth_disabled = true;
+        self
     }
 
     pub fn allowed_domains(mut self, domains: &[&str]) -> Self {
@@ -396,6 +445,13 @@ impl TestHubBuilder {
     /// file with the hub stopped; enforced after startup).
     pub fn banned_subs(mut self, subs: &[&str]) -> Self {
         self.banned_subs = subs.iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    /// Pre-write `revocations.json` `not_before` entries (the on-disk
+    /// shape a `logout-everywhere` leaves behind) before the hub starts.
+    pub fn not_before_subs(mut self, entries: &[(&str, i64)]) -> Self {
+        self.not_before_subs = entries.iter().map(|(s, t)| (s.to_string(), *t)).collect();
         self
     }
 
@@ -443,12 +499,17 @@ impl TestHubBuilder {
             std::fs::write(temp.path().join("hub.json"), config.to_string()).unwrap();
         }
 
-        // Pre-write revocations.json with ban entries (the documented
-        // stopped-hub operator procedure).
-        if !self.banned_subs.is_empty() {
+        // Pre-write revocations.json with ban / not_before entries (the
+        // documented stopped-hub operator procedure).
+        if !self.banned_subs.is_empty() || !self.not_before_subs.is_empty() {
+            let not_before: serde_json::Map<String, serde_json::Value> = self
+                .not_before_subs
+                .iter()
+                .map(|(sub, ts)| (sub.clone(), serde_json::json!(ts)))
+                .collect();
             let revocations = serde_json::json!({
                 "version": 1,
-                "not_before": {},
+                "not_before": not_before,
                 "banned": self.banned_subs,
             });
             std::fs::write(
@@ -470,7 +531,7 @@ impl TestHubBuilder {
             host: "127.0.0.1".to_string(),
             sync_interval_secs: None,
             watch_enabled: false,
-            auth_config: Some(auth_config),
+            auth_config: (!self.auth_disabled).then_some(auth_config),
             allow_insecure_auth: self.allow_insecure_auth,
             register_root_ws: false,
             ..HubConfig::default()
@@ -480,17 +541,20 @@ impl TestHubBuilder {
         let ctx: SharedContext = Arc::new(ctx);
 
         // Inject the auth state ourselves, bypassing OIDC discovery so the
-        // mock provider's http:// URLs are usable in tests.
-        let audiences = vec![SPA_CLIENT_ID.to_string(), MCP_CLIENT_ID.to_string()];
-        let auth_state = auth::build_auth_state_from_parts(
-            provider.jwks_url.clone(),
-            vec![Algorithm::RS256],
-            audiences,
-            provider.issuer.clone(),
-        )
-        .await
-        .expect("build auth state");
-        ctx.set_auth_state(auth_state).expect("set auth state");
+        // mock provider's http:// URLs are usable in tests. Skipped for a
+        // no-auth hub, which has no JWKS decoder to install.
+        if !self.auth_disabled {
+            let audiences = vec![SPA_CLIENT_ID.to_string(), MCP_CLIENT_ID.to_string()];
+            let auth_state = auth::build_auth_state_from_parts(
+                provider.jwks_url.clone(),
+                vec![Algorithm::RS256],
+                audiences,
+                provider.issuer.clone(),
+            )
+            .await
+            .expect("build auth state");
+            ctx.set_auth_state(auth_state).expect("set auth state");
+        }
 
         let router = build_router_with_state(ctx.clone()).await.unwrap();
         let router = router.with_state(ctx);
@@ -534,18 +598,31 @@ impl TestHub {
         self.client.post(self.url("/auth/logout"))
     }
 
-    /// Extract the `quarto_hub_token` value from a response's
-    /// `Set-Cookie` headers, plus the full attribute string.
-    /// Returns `None` when no auth cookie was set.
+    /// Extract the session-cookie value from a response's `Set-Cookie`
+    /// headers, plus the full attribute string. Returns `None` when no
+    /// auth cookie was set.
+    ///
+    /// The hub's cookie name is mode-dependent (H3): `__Host-`-prefixed
+    /// under TLS, bare under `--allow-insecure-auth`. The prefixed name
+    /// is checked **first** so a secure-mode mint — which also emits a
+    /// legacy-name *clear* — yields the real token, not the clear.
     pub fn set_auth_cookie(resp: &reqwest::Response) -> Option<(String, String)> {
+        Self::find_set_cookie(resp, AUTH_COOKIE_NAME_SECURE)
+            .or_else(|| Self::find_set_cookie(resp, AUTH_COOKIE_NAME_LEGACY))
+    }
+
+    /// Extract a specific `Set-Cookie` by cookie name, as
+    /// `(value, full_attribute_string)`.
+    pub fn find_set_cookie(resp: &reqwest::Response, name: &str) -> Option<(String, String)> {
+        let prefix = format!("{name}=");
         resp.headers()
             .get_all(http::header::SET_COOKIE)
             .iter()
             .filter_map(|v| v.to_str().ok())
-            .find(|v| v.starts_with("quarto_hub_token="))
+            .find(|v| v.starts_with(&prefix))
             .map(|v| {
                 let value = v
-                    .strip_prefix("quarto_hub_token=")
+                    .strip_prefix(&prefix)
                     .unwrap()
                     .split(';')
                     .next()

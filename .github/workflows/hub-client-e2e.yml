@@ -117,6 +117,12 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      # wasm-opt (binaryen) is `build:wasm` step 3 (live-share payload
+      # plan Phase 1). Pinned to the version local dev uses (Homebrew
+      # binaryen 132) so CI and dev builds produce the same bytes.
+      - name: Install binaryen (wasm-opt)
+        run: npm install -g binaryen@132.0.0
+
       # WASM artifacts must exist before any package's `vite build` runs
       # (hub-client and q2-demos/* all import the WASM module).
       - name: Build WASM
@@ -169,12 +175,42 @@ jobs:
           cd hub-client
           npx playwright test
 
+      # Did this PR touch smoke-all fixtures? If so we run smoke-all below, so
+      # a fixture can't be authored against `q2 render` (no source-location),
+      # land green, and then sit red in a nightly nobody watches — which is
+      # exactly how three fixtures were born red (bd-nhn7snpg).
+      #
+      # This is a step-level gate on purpose. `on.pull_request.paths` would
+      # filter the whole WORKFLOW, which would stop the fast interactive E2E
+      # gate from running on every other PR.
+      #
+      # The explicit fetch is load-bearing: actions/checkout clones shallow,
+      # so without it there is no base commit to diff against. Two-dot diff
+      # (not three-dot) for the same reason — no merge-base in a shallow clone.
+      - name: Did this PR touch smoke-all fixtures?
+        id: smoke_changed
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "${{ github.base_ref }}"
+          if git diff --quiet FETCH_HEAD HEAD -- crates/quarto/tests/smoke-all/; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No smoke-all fixture changes; skipping smoke-all."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Smoke-all fixtures changed:"
+            git diff --name-only FETCH_HEAD HEAD -- crates/quarto/tests/smoke-all/
+          fi
+
       # Smoke-all: full render pipeline matrix (~80 tests). Runs nightly
-      # (schedule trigger) or on demand (workflow_dispatch with run-smoke-all=true).
-      # Skipped for every push/PR. Use this to verify render correctness after
-      # changes to the WASM pipeline or theme resolution.
-      - name: Run smoke-all E2E tests (nightly + opt-in)
-        if: inputs.run-smoke-all == true || github.event_name == 'schedule'
+      # (schedule trigger), on demand (workflow_dispatch with run-smoke-all=true),
+      # and on PRs that touch smoke-all fixtures. Otherwise skipped for push/PR.
+      # Use this to verify render correctness after changes to the WASM
+      # pipeline or theme resolution.
+      - name: Run smoke-all E2E tests (nightly + opt-in + fixture PRs)
+        if: >-
+          inputs.run-smoke-all == true
+          || github.event_name == 'schedule'
+          || steps.smoke_changed.outputs.changed == 'true'
         env:
           # Worker count override. Scheduled nightlies leave inputs unset, so
           # this is empty → the config uses its default (3). A workflow_dispatch

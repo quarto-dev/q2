@@ -1,0 +1,28 @@
+Link with relative path [x](../foo.html) here.
+
+Prose with two dots .. and a lone dot . here.
+
+... starts this block.
+
+Filename a.b.c and decimal 3.14 and Mr. Smith here.
+
+Attribute span [text]{.class} and another [y]{.a .b} here.
+
+| col . one | col ... two |
+|-----------|-------------|
+| a .. b    | c ... d     |
+
+1. ordered item one
+2. ordered item two
+
+1... not a list
+
+Four dots .... and five ..... here.
+
+## Heading with ... dots
+
+Emphasis **...** and *...* here.
+
+Code `...` untouched.
+
+Escaped a\.\.\.b stays literal.

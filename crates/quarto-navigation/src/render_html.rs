@@ -27,7 +27,7 @@ use crate::footer::{FooterBorder, FooterRegion, PageFooter};
 use crate::item::NavigationItem;
 use crate::navbar::{Navbar, NavbarTitle};
 use crate::page_nav::PageNavigation;
-use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
+use crate::sidebar::{Crumb, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
 
 /// Render a complete navbar element.
 ///
@@ -43,7 +43,7 @@ use crate::sidebar::{Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
 /// pass `"./"` in unit tests / single-doc fallbacks. See bd-jgeu.
 pub fn navbar_to_html(
     navbar: &Navbar,
-    document_title_fallback: Option<&str>,
+    document_title_fallback: Option<&ConfigValue>,
     home_url: &str,
 ) -> String {
     let mut html = String::new();
@@ -199,7 +199,73 @@ pub fn page_footer_to_html(footer: &PageFooter) -> String {
 /// Phase 2 emits structurally-correct collapse markup (`data-bs-*`
 /// attributes, `aria-expanded`), but the actual JS glue lives in
 /// Phase 5 (`site_libs/`); until then the chevrons are inert.
+/// Render a breadcrumb trail — Q1's `.quarto-page-breadcrumbs` markup
+/// (bd-breadcrumbs-missing-1vpuqh34):
+///
+/// ```html
+/// <nav class="quarto-page-breadcrumbs …" aria-label="breadcrumb">
+///   <ol class="breadcrumb">
+///     <li class="breadcrumb-item"><a href="…">Text</a></li>
+///     …
+///   </ol>
+/// </nav>
+/// ```
+///
+/// `extra_classes` tags the placement variant — the title-block
+/// instance carries `quarto-title-breadcrumbs d-none d-lg-block`; the
+/// (future) secondary-nav instance carries none. Crumbs without text
+/// are skipped (Q1's `item.text || item.icon` filter, minus icons —
+/// q2 crumbs have no icon field yet); crumbs without an href render
+/// as unlinked text. Pure and resolver-free like its siblings —
+/// callers resolve crumb hrefs before rendering.
+pub fn breadcrumbs_to_html(crumbs: &[Crumb], extra_classes: &[&str]) -> String {
+    let mut classes = String::from("quarto-page-breadcrumbs");
+    for cls in extra_classes {
+        classes.push(' ');
+        classes.push_str(cls);
+    }
+    let mut html = format!(
+        "<nav class=\"{}\" aria-label=\"breadcrumb\"><ol class=\"breadcrumb\">",
+        classes
+    );
+    for crumb in crumbs {
+        let Some(text_cv) = &crumb.text else {
+            continue;
+        };
+        let text = render_text(text_cv);
+        html.push_str("<li class=\"breadcrumb-item\">");
+        match &crumb.href {
+            Some(href) => {
+                html.push_str("<a href=\"");
+                html.push_str(&escape_attr(href));
+                html.push_str("\">");
+                html.push_str(&text);
+                html.push_str("</a>");
+            }
+            None => html.push_str(&text),
+        }
+        html.push_str("</li>");
+    }
+    html.push_str("</ol></nav>");
+    html
+}
+
 pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
+    sidebar_to_html_with_appended(sidebar, home_url, None)
+}
+
+/// [`sidebar_to_html`] with an extra HTML fragment appended inside the
+/// `nav#quarto-sidebar` element, after the menu.
+///
+/// This is the seam for `toc-location: left` on website pages
+/// (bd-e2kpwy7n): quarto-core's `SidebarRenderTransform` passes the
+/// rendered `nav#TOC` block here so it lands after the nav items —
+/// Q1's `sidebar.ejs` merge order (items first, TOC target last).
+pub fn sidebar_to_html_with_appended(
+    sidebar: &Sidebar,
+    home_url: &str,
+    appended_html: Option<&str>,
+) -> String {
     let mut html = String::new();
 
     let style_class = match sidebar.style {
@@ -240,6 +306,9 @@ pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
         html.push_str("  </div>\n");
     }
 
+    if let Some(extra) = appended_html {
+        html.push_str(extra);
+    }
     html.push_str("</nav>\n");
     html
 }
@@ -309,7 +378,7 @@ fn render_page_nav_side(html: &mut String, side: &str, item: Option<&NavigationI
 
 // --- Private helpers ---------------------------------------------------------
 
-fn render_brand(navbar: &Navbar, fallback: Option<&str>, home_url: &str) -> Option<String> {
+fn render_brand(navbar: &Navbar, fallback: Option<&ConfigValue>, home_url: &str) -> Option<String> {
     let href = navbar.logo_href.as_deref().unwrap_or(home_url);
     let logo_img = navbar.logo.as_deref().map(|logo| {
         let alt = navbar
@@ -327,7 +396,11 @@ fn render_brand(navbar: &Navbar, fallback: Option<&str>, home_url: &str) -> Opti
     let title_html = match &navbar.title {
         NavbarTitle::Hidden => None,
         NavbarTitle::Text(cv) => Some(render_text(cv)),
-        NavbarTitle::Default => fallback.map(escape_html),
+        // The fallback (`website.title` → document `title`) is a
+        // ConfigValue so PandocInlines-shaped titles — the common form
+        // once ConfigMarkdownTransform has run — render as inlines
+        // (raw HTML honored) instead of being flattened and escaped.
+        NavbarTitle::Default => fallback.map(render_text),
     };
 
     // Nothing to show? Skip brand entirely.
@@ -673,9 +746,21 @@ fn render_footer_region(html: &mut String, class: &str, region: &FooterRegion) {
 
 fn render_footer_item(item: &NavigationItem, indent: usize) -> String {
     let pad = " ".repeat(indent);
-    let mut attrs = link_attrs(item);
     let label = render_item_label(item);
-    let href = item.href.as_deref().unwrap_or("#");
+
+    // No href: emit the label directly in the `<li>`, with no wrapping
+    // anchor (bd-page-footer-items-f4th80mj, defect 5). Q1 does the same,
+    // and the sidebar already takes this shape for `SidebarEntry::Heading`.
+    //
+    // This is not cosmetic: item `text:` is markdown now, so a label
+    // carrying its own `<a>` — the common cookie-preferences pattern —
+    // would otherwise land *inside* this anchor and produce nested
+    // anchors, which is invalid HTML.
+    let Some(href) = item.href.as_deref() else {
+        return format!("{}<li class=\"nav-item\">{}</li>\n", pad, label);
+    };
+
+    let mut attrs = link_attrs(item);
     attrs.insert(0, format!("href=\"{}\"", escape_attr(href)));
     attrs.insert(1, "class=\"nav-link\"".to_string());
     format!(
@@ -806,8 +891,57 @@ fn push_inline(out: &mut String, inline: &Inline) {
                 out.push_str(&r.text);
             }
         }
-        // The remaining variants (Cite, Math, Image, Note, NoteReference,
-        // Shortcode, Attr, Insert, Delete, Highlight, EditComment, Custom)
+        // Markdown images are first-class in nav/footer text regions
+        // (bd-root-relative-paths-design-fc5pvkcv, Case C): without
+        // this arm they flattened to alt text, which pushed authors
+        // into raw `<img>`{=html} — the one form whose paths cannot
+        // be rebased. The src is emitted verbatim; page-relative
+        // resolution happens upstream in quarto-core's render
+        // transforms, keeping this module resolver-free.
+        Inline::Image(img) => {
+            out.push_str("<img src=\"");
+            out.push_str(&escape_attr(&img.target.0));
+            out.push_str("\" alt=\"");
+            out.push_str(&escape_attr(
+                &inlines_plain_text(&img.content).unwrap_or_default(),
+            ));
+            out.push('"');
+            if !img.target.1.is_empty() {
+                out.push_str(" title=\"");
+                out.push_str(&escape_attr(&img.target.1));
+                out.push('"');
+            }
+            let (id, classes, kvs) = &img.attr;
+            if !id.is_empty() {
+                out.push_str(" id=\"");
+                out.push_str(&escape_attr(id));
+                out.push('"');
+            }
+            if !classes.is_empty() {
+                out.push_str(" class=\"");
+                out.push_str(&escape_attr(&classes.join(" ")));
+                out.push('"');
+            }
+            for (k, v) in kvs {
+                out.push(' ');
+                out.push_str(&escape_attr(k));
+                out.push_str("=\"");
+                out.push_str(&escape_attr(v));
+                out.push('"');
+            }
+            out.push('>');
+        }
+        // An unresolved shortcode reaching the renderer means it was
+        // never visited by ShortcodeResolveTransform's metadata walk
+        // (resolved ones are Str/error-marker nodes by now). Render the
+        // body-text-policy marker instead of silently dropping it.
+        Inline::Shortcode(sc) => {
+            out.push_str("<strong>");
+            out.push_str(&escape_html(&format!("?{}", sc.name)));
+            out.push_str("</strong>");
+        }
+        // The remaining variants (Cite, Math, Note, NoteReference,
+        // Attr, Insert, Delete, Highlight, EditComment, Custom)
         // are not expected in navbar/footer text. Fall back to plain text.
         other => {
             if let Some(content) = inline_plain_fallback(other) {
@@ -819,9 +953,14 @@ fn push_inline(out: &mut String, inline: &Inline) {
 
 fn inline_plain_fallback(inline: &Inline) -> Option<String> {
     // Best-effort flattening for unsupported inline kinds.
+    inlines_plain_text(std::slice::from_ref(inline))
+}
+
+/// Flatten inlines to their plain text (used for `<img alt>` and the
+/// unsupported-inline fallback).
+fn inlines_plain_text(inlines: &[Inline]) -> Option<String> {
     use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_pandoc_types::config_value::ConfigValueKind;
-    let inlines = std::slice::from_ref(inline);
     let cv = ConfigValue {
         value: ConfigValueKind::PandocInlines(inlines.to_vec()),
         source_info: SourceInfo::generated(By::programmatic_config()),
@@ -924,7 +1063,7 @@ mod tests {
     #[test]
     fn navbar_falls_back_to_document_title() {
         let navbar = Navbar::with_defaults();
-        let html = navbar_to_html(&navbar, Some("Doc Title"), "./");
+        let html = navbar_to_html(&navbar, Some(&s("Doc Title")), "./");
         assert!(html.contains("Doc Title"));
         assert!(html.contains("navbar-brand"));
     }
@@ -935,7 +1074,7 @@ mod tests {
             title: NavbarTitle::Hidden,
             ..Navbar::with_defaults()
         };
-        let html = navbar_to_html(&navbar, Some("Doc Title"), "./");
+        let html = navbar_to_html(&navbar, Some(&s("Doc Title")), "./");
         assert!(!html.contains("Doc Title"));
         assert!(!html.contains("navbar-brand"));
     }
@@ -1156,7 +1295,7 @@ mod tests {
         // Sanity-check the navbar's existing container wrapper; same
         // rationale as the footer, and guards against regressions.
         let navbar = Navbar::with_defaults();
-        let html = navbar_to_html(&navbar, Some("Doc"), "./");
+        let html = navbar_to_html(&navbar, Some(&s("Doc")), "./");
         assert!(
             html.contains("<div class=\"container-fluid\">"),
             "navbar should wrap body in .container-fluid: {}",
@@ -1241,6 +1380,95 @@ mod tests {
         assert!(html.contains("border-top: none"));
     }
 
+    // --- href-less footer items (bd-page-footer-items-f4th80mj) -----
+
+    /// Defect 5 — an item with `text:` but no `href:` renders its label
+    /// directly in the `<li>`, with no wrapping anchor. Mirrors Q1 and
+    /// the sidebar's existing `SidebarEntry::Heading` precedent.
+    #[test]
+    fn footer_item_without_href_renders_without_anchor() {
+        let footer = PageFooter {
+            left: FooterRegion::Items(vec![NavigationItem {
+                text: Some(s("Just text")),
+                ..NavigationItem::default()
+            }]),
+            ..PageFooter::default()
+        };
+        let html = page_footer_to_html(&footer);
+        assert!(
+            html.contains("Just text"),
+            "label should be present; html: {}",
+            html
+        );
+        assert!(
+            !html.contains("href=\"#\""),
+            "href-less footer item must not be wrapped in <a href=\"#\">; html: {}",
+            html
+        );
+        assert!(
+            !html.contains("<a "),
+            "href-less footer item must emit no anchor at all; html: {}",
+            html
+        );
+    }
+
+    /// Defect 5, the case that forces it to land with defect 1: item
+    /// text carrying its own `<a>` must not end up nested inside a
+    /// wrapping anchor (invalid HTML). This is the cookie-preferences
+    /// pattern from the Posit Connect docs.
+    #[test]
+    fn footer_item_with_own_anchor_does_not_nest_anchors() {
+        use quarto_pandoc_types::inline::RawInline;
+        let raw = |t: &str| {
+            Inline::RawInline(RawInline {
+                format: "html".to_string(),
+                text: t.to_string(),
+                source_info: SourceInfo::for_test(),
+            })
+        };
+        let text = ConfigValue::new_inlines(
+            vec![
+                raw("<a href=\"#\" id=\"open_preferences_center\">"),
+                str_inline("Cookie Preferences"),
+                raw("</a>"),
+            ],
+            SourceInfo::for_test(),
+        );
+        let footer = PageFooter {
+            right: FooterRegion::Items(vec![NavigationItem {
+                text: Some(text),
+                ..NavigationItem::default()
+            }]),
+            ..PageFooter::default()
+        };
+        let html = page_footer_to_html(&footer);
+        assert_eq!(
+            html.matches("<a ").count(),
+            1,
+            "exactly one anchor (the author's own) should survive; html: {}",
+            html
+        );
+    }
+
+    /// An item that *does* have an href keeps its anchor.
+    #[test]
+    fn footer_item_with_href_still_renders_anchor() {
+        let footer = PageFooter {
+            left: FooterRegion::Items(vec![NavigationItem {
+                href: Some("https://example.com".to_string()),
+                text: Some(s("Support")),
+                ..NavigationItem::default()
+            }]),
+            ..PageFooter::default()
+        };
+        let html = page_footer_to_html(&footer);
+        assert!(
+            html.contains("<a href=\"https://example.com\""),
+            "item with href keeps its anchor; html: {}",
+            html
+        );
+    }
+
     #[test]
     fn footer_escapes_literal_text() {
         let footer = PageFooter {
@@ -1276,6 +1504,54 @@ mod tests {
         let out = inlines_to_html(&inlines);
         assert!(out.contains("<a href=\"https://example.com\">site</a>"));
         assert!(out.contains("<code>x &amp; y</code>"));
+    }
+
+    /// Case C incentive removal
+    /// (bd-root-relative-paths-design-fc5pvkcv): a markdown image in a
+    /// nav/footer text region renders as a real `<img>` — src, alt
+    /// (flattened content), title, and attributes all carried through —
+    /// instead of flattening to its alt text, which is what pushed
+    /// authors into raw `<img>`{=html}. The src is emitted verbatim:
+    /// page-relative resolution happens upstream in quarto-core.
+    #[test]
+    fn inlines_to_html_image_renders_img_tag() {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        let mut attr: quarto_pandoc_types::attr::Attr = Default::default();
+        attr.0 = "brand-img".to_string();
+        attr.1.push("footer-logo".to_string());
+        attr.2.insert("width".to_string(), "32".to_string());
+        let inlines = vec![Inline::Image(quarto_pandoc_types::inline::Image {
+            attr,
+            content: vec![str_inline("Posit logo")],
+            target: ("../../images/logo.svg".to_string(), "The title".to_string()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })];
+        let out = inlines_to_html(&inlines);
+        assert_eq!(
+            out,
+            "<img src=\"../../images/logo.svg\" alt=\"Posit logo\" \
+             title=\"The title\" id=\"brand-img\" class=\"footer-logo\" \
+             width=\"32\">"
+        );
+    }
+
+    /// Attribute-less image: only src and alt, and everything is
+    /// escaped.
+    #[test]
+    fn inlines_to_html_image_minimal_and_escaped() {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        let inlines = vec![Inline::Image(quarto_pandoc_types::inline::Image {
+            attr: Default::default(),
+            content: vec![str_inline("a & b")],
+            target: ("x\"y.svg".to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })];
+        let out = inlines_to_html(&inlines);
+        assert_eq!(out, "<img src=\"x&quot;y.svg\" alt=\"a &amp; b\">");
     }
 
     // --- Navbar active-item rendering (Phase 3) -------------------------
@@ -1892,5 +2168,76 @@ mod tests {
             .unwrap_or("");
         assert!(prev_block.contains("bi-arrow-left-short"));
         assert!(!prev_block.contains("bi-arrow-right-short"));
+    }
+
+    // ---- breadcrumbs_to_html (bd-breadcrumbs-missing-1vpuqh34) ----
+
+    /// Full markup shape, Q1 parity: nav.quarto-page-breadcrumbs with
+    /// extra classes, aria-label, ol.breadcrumb, li.breadcrumb-item,
+    /// linked crumbs.
+    #[test]
+    fn breadcrumbs_markup_shape() {
+        let crumbs = vec![
+            Crumb {
+                text: Some(s("Guide")),
+                href: Some("../intro.html".to_string()),
+            },
+            Crumb {
+                text: Some(s("Deep")),
+                href: Some("deep.html".to_string()),
+            },
+        ];
+        let html = breadcrumbs_to_html(
+            &crumbs,
+            &["quarto-title-breadcrumbs", "d-none", "d-lg-block"],
+        );
+        assert_eq!(
+            html,
+            "<nav class=\"quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block\" \
+             aria-label=\"breadcrumb\"><ol class=\"breadcrumb\">\
+             <li class=\"breadcrumb-item\"><a href=\"../intro.html\">Guide</a></li>\
+             <li class=\"breadcrumb-item\"><a href=\"deep.html\">Deep</a></li>\
+             </ol></nav>"
+        );
+    }
+
+    /// Crumb without href renders unlinked; crumb without text is
+    /// skipped entirely (Q1's text filter).
+    #[test]
+    fn breadcrumbs_unlinked_and_textless_crumbs() {
+        let crumbs = vec![
+            Crumb {
+                text: Some(s("No Link")),
+                href: None,
+            },
+            Crumb {
+                text: None,
+                href: Some("skipped.html".to_string()),
+            },
+        ];
+        let html = breadcrumbs_to_html(&crumbs, &[]);
+        assert!(
+            html.contains("<li class=\"breadcrumb-item\">No Link</li>"),
+            "unlinked crumb renders as bare text; got: {}",
+            html
+        );
+        assert!(!html.contains("skipped.html"), "textless crumb skipped");
+        assert!(html.starts_with("<nav class=\"quarto-page-breadcrumbs\""));
+    }
+
+    /// Text and href are escaped.
+    #[test]
+    fn breadcrumbs_escapes_text_and_href() {
+        let crumbs = vec![Crumb {
+            text: Some(s("A & B")),
+            href: Some("x.html?a=1&b=2".to_string()),
+        }];
+        let html = breadcrumbs_to_html(&crumbs, &[]);
+        assert!(html.contains("A &amp; B"), "text escaped; got {}", html);
+        assert!(
+            html.contains("x.html?a=1&amp;b=2"),
+            "href escaped; got {}",
+            html
+        );
     }
 }

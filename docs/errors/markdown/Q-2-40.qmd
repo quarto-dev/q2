@@ -1,0 +1,48 @@
+---
+title: "Engine Specification Ignored for Markdown Input"
+description: "A .md document declared an execution engine; .md files never execute code, so the specification has no effect."
+code: Q-2-40
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-40` — Engine Specification Ignored for Markdown Input
+
+> `.md` documents never execute engines; the engine specification has
+> no effect.
+
+## What this means
+
+A `.md` file's front matter declared an execution engine — either
+explicitly:
+
+```yaml
+---
+title: My notes
+engine: jupyter
+---
+```
+
+or implicitly, via an engine-specific top-level key:
+
+```yaml
+---
+title: My notes
+jupyter:
+  kernel: python3
+---
+```
+
+In Quarto 2, plain `.md` files support the full Quarto markdown
+dialect (shortcodes, divs, cross-references, …) but never execute
+code. The engine specification is ignored: the document still renders,
+code cells pass through as ordinary code blocks, and nothing runs.
+
+## How to fix it
+
+- If the document needs executable code, rename it to `.qmd`.
+- If it doesn't, delete the `engine:` (or `jupyter:` / `knitr:`) key
+  from its front matter.

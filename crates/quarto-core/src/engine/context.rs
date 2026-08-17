@@ -60,6 +60,21 @@ pub struct ExecutionContext {
     /// this would contain the `{ kernel: python3 }` map.
     pub engine_config: Option<ConfigValue>,
 
+    /// The document's merged `execute:` scope, if it has one.
+    ///
+    /// This is the document-level default every cell option resolves
+    /// against: cell `#|` options merge *over* this map, cell wins
+    /// (Q1's `shouldInclude` in `src/core/jupyter/tags.ts`). It comes
+    /// from the fully merged metadata — `MetadataMergeStage` runs
+    /// before engine execution — so project `_quarto.yml` defaults and
+    /// profile overlays are already folded in.
+    ///
+    /// Engines that need it: jupyter resolves `echo`/`output`/
+    /// `warning`/`include`/`error` against it in Rust; knitr forwards
+    /// it to R as `format$execute`, where `execute.R` builds
+    /// `opts_chunk` from it (bd-nn2fou8h).
+    pub execute_scope: Option<ConfigValue>,
+
     /// Source provenance for the input text.
     ///
     /// Maps byte offsets in the engine's input `&str` back to original source
@@ -137,6 +152,14 @@ pub struct ExecutionContext {
     /// Defaults to empty so existing call sites (tests, knitr, jupyter) are
     /// unaffected.
     pub metadata: HashMap<String, TsMetadataValue>,
+
+    /// Environment pairs from the project's `_environment` files to
+    /// pass to engine subprocesses, **already filtered** to keys the
+    /// real process environment does not define (see
+    /// [`crate::project::environment::env_for_subprocess`]). q2 never
+    /// mutates its own environment; executed code sees these values
+    /// only because spawn sites apply them with `Command::env`.
+    pub project_env: Vec<(String, String)>,
 }
 
 impl ExecutionContext {
@@ -155,6 +178,7 @@ impl ExecutionContext {
             format: format.into(),
             quiet: false,
             engine_config: None,
+            execute_scope: None,
             // "no source location known yet" sentinel; `with_source_info`
             // overwrites this with the real qmd serialization range before
             // any consumer reads it.
@@ -170,7 +194,16 @@ impl ExecutionContext {
             // Default empty; EngineExecutionStage sets this from the merged
             // document metadata (P1.1b).
             metadata: HashMap::new(),
+            project_env: Vec::new(),
         }
+    }
+
+    /// Set the project environment pairs passed to engine
+    /// subprocesses (pre-filtered by
+    /// [`crate::project::environment::env_for_subprocess`]).
+    pub fn with_project_env(mut self, project_env: Vec<(String, String)>) -> Self {
+        self.project_env = project_env;
+        self
     }
 
     /// Set the project directory.
@@ -240,6 +273,12 @@ impl ExecutionContext {
     /// See the `metadata` field doc for the wire path this feeds.
     pub fn with_metadata(mut self, metadata: HashMap<String, TsMetadataValue>) -> Self {
         self.metadata = metadata;
+        self
+    }
+
+    /// Set the document's merged `execute:` scope (bd-nn2fou8h).
+    pub fn with_execute_scope(mut self, execute_scope: Option<ConfigValue>) -> Self {
+        self.execute_scope = execute_scope;
         self
     }
 }
@@ -501,6 +540,7 @@ mod tests {
     fn test_execute_result_html_dependencies_serde_round_trip() {
         let dep = HtmlDependency {
             name: "jquery".to_string(),
+            version: None,
             stylesheets: vec![PathBuf::from("libs/jquery/jquery.css")],
             scripts: vec![PathBuf::from("libs/jquery/jquery.js")],
         };

@@ -184,6 +184,8 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  padding: 0;
+  overflow: hidden;
 }
 
 .ph-avatar.big {
@@ -192,6 +194,13 @@
   font-size: 14px;
   cursor: default;
   flex-shrink: 0;
+}
+
+.ph-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 /* ---- menus ---- */
@@ -1034,6 +1043,24 @@ select.ph-input { appearance: auto; }
 }
 
 .ph-error.inline { margin: 12px 0 0; }
+
+/* Recovery action inside an error banner (e.g. "Sign in again" on an
+   expired-session join failure). */
+.ph-error-action {
+  display: block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--error-text);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--error-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ph-error-action:hover {
+  background: var(--error-bg-subtle);
+}
 
 .ph-empty-state {
   text-align: center;

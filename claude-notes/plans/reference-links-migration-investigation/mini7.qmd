@@ -1,0 +1,4 @@
+See [d][r].
+
+[r]: https://e.com
+[r2]: https://e2.com

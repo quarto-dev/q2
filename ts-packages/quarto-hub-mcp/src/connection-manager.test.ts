@@ -18,6 +18,7 @@ import type { SyncClient, SyncClientCallbacks } from '@quarto/quarto-sync-client
 import {
   AuthRequiredError,
   ConnectionManager,
+  HubAccessDeniedError,
   InsecureTransportError,
   isLoopbackHost,
 } from './connection-manager.js';
@@ -699,6 +700,269 @@ describe('waitForChange (long-poll)', () => {
     cap.cbs().onFileChanged('other.qmd', 'nope', []);
     const res = await pending;
     expect(res.changed).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mid-session auth rejection (bd-l3b1brn8)
+// ---------------------------------------------------------------------------
+//
+// The sync adapter reports definitive evidence (upgrade 401/403,
+// terminal refresh failure) through `onAuthRejected`; the manager owns
+// policy: one forceRefresh+reprobe cycle on 401 (coalesced across
+// projects), invalidate + reauth-required on persistent 401, a
+// keyring-preserving terminal "not allowed" state on 403. Network
+// errors never reach this path (the adapter never reports them).
+
+/** The upgrade-401 evidence shape the adapter reports. */
+const evidence401 = { kind: 'upgrade-status', status: 401 } as const;
+const evidence403 = { kind: 'upgrade-status', status: 403 } as const;
+
+describe('mid-session auth rejection', () => {
+  it('wires onAuthRejected into the sync-client auth options', async () => {
+    const auth = seededAuth();
+    const fetchSpy = scriptedFetch([200]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    const passed = sync.connectCalls[0]!.auth as {
+      onAuthRejected?: (evidence: unknown) => void;
+    };
+    expect(typeof passed.onAuthRejected).toBe('function');
+  });
+
+  it('recovers silently when one forceRefresh+reprobe fixes a 401', async () => {
+    const auth = seededAuth();
+    auth.forceRefresh.mockResolvedValue('fresh-token');
+    // initial probe 200, recheck probe 200.
+    const fetchSpy = scriptedFetch([200, 200]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    await mgr.handleAuthRejected(evidence401);
+
+    expect(auth.forceRefresh).toHaveBeenCalledOnce();
+    expect(fetchSpy.calls).toHaveLength(2);
+    expect(fetchSpy.calls[1]!.headers.Authorization).toBe('Bearer fresh-token');
+    // Recovery is invisible: no invalidate, project handle intact — the
+    // adapter's own retry picks the fresh token up via getBearer.
+    expect(auth.invalidate).not.toHaveBeenCalled();
+    expect(mgr.get('idx-1')).toBeDefined();
+  });
+
+  it('invalidates and enters reauth-required on persistent 401; the next call fails fast with ReauthRequired', async () => {
+    const auth = seededAuth();
+    auth.forceRefresh.mockResolvedValue('still-bad-token');
+    // initial probe 200, recheck probe 401 — and NOTHING more scripted:
+    // the post-state connect must fail without touching the network.
+    const fetchSpy = scriptedFetch([200, 401]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    await mgr.handleAuthRejected(evidence401);
+
+    expect(auth.invalidate).toHaveBeenCalledOnce();
+    expect(await auth.store.read()).toBeNull();
+    // The dead project handle was disconnected and dropped…
+    expect(mgr.get('idx-1')).toBeUndefined();
+    // …and the next tool call fails fast with the reauth message instead
+    // of hanging into the peer timeout (no probe: fetch is exhausted).
+    await expect(mgr.connect('idx-1')).rejects.toBeInstanceOf(ReauthRequired);
+  });
+
+  it('self-heals from reauth-required after the user re-authenticates', async () => {
+    const auth = seededAuth();
+    auth.forceRefresh.mockResolvedValue('still-bad-token');
+    const fetchSpy = scriptedFetch([200, 401, 200]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+    await mgr.handleAuthRejected(evidence401);
+    await expect(mgr.connect('idx-1')).rejects.toBeInstanceOf(ReauthRequired);
+
+    // The user runs `authenticate`: fresh credentials land in the store.
+    await auth.store.write({
+      idToken: 'post-reauth-token',
+      refreshToken: 'post-reauth-refresh',
+      idTokenExpiresAt: new Date(Date.now() + 3600_000),
+      scopes: ['openid', 'email', 'profile'],
+    });
+    auth.getValid.mockResolvedValue('post-reauth-token');
+
+    // The gate clears and a normal probed connect runs (the third 200).
+    await mgr.connect('idx-1');
+    expect(mgr.get('idx-1')).toBeDefined();
+  });
+
+  it('treats 403 evidence as terminal denial: keyring kept, clear message on the next call', async () => {
+    const auth = seededAuth();
+    // initial probe 200; the next connect's re-probe answers 403.
+    const fetchSpy = scriptedFetch([200, 403]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    await mgr.handleAuthRejected(evidence403);
+
+    // Identity denial, not credential failure: no refresh, no wipe.
+    expect(auth.forceRefresh).not.toHaveBeenCalled();
+    expect(auth.invalidate).not.toHaveBeenCalled();
+    expect(await auth.store.read()).not.toBeNull();
+    expect(mgr.get('idx-1')).toBeUndefined();
+
+    // Next call re-probes (fast HTTP, no peer timeout) and surfaces the
+    // clear denial message; a later operator un-ban would self-heal here.
+    const err = await mgr.connect('idx-1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(HubAccessDeniedError);
+    expect(String((err as Error).message)).toMatch(/banned|allowlist/i);
+  });
+
+  it('maps a 403 on the recheck probe after 401 evidence to the same denial state', async () => {
+    const auth = seededAuth();
+    auth.forceRefresh.mockResolvedValue('fresh-token');
+    // initial 200; recheck probe 403 (banned mid-session while a refresh
+    // was in flight); next connect re-probes 403.
+    const fetchSpy = scriptedFetch([200, 403, 403]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    await mgr.handleAuthRejected(evidence401);
+
+    expect(auth.invalidate).not.toHaveBeenCalled();
+    expect(await auth.store.read()).not.toBeNull();
+    expect(mgr.get('idx-1')).toBeUndefined();
+    await expect(mgr.connect('idx-1')).rejects.toBeInstanceOf(HubAccessDeniedError);
+  });
+
+  it('enters reauth-required directly on token-refresh-terminal evidence', async () => {
+    const auth = seededAuth();
+    const fetchSpy = scriptedFetch([200]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    // The refresh manager already invalidated the grant when it threw
+    // ReauthRequired from getBearer; simulate that store state.
+    await auth.store.clear();
+    await mgr.handleAuthRejected({ kind: 'token-refresh-terminal' });
+
+    expect(auth.forceRefresh).not.toHaveBeenCalled(); // pointless, skip it
+    expect(mgr.get('idx-1')).toBeUndefined();
+    await expect(mgr.connect('idx-1')).rejects.toBeInstanceOf(ReauthRequired);
+  });
+
+  it('coalesces concurrent reports into one forceRefresh+reprobe cycle', async () => {
+    const auth = seededAuth();
+    auth.forceRefresh.mockResolvedValue('fresh-token');
+    // Exactly one recheck response scripted: a second cycle would throw
+    // "ran out of responses".
+    const fetchSpy = scriptedFetch([200, 200]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    // Two project adapters both fire after a hub-wide event.
+    await Promise.all([
+      mgr.handleAuthRejected(evidence401),
+      mgr.handleAuthRejected(evidence401),
+    ]);
+
+    expect(auth.forceRefresh).toHaveBeenCalledOnce();
+    expect(fetchSpy.calls).toHaveLength(2);
+  });
+
+  it('leaves state untouched when the recheck refresh fails transiently (TokenRefreshError)', async () => {
+    const auth = seededAuth();
+    const transient = new Error('IdP hiccup');
+    transient.name = 'TokenRefreshError';
+    auth.forceRefresh.mockRejectedValue(transient);
+    const fetchSpy = scriptedFetch([200]); // no recheck probe happens
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    await mgr.handleAuthRejected(evidence401);
+
+    expect(auth.invalidate).not.toHaveBeenCalled();
+    expect(mgr.get('idx-1')).toBeDefined(); // nothing torn down
+    expect(await auth.store.read()).not.toBeNull();
+  });
+
+  it('surfaces the clear denial message on an initial-probe 403 (not "Unexpected status")', async () => {
+    const auth = seededAuth();
+    const fetchSpy = scriptedFetch([403]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+
+    const err = await mgr.connect('idx-1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(HubAccessDeniedError);
+    expect(String((err as Error).message)).not.toMatch(/unexpected status/i);
+    expect(String((err as Error).message)).toMatch(/banned|allowlist/i);
+    expect(sync.connectCalls).toHaveLength(0);
   });
 });
 

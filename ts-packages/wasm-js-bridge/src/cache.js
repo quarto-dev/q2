@@ -26,6 +26,31 @@ export const MAX_ENTRIES = 200;
 /** Maximum total size in bytes before eviction triggers (50MB). */
 export const MAX_TOTAL_SIZE = 50 * 1024 * 1024;
 
+/**
+ * Ephemeral in-memory mode (bd-91mdd056).
+ *
+ * A host page sets `globalThis.__Q2_EPHEMERAL_STORAGE__ = true` before
+ * the WASM first touches the cache when the session is ephemeral — q2
+ * preview serves every session from a fresh origin (a random loopback
+ * port), so a persisted `quarto-cache` database would never be read
+ * again and just accumulates across sessions. In this mode everything
+ * lives in a module-level Map with the same LRU semantics (touch-on-
+ * read, same eviction limits); the store dies with the page.
+ *
+ * The flag is a runtime global rather than a build-time
+ * `import.meta.env` read so this module stays byte-identical across the
+ * viewer/editor builds — the q2 preview embed's asset dedupe and
+ * live-share manifest hashes depend on the WASM glue chunk not
+ * diverging.
+ *
+ * @type {Map<string, {namespace: string, key: string, value: Uint8Array, timestamp: number, size: number}>}
+ */
+const memoryStore = new Map();
+
+function ephemeralMode() {
+  return globalThis.__Q2_EPHEMERAL_STORAGE__ === true;
+}
+
 /** @type {IDBDatabase | null} */
 let db = null;
 
@@ -92,6 +117,13 @@ function compositeKey(namespace, key) {
  * @returns {Promise<Uint8Array | null>} The cached bytes, or null on miss
  */
 export async function jsCacheGet(namespace, key) {
+  if (ephemeralMode()) {
+    const record = memoryStore.get(compositeKey(namespace, key));
+    if (record == null) return null;
+    // Touch-on-read, mirroring the IndexedDB path.
+    record.timestamp = Date.now();
+    return record.value;
+  }
   const database = await openDb();
   const ck = compositeKey(namespace, key);
 
@@ -127,6 +159,17 @@ export async function jsCacheGet(namespace, key) {
  * @returns {Promise<void>}
  */
 export async function jsCacheSet(namespace, key, value) {
+  if (ephemeralMode()) {
+    memoryStore.set(compositeKey(namespace, key), {
+      namespace,
+      key,
+      value,
+      timestamp: Date.now(),
+      size: value.length,
+    });
+    evictMemoryIfNeeded();
+    return;
+  }
   const database = await openDb();
 
   // Store the entry
@@ -213,6 +256,33 @@ async function evictIfNeeded(database) {
 }
 
 /**
+ * Evict oldest entries (by timestamp) from the in-memory store until
+ * both entry count and total size are within limits. Mirrors the
+ * IndexedDB path's global-across-namespaces eviction.
+ */
+function evictMemoryIfNeeded() {
+  let totalSize = 0;
+  for (const record of memoryStore.values()) {
+    totalSize += record.size || 0;
+  }
+  if (memoryStore.size <= MAX_ENTRIES && totalSize <= MAX_TOTAL_SIZE) {
+    return;
+  }
+
+  // Oldest first, matching the IDB path's ascending timestamp index.
+  const byAge = [...memoryStore.entries()].sort(
+    (a, b) => a[1].timestamp - b[1].timestamp,
+  );
+  let count = memoryStore.size;
+  for (const [ck, record] of byAge) {
+    if (count <= MAX_ENTRIES && totalSize <= MAX_TOTAL_SIZE) break;
+    memoryStore.delete(ck);
+    count--;
+    totalSize -= record.size || 0;
+  }
+}
+
+/**
  * Delete a cached value by namespace and key.
  *
  * No-op if the key does not exist.
@@ -222,6 +292,10 @@ async function evictIfNeeded(database) {
  * @returns {Promise<void>}
  */
 export async function jsCacheDelete(namespace, key) {
+  if (ephemeralMode()) {
+    memoryStore.delete(compositeKey(namespace, key));
+    return;
+  }
   const database = await openDb();
 
   return new Promise((resolve, reject) => {
@@ -244,8 +318,14 @@ export async function jsCacheDelete(namespace, key) {
  * @returns {Promise<void>}
  */
 export async function jsCacheClearNamespace(namespace) {
-  const database = await openDb();
   const prefix = `${namespace}:`;
+  if (ephemeralMode()) {
+    for (const ck of memoryStore.keys()) {
+      if (ck.startsWith(prefix)) memoryStore.delete(ck);
+    }
+    return;
+  }
+  const database = await openDb();
 
   return new Promise((resolve, reject) => {
     const tx = database.transaction(STORE_NAME, "readwrite");
@@ -269,12 +349,13 @@ export async function jsCacheClearNamespace(namespace) {
 }
 
 /**
- * Reset the module-level database handle.
+ * Reset the module-level database handle and clear the in-memory store.
  *
  * Exported for testing only — allows tests to delete the database and
  * re-open a fresh one without stale handles.
  */
 export function _resetDbHandle() {
+  memoryStore.clear();
   if (db) {
     db.close();
     db = null;

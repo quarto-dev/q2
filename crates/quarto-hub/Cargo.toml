@@ -45,9 +45,9 @@ time = "0.3"
 # utf16-indexing: use UTF-16 code units for text indices, matching the JS/WASM client.
 # Without this, the Rust default is UnicodeCodePoint, which disagrees with JS on
 # non-BMP characters (emoji etc.) — each emoji is 1 code point but 2 UTF-16 code units.
-automerge = { version = "0.10.0", features = ["utf16-indexing"] }
-# Vendored samod fork carrying the synchronous AccessPolicy trait (long-term home).
-samod = { version = "0.12.1", git = "https://github.com/quarto-dev/samod.git", branch = "access-policy", features = ["tokio", "axum", "tungstenite"] }
+automerge = { version = "0.11.0", features = ["utf16-indexing"] }
+# samod fork carrying the synchronous AccessPolicy trait.
+samod = { version = "0.13.0", git = "https://github.com/quarto-dev/samod.git", branch = "access-policy", features = ["tokio", "axum", "tungstenite"] }
 
 # Async streams (for samod event handling)
 futures = "0.3"
@@ -94,13 +94,15 @@ hex = "0.4"
 # MIME type detection from file content
 infer = "0.19"
 
+# RFC 3339 createdAt stamps on capture-doc meta (bd-eiku4ymo).
+chrono = "0.4"
+
 [dev-dependencies]
 tempfile = "3"
 # Phase 2 Bearer-auth integration tests: spin up a mock OIDC provider,
 # mint signed JWTs, exercise the hub router against random ports.
 rsa = { version = "0.9", features = ["pem", "getrandom"] }
 base64 = "0.22"
-chrono = "0.4"
 parking_lot = "0.12"
 
 [lints]

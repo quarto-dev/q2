@@ -246,19 +246,14 @@ pub fn process_pipe_table(
         }
     };
 
-    // Calculate the table's source_info: if there's a caption, extend to include it
+    // Calculate the table's source_info: if there's a caption, extend to
+    // include it via the same-file, preimage-based hull (bd-t3enk8gq). The
+    // previous manual construction paired raw offsets (parent-relative for
+    // Substrings) with root_file_id().unwrap_or(FileId(0)), fabricating a
+    // mis-anchored Original under a parent_source_info context.
     let table_source_info = if let Some(ref cap_info) = caption_source_info {
-        // Extend from start of table node to end of caption
         let table_start = node_source_info_with_context(node, context);
-        let start_offset = table_start.start_offset();
-        let end_offset = cap_info.end_offset();
-        // Extract file_id from the table's source info; root_file_id walks
-        // every nesting level, so this works for arbitrarily deep Substrings.
-        let file_id = table_start
-            .root_file_id()
-            .unwrap_or(quarto_source_map::FileId(0));
-        // Create a new SourceInfo spanning from table start to caption end
-        quarto_source_map::SourceInfo::original(file_id, start_offset, end_offset)
+        super::postprocess::hull_source_infos(&table_start, cap_info)
     } else {
         node_source_info_with_context(node, context)
     };

@@ -3,14 +3,18 @@
  * Copyright (c) 2026 Posit, PBC
  */
 
-//! Body-content link rewriting transform.
+//! Body-content link and image-URL rewriting transform.
 //!
-//! Walks the AST body, finds every [`Inline::Link`], and rewrites
-//! its `target.0` URL to a page-relative URL when it points at
-//! another project document. Phase 6 of the website-projects epic.
+//! Walks the AST body and rewrites two kinds of `target.0` URLs to
+//! page-relative form: [`Inline::Link`]s that point at another
+//! project document, and [`Inline::Image`]s, whose targets are
+//! static resources. Phase 6 of the website-projects epic; images
+//! added by bd-root-relative-paths-design-fc5pvkcv (Case B).
 //!
 //! See `claude-notes/plans/2026-04-24-websites-phase-6.md` for the
-//! design (especially Decisions 1, 2, 6, 7).
+//! original design (especially Decisions 1, 2, 6, 7) and
+//! `claude-notes/plans/2026-08-13-site-root-relative-paths.md` for
+//! the image extension.
 //!
 //! ## What it rewrites
 //!
@@ -18,19 +22,26 @@
 //!   [`ProjectIndex`](crate::project::index::ProjectIndex), with
 //!   `..` / `.` / leading `/` normalization handled by
 //!   [`resolve_doc_relative_href`](super::navigation_href::resolve_doc_relative_href).
-//! - Query strings and fragment anchors are preserved across the
-//!   rewrite (`other.qmd?x=1#sec` → `other.html?x=1#sec`).
+//! - `Image::target.0` via
+//!   [`resolve_static_resource_href`](super::navigation_href::resolve_static_resource_href)
+//!   — no index lookup, no `.qmd` diagnostic. This is what keeps a
+//!   site-root-relative `![](/images/x.svg)` working under a deploy
+//!   subpath: a page two levels deep emits `../../images/x.svg`,
+//!   matching Q1. Relative targets round-trip (modulo `..`/`.`
+//!   normalization, a deliberate side effect).
+//! - Query strings and fragment anchors are preserved across both
+//!   rewrites (`other.qmd?x=1#sec` → `other.html?x=1#sec`).
 //!
 //! ## What it leaves alone
 //!
 //! - External URLs (`http:`, `https:`, `mailto:`, `tel:`, `ftp:`,
-//!   `//host/...`).
+//!   `//host/...`) and `data:` URIs.
 //! - Fragment-only anchors (`#section`).
-//! - `Image::target.0` — images point at static resources, not
-//!   project documents (Q1 doesn't rewrite them either).
-//! - Body links inside a document rendered without a
-//!   `ProjectIndex` (standalone single-doc render). The transform
-//!   short-circuits and the AST is untouched.
+//! - Body *links* in a document rendered without a `ProjectIndex`
+//!   (standalone single-doc render) — doc-link resolution needs the
+//!   index (Decision 7). Images still rewrite whenever a
+//!   [`ResourceResolverContext`] is attached; with neither index nor
+//!   resolver the transform short-circuits entirely.
 //!
 //! ## Pipeline placement
 //!
@@ -53,7 +64,7 @@ use crate::render::RenderContext;
 use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::navigation_active::page_relative_source;
-use crate::transforms::navigation_href::resolve_doc_relative_href;
+use crate::transforms::navigation_href::{resolve_doc_relative_href, resolve_static_resource_href};
 
 /// Body-content link rewriter (Phase 6).
 pub struct LinkRewriteTransform;
@@ -81,13 +92,16 @@ impl AstTransform for LinkRewriteTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        // Standalone render: no project context, nothing to rewrite.
-        // Body hrefs pass through verbatim. See Decision 7.
-        let Some(index) = ctx.project_index.as_deref() else {
-            return Ok(());
-        };
-
+        let index = ctx.project_index.as_deref();
         let resolver = ctx.resource_resolver.as_ref();
+
+        // Nothing to resolve against: no index (so links can't be
+        // looked up — Decision 7) and no resolver (so image targets
+        // would pass through verbatim anyway). Skip the walk.
+        if index.is_none() && resolver.is_none() {
+            return Ok(());
+        }
+
         let source = page_relative_source(ctx);
 
         // Move diagnostics into a local buffer so the helper can
@@ -110,7 +124,9 @@ impl AstTransform for LinkRewriteTransform {
 
 struct LinkRewriter<'a> {
     source: &'a str,
-    index: &'a ProjectIndex,
+    /// `None` in standalone renders — link targets then pass through
+    /// (Decision 7) while image targets still rewrite.
+    index: Option<&'a ProjectIndex>,
     resolver: Option<&'a ResourceResolverContext>,
     diagnostics: &'a mut Vec<quarto_error_reporting::DiagnosticMessage>,
 }
@@ -220,21 +236,40 @@ impl<'a> LinkRewriter<'a> {
                 // text could itself contain rewritable inlines
                 // (uncommon, but possible after filter passes).
                 self.visit_inlines(&mut link.content);
-                let new_url = resolve_doc_relative_href(
-                    &link.target.0,
-                    self.source,
-                    self.resolver,
-                    Some(self.index),
-                    link.target_source.url.clone(),
-                    self.diagnostics,
-                );
-                link.target.0 = new_url;
+                if let Some(index) = self.index {
+                    let new_url = resolve_doc_relative_href(
+                        &link.target.0,
+                        self.source,
+                        self.resolver,
+                        Some(index),
+                        link.target_source.url.clone(),
+                        self.diagnostics,
+                    );
+                    link.target.0 = new_url;
+                }
             }
             Inline::Image(img) => {
-                // Walk image content (alt-text inlines) but leave
-                // `img.target.0` (the image URL) alone — images
-                // point at static resources, not project docs.
+                // Walk image content (alt-text inlines), then rebase
+                // the image URL itself. Images point at static
+                // resources, so this goes through the static helper:
+                // no index lookup, no `.qmd` diagnostic — just
+                // normalize (leading `/` = site-root, Decision 4 of
+                // bd-root-relative-paths-design-fc5pvkcv) and
+                // relativize to the page.
+                //
+                // EXCEPT in VFS-root mode (hub-client q2-preview):
+                // preview images are not fetched by URL — the
+                // parent-side asset walker reads the VFS and mints
+                // blob URLs keyed by the *user-written* path (the
+                // contract pinned by
+                // `hub-client/src/services/assetManifestProject.wasm.test.ts`),
+                // so a rewrite here would orphan every preview image.
+                // Same mode-gate as `ResourceCollectorTransform`.
                 self.visit_inlines(&mut img.content);
+                if !self.resolver.is_some_and(|r| r.is_vfs_root_mode()) {
+                    img.target.0 =
+                        resolve_static_resource_href(&img.target.0, self.source, self.resolver);
+                }
             }
             Inline::Emph(e) => self.visit_inlines(&mut e.content),
             Inline::Underline(u) => self.visit_inlines(&mut u.content),
@@ -701,5 +736,168 @@ mod tests {
             "Q-13-4 must carry the link URL's SourceInfo; got {:?}",
             d.location
         );
+    }
+
+    // ---- Case B (bd-root-relative-paths-design-fc5pvkcv): image targets ----
+    //
+    // Image targets are static resources; they rebase through
+    // `resolve_static_resource_href` so a root-absolute (site-root)
+    // path lands page-relative, matching Q1. The link row of the
+    // strand's repro is the control: both are ordinary AST nodes in
+    // the same paragraph, and both must resolve.
+
+    fn image_urls(blocks: &[Block]) -> Vec<String> {
+        let mut urls = Vec::new();
+        for b in blocks {
+            if let Block::Paragraph(p) = b {
+                for i in &p.content {
+                    if let Inline::Image(img) = i {
+                        urls.push(img.target.0.clone());
+                    }
+                }
+            }
+        }
+        urls
+    }
+
+    /// A root-absolute image target rebases to a page-relative URL on
+    /// a depth-2 page — the exact repro row that q2 got wrong while
+    /// getting the sibling link right.
+    #[tokio::test]
+    async fn image_rewrite_root_absolute_rebases_at_depth() {
+        let blocks = vec![para(vec![image_inline("/images/x.svg", "x")])];
+        let (out, diags) = run(
+            blocks,
+            "deep/deeper/index.qmd",
+            "deep/deeper/index.html",
+            vec![],
+            true,
+        )
+        .await;
+        assert_eq!(image_urls(&out), vec!["../../images/x.svg"]);
+        assert!(diags.is_empty(), "static rebasing must not diagnose");
+    }
+
+    /// Relative image targets stay correct: `..`-laden paths
+    /// normalize, plain relative paths round-trip unchanged
+    /// (decision 2: all targets route through the resolver, and
+    /// normalization is a desired side effect).
+    #[tokio::test]
+    async fn image_rewrite_normalizes_relative_targets() {
+        let blocks = vec![para(vec![
+            image_inline("a/../b.png", "b"),
+            image_inline("../x.png", "x"),
+            image_inline("figs/d.png", "d"),
+        ])];
+        let (out, diags) = run(
+            blocks,
+            "deep/deeper/index.qmd",
+            "deep/deeper/index.html",
+            vec![],
+            true,
+        )
+        .await;
+        assert_eq!(image_urls(&out), vec!["b.png", "../x.png", "figs/d.png"]);
+        assert!(diags.is_empty());
+    }
+
+    /// External URLs, data: URIs, and fragment-only image targets pass
+    /// through untouched.
+    #[tokio::test]
+    async fn image_rewrite_leaves_external_untouched() {
+        let urls_in = [
+            "https://example.com/remote.png",
+            "data:image/png;base64,AAAA",
+            "//cdn.example.com/x.png",
+            "#gradient-stop",
+        ];
+        let blocks = vec![para(
+            urls_in.iter().map(|u| image_inline(u, "alt")).collect(),
+        )];
+        let (out, diags) = run(
+            blocks,
+            "deep/deeper/index.qmd",
+            "deep/deeper/index.html",
+            vec![],
+            true,
+        )
+        .await;
+        assert_eq!(image_urls(&out), urls_in.to_vec());
+        assert!(diags.is_empty());
+    }
+
+    /// Query / fragment tails survive the image rewrite.
+    #[tokio::test]
+    async fn image_rewrite_preserves_tail() {
+        let blocks = vec![para(vec![
+            image_inline("/images/x.svg#frag", "x"),
+            image_inline("/images/x.svg?v=2", "x"),
+        ])];
+        let (out, _) = run(
+            blocks,
+            "deep/deeper/index.qmd",
+            "deep/deeper/index.html",
+            vec![],
+            true,
+        )
+        .await;
+        assert_eq!(
+            image_urls(&out),
+            vec!["../../images/x.svg#frag", "../../images/x.svg?v=2"]
+        );
+    }
+
+    /// VFS-root mode (hub-client q2-preview): image targets pass
+    /// through **untouched**. Preview images are not fetched by URL —
+    /// the parent-side asset walker reads the VFS and mints blob URLs
+    /// keyed by the *user-written* path
+    /// (`hub-client/src/services/assetManifestProject.wasm.test.ts`
+    /// pins that contract), so a rewrite here would orphan every
+    /// preview image. Links are unaffected (they already rewrite in
+    /// VFS mode — bd-kw93.14).
+    #[tokio::test]
+    async fn image_rewrite_skipped_in_vfs_root_mode() {
+        let blocks = vec![para(vec![image_inline("../hero.png", "h")])];
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/sub/page.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.resource_resolver = Some(ResourceResolverContext::vfs_root("/project"));
+        let mut ast = Pandoc {
+            meta: empty_meta(),
+            blocks,
+        };
+        LinkRewriteTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert_eq!(
+            image_urls(&ast.blocks),
+            vec!["../hero.png"],
+            "VFS-root mode must preserve the user-written image path"
+        );
+    }
+
+    /// Images rewrite even without a `ProjectIndex` — static-resource
+    /// resolution needs only the resolver. Links still require the
+    /// index and pass through (phase-6 Decision 7 unchanged).
+    #[tokio::test]
+    async fn image_rewrite_runs_without_index_links_untouched() {
+        let blocks = vec![
+            para(vec![image_inline("/images/x.svg", "x")]),
+            para(vec![link_inline("about.qmd", "About")]),
+        ];
+        let (out, diags) = run(
+            blocks,
+            "deep/deeper/index.qmd",
+            "deep/deeper/index.html",
+            vec![],
+            false,
+        )
+        .await;
+        assert_eq!(image_urls(&out), vec!["../../images/x.svg"]);
+        assert_eq!(first_link_url(&out), "about.qmd");
+        assert!(diags.is_empty());
     }
 }

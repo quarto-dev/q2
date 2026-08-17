@@ -36,7 +36,8 @@ use quarto_config::resolve_website_value;
 use quarto_pandoc_types::ConfigValue;
 use quarto_sass::{CSS_BUILD_ID, SassLayer, ThemeConfig, ThemeContext, compile_default_css};
 use quarto_system_runtime::{
-    SASS_CACHE_BUDGET_BYTES, SystemRuntime, cache_get_lru, cache_set_lru, ensure_namespace_version,
+    PathKind, SASS_CACHE_BUDGET_BYTES, SystemRuntime, cache_get_lru, cache_set_lru,
+    ensure_namespace_version,
 };
 
 use crate::artifact::{Artifact, ArtifactScope};
@@ -368,24 +369,41 @@ impl PipelineStage for CompileThemeCssStage {
         let theme_config = match ThemeConfig::from_config_value(&doc.ast.meta) {
             Ok(c) => c,
             Err(e) => {
-                // The error's source span can point at either the
-                // project's _quarto.yml (most common) OR the
-                // document's own frontmatter (when the document
-                // overrides `theme:`). Hand the converter both
-                // candidates with their FileId bindings:
-                // - _quarto.yml uses the YAML parser's hash-based
-                //   FileId (via `quarto_yaml::file_id_for_filename`).
-                // - The document uses pampa's primary FileId(0).
-                let mut candidates: Vec<(quarto_source_map::FileId, &std::path::Path)> = Vec::new();
-                if let Some(p) = ctx.project.config.config_path.as_deref() {
-                    let fid = quarto_yaml::file_id_for_filename(&p.to_string_lossy());
-                    candidates.push((fid, p));
-                }
-                candidates.push((quarto_source_map::FileId(0), ctx.document.input.as_path()));
-                let pe = crate::theme_diagnostic::sass_error_to_parse_error(&e, &candidates);
+                let pe = crate::theme_diagnostic::sass_error_to_parse_error(
+                    &e,
+                    &theme_error_candidates(ctx),
+                );
                 return Err(PipelineError::Structured(pe));
             }
         };
+
+        // Interim light/dark degradation (bd-o76p01wb): the parser
+        // accepted a `theme: {light: …, dark: …}` map but only the
+        // light half is honored. Make the degradation loud — one
+        // Q-14-3 *warning* per document, anchored at the ignored
+        // `dark:` key. Emitted here (not in `BootstrapJsStage`, which
+        // parses the same config) so each document warns exactly once;
+        // the CLI's source-location coalescer collapses repeats across
+        // documents that share the offending config file.
+        if let Some(dark_loc) = &theme_config.dark_theme_ignored {
+            ctx.add_diagnostic(
+                quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                    "Dark theme variant not yet supported",
+                )
+                .with_code("Q-14-3")
+                .problem(
+                    "`theme:` uses the `light:`/`dark:` map form; only the `light:` \
+                     themes are applied. The `dark:` entry is ignored and no \
+                     dark-mode toggle is emitted.",
+                )
+                .add_hint(
+                    "Remove the `dark:` entry to silence this warning, or keep it — \
+                     it will take effect when dual light/dark theme support lands.",
+                )
+                .with_location(dark_loc.clone())
+                .build(),
+            );
+        }
 
         // `theme: none` → ship the static lightweight DEFAULT_CSS without
         // compiling Bootstrap. This is the explicit opt-out path.
@@ -494,6 +512,37 @@ impl PipelineStage for CompileThemeCssStage {
             theme_context = theme_context.with_brand(brand, brand_dir);
         }
 
+        // Up-front validation: every custom theme entry must resolve
+        // to a real file (bd-of20unsb). Before this check, a dangling
+        // entry surfaced only as a compile failure swallowed by the
+        // DEFAULT_CSS fallback below — silently dropping the *entire*
+        // theme list, valid entries included. A dangling entry is a
+        // user-facing configuration error, so it gets the same
+        // structured hard-error treatment as the `from_config_value`
+        // path above: Q-14-4, with a span at the offending `theme:`
+        // entry.
+        for (i, spec) in theme_config.themes.iter().enumerate() {
+            let Some(path) = spec.as_custom() else {
+                continue;
+            };
+            let resolved_path = theme_context.resolve_path(path);
+            let exists = ctx
+                .runtime
+                .path_exists(&resolved_path, Some(PathKind::File))
+                .unwrap_or(false);
+            if !exists {
+                let err = quarto_sass::SassError::CustomThemeNotFound {
+                    path: resolved_path,
+                    location: theme_config.theme_locations.get(i).cloned().flatten(),
+                };
+                let pe = crate::theme_diagnostic::sass_error_to_parse_error(
+                    &err,
+                    &theme_error_candidates(ctx),
+                );
+                return Err(PipelineError::Structured(pe));
+            }
+        }
+
         let key = match cache_key(
             &theme_config,
             &theme_context,
@@ -570,6 +619,43 @@ impl PipelineStage for CompileThemeCssStage {
 
         Ok(PipelineData::DocumentAst(doc))
     }
+}
+
+/// FileId candidates for rendering a theme-config diagnostic's source
+/// span. The merged `theme:` value can live in the project's
+/// `_quarto.yml`, the document's own frontmatter, a directory
+/// `_metadata.yml` layer, or a contributing extension's
+/// `_extension.yml` (bd-r64mj1aa) — two FileId schemes:
+///
+/// - Standalone YAML files use the parser's hash-based FileId (via
+///   `quarto_yaml::file_id_for_filename`).
+/// - The document uses pampa's primary `FileId(0)`.
+fn theme_error_candidates(
+    ctx: &StageContext,
+) -> Vec<(quarto_source_map::FileId, std::path::PathBuf)> {
+    let hash = |p: &std::path::Path| quarto_yaml::file_id_for_filename(&p.to_string_lossy());
+    let mut candidates: Vec<(quarto_source_map::FileId, std::path::PathBuf)> = Vec::new();
+    if let Some(p) = ctx.project.config.config_path.as_deref() {
+        candidates.push((hash(p), p.to_path_buf()));
+    }
+    candidates.push((quarto_source_map::FileId(0), ctx.document.input.clone()));
+    // Project-profile overlays / `_quarto.yml.local` (bd-fu16z22k):
+    // a merged `theme:` can be written in any of them.
+    for p in &ctx.project.config.profile_config_paths {
+        candidates.push((hash(p), p.clone()));
+    }
+    for p in &ctx.project.config.extension_manifest_paths {
+        candidates.push((hash(p), p.clone()));
+    }
+    for p in crate::project::directory_metadata_paths_for_document(
+        &ctx.project,
+        &ctx.document.input,
+        ctx.runtime.as_ref(),
+    ) {
+        let fid = hash(&p);
+        candidates.push((fid, p));
+    }
+    candidates
 }
 
 /// Length of the theme fingerprint hex prefix used in artifact
@@ -811,6 +897,38 @@ mod tests {
         }
     }
 
+    /// Metadata with the Q1 light/dark map form:
+    /// `theme: {light: [<light>], dark: [<dark>]}` (bd-o76p01wb).
+    fn meta_with_light_dark_theme(light: &str, dark: &str) -> ConfigValue {
+        let list = |name: &str| ConfigValue {
+            value: ConfigValueKind::Array(vec![ConfigValue {
+                value: ConfigValueKind::Scalar(Yaml::String(name.to_string())),
+                source_info: SourceInfo::for_test(),
+                merge_op: quarto_pandoc_types::MergeOp::Concat,
+            }]),
+            source_info: SourceInfo::for_test(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+        let entry = |key: &str, value: ConfigValue| ConfigMapEntry {
+            key: key.to_string(),
+            key_source: SourceInfo::for_test(),
+            value,
+        };
+        let theme_value = ConfigValue {
+            value: ConfigValueKind::Map(vec![
+                entry("light", list(light)),
+                entry("dark", list(dark)),
+            ]),
+            source_info: SourceInfo::for_test(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+        ConfigValue {
+            value: ConfigValueKind::Map(vec![entry("theme", theme_value)]),
+            source_info: SourceInfo::for_test(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        }
+    }
+
     /// Locate the (single) `css:theme:*` artifact stored by
     /// [`CompileThemeCssStage`] and return its content as a string.
     /// Phase 5 retires the singleton `"css:default"` key in favor
@@ -1039,6 +1157,52 @@ mod tests {
         assert!(
             css.contains(".container"),
             "compiled CSS should contain .container"
+        );
+    }
+
+    #[tokio::test]
+    async fn light_dark_theme_map_compiles_light_and_warns_q_14_3() {
+        // bd-o76p01wb interim: the Q1 `theme: {light: […], dark: […]}`
+        // map form must not fail the render. The light half compiles;
+        // the ignored dark half surfaces as exactly one Q-14-3
+        // *warning* on the stage context.
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let mut ctx = make_stage_context(runtime);
+        let stage = CompileThemeCssStage::new();
+
+        let input = make_doc_ast(meta_with_light_dark_theme("cosmo", "darkly"));
+        let output = stage
+            .run(input, &mut ctx)
+            .await
+            .expect("light/dark map form must not fail the stage");
+        assert!(output.into_document_ast().is_some());
+
+        let css = get_css_artifact(&ctx);
+        assert_ne!(
+            css, DEFAULT_CSS,
+            "light half must be compiled, not fallback"
+        );
+        assert!(
+            css.contains(".btn"),
+            "light half must produce real Bootstrap CSS"
+        );
+
+        let q14_3: Vec<_> = ctx
+            .diagnostics
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("Q-14-3"))
+            .collect();
+        assert_eq!(
+            q14_3.len(),
+            1,
+            "expected exactly one Q-14-3 warning, diagnostics: {:?}",
+            ctx.diagnostics
+        );
+        assert_eq!(
+            q14_3[0].kind,
+            quarto_error_reporting::DiagnosticKind::Warning,
+            "Q-14-3 must be warning severity, not error"
         );
     }
 
@@ -1491,9 +1655,7 @@ mod tests {
         ThemeConfig {
             themes: vec![spec],
             minified,
-            suppress_bootstrap: false,
-            title_block_layer: true,
-            brand_ref: None,
+            ..ThemeConfig::default_bootstrap()
         }
     }
 
@@ -1501,9 +1663,7 @@ mod tests {
         ThemeConfig {
             themes: vec![ThemeSpec::Custom(PathBuf::from(path))],
             minified,
-            suppress_bootstrap: false,
-            title_block_layer: true,
-            brand_ref: None,
+            ..ThemeConfig::default_bootstrap()
         }
     }
 

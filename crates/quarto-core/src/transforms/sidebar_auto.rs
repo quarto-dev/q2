@@ -21,12 +21,15 @@
 //!
 //! [`SidebarGenerateTransform`]: crate::transforms::SidebarGenerateTransform
 
+use std::path::Path;
+
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_navigation::{AutoSpec, NavigationItem, Sidebar, SidebarEntry};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_source_map::{By, SourceInfo};
 
 use crate::document_profile::DocumentProfile;
+use crate::glob::{BaseDirContext, GlobOptions, PatternSet, RawGlob, resolve_patterns};
 use crate::project::index::ProjectIndex;
 
 /// Q-13-5: sidebar `auto:` dropped because no project index is
@@ -159,7 +162,7 @@ pub fn expand_spec(
     }
 
     match scope {
-        Scope::All => group_with_subdirs(&candidates, index),
+        Scope::Grouped => group_with_subdirs(&candidates, index),
         Scope::Flat => flatten_as_links(&candidates),
     }
 }
@@ -172,12 +175,36 @@ fn auto_spec_debug(spec: &AutoSpec) -> String {
     }
 }
 
-/// The "scope" of an auto spec — whether it's a whole-project sweep
-/// (which may produce grouped Sections) or a scoped sub-path (which
-/// produces a flat list).
+/// The "scope" of an auto spec — whether its matches get partitioned
+/// into per-directory Sections, or emitted as a flat list of links.
 enum Scope {
-    All,
+    Grouped,
     Flat,
+}
+
+/// Does this `auto:` pattern name a **directory**?
+///
+/// bd-sidebar-contents-dir-shorthand-z7arvhx8 D3. Q1 answers this by
+/// stat-ing the filesystem (`safeExistsSync` + `isDirectory` in
+/// `website-sidebar-auto.ts`). q2 cannot: expansion is driven by the
+/// `ProjectIndex` and has to work under WASM, where there is no
+/// filesystem to stat. So we answer it from the index instead — a
+/// pattern is a directory when it carries no glob metacharacter *and*
+/// at least one matched document lives beneath it.
+///
+/// The deliberate consequence (accepted when this was designed): an
+/// empty or unindexed directory is not recognised as one. It matches
+/// nothing, so `expand_spec` returns early with the `Q-13-6`
+/// empty-match warning before scope is ever consulted.
+fn is_bare_directory(pattern: &str, candidates: &[&DocumentProfile]) -> bool {
+    let pattern = pattern.trim_end_matches('/');
+    if pattern.is_empty() || pattern.contains(['*', '?', '[', ']', '{', '}']) {
+        return false;
+    }
+    let prefix = format!("{}/", pattern);
+    candidates
+        .iter()
+        .any(|p| source_fwd_slash(p).starts_with(&prefix))
 }
 
 fn collect_candidates<'a>(
@@ -192,49 +219,75 @@ fn collect_candidates<'a>(
                 .filter(|p| !p.draft)
                 .filter(|p| !is_top_level_index(p))
                 .collect();
-            (candidates, Scope::All)
+            (candidates, Scope::Grouped)
         }
         AutoSpec::Path(pat) => {
-            let normalized = normalize_pattern(pat);
+            let matcher = auto_matcher(std::slice::from_ref(pat));
             let candidates: Vec<&DocumentProfile> = profiles
                 .iter()
                 .filter(|p| !p.draft)
-                .filter(|p| matches_prefix(p, &normalized))
+                .filter(|p| matches_spec(p, matcher.as_ref()))
                 .collect();
-            (candidates, Scope::Flat)
+            // D1 — a bare directory is Q1's "auto-dir": the directory
+            // becomes a wrapping node. Every candidate then shares a
+            // first path component, so `group_with_subdirs` collapses
+            // to exactly one titled section. Globs stay flat.
+            let scope = if is_bare_directory(pat, &candidates) {
+                Scope::Grouped
+            } else {
+                Scope::Flat
+            };
+            (candidates, scope)
         }
         AutoSpec::Paths(pats) => {
-            let normalized: Vec<String> = pats.iter().map(|p| normalize_pattern(p)).collect();
+            let matcher = auto_matcher(pats);
             let candidates: Vec<&DocumentProfile> = profiles
                 .iter()
                 .filter(|p| !p.draft)
-                .filter(|p| normalized.iter().any(|n| matches_prefix(p, n)))
+                .filter(|p| matches_spec(p, matcher.as_ref()))
                 .collect();
             // A Paths spec is always flat — grouping semantics are
-            // ambiguous when multiple prefixes overlap.
+            // ambiguous when multiple patterns overlap.
             (candidates, Scope::Flat)
         }
     }
 }
 
-/// Strip trailing glob markers so `"docs"`, `"docs/"`, `"docs/*"`,
-/// `"docs/**"`, `"docs/*.qmd"` all normalize to `"docs"`.
-fn normalize_pattern(p: &str) -> String {
-    let trimmed = p
-        .trim_end_matches("*.qmd")
-        .trim_end_matches("**")
-        .trim_end_matches('*')
-        .trim_end_matches('/');
-    trimmed.to_string()
+/// Compile an `auto:` spec's patterns with q2's shared glob
+/// semantics (bd-mt7a6uc4 D6).
+///
+/// Before this, `auto:` was not a glob implementation at all: it
+/// stripped `*.qmd` / `**` / `*` off the end of each entry and
+/// prefix-matched what was left, so `docs/*.qmd`, `docs/**` and
+/// `docs` were the same pattern and every one of them swept up
+/// nested documents. Now `*` is one directory level, `**` crosses
+/// levels, a bare directory still means everything beneath it, and
+/// `[a-z]` classes and `!` exclusions work — the same rules
+/// `contents:`, `project.render` and `resources:` follow.
+///
+/// Patterns resolve against the **project root**. `auto:` lists
+/// project pages, and `AutoSpec` carries no provenance, so there is
+/// no declaring-file directory to anchor to.
+///
+/// Returns `None` when nothing compiles, which matches nothing —
+/// the caller's existing `Q-13-6` empty-match warning covers it.
+fn auto_matcher(patterns: &[String]) -> Option<PatternSet> {
+    let resolution = resolve_patterns(
+        patterns
+            .iter()
+            .map(|p| RawGlob::new(p.clone(), SourceInfo::generated(By::programmatic_config()))),
+        &BaseDirContext {
+            source_context: None,
+            project_dir: Path::new(""),
+            fallback_dir: "",
+        },
+        &GlobOptions::SIDEBAR,
+    );
+    resolution.compile(&GlobOptions::SIDEBAR).ok()
 }
 
-fn matches_prefix(profile: &DocumentProfile, prefix: &str) -> bool {
-    let src = source_fwd_slash(profile);
-    if prefix.is_empty() {
-        return true;
-    }
-    // Exact match on a file path, or any descendant under a directory.
-    src == prefix || src.starts_with(&format!("{}/", prefix))
+fn matches_spec(profile: &DocumentProfile, matcher: Option<&PatternSet>) -> bool {
+    matcher.is_some_and(|m| m.matches(&source_fwd_slash(profile)))
 }
 
 fn source_fwd_slash(profile: &DocumentProfile) -> String {
@@ -480,9 +533,18 @@ mod tests {
         }
     }
 
-    /// Test 21 — `auto: docs` scopes to the subdirectory and flattens.
+    /// Test 21 — `auto: docs` scopes to the subdirectory and wraps the
+    /// matches in a section titled after the directory.
+    ///
+    /// bd-sidebar-contents-dir-shorthand-z7arvhx8 D1: this asserted a
+    /// *flat* list of links until Q1 parity landed. Q1 treats a bare
+    /// directory as an auto-dir and re-roots the node set so the
+    /// directory becomes a wrapping node (`isAutoDir` in
+    /// `website-sidebar-auto.ts`), which is what the section below is.
+    /// Globs (`docs/*`, `docs/**/*.qmd`) are *not* directories and stay
+    /// flat — see the tests that follow.
     #[test]
-    fn auto_path_scopes_to_subdir() {
+    fn auto_bare_directory_wraps_in_titled_section() {
         let profiles = vec![
             make_profile("a.qmd", "A"),
             make_profile("docs/b.qmd", "B"),
@@ -491,26 +553,220 @@ mod tests {
         let index = ProjectIndex::new(profiles);
         let mut diags = Vec::new();
         let entries = expand_spec(&AutoSpec::Path("docs".to_string()), &index, &mut diags);
-        assert_eq!(entries.len(), 2);
-        for entry in &entries {
-            match entry {
-                SidebarEntry::Link { item, .. } => {
-                    let href = item.href.as_deref().unwrap();
-                    assert!(href.starts_with("docs/"), "got href {}", href);
+        assert_eq!(entries.len(), 1, "one section, not a flat run of links");
+        match &entries[0] {
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                assert_eq!(
+                    text.as_ref().unwrap().as_plain_text().as_deref(),
+                    Some("Docs"),
+                    "no docs/index.qmd, so the title is the capitalized dir name"
+                );
+                assert_eq!(href.as_deref(), None, "no index.qmd means no header link");
+                assert_eq!(contents.len(), 2, "b and c");
+                for entry in contents {
+                    match entry {
+                        SidebarEntry::Link { item, .. } => {
+                            let href = item.href.as_deref().unwrap();
+                            assert!(href.starts_with("docs/"), "got href {}", href);
+                        }
+                        other => panic!("expected Link, got {:?}", other),
+                    }
                 }
-                other => panic!("expected Link, got {:?}", other),
             }
+            other => panic!("expected Section, got {:?}", other),
         }
     }
 
-    /// `auto: docs/*` normalizes to the same as `auto: docs`.
+    /// D1 + D3 — a bare directory that *has* an `index.qmd` takes its
+    /// title and href from that index, and excludes it from the
+    /// children. This is the shape Q1 emits for the Connect docs'
+    /// `contents: how-to`.
     #[test]
-    fn auto_path_with_glob_normalizes() {
+    fn auto_bare_directory_section_uses_dir_index() {
+        let profiles = vec![
+            make_profile("how-to/index.qmd", "How To Guides"),
+            make_profile("how-to/one.qmd", "One"),
+            make_profile("how-to/two.qmd", "Two"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(&AutoSpec::Path("how-to".to_string()), &index, &mut diags);
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                assert_eq!(
+                    text.as_ref().unwrap().as_plain_text().as_deref(),
+                    Some("How To Guides")
+                );
+                assert_eq!(href.as_deref(), Some("how-to/index.qmd"));
+                assert_eq!(contents.len(), 2, "index is the header, not a child");
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// D3 — directory-ness is decided from the *project index*, never
+    /// the filesystem (WASM-safe). A spec naming a single document is
+    /// not a directory, so it stays a flat link rather than becoming a
+    /// section wrapping itself.
+    #[test]
+    fn auto_single_file_spec_is_not_a_directory() {
+        let profiles = vec![
+            make_profile("intro.qmd", "Intro"),
+            make_profile("a.qmd", "A"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(&AutoSpec::Path("intro.qmd".to_string()), &index, &mut diags);
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            SidebarEntry::Link { item, .. } => {
+                assert_eq!(item.href.as_deref(), Some("intro.qmd"));
+            }
+            other => panic!("expected Link, got {:?}", other),
+        }
+    }
+
+    /// D1 — an explicit glob is not a bare directory even when it
+    /// happens to select a whole directory's worth of documents. This
+    /// is the fence that keeps `docs/*` from silently becoming a
+    /// section.
+    #[test]
+    fn auto_glob_spec_stays_flat() {
+        let profiles = vec![
+            make_profile("docs/b.qmd", "B"),
+            make_profile("docs/c.qmd", "C"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(&AutoSpec::Path("docs/*".to_string()), &index, &mut diags);
+        assert_eq!(entries.len(), 2, "glob stays flat");
+        assert!(
+            entries
+                .iter()
+                .all(|e| matches!(e, SidebarEntry::Link { .. })),
+            "expected all Links, got {:?}",
+            entries
+        );
+    }
+
+    /// `auto: docs/*` matches the documents directly in `docs/` —
+    /// one directory level, like `*` everywhere else in q2.
+    #[test]
+    fn auto_path_with_glob_matches_one_level() {
         let profiles = vec![make_profile("a.qmd", "A"), make_profile("docs/b.qmd", "B")];
         let index = ProjectIndex::new(profiles);
         let mut diags = Vec::new();
         let entries = expand_spec(&AutoSpec::Path("docs/*".to_string()), &index, &mut diags);
         assert_eq!(entries.len(), 1);
+    }
+
+    /// bd-mt7a6uc4 D6 — the behavior change. `auto: "docs/*.qmd"`
+    /// used to be normalized to the prefix `docs` and therefore
+    /// swept up nested documents; now `*` means one directory level
+    /// and the author writes `**/` to recurse.
+    #[test]
+    fn auto_single_star_no_longer_matches_nested_documents() {
+        let profiles = vec![
+            make_profile("docs/top.qmd", "Top"),
+            make_profile("docs/deep/nested.qmd", "Nested"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(
+            &AutoSpec::Path("docs/*.qmd".to_string()),
+            &index,
+            &mut diags,
+        );
+        assert_eq!(entries.len(), 1, "only docs/top.qmd");
+    }
+
+    #[test]
+    fn auto_double_star_matches_nested_documents() {
+        let profiles = vec![
+            make_profile("docs/top.qmd", "Top"),
+            make_profile("docs/deep/nested.qmd", "Nested"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(
+            &AutoSpec::Path("docs/**/*.qmd".to_string()),
+            &index,
+            &mut diags,
+        );
+        assert_eq!(entries.len(), 2);
+    }
+
+    /// A bare directory still *matches* everything beneath it
+    /// (bd-mt7a6uc4 D4), including nested documents. Since
+    /// bd-sidebar-contents-dir-shorthand-z7arvhx8 D1 those matches
+    /// arrive wrapped in the directory's section rather than as a flat
+    /// run, so the count is asserted on the section's children.
+    ///
+    /// Note the known limitation recorded in that plan: `section_for_dir`
+    /// builds children as flat links, so `docs/deep/nested.qmd` appears
+    /// as a plain entry rather than a nested `deep` sub-section. Q1
+    /// recurses arbitrarily; q2 is one level deep here.
+    #[test]
+    fn auto_bare_directory_still_matches_nested_documents() {
+        let profiles = vec![
+            make_profile("docs/top.qmd", "Top"),
+            make_profile("docs/deep/nested.qmd", "Nested"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(&AutoSpec::Path("docs".to_string()), &index, &mut diags);
+        assert_eq!(entries.len(), 1, "one section for docs/");
+        match &entries[0] {
+            SidebarEntry::Section { contents, .. } => {
+                assert_eq!(contents.len(), 2, "top and the nested document");
+                let hrefs: Vec<&str> = contents
+                    .iter()
+                    .map(|e| match e {
+                        SidebarEntry::Link { item, .. } => item.href.as_deref().unwrap(),
+                        other => panic!("expected Link, got {:?}", other),
+                    })
+                    .collect();
+                assert!(hrefs.contains(&"docs/deep/nested.qmd"));
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// Character classes reach `auto:` too, and `!` excludes.
+    #[test]
+    fn auto_supports_classes_and_negation() {
+        let profiles = vec![
+            make_profile("docs/ch-1.qmd", "One"),
+            make_profile("docs/ch-2.qmd", "Two"),
+            make_profile("docs/notes.qmd", "Notes"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+
+        let entries = expand_spec(
+            &AutoSpec::Path("docs/ch-[0-9].qmd".to_string()),
+            &index,
+            &mut diags,
+        );
+        assert_eq!(entries.len(), 2);
+
+        let entries = expand_spec(
+            &AutoSpec::Paths(vec!["docs".to_string(), "!docs/notes.qmd".to_string()]),
+            &index,
+            &mut diags,
+        );
+        assert_eq!(entries.len(), 2, "negation excludes docs/notes.qmd");
     }
 
     /// Test 22 — `auto: true` with a subdir index.qmd produces a

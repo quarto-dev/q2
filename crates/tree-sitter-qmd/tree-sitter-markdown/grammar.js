@@ -93,6 +93,16 @@ const regexOr = (...groups) => regexBracket(groups.join("|"));
 const PANDOC_NON_ASCII_WHITESPACE =
     "\\u{00A0}\\u{1680}\\u{2000}-\\u{200A}\\u{2028}\\u{2029}\\u{202F}\\u{205F}\\u{3000}";
 
+// Combining marks (Mn nonspacing, Mc spacing, Me enclosing) plus the join
+// controls ZWNJ (U+200C) and ZWJ (U+200D). Pandoc folds all of these into the
+// surrounding `Str` verbatim: decomposed accents (`cafe` + U+0301), Indic
+// vowel signs (`का` = U+0915 + U+093E), enclosing marks, and ZWNJ/ZWJ between
+// letters (Persian/Indic joining control) are content, not markup. Without
+// this class a bare mark in prose produced a parse ERROR (bd-96fswwce) — the
+// same bug family as bd-6kewx above. ZWJ inside emoji sequences is unaffected:
+// EMOJI_REGEX matches those as a longer token, which wins.
+const PANDOC_COMBINING_MARKS = "\\p{M}\\u{200C}\\u{200D}";
+
 const startStrRegex = regexOr(
     "[" + PANDOC_NON_ASCII_WHITESPACE + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]");
 const afterUnderscoreRegex = "[" + PANDOC_ALPHA_NUM + "]";
@@ -113,10 +123,30 @@ const PANDOC_REGEX_STR =
             "[" + PANDOC_PUNCTUATION + "]",
             "[" + PANDOC_VALID_OTHER_PUNCTUATION + "]",
             "[" + PANDOC_VALID_SYMBOLS + "]",
+            "[" + PANDOC_COMBINING_MARKS + "]",
+            // A run of dots lexes as ONE token so that smart typography sees the
+            // whole run. `apply_smart_typography` is applied per prose-str node
+            // (deliberately — that is what keeps `a\.\.\.b` literal, since each
+            // escaped dot arrives as its own backslash-plus-dot node), so a run
+            // split across nodes can never be converted: each node holds a run of
+            // one, which correctly stays literal, and `merge_strs` concatenates
+            // them only afterwards.
+            //
+            // Without this alternative a dot run at *token start* fell through to
+            // the single-character `[>.,;!?]` case below and emitted one node per
+            // dot, so `the ... menu` never became an ellipsis while `a...b` did.
+            // `-` never had this problem because it is in `startStrRegex`; `.` is
+            // not, and adding it there would make `.class` a single token next
+            // door to the attribute grammar. See bd-ellipsis-not-smart-48bv2pe6.
+            //
+            // Longest-match in the lexer means a lone `.` still matches as one
+            // character, and `..` stays a literal two-dot run per Pandoc's
+            // three-at-a-time rule.
+            "[.]+",
             "[>.,;!?]",
             startStrRegex +
             regexOr(
-                "[!,.;?" + PANDOC_NON_ASCII_WHITESPACE + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]",
+                "[!,.;?" + PANDOC_NON_ASCII_WHITESPACE + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + PANDOC_COMBINING_MARKS + "-]",
                 // "\\\\.",
                 "['\\u{2018}\\u{2019}][\\p{L}\\p{N}]",
                 regexBracket("[_]" + afterUnderscoreRegex)
@@ -977,10 +1007,28 @@ module.exports = grammar({
             optional($.block_continuation)
         ),
 
-        _soft_line_break: $ => seq(
+        // prec.right: a _whitespace after _soft_line_ending could also
+        // be parsed OUTSIDE this rule (e.g. _attr_ws / _shortcode_sep
+        // build seq(_soft_line_break, _whitespace) shapes). Prefer
+        // absorbing it here — both readings are separators, and
+        // absorption is what keeps stray continuation indentation out
+        // of the inline stream.
+        _soft_line_break: $ => prec.right(seq(
             $._soft_line_ending,
-            optional($.block_continuation)
-        ),
+            optional($.block_continuation),
+            // bd-indented-continuation-parse-error-j7be7kuc: a
+            // continuation line's leading indentation is not always
+            // consumed by the scanner. When a SOFT_LINE_ENDING gate
+            // peek judges an indented line "prose", the peeked path
+            // deliberately skips mark_end (the lexer cannot rewind to
+            // post-indent/pre-delimiter), so any indentation beyond
+            // what block_continuation claims reaches the parser as a
+            // _whitespace token. Absorb it here — pandoc strips
+            // continuation-line leading whitespace, so it contributes
+            // nothing to the inline stream (the whole seq is aliased
+            // to pandoc_soft_break -> a single SoftBreak).
+            optional($._whitespace)
+        )),
 
 
         _inline_whitespace: $ => prec(-1, choice($._whitespace, $._soft_line_break)),

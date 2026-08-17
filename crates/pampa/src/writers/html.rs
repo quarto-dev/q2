@@ -1055,8 +1055,19 @@ fn write_inline<W: Write>(
             }
             write!(ctx, "</span>")?;
         }
+        // A shortcode that survives to the writer was never resolved — a
+        // resolution leak. Render the Q1-style visible ?name marker so the
+        // gap is diagnosable in the output; never drop it silently
+        // (bd-540a976a Phase 5).
+        Inline::Shortcode(sc) => {
+            write!(
+                ctx,
+                "<span class=\"quarto-unresolved-shortcode\">?{}</span>",
+                escape_html(&sc.name)
+            )?;
+        }
         // Quarto extensions - render as raw HTML or skip
-        Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_) => {
+        Inline::NoteReference(_) | Inline::Attr(_) => {
             // These should not appear in final output
         }
         Inline::Insert(ins) => {
@@ -1379,6 +1390,48 @@ fn write_list_item<W: Write>(
     Ok(())
 }
 
+/// Figcaption metadata parsed from a Figure's `data-qf-*` kvs
+/// (bd-hcp8m3ve). `None` when the Figure carries no float metadata —
+/// plain figures keep the bare-`<figcaption>` path.
+struct QfCaptionKvs {
+    ref_type: String,
+    location: String,
+    caption_id: String,
+    uncaptioned: bool,
+}
+
+impl QfCaptionKvs {
+    /// Q1-verbatim figcaption class list:
+    /// `quarto-float-caption-<loc> quarto-float-caption quarto-float-<ref>
+    /// [quarto-uncaptioned]`.
+    fn caption_classes(&self) -> String {
+        let mut classes = format!(
+            "quarto-float-caption-{} quarto-float-caption quarto-float-{}",
+            self.location, self.ref_type
+        );
+        if self.uncaptioned {
+            classes.push_str(" quarto-uncaptioned");
+        }
+        classes
+    }
+}
+
+fn read_qf_caption_kvs(kvs: &hashlink::LinkedHashMap<String, String>) -> Option<QfCaptionKvs> {
+    let caption_id = kvs.get("data-qf-caption-id")?.clone();
+    Some(QfCaptionKvs {
+        ref_type: kvs
+            .get("data-qf-ref-type")
+            .cloned()
+            .unwrap_or_else(|| "fig".to_string()),
+        location: kvs
+            .get("data-qf-caption-location")
+            .cloned()
+            .unwrap_or_else(|| "bottom".to_string()),
+        caption_id,
+        uncaptioned: kvs.contains_key("data-qf-uncaptioned"),
+    })
+}
+
 fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> std::io::Result<()> {
     match block {
         Block::Plain(plain) => {
@@ -1594,19 +1647,68 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             writeln!(ctx, "</table>")?;
         }
         Block::Figure(figure) => {
-            write!(ctx, "<figure")?;
-            write_attr(&figure.attr, ctx)?;
-            write_block_source_attrs(block, ctx)?;
-            writeln!(ctx, ">")?;
-            write_blocks(&figure.content, ctx)?;
-            if let Some(ref long_caption) = figure.caption.long
-                && !long_caption.is_empty()
-            {
-                writeln!(ctx, "<figcaption>")?;
-                write_blocks(long_caption, ctx)?;
-                writeln!(ctx, "</figcaption>")?;
+            // Float figcaption synthesis (bd-hcp8m3ve): the crossref
+            // renderer carries figcaption metadata as `data-qf-*` kvs on the
+            // Figure attr (Pandoc's Caption has no attr of its own). When
+            // present, the kvs are consumed here — never emitted on the
+            // <figure> — and drive the figcaption's id, Q1-verbatim classes,
+            // and top/bottom placement. Contract:
+            // claude-notes/designs/float-layout-class-taxonomy.md.
+            let qf = read_qf_caption_kvs(&figure.attr.2);
+            if let Some(qf) = &qf {
+                let stripped_attr = (
+                    figure.attr.0.clone(),
+                    figure.attr.1.clone(),
+                    figure
+                        .attr
+                        .2
+                        .iter()
+                        .filter(|(k, _)| !k.starts_with("data-qf-"))
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect(),
+                );
+                write!(ctx, "<figure")?;
+                write_attr(&stripped_attr, ctx)?;
+                write_block_source_attrs(block, ctx)?;
+                writeln!(ctx, ">")?;
+                let write_figcaption = |ctx: &mut HtmlWriterContext<'_, W>| -> std::io::Result<()> {
+                    if let Some(ref long_caption) = figure.caption.long
+                        && !long_caption.is_empty()
+                    {
+                        writeln!(
+                            ctx,
+                            "<figcaption id=\"{}\" class=\"{}\">",
+                            escape_html(&qf.caption_id),
+                            qf.caption_classes()
+                        )?;
+                        write_blocks(long_caption, ctx)?;
+                        writeln!(ctx, "</figcaption>")?;
+                    }
+                    Ok(())
+                };
+                if qf.location == "top" {
+                    write_figcaption(ctx)?;
+                    write_blocks(&figure.content, ctx)?;
+                } else {
+                    write_blocks(&figure.content, ctx)?;
+                    write_figcaption(ctx)?;
+                }
+                writeln!(ctx, "</figure>")?;
+            } else {
+                write!(ctx, "<figure")?;
+                write_attr(&figure.attr, ctx)?;
+                write_block_source_attrs(block, ctx)?;
+                writeln!(ctx, ">")?;
+                write_blocks(&figure.content, ctx)?;
+                if let Some(ref long_caption) = figure.caption.long
+                    && !long_caption.is_empty()
+                {
+                    writeln!(ctx, "<figcaption>")?;
+                    write_blocks(long_caption, ctx)?;
+                    writeln!(ctx, "</figcaption>")?;
+                }
+                writeln!(ctx, "</figure>")?;
             }
-            writeln!(ctx, "</figure>")?;
         }
         Block::Div(div) => {
             // Semantic HTML5 sectioning by class:
@@ -1929,6 +2031,41 @@ mod tests {
 
     fn dummy_source_info() -> SourceInfo {
         SourceInfo::for_test()
+    }
+
+    #[test]
+    fn test_unresolved_shortcode_renders_visible_marker() {
+        use crate::pandoc::ASTContext;
+
+        // An Inline::Shortcode surviving to the writer is a resolution
+        // leak. It must render as a visible ?name marker — never be
+        // silently dropped (bd-540a976a, Phase 5).
+        let ctx = ASTContext::anonymous();
+        let sc = quarto_pandoc_types::Shortcode {
+            is_escaped: false,
+            name: "mystery".to_string(),
+            positional_args: vec![],
+            keyword_args: hashlink::LinkedHashMap::new(),
+            source_info: dummy_source_info(),
+        };
+        let para = Block::Paragraph(Paragraph {
+            content: vec![Inline::Shortcode(sc)],
+            source_info: dummy_source_info(),
+        });
+        let pandoc = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![para],
+        };
+
+        let mut output = Vec::new();
+        write(&pandoc, &ctx, &mut output).unwrap();
+        let html = String::from_utf8(output).unwrap();
+
+        assert!(
+            html.contains("?mystery"),
+            "expected visible marker, got: {html}"
+        );
+        assert!(html.contains("quarto-unresolved-shortcode"));
     }
 
     #[test]

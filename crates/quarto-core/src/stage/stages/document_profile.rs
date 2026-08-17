@@ -90,6 +90,41 @@ impl PipelineStage for DocumentProfileStage {
         // (transitive) child file the parent depends on.
         profile.includes = std::mem::take(&mut doc.recorded_includes);
 
+        // Resolve the host's `listing.*.contents:` globs to
+        // project-relative form (bd-v7ixzsp5, GH #456). Needs the
+        // document's `SourceContext` (registered YAML metadata
+        // layers) to recover each glob's declaring file, so it
+        // lives here rather than in the pure `extract`. Escaping
+        // patterns are dropped silently — the render transform owns
+        // the `Q-12-17` diagnostic.
+        let host_dir = to_forward_slash(source_path.parent().unwrap_or(Path::new("")));
+        let contents = crate::project::listing::config::flatten_content_globs(&doc.ast.meta);
+        profile.listing_content_globs =
+            crate::project::listing::glob_resolve::resolve_content_globs(
+                &contents,
+                Some(&doc.ast_context.source_context),
+                &ctx.project.dir,
+                &host_dir,
+            )
+            .globs;
+
+        // Same treatment for `resources:` (bd-mt7a6uc4 defect 1).
+        // Before this, a `resources:` glob written in
+        // `blog/_metadata.yml` resolved against each *host document's*
+        // directory instead of `blog/`, so the wrong files were
+        // published — the same defect #456 fixed for listings, one
+        // metadata key over.
+        let (resource_resolution, rejected_resources) =
+            crate::project_resources::resolve_declared_resource_globs(
+                &profile.resources,
+                Some(&doc.ast_context.source_context),
+                &ctx.project.dir,
+                &host_dir,
+            );
+        profile.resource_globs = resource_resolution.globs;
+        profile.resource_glob_sources = resource_resolution.sources;
+        profile.rejected_resources = rejected_resources;
+
         // Plan 6 Phase 5: stamp the reduced Pass-1 engine resolution.
         // `resolve_engines_pass1` is pure and cheap (no I/O, no engine
         // load) — safe to call unconditionally here, including on the

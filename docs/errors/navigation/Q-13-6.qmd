@@ -17,12 +17,36 @@ categories:
 ## What this means
 
 A sidebar `auto:` entry asks Quarto to fill the sidebar with
-every document matching a path or glob — `auto: posts/` for
+every document matching a path or glob — `auto: posts` for
 everything under `posts/`, `auto: "**/*.qmd"` for every `.qmd`
 in the project, and so on. This warning fires when the
 expansion runs against a real project index but finds nothing.
 The sidebar still renders; the `auto:` entry contributes no
 items.
+
+## You may see this without having written `auto:`
+
+Writing a sidebar's `contents:` as a single string is shorthand
+for `auto:`. These two are the same configuration:
+
+``` yaml
+website:
+  sidebar:
+    contents: guides
+```
+
+``` yaml
+website:
+  sidebar:
+    contents:
+      - auto: guides
+```
+
+So a mistyped directory name in the short form reports this
+`auto:` warning even though the word never appears in your
+`_quarto.yml`. The shorthand applies only when `contents:` is a
+single string — entries in a `contents:` *list* are ordinary
+links, not `auto:` specs.
 
 ## Why this happens
 
@@ -34,6 +58,11 @@ Common causes:
 - **The directory holds only excluded files** — underscore-
   prefixed names, hidden directories, or files filtered out
   by `project.render`.
+- **The directory holds no documents Quarto renders.** A
+  directory is only recognized as one when the project index
+  contains at least one document beneath it. A directory of
+  images or data files, with no `.qmd` alongside them, matches
+  nothing and reports this warning.
 
 ## How to fix
 

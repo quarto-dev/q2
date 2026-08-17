@@ -1,0 +1,11 @@
+---
+title: Footnote heading repro
+---
+
+Some text with a note.[^a]
+
+More text with another.[^b]
+
+[^a]: First note.
+
+[^b]: Second note.

@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import React, { useContext } from 'react';
 import { PreviewContext } from './PreviewContext';
+import type { PreviewContextValue } from './PreviewContext';
 import { PreviewRoot } from './PreviewRoot';
 
 // An AST with one Para so the customRegistry Para entry fires, giving us
@@ -36,7 +37,7 @@ const SAMPLE_NESTED_BUFFERS: Record<string, string> = {
  * value during render. Returns `capturedCtx` synchronously after `render()`.
  */
 function mountAndCapture(props: Partial<React.ComponentProps<typeof PreviewRoot>> = {}) {
-    let capturedCtx: ReturnType<typeof useContext<typeof PreviewContext>> = null;
+    let capturedCtx: PreviewContextValue | null = null;
 
     function ContextCapture() {
         capturedCtx = useContext(PreviewContext);

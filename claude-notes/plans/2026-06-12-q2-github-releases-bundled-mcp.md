@@ -137,6 +137,14 @@ Whichever lands, add a workflow assertion that the embedded bundle's
 
 ### D4. Linux build target: spike musl, fall back to gnu
 
+> **SUPERSEDED (2026-07-28, bd-dofxhzaj).** The gnu fallback below was
+> chosen only because `rusty_v8` shipped no musl prebuilts. That
+> dependency was removed in bd-3e3sam51, and the linux legs are now
+> static musl on `ubuntu-latest` / `ubuntu-24.04-arm` with no gnu
+> artifact. See `claude-notes/plans/2026-07-28-linux-release-static-musl.md`.
+> The historical reasoning is kept below as the record of why gnu was
+> right *at the time* — do not act on it.
+
 braid ships static musl. q2's dep tree is much larger (tokio, axum,
 tree-sitter C, …). **Spike S2:** try `x86_64-unknown-linux-musl` for
 `-p quarto`; if it fights back, ship gnu built on the oldest supported

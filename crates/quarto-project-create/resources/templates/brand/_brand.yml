@@ -1,0 +1,43 @@
+# _brand.yml — the single place this project's look is defined.
+#
+# Colors, fonts, and logos set here flow into every output format
+# Quarto knows how to brand. Edit the values below, then re-render.
+#
+# Full reference: https://posit-dev.github.io/brand-yml/
+
+meta:
+  # Shown in generated output where a brand name is called for.
+  name: My Brand
+
+color:
+  # `palette` names your raw colors. Everything below refers to these
+  # names rather than repeating hex values, so changing a color once
+  # changes it everywhere.
+  palette:
+    ink: "#1a1a1a"
+    paper: "#ffffff"
+    accent: "#2c6fbb"
+  foreground: ink
+  background: paper
+  primary: accent
+
+typography:
+  # A font declared here is fetched from Google Fonts. To use a font
+  # file you ship with the project instead, see `source: file` in the
+  # reference above.
+  fonts:
+    - family: Open Sans
+      source: google
+  base:
+    family: Open Sans
+  headings:
+    family: Open Sans
+    weight: 600
+
+# Logos are optional. Uncomment and point these at image files in your
+# project; `small` also becomes the site favicon when none is set.
+#
+# logo:
+#   small: logo-icon.png
+#   medium: logo.png
+#   large: logo-wide.png

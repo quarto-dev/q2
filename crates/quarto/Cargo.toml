@@ -20,13 +20,20 @@ tracing-subscriber.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 pollster.workspace = true
-# `signal` for the `provide-hub` serve loop's Ctrl-C shutdown.
-tokio = { workspace = true, features = ["signal"] }
+# `signal` for the `provide-hub` serve loop's Ctrl-C shutdown; `net` +
+# `io-util` for `q2 preview`'s readiness probes (TCP accept probe, and
+# the `--join` health probe through the tunnel).
+tokio = { workspace = true, features = ["signal", "net", "io-util"] }
 
 quarto-core = { workspace = true, features = ["clap"] }
 quarto-error-catalog.workspace = true
 quarto-error-reporting = { workspace = true, features = ["json"] }
 quarto-source-map.workspace = true
+# `q2 use brand` inspects _quarto.yml with the same source-located
+# parser the render pipeline uses, so "what counts as a brand
+# declaration" cannot drift from what actually takes effect.
+quarto-yaml.workspace = true
+yaml-rust2.workspace = true
 quarto-trace.workspace = true
 quarto-trace-server.workspace = true
 quarto-util.workspace = true
@@ -39,9 +46,19 @@ quarto-hub.workspace = true
 quarto-hub-provider = { path = "../quarto-hub-provider" }
 quarto-mcp-launcher = { path = "../quarto-mcp-launcher" }
 quarto-preview = { path = "../quarto-preview" }
+# `q2 preview --join`: ticket parsing + the guest-side tunnel client
+# (live-share plan Phase 3, bd-6y0p1bne). All iroh usage stays behind
+# quarto-p2p's API.
+quarto-p2p.workspace = true
 url = "2.5"
 quarto-publish.workspace = true
 quarto-sass.workspace = true
+# `q2 use brand` validates a fetched brand against the typed model
+# before writing anything, and walks it for referenced logo/font files.
+quarto-brand.workspace = true
+# Target resolution, download, and hardened archive extraction for
+# `q2 use brand <source>`. Shared with `q2 add` when that lands.
+quarto-source-fetch = { path = "../quarto-source-fetch" }
 quarto-test.workspace = true
 serde_yaml.workspace = true
 tempfile = "3"

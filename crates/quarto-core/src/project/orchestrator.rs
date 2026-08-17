@@ -390,15 +390,62 @@ pub trait ProjectType {
     /// renders pass an empty slice. The resolver argument is new
     /// — Phase 9 §Decision 4. It's the single source of truth for
     /// "where do Project-scope artifacts live on disk / VFS", so
-    /// hooks like `flush_site_libs` no longer reconstruct the path
-    /// math themselves.
+    /// hooks like the project-artifact flush no longer reconstruct
+    /// the path math themselves.
     async fn post_render(
         &self,
-        _project: &ProjectContext,
-        _index: &ProjectIndex,
+        project: &ProjectContext,
+        index: &ProjectIndex,
         _output_paths: &[std::path::PathBuf],
         _project_artifacts: &crate::artifact::ArtifactStore,
         _resolver: &crate::resource_resolver::ResourceResolverContext,
+        _runtime: &dyn quarto_system_runtime::SystemRuntime,
+        diagnostics: &mut Vec<DiagnosticMessage>,
+    ) -> Result<()> {
+        // Only website projects write redirect stubs. Every other
+        // project type says so rather than dropping the key in
+        // silence — the silence *was* the original bug report
+        // (bd-aliases-redirects-missing-sch7cd1g): a porting project
+        // got no signal that its redirects had disappeared.
+        super::aliases::warn_aliases_ignored(index, diagnostics);
+        // Same policy for `website.llms-txt`
+        // (bd-llms-txt-unimplemented-oih6z6j7): only website
+        // projects emit llms.txt + markdown companions, and an
+        // accepted-but-inert key deserves a signal, not silence.
+        if let Some(meta) = project.config.metadata.as_ref()
+            && super::website_config::website_llms_txt_enabled(meta)
+        {
+            diagnostics.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                    "`website.llms-txt: true` has no effect in this project type",
+                )
+                .problem(
+                    "llms.txt and per-page markdown companions are written only for \
+                     `website` projects.",
+                )
+                .add_hint("Set `project: type: website` in `_quarto.yml`?")
+                .build(),
+            );
+        }
+        Ok(())
+    }
+
+    /// Hook that runs **after** the orchestrator's resource-copy pass
+    /// (bd-o8pr) — i.e. after every other producer of output-dir
+    /// files. Native-only in practice: the orchestrator calls it
+    /// inside the same `#[cfg(not(wasm32))]` block as the resource
+    /// copy. Default: no-op.
+    ///
+    /// This late position exists for writes that must consult the
+    /// *complete* set of files on disk before claiming a path — the
+    /// llms companion writes (bd-llms-txt-unimplemented-oih6z6j7)
+    /// refuse to overwrite anything they didn't generate (Q-5-28),
+    /// which is only sound once resource copies have landed.
+    async fn post_resources(
+        &self,
+        _project: &ProjectContext,
+        _index: &ProjectIndex,
+        _project_artifacts: &crate::artifact::ArtifactStore,
         _runtime: &dyn quarto_system_runtime::SystemRuntime,
         _diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> Result<()> {
@@ -442,11 +489,13 @@ impl ProjectType for WebsiteProjectType {
     /// Run the website post-render hooks.
     ///
     /// **Cross-platform** (Phase 9 sub-phase 9.2):
-    /// 1. **`flush_site_libs`** (Phase 5; resolver-driven) — drain
-    ///    Project-scoped artifacts to whatever destination the
-    ///    resolver decides — `<output_dir>/site_libs/...` natively
-    ///    or `/.quarto/project-artifacts/...` in the hub-client
-    ///    VFS.
+    /// 1. **[`flush_project_artifacts`]** (Phase 5; resolver-driven) —
+    ///    write the Project-scoped artifacts accumulated across every
+    ///    Pass-2 render to whatever destination the resolver decides:
+    ///    `<output_dir>/site_libs/...` natively, or
+    ///    `/.quarto/project-artifacts/...` in the hub-client VFS.
+    ///
+    /// [`flush_project_artifacts`]: crate::artifact_flush::flush_project_artifacts
     ///
     /// **Native-only** (the rest write into the on-disk
     /// `<output_dir>` which doesn't exist in the in-browser
@@ -462,7 +511,7 @@ impl ProjectType for WebsiteProjectType {
     ///
     /// Each hook short-circuits cleanly when its triggering config
     /// is absent, so a website project that opts in to none of
-    /// these features just runs the site_libs flush.
+    /// these features just runs the project-artifact flush.
     async fn post_render(
         &self,
         project: &ProjectContext,
@@ -473,17 +522,28 @@ impl ProjectType for WebsiteProjectType {
         runtime: &dyn quarto_system_runtime::SystemRuntime,
         diagnostics: &mut Vec<DiagnosticMessage>,
     ) -> Result<()> {
-        use super::website_post_render::flush_site_libs;
-        flush_site_libs(project_artifacts, resolver, runtime)?;
+        crate::artifact_flush::flush_project_artifacts(project_artifacts, resolver, runtime)?;
         // The remaining hooks write to the on-disk output dir,
         // which only exists natively. WASM hub-client renders skip
         // them — see Phase 9 plan §Decision 4.
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use super::website_post_render::{copy_favicon, write_robots_txt, write_sitemap};
+            use super::website_post_render::{
+                copy_favicon, copy_footer_images, copy_navbar_logo, write_alias_redirects,
+                write_robots_txt, write_sitemap,
+            };
             copy_favicon(project, runtime, diagnostics)?;
+            copy_navbar_logo(project, runtime, diagnostics)?;
+            copy_footer_images(project, runtime, diagnostics)?;
             write_sitemap(project, index, output_paths, runtime)?;
             write_robots_txt(project, runtime)?;
+            // `aliases:` redirect stubs
+            // (bd-aliases-redirects-missing-sch7cd1g). Unlike its
+            // neighbours this hook can *fail* the render: an alias
+            // collision is an error, not a warning, because the
+            // alternative is a redirect silently pointing at the
+            // wrong page. See the `Q-5-23`..`Q-5-26` docs pages.
+            write_alias_redirects(project, index, runtime)?;
             // L7 (`bd-qf7r`): replace listing description / image
             // placeholder envelopes with engine-rendered preview
             // content read from sibling outputs. Bracketed feature
@@ -513,6 +573,39 @@ impl ProjectType for WebsiteProjectType {
         #[cfg(target_arch = "wasm32")]
         {
             let _ = (project, index, output_paths, diagnostics);
+        }
+        Ok(())
+    }
+
+    /// llms.txt + markdown companions
+    /// (bd-llms-txt-unimplemented-oih6z6j7). Runs *after* the
+    /// resource-copy pass, deliberately: the companion writes refuse
+    /// to overwrite any output-dir file they didn't generate
+    /// (Q-5-28), and that ledger check is only sound once every
+    /// other producer — rendered pages, site_libs, resource copies —
+    /// has landed. Reads the captures `LlmsCaptureTransform`
+    /// deposited as path-less Project artifacts.
+    async fn post_resources(
+        &self,
+        project: &ProjectContext,
+        index: &ProjectIndex,
+        project_artifacts: &crate::artifact::ArtifactStore,
+        runtime: &dyn quarto_system_runtime::SystemRuntime,
+        diagnostics: &mut Vec<DiagnosticMessage>,
+    ) -> Result<()> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            super::llms_post_render::write_llms_artifacts(
+                project,
+                index,
+                project_artifacts,
+                runtime,
+                diagnostics,
+            )?;
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (project, index, project_artifacts, runtime, diagnostics);
         }
         Ok(())
     }
@@ -977,7 +1070,17 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
     }
 
     async fn run_inner(&mut self) -> Result<ProjectRenderSummary<R::Output>> {
-        let initial_diagnostics = self.empty_render_set_diagnostic();
+        let mut initial_diagnostics = self.empty_render_set_diagnostic();
+        // `project.render` patterns that contributed nothing
+        // (bd-mt7a6uc4 D7). Computed here rather than inside
+        // discovery so `ProjectContext::discover` keeps its
+        // signature; the check is pure and reads the post-exclusion
+        // file list, so it reports what actually happened.
+        initial_diagnostics.extend(crate::project::discovery::render_pattern_diagnostics(
+            &self.project.dir,
+            &self.project.config.render_patterns,
+            &self.project.files,
+        ));
 
         let (profiles, pass1_failures) = self.pass_one().await;
 
@@ -1073,7 +1176,17 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                 &mut project_diagnostics,
             )
             .await
-            .map_err(|e| QuartoError::other(format!("post_render failed: {e}")))?;
+            // A hook that already produced structured diagnostics
+            // passes through intact. Wrapping it in `other` would
+            // flatten Ariadne spans into a string the caller can no
+            // longer inspect, re-render, or serialize — the CLI would
+            // print pre-rendered ANSI inside a generic message, and
+            // `--to json` would lose the diagnostics entirely.
+            // Opaque errors still get the context prefix.
+            .map_err(|e| match e {
+                QuartoError::Parse(_) => e,
+                other => QuartoError::other(format!("post_render failed: {other}")),
+            })?;
 
         // bd-o8pr Phases 1 + 2: copy resources to the output dir.
         // - Phase 1 (static channel): project- and document-level
@@ -1089,11 +1202,15 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // dir.
         #[cfg(not(target_arch = "wasm32"))]
         {
+            let mut resource_diagnostics = Vec::new();
             let mut resolved = crate::project_resources::collect_static_resources_with_diagnostics(
                 self.project,
                 &index,
+                self.runtime.as_ref(),
+                &mut resource_diagnostics,
             )
             .map_err(QuartoError::Parse)?;
+            project_diagnostics.extend(resource_diagnostics);
             for output in &outputs {
                 if let Some(report) = R::extract_resource_report(output) {
                     if report.is_empty() {
@@ -1102,6 +1219,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                     let resolved_report = crate::project_resources::resolve_reported_resources(
                         &self.project.dir,
                         report,
+                        self.runtime.as_ref(),
                     )
                     .map_err(|e| QuartoError::other(e.to_string()))?;
                     resolved.extend(resolved_report);
@@ -1138,6 +1256,25 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                 &manifest,
                 self.runtime.as_ref(),
             )?;
+
+            // Post-resources hook: writes that must see the complete
+            // output dir (rendered pages + artifacts + resource
+            // copies) before claiming paths — see
+            // `ProjectType::post_resources`. Same error-passthrough
+            // rationale as `post_render` above.
+            self.project_type
+                .post_resources(
+                    self.project,
+                    &index,
+                    &self.project_artifacts,
+                    self.runtime.as_ref(),
+                    &mut project_diagnostics,
+                )
+                .await
+                .map_err(|e| match e {
+                    QuartoError::Parse(_) => e,
+                    other => QuartoError::other(format!("post_resources failed: {other}")),
+                })?;
         }
 
         let stopped_early = self.fail_fast && !pass2_failures.is_empty();
@@ -1179,13 +1316,47 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         )));
         let has_render_patterns = !self.project.config.render_patterns.is_empty();
         let hint = if has_render_patterns {
-            "Check `project.render` in `_quarto.yml` — its globs matched no `.qmd` files."
+            "Check `project.render` in `_quarto.yml` — its globs matched no renderable files."
         } else {
             "Add a `.qmd` file to the project, or remove `_quarto.yml` to render a single \
              standalone document."
         };
         diag.hints
             .push(quarto_error_reporting::MessageContent::from(hint));
+        // `.md` files are render-list opt-in (bd-6d2wj4zp). When the
+        // project has renderable `.md` files that no pattern matched,
+        // the empty set is likely that policy at work — say so, or
+        // the default reads as Quarto silently ignoring the files.
+        // Mirror the extension set `ProjectContext::discover` walked with, so
+        // this explanatory re-walk sees the same renderable universe. Without
+        // it a project whose only inputs are engine-claimed (e.g. `.echo`)
+        // would re-walk with the fixed set and mis-describe the empty set.
+        let renderable_extensions = crate::project::discovery::RenderableExtensions::new(
+            self.project
+                .extensions
+                .iter()
+                .flat_map(|e| &e.contributes.engines)
+                .flat_map(crate::extension::types::claimed_file_extensions),
+        );
+        let discovery_cfg = crate::project::discovery::DiscoveryConfig {
+            project_dir: &self.project.dir,
+            output_dir: &self.project.output_dir,
+            render_patterns: &self.project.config.render_patterns,
+            renderable_extensions: &renderable_extensions,
+        };
+        if let Ok(md) =
+            crate::project::discovery::unmatched_md_files(&discovery_cfg, self.runtime.as_ref())
+            && !md.is_empty()
+        {
+            let n = md.len();
+            let plural = if n == 1 { "" } else { "s" };
+            diag.hints
+                .push(quarto_error_reporting::MessageContent::from(format!(
+                    "The project contains {n} `.md` file{plural}; `.md` files render \
+                     only when matched by a `project.render` pattern such as \
+                     `\"**/*.md\"`."
+                )));
+        }
         vec![diag]
     }
 
@@ -1847,6 +2018,30 @@ async fn pass1_profile_with_cache(
     // for the rationale.
     let extension_contributions = pass1_engine_extension_contributions(runtime.as_ref(), project);
 
+    // Project-profile inputs (bd-fu16z22k): active names plus raw
+    // bytes of every merged overlay / `_quarto.yml.local`, so a
+    // profile switch or overlay edit invalidates cached pass-1
+    // DocumentProfiles. Paths are hashed project-relative for
+    // machine-independence, same policy as `metadata_files`.
+    let active_profile_names: Vec<String> = project
+        .config
+        .active_config_profiles
+        .iter()
+        .map(|p| p.name.clone())
+        .collect();
+    let profile_config_files: Vec<(std::path::PathBuf, Vec<u8>)> = project
+        .config
+        .profile_config_paths
+        .iter()
+        .map(|path| {
+            let rel = path
+                .strip_prefix(&project.dir)
+                .map_or_else(|_| path.clone(), std::path::Path::to_path_buf);
+            let bytes = runtime.file_read(path).unwrap_or_default();
+            (rel, bytes)
+        })
+        .collect();
+
     let key_inputs = crate::project::cache_key::Pass1KeyInputs {
         format_id: &format_id,
         source_path: &source_path,
@@ -1854,6 +2049,8 @@ async fn pass1_profile_with_cache(
         metadata_files: &metadata_files,
         quarto_yml_bytes: &quarto_yml_bytes,
         extension_contributions: &extension_contributions,
+        active_config_profiles: &active_profile_names,
+        profile_config_files: &profile_config_files,
     };
     let key_bytes = crate::project::cache_key::pass1_key(&key_inputs);
     let key_hex = crate::project::cache_key::hex_encode(&key_bytes);

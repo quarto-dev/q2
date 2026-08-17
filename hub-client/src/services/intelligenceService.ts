@@ -22,7 +22,7 @@ import type {
   LspSemanticTokensResponse,
 } from '@quarto/preview-renderer/types/intelligence';
 import { initWasm, vfsAddFile } from '@quarto/preview-runtime';
-import { isQmdFile } from '@quarto/preview-renderer/types/project';
+import { isSourceFile } from '@quarto/preview-renderer/types/project';
 
 // Re-export types for convenience
 export type { Symbol, Diagnostic, FoldingRange, DocumentAnalysis, SemanticToken } from '@quarto/preview-renderer/types/intelligence';
@@ -118,8 +118,8 @@ async function getWasm(): Promise<typeof import('wasm-quarto-hub-client')> {
  * @returns Complete analysis (symbols, folding ranges, diagnostics)
  */
 export async function analyzeDocument(path: string): Promise<DocumentAnalysis> {
-  // Only QMD files have intelligence data
-  if (!isQmdFile(path)) {
+  // Only source files (.qmd, .md) have intelligence data
+  if (!isSourceFile(path)) {
     return { symbols: [], foldingRanges: [], diagnostics: [] };
   }
 
@@ -148,8 +148,8 @@ export async function analyzeDocument(path: string): Promise<DocumentAnalysis> {
  * @returns Hierarchical symbols for document outline
  */
 export async function getSymbols(path: string): Promise<Symbol[]> {
-  // Only QMD files have symbols
-  if (!isQmdFile(path)) {
+  // Only source files (.qmd, .md) have symbols
+  if (!isSourceFile(path)) {
     return [];
   }
 
@@ -176,8 +176,8 @@ export async function getSymbols(path: string): Promise<Symbol[]> {
  * @returns Folding ranges for code folding
  */
 export async function getFoldingRanges(path: string): Promise<FoldingRange[]> {
-  // Only QMD files have folding ranges
-  if (!isQmdFile(path)) {
+  // Only source files (.qmd, .md) have folding ranges
+  if (!isSourceFile(path)) {
     return [];
   }
 
@@ -202,8 +202,8 @@ export async function getFoldingRanges(path: string): Promise<FoldingRange[]> {
  * @returns Rich diagnostics array
  */
 export async function getDiagnostics(path: string): Promise<Diagnostic[]> {
-  // Only QMD files have diagnostics
-  if (!isQmdFile(path)) {
+  // Only source files (.qmd, .md) have diagnostics
+  if (!isSourceFile(path)) {
     return [];
   }
 
@@ -222,7 +222,7 @@ export async function getDiagnostics(path: string): Promise<Diagnostic[]> {
  * Get semantic tokens for a file — drives Monaco syntax highlighting for
  * `.qmd` (qmd structure + frontmatter YAML + code-cell interiors).
  *
- * Graceful by design: a non-qmd path, a `{ success: false }` envelope, or a
+ * Graceful by design: a non-source path, a `{ success: false }` envelope, or a
  * JSON-decode failure all resolve to `[]` (never a rejection), so the provider
  * needs no try/catch on the normal path and treats "no tokens" uniformly as
  * "fall back to the Monarch base layer".
@@ -231,7 +231,7 @@ export async function getDiagnostics(path: string): Promise<Diagnostic[]> {
  * @returns Semantic tokens, sorted and non-overlapping
  */
 export async function getSemanticTokens(path: string): Promise<SemanticToken[]> {
-  if (!isQmdFile(path)) {
+  if (!isSourceFile(path)) {
     return [];
   }
 
@@ -264,7 +264,7 @@ export async function getSemanticTokensForContent(
   path: string,
   content: string
 ): Promise<SemanticToken[]> {
-  if (!isQmdFile(path)) {
+  if (!isSourceFile(path)) {
     return [];
   }
 

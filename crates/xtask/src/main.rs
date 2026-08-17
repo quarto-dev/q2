@@ -15,6 +15,7 @@
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 //! - `build-all`: Fresh-clone build orchestration (npm install + hub-client + Rust workspace)
 //! - `build-trace-viewer`: Build just the trace-viewer SPA
+//! - `build-hub-client-embed`: Build the hub-client editor bundle for `q2 preview --ui editor`
 //! - `build-hub-mcp-bundle`: Build the self-contained hub MCP server bundle
 //! - `build-engine-host-bundle`: Build the committed engine-host-deno.js bundle
 //! - `stage-doc-examples`: Render `examples/manifest.yml` projects into `docs/examples/`
@@ -22,6 +23,7 @@
 mod braid_snapshot;
 mod build_all;
 mod build_engine_host_bundle;
+mod build_hub_client_embed;
 mod build_hub_mcp_bundle;
 mod build_q2_preview_spa;
 mod build_trace_viewer;
@@ -242,6 +244,14 @@ enum Command {
     /// build -p quarto-preview` (via `include_dir!`).
     BuildQ2PreviewSpa {},
 
+    /// Build the hub-client editor bundle for `q2 preview --ui editor`.
+    ///
+    /// Produces `hub-client/dist-preview-embed/` (auth off, sync server
+    /// pinned to the relative `/ws`, PWA disabled) — picked up on the
+    /// next `cargo build -p quarto-preview` (via `include_dir!`, with
+    /// viewer-dist-identical files stripped at embed time).
+    BuildHubClientEmbed {},
+
     /// Build the self-contained hub MCP server bundle.
     ///
     /// Produces `ts-packages/quarto-hub-mcp/dist-bundle/` (esbuild) —
@@ -382,6 +392,7 @@ fn main() -> Result<()> {
         Command::StageDocExamples {} => stage_doc_examples::run(),
         Command::BuildTraceViewer {} => build_trace_viewer::run(),
         Command::BuildQ2PreviewSpa {} => build_q2_preview_spa::run(),
+        Command::BuildHubClientEmbed {} => build_hub_client_embed::run(),
         Command::BuildHubMcpBundle {} => build_hub_mcp_bundle::run(),
         Command::BuildEngineHostBundle {} => build_engine_host_bundle::run(),
         Command::BuildAll {

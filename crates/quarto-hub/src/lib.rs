@@ -7,11 +7,13 @@
 //! - REST API for document operations
 
 pub mod access_policy;
+pub mod admin;
 pub mod auth;
 pub mod context;
 pub mod discovery;
 pub mod error;
 pub mod index;
+pub mod login_state;
 pub mod peer;
 pub mod resource;
 pub mod revocation;

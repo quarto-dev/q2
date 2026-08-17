@@ -23,6 +23,55 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-14
+
+- [`9b60bbe2`](https://github.com/quarto-dev/q2/commits/9b60bbe2): Keep the WASM-driven theme/SASS cache in memory during `q2 preview` sessions (viewer and editor alike), so preview origins leave no IndexedDB databases behind at all.
+- [`f2db6bce`](https://github.com/quarto-dev/q2/commits/f2db6bce): Keep all browser storage in memory for `q2 preview --ui editor` sessions, so each ephemeral preview origin no longer accumulates a stale IndexedDB document cache and project entries; reloading the editor now rebuilds the session from the preview server's boot config.
+
+### 2026-08-12
+
+- [`e5769e5b`](https://github.com/quarto-dev/q2/commits/e5769e5b): Bump the samod sync library to 0.13.0 and the JS automerge package to 3.4.1.
+
+### 2026-08-09
+
+- [`6ffe5211`](https://github.com/quarto-dev/q2/commits/6ffe5211): The ephemeral-session banner's config fetch now retries once on a transient network failure, so a dropped first request (for example a `--join` guest's tunnel mid-handshake) no longer hides the banner for the whole session.
+- [`4111452f`](https://github.com/quarto-dev/q2/commits/4111452f): The editor shows a persistent "Ephemeral session — edits won't be saved to disk" banner when the serving `q2 preview` was started without `--allow-edit`; guests of a shared session see it too.
+- [`bcfbb47f`](https://github.com/quarto-dev/q2/commits/bcfbb47f): `q2 preview --ui editor` boots skip the project-set setup and migration screens and land straight in the previewed document.
+- [`9dfce50e`](https://github.com/quarto-dev/q2/commits/9dfce50e): `q2 preview --ui editor` serves the full collaborative editor (Monaco, file sidebar, live preview pane) from the preview server, to the host and any `--join` guests alike.
+
+### 2026-08-07
+
+- [`279d7e5e`](https://github.com/quarto-dev/q2/commits/279d7e5e): `.md` files are now first-class source files: they sync into hub projects, get live preview, outline, folding, diagnostics, and qmd highlighting in the editor, and cross-document links into `.md` pages navigate like `.qmd` ones.
+
+### 2026-08-03
+
+- [`bd8f5206`](https://github.com/quarto-dev/q2/commits/bd8f5206): The session-expiry re-check now schedules only from the server-reported expiry; `/auth/me` gained a `credential` field distinguishing sliding sessions from fixed-expiry Bearer tokens, and the obsolete 1-hour fallback lifetime was removed.
+
+### 2026-07-30
+
+- [`9e65fcdc`](https://github.com/quarto-dev/q2/commits/9e65fcdc): `quartoDebug.openServerInspector()` embeds the standalone Automerge debugger next to the editor, pre-pointed at the current project, so the sync server's view of a document can be compared against the editor's own.
+- [`12412aba`](https://github.com/quarto-dev/q2/commits/12412aba): `quartoDebug.openInspector()` opens a live inspector panel inside the editor — document viewer, sync status, presence, consistency doctor, and message log over the session's own synced state (loaded on demand, never part of the normal page load).
+- [`41432f73`](https://github.com/quarto-dev/q2/commits/41432f73): The console debug API gained `quartoDebug.am.doctor()` — a one-call cross-layer consistency check (editor text vs synced document vs virtual filesystem) — and `quartoDebug.am.messages()`, which observes the editor's own sync-protocol traffic.
+- [`1d30f39a`](https://github.com/quarto-dev/q2/commits/1d30f39a): The console debug API (`window.quartoDebug`) gained an `am` namespace for inspecting the live Automerge state (documents, heads, history, sync status, presence), plus a `help()` guide covering the whole API.
+- [`d947fab2`](https://github.com/quarto-dev/q2/commits/d947fab2): Joining a shared collection now explains what actually went wrong — expired sign-in, no connection, or a collection missing from the sync server — instead of a cryptic "Document is unavailable", and a slow connection no longer makes the join fail spuriously.
+- [`047903c3`](https://github.com/quarto-dev/q2/commits/047903c3): The out-of-date sign-in message no longer asks you to reload the page, which the app's cached bundle would have ignored; it now tells you the app is updating and to try again in a few minutes.
+- [`d2582ed9`](https://github.com/quarto-dev/q2/commits/d2582ed9): A failed sign-in now says what actually went wrong — an interrupted sign-in asks you to try again, an out-of-date app says it is out of date, and only a genuinely refused account is told it is not authorized.
+
+### 2026-07-29
+
+- [`d866c6ae`](https://github.com/quarto-dev/q2/commits/d866c6ae): New projects can now be created from a Blog template — a listing home page, two starter posts with images, an about page, and an RSS-ready configuration.
+
+### 2026-07-28
+
+- [`807fd96c`](https://github.com/quarto-dev/q2/commits/807fd96c): Signing in with Google is now tied to the specific sign-in you started, so a copied Google token can no longer be used to open a session on your behalf.
+- [`9a673bbc`](https://github.com/quarto-dev/q2/commits/9a673bbc): Sign-in sessions are now stored in a host-locked browser cookie (`__Host-`), which a neighbouring subdomain cannot plant or overwrite. You will be asked to sign in once more after this update.
+
+### 2026-07-27
+
+- [`d419d32`](https://github.com/quarto-dev/q2/commits/d419d32): Opening a document now connects to the live document straight away, so the connection indicator no longer briefly shows "Offline" before switching to "Online" on a normal connection.
+- [`2b6091d8`](https://github.com/quarto-dev/q2/commits/2b6091d8): The project selector avatar now shows your profile picture when signed in, instead of a plain initials circle.
+- [`e73786ed`](https://github.com/quarto-dev/q2/commits/e73786ed): When a signed-in session definitively ends (you sign out everywhere, or it reaches its 30-day maximum), the app now returns you to the sign-in screen instead of trying to silently re-authenticate through Google One Tap; day-to-day sessions still renew invisibly while you keep using the app.
+
 ### 2026-07-24
 
 - [`ee905592`](https://github.com/quarto-dev/q2/commits/ee905592): Signed-in sessions now stay alive as long as you keep using the app — the hub issues its own sliding session (7-day idle timeout, 30-day maximum) instead of expiring hourly with the Google token, so work no longer stalls on environments where Google One Tap is blocked. The app quietly confirms the session once an hour while connected.

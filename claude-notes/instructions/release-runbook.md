@@ -88,7 +88,8 @@ git tag exactly equals `[workspace.package].version` in the root
 cargo xtask switch-task <strand>           # or: git switch -c release/vX.Y.Z main
 # edit root Cargo.toml: [workspace.package] version = "X.Y.Z"
 cargo update --workspace                    # rewrites Cargo.lock workspace versions only
-git diff Cargo.lock | grep -E '^[+-]version' | grep -v 'OLD\|NEW'   # sanity: no surprise bumps
+cargo update --manifest-path crates/wasm-quarto-hub-client/Cargo.toml --workspace   # SECOND lockfile, see below
+git diff '**/Cargo.lock' | grep -E '^[+-]version' | grep -v 'OLD\|NEW'   # sanity: no surprise bumps
 cargo build --bin q2 --locked && ./target/debug/q2 --version        # must print "q2 (quarto 2) X.Y.Z"
 ```
 
@@ -97,7 +98,17 @@ workspace members' own version entries — external deps stay pinned. The
 `--locked` build is the real check: CI builds with `--locked`, so the
 lockfile must already be in sync or every build leg fails.
 
-Commit (Cargo.toml + Cargo.lock), push, open a PR, get it merged. A
+**There are two lockfiles.** `crates/wasm-quarto-hub-client/` declares
+its own `[workspace]` so cargo does not traverse up into the monorepo,
+which means it carries a *separate* `Cargo.lock` recording the versions
+of every path dependency it pulls from `crates/`. A root
+`cargo update --workspace` does not touch it. Miss it and nothing fails
+loudly — the WASM build simply rewrites the file, so the next person to
+run `cargo xtask verify` (without `--skip-hub-build`) finds ~17 lines of
+unrequested churn in their working tree. The v0.17.0 bump missed it;
+v0.15.0 and v0.16.0 did not. Both locks should appear in the bump commit.
+
+Commit (Cargo.toml + both Cargo.lock files), push, open a PR, get it merged. A
 version bump is small but still goes through a PR — `main` is gated
 (CI clippy gate, bd-3zst4hwy).
 
@@ -186,6 +197,16 @@ quarto-hub.com (`connect_project` + `read_file`) and spot-check the
 `darwin_amd64` artifact runs under Rosetta with both darwin keyring
 addons. See bd-c6l13j79's plan (Phase 4 record) for a worked example.
 
+**You do not need to check the linux binaries against a glibc-less
+distro by hand** — CI does it every release (bd-3b47pxmm). Each musl leg
+runs its freshly built binary inside `alpine:latest` (which has musl and
+no glibc at all) and asserts `--version`, in the `Assert the binary needs
+no glibc (Alpine)` step, *before* anything is packaged or published.
+Each leg runs its own arch's container natively, so both `linux_amd64`
+and `linux_arm64` are covered — which a hand-run on an Apple Silicon
+laptop never was. If that step ever goes red, the release stops with
+nothing shipped.
+
 ### 7. Close out
 
 Update the release strand, note the release URL, and (if the release
@@ -199,21 +220,52 @@ still matches.
 - **`--locked` everywhere** — the lockfile must be committed and in
   sync, or every build leg fails. Always `cargo update --workspace`
   after a version bump.
-- **Linux ships gnu today** (`x86_64/aarch64-unknown-linux-gnu` on
-  **ubuntu-22.04** runners, glibc 2.35 floor, `--features
-  vendored-openssl` so the binary has no runtime `libssl` dependency;
-  Alpine users need `gcompat`). Static musl was originally *blocked* by
+- **Linux ships static musl** (`x86_64/aarch64-unknown-linux-musl` on
+  `ubuntu-latest` / `ubuntu-24.04-arm`, `--features vendored-openssl` so
+  the binary has no runtime `libssl` dependency). One artifact per arch,
+  no glibc floor, Alpine works with no `gcompat` shim. **There is no gnu
+  artifact** — anyone who needs a dynamically-linked build uses
+  `install.sh --from-source`. Both legs build *natively*, so
+  `musl-tools`' `musl-gcc` is the right compiler on each runner; the
+  `Install musl-tools` step is gated `if: contains(matrix.target,
+  'musl')`. History worth knowing: musl was originally blocked by
   `rusty_v8` (via `deno_core` → `quarto-system-runtime`), which shipped
   no musl prebuilts — both musl legs 404'd at the v8 download in the
-  v0.1.0 dry-run. **That dependency has since been removed
-  (bd-3e3sam51), so musl is now viable** — the only remaining
-  consideration is openssl/aws-lc, both vendorable/musl-buildable.
-  Switching the matrix to musl (one artifact per arch, Alpine included)
-  is unblocked future work; until someone does it, linux is gnu.
-- **Signing happens in the `release` job, not the build matrix.**
-  ubuntu-22.04 (jammy) has no `minisign` apt package; ubuntu-latest
-  (the release runner) does. Centralizing also means the secret key is
-  touched by one job and signs the exact published bytes.
+  v0.1.0 dry-run, which is why the matrix was gnu from PR #280 until
+  bd-dofxhzaj. That dependency was removed in bd-3e3sam51.
+- **Because the binaries are static, the runner image no longer sets a
+  compatibility floor.** The old `ubuntu-22.04` pin existed *only* to
+  keep the glibc requirement low; with musl it bought nothing, so the
+  linux legs track `ubuntu-latest`. Don't re-pin them without a reason
+  that isn't glibc.
+- **`musl-tools` is the only extra package the musl legs need.** In
+  particular `aws-lc-sys` — long feared to be the hard part — is a
+  non-issue at v0.40.0: it ships pregenerated bindings for both musl
+  triples, so there is **no `bindgen` step and no `libclang`
+  requirement**, and it compiled in ~17 s per leg in the bd-dofxhzaj
+  spike (run 30375857883). If a future `aws-lc-sys` bump ever *does*
+  start wanting cmake or libclang, that is a real regression worth
+  pinning rather than papering over with extra apt packages.
+- **`file` describes the two arches differently.** x86_64 comes out
+  `static-pie linked`; aarch64 comes out plain `statically linked`. Any
+  staticness check must accept **both** spellings — matching one passes
+  on one arch and fails on the other. (`ldd` says *not a dynamic
+  executable* on both, but exits non-zero, so it cannot be used as a
+  bare assertion either.) This gotcha has a live consumer: the `Assert
+  the binary needs no glibc (Alpine)` step in `release.yml` greps for
+  both spellings. Don't "tidy" it down to one.
+- **Staticness is a *default*, not a pin.** `crt-static` comes from the
+  `*-unknown-linux-musl` targets, so a stray `RUSTFLAGS`, cargo config,
+  or build-script link flag could turn the linux artifacts dynamic while
+  every other gate stays green — they'd still run fine on the runner.
+  The Alpine step is what catches that; it is a real gate, not ceremony
+  (bd-3b47pxmm).
+- **Signing happens in the `release` job, not the build matrix.** The
+  secret key is touched by exactly one job, which signs the exact bytes
+  being published — and the macOS/Windows build runners have no
+  `minisign` anyway. (The original reason was narrower: jammy had no
+  `minisign` apt package. The linux legs are no longer on jammy, but
+  centralizing is still the right shape.)
 - **`darwin_amd64` cross-compiles on an arm64 runner.** Its keyring
   addon must match the *user's* mac, so `KEYRING_PLATFORMS` stages both
   `darwin-x64` and `darwin-arm64` (fetched via `npm pack` when not

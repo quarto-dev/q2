@@ -1,5 +1,5 @@
 ---
-description: Survey the workspace for available Rust dependency upgrades, apply patch/minor bumps in an isolated worktree, run full `cargo xtask verify`, and produce a plan doc + per-major braid strands so the user can review and merge. Use when the user says "upgrade cargo deps", "check for dependency upgrades", "do the bi-weekly cargo upgrade", or asks about outdated dependencies. Runs on demand only — there is no schedule.
+description: Survey the workspace for available Rust dependency upgrades, apply patch/minor bumps in an isolated worktree, run full `cargo xtask verify`, and produce a plan doc + per-major braid strands so the user can review and merge. Also reconciles previously-filed `Cargo:` upgrade strands against the current tree, closing ones that unrelated work already resolved. Use when the user says "upgrade cargo deps", "check for dependency upgrades", "do the bi-weekly cargo upgrade", asks about outdated dependencies, or asks whether existing `Cargo:` chore strands are still real. Runs on demand only — there is no schedule.
 ---
 
 # upgrade-cargo-deps Skill
@@ -9,6 +9,7 @@ This skill turns the repetitive "are any of our Rust deps behind?" task into a s
 1. A worktree branch with patch/minor upgrades applied and verified.
 2. A plan doc at `claude-notes/plans/YYYY-MM-DD-cargo-upgrade-survey.md` summarizing what happened.
 3. One braid strand per available major upgrade, linked from the plan.
+4. A reconciliation pass over the `Cargo:` strands prior surveys filed — closing the ones the tree has already outgrown (step 2b).
 
 The user merges the worktree branch when satisfied, triages the strands at their own cadence, and (optionally) closes the survey plan.
 
@@ -17,6 +18,7 @@ The user merges the worktree branch when satisfied, triages the strands at their
 - User says "upgrade cargo deps", "run the cargo upgrade survey", "check our Rust dependencies", "do the bi-weekly upgrade".
 - The most recent `claude-notes/plans/YYYY-MM-DD-cargo-upgrade-survey.md` is older than ~2 weeks and the user asks for a fresh survey.
 - User pastes `cargo update --dry-run` output and asks "what should we do about this".
+- User asks whether the open `Cargo:` chore strands are still real, or is cleaning up the strand queue — run **step 2b standalone**; no worktree, no survey.
 
 **Suggested cadence:** bi-weekly. There is no scheduled trigger; the user runs it.
 
@@ -36,11 +38,12 @@ The user merges the worktree branch when satisfied, triages the strands at their
 
 The worktree gives this skill its own checkout, its own branch, and its own `target/` — fully isolated from anything else in flight. The user merges the branch when ready; until then, nothing the skill does touches their working tree. Steps 1 (pre-flight verify) and 2 (dry-run survey) are the only read-only operations that run in the main checkout, and they don't write any files.
 
-## Outcome: three durable artifacts
+## Outcome: four durable artifacts
 
 1. **Worktree branch** `cargo-upgrade-YYYY-MM-DD` at `.worktrees/cargo-upgrade-YYYY-MM-DD/` containing the applied `Cargo.lock` change (and any `Cargo.toml` widenings — see "Major upgrades" below; for v1 the answer is *none*) plus a verified test/build run.
-2. **Plan doc** at `claude-notes/plans/YYYY-MM-DD-cargo-upgrade-survey.md` with three sections: Applied & verified / Needs review (majors) / Skipped (vendored or excluded).
+2. **Plan doc** at `claude-notes/plans/YYYY-MM-DD-cargo-upgrade-survey.md` with four sections: Reconciled prior strands / Applied & verified / Needs review (majors) / Skipped (vendored or excluded).
 3. **One braid strand per major upgrade**, type `chore`, priority `3`, linked from the plan.
+4. **A reconciled strand queue** — every prior `Cargo:` strand either closed with evidence or corrected against the current tree (step 2b). This is the only artifact that *shrinks* the backlog; without it the other three grow it monotonically.
 
 If verification fails, the skill stops, leaves the worktree intact, and reports the failure so the user can investigate.
 
@@ -80,6 +83,103 @@ cargo tree --duplicates --workspace --depth 0
 ```
 
 Count the number of duplicate-version entries — each crate listed twice (or more) counts as one duplicate. You'll compare this before/after.
+
+### 2b. Reconcile previously-filed `Cargo:` strands
+
+**Every survey must run this before filing anything new.** It is also
+invocable on its own — "reconcile the cargo strands", "are those `Cargo:`
+chores still real?" — without doing a full survey. When run standalone, do
+steps 2b only; skip the worktree entirely (this step is read-only apart from
+braid writes).
+
+**Why this exists.** Steps 11–12 file a strand per breaking upgrade, but
+nothing ever closed them. A strand records the state of the tree *on the day
+it was filed*, and the tree moves underneath it — usually by unrelated work.
+Left alone they rot silently. The 2026-07-27 audit found all three surviving
+`Cargo:` strands from the 2026-05-04 survey were wrong in some way: two were
+already resolved, and the third's own description had drifted from reality.
+Filing is cheap; reconciling is what keeps the queue honest.
+
+List the candidates:
+
+```bash
+braid list --json | jq -r '.[] | select(.title|test("^Cargo:")) |
+  [.id,.status,.updated_at[0:10],.title] | @tsv'
+```
+
+For each, get **three** numbers — the strand's target, what the tree declares
+today, and what upstream is at now. Do not skip the third; the target itself
+ages.
+
+```bash
+# what the tree DECLARES (the direct dep — this is what you act on)
+grep -rn -E "^\s*<crate>\s*=" --include=Cargo.toml . | grep -v '^./target'
+
+# what the tree RESOLVES to (may include transitive copies at other versions)
+cargo tree -i <crate> --workspace
+
+# what upstream is at (crates.io requires a User-Agent or returns nothing useful)
+curl -s -H "User-Agent: q2-dep-audit (<your email>)" \
+  "https://crates.io/api/v1/crates/<crate>" | jq -r '.crate.max_stable_version'
+```
+
+Then assign one of three verdicts:
+
+| Verdict | Test | Action |
+|---|---|---|
+| **Superseded** | Declared version ≥ the strand's target | `braid close` — quote the declared version, every consumer, and the current upstream latest |
+| **Obsolete** | Crate absent from all `Cargo.toml` *and* `Cargo.lock` | `braid close` — find the removing commit (`git log -S "<crate>" -- '*Cargo.toml'`) and cite it |
+| **Still real** | Direct declaration is still behind | Keep open, and **correct the description** if it drifted |
+
+Three traps, each of which bit the 2026-07-27 audit:
+
+- **A version in `Cargo.lock` does not mean we depend on it directly.** `rand`
+  0.10.1 was in the lock, which looks like the upgrade landed — but it arrived
+  transitively via `automerge`, while our own `rand = "0.9"` sat untouched in
+  `crates/quarto-hub`. Always check `cargo tree -i`, and act on the
+  *declaration*, not the lock entry.
+- **"Superseded" is common and easy to miss.** `automerge` was filed as
+  0.8.0 → 0.9.0 and the tree had since moved to 0.10.0 — past the target, via
+  work that never referenced the strand.
+- **A dependency can leave the tree entirely.** `serde_v8` was removed wholesale
+  with `deno_core`/`rusty_v8`; the strand outlived the dependency by three months.
+
+**Before calling a "still real" upgrade *actionable*, check for a
+first-party-fork blocker.** A crate we consume from a git fork can expose the
+old dependency's types in its own public API, which makes the upgrade
+impossible for us until the fork moves — and this does not show up in
+`cargo update`, `cargo tree`, or any version comparison. It shows up only as a
+trait-bound error at the call sites, and only under `--all-targets` if the
+call sites are in test modules.
+
+```bash
+# does any git-sourced dependency still require the old major?
+cargo metadata --format-version 1 | jq -r '
+  .packages[] | select(.source == null or (.source|test("git\\+"))) | . as $p |
+  .dependencies[] | select(.name=="<crate>") | "\($p.name) \($p.version) -> \(.req)"'
+```
+
+The 2026-07-27 attempt on `rand` 0.9 → 0.10 died exactly here: `quarto-hub`
+built fine after the API fix, then `cargo xtask verify` failed at clippy
+because `samod::DocumentId::new` (our fork, `rand ^0.9.1`) takes a rand-0.9
+`impl Rng`. File the fork's move as its own strand and add a `blocks`
+dependency rather than leaving the parent looking actionable.
+
+**Also verify any "collapses a duplicate" claim by measuring**, before and
+after, with `cargo tree --duplicates --workspace --depth 0 | grep -cE '^[a-z]'`.
+Our own crate leaving a version does not remove that version if a
+dev-dependency (e.g. `proptest`) still requires it — the 2026-07-27 attempt
+predicted a collapse and measured 101 duplicates both ways.
+
+When correcting a "still real" strand, rewrite the description to the current
+facts rather than appending a note — include the exact file declaring it, the
+current upstream latest, and any transitive copies that upgrading would
+collapse. A stale description is what makes the next reader re-derive
+everything from scratch.
+
+Report the reconciliation in the survey plan under **"Reconciled prior
+strands"** (closed / corrected / unchanged), so consecutive surveys show
+the queue actually converging instead of growing.
 
 ### 3. Classify the "Unchanged" entries
 
@@ -223,6 +323,7 @@ Create `claude-notes/plans/YYYY-MM-DD-cargo-upgrade-survey.md` using the templat
 - Applied: N patch/minor upgrades via `cargo update` (commit `<hash>`).
 - Needs review: M major upgrades (strands: bd-XXXX, bd-YYYY, …).
 - Skipped: K (vendored / excluded — see below).
+- Reconciled: P prior strands closed, Q corrected (see below).
 - Duplicates: <before> → <after> (delta: <±N>).
 - Verification: `cargo xtask verify` <PASSED | FAILED> — <one-line summary>.
 
@@ -236,6 +337,17 @@ Patch/minor upgrades applied in `cargo update`:
 | … | | |
 
 Verification: full `cargo xtask verify` passed (or: link to log if not).
+
+## Reconciled prior strands
+
+Result of step 2b over the `Cargo:` strands earlier surveys filed.
+
+| Strand | Crate | Filed target | Tree today | Upstream latest | Verdict |
+|---|---|---|---|---|---|
+| bd-XXXX | <name> | <a.b.c> → <x.y.z> | <declared> | <latest> | superseded / obsolete / still real |
+
+<Closed strands: one line each on the evidence. Corrected strands: what the
+description got wrong.>
 
 ## Needs review (major upgrades)
 
@@ -297,6 +409,8 @@ Hand the worktree back to the user. They review the lockfile diff, merge or disc
 - **`cargo update` reports zero changes but majors are available**: still write the plan, still file strands. The survey's value isn't only the lockfile bump.
 - **A `Locking N` lands but `cargo tree --duplicates` count *grew***: not a failure, but call it out prominently in the plan TL;DR. The user may decide to revert.
 - **HEAD verification fails in step 1**: stop. Tell the user. Don't survey on a broken HEAD.
+- **A `Cargo:` strand names a crate you cannot find at all**: that is the *obsolete* verdict, not an error — confirm with `git log -S "<crate>" -- '*Cargo.toml'` to name the removing commit, then close citing it.
+- **crates.io returns null/empty for a crate**: you almost certainly omitted the `User-Agent` header. Retry with one before concluding the crate is gone.
 
 ## Conventions used by this skill
 

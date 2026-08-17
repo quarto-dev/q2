@@ -161,8 +161,7 @@ pub fn available_choices() -> Vec<ProjectChoice> {
             "Blog",
             "A blog using the Quarto blog template",
             ProjectTypeWithTemplate::with_template(ProjectType::Website, "blog"),
-        )
-        .unimplemented(),
+        ),
         ProjectChoice::new(
             "manuscript",
             "Manuscript",

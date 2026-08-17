@@ -1,0 +1,78 @@
+---
+title: "Pre-render script changed a forbidden project setting"
+description: "A `project.pre-render` script changed `project.type` or `project.output-dir` in `_quarto.yml`, which must stay fixed."
+code: Q-5-9
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-9` — Pre-render script changed a forbidden project setting
+
+> A `project.pre-render` script changed `project.type` or
+> `project.output-dir` in `_quarto.yml`, which must stay fixed.
+
+## What this means
+
+Pre-render scripts are allowed to modify the project. Generating input
+files, rewriting configuration, adding entries to a listing — all of
+that is supported and is much of why the hook exists.
+
+Two settings are the exception: `project.type` and
+`project.output-dir`. Quarto reads both *before* running the scripts,
+because it has to — the scripts themselves receive
+`QUARTO_PROJECT_OUTPUT_DIR` in their environment, computed from those
+values. A script that changes them afterwards has already been handed
+the old answer, and the render that follows would use a mix of the two.
+
+Quarto detects the change by re-reading `_quarto.yml` after the scripts
+finish, and reports it rather than proceeding with an inconsistent
+configuration.
+
+## Why this happens
+
+- **A script that rewrites `_quarto.yml` wholesale**, regenerating the
+  whole file from a template and changing these keys as a side effect
+  of reordering or reformatting.
+- **Switching output directories per environment** — a script that sets
+  `output-dir: _site-staging` when a staging variable is set.
+- **Switching project type conditionally**, for instance between
+  `default` and `website`.
+
+## How to fix
+
+Move these two settings out of the script and into `_quarto.yml`
+directly:
+
+```yaml
+project:
+  type: website
+  output-dir: _site
+  pre-render: tools/prepare.py
+```
+
+If the value genuinely needs to vary, use a project profile rather than
+a script. Profiles are resolved before scripts run, so the setting is
+fixed by the time the environment variables are computed:
+
+```yaml
+# _quarto-staging.yml
+project:
+  output-dir: _site-staging
+```
+
+```bash
+quarto render --profile staging
+```
+
+If the script is rewriting `_quarto.yml` from a template, have the
+template carry the current values rather than defaults — reading them
+back before writing is the reliable form.
+
+## Related errors
+
+- [`Q-5-8`](Q-5-8.qmd) — the script exited non-zero.
+- [`Q-5-19`](Q-5-19.qmd) — a profile name that matches nothing in the
+  project.

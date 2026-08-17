@@ -666,3 +666,132 @@ fn test_list_item_multiple_blocks_with_paragraph() {
         );
     }
 }
+
+// ============================================================================
+// Named entity reference tests (bd-named-entities-w6xbfftj)
+// ============================================================================
+
+/// Flatten a paragraph's inline sequence to plain text (Str + Space only;
+/// any other inline renders as nothing, which the assertions would catch).
+fn para_text(pandoc: &pampa::pandoc::Pandoc, index: usize) -> String {
+    let Block::Paragraph(para) = &pandoc.blocks[index] else {
+        panic!("Expected paragraph at block {}", index);
+    };
+    inlines_text(&para.content)
+}
+
+fn inlines_text(inlines: &[Inline]) -> String {
+    let mut out = String::new();
+    for inline in inlines {
+        match inline {
+            Inline::Str(s) => out.push_str(&s.text),
+            Inline::Space(_) => out.push(' '),
+            other => panic!("Unexpected inline in entity test: {:?}", other),
+        }
+    }
+    out
+}
+
+#[test]
+fn test_entity_reference_gt_lt_amp() {
+    let pandoc = parse_qmd("A &gt; B &lt; C &amp; D");
+    assert_eq!(para_text(&pandoc, 0), "A > B < C & D");
+}
+
+#[test]
+fn test_entity_reference_nbsp_is_u00a0() {
+    // &nbsp; must decode to U+00A0, not a regular space
+    let pandoc = parse_qmd("F&nbsp;G");
+    assert_eq!(para_text(&pandoc, 0), "F\u{00a0}G");
+}
+
+#[test]
+fn test_entity_reference_copy() {
+    let pandoc = parse_qmd("&copy; 2026");
+    assert_eq!(para_text(&pandoc, 0), "\u{00a9} 2026");
+}
+
+#[test]
+fn test_entity_reference_multi_codepoint() {
+    // &NotEqualTilde; decodes to two codepoints: U+2242 U+0338
+    let pandoc = parse_qmd("x &NotEqualTilde; y");
+    assert_eq!(para_text(&pandoc, 0), "x \u{2242}\u{0338} y");
+}
+
+#[test]
+fn test_entity_reference_unknown_emits_verbatim() {
+    // "&AM;" is not a valid entity name and must survive as literal text.
+    // Before bd-v8qc9zyc it lexed as entity_reference (a truncated legacy
+    // alternative in the grammar regex) and exercised the converter's
+    // verbatim fallback; since the regex fix it is plain text. The assertion
+    // holds either way, guarding both layers.
+    let pandoc = parse_qmd("A &AM; B");
+    assert_eq!(para_text(&pandoc, 0), "A &AM; B");
+}
+
+#[test]
+fn test_entity_reference_quot_bypasses_smart_typography() {
+    // Decoded entities are literal characters: &quot; stays a straight quote,
+    // it is NOT smart-quoted (matches Pandoc and the numeric-reference handler).
+    let pandoc = parse_qmd("A &quot;B&quot; C");
+    assert_eq!(para_text(&pandoc, 0), "A \u{0022}B\u{0022} C");
+}
+
+#[test]
+fn test_entity_reference_inside_emphasis() {
+    let pandoc = parse_qmd("*A &gt; B*");
+    let Block::Paragraph(para) = &pandoc.blocks[0] else {
+        panic!("Expected paragraph");
+    };
+    let Some(Inline::Emph(emph)) = para.content.first() else {
+        panic!("Expected emphasis as first inline, got {:?}", para.content);
+    };
+    assert_eq!(inlines_text(&emph.content), "A > B");
+}
+
+// ============================================================================
+// Combining marks / join controls in prose (bd-96fswwce)
+// Pandoc folds all of these into Str verbatim; they must not be parse errors.
+// ============================================================================
+
+#[test]
+fn test_combining_mark_after_symbol() {
+    // U+2242 U+0338 — what &NotEqualTilde; decodes to, written literally
+    let pandoc = parse_qmd("x \u{2242}\u{0338} y");
+    assert_eq!(para_text(&pandoc, 0), "x \u{2242}\u{0338} y");
+}
+
+#[test]
+fn test_combining_mark_inside_word() {
+    // Decomposed (NFD) accent: cafe + U+0301
+    let pandoc = parse_qmd("cafe\u{0301} fin");
+    assert_eq!(para_text(&pandoc, 0), "cafe\u{0301} fin");
+}
+
+#[test]
+fn test_spacing_combining_mark_devanagari() {
+    // का = क (U+0915) + ा (U+093E, Mc) — any Hindi text with vowel signs
+    let pandoc = parse_qmd("\u{0915}\u{093E} matra");
+    assert_eq!(para_text(&pandoc, 0), "\u{0915}\u{093E} matra");
+}
+
+#[test]
+fn test_enclosing_combining_mark() {
+    // a + U+20DD (Me, combining enclosing circle)
+    let pandoc = parse_qmd("a\u{20DD} circled");
+    assert_eq!(para_text(&pandoc, 0), "a\u{20DD} circled");
+}
+
+#[test]
+fn test_zero_width_non_joiner_in_word() {
+    // U+200C between letters (Persian/Indic joining control)
+    let pandoc = parse_qmd("ab\u{200C}cd");
+    assert_eq!(para_text(&pandoc, 0), "ab\u{200C}cd");
+}
+
+#[test]
+fn test_zero_width_joiner_in_word() {
+    // U+200D between letters (outside emoji sequences)
+    let pandoc = parse_qmd("ab\u{200D}cd");
+    assert_eq!(para_text(&pandoc, 0), "ab\u{200D}cd");
+}

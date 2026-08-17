@@ -23,9 +23,27 @@ use crate::stage::PandocIncludes;
 /// Store HTML dependencies as artifacts.
 ///
 /// For each dependency, reads stylesheet and script files via the runtime
-/// and stores them as `css:{name}:{filename}` and `js:{name}:{filename}`
-/// artifacts. Artifact paths follow Quarto 1's `libs/` convention:
-/// `libs/{name}/{filename}` (relative to the scope root).
+/// and stores them as `css:{name}[:{version}]:{filename}` and
+/// `js:{name}[:{version}]:{filename}` artifacts, at
+/// `libs/{name}[/{version}]/{filename}` relative to the scope root.
+///
+/// # Versioning (bd-add-html-dependency-version-5tnub5ds)
+///
+/// A dependency that declares a `version` nests one level deeper —
+/// `libs/{name}/{version}/{filename}` — and carries the version in its
+/// artifact key. **Both halves matter**: without the version in the key, two
+/// renders that produce different versions of one dependency collapse onto a
+/// single artifact and the older render's assets are clobbered. That is the
+/// requirement `freeze` will depend on, which is the only reason this crate
+/// honors `version` at all — see
+/// `claude-notes/plans/2026-08-14-add-html-dependency-version.md`.
+///
+/// Dependencies without a `version` keep the flat `libs/{name}/{filename}`
+/// layout unchanged. Note that this is Quarto 1's layout for *built-in*
+/// dependencies; Quarto 1 puts Lua-registered ones under
+/// `quarto-contrib/{name}-{version}/`, which q2 deliberately does not mirror
+/// (q2 has no notion of "external" dependencies, and makes no longevity
+/// promise about `_site` internals).
 ///
 /// Phase 5: extension dependencies are tagged
 /// [`ArtifactScope::Project`] — under a website project they
@@ -78,16 +96,33 @@ pub fn store_html_dependencies(
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
     for dep in deps {
+        // `name` for unversioned deps, `name:version` / `name/version` when a
+        // version is declared. Empty for unversioned so existing keys and
+        // paths are byte-identical to what they were before versioning.
+        let key_qualifier = dep
+            .version
+            .as_deref()
+            .map_or_else(String::new, |v| format!(":{v}"));
+        let path_qualifier = dep
+            .version
+            .as_deref()
+            .map_or_else(String::new, |v| format!("/{v}"));
+
         // Layer 2 — name-collision first-wins guard.
         //
         // Check whether this dep name was already registered by looking for
-        // any `css:{name}:*` or `js:{name}:*` keys in the store.  We use
-        // `get_by_prefix` rather than a separate "seen" set so the store
-        // itself is the single source of truth, and the guard works across
-        // multiple `store_html_dependencies` calls (i.e. across the
-        // multi-engine loop in `EngineExecutionStage`).
-        let css_prefix = format!("css:{}:", dep.name);
-        let js_prefix = format!("js:{}:", dep.name);
+        // any `css:{name}[:{version}]:*` or `js:{name}[:{version}]:*` keys in
+        // the store.  We use `get_by_prefix` rather than a separate "seen" set
+        // so the store itself is the single source of truth, and the guard
+        // works across multiple `store_html_dependencies` calls (i.e. across
+        // the multi-engine loop in `EngineExecutionStage`).
+        //
+        // The prefix is **version-qualified**: two different versions of one
+        // dependency are distinct artifacts by design (that is the whole point
+        // of bd-add-html-dependency-version-5tnub5ds — `freeze` needs the old
+        // version to survive), so they must not read as a name collision.
+        let css_prefix = format!("css:{}{}:", dep.name, key_qualifier);
+        let js_prefix = format!("js:{}{}:", dep.name, key_qualifier);
         let already_stored_css = artifacts.get_by_prefix(&css_prefix);
         let already_stored_js = artifacts.get_by_prefix(&js_prefix);
 
@@ -107,7 +142,7 @@ pub fn store_html_dependencies(
                     || "style.css".to_string(),
                     |f| f.to_string_lossy().to_string(),
                 );
-                let key = format!("css:{}:{}", dep.name, filename);
+                let key = format!("css:{}{}:{}", dep.name, key_qualifier, filename);
                 match (artifacts.get(&key), runtime.file_read(stylesheet_path)) {
                     (Some(stored), Ok(incoming)) => {
                         if stored.content != incoming {
@@ -128,7 +163,7 @@ pub fn store_html_dependencies(
                         || "script.js".to_string(),
                         |f| f.to_string_lossy().to_string(),
                     );
-                    let key = format!("js:{}:{}", dep.name, filename);
+                    let key = format!("js:{}{}:{}", dep.name, key_qualifier, filename);
                     match (artifacts.get(&key), runtime.file_read(script_path)) {
                         (Some(stored), Ok(incoming)) => {
                             if stored.content != incoming {
@@ -170,8 +205,8 @@ pub fn store_html_dependencies(
                 |f| f.to_string_lossy().to_string(),
             );
 
-            let artifact_key = format!("css:{}:{}", dep.name, filename);
-            let relative_path = format!("libs/{}/{}", dep.name, filename);
+            let artifact_key = format!("css:{}{}:{}", dep.name, key_qualifier, filename);
+            let relative_path = format!("libs/{}{}/{}", dep.name, path_qualifier, filename);
 
             match runtime.file_read(stylesheet_path) {
                 Ok(content) => {
@@ -198,8 +233,8 @@ pub fn store_html_dependencies(
                 |f| f.to_string_lossy().to_string(),
             );
 
-            let artifact_key = format!("js:{}:{}", dep.name, filename);
-            let relative_path = format!("libs/{}/{}", dep.name, filename);
+            let artifact_key = format!("js:{}{}:{}", dep.name, key_qualifier, filename);
+            let relative_path = format!("libs/{}{}/{}", dep.name, path_qualifier, filename);
 
             match runtime.file_read(script_path) {
                 Ok(content) => {
@@ -241,6 +276,7 @@ pub fn push_text_includes(includes: Vec<TextInclude>, pandoc_includes: &mut Pand
 mod tests {
     use super::*;
     use quarto_system_runtime::NativeRuntime;
+    use std::path::PathBuf;
 
     // -----------------------------------------------------------------------
     // Row 13 — name-collision guard: first-wins, one warning, content check.
@@ -274,11 +310,13 @@ mod tests {
 
         let dep_first = HtmlDependency {
             name: "jquery".to_string(),
+            version: None,
             stylesheets: vec![css_v1.clone()],
             scripts: vec![],
         };
         let dep_second = HtmlDependency {
             name: "jquery".to_string(),
+            version: None,
             stylesheets: vec![css_v2.clone()],
             scripts: vec![],
         };
@@ -339,11 +377,13 @@ mod tests {
 
         let dep1 = HtmlDependency {
             name: "jquery".to_string(),
+            version: None,
             stylesheets: vec![css_path.clone()],
             scripts: vec![],
         };
         let dep2 = HtmlDependency {
             name: "jquery".to_string(),
+            version: None,
             stylesheets: vec![css_path.clone()],
             scripts: vec![],
         };
@@ -363,5 +403,139 @@ mod tests {
         // Still exactly one artifact in the store.
         assert_eq!(store.get_by_prefix("css:jquery:").len(), 1);
         assert_eq!(store.get("css:jquery:jquery.css").unwrap().content, content);
+    }
+
+    /// Write `files` into a fresh temp dir and return it plus the absolute
+    /// paths, so `store_html_dependencies` can read them through the real
+    /// native runtime rather than a mock.
+    fn fixture(files: &[(&str, &str)]) -> (tempfile::TempDir, Vec<PathBuf>) {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = files
+            .iter()
+            .map(|(name, contents)| {
+                let path = dir.path().join(name);
+                std::fs::write(&path, contents).unwrap();
+                path
+            })
+            .collect();
+        (dir, paths)
+    }
+
+    fn store(deps: Vec<HtmlDependency>) -> (ArtifactStore, Vec<DiagnosticMessage>) {
+        let runtime = quarto_system_runtime::NativeRuntime::new();
+        let mut artifacts = ArtifactStore::new();
+        let mut diagnostics = Vec::new();
+        store_html_dependencies(deps, &mut artifacts, &runtime, &mut diagnostics);
+        (artifacts, diagnostics)
+    }
+
+    /// The artifact's relative path, as a forward-slashed string.
+    fn path_of(artifacts: &ArtifactStore, key: &str) -> String {
+        artifacts
+            .get(key)
+            .unwrap_or_else(|| {
+                panic!(
+                    "no artifact at key {key:?}; keys present: {:?}",
+                    artifacts.keys().collect::<Vec<_>>()
+                )
+            })
+            .path
+            .as_ref()
+            .expect("dependency artifacts always carry a path")
+            .to_string_lossy()
+            .replace('\\', "/")
+    }
+
+    /// An unversioned dependency keeps the pre-existing `libs/{name}/`
+    /// layout — unchanged by bd-add-html-dependency-version-5tnub5ds.
+    #[test]
+    fn unversioned_dependency_keeps_flat_libs_path() {
+        let (_dir, paths) = fixture(&[("dep.js", "console.log(1)")]);
+        let (artifacts, diagnostics) = store(vec![HtmlDependency {
+            name: "plain".to_string(),
+            version: None,
+            stylesheets: vec![],
+            scripts: paths,
+        }]);
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert_eq!(path_of(&artifacts, "js:plain:dep.js"), "libs/plain/dep.js");
+    }
+
+    /// A versioned dependency nests under the version.
+    #[test]
+    fn versioned_dependency_nests_under_version() {
+        let (_dir, paths) = fixture(&[("dep.js", "console.log(1)")]);
+        let (artifacts, diagnostics) = store(vec![HtmlDependency {
+            name: "versioned".to_string(),
+            version: Some("1.0.0".to_string()),
+            stylesheets: vec![],
+            scripts: paths,
+        }]);
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert_eq!(
+            path_of(&artifacts, "js:versioned:1.0.0:dep.js"),
+            "libs/versioned/1.0.0/dep.js"
+        );
+    }
+
+    /// The `freeze` requirement: two renders that produce different versions
+    /// of one dependency must not collapse onto a single artifact, or the
+    /// older frozen page loses its assets. Here both registrations arrive in
+    /// one store, which is the strongest form of the same check.
+    #[test]
+    fn two_versions_of_one_dependency_produce_two_artifacts() {
+        let (_dir, old) = fixture(&[("dep.js", "OLD")]);
+        let (_dir2, new) = fixture(&[("dep.js", "NEW")]);
+        let (artifacts, diagnostics) = store(vec![
+            HtmlDependency {
+                name: "lib".to_string(),
+                version: Some("1.0.0".to_string()),
+                stylesheets: vec![],
+                scripts: old,
+            },
+            HtmlDependency {
+                name: "lib".to_string(),
+                version: Some("2.0.0".to_string()),
+                stylesheets: vec![],
+                scripts: new,
+            },
+        ]);
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert_eq!(artifacts.len(), 2, "versions must not collapse");
+        assert_eq!(
+            path_of(&artifacts, "js:lib:1.0.0:dep.js"),
+            "libs/lib/1.0.0/dep.js"
+        );
+        assert_eq!(
+            path_of(&artifacts, "js:lib:2.0.0:dep.js"),
+            "libs/lib/2.0.0/dep.js"
+        );
+        assert_eq!(
+            artifacts.get("js:lib:1.0.0:dep.js").unwrap().content,
+            b"OLD"
+        );
+        assert_eq!(
+            artifacts.get("js:lib:2.0.0:dep.js").unwrap().content,
+            b"NEW"
+        );
+    }
+
+    #[test]
+    fn versioned_stylesheets_nest_too() {
+        let (_dir, paths) = fixture(&[("dep.css", "body{}")]);
+        let (artifacts, _) = store(vec![HtmlDependency {
+            name: "styled".to_string(),
+            version: Some("0.3.1".to_string()),
+            stylesheets: paths,
+            scripts: vec![],
+        }]);
+
+        assert_eq!(
+            path_of(&artifacts, "css:styled:0.3.1:dep.css"),
+            "libs/styled/0.3.1/dep.css"
+        );
     }
 }

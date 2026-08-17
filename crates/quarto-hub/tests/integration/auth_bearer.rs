@@ -23,8 +23,8 @@ use rsa::{RsaPrivateKey, pkcs1::EncodeRsaPrivateKey, pkcs8::LineEnding};
 use serde_json::json;
 
 use crate::support::{
-    ClaimsBuilder, MCP_CLIENT_ID, MockOidcProvider, SPA_CLIENT_ID, TestHub, TestHubBuilder,
-    install_tracing_once, snapshot_events,
+    AUTH_COOKIE_NAME_SECURE, ClaimsBuilder, MCP_CLIENT_ID, MockOidcProvider, SPA_CLIENT_ID,
+    TestHub, TestHubBuilder, install_tracing_once, snapshot_events,
 };
 
 // ── shared test fixtures ──────────────────────────────────────────
@@ -437,7 +437,8 @@ async fn ws_upgrade_with_bearer_skips_origin_check() {
 #[tokio::test]
 async fn ws_upgrade_with_cookie_still_requires_origin() {
     // Hubs started with allow_insecure_auth=true skip the Origin check,
-    // so this regression needs the secure fixture.
+    // so this regression needs the secure fixture — which is also why
+    // the cookie carries the `__Host-` prefixed name (H3).
     let (provider, hub) = secure_setup().await;
     let token = provider.sign(
         &ClaimsBuilder::from_provider(provider)
@@ -447,7 +448,7 @@ async fn ws_upgrade_with_cookie_still_requires_origin() {
     let resp = hub
         .ws_upgrade()
         .header("origin", "https://attacker.example.com")
-        .header("cookie", format!("quarto_hub_token={token}"))
+        .header("cookie", format!("{AUTH_COOKIE_NAME_SECURE}={token}"))
         .send()
         .await
         .unwrap();
@@ -752,6 +753,220 @@ async fn dual_credential_400_wins_over_csrf_and_origin() {
         .await
         .unwrap();
     assert_eq!(resp.status(), 400);
+}
+
+// ── Revocation ledger on the Bearer path (bd-jkih1ql7) ───────────
+//
+// Bans and logout-everywhere `not_before` floors must bite Bearer
+// credentials too, not just session cookies — otherwise a banned user
+// keeps full MCP access and a stolen Google ID token survives
+// logout-everywhere for its remaining lifetime. The anchor is the
+// Google token's `iat`; a missing `iat` fails closed. Plan:
+// claude-notes/plans/2026-08-03-bearer-revocation-and-mcp-auth-followups.md (F1).
+
+/// Hub with pre-written revocation events (the stopped-hub operator
+/// procedure): one banned sub, plus per-test `not_before` floors
+/// anchored to the fixture's start instant (returned as third element
+/// so tests mint `iat`s relative to it, immune to test-order timing).
+async fn revocation_setup() -> &'static (MockOidcProvider, TestHub, i64) {
+    static SETUP: tokio::sync::OnceCell<(MockOidcProvider, TestHub, i64)> =
+        tokio::sync::OnceCell::const_new();
+    SETUP
+        .get_or_init(|| async {
+            install_tracing_once();
+            let now = chrono::Utc::now().timestamp();
+            let provider = MockOidcProvider::start().await;
+            let hub = TestHubBuilder::new()
+                .banned_subs(&["banned-bearer-sub"])
+                .not_before_subs(&[
+                    ("revoked-bearer-sub", now - 100),
+                    ("no-iat-bearer-sub", now - 100),
+                    ("self-heal-bearer-sub", now - 100),
+                    // Future floor = the shape a live logout-everywhere
+                    // writes (now + 1); lets the mint-path test present
+                    // a token whose iat provably predates the floor.
+                    ("mint-clamp-bearer-sub", now + 1),
+                ])
+                .start(&provider)
+                .await;
+            (provider, hub, now)
+        })
+        .await
+}
+
+#[tokio::test]
+async fn bearer_banned_sub_returns_403() {
+    let (provider, hub, now) = revocation_setup().await;
+    let token = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("banned-bearer-sub")
+            .iat(now - 5)
+            .to_value(),
+    );
+    let resp = hub.get_health().bearer_auth(&token).send().await.unwrap();
+    assert_eq!(
+        resp.status(),
+        403,
+        "banned sub must be refused on the Bearer path"
+    );
+
+    let events = snapshot_events();
+    assert!(
+        events.iter().any(|e| {
+            e.fields.get("action").map(|s| s.as_str()) == Some("auth_fail")
+                && e.fields.get("credential_kind").map(|s| s.as_str()) == Some("bearer")
+                && e.fields.get("sub").map(|s| s.as_str()) == Some("banned-bearer-sub")
+                && e.fields.get("detail").map(|s| s.as_str()) == Some("user_banned")
+        }),
+        "expected auth_fail with detail=user_banned, credential_kind=bearer"
+    );
+    // Ordering pin: the deny must happen before the auth_ok emission —
+    // an allow-then-deny pair for one request would corrupt the audit log.
+    assert!(
+        !events.iter().any(|e| {
+            e.fields.get("action").map(|s| s.as_str()) == Some("auth_ok")
+                && e.fields.get("sub").map(|s| s.as_str()) == Some("banned-bearer-sub")
+        }),
+        "a denied Bearer must not leave an auth_ok event in the audit log"
+    );
+}
+
+#[tokio::test]
+async fn ws_upgrade_with_banned_bearer_returns_403() {
+    let (provider, hub, now) = revocation_setup().await;
+    let token = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("banned-bearer-sub")
+            .iat(now - 5)
+            .to_value(),
+    );
+    let resp = hub.ws_upgrade().bearer_auth(&token).send().await.unwrap();
+    assert_eq!(
+        resp.status(),
+        403,
+        "banned sub must be refused on the WS upgrade too"
+    );
+}
+
+#[tokio::test]
+async fn bearer_with_iat_before_not_before_returns_401() {
+    let (provider, hub, now) = revocation_setup().await;
+    let token = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("revoked-bearer-sub")
+            .iat(now - 200) // predates the now-100 floor
+            .to_value(),
+    );
+    let resp = hub.get_health().bearer_auth(&token).send().await.unwrap();
+    assert_eq!(
+        resp.status(),
+        401,
+        "a Bearer minted before the not_before floor must be refused"
+    );
+
+    let events = snapshot_events();
+    assert!(
+        events.iter().any(|e| {
+            e.fields.get("action").map(|s| s.as_str()) == Some("auth_fail")
+                && e.fields.get("credential_kind").map(|s| s.as_str()) == Some("bearer")
+                && e.fields.get("sub").map(|s| s.as_str()) == Some("revoked-bearer-sub")
+                && e.fields.get("detail").map(|s| s.as_str()) == Some("bearer_revoked")
+        }),
+        "expected auth_fail with detail=bearer_revoked (not session_revoked — it isn't a session)"
+    );
+    assert!(
+        !events.iter().any(|e| {
+            e.fields.get("action").map(|s| s.as_str()) == Some("auth_ok")
+                && e.fields.get("sub").map(|s| s.as_str()) == Some("revoked-bearer-sub")
+        }),
+        "a denied Bearer must not leave an auth_ok event in the audit log"
+    );
+}
+
+#[tokio::test]
+async fn bearer_without_iat_fails_closed_when_not_before_exists() {
+    let (provider, hub, _now) = revocation_setup().await;
+    // OIDC requires iat and Google always sends it, but OidcClaims.iat
+    // is Option<i64> — an iat-less token must anchor at 0 and die
+    // against any not_before entry rather than sail past the check.
+    let token = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("no-iat-bearer-sub")
+            .no_iat()
+            .to_value(),
+    );
+    let resp = hub.get_health().bearer_auth(&token).send().await.unwrap();
+    assert_eq!(
+        resp.status(),
+        401,
+        "an iat-less Bearer must fail closed against a not_before entry"
+    );
+}
+
+#[tokio::test]
+async fn bearer_minted_after_revocation_authenticates() {
+    let (provider, hub, now) = revocation_setup().await;
+    // The self-heal path: a legitimate MCP client caught by
+    // logout-everywhere refreshes, gets a fresh iat ≥ not_before, and
+    // is back in — same "immediate re-login works" semantics as the
+    // browser.
+    let token = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("self-heal-bearer-sub")
+            .iat(now - 5) // after the now-100 floor
+            .to_value(),
+    );
+    let resp = hub.get_health().bearer_auth(&token).send().await.unwrap();
+    assert_eq!(
+        resp.status(),
+        200,
+        "a Bearer minted after the revocation instant must authenticate; body: {:?}",
+        resp.text().await
+    );
+}
+
+#[tokio::test]
+async fn bearer_revocation_does_not_leak_into_mint_path() {
+    let (provider, hub, now) = revocation_setup().await;
+    // A token whose iat predates the not_before floor: refused as a
+    // request credential…
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("mint-clamp-bearer-sub")
+            .iat(now - 5) // predates the now+1 floor
+            .to_value(),
+    );
+    let r = hub.get_health().bearer_auth(&google).send().await.unwrap();
+    assert_eq!(
+        r.status(),
+        401,
+        "pre-revocation iat must be refused as a request credential"
+    );
+
+    // …but the same credential still mints a session: the mint path's
+    // min_auth_time clamp (not a raw iat check) is what handles the
+    // floor there, so same-second re-login keeps working.
+    let r = hub
+        .client
+        .post(hub.url("/auth/session"))
+        .header("x-requested-with", "XMLHttpRequest")
+        .json(&serde_json::json!({ "credential": google }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        r.status(),
+        200,
+        "mint must not enforce the Bearer iat floor (min_auth_time clamp)"
+    );
+    let (cookie, _) = TestHub::set_auth_cookie(&r).expect("fresh session cookie");
+    let r = hub
+        .get_health()
+        .header("cookie", format!("quarto_hub_token={cookie}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200, "post-clamp session authenticates");
 }
 
 // ── Unauthenticated endpoints unaffected ─────────────────────────

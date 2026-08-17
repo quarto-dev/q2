@@ -12,9 +12,15 @@
  */
 
 import { useAuthProvider } from '../../auth/AuthProvider';
+import { authErrorMessage } from '../../auth/authError';
 import { hubPath } from '../../utils/routing';
 
-export function LoginScreen({ error, message }: { error?: boolean; message?: string }) {
+/**
+ * `errorReason` is the hub's coarse `auth_error` reason, not a flag —
+ * `''` (a bare `/?auth_error`) is a *present* error, so presence is
+ * tested with `!== undefined` rather than truthiness.
+ */
+export function LoginScreen({ errorReason, message }: { errorReason?: string; message?: string }) {
   const provider = useAuthProvider();
 
   return (
@@ -22,9 +28,9 @@ export function LoginScreen({ error, message }: { error?: boolean; message?: str
       <div className="modal" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '48px 32px' }}>
         <img src="/quarto-icon.svg" alt="Quarto" style={{ width: '48px', height: '48px', marginBottom: '8px' }} />
         <h1 style={{ margin: 0 }}>Quarto Hub</h1>
-        {error ? (
+        {errorReason !== undefined ? (
           <p style={{ color: 'var(--posit-red)', fontSize: '14px', margin: '0 0 16px' }}>
-            Sign-in failed. Your account is not authorized to access this hub.
+            {authErrorMessage(errorReason)}
           </p>
         ) : message ? (
           <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 16px' }}>

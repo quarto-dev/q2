@@ -1,0 +1,29 @@
+---
+title: Return value coercions
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        # `strong[^>]*>` not `strong>`: the hub preview renders with
+        # `source-location: full`, which puts data-sid/data-loc on the opening
+        # tag, so the text no longer sits flush against `>`. Both renderers
+        # must satisfy this pattern. `!str` stops the value being parsed as
+        # markdown, where the `*` quantifier reads as an unclosed emphasis
+        # marker and emits [Q-1-20]. (The brackets are harmless on their own;
+        # the same pattern with `+` instead of `*` parses clean.)
+        - ["RET-STRING", !str "strong[^>]*>RET-INLINE", "RET-INLINES", "RET-BLOCK", "RET-BLOCKS-1", "RET-BLOCKS-2", "RET-ARRAY"]
+---
+
+String: {{< rstr >}}
+
+Inline node: {{< rinline >}}
+
+Inlines list: {{< rinlines >}}
+
+{{< rblock >}}
+
+{{< rblocks >}}
+
+Array: {{< rarray >}}

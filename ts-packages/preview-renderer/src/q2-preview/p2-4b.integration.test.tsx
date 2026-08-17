@@ -40,6 +40,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import type { Mock } from 'vitest';
 import {
     render,
     cleanup,
@@ -246,7 +247,7 @@ interface KeydownHarnessProps {
     pool: unknown[];
     content: string;
     editTarget: EditTarget;
-    requestMove: vi.Mock;
+    requestMove: Mock;
     cancelPendingLand?: () => void;
 }
 
@@ -285,7 +286,7 @@ function EditTextareaKeydownHarness({
     return (
         <PreviewContext.Provider value={ctx}>
             <RegistryContext.Provider value={{ registry: {} }}>
-                <Block node={makeParaNode(0) as any} />
+                <Block node={makeParaNode(0) as any} setLocalAst={() => {}} />
             </RegistryContext.Provider>
         </PreviewContext.Provider>
     );
@@ -507,7 +508,7 @@ function CaretArrivalHarness({
     return (
         <PreviewContext.Provider value={ctx}>
             <RegistryContext.Provider value={{ registry: {} }}>
-                <Block node={makeParaNode(0) as any} />
+                <Block node={makeParaNode(0) as any} setLocalAst={() => {}} />
             </RegistryContext.Provider>
         </PreviewContext.Provider>
     );

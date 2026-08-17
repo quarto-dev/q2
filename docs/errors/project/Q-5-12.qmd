@@ -1,0 +1,62 @@
+---
+title: "Project render scripts unsupported in this environment"
+description: "The environment cannot run subprocesses, so `project.pre-render` / `project.post-render` scripts were skipped."
+code: Q-5-12
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-12` — Project render scripts unsupported in this environment
+
+> The environment cannot run subprocesses, so `project.pre-render` /
+> `project.post-render` scripts were skipped.
+
+## What this means
+
+Your project configures render scripts, and this environment cannot
+run them. The browser-based hub preview runs Quarto compiled to
+WebAssembly, inside a sandbox with no process model — there is no way
+to launch Python, R, or a shell from it.
+
+Quarto skips the scripts and renders anyway, so you still get a
+preview. What that preview lacks is whatever the scripts would have
+produced: fetched data, generated pages, a rebuilt index.
+
+This is a statement about where the render is happening, not a problem
+with your configuration. The same project renders with its scripts on
+a normal machine.
+
+## Why this happens
+
+- **Previewing a project in Quarto Hub** whose `_quarto.yml` declares
+  render scripts.
+- **A project shared from a machine where the scripts run**, opened in
+  the browser preview by a collaborator.
+
+## How to fix
+
+Nothing needs fixing for the preview to work. To get the effects of
+the scripts, render on a machine that can run them:
+
+```bash
+quarto render
+```
+
+Two ways to keep the browser preview useful in the meantime:
+
+**Commit the generated artifacts.** If a pre-render script generates
+files that change rarely, checking them in means the preview sees the
+same inputs a full render would.
+
+**Make the scripts optional.** If the generated content is
+supplementary, the preview showing the document without it is a
+reasonable degradation — which is what already happens here.
+
+## Related errors
+
+- [`Q-5-8`](Q-5-8.qmd) — a script that ran and failed.
+- [`Q-5-10`](Q-5-10.qmd) — a script that could not be started in an
+  environment that does support subprocesses.

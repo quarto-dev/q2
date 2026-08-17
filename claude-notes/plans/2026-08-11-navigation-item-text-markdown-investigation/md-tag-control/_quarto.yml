@@ -1,0 +1,12 @@
+# q2-only control: with an explicit `!md` tag, footer item text: behaves
+# correctly — markdown parsed, entities resolved, shortcodes substituted.
+# Quarto 1 rejects the !md tag, so this cannot live in the parent config.
+project:
+  type: website
+
+website:
+  title: "!md control"
+  page-footer:
+    right:
+      - text: !md "Tagged &copy; <b>2026</b> *emph* {{< env REPRO_YEAR >}}"
+        href: "https://example.com/tagged"

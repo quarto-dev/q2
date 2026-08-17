@@ -7750,3 +7750,671 @@ end
     .await;
     assert_eq!(out.meta, expected_meta);
 }
+
+// ============================================================================
+// bd-thagcbfq: byte_range() must expose the FileId; lookup_range must
+// refuse ranges from a file other than the blamed one
+// ============================================================================
+
+#[tokio::test]
+async fn test_source_info_byte_range_exposes_file_id() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("byte_range_fid.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Span(elem)
+    local r = elem.source_info:byte_range()
+    local cls = "fid-" .. tostring(r and r.file_id)
+    return pandoc.Span(elem.content, pandoc.Attr("", {cls}, {}))
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Span(crate::pandoc::Span {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![],
+                source_info: quarto_source_map::SourceInfo::original(
+                    quarto_source_map::FileId(3),
+                    5,
+                    7,
+                ),
+            })],
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = apply_lua_filter(
+        &pandoc,
+        &context,
+        &filter_path,
+        "html",
+        native_runtime(),
+        None,
+    )
+    .await
+    .unwrap()
+    .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Span(s) => assert_eq!(
+                s.attr.1,
+                vec!["fid-3".to_string()],
+                "byte_range() must carry the resolved file id so filters \
+                 don't have to re-derive it (bd-thagcbfq)"
+            ),
+            other => panic!("Expected Span, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_quarto_attribution_lookup_range_refuses_foreign_file_id() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("lookup_range_foreign.lua");
+    // The handle blames file 0 (the default); a range explicitly
+    // declared as belonging to file 3 must not collide into file 0's
+    // runs, even though the raw byte range overlaps them.
+    fs::write(
+        &filter_path,
+        r#"
+function Span(elem)
+    local hit = quarto.attribution.lookup_range(2, 8, 3)
+    if hit then
+        return pandoc.Span(elem.content, pandoc.Attr("", {"hit-" .. hit.actor}, {}))
+    end
+    return pandoc.Span(elem.content, pandoc.Attr("", {"miss"}, {}))
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Span(crate::pandoc::Span {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![],
+                source_info: quarto_source_map::SourceInfo::for_test(),
+            })],
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })],
+    };
+    let context = ASTContext::new();
+    let filtered = crate::lua::apply_lua_filter(
+        &pandoc,
+        &context,
+        &filter_path,
+        "html",
+        native_runtime(),
+        Some(make_test_handle()),
+    )
+    .await
+    .unwrap()
+    .pandoc;
+
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Span(s) => assert_eq!(
+                s.attr.1,
+                vec!["miss".to_string()],
+                "a range declared as file 3 must not attribute against the \
+                 blamed file's (file 0) runs (bd-thagcbfq)"
+            ),
+            other => panic!("Expected Span, got {:?}", other),
+        },
+        other => panic!("Expected Paragraph, got {:?}", other),
+    }
+}
+
+// ===========================================================================
+// Filter-script return values (bd-lua-filter-table-form-ignored-ph23becz)
+//
+// Pandoc's rule, pinned by probe against pandoc 3.9.0.2 (the version in
+// tests/lua-conformance/differential/ORACLE_VERSION):
+//
+//   1. Script returns NO value          -> filter is built from the globals.
+//   2. Script returns ANY value         -> that value is the filter, and the
+//      globals are never consulted:
+//        - table, rawlen == 0           -> a single filter table;
+//        - table, rawlen > 0            -> a list of filters, applied as
+//                                          successive passes, each honoring
+//                                          its own `traverse`;
+//        - anything else                -> a load-time error.
+//
+// The probe scripts and the full q2-vs-pandoc matrix live in
+// claude-notes/plans/2026-08-11-lua-filter-returned-table-form-investigation/.
+// ===========================================================================
+
+/// The smallest document that exercises an inline handler: one paragraph
+/// holding one `Str`.
+fn str_doc(text: &str) -> Pandoc {
+    Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Str(crate::pandoc::Str {
+                text: text.to_string(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
+            })],
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })],
+    }
+}
+
+/// Text of the first `Str` in the first paragraph.
+fn first_str(doc: &Pandoc) -> String {
+    match &doc.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Str(s) => s.text.clone(),
+            other => panic!("expected Str, got {other:?}"),
+        },
+        other => panic!("expected Paragraph, got {other:?}"),
+    }
+}
+
+/// Run `source` as a Lua filter over `doc`.
+async fn run_filter_source(source: &str, doc: &Pandoc) -> FilterResult<Pandoc> {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("filter.lua");
+    fs::write(&path, source).unwrap();
+    let context = ASTContext::new();
+    apply_lua_filter(doc, &context, &path, "html", native_runtime(), None)
+        .await
+        .map(|output| output.pandoc)
+}
+
+/// Run `source` over a one-`Str` document and return the resulting text.
+async fn filter_str(source: &str, text: &str) -> FilterResult<String> {
+    run_filter_source(source, &str_doc(text))
+        .await
+        .map(|doc| first_str(&doc))
+}
+
+// ── The reported bug: returned tables are handlers ────────────────────────
+
+#[tokio::test]
+async fn test_returned_table_form_runs_handlers() {
+    let out = filter_str(
+        r#"
+return {
+  Str = function(el)
+    if el.text == "MARKER" then return pandoc.Str("TABLE-RAN") end
+  end,
+}
+"#,
+        "MARKER",
+    )
+    .await
+    .expect("returned-table filter should load");
+    assert_eq!(out, "TABLE-RAN");
+}
+
+#[tokio::test]
+async fn test_returned_list_applies_passes_in_order() {
+    // The second pass matches only the FIRST pass's output, so the assertion
+    // fails unless the passes ran, and ran in this order.
+    let out = filter_str(
+        r#"
+return {
+  { Str = function(el)
+      if el.text == "MARKER" then return pandoc.Str("PASS-ONE") end
+    end },
+  { Str = function(el)
+      if el.text == "PASS-ONE" then return pandoc.Str("PASS-TWO") end
+    end },
+}
+"#,
+        "MARKER",
+    )
+    .await
+    .expect("returned filter list should load");
+    assert_eq!(out, "PASS-TWO");
+}
+
+#[tokio::test]
+async fn test_returned_table_honors_traverse_topdown() {
+    // Topdown: Para is replaced first, then Str visits the NEW content -> "S-P".
+    // Typewise: Str visits "x" first, then Para discards it -> "P".
+    // The two orders give different text, so this pins the traversal mode
+    // rather than merely observing that something ran.
+    let out = filter_str(
+        r#"
+return {
+  traverse = 'topdown',
+  Para = function(el) return pandoc.Para({pandoc.Str("P")}) end,
+  Str = function(el) return pandoc.Str("S-" .. el.text) end,
+}
+"#,
+        "x",
+    )
+    .await
+    .expect("returned table with traverse should load");
+    assert_eq!(out, "S-P", "traverse='topdown' on the returned table");
+}
+
+#[tokio::test]
+async fn test_returned_list_traverse_is_per_entry() {
+    // Entry 1 is topdown; entry 2 must NOT inherit that.
+    //   entry 1 (topdown):  Para -> "P", then Str -> "1-P"
+    //   entry 2 (typewise): Str -> "2-1-P", then Para discards it -> "Q"
+    // Had entry 2 inherited topdown it would yield "2-Q".
+    let out = filter_str(
+        r#"
+return {
+  { traverse = 'topdown',
+    Para = function(el) return pandoc.Para({pandoc.Str("P")}) end,
+    Str = function(el) return pandoc.Str("1-" .. el.text) end },
+  { Para = function(el) return pandoc.Para({pandoc.Str("Q")}) end,
+    Str = function(el) return pandoc.Str("2-" .. el.text) end },
+}
+"#,
+        "x",
+    )
+    .await
+    .expect("returned filter list with per-entry traverse should load");
+    assert_eq!(out, "Q", "entry 2 must run typewise, not inherit topdown");
+}
+
+#[tokio::test]
+async fn test_returned_table_dispatches_name_outside_globals_whitelist() {
+    // `NoteDefinitionPara` is dispatchable by the walker (it has a tag_name)
+    // but is absent from get_filter_table's hand-written globals list
+    // (bd-18a2r2lp). A returned table must not be filtered through that list.
+    let doc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::NoteDefinitionPara(
+            quarto_pandoc_types::NoteDefinitionPara {
+                id: "1".to_string(),
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "note".to_string(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
+                })],
+                source_info: quarto_source_map::SourceInfo::for_test(),
+            },
+        )],
+    };
+    let out = run_filter_source(
+        r#"
+return {
+  NoteDefinitionPara = function(el)
+    return pandoc.Para({pandoc.Str("NDP-RAN")})
+  end,
+}
+"#,
+        &doc,
+    )
+    .await
+    .expect("returned table with a non-whitelisted handler should load");
+    assert_eq!(first_str(&out), "NDP-RAN");
+}
+
+// ── The globals path keeps working ────────────────────────────────────────
+
+#[tokio::test]
+async fn test_globals_used_when_script_returns_nothing() {
+    let out = filter_str(
+        r#"
+function Str(el)
+  if el.text == "MARKER" then return pandoc.Str("GLOBAL-RAN") end
+end
+"#,
+        "MARKER",
+    )
+    .await
+    .expect("globals-form filter should load");
+    assert_eq!(out, "GLOBAL-RAN");
+}
+
+// ── Strict parity: a returned value wins outright ─────────────────────────
+//
+// Each test below asserts behavior q2 does NOT have yet, and that it has in
+// the opposite direction: today the globals run. See the plan's parity matrix.
+
+#[tokio::test]
+async fn test_returned_table_shadows_globals() {
+    let out = filter_str(
+        r#"
+function Str(el)
+  if el.text == "MARKER" then return pandoc.Str("GLOBAL-RAN") end
+end
+return {
+  Str = function(el)
+    if el.text == "MARKER" then return pandoc.Str("TABLE-RAN") end
+  end,
+}
+"#,
+        "MARKER",
+    )
+    .await
+    .expect("filter should load");
+    assert_eq!(
+        out, "TABLE-RAN",
+        "a returned table wins; the globals must not run"
+    );
+}
+
+#[tokio::test]
+async fn test_empty_returned_table_disables_globals() {
+    let out = filter_str(
+        r#"
+function Str(el)
+  if el.text == "MARKER" then return pandoc.Str("GLOBAL-RAN") end
+end
+return {}
+"#,
+        "MARKER",
+    )
+    .await
+    .expect("filter should load");
+    assert_eq!(
+        out, "MARKER",
+        "an empty returned table still wins, so nothing runs"
+    );
+}
+
+#[tokio::test]
+async fn test_empty_returned_list_disables_globals() {
+    let out = filter_str(
+        r#"
+function Str(el)
+  if el.text == "MARKER" then return pandoc.Str("GLOBAL-RAN") end
+end
+return { {} }
+"#,
+        "MARKER",
+    )
+    .await
+    .expect("filter should load");
+    assert_eq!(out, "MARKER", "a list of one empty filter runs nothing");
+}
+
+#[tokio::test]
+async fn test_hybrid_table_prefers_array_part() {
+    // rawlen > 0 makes it a LIST, and the named keys are discarded.
+    let out = filter_str(
+        r#"
+return {
+  Str = function(el)
+    if el.text == "MARKER" then return pandoc.Str("NAMED-RAN") end
+  end,
+  { Str = function(el)
+      if el.text == "MARKER" then return pandoc.Str("ARRAY-RAN") end
+    end },
+}
+"#,
+        "MARKER",
+    )
+    .await
+    .expect("filter should load");
+    assert_eq!(
+        out, "ARRAY-RAN",
+        "a non-empty array part makes it a list; named keys are ignored"
+    );
+}
+
+// ── Invalid script returns are errors ─────────────────────────────────────
+
+#[tokio::test]
+async fn test_explicit_return_nil_is_an_error() {
+    // THE distinction to get right: falling off the end of the script uses the
+    // globals, but an explicit `return nil` is a returned value, and an
+    // uninterpretable one. mlua's `eval_async::<Value>()` collapses both to
+    // Value::Nil, so the classification must read a MultiValue and check how
+    // many values came back.
+    let result = filter_str(
+        r#"
+function Str(el)
+  if el.text == "MARKER" then return pandoc.Str("GLOBAL-RAN") end
+end
+return nil
+"#,
+        "MARKER",
+    )
+    .await;
+    assert!(
+        result.is_err(),
+        "explicit `return nil` must error, not fall back to globals; got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_non_table_return_is_an_error() {
+    let result = filter_str(
+        r#"
+function Str(el)
+  if el.text == "MARKER" then return pandoc.Str("GLOBAL-RAN") end
+end
+return 5
+"#,
+        "MARKER",
+    )
+    .await;
+    assert!(
+        result.is_err(),
+        "a numeric script return must error; got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_returned_function_is_an_error() {
+    let result = filter_str("return function(x) return x end", "MARKER").await;
+    assert!(
+        result.is_err(),
+        "a returned function is not a filter; got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_globals_dispatch_name_outside_old_whitelist() {
+    // Regression for bd-18a2r2lp: `NoteDefinitionPara` is dispatchable by the
+    // walker but was missing from get_filter_table's hand-written name list,
+    // so a filter defining it as a GLOBAL was silently dropped. The list is
+    // now generated from the same tag names the walker dispatches on.
+    let doc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::NoteDefinitionPara(
+            quarto_pandoc_types::NoteDefinitionPara {
+                id: "1".to_string(),
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "note".to_string(),
+                    source_info: quarto_source_map::SourceInfo::for_test(),
+                })],
+                source_info: quarto_source_map::SourceInfo::for_test(),
+            },
+        )],
+    };
+    let out = run_filter_source(
+        r#"
+function NoteDefinitionPara(el)
+  return pandoc.Para({pandoc.Str("NDP-GLOBAL-RAN")})
+end
+"#,
+        &doc,
+    )
+    .await
+    .expect("globals filter should load");
+    assert_eq!(first_str(&out), "NDP-GLOBAL-RAN");
+}
+
+#[test]
+fn test_recognized_handler_names_cover_every_dispatchable_tag() {
+    // The set the globals scan and the unrecognized-name warning share must
+    // contain every tag the walker can dispatch. Generated from the same macro
+    // as `tag_name`, so this asserts the wiring rather than a copy.
+    let names: std::collections::HashSet<&str> = recognized_handler_names().collect();
+    for tag in crate::lua::types::INLINE_TAG_NAMES {
+        assert!(names.contains(tag), "inline tag {tag} not recognized");
+    }
+    for tag in crate::lua::types::BLOCK_TAG_NAMES {
+        assert!(names.contains(tag), "block tag {tag} not recognized");
+    }
+    // Spot-check the five that bd-18a2r2lp found missing.
+    for tag in [
+        "Attr",
+        "BlockMetadata",
+        "CaptionBlock",
+        "NoteDefinitionFencedBlock",
+        "NoteDefinitionPara",
+    ] {
+        assert!(names.contains(tag), "bd-18a2r2lp regression: {tag}");
+    }
+    // And the catch-alls, which are not element tags.
+    for name in [
+        "Pandoc", "Doc", "Meta", "Inline", "Inlines", "Block", "Blocks",
+    ] {
+        assert!(names.contains(name), "catch-all {name} not recognized");
+    }
+}
+
+// ── Diagnostics: unrecognized handler names (Q-11-7) ──────────────────────
+
+/// Run `source` over a one-`Str` document and return its diagnostics.
+async fn filter_diagnostics(source: &str) -> Vec<quarto_error_reporting::DiagnosticMessage> {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("filter.lua");
+    fs::write(&path, source).unwrap();
+    let context = ASTContext::new();
+    apply_lua_filter(
+        &str_doc("MARKER"),
+        &context,
+        &path,
+        "html",
+        native_runtime(),
+        None,
+    )
+    .await
+    .expect("filter should load")
+    .diagnostics
+}
+
+fn rendered(diags: &[quarto_error_reporting::DiagnosticMessage]) -> String {
+    diags
+        .iter()
+        .map(|d| format!("{d:?}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[tokio::test]
+async fn test_unrecognized_handler_name_warns_with_suggestion() {
+    let diags = filter_diagnostics(
+        r#"
+return {
+  Strs = function(el) return el end,
+}
+"#,
+    )
+    .await;
+    assert_eq!(diags.len(), 1, "expected exactly one warning: {diags:?}");
+    let text = rendered(&diags);
+    assert!(text.contains("Q-11-7"), "missing code: {text}");
+    assert!(
+        text.contains("Strs"),
+        "must name the offending handler: {text}"
+    );
+    assert!(
+        text.contains("Did you mean 'Str'?"),
+        "must suggest the near name: {text}"
+    );
+}
+
+#[tokio::test]
+async fn test_recognized_handlers_produce_no_warning() {
+    let diags = filter_diagnostics(
+        r#"
+return {
+  traverse = 'topdown',
+  Str = function(el) return el end,
+  Pandoc = function(doc) return doc end,
+  NoteDefinitionPara = function(el) return el end,
+}
+"#,
+    )
+    .await;
+    assert!(
+        diags.is_empty(),
+        "recognized names, `traverse`, and catch-alls must not warn: {diags:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_non_function_keys_are_not_warned() {
+    // Authors park data on filter tables; pandoc tolerates it and so do we.
+    let diags = filter_diagnostics(
+        r#"
+return {
+  my_config = { threshold = 3 },
+  Str = function(el) return el end,
+}
+"#,
+    )
+    .await;
+    assert!(diags.is_empty(), "data keys must not warn: {diags:?}");
+}
+
+#[tokio::test]
+async fn test_globals_form_never_warns() {
+    // The globals-derived table is built FROM the recognized set, so an
+    // unrecognized global helper can never reach the warning.
+    let diags = filter_diagnostics(
+        r#"
+function my_helper(x) return x end
+function Str(el) return el end
+"#,
+    )
+    .await;
+    assert!(diags.is_empty(), "globals path must not warn: {diags:?}");
+}
+
+#[tokio::test]
+async fn test_unrecognized_handler_warning_names_its_pass() {
+    let diags = filter_diagnostics(
+        r#"
+return {
+  { Str = function(el) return el end },
+  { Headerr = function(el) return el end },
+}
+"#,
+    )
+    .await;
+    assert_eq!(diags.len(), 1, "expected one warning: {diags:?}");
+    let text = rendered(&diags);
+    assert!(
+        text.contains("pass 2 of 2"),
+        "a list-form warning must say which pass: {text}"
+    );
+    assert!(
+        text.contains("Did you mean 'Header'?"),
+        "must suggest the near name: {text}"
+    );
+}
+
+#[test]
+fn test_edit_distance_basics() {
+    assert_eq!(edit_distance("Str", "Str"), 0);
+    assert_eq!(edit_distance("Strs", "Str"), 1);
+    assert_eq!(edit_distance("", "Str"), 3);
+    assert_eq!(edit_distance("Str", ""), 3);
+    assert_eq!(edit_distance("Headerr", "Header"), 1);
+    assert_eq!(edit_distance("Para", "Plain"), 3);
+}
+
+#[test]
+fn test_closest_handler_name_declines_when_nothing_is_close() {
+    let recognized: std::collections::HashSet<&str> = recognized_handler_names().collect();
+    assert_eq!(closest_handler_name("Strs", &recognized), Some("Str"));
+    assert_eq!(closest_handler_name("Headerr", &recognized), Some("Header"));
+    // A name unlike anything we dispatch gets no misleading suggestion.
+    assert_eq!(
+        closest_handler_name("totally_unrelated_helper", &recognized),
+        None
+    );
+}

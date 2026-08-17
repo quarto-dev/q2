@@ -23,8 +23,21 @@ use quick_xml::events::{BytesCData, BytesEnd, BytesStart, Event};
 /// # Errors
 ///
 /// Returns an error if the XML is malformed or if parsing fails.
+/// FileId minted for anonymous parses (no caller-supplied id).
+///
+/// Deliberately NOT `FileId(0)`: `SourceContext::get_file` falls back
+/// to positional indexing for unmapped ids, so a `FileId(0)` span
+/// resolves against whatever file occupies an unrelated context's
+/// first dense slot — in q2, the primary document — rendering XML
+/// offsets against qmd text (bd-y5gpc8yv). `usize::MAX` resolves in
+/// no context: anonymous spans degrade span-less, never wrong-file.
+/// (Aligns with the reserved "unknown" id planned for
+/// quarto-source-map's binding-API redesign; see q2's
+/// claude-notes/research/2026-08-09-fileid-span-integrity-audit.md.)
+pub const ANONYMOUS_FILE_ID: FileId = FileId(usize::MAX);
+
 pub fn parse(content: &str) -> Result<XmlWithSourceInfo> {
-    parse_impl(content, None, FileId(0))
+    parse_impl(content, None, ANONYMOUS_FILE_ID)
 }
 
 /// Parse XML from a string with an associated file ID.
@@ -40,7 +53,9 @@ pub fn parse_with_file_id(content: &str, file_id: FileId) -> Result<XmlWithSourc
 /// document. The resulting XmlWithSourceInfo will have Substring mappings
 /// that track back to the parent document.
 pub fn parse_with_parent(content: &str, parent: SourceInfo) -> Result<XmlWithSourceInfo> {
-    parse_impl(content, Some(parent), FileId(0))
+    // The id is unused when a parent is supplied (spans become
+    // Substrings of it), but keep the non-aliasing sentinel for safety.
+    parse_impl(content, Some(parent), ANONYMOUS_FILE_ID)
 }
 
 /// Parse XML from a string with diagnostic collection.
@@ -80,7 +95,7 @@ pub fn parse_with_context(
     content: &str,
     ctx: &mut XmlParseContext,
 ) -> ParseResult<XmlWithSourceInfo> {
-    parse_with_context_impl(content, None, FileId(0), ctx)
+    parse_with_context_impl(content, None, ANONYMOUS_FILE_ID, ctx)
 }
 
 fn parse_with_context_impl(
@@ -617,6 +632,32 @@ impl<'a> XmlParser<'a> {
 
 #[cfg(test)]
 mod tests {
+    // bd-y5gpc8yv is tested first below; existing tests follow.
+
+    #[test]
+    fn anonymous_parse_does_not_alias_dense_slot_zero() {
+        use quarto_source_map::{FileId, SourceContext};
+        // Anonymous parses must not mint an id that positionally
+        // aliases the first dense file of an unrelated SourceContext
+        // (in q2 that slot is the primary document): an XML-anchored
+        // diagnostic would render its offsets against qmd text
+        // (bd-y5gpc8yv). The correct degradation is an id that no
+        // context resolves — span-less, never wrong-file.
+        let xml = super::parse("<root><child/></root>").unwrap();
+        let (fid, _, _) = xml
+            .root
+            .name_source
+            .resolve_byte_range()
+            .expect("anonymous span must still resolve to offsets");
+        let mut ctx = SourceContext::new();
+        ctx.add_file("main.qmd".to_string(), Some("# Hello".to_string()));
+        assert!(
+            ctx.get_file(FileId(fid)).is_none(),
+            "anonymous XML FileId {fid} must not resolve against an \
+             unrelated context's dense slot"
+        );
+    }
+
     use super::*;
 
     #[test]

@@ -141,6 +141,7 @@ pub use fixture::FixtureEngine;
 pub use markdown::MarkdownEngine;
 pub use registry::EngineRegistry;
 pub use replay::ReplayEngine;
+pub(crate) use resolution::explicitly_declared_engines;
 pub use resolution::{EngineResolution, ResolutionNote, resolve_engines, resolve_engines_pass1};
 pub use traits::ExecutionEngine;
 
@@ -151,6 +152,11 @@ pub use jupyter::JupyterEngine;
 pub use knitr::KnitrEngine;
 #[cfg(not(target_arch = "wasm32"))]
 pub use ts_engine::TsEngine;
+
+// Rscript discovery, shared with the project render-script dispatcher
+// (`project::render_scripts`).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use knitr::find_rscript;
 
 /// Print `perf.engine-discover jupyter=N rscript=N` to stderr when
 /// `QUARTO_PERF_STATS=1`. Call once at the end of a top-level

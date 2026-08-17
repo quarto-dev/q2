@@ -279,6 +279,37 @@ pub fn load_embed_example_layer() -> Result<SassLayer, SassError> {
     parse_layer(content, Some("embed-example.scss"))
 }
 
+/// Load the listing (cards / table / category chips / pagination) SCSS
+/// layer (bd-57y4).
+///
+/// Reads `quarto-listing.scss` — a verbatim vendor of Q1's
+/// `projects/website/listing/quarto-listing.scss`. Like Q1's
+/// `listingSassBundle()`, the layer is attached **unconditionally** to
+/// every HTML (bootstrap) compile, not gated on a page having listings:
+/// the theme-CSS stage runs before listing resolution, and keeping the
+/// layer unconditional keeps one shared theme CSS per site. Slide
+/// formats do not include it.
+///
+/// Known parity quirk carried over on purpose: the file's
+/// `/*-- scss:variables --*/` marker is not a recognized boundary (in
+/// Q1 or here), so its `!default` block rides along in the `functions`
+/// band — same as `title-block.scss` (quarto-cli#13960). Do not "fix"
+/// the marker without a deliberate parity decision.
+///
+/// The per-theme override map inside keys off `$theme-name`, emitted
+/// for built-in themes by [`crate::themes::process_theme_specs`].
+pub fn load_listing_layer() -> Result<SassLayer, SassError> {
+    use crate::resources::TEMPLATES_RESOURCES;
+
+    let content = TEMPLATES_RESOURCES
+        .read_str(Path::new("quarto-listing.scss"))
+        .ok_or_else(|| SassError::CompilationFailed {
+            message: "quarto-listing.scss not found in templates resources".to_string(),
+        })?;
+
+    parse_layer(content, Some("quarto-listing.scss"))
+}
+
 /// Load the reveal.js framework layer.
 ///
 /// This is the reveal analogue of [`load_bootstrap_framework`]: it provides the

@@ -1,0 +1,7 @@
+::: {.callout-note title="Say \"hello\" now"}
+Body.
+:::
+
+::: {.callout-tip title="Use `renv` today"}
+Body.
+:::

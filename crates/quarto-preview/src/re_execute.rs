@@ -33,13 +33,11 @@ use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_hub::HubContext;
 use quarto_hub::context::SharedContext;
 use quarto_hub::index::{CaptureRef, CaptureState};
-use quarto_hub::resource::create_binary_document;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use quarto_trace::EngineCapture;
 use serde::{Deserialize, Serialize};
 
 use crate::cache::record_capture_cached;
-use crate::capture_driver::CAPTURE_MIME_TYPE;
 use crate::diagnostics;
 
 /// Process-wide set of paths currently being re-executed. Used to
@@ -312,7 +310,7 @@ async fn perform_re_execute(
         return Err("engine produced no capture (no code cells?)".to_string());
     }
 
-    let new_doc_id = write_capture_doc(&ctx, &captures)
+    let new_doc_id = write_capture_doc(&ctx, rel_path, &captures)
         .await
         .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
 
@@ -337,11 +335,16 @@ async fn perform_re_execute(
 /// bd-qbhp2cvv).
 async fn write_capture_doc(
     ctx: &Arc<HubContext>,
+    rel_path: &str,
     captures: &[EngineCapture],
 ) -> Result<String, String> {
     let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
         .map_err(|e| format!("serialize/gzip: {e}"))?;
-    let doc = create_binary_document(&gzipped, CAPTURE_MIME_TYPE)
+    let meta = quarto_hub::resource::CaptureDocMeta {
+        source_path: rel_path.to_string(),
+        engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
+    };
+    let doc = quarto_hub::resource::create_capture_document(&gzipped, &meta)
         .map_err(|e| format!("binary doc: {e}"))?;
     let handle = ctx
         .repo()

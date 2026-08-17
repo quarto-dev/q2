@@ -147,7 +147,33 @@ async function buildWsAdapter(
   return new mod.NodeWebSocketClientAdapter(url, {
     getBearer: auth.getBearer,
     retryInterval: retryIntervalMs,
+    onAuthRejected: auth.onAuthRejected,
   }) as unknown as NetworkAdapter;
+}
+
+/**
+ * Optional wrapper applied to the freshly built websocket adapter at
+ * Repo construction (module-level injection, same pattern as
+ * `setSyncLogger`). Lets a host observe sync traffic without the
+ * options plumbing — e.g. hub-client's debug message tap
+ * (bd-6ogrov5r). The wrapper must be fully forwarding (a
+ * `NetworkAdapter` that delegates connect/send/disconnect and
+ * re-emits events). Takes effect on the NEXT connect/createNewProject;
+ * existing connections are untouched. Clear with null.
+ */
+export type NetworkAdapterWrapper = (adapter: NetworkAdapter) => NetworkAdapter;
+
+let networkAdapterWrapper: NetworkAdapterWrapper | null = null;
+
+export function setNetworkAdapterWrapper(
+  fn: NetworkAdapterWrapper | null,
+): void {
+  networkAdapterWrapper = fn;
+}
+
+/** Apply the module-level wrapper, if any, to a freshly built adapter. */
+function wrapAdapter(adapter: NetworkAdapter): NetworkAdapter {
+  return networkAdapterWrapper ? networkAdapterWrapper(adapter) : adapter;
 }
 
 // FileDocument can be text or binary - use runtime detection
@@ -242,6 +268,28 @@ export interface SyncDiagnostics {
   unavailableRetryTicks: number;
   retryTimerActive: boolean;
   stranded: StrandedFileDiagnostic[];
+}
+
+/**
+ * One document known to this sync client, as reported by
+ * {@link getDocInventory}. Built for the hub-client in-context debug
+ * API (`quartoDebug.am`, bd-q93tkglb).
+ *
+ * `docId` is the bare document id (no `automerge:` prefix).
+ * `handleState` is the raw automerge-repo DocHandle state, or null when
+ * the repo holds no cached handle for the doc. `heads` is the doc's
+ * current change-hash heads when the handle is ready, else null.
+ * `unavailableMarker` mirrors the client's dangling-entry marker: the
+ * index references this path but the document never loaded — for those
+ * entries binary-ness is unknowable, so the role is the generic `file`.
+ */
+export interface DocInventoryEntry {
+  docId: string;
+  role: 'index' | 'file' | 'binary-file';
+  path: string | null;
+  handleState: string | null;
+  heads: string[] | null;
+  unavailableMarker: boolean;
 }
 
 const DEFAULT_FIND_DOC_RETRY: Required<FindDocRetryOptions> = {
@@ -817,7 +865,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     await disconnect();
 
     try {
-      state.wsAdapter = await buildWsAdapter(syncServerUrl, effectiveAuth, options.retryIntervalMs);
+      state.wsAdapter = wrapAdapter(
+        await buildWsAdapter(syncServerUrl, effectiveAuth, options.retryIntervalMs),
+      );
       state.repo = new Repo({
         network: [state.wsAdapter],
         storage: buildStorageAdapter(options.storage),
@@ -1476,6 +1526,72 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * The live Repo backing this connection, or null when disconnected.
+   * Exposed for same-heap debug tooling (`quartoDebug.am`); observation
+   * only — mutations must keep going through this client's methods so
+   * its caches (fileHandles, binaryFiles, VFS callbacks) stay coherent.
+   */
+  function getRepo(): Repo | null {
+    return state.repo;
+  }
+
+  /** Heads of a handle's doc when ready, else null (plain string[]). */
+  function headsOf(handle: DocHandle<unknown>): string[] | null {
+    if (handle.state !== 'ready') return null;
+    return [...handle.heads()];
+  }
+
+  /**
+   * Every document this client knows about: the index doc first, then
+   * per-path entries (loaded file docs + dangling index entries) sorted
+   * by path. See {@link DocInventoryEntry} for field semantics.
+   */
+  function getDocInventory(): DocInventoryEntry[] {
+    const entries: DocInventoryEntry[] = [];
+    if (state.indexHandle) {
+      entries.push({
+        docId: state.indexHandle.documentId,
+        role: 'index',
+        path: null,
+        handleState: state.indexHandle.state,
+        heads: headsOf(state.indexHandle),
+        unavailableMarker: false,
+      });
+    }
+    const byPath: DocInventoryEntry[] = [];
+    for (const [path, handle] of state.fileHandles) {
+      byPath.push({
+        docId: handle.documentId,
+        role: state.binaryFiles.has(path) ? 'binary-file' : 'file',
+        path,
+        handleState: handle.state,
+        heads: headsOf(handle),
+        unavailableMarker: false,
+      });
+    }
+    for (const [path, rawDocId] of state.unavailableFiles) {
+      // A file can recover after being marked (retry loop); the loaded
+      // handle entry above is then the truth.
+      if (state.fileHandles.has(path)) continue;
+      const bareId = rawDocId.startsWith('automerge:')
+        ? rawDocId.slice('automerge:'.length)
+        : rawDocId;
+      const cached = state.repo?.handles?.[bareId as DocumentId];
+      byPath.push({
+        docId: bareId,
+        role: 'file',
+        path,
+        handleState: cached?.state ?? null,
+        heads: null,
+        unavailableMarker: true,
+      });
+    }
+    byPath.sort((a, b) => a.path!.localeCompare(b.path!));
+    entries.push(...byPath);
+    return entries;
+  }
+
+  /**
    * Create a new project with the given files.
    */
   async function createNewProject(
@@ -1488,10 +1604,12 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     await disconnect();
 
     try {
-      state.wsAdapter = await buildWsAdapter(
-        options.syncServer,
-        options.auth,
-        options.retryIntervalMs,
+      state.wsAdapter = wrapAdapter(
+        await buildWsAdapter(
+          options.syncServer,
+          options.auth,
+          options.retryIntervalMs,
+        ),
       );
       state.repo = new Repo({
         network: [state.wsAdapter],
@@ -1713,6 +1831,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     getFilePaths,
     getUnavailableFiles,
     getSyncDiagnostics,
+    getRepo,
+    getDocInventory,
     createNewProject,
     getActorId,
   };

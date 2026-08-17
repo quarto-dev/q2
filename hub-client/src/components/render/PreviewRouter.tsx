@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
-import { isQmdFile } from '@quarto/preview-renderer/types/project';
+import { isSourceFile } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import type { ActorIdentity, CaptureRef } from '@quarto/preview-runtime';
 import { parseQmdToAst, isWasmReady, initWasm } from '@quarto/preview-runtime';
@@ -51,6 +51,12 @@ interface PreviewRouterProps {
    * drive `useAttribution`.
    */
   attributionOn: boolean;
+  /**
+   * Comment-bubble display mode (expand / show / hide). Session-only —
+   * owned by `Editor.tsx`, threaded into `ReactPreview` (the non-React
+   * `Preview` branch has no comment chrome).
+   */
+  commentsMode?: 'expand' | 'show' | 'hide';
   /**
    * Reports `useAttribution`'s in-flight state up to `Editor.tsx` so
    * the Attribution pill can animate its border while attribution
@@ -137,15 +143,15 @@ export default function PreviewRouter(props: PreviewRouterProps) {
     );
   }
 
-  // Non-QMD files: show placeholder
-  if (!isQmdFile(props.currentFile?.path)) {
+  // Non-source files (not .qmd/.md): show placeholder
+  if (!isSourceFile(props.currentFile?.path)) {
     return <NonQmdPlaceholderView filename={props.currentFile?.path ?? 'no currentFile path'} />;
   }
 
   // Render the appropriate preview component with shared WASM error banner.
   // `identities` and `attributionOn` are for ReactPreview only — Preview
   // doesn't know about either.
-  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onRegisterReplayScroll, onFormatChange, onContentRewrite, fileContents, identities, captures, attributionOn, onAttributionGeneratingChange, ...commonProps } = props;
+  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onRegisterReplayScroll, onFormatChange, onContentRewrite, fileContents, identities, captures, attributionOn, commentsMode, onAttributionGeneratingChange, ...commonProps } = props;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -155,7 +161,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
       )}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {reactFormat ? (
-          <ReactPreview {...commonProps} onContentRewrite={onContentRewrite} fileContents={fileContents} format={reactFormat} identities={identities} captures={captures} attributionOn={attributionOn} onAttributionGeneratingChange={onAttributionGeneratingChange} onRegisterReplayScroll={onRegisterReplayScroll} />
+          <ReactPreview {...commonProps} onContentRewrite={onContentRewrite} fileContents={fileContents} format={reactFormat} identities={identities} captures={captures} attributionOn={attributionOn} commentsMode={commentsMode} onAttributionGeneratingChange={onAttributionGeneratingChange} onRegisterReplayScroll={onRegisterReplayScroll} />
         ) : (
           // Phase 9 Decision 6: pass `fileContents` so any sibling
           // edit (including `_quarto.yml`) triggers a re-render via

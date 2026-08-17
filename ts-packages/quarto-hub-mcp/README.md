@@ -240,13 +240,16 @@ To revoke manually, or to be sure when the revoke step failed:
 The agent's next action surfaces `ReauthRequired` with a message
 asking you to re-authenticate.
 
-> **ID-token residual validity.** A stolen ID token authenticates to
-> the hub for up to **≤1 hour** after revocation, because JWTs are
-> self-contained and the hub does not consult Google on each
-> request. Closing this window requires a hub-side denylist — not in
-> v1. If you have evidence of an active compromise (e.g. a leaked
-> machine), ask your hub operator to roll the audience allowlist or
-> rotate the OAuth client.
+> **ID-token residual validity — closed for hub-side events.** The
+> hub enforces its revocation ledger on the Bearer path (bd-jkih1ql7):
+> a **ban** denies the identity immediately (403), and a
+> **logout-everywhere** kills every outstanding ID token whose `iat`
+> predates it (401). What the ledger cannot kill is a stolen **refresh
+> token** — a refresh mints a fresh `iat` that passes the floor — so
+> Google-side revocation (`authenticate_clear`, or the manual steps
+> above) remains the lever for a compromised grant, and a hub **ban**
+> remains the operator lever for a hostile identity. A legitimate
+> client caught by logout-everywhere self-heals on its next refresh.
 
 ## Why both env vars must come from the operator
 

@@ -57,26 +57,61 @@ use thiserror::Error;
 ///   offending scalar. v5 serialized profiles will fail to
 ///   deserialize at the field level; cached frozen profiles need to
 ///   be regenerated.
-/// - `7`: (superseded — see `8`). Two additions shipped concurrently on
-///   separate branches and each bumped the version to `7`; the merged
-///   profile (ts-engine-extensions rebase) carries both under version `8`.
-/// - `8`: merge of the two concurrent version-`7` additions —
-///   - `bd-ez0hiowa` (title-block parity epic, P2): `authors_structured:
-///     Vec<ProfileAuthor>`, the structured author model (name components,
-///     ORCID, email, url, degrees, attribute flags, denormalized
-///     affiliations) that the Phase-0 note below deferred. The flat
-///     `authors: Vec<String>` field is unchanged in type and now derives its
-///     literals from the same normalization
-///     (`metadata::authors::parse_authors_model`), so the two fields agree.
-///   - Plan 6 Phase 5
-///     (`claude-notes/plans/2026-06-29-plan6-pass1-engine-resolution.md`):
-///     `engine_resolution: Option<ProfileEngineResolution>`, the
-///     Pass-1-resolved engine sequence/ownership (names only; configs stay in
-///     merged metadata), stamped by `DocumentProfileStage` from
-///     `resolve_engines_pass1`. `None` means the document could not be
-///     resolved load-free at index time — advisory, not an error; Pass-2
-///     always re-resolves via the full loading resolver regardless.
-pub const DOCUMENT_PROFILE_VERSION: u32 = 8;
+/// - `7`: `bd-ez0hiowa` (title-block parity epic, P2). Adds
+///   `authors_structured: Vec<ProfileAuthor>` — the structured author
+///   model (name components, ORCID, email, url, degrees, attribute
+///   flags, denormalized affiliations) that the Phase-0 note below
+///   deferred. The flat `authors: Vec<String>` field is unchanged in
+///   type and now derives its literals from the same normalization
+///   (`metadata::authors::parse_authors_model`), so the two fields
+///   always agree.
+/// - `8`: `bd-v7ixzsp5` (GH #456). Changes `listing_content_globs`
+///   from `Vec<String>` (raw patterns, expanded dual-view at
+///   graph-build time) to `Vec<GlobPattern>` — patterns are
+///   now **resolved to project-relative form at profile-extraction
+///   time** against the directory of the file each glob was written
+///   in (front matter → host dir, `_metadata.yml` → its dir,
+///   `_quarto.yml` → project root), and carry a `negated` flag for
+///   `!`-prefixed exclusion patterns. Consumers match single-view
+///   via [`crate::glob::PatternSet`].
+/// - `9`: `bd-mt7a6uc4`. Adds `resource_globs: Vec<GlobPattern>` — the
+///   document's `resources:` patterns resolved to project-relative
+///   form at profile-extraction time, against the directory of the
+///   file each was written in. The raw `resources` field stays as-is
+///   because `ResourceReportStage` compares raw pattern strings to
+///   detect filter-added entries; the two answer different questions.
+/// - `10`: `bd-aliases-redirects-missing-sch7cd1g`. Adds
+///   `aliases: Vec<String>` and the index-aligned
+///   `alias_sources: Vec<SourceInfo>` — the document's `aliases:`
+///   front-matter entries, kept **raw**. Unlike `resource_globs`,
+///   these are deliberately *not* resolved at extraction time:
+///   resolving an alias needs only the page's own `output_href`
+///   (already on the profile) and no filesystem, while *validating*
+///   one needs every other page in the project. Resolution and
+///   collision detection therefore both live in the post-render pass,
+///   which is also the only place a diagnostic survives profile
+///   caching (see `rejected_resources` for the same lesson learned
+///   the hard way).
+/// - `11`: `bd-toc-smart-quotes-6nro57ed`. Changes `outline`'s entry
+///   titles from `String` to `Inlines` (`TocEntry::title`). The
+///   outline now carries the heading's inline markup — emphasis,
+///   code, math, and the quoted-span delimiters a flattened title
+///   silently dropped — so it is a faithful semantic outline rather
+///   than a lossy projection. **Serialized shape changes**: a title
+///   that was `"Top"` is now an array of inline nodes, so v10
+///   profiles fail to deserialize at the field level and cached
+///   profiles must be regenerated. Consumers wanting plain text
+///   project it themselves with
+///   `pampa::writers::plaintext::inlines_to_string`.
+/// - `12`: Plan 6 Phase 5
+///   (`claude-notes/plans/2026-06-29-plan6-pass1-engine-resolution.md`).
+///   Adds `engine_resolution: Option<ProfileEngineResolution>` — the
+///   Pass-1-resolved engine sequence/ownership (names only; configs stay
+///   in merged metadata), stamped by `DocumentProfileStage` from
+///   `resolve_engines_pass1`. `None` means the document could not be
+///   resolved load-free at index time — advisory, not an error; Pass-2
+///   always re-resolves via the full loading resolver regardless.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 12;
 
 /// Reduced, serializable form of [`crate::engine::EngineResolution`] for the
 /// profile (names only — configs stay in merged metadata; Plan 6 decision 6).
@@ -408,6 +443,39 @@ pub struct DocumentProfile {
     pub image: Option<String>,
     pub draft: bool,
 
+    /// `aliases:` front-matter entries — old URLs that should redirect
+    /// to this page — exactly as the author wrote them.
+    ///
+    /// Kept raw. An alias is resolved against this profile's own
+    /// [`output_href`](Self::output_href), which needs no filesystem
+    /// and no other document; but deciding whether it is *legal*
+    /// needs every other page in the project. Both therefore happen
+    /// in `project::website_post_render`, which is additionally the
+    /// only place a diagnostic survives profile caching — a collision
+    /// reported at extraction time would appear on the render that
+    /// populated the cache and never again.
+    ///
+    /// Consumed only by website projects; other project types warn
+    /// that the key is inert rather than dropping it silently.
+    ///
+    /// Default empty; added v9 → v10.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
+
+    /// Provenance for [`Self::aliases`], same order and length — the
+    /// YAML scalar each alias came from.
+    ///
+    /// Collision diagnostics index into this with the position of the
+    /// offending alias, so the two vectors are index-aligned by
+    /// contract. Carried for the same reason as
+    /// [`Self::resource_glob_sources`]: an alias inherited from a
+    /// `_metadata.yml` and shared by many pages is the difference
+    /// between a useful error and a puzzle.
+    ///
+    /// Default empty; added v9 → v10.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alias_sources: Vec<quarto_source_map::SourceInfo>,
+
     /// Author-supplied sort key from `order:` frontmatter. Consumed by
     /// Phase-2 auto-sidebar expansion to order sibling entries. `None`
     /// when the key is absent or non-integer. Additive on top of
@@ -497,6 +565,49 @@ pub struct DocumentProfile {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<crate::project_resources::RawResourcePattern>,
 
+    /// The same `resources:` declarations, resolved to
+    /// project-relative patterns against the directory of the file
+    /// each was **written in** (bd-mt7a6uc4).
+    ///
+    /// This is what the post-render collector expands. It exists
+    /// separately from [`Self::resources`] because the two answer
+    /// different questions: this one is "which files does this
+    /// document publish", while the raw list is the frontmatter
+    /// snapshot `ResourceReportStage` diffs against post-filter
+    /// metadata to catch filter-added entries.
+    ///
+    /// Populated by `DocumentProfileStage`, which is where the
+    /// document's `SourceContext` (and therefore each pattern's
+    /// declaring file) is in scope. Default empty; added v8 → v9.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_globs: Vec<crate::glob::GlobPattern>,
+
+    /// Provenance for [`Self::resource_globs`], same order and
+    /// length — the YAML scalar each resolved pattern came from.
+    ///
+    /// Carried so the post-render collector's diagnostics (`Q-5-16`)
+    /// can point at what the author wrote. Without it the pattern
+    /// would be named but not located, which for a `_metadata.yml`
+    /// declaration inherited by many pages is the difference between
+    /// a useful warning and a puzzle.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_glob_sources: Vec<quarto_source_map::SourceInfo>,
+
+    /// Declared `resources:` patterns resolution could not use — one
+    /// that climbs above the project root, or that the glob engine
+    /// rejects (bd-mt7a6uc4).
+    ///
+    /// These travel with the profile rather than being reported at
+    /// profile-extraction time because **profiles are cached**: a
+    /// diagnostic emitted in the stage would appear on the render
+    /// that populated the cache and never again. The post-render
+    /// collector turns each of these into its `Q-5-1` / `Q-5-2`
+    /// error on every render.
+    ///
+    /// Default empty; added v8 → v9.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rejected_resources: Vec<crate::project_resources::RejectedResourcePattern>,
+
     /// Tagged form of the top-level `categories:` value as written
     /// by the author. Mirrors [`Self::categories`] but preserves
     /// `ConfigValue` merge tags (`!prefer` / `!concat`) for
@@ -531,20 +642,29 @@ pub struct DocumentProfile {
 
     /// Glob patterns from the host's `listing.*.contents:` config,
     /// flattened across all listings declared on the page. Each
-    /// entry is a raw glob string (e.g. `"*.qmd"`,
-    /// `"posts/**/*.qmd"`) — *not* a resolved path.
+    /// entry is a **project-relative, base-resolved** pattern (e.g.
+    /// `"sub/*.qmd"`) plus a negation flag — resolved by
+    /// [`crate::project::listing::glob_resolve::resolve_content_globs`]
+    /// against the directory of the file the glob was written in
+    /// (front matter → host dir, `_metadata.yml` → its dir,
+    /// `_quarto.yml` → project root; GH #456, bd-v7ixzsp5).
+    /// Populated by `DocumentProfileStage` (the resolution needs the
+    /// document's `SourceContext`, which `extract` doesn't take);
+    /// [`DocumentProfile::extract`] leaves it empty. Patterns whose
+    /// normalization escapes the project root are dropped here (the
+    /// render transform owns the `Q-12-17` diagnostic).
     ///
-    /// Resolution is **not** cached on the profile because it
-    /// depends on the full project source set, which a per-doc
-    /// profile cannot represent safely (a new sibling `.qmd` added
-    /// to the project would not invalidate the host's profile
-    /// cache, leaving the resolution stale). Instead, the
-    /// dependency-graph builder
+    /// *Expansion* against the project's file set is still **not**
+    /// cached on the profile because it depends on the full project
+    /// source set, which a per-doc profile cannot represent safely
+    /// (a new sibling `.qmd` added to the project would not
+    /// invalidate the host's profile cache, leaving the expansion
+    /// stale). The dependency-graph builder
     /// ([`crate::project::dependency_graph::ProjectDependencyGraph::build`])
-    /// expands these globs at graph-build time against
-    /// [`crate::project::index::ProjectIndex::profiles`]
-    /// (host-relative first, project-relative fallback — same rule
-    /// the L3 generate transform uses at render time) and produces
+    /// matches these patterns at graph-build time against
+    /// [`crate::project::index::ProjectIndex::profiles`] (single
+    /// view, via [`crate::glob::PatternSet`] — the same rule the
+    /// L3 generate transform uses at render time) and produces
     /// forward edges from each host to each match. Listing hosts
     /// with non-empty entries are also added to
     /// [`crate::project::dependency_graph::ProjectDependencyGraph::force_render`]
@@ -552,16 +672,17 @@ pub struct DocumentProfile {
     /// in the user-named target set.
     ///
     /// Default empty; serializer omits empty lists.
-    /// Added v4 → v5 (`bd-xbnf`).
+    /// Added v4 → v5 (`bd-xbnf`); shape changed v7 → v8
+    /// (`bd-v7ixzsp5`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub listing_content_globs: Vec<String>,
+    pub listing_content_globs: Vec<crate::glob::GlobPattern>,
 
     /// Pass-1-resolved engine sequence/ownership (names only), stamped by
     /// `DocumentProfileStage` from `resolve_engines_pass1`. `None` means the
     /// document fell through to Pass-2's loading resolver — advisory, not
     /// an error. See [`ProfileEngineResolution`] and Plan 6 decision 6.
     ///
-    /// Added v6 → v7 (Plan 6 Phase 5).
+    /// Added v12 (Plan 6 Phase 5).
     #[serde(default)]
     pub engine_resolution: Option<ProfileEngineResolution>,
 }
@@ -608,6 +729,8 @@ impl Default for DocumentProfile {
             keywords: Vec::new(),
             image: None,
             draft: false,
+            aliases: Vec::new(),
+            alias_sources: Vec::new(),
             order: None,
             outline: Vec::new(),
             includes: Vec::new(),
@@ -615,6 +738,11 @@ impl Default for DocumentProfile {
             always_render: false,
             body_link_targets: Vec::new(),
             resources: Vec::new(),
+            // Resolution needs the document's SourceContext, so
+            // `DocumentProfileStage` fills these in; `extract` stays pure.
+            resource_globs: Vec::new(),
+            resource_glob_sources: Vec::new(),
+            rejected_resources: Vec::new(),
             categories_raw: None,
             listing_item: ListingItemInfo::default(),
             listing_content_globs: Vec::new(),
@@ -646,6 +774,7 @@ impl DocumentProfile {
         let meta = &ast.meta;
         let outline = extract_outline(&ast.blocks);
         let authors_structured = extract_structured_authors(meta);
+        let aliases = extract_string_list_with_sources(meta, "aliases");
 
         Self {
             profile_version: DOCUMENT_PROFILE_VERSION,
@@ -662,6 +791,8 @@ impl DocumentProfile {
             keywords: extract_string_list(meta, "keywords"),
             image: plain_text_field(meta, "image"),
             draft: meta.get("draft").and_then(|v| v.as_bool()).unwrap_or(false),
+            aliases: aliases.iter().map(|(s, _)| s.clone()).collect(),
+            alias_sources: aliases.into_iter().map(|(_, info)| info).collect(),
             order: meta
                 .get("order")
                 .and_then(|v| v.as_int())
@@ -676,16 +807,23 @@ impl DocumentProfile {
             always_render: meta_bool_path(meta, &["project", "always-render"]).unwrap_or(false),
             body_link_targets: Vec::new(),
             resources: crate::project_resources::extract_resource_patterns(meta, &["resources"]),
+            // Resolution needs the document's SourceContext, so
+            // `DocumentProfileStage` fills these in; `extract` stays pure.
+            resource_globs: Vec::new(),
+            resource_glob_sources: Vec::new(),
+            rejected_resources: Vec::new(),
             // L0 (`bd-n8a4`): both fields wired into extract below.
             // Skeleton stage left explicit so TDD failure points at
             // the wiring, not the field declarations.
             categories_raw: extract_categories_raw(meta),
             listing_item: extract_listing_item(meta),
-            // L6 (`bd-xbnf`): pull glob strings out of meta.listing
-            // so the dep-graph builder can expand them later. The
-            // resolution itself happens at graph-build time, not
-            // here — see the field doc for the reason.
-            listing_content_globs: crate::project::listing::config::extract_content_globs(meta),
+            // L6 (`bd-xbnf`) / v8 (`bd-v7ixzsp5`): populated by
+            // `DocumentProfileStage`, which resolves each glob's
+            // base directory from its `SourceInfo` provenance — a
+            // lookup that needs the document's `SourceContext`,
+            // which this pure extractor doesn't take. See the field
+            // doc.
+            listing_content_globs: Vec::new(),
             // Stamped by `DocumentProfileStage` from `resolve_engines_pass1`
             // (needs the registry + AST, not available to this pure
             // metadata-only extractor) — mirrors the `includes` field.
@@ -845,6 +983,38 @@ fn extract_string_list(meta: &ConfigValue, key: &str) -> Vec<String> {
     }
 }
 
+/// [`extract_string_list`] that also keeps each entry's source span.
+///
+/// Same shape rules as its span-less sibling — a YAML sequence yields
+/// one entry per item, a bare scalar yields a single entry — but each
+/// string is paired with the [`SourceInfo`] of the `ConfigValue` it
+/// came from, so a later diagnostic can point at what the author
+/// actually wrote.
+///
+/// The parallel implementation in
+/// [`crate::project_resources::extract_resource_patterns`] does the
+/// same job for `resources:`; it stays separate because it builds a
+/// domain type (`RawResourcePattern`) rather than a bare pair.
+///
+/// [`SourceInfo`]: quarto_source_map::SourceInfo
+fn extract_string_list_with_sources(
+    meta: &ConfigValue,
+    key: &str,
+) -> Vec<(String, quarto_source_map::SourceInfo)> {
+    let Some(value) = meta.get(key) else {
+        return Vec::new();
+    };
+    if let Some(arr) = value.as_array() {
+        arr.iter()
+            .filter_map(|v| v.as_plain_text().map(|s| (s, v.source_info.clone())))
+            .collect()
+    } else if let Some(s) = value.as_plain_text() {
+        vec![(s, value.source_info.clone())]
+    } else {
+        Vec::new()
+    }
+}
+
 /// Structured-author extraction (v7, bd-ez0hiowa): runs the shared
 /// author normalization (`metadata::authors::parse_authors_model` —
 /// the same pass the title block renders from) and snapshots its
@@ -927,6 +1097,14 @@ mod tests {
         ast
     }
 
+    /// Project a TOC entry title to plain text for assertions. The
+    /// profile's outline carries inlines (bd-toc-smart-quotes-6nro57ed);
+    /// consumers that want text project it themselves, and the
+    /// plain-text writer is the shared way to do that.
+    fn title_text(title: &quarto_pandoc_types::Inlines) -> String {
+        pampa::writers::plaintext::inlines_to_string(title).0
+    }
+
     fn entry_ids(entries: &[TocEntry]) -> Vec<&str> {
         entries.iter().map(|e| e.id.as_str()).collect()
     }
@@ -979,11 +1157,11 @@ Deep text.
         assert_eq!(profile.outline.len(), 2, "two top-level headings");
         let first = &profile.outline[0];
         assert_eq!(first.level, 1);
-        assert_eq!(first.title, "Top");
+        assert_eq!(title_text(&first.title), "Top");
         assert_eq!(entry_ids(&first.children), vec!["sub"]);
         assert_eq!(first.children[0].level, 2);
         assert_eq!(entry_ids(&first.children[0].children), vec!["deep"]);
-        assert_eq!(profile.outline[1].title, "Top two");
+        assert_eq!(title_text(&profile.outline[1].title), "Top two");
         assert!(
             all_unnumbered(&profile.outline),
             "profile outline must be un-numbered"
@@ -1109,6 +1287,56 @@ Body.
         let ast = parse_qmd("---\ntitle: Bad order\norder: \"abc\"\n---\n\nBody.\n");
         let profile = DocumentProfile::extract(&ast, Path::new("bad.qmd"), "bad.html", "html");
         assert_eq!(profile.order, None);
+    }
+
+    #[test]
+    fn profile_extract_aliases_in_declaration_order() {
+        // Order is load-bearing: the post-render pass reports the
+        // *first* declaration of a colliding alias as the primary and
+        // the rest as secondaries, so a reshuffle would move the span
+        // the diagnostic points at.
+        let ast = parse_qmd(
+            "---\ntitle: Moved\naliases:\n  - /old.html\n  - ../previous/index.html\n---\n\nBody.\n",
+        );
+        let profile = DocumentProfile::extract(&ast, Path::new("m.qmd"), "m.html", "html");
+        assert_eq!(profile.aliases, vec!["/old.html", "../previous/index.html"]);
+    }
+
+    #[test]
+    fn profile_extract_aliases_absent_is_empty() {
+        let ast = parse_qmd("---\ntitle: No aliases\n---\n\nBody.\n");
+        let profile = DocumentProfile::extract(&ast, Path::new("x.qmd"), "x.html", "html");
+        assert!(profile.aliases.is_empty());
+        assert!(profile.alias_sources.is_empty());
+    }
+
+    #[test]
+    fn profile_extract_aliases_accepts_single_scalar() {
+        // Q1 requires a YAML list and silently ignores a bare scalar.
+        // Accepting both matches how `resources:` already behaves here,
+        // and a dropped redirect is exactly the silent failure this
+        // feature exists to prevent.
+        let ast = parse_qmd("---\ntitle: One\naliases: /old.html\n---\n\nBody.\n");
+        let profile = DocumentProfile::extract(&ast, Path::new("o.qmd"), "o.html", "html");
+        assert_eq!(profile.aliases, vec!["/old.html"]);
+        assert_eq!(profile.alias_sources.len(), 1);
+    }
+
+    #[test]
+    fn profile_extract_alias_sources_parallel_to_aliases() {
+        // The two vectors are index-aligned by contract — collision
+        // diagnostics index into `alias_sources` with the position of
+        // the offending alias.
+        let ast = parse_qmd(
+            "---\ntitle: Moved\naliases:\n  - /a.html\n  - /b.html\n  - /c.html\n---\n\nBody.\n",
+        );
+        let profile = DocumentProfile::extract(&ast, Path::new("m.qmd"), "m.html", "html");
+        assert_eq!(profile.aliases.len(), 3);
+        assert_eq!(
+            profile.alias_sources.len(),
+            profile.aliases.len(),
+            "alias_sources must stay index-aligned with aliases"
+        );
     }
 
     #[test]
@@ -1621,11 +1849,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_8() {
-        // Bumped 7 → 8 in the ts-engine-extensions rebase: two concurrent
-        // version-7 additions (`authors_structured`, bd-ez0hiowa; and
-        // `engine_resolution`, Plan 6) coexist under version 8.
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 8);
+    fn document_profile_version_is_12() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 12);
     }
 
     /// A v3 profile (the pre-listings shape) must be rejected by
@@ -1742,11 +1967,15 @@ Body.
         assert!(p.listing_content_globs.is_empty());
     }
 
-    /// Test #10 — frontmatter with a listing populates the field.
-    /// Mirrors what `extract_content_globs` returns when called on
-    /// the document's `meta`.
+    /// Test #10 — `extract` leaves the field empty even when the
+    /// frontmatter declares a listing: since v8 (bd-v7ixzsp5) the
+    /// globs are resolved (base-directory + negation) by
+    /// `DocumentProfileStage`, which has the `SourceContext` the
+    /// pure extractor lacks. The stage-level population is covered
+    /// by `document_profile` stage tests and the
+    /// `listing_glob_resolution` integration suite.
     #[test]
-    fn profile_extract_populates_listing_content_globs_from_meta() {
+    fn profile_extract_leaves_listing_content_globs_to_the_stage() {
         let qmd = "\
 ---
 title: Host
@@ -1758,10 +1987,9 @@ Body.
 ";
         let ast = parse_qmd(qmd);
         let p = DocumentProfile::extract(&ast, Path::new("idx.qmd"), "idx.html", "html");
-        assert_eq!(
-            p.listing_content_globs,
-            vec!["posts/*.qmd".to_string()],
-            "extract should pull glob strings from meta.listing.contents"
+        assert!(
+            p.listing_content_globs.is_empty(),
+            "resolution happens in DocumentProfileStage, not extract"
         );
     }
 
@@ -1800,16 +2028,17 @@ Body.
     #[test]
     #[allow(clippy::field_reassign_with_default)] // default-then-set keeps the test readable
     fn profile_v5_listing_content_globs_round_trip() {
+        use crate::glob::GlobPattern;
         let mut p = DocumentProfile::default();
         p.source_path = PathBuf::from("idx.qmd");
-        p.listing_content_globs = vec!["a/*.qmd".to_string(), "b/*.qmd".to_string()];
+        p.listing_content_globs = vec![
+            GlobPattern::positive("a/*.qmd"),
+            GlobPattern::negated("a/wip.qmd"),
+        ];
 
         let json = p.to_json().expect("serialize");
         let restored = DocumentProfile::from_json(&json).expect("deserialize");
-        assert_eq!(
-            restored.listing_content_globs,
-            vec!["a/*.qmd".to_string(), "b/*.qmd".to_string()]
-        );
+        assert_eq!(restored.listing_content_globs, p.listing_content_globs);
     }
 
     /// Test #13 — `to_json` of a default profile omits the empty

@@ -126,8 +126,110 @@ fn build_csp(config: &auth::AuthConfig) -> String {
     )
 }
 
-/// Cookie name for the hub authentication token.
-const AUTH_COOKIE_NAME: &str = "quarto_hub_token";
+/// Cookie name for the hub authentication token in secure (TLS) mode.
+///
+/// The `__Host-` prefix is a browser-enforced binding: a cookie with
+/// this name is only accepted if it carries `Secure`, `Path=/`, and
+/// **no** `Domain`. That makes it un-tossable — a sibling subdomain
+/// (`evil.example.com` setting `Domain=example.com`) cannot plant one,
+/// which is the session-fixation vector the bare name leaves open (H3).
+const AUTH_COOKIE_NAME_SECURE: &str = "__Host-quarto_hub_token";
+
+/// Cookie name under `--allow-insecure-auth`, and the pre-H3 name
+/// everywhere. `__Host-` *requires* `Secure`, which requires TLS, so
+/// plain-HTTP dev mode cannot use the prefixed form.
+const AUTH_COOKIE_NAME_LEGACY: &str = "quarto_hub_token";
+
+/// The session-cookie name for the current TLS mode.
+///
+/// Mint, extract, clear, and the sliding-re-issue layer all resolve the
+/// name through here, so the two modes can never disagree about which
+/// cookie is the credential.
+fn auth_cookie_name(secure: bool) -> &'static str {
+    if secure {
+        AUTH_COOKIE_NAME_SECURE
+    } else {
+        AUTH_COOKIE_NAME_LEGACY
+    }
+}
+
+/// Cookie carrying the sealed login-state blob in secure mode (H2).
+///
+/// `__Secure-` rather than `__Host-`: the cookie is scoped to
+/// `Path=/auth`, which `__Host-` forbids. The cookie-tossing risk that
+/// `__Host-` would cover is already covered here by the HMAC — a tossed
+/// blob cannot be forged, and a *replayed* one is bounded by its `exp`.
+const LOGIN_STATE_COOKIE_SECURE: &str = "__Secure-quarto_hub_login";
+
+/// Login-state cookie name under `--allow-insecure-auth`, where neither
+/// `__Secure-` nor `SameSite=None` can work (both require TLS).
+const LOGIN_STATE_COOKIE_LEGACY: &str = "quarto_hub_login";
+
+/// The login-state cookie name for the current TLS mode.
+fn login_state_cookie_name(secure: bool) -> &'static str {
+    if secure {
+        LOGIN_STATE_COOKIE_SECURE
+    } else {
+        LOGIN_STATE_COOKIE_LEGACY
+    }
+}
+
+/// Build the `Set-Cookie` carrying a sealed login-state blob.
+///
+/// `SameSite=None` in secure mode is **load-bearing, not laxity**:
+/// Google delivers the credential by cross-site form POST to
+/// `/auth/callback`, and a `Lax` cookie is not attached to that. (The
+/// `g_csrf` cookie only survives it via Chrome's 2-minute
+/// Lax-by-default grace period — not something to depend on.) Since
+/// `SameSite=None` requires `Secure`, insecure mode falls back to `Lax`;
+/// the callback skips enforcement there anyway.
+///
+/// `Path=/auth` scopes it to the two routes that use it: this cookie is
+/// attached to a cross-site POST, so it should not ride along on
+/// anything else.
+fn build_login_state_cookie(blob: &str, secure: bool) -> String {
+    let mut builder = cookie::Cookie::build((login_state_cookie_name(secure), blob))
+        .http_only(true)
+        .path("/auth")
+        .max_age(time::Duration::seconds(
+            crate::login_state::LOGIN_STATE_TTL_SECS,
+        ));
+    builder = if secure {
+        builder.secure(true).same_site(SameSite::None)
+    } else {
+        builder.same_site(SameSite::Lax)
+    };
+    builder.build().to_string()
+}
+
+/// Build a `Set-Cookie` that clears the login-state cookie.
+///
+/// The blob is single-use: the callback clears it on **every** exit path,
+/// so one pre-flight can complete at most one login.
+fn build_clear_login_state_cookie(secure: bool) -> String {
+    let mut builder = cookie::Cookie::build((login_state_cookie_name(secure), ""))
+        .http_only(true)
+        .path("/auth")
+        .max_age(time::Duration::ZERO);
+    builder = if secure {
+        builder.secure(true).same_site(SameSite::None)
+    } else {
+        builder.same_site(SameSite::Lax)
+    };
+    builder.build().to_string()
+}
+
+/// Read the sealed login-state blob from the `Cookie` header.
+fn login_state_cookie(headers: &HeaderMap, secure: bool) -> Option<String> {
+    let name = login_state_cookie_name(secure);
+    let cookies = headers.get("cookie")?.to_str().ok()?;
+    cookies
+        .split(';')
+        .filter_map(|s| cookie::Cookie::parse(s.trim()).ok())
+        .find(|c| c.name() == name)
+        .map(|c| c.value().to_owned())
+        .filter(|v| !v.is_empty())
+}
 
 /// JSON error body for auth failures, so clients can distinguish
 /// 401 auth errors from other HTTP errors programmatically.
@@ -206,10 +308,14 @@ pub enum CredentialError {
 /// checks: a request that smuggles a stolen Bearer with a same-origin
 /// cookie must not be silently routed through one credential path or
 /// the other.
+///
+/// `secure` selects which cookie name counts as the credential — see
+/// [`auth_cookie_name`]. Callers pass `!ctx.allow_insecure_auth()`.
 pub fn extract_credential(
     headers: &HeaderMap,
+    secure: bool,
 ) -> std::result::Result<Option<Credential>, CredentialError> {
-    let cookie = cookie_token(headers);
+    let cookie = cookie_token(headers, secure);
     let auth_header = headers.get(http::header::AUTHORIZATION);
 
     let bearer = match auth_header {
@@ -266,12 +372,20 @@ fn conflicting_credentials() -> (StatusCode, Json<serde_json::Value>) {
 /// Uses the `cookie` crate parser for RFC 6265 compliance (handles
 /// quoted values and other edge cases). Returns `None` if the cookie
 /// is absent, the header is not valid UTF-8, or the value is empty.
-fn cookie_token(headers: &HeaderMap) -> Option<String> {
+///
+/// Only the name for the current mode is honoured. In secure mode a
+/// token presented under the legacy (unprefixed) name is **not** a
+/// credential: accepting both would forfeit the `__Host-` guarantee,
+/// since a subdomain-tossed unprefixed cookie would still authenticate.
+/// Sessions minted before the H3 rollout therefore die once, and the
+/// user re-logs-in.
+fn cookie_token(headers: &HeaderMap, secure: bool) -> Option<String> {
+    let name = auth_cookie_name(secure);
     let cookies = headers.get("cookie")?.to_str().ok()?;
     cookies
         .split(';')
         .filter_map(|s| cookie::Cookie::parse(s.trim()).ok())
-        .find(|c| c.name() == AUTH_COOKIE_NAME)
+        .find(|c| c.name() == name)
         .map(|c| c.value().to_owned())
         .filter(|v| !v.is_empty())
 }
@@ -296,7 +410,7 @@ fn build_auth_cookie(token: &str, secure: bool, max_age_secs: i64) -> String {
              (4096 byte limit including cookie metadata)"
         );
     }
-    let mut builder = cookie::Cookie::build((AUTH_COOKIE_NAME, token))
+    let mut builder = cookie::Cookie::build((auth_cookie_name(secure), token))
         .http_only(true)
         .same_site(SameSite::Lax)
         .path("/")
@@ -307,16 +421,45 @@ fn build_auth_cookie(token: &str, secure: bool, max_age_secs: i64) -> String {
     builder.build().to_string()
 }
 
+/// Which login endpoint minted a session — the `endpoint` field of the
+/// `login_mint` audit event (H5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LoginEndpoint {
+    /// Form-post `/auth/callback` (Google).
+    Callback,
+    /// JSON `/auth/session` (Generic providers).
+    Session,
+}
+
+impl LoginEndpoint {
+    fn label(self) -> &'static str {
+        match self {
+            LoginEndpoint::Callback => "callback",
+            LoginEndpoint::Session => "session",
+        }
+    }
+}
+
 /// Mint a fresh hub session cookie (§1) for Google-validated claims:
 /// fresh random `sid`, identity stamped from the validated Google
 /// claims, `auth_time = now` — bumped to the revocation ledger's
 /// re-login floor when one exists, so a login in the same second as a
 /// logout-everywhere doesn't die with the revoked family (clocks are
-/// second-granular). Returns the full `Set-Cookie` value.
+/// second-granular).
+///
+/// Returns every `Set-Cookie` value the login response must carry: the
+/// session cookie, plus — in secure mode — a clear for the pre-H3
+/// unprefixed name. Callers **append** these (a login sets more than
+/// one cookie).
+///
+/// Emits the `login_mint` audit event (H5) on success. It lives here
+/// rather than in the two handlers so a future third mint call site
+/// cannot forget it; `endpoint` is what distinguishes them in the log.
 async fn mint_session_cookie(
     ctx: &HubContext,
     claims: &auth::OidcClaims,
-) -> std::result::Result<String, jsonwebtoken::errors::Error> {
+    endpoint: LoginEndpoint,
+) -> std::result::Result<Vec<String>, jsonwebtoken::errors::Error> {
     let now = crate::session::unix_now();
     let lifetimes = ctx.session_lifetimes();
     let identity = crate::session::SessionIdentity::from_oidc(claims);
@@ -325,19 +468,78 @@ async fn mint_session_cookie(
         .min_auth_time(&claims.sub)
         .await
         .map_or(now, |floor| floor.max(now));
-    let token =
+    let minted =
         crate::session::mint_session_at(ctx.session_keys(), lifetimes, &identity, now, auth_time)?;
     let max_age = lifetimes.expiry(now, auth_time) - now;
-    Ok(build_auth_cookie(
-        &token,
-        !ctx.allow_insecure_auth(),
-        max_age,
-    ))
+    let secure = !ctx.allow_insecure_auth();
+
+    // A mint is the birth of a session family, not just another
+    // authenticated request — logged distinctly so "where did this
+    // session come from?" is answerable from the audit trail alone.
+    tracing::event!(
+        target: "quarto_hub::audit",
+        tracing::Level::INFO,
+        action = "login_mint",
+        outcome = "allow",
+        credential_kind = "cookie",
+        sub = %claims.sub,
+        sid = %minted.sid,
+        endpoint = endpoint.label(),
+    );
+
+    let mut cookies = vec![build_auth_cookie(&minted.token, secure, max_age)];
+    if secure {
+        cookies.push(build_clear_legacy_cookie());
+    }
+    Ok(cookies)
+}
+
+/// Attach `Set-Cookie` values to a response, appending so multiple
+/// cookies survive (`insert` would keep only the last).
+fn attach_cookies(response: &mut axum::response::Response, cookies: &[String]) {
+    for cookie in cookies {
+        match cookie.parse() {
+            Ok(value) => {
+                response
+                    .headers_mut()
+                    .append(http::header::SET_COOKIE, value);
+            }
+            Err(err) => {
+                // Cookie values are built by the `cookie` crate from
+                // hub-minted tokens, so this is unreachable short of a
+                // bug — log rather than drop silently.
+                tracing::error!(error = %err, "failed to encode Set-Cookie header");
+            }
+        }
+    }
 }
 
 /// Build a `Set-Cookie` header value that clears the auth cookie.
-fn build_clear_cookie() -> String {
-    cookie::Cookie::build((AUTH_COOKIE_NAME, ""))
+///
+/// Clearing a `__Host-` cookie requires re-stating the attributes the
+/// prefix demands, or the browser rejects the clear and the cookie
+/// survives — hence `Secure`/`Path=/` in secure mode.
+fn build_clear_cookie(secure: bool) -> String {
+    let mut builder = cookie::Cookie::build((auth_cookie_name(secure), ""))
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .path("/")
+        .max_age(time::Duration::ZERO);
+    if secure {
+        builder = builder.secure(true);
+    }
+    builder.build().to_string()
+}
+
+/// Build a `Set-Cookie` that clears the *pre-H3* unprefixed cookie.
+///
+/// Emitted alongside a secure-mode login mint so a session predating
+/// the `__Host-` rollout doesn't linger in the jar — it is no longer a
+/// credential (see [`cookie_token`]), just dead weight the user can't
+/// remove themselves. Never emitted in insecure mode, where this *is*
+/// the live cookie name.
+fn build_clear_legacy_cookie() -> String {
+    cookie::Cookie::build((AUTH_COOKIE_NAME_LEGACY, ""))
         .http_only(true)
         .same_site(SameSite::Lax)
         .path("/")
@@ -439,7 +641,7 @@ where
         state: &S,
     ) -> std::result::Result<Self, Self::Rejection> {
         let ctx = SharedContext::from_ref(state);
-        let credential = match extract_credential(&parts.headers) {
+        let credential = match extract_credential(&parts.headers, !ctx.allow_insecure_auth()) {
             Ok(c) => c,
             Err(CredentialError::Conflicting) => {
                 return Err(conflicting_credentials());
@@ -716,6 +918,167 @@ fn validate_callback_csrf(
     }
 }
 
+/// Response for `GET /auth/nonce`.
+#[derive(Serialize)]
+struct AuthNonceResponse {
+    nonce: String,
+}
+
+/// Handle `GET /auth/nonce` — the login pre-flight (H2).
+///
+/// Mints a random nonce, returns it to the SPA (which passes it to the
+/// IdP), and seals a copy into an HttpOnly cookie so the callback can
+/// verify the IdP echoed *this* login attempt's value back. No
+/// server-side state: the cookie is the state, and the HMAC is what
+/// makes trusting it safe.
+///
+/// Unauthenticated by necessity — it runs before there is a session. It
+/// is a GET, so no CSRF gate applies; it reveals nothing and its only
+/// side effect is a cookie on the caller's own jar.
+async fn auth_nonce(State(ctx): State<SharedContext>) -> impl IntoResponse {
+    let secure = !ctx.allow_insecure_auth();
+    let nonce = crate::login_state::generate_login_nonce();
+    let blob = match crate::login_state::seal_login_state(
+        ctx.session_keys(),
+        &nonce,
+        crate::session::unix_now(),
+        crate::login_state::LOGIN_STATE_TTL_SECS,
+    ) {
+        Ok(blob) => blob,
+        Err(err) => {
+            tracing::error!(error = %err, "failed to seal login state");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "login_state_seal_failed"})),
+            )
+                .into_response();
+        }
+    };
+
+    let mut response = Json(AuthNonceResponse { nonce }).into_response();
+    attach_cookies(&mut response, &[build_login_state_cookie(&blob, secure)]);
+    response
+}
+
+/// Login-state failure class for a callback that presented no cookie and a
+/// nonce-less token. Retained for future callback-time compatibility branches;
+/// every other login-state failure maps to `restart`.
+const LOGIN_STATE_STALE_CLIENT: &str = "stale_client";
+
+/// Outcome of the callback's nonce check.
+enum NonceCheck {
+    Ok,
+    /// Enforcement was skipped — insecure mode only.
+    Skipped,
+    /// The **bare** failure class, e.g. `expired`. The emit site adds
+    /// the `login_state_` prefix, so carrying one here would double it.
+    Failed(&'static str),
+}
+
+/// Verify that the ID token's `nonce` matches the sealed login-state
+/// cookie (H2).
+///
+/// This is what makes a captured ID token useless: without it, the hub
+/// validates signature, `iss`, `aud`, and `exp` — all of which still hold
+/// for a stolen token — and has no way to ask "did *this* browser start
+/// *this* login?".
+///
+/// Returns [`NonceCheck::Skipped`] for a nonce-less token while old SPA
+/// compatibility is required. Tokens that present a nonce still require an
+/// exact match against the sealed login-state cookie.
+fn check_login_nonce(
+    ctx: &HubContext,
+    claims: &auth::OidcClaims,
+    headers: &HeaderMap,
+) -> NonceCheck {
+    if ctx.allow_insecure_auth() {
+        tracing::warn!(
+            "nonce verification skipped: --allow-insecure-auth cannot carry the \
+             SameSite=None; Secure login-state cookie. Never use this in production."
+        );
+        return NonceCheck::Skipped;
+    }
+
+    // TODO(bd-mc00s2ws): Reject nonce-less tokens after old SPA versions no
+    // longer need to authenticate against current hub servers.
+    if claims.nonce.is_none() {
+        tracing::warn!(
+            "nonce verification skipped for a nonce-less token to support an old SPA; \
+             restore universal nonce enforcement before removing the old SPA"
+        );
+        return NonceCheck::Skipped;
+    }
+
+    let Some(blob) = login_state_cookie(headers, true) else {
+        // Two readings, opposite remedies — and the token's own `nonce`
+        // claim separates them. Reading it here is safe: the callback
+        // has already signature-validated these claims.
+        //
+        // A nonce with no cookie means the pre-flight did happen and the
+        // cookie was lost in transit (fix the configuration), or a captured
+        // token is being replayed from a browser that never ran one.
+        return NonceCheck::Failed("missing");
+    };
+    let sealed = match crate::login_state::open_login_state(
+        ctx.session_keys(),
+        &blob,
+        crate::session::unix_now(),
+    ) {
+        Ok(sealed) => sealed,
+        Err(err) => return NonceCheck::Failed(err.audit_class()),
+    };
+    let Some(presented) = claims.nonce.as_deref() else {
+        return NonceCheck::Failed("token_nonce_missing");
+    };
+    // Both values are hub-generated hex of fixed length, so a plain
+    // comparison leaks nothing useful about timing.
+    if presented != sealed.nonce {
+        return NonceCheck::Failed("nonce_mismatch");
+    }
+    NonceCheck::Ok
+}
+
+/// Why `POST /auth/callback` failed, as told to the *user*.
+///
+/// Deliberately coarse. These values land in a URL the user can read and
+/// anyone can craft, so the fine distinctions — tampered blob, `kid`
+/// mismatch, nonce mismatch, which JWT claim was wrong — stay in the
+/// audit log, where they cost an attacker nothing to learn and an
+/// operator everything to lose. The mapping from cause to reason is
+/// many-to-one by design; a dozen causes collapse into these four.
+///
+/// The distinction that matters most is `Denied` vs `Restart`: `Denied`
+/// sends the user to an administrator, so it is reserved for the two
+/// causes where an identity really was established and then refused (a
+/// ban, and an allowlist miss). Everything else is a retry.
+#[derive(Clone, Copy)]
+enum AuthErrorReason {
+    /// The client predates a protocol step the hub now requires — the
+    /// general slot for "your bundle is old". Map a future callback-time
+    /// break here, not to `Restart`: a client cannot render a reason
+    /// invented after it shipped.
+    StaleClient,
+    /// The attempt broke down without establishing an identity.
+    Restart,
+    /// An identity was established, then refused on policy.
+    Denied,
+    /// The hub itself failed.
+    Server,
+}
+
+impl AuthErrorReason {
+    /// The query-parameter value. Server-controlled constants only —
+    /// nothing user-supplied is ever reflected into the redirect.
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::StaleClient => "stale_client",
+            Self::Restart => "restart",
+            Self::Denied => "denied",
+            Self::Server => "server",
+        }
+    }
+}
+
 /// Handle `POST /auth/callback` — credential delivery via form POST.
 ///
 /// Registered for providers where [`AuthConfig::uses_form_post_callback()`]
@@ -730,6 +1093,19 @@ async fn auth_callback(
     headers: HeaderMap,
     Form(form): Form<AuthCallbackForm>,
 ) -> impl IntoResponse {
+    let secure = !ctx.allow_insecure_auth();
+    // The sealed login-state blob is single-use: every exit path from
+    // here clears it, so one pre-flight can complete at most one login.
+    // Building the failure response through a closure is what keeps that
+    // true as paths are added. The reason is a required parameter for the
+    // same reason — a new path cannot silently inherit someone else's.
+    let auth_error = |reason: AuthErrorReason| {
+        let mut response =
+            Redirect::to(&format!("/?auth_error={}", reason.as_str())).into_response();
+        attach_cookies(&mut response, &[build_clear_login_state_cookie(secure)]);
+        response
+    };
+
     let mode = ctx
         .auth_config()
         .map_or(auth::CallbackCsrfMode::GoogleDoubleSubmit, |c| {
@@ -737,15 +1113,65 @@ async fn auth_callback(
         });
 
     if !validate_callback_csrf(&mode, &form, &headers) {
-        return Redirect::to("/?auth_error").into_response();
+        // No `sub`: this runs before the token is parsed, so no subject
+        // has been validated — and an unvalidated one in the audit log
+        // would be worse than an absent one. Emittable by
+        // unauthenticated callers, so WARN volume here is
+        // attacker-influenceable (as it already is on the nonce path).
+        tracing::event!(
+            target: "quarto_hub::audit",
+            tracing::Level::WARN,
+            action = "auth_fail",
+            outcome = "deny",
+            credential_kind = "cookie",
+            detail = "callback_csrf",
+        );
+        return auth_error(AuthErrorReason::Restart);
     }
 
     // Validate the Google ID token once, then mint the hub session
     // cookie (§1) — the Google token itself is never cookie'd.
     let claims = match ctx.authenticate_claims(Some(&form.credential)).await {
         Ok(claims) => claims,
-        Err(_status) => return Redirect::to("/?auth_error").into_response(),
+        // The status is the whole point here: `check_allowlists_for`
+        // answers 403 for "good credentials, wrong user" and 401 for
+        // everything else, which is exactly the denied/restart line.
+        // Discarding it is what made an allowlist denial indistinguish-
+        // able from a broken login.
+        Err(status) => {
+            return auth_error(if status == StatusCode::FORBIDDEN {
+                // An identity was established, then refused on policy;
+                // retrying will never help.
+                AuthErrorReason::Denied
+            } else {
+                // No identity was established, so "not authorized" would
+                // be false. On client-ID drift this fires for every user
+                // at once — telling them all their accounts were refused
+                // would be indistinguishable from a mass de-allowlisting.
+                AuthErrorReason::Restart
+            });
+        }
     };
+
+    // Bind the token to this login attempt (H2). Runs after signature
+    // validation — there is no point comparing claims from a token we
+    // have not authenticated — but before the ban check and the mint.
+    if let NonceCheck::Failed(detail) = check_login_nonce(&ctx, &claims, &headers) {
+        tracing::event!(
+            target: "quarto_hub::audit",
+            tracing::Level::WARN,
+            action = "auth_fail",
+            outcome = "deny",
+            credential_kind = "cookie",
+            sub = %claims.sub,
+            detail = %format!("login_state_{detail}"),
+        );
+        return auth_error(if detail == LOGIN_STATE_STALE_CLIENT {
+            AuthErrorReason::StaleClient
+        } else {
+            AuthErrorReason::Restart
+        });
+    }
 
     // Bans gate mint too (§3) — otherwise a banned user just
     // re-logs-in via Google.
@@ -759,20 +1185,21 @@ async fn auth_callback(
             sub = %claims.sub,
             detail = "user_banned",
         );
-        return Redirect::to("/?auth_error").into_response();
+        // The other genuine denial: this identity is refused until an
+        // operator says otherwise.
+        return auth_error(AuthErrorReason::Denied);
     }
 
-    let cookie = match mint_session_cookie(&ctx, &claims).await {
-        Ok(cookie) => cookie,
+    let cookies = match mint_session_cookie(&ctx, &claims, LoginEndpoint::Callback).await {
+        Ok(cookies) => cookies,
         Err(err) => {
             tracing::error!(error = %err, "failed to mint session token");
-            return Redirect::to("/?auth_error").into_response();
+            return auth_error(AuthErrorReason::Server);
         }
     };
     let mut response = Redirect::to("/").into_response();
-    response
-        .headers_mut()
-        .insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+    attach_cookies(&mut response, &cookies);
+    attach_cookies(&mut response, &[build_clear_login_state_cookie(secure)]);
     response
 }
 
@@ -782,9 +1209,18 @@ struct AuthMeResponse {
     email: String,
     name: Option<String>,
     picture: Option<String>,
-    /// Token expiry (epoch seconds) so the client can schedule silent
-    /// refresh from the real expiry instead of assuming a fixed lifetime.
+    /// Expiry (epoch seconds) **of the presented credential** — the
+    /// semantics depend on `credential`: a *sliding* session expiry on
+    /// the cookie path (authenticated activity extends it; the SPA
+    /// schedules its expiry re-check from it), but the Google token's
+    /// *fixed* expiry on the Bearer path (nothing slides; the client
+    /// refreshes at the IdP). `credential` is the discriminator
+    /// (bd-aw8f3sp8).
     exp: i64,
+    /// Which verification path authenticated this request: `"session"`
+    /// (hub-minted cookie) or `"bearer"` (Google ID token). Mirrors the
+    /// [`crate::context::AuthenticatedUser`] variants.
+    credential: &'static str,
 }
 
 /// Query parameters for GET /auth/actor.
@@ -799,9 +1235,9 @@ struct AuthActorResponse {
     actor_id: String,
 }
 
-/// Request body for POST /auth/refresh.
+/// Request body for POST /auth/session.
 #[derive(Deserialize)]
-struct RefreshRequest {
+struct SessionRequest {
     credential: String,
 }
 
@@ -813,7 +1249,7 @@ async fn authenticate_request(
     ctx: &HubContext,
     headers: &HeaderMap,
 ) -> std::result::Result<crate::context::AuthenticatedUser, (StatusCode, Json<serde_json::Value>)> {
-    let credential = match extract_credential(headers) {
+    let credential = match extract_credential(headers, !ctx.allow_insecure_auth()) {
         Ok(Some(c)) => c,
         Ok(None) => return Err(unauthorized()),
         Err(CredentialError::Conflicting) => return Err(conflicting_credentials()),
@@ -849,12 +1285,14 @@ async fn auth_me(
             name: v.claims.name,
             picture: v.claims.picture,
             exp: v.claims.exp,
+            credential: "session",
         },
         crate::context::AuthenticatedUser::Google(claims) => AuthMeResponse {
             email: claims.email,
             name: claims.name,
             picture: claims.picture,
             exp: claims.exp,
+            credential: "bearer",
         },
     };
     Ok(Json(response))
@@ -893,6 +1331,7 @@ async fn auth_actor(
 /// them, kept symmetric for tooling.
 async fn auth_logout(
     auth: Authenticated,
+    State(ctx): State<SharedContext>,
     headers: HeaderMap,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     if auth.credential_kind == CredentialKind::Cookie {
@@ -900,7 +1339,7 @@ async fn auth_logout(
             .map_err(|s| (s, Json(serde_json::json!({"error": "csrf check failed"}))))?;
     }
 
-    let cookie = build_clear_cookie();
+    let cookie = build_clear_cookie(!ctx.allow_insecure_auth());
     let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
     response
         .headers_mut()
@@ -923,7 +1362,7 @@ async fn auth_logout_everywhere(
     headers: HeaderMap,
     State(ctx): State<SharedContext>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let credential = match extract_credential(&headers) {
+    let credential = match extract_credential(&headers, !ctx.allow_insecure_auth()) {
         Ok(Some(c)) => c,
         Ok(None) => return Err(unauthorized()),
         Err(CredentialError::Conflicting) => return Err(conflicting_credentials()),
@@ -974,7 +1413,7 @@ async fn auth_logout_everywhere(
         sub = %verified.claims.sub,
     );
 
-    let cookie = build_clear_cookie();
+    let cookie = build_clear_cookie(!ctx.allow_insecure_auth());
     let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
     response
         .headers_mut()
@@ -982,27 +1421,34 @@ async fn auth_logout_everywhere(
     Ok(response)
 }
 
-/// Validate a fresh OIDC JWT and set a new cookie.
+/// Validate a submitted OIDC ID token and mint a fresh session cookie.
 ///
-/// Called by the client after obtaining a new credential from the OIDC provider
-/// (e.g. Google One Tap silent refresh). The new JWT goes through the full
-/// `authenticate()` path (signature, audience, issuer, email allowlist)
-/// before setting the cookie.
+/// `POST /auth/session` is the direct-JSON credential-submission **login**
+/// endpoint: a client posts an OIDC ID token as JSON and, on success, receives
+/// a hub session cookie. It is the counterpart to the redirect/form-post
+/// `/auth/callback`, and is the *only* mint endpoint a non-Google (Generic)
+/// OIDC deployment has — `/auth/callback` is registered only for providers
+/// whose `AuthConfig::uses_form_post_callback()` is true (Google alone).
 ///
-/// This is also the recommended credential submission endpoint for non-Google
-/// OIDC frontends (instead of the Google-specific `/auth/callback`).
+/// **Registered only for Generic providers** (H1): a form-post
+/// deployment has no caller for it, so exposing it there would be a
+/// second ID-token replay sink for nothing.
+///
+/// The submitted JWT goes through the full `authenticate_claims()` path
+/// (signature, audience, issuer, email allowlist) before a session is minted;
+/// because this is a fresh login, `auth_time = now` and a new `sid` are correct.
 ///
 /// Requires `X-Requested-With: XMLHttpRequest` for CSRF protection.
-async fn auth_refresh(
+async fn auth_session(
     headers: HeaderMap,
     State(ctx): State<SharedContext>,
-    Json(body): Json<RefreshRequest>,
+    Json(body): Json<SessionRequest>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     // Dual-credential 400 wins over CSRF — same precedence as the
     // `Authenticated` extractor. Without this, a request carrying both
     // a cookie and a Bearer would bypass the conflicting-credentials
     // rule on this endpoint (the cookie path runs without `Authenticated`).
-    let bearer_present = match extract_credential(&headers) {
+    let bearer_present = match extract_credential(&headers, !ctx.allow_insecure_auth()) {
         Ok(Some(c)) => matches!(c.kind(), CredentialKind::Bearer),
         Ok(None) => false,
         Err(CredentialError::Conflicting) => return Err(conflicting_credentials()),
@@ -1016,7 +1462,7 @@ async fn auth_refresh(
             .map_err(|s| (s, Json(serde_json::json!({"error": "csrf check failed"}))))?;
     }
 
-    // Validate the NEW Google credential (not the existing cookie — it
+    // Validate the submitted OIDC credential (not the existing cookie — it
     // may be expired), then mint a fresh hub session cookie: this is a
     // new login, so `auth_time = now` and a fresh `sid` are correct.
     let claims = ctx
@@ -1025,7 +1471,7 @@ async fn auth_refresh(
         .map_err(|_| unauthorized())?;
 
     // Bans gate mint too (§3) — otherwise a banned user just
-    // re-logs-in via Google.
+    // re-logs-in via the OIDC provider.
     if ctx.revocations().is_banned(&claims.sub).await {
         tracing::event!(
             target: "quarto_hub::audit",
@@ -1042,17 +1488,17 @@ async fn auth_refresh(
         ));
     }
 
-    let cookie = mint_session_cookie(&ctx, &claims).await.map_err(|err| {
-        tracing::error!(error = %err, "failed to mint session token");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": "session_mint_failed"})),
-        )
-    })?;
+    let cookies = mint_session_cookie(&ctx, &claims, LoginEndpoint::Session)
+        .await
+        .map_err(|err| {
+            tracing::error!(error = %err, "failed to mint session token");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "session_mint_failed"})),
+            )
+        })?;
     let mut response = Json(serde_json::json!({"status": "ok"})).into_response();
-    response
-        .headers_mut()
-        .insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+    attach_cookies(&mut response, &cookies);
     Ok(response)
 }
 
@@ -1081,7 +1527,7 @@ async fn session_reissue_layer(
     // attached (a Bearer/MCP or dual-credential request must never
     // slide the window).
     let token = if request.headers().get(http::header::AUTHORIZATION).is_none() {
-        cookie_token(request.headers())
+        cookie_token(request.headers(), !ctx.allow_insecure_auth())
     } else {
         None
     };
@@ -1159,7 +1605,7 @@ async fn ws_handler(
     ws: WebSocketUpgrade,
 ) -> axum::response::Response {
     let email = if ctx.auth_config().is_some() {
-        let credential = match extract_credential(&headers) {
+        let credential = match extract_credential(&headers, !ctx.allow_insecure_auth()) {
             Ok(c) => c,
             Err(CredentialError::Conflicting) => {
                 return conflicting_credentials().into_response();
@@ -1310,7 +1756,6 @@ pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<Shared
         .route("/auth/actor", get(auth_actor))
         .route("/auth/logout", post(auth_logout))
         .route("/auth/logout-everywhere", post(auth_logout_everywhere))
-        .route("/auth/refresh", post(auth_refresh))
         // WebSocket endpoint for automerge sync at `/ws` (hub-client +
         // q2-preview SPA's canonical path).
         .route("/ws", get(ws_handler))
@@ -1331,6 +1776,28 @@ pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<Shared
         .is_some_and(|c| c.uses_form_post_callback())
     {
         router = router.route("/auth/callback", post(auth_callback));
+    }
+
+    // Login pre-flight (H2). Registered whenever auth is enabled — not
+    // just for form-post providers — so the SPA has one unconditional
+    // way to obtain a nonce and never has to branch on the deployment's
+    // provider. *Enforcement* is narrower: only `/auth/callback` checks
+    // it (see `check_login_nonce`).
+    if ctx.auth_config().is_some() {
+        router = router.route("/auth/nonce", get(auth_nonce));
+    }
+
+    // `/auth/session` is the JSON mint endpoint, and the *only* login
+    // path a Generic OIDC deployment has. Form-post providers (Google)
+    // log in through `/auth/callback` and nothing calls this — leaving
+    // it registered there would publish a second ID-token replay sink
+    // for no benefit, so it is the exact inverse of the condition above
+    // (H1, bd-zbep24xd).
+    if ctx
+        .auth_config()
+        .is_some_and(|c| !c.uses_form_post_callback())
+    {
+        router = router.route("/auth/session", post(auth_session));
     }
 
     // Add Content-Security-Policy header when auth is enabled.
@@ -1432,6 +1899,7 @@ where
 {
     let addr = format!("{}:{}", config.host, config.port);
     let sync_interval = config.sync_interval_secs;
+    let shutdown_message = config.shutdown_message.clone();
     let watch_enabled = config.watch_enabled;
     let watch_debounce_ms = config.watch_debounce_ms;
     let watch_filter = config.watch_filter;
@@ -1473,9 +1941,18 @@ where
     // Create shutdown signal channel
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
-    // Spawn task to listen for OS signals and trigger shutdown
+    // Spawn task to listen for OS signals and trigger shutdown. The
+    // caller's shutdown message prints here — before the signal is
+    // forwarded, on the shutdown critical path — so teardown can
+    // never exit the process before the line appears (bd-wj9smyxg:
+    // a detached listener task races exactly that and lost in CI).
     tokio::spawn(async move {
-        wait_for_shutdown_signal().await;
+        if wait_for_shutdown_signal().await == ShutdownSignal::CtrlC
+            && let Some(message) = shutdown_message
+        {
+            println!();
+            println!("  {message}");
+        }
         let _ = shutdown_tx.send(true);
     });
 
@@ -1691,8 +2168,18 @@ async fn run_file_watcher(
     }
 }
 
+/// Which OS signal initiated shutdown. The distinction matters to
+/// callers printing a user-facing acknowledgment: the message reads
+/// "Received Ctrl-C", so it must not appear on a SIGTERM-driven
+/// shutdown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShutdownSignal {
+    CtrlC,
+    Sigterm,
+}
+
 /// Wait for shutdown signals (Ctrl-C, SIGTERM, SIGINT).
-async fn wait_for_shutdown_signal() {
+async fn wait_for_shutdown_signal() -> ShutdownSignal {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
             .await
@@ -1713,9 +2200,11 @@ async fn wait_for_shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => {
             info!("Received Ctrl-C, initiating graceful shutdown...");
+            ShutdownSignal::CtrlC
         }
         _ = terminate => {
             info!("Received SIGTERM, initiating graceful shutdown...");
+            ShutdownSignal::Sigterm
         }
     }
 }
@@ -1741,7 +2230,7 @@ mod tests {
     #[test]
     fn cookie_token_extracts_value() {
         let h = headers_with(&[("cookie", "quarto_hub_token=abc123")]);
-        assert_eq!(cookie_token(&h).as_deref(), Some("abc123"));
+        assert_eq!(cookie_token(&h, false).as_deref(), Some("abc123"));
     }
 
     #[test]
@@ -1750,32 +2239,66 @@ mod tests {
             "cookie",
             "other=x; quarto_hub_token=jwt.value.here; third=y",
         )]);
-        assert_eq!(cookie_token(&h).as_deref(), Some("jwt.value.here"));
+        assert_eq!(cookie_token(&h, false).as_deref(), Some("jwt.value.here"));
     }
 
     #[test]
     fn cookie_token_missing() {
         let h = headers_with(&[("cookie", "other=x; another=y")]);
-        assert_eq!(cookie_token(&h), None);
+        assert_eq!(cookie_token(&h, false), None);
     }
 
     #[test]
     fn cookie_token_no_cookie_header() {
         let h = HeaderMap::new();
-        assert_eq!(cookie_token(&h), None);
+        assert_eq!(cookie_token(&h, false), None);
     }
 
     #[test]
     fn cookie_token_empty_value() {
         let h = headers_with(&[("cookie", "quarto_hub_token=")]);
-        assert_eq!(cookie_token(&h), None);
+        assert_eq!(cookie_token(&h, false), None);
     }
 
     #[test]
     fn cookie_token_prefix_mismatch() {
         // "quarto_hub_token_v2" should NOT match "quarto_hub_token"
         let h = headers_with(&[("cookie", "quarto_hub_token_v2=abc")]);
-        assert_eq!(cookie_token(&h), None);
+        assert_eq!(cookie_token(&h, false), None);
+    }
+
+    // ── H3: mode-aware cookie name ────────────────────────────────
+
+    #[test]
+    fn cookie_token_secure_mode_reads_host_prefixed_name() {
+        let h = headers_with(&[("cookie", "__Host-quarto_hub_token=abc123")]);
+        assert_eq!(cookie_token(&h, true).as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn cookie_token_secure_mode_ignores_legacy_name() {
+        // Accepting the unprefixed name in secure mode would forfeit the
+        // whole point of `__Host-`: a subdomain-tossed cookie would
+        // still authenticate.
+        let h = headers_with(&[("cookie", "quarto_hub_token=abc123")]);
+        assert_eq!(cookie_token(&h, true), None);
+    }
+
+    #[test]
+    fn cookie_token_insecure_mode_ignores_host_prefixed_name() {
+        let h = headers_with(&[("cookie", "__Host-quarto_hub_token=abc123")]);
+        assert_eq!(cookie_token(&h, false), None);
+    }
+
+    #[test]
+    fn cookie_token_secure_mode_picks_prefixed_among_both() {
+        // Transitional jar: a stale legacy cookie sitting next to the
+        // live prefixed one must not shadow it.
+        let h = headers_with(&[(
+            "cookie",
+            "quarto_hub_token=stale; __Host-quarto_hub_token=live",
+        )]);
+        assert_eq!(cookie_token(&h, true).as_deref(), Some("live"));
     }
 
     // ── build_auth_cookie ─────────────────────────────────────────
@@ -1783,12 +2306,14 @@ mod tests {
     #[test]
     fn build_auth_cookie_secure() {
         let cookie = build_auth_cookie("mytoken", true, 3600);
-        assert!(cookie.starts_with("quarto_hub_token=mytoken;"));
+        assert!(cookie.starts_with("__Host-quarto_hub_token=mytoken;"));
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.contains("Secure"));
         assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("Path=/"));
         assert!(cookie.contains("Max-Age=3600"));
+        // `__Host-` is only honoured without a Domain attribute.
+        assert!(!cookie.contains("Domain"));
     }
 
     #[test]
@@ -1811,10 +2336,29 @@ mod tests {
 
     #[test]
     fn build_clear_cookie_has_zero_max_age() {
-        let cookie = build_clear_cookie();
+        let cookie = build_clear_cookie(false);
         assert!(cookie.contains("Max-Age=0"));
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.starts_with("quarto_hub_token=;"));
+    }
+
+    #[test]
+    fn build_clear_cookie_secure_restates_host_prefix_attributes() {
+        // A clear for a `__Host-` cookie is itself subject to the
+        // prefix rules — drop `Secure`/`Path=/` and the browser
+        // rejects the clear, leaving the cookie in place.
+        let cookie = build_clear_cookie(true);
+        assert!(cookie.starts_with("__Host-quarto_hub_token=;"));
+        assert!(cookie.contains("Max-Age=0"));
+        assert!(cookie.contains("Secure"));
+        assert!(cookie.contains("Path=/"));
+    }
+
+    #[test]
+    fn build_clear_legacy_cookie_targets_unprefixed_name() {
+        let cookie = build_clear_legacy_cookie();
+        assert!(cookie.starts_with("quarto_hub_token=;"));
+        assert!(cookie.contains("Max-Age=0"));
     }
 
     // ── check_csrf ────────────────────────────────────────────────

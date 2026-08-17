@@ -1,0 +1,28 @@
+---
+title: Mermaid syntax forms and cell options
+---
+
+## A: GFM fence, no cell options — works today
+
+```mermaid
+flowchart LR
+  A --> B
+```
+
+## B: GFM fence with `%%|` cell options — options ignored
+
+```mermaid
+%%| fig-cap: "A tiny flowchart."
+%%| fig-alt: "Two nodes connected by an arrow."
+flowchart LR
+  E --> F
+```
+
+## C: brace cell, the Quarto 1 form — not recognized
+
+```{mermaid}
+%%| fig-cap: "A tiny flowchart."
+%%| fig-alt: "Two nodes connected by an arrow."
+flowchart LR
+  C --> D
+```

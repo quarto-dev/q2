@@ -20,6 +20,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { readAuthErrorReason } from './auth/authError';
 import {
   connect,
   disconnect,
@@ -41,10 +42,28 @@ import { useAuth } from './hooks/useAuth';
 import { useAuthProbe } from './hooks/useAuthProbe';
 import { useSessionKeepAlive } from './hooks/useSessionKeepAlive';
 import { useExecutionChannel } from './hooks/useExecutionChannel';
+import { usePreviewSession } from './hooks/usePreviewSession';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
 import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
-import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER } from './utils/routing';
+import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER, parseHashRoute, hubPath } from './utils/routing';
+import { isEphemeralStorage } from './services/ephemeralStorage';
+import { fetchPreviewSessionConfig } from './services/previewConfig';
+import type { StorageKind } from '@quarto/quarto-sync-client';
 import './App.css';
+
+/**
+ * Production budget for the initial peer connect. `waitForPeer` resolves the
+ * *instant* the peer connects, so in the common (online) case this adds only
+ * the real connect latency and lets `connect()` resolve as Online — the header
+ * (which mounts only after connect() resolves) then shows Online right away
+ * with the *live* document, instead of the 1 ms probe that always resolved
+ * offline-first and made the indicator flash Offline → Online. If the connect
+ * is slower than this budget the header mounts Offline and flips to Online when
+ * the peer lands — the rare tail, and still an improvement on always-first
+ * Offline. A genuinely-offline user waits at most this long before cached
+ * content appears (bounded regression of offline-first).
+ */
+const PRODUCTION_PEER_TIMEOUT_MS = 400;
 
 /**
  * Connect to a sync server and load all file contents into a Map.
@@ -62,19 +81,26 @@ async function connectAndLoadContents(
   if (import.meta.env.VITE_E2E === '1') {
     actorId = (window as any).__QUARTO_TEST_ACTOR_ID__ as string | undefined ?? actorId;
   }
-  // Production opens offline-first (the sync client's 1 ms default peer wait):
-  // a returning user sees cached content instantly while the peer connects in
-  // the background. But the smoke-all E2E env always starts with EMPTY storage
-  // and must sync every doc from the (local) server, so opening offline-first
-  // there means loadFileDocuments races the still-connecting websocket — and
-  // under CI contention the render-target doc loses that race, is marked
-  // unavailable, and the preview fails "Path not found" (stage
-  // EDITOR_NO_PREVIEW; sometimes the index loses it too → CONNECT_STALL).
-  // waitForPeer resolves the instant the peer connects, so this only adds wall
-  // time when the connection is genuinely slow — exactly the CI case we want to
-  // wait out. Tree-shaken in production, so no offline-first UX change there.
-  const peerTimeoutMs = import.meta.env.VITE_E2E === '1' ? 15000 : undefined;
-  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, actorId, screenName, color, peerTimeoutMs);
+  // Production gives the peer a modest budget (PRODUCTION_PEER_TIMEOUT_MS) so
+  // the common (online) open resolves as Online with the live document, rather
+  // than the 1 ms offline-first probe that made the indicator always flash
+  // Offline → Online. waitForPeer resolves the instant the peer connects, so a
+  // fast connection pays only its real latency; a genuinely-offline user waits
+  // at most the budget before cached content appears.
+  //
+  // The smoke-all E2E env always starts with EMPTY storage and must sync every
+  // doc from the (local) server, so it needs a much longer wait: opening before
+  // the socket connects means loadFileDocuments races it — under CI contention
+  // the render-target doc loses, is marked unavailable, and the preview fails
+  // "Path not found" (stage EDITOR_NO_PREVIEW; sometimes the index loses it too
+  // → CONNECT_STALL).
+  const peerTimeoutMs = import.meta.env.VITE_E2E === '1' ? 15000 : PRODUCTION_PEER_TIMEOUT_MS;
+  // Ephemeral storage mode (bd-sw4xy1vw): the q2 preview embed build
+  // keeps the automerge document cache in memory — each preview session
+  // is a fresh origin, so a persisted cache could never hit and would
+  // just accumulate in IndexedDB.
+  const storage: StorageKind = isEphemeralStorage() ? 'memory' : 'indexeddb';
+  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, actorId, screenName, color, { peerTimeoutMs, storage });
   const contents = new Map<string, string>();
   for (const file of files) {
     const content = getFileContent(file.path);
@@ -92,7 +118,6 @@ function App() {
     auth,
     loading: authLoading,
     logout,
-    triggerRefresh,
     sessionExpired,
     expireSession,
     applyAuth,
@@ -131,7 +156,6 @@ function App() {
   // (preempting this probe's two-strike); the probe governs earlier drops.
   useAuthProbe({
     enabled: AUTH_ENABLED && !!auth && !!project && !isOnline,
-    triggerRefresh,
     onAuthRejected: expireSession,
   });
 
@@ -142,7 +166,7 @@ function App() {
   useSessionKeepAlive({
     enabled: AUTH_ENABLED && !!auth && isOnline,
     onAuthState: applyAuth,
-    triggerRefresh,
+    onAuthRejected: expireSession,
   });
 
   // Project set management (synced project list)
@@ -157,16 +181,43 @@ function App() {
   // `resolveActorIdRequest` for the three-valued contract; callers abandon
   // the open only on `null` (auth failure), proceed on `string`/`undefined`.
   const resolveActorId = useCallback(
-    (indexDocId: string) => resolveActorIdRequest(indexDocId, AUTH_ENABLED, triggerRefresh, localActorId),
-    [triggerRefresh, localActorId],
+    (indexDocId: string) => resolveActorIdRequest(indexDocId, AUTH_ENABLED, expireSession, localActorId),
+    [expireSession, localActorId],
   );
 
-  // Capture auth error from redirect query param (once, before URL is cleaned).
-  const [authError] = useState(() => {
-    const has = new URLSearchParams(window.location.search).has('auth_error');
-    if (has) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
-    return has;
+  // Capture the auth error reason from the redirect query param (once,
+  // before the URL is cleaned). `undefined` means no error; `''` means a
+  // bare `/?auth_error` from a hub predating the reason codes, which is
+  // still an error — see readAuthErrorReason.
+  const [authErrorReason] = useState(() => {
+    const reason = readAuthErrorReason(window.location.search);
+    if (reason !== undefined) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    }
+    return reason;
   });
+
+  // Capture the ephemeral-hub flag from the boot URL (once, before the
+  // share handler below clears the hash from the address bar). Only
+  // `q2 preview --ui editor` emits it: the serving hub is a throwaway
+  // per-session server, so project-set onboarding is skipped entirely
+  // (bd-zf4ryvuq). The preview-embed build (VITE_EPHEMERAL_STORAGE=1,
+  // bd-sw4xy1vw) only ever serves such a hub, so the flag holds for the
+  // whole artifact — including after a reload, when the boot URL's
+  // share hash is gone.
+  const [ephemeralHub] = useState(() => {
+    if (isEphemeralStorage()) return true;
+    const bootRoute = parseHashRoute(window.location.hash);
+    return bootRoute.type === 'share' && bootRoute.ephemeral === true;
+  });
+
+  // `q2 preview` session config (bd-ov4gqk3m): when the serving server
+  // is a preview started without --allow-edit, the editor shows an
+  // ephemeral-session banner. Null on a standalone hub (no such
+  // endpoint), which never shows the banner. Unlike the boot-URL flag
+  // above this survives reloads and works for --join guests, whose
+  // proxy splices every connection through to the host.
+  const previewSession = usePreviewSession();
 
   // Load screen name from IndexedDB (for identity mapping in Automerge docs).
   // When auth is enabled, wait for it to resolve so we can upgrade anonymous
@@ -230,6 +281,29 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.type, projectSetState.status]);
+
+  // Ephemeral preview boot (bd-zf4ryvuq): same invite-first pattern as
+  // join-collection above. The user asked for a preview, not project
+  // management, so establish the personal root silently — create on a
+  // fresh browser, migrate when legacy IDB projects exist — and never
+  // show the setup/migration screens. DEFAULT_SYNC_SERVER is '/ws' in
+  // the preview-embed build, i.e. the ephemeral hub itself; the root
+  // doc lives in IndexedDB and re-syncs to whatever ephemeral hub serves
+  // this origin next.
+  const ephemeralRootInitiatedRef = useRef(false);
+  useEffect(() => {
+    if (!ephemeralHub || ephemeralRootInitiatedRef.current) return;
+    if (projectSetState.status === 'needs-setup') {
+      ephemeralRootInitiatedRef.current = true;
+      projectSetActions.createProjectSet(DEFAULT_SYNC_SERVER);
+    } else if (projectSetState.status === 'needs-migration') {
+      // Fire once: migrateProjects resets to needs-migration on failure, so
+      // an unguarded effect would retry-loop against an unreachable server.
+      ephemeralRootInitiatedRef.current = true;
+      projectSetActions.migrateProjects(DEFAULT_SYNC_SERVER);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ephemeralHub, projectSetState.status]);
 
   // Denormalize a peek summary onto this user's project-set entry while a
   // project is open. Kept current as files and identities change (both are
@@ -386,34 +460,27 @@ function App() {
         return;
       }
 
-      // Handle shareable link URLs
-      if (route.type === 'share') {
-        // SECURITY: Immediately clear the URL to prevent indexDocId from appearing
-        // in browser history, bookmarks, or being accidentally shared.
-        navigateToProjectSelector({ replace: true });
-
-        const shareRoute = route as ShareRoute;
-
-        // Validate required fields
-        if (!shareRoute.syncServer || !shareRoute.filePath || !shareRoute.name) {
-          setConnectionError(
-            'This share link is incomplete. Please ask the sender to share a new link.'
-          );
-          return;
-        }
-
+      // Shared by the share-route branch and the ephemeral
+      // reload-recovery branch below: find-or-create the local project
+      // entry for a shared document, then connect and open the file.
+      const connectToSharedProject = async (share: {
+        indexDocId: string;
+        syncServer: string;
+        name: string;
+        filePath: string;
+      }): Promise<void> => {
         // Normalize the indexDocId (add 'automerge:' prefix if not present)
-        const normalizedIndexDocId = shareRoute.indexDocId.startsWith('automerge:')
-          ? shareRoute.indexDocId
-          : `automerge:${shareRoute.indexDocId}`;
+        const normalizedIndexDocId = share.indexDocId.startsWith('automerge:')
+          ? share.indexDocId
+          : `automerge:${share.indexDocId}`;
 
         // Check if we already have this project locally, or auto-create it
         let targetProject = await projectStorage.getProjectByIndexDocId(normalizedIndexDocId);
         if (!targetProject) {
           targetProject = await projectStorage.addProject(
             normalizedIndexDocId,
-            shareRoute.syncServer,
-            shareRoute.name
+            share.syncServer,
+            share.name
           );
         }
 
@@ -422,8 +489,8 @@ function App() {
           try {
             projectSetActions.addProject({
               indexDocId: normalizedIndexDocId,
-              syncServer: shareRoute.syncServer,
-              description: shareRoute.name,
+              syncServer: share.syncServer,
+              description: share.name,
             });
           } catch {
             // Non-fatal: project set update failed, but project is in IDB
@@ -440,12 +507,36 @@ function App() {
           setFiles(loadedFiles);
           setFileContents(contents);
 
-          navigateToFile(targetProject.id, shareRoute.filePath, { replace: true });
+          navigateToFile(targetProject.id, share.filePath, { replace: true });
         } catch (err) {
           setConnectionError(err instanceof Error ? err.message : String(err));
         } finally {
           setIsConnecting(false);
         }
+      };
+
+      // Handle shareable link URLs
+      if (route.type === 'share') {
+        // SECURITY: Immediately clear the URL to prevent indexDocId from appearing
+        // in browser history, bookmarks, or being accidentally shared.
+        navigateToProjectSelector({ replace: true });
+
+        const shareRoute = route as ShareRoute;
+
+        // Validate required fields
+        if (!shareRoute.syncServer || !shareRoute.filePath || !shareRoute.name) {
+          setConnectionError(
+            'This share link is incomplete. Please ask the sender to share a new link.'
+          );
+          return;
+        }
+
+        await connectToSharedProject({
+          indexDocId: shareRoute.indexDocId,
+          syncServer: shareRoute.syncServer,
+          name: shareRoute.name,
+          filePath: shareRoute.filePath,
+        });
         return;
       }
 
@@ -462,13 +553,32 @@ function App() {
             setProject(targetProject);
             setFiles(loadedFiles);
             setFileContents(contents);
-            
+
           } catch (err) {
             setConnectionError(err instanceof Error ? err.message : String(err));
             navigateToProjectSelector({ replace: true });
           } finally {
             setIsConnecting(false);
           }
+        } else if (isEphemeralStorage()) {
+          // Ephemeral storage mode (bd-sw4xy1vw) keeps no project
+          // records across page reloads. Rebuild the session from the
+          // preview server's boot params (every editor-UI session
+          // serves them at /api/preview/config, bd-7htq16rx) instead of
+          // reporting a missing project. A non-preview server answers
+          // without editorBoot and falls through to the error.
+          const config = await fetchPreviewSessionConfig();
+          if (config?.editorBoot) {
+            await connectToSharedProject({
+              indexDocId: config.editorBoot.indexDocId,
+              syncServer: hubPath('/ws'),
+              name: config.editorBoot.name,
+              filePath: config.editorBoot.file,
+            });
+            return;
+          }
+          setConnectionError(`Project not found. It may have been deleted.`);
+          navigateToProjectSelector({ replace: true });
         } else {
           // Project not found - show error and stay on project selector
           setConnectionError(`Project not found. It may have been deleted.`);
@@ -622,6 +732,8 @@ function App() {
       const result = await createNewProject({
         syncServer: resolveSyncServerUrl(syncServer),
         files,
+        // Ephemeral storage mode (bd-sw4xy1vw): no IndexedDB cache.
+        storage: isEphemeralStorage() ? 'memory' : 'indexeddb',
       }, undefined, screenName, cursorColor, resolveActorId);
 
       // Store the project in IndexedDB
@@ -679,7 +791,7 @@ function App() {
   if (AUTH_ENABLED && !auth) {
     return (
       <LoginScreen
-        error={authError}
+        errorReason={authErrorReason}
         message={sessionExpired ? 'Your session expired — please sign in again.' : undefined}
       />
     );
@@ -716,10 +828,13 @@ function App() {
     );
   }
 
-  // Show project set setup/migration screen if needed
+  // Show project set setup/migration screen if needed. Ephemeral
+  // preview boots skip it: the effect above establishes the root
+  // silently while the share handler connects.
   if (
-    projectSetState.status === 'needs-setup' ||
-    projectSetState.status === 'needs-migration'
+    !ephemeralHub &&
+    (projectSetState.status === 'needs-setup' ||
+      projectSetState.status === 'needs-migration')
   ) {
     return (
       <ProjectSetSetup
@@ -735,8 +850,10 @@ function App() {
     );
   }
 
-  // Show error if project set connection failed
-  if (projectSetState.status === 'error') {
+  // Show error if project set connection failed. Ephemeral preview
+  // boots skip it too: the preview works without a project set, so a
+  // set failure must not block it.
+  if (!ephemeralHub && projectSetState.status === 'error') {
     return (
       <ProjectSetSetup
         hasMigration={false}
@@ -762,6 +879,7 @@ function App() {
             error={connectionError}
             onSignOut={AUTH_ENABLED ? logout : undefined}
             authEmail={auth?.email}
+            authPicture={auth?.picture}
             onScreenNameChange={setScreenName}
             onColorChange={setCursorColor}
             projectSetDocId={projectSetActions.getProjectSetDocId()}
@@ -830,6 +948,7 @@ function App() {
               executorsOnline={liveExecutors.length > 0}
               onRequestExecution={requestExecution}
               isOnline={isOnline}
+              sessionEphemeral={previewSession?.allowEdit === false}
             />
           </ErrorBoundary>
         </ViewModeProvider>

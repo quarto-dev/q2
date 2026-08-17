@@ -8,7 +8,9 @@ project:
 
 website:
   title: "Quarto 2"
+  description: "Documentation for Quarto 2, the Rust-based rewrite of the Quarto publishing system"
   logo: quarto.png
+  llms-txt: true
   navbar:
     left:
       - href: index.qmd
@@ -27,6 +29,15 @@ website:
           href: guides/index.qmd
           contents:
             - guides/authoring/index.qmd
+            - guides/projects/create.qmd
+            - guides/projects/paths.qmd
+            - guides/projects/breadcrumbs.qmd
+            - guides/projects/render-list.qmd
+            - guides/projects/aliases.qmd
+            - guides/projects/llms-txt.qmd
+            - guides/projects/scripts.qmd
+            - guides/projects/environment.qmd
+            - guides/projects/profiles.qmd
             - guides/publishing/index.qmd
     - id: Authoring
       collapse-level: 1
@@ -223,6 +234,12 @@ website:
             - errors/project/Q-5-3.qmd
             - errors/project/Q-5-4.qmd
             - errors/project/Q-5-5.qmd
+        - section: "include"
+          contents:
+            - errors/include/Q-17-1.qmd
+            - errors/include/Q-17-2.qmd
+            - errors/include/Q-17-3.qmd
+            - errors/include/Q-17-4.qmd
         - section: "internal"
           contents:
             - errors/internal/Q-0-1.qmd
@@ -234,6 +251,12 @@ website:
         - section: "lua"
           contents:
             - errors/lua/Q-11-1.qmd
+            - errors/lua/Q-11-2.qmd
+            - errors/lua/Q-11-3.qmd
+            - errors/lua/Q-11-4.qmd
+            - errors/lua/Q-11-5.qmd
+            - errors/lua/Q-11-6.qmd
+            - errors/lua/Q-11-7.qmd
 
 format:
   html:

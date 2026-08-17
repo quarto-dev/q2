@@ -1,0 +1,70 @@
+---
+title: "Ambiguous project type extension"
+description: "A bare `project.type` name matched more than one extension contributing a project type."
+code: Q-16-8
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-8` — Ambiguous project type extension
+
+> A bare `project.type` name matched more than one extension
+> contributing a project type.
+
+## What this means
+
+Extensions are identified by `organization/name`, but `project.type`
+accepts the bare `name` as a convenience. When two installed extensions
+contribute a project type with the same bare name, that convenience
+becomes ambiguous.
+
+Quarto picks one and tells you which, rather than failing: the
+extension with no organization wins, and among organization-qualified
+candidates, the lexicographically first organization wins. The message
+names both the chosen extension and the ones it shadowed.
+
+The render continues with the chosen type. The risk is that the choice
+is not the one you meant, and the resulting project is configured by
+the wrong extension — a failure that shows up as puzzling output
+rather than as an error.
+
+## Why this happens
+
+- **Two extensions with a generic type name** — `docs`, `site`,
+  `report` — from different organizations.
+- **A vendored copy alongside an installed one.** An extension copied
+  into `_extensions/<name>/` while the same extension is also
+  installed under `_extensions/<org>/<name>/`.
+- **A fork.** You forked an extension, installed the fork under your
+  own organization, and left the original in place.
+
+## How to fix
+
+Use the full `organization/name` form so the choice is explicit:
+
+```yaml
+project:
+  type: my-org/docs
+```
+
+This is worth doing even when the current default happens to be right —
+installing another extension later can change which candidate wins,
+and the bare form gives no signal when that happens.
+
+If one of the candidates is a leftover, remove it:
+
+```bash
+quarto remove <owner>/<name>
+```
+
+or delete its directory under `_extensions/`.
+
+## Related errors
+
+- [`Q-5-17`](../project/Q-5-17.qmd) — the type name matched no
+  extension at all.
+- [`Q-16-7`](Q-16-7.qmd) — the extension was found but its
+  contribution is unusable.

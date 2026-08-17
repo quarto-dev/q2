@@ -1,0 +1,48 @@
+---
+title: "Include File Not Found"
+description: "The file named by an include shortcode could not be read."
+code: Q-17-2
+subsystem: include
+status: stub
+since: "99.9.9"
+categories:
+  - include
+---
+
+# `Q-17-2` — Include File Not Found
+
+> The file named by an include shortcode could not be read.
+
+## What this means
+
+An `{{{< include >}}}` shortcode names a file that Quarto could not
+read — most often because no file exists at the resolved path. The
+include is skipped: its content is omitted from the output, and the
+rest of the document renders normally.
+
+## Why this happens
+
+Common causes:
+
+- **A typo in the path**, or a file that was renamed or moved after
+  the include was written.
+- **A path resolved from the wrong base.** Relative include paths
+  are resolved from the directory of the file *containing the
+  shortcode* — not the project root, and not the top-level document.
+  A snippet that lives in a subdirectory resolves its own includes
+  from that subdirectory. To resolve from the project root instead,
+  start the path with `/`: `{{{< include /snippets/note.qmd >}}}`
+  means `<project>/snippets/note.qmd` no matter which file contains
+  the shortcode.
+- **Case mismatch** on a case-sensitive filesystem (for example,
+  deploying to Linux a project authored on macOS).
+- **A permissions problem** — the file exists but is not readable.
+  The message includes the underlying I/O error in this case.
+
+## How to fix
+
+Check the path in the message: it is the fully resolved path Quarto
+tried to read. Compare it against the actual file location and fix
+the path in the shortcode — remembering that a relative path is
+relative to the file the shortcode appears in, while a path starting
+with `/` is relative to the project root.

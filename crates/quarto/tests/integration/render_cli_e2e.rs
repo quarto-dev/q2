@@ -559,6 +559,217 @@ fn empty_default_project_with_no_qmd_emits_diagnostic() {
     );
 }
 
+/// bd-6d2wj4zp: `.md` files render only when opted in via
+/// `project.render`. When that opt-in is the *reason* the render set
+/// came up empty, `Q-PROJECT-EMPTY` must say so — otherwise the
+/// default reads as "Quarto silently ignored my files".
+#[test]
+fn empty_project_with_md_files_hints_at_render_list_optin() {
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+    write_file(&project.join("_quarto.yml"), "project:\n  type: default\n");
+    write_file(&project.join("notes.md"), "# notes\n");
+    write_file(&project.join("docs/guide.md"), "# guide\n");
+    // Excluded `.md` must not inflate the count.
+    write_file(&project.join("README.md"), "# readme\n");
+
+    let out = run_q2(&project, &[]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "expected non-zero exit on empty render set; stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("2 `.md` file"),
+        "hint should count the opt-in candidates; got stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("**/*.md"),
+        "hint should show the opt-in pattern; got stderr: {stderr}",
+    );
+}
+
+/// bd-6d2wj4zp: `q2 render notes.md` inside a project whose render
+/// list doesn't include it fails with Q-7-6 — and because the real
+/// cause is the `.md` opt-in policy (not underscore/hidden rules),
+/// the hint must say how to opt the file in.
+#[test]
+fn rendering_md_not_in_render_list_hints_at_optin() {
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+    write_file(&project.join("_quarto.yml"), "project:\n  type: default\n");
+    write_file(&project.join("index.qmd"), "---\ntitle: T\n---\n\nhi\n");
+    write_file(&project.join("notes.md"), "# notes\n");
+
+    let out = run_q2(&project, &["notes.md"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "expected non-zero exit for an un-opted-in .md; stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("Q-7-6") || stderr.contains("excluded from the render list"),
+        "expected the render-list exclusion diagnostic; got stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("**/*.md"),
+        "hint should explain the `.md` opt-in; got stderr: {stderr}",
+    );
+}
+
+/// bd-6d2wj4zp S5: an opted-in `.md` with an `engine:` spec renders
+/// successfully (passthrough, no execution) and warns with Q-2-40
+/// through the real diagnostic path.
+#[test]
+fn md_with_engine_spec_renders_with_q_2_40_warning() {
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+    write_file(
+        &project.join("_quarto.yml"),
+        "project:\n  type: default\n  render:\n    - \"*.md\"\n",
+    );
+    write_file(
+        &project.join("notes.md"),
+        "---\ntitle: Notes\nengine: jupyter\n---\n\n# Hello\n\nplain text\n",
+    );
+
+    let out = run_q2(&project, &[]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success(),
+        "the render itself must succeed; stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("Q-2-40"),
+        "expected the engine-ignored warning; got stderr: {stderr}",
+    );
+    let html = std::fs::read_to_string(project.join("notes.html")).expect("notes.html exists");
+    assert!(
+        html.contains("plain text"),
+        "content renders as plain markdown"
+    );
+}
+
+/// bd-6d2wj4zp D7: an output path equal to the input must refuse
+/// rather than silently replace the source with rendered HTML.
+/// (Before the guard, `--output <abs input path>` destroyed the
+/// source file.)
+#[test]
+fn output_equal_to_input_refuses_and_preserves_source() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    let source = "---\ntitle: T\n---\n\nhello\n";
+    write_file(&dir.join("doc.qmd"), source);
+    let abs = dir.join("doc.qmd");
+
+    let out = run_q2(&dir, &["doc.qmd", "--output", abs.to_str().unwrap()]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "expected refusal when output == input; stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("overwrite"),
+        "error should explain the overwrite refusal; got stderr: {stderr}",
+    );
+    let after = std::fs::read_to_string(&abs).expect("source still exists");
+    assert_eq!(after, source, "source file must be untouched");
+}
+
+/// bd-6d2wj4zp S3: single-file format detection reads `.md` front
+/// matter exactly like `.qmd`. Pinned via the non-native bail-out:
+/// a `.md` declaring `format: pdf` must get the same early "not yet
+/// supported" refusal a `.qmd` gets — before the fix it rendered
+/// HTML bytes into a `p.pdf` file.
+#[test]
+fn md_with_non_native_format_gets_early_refusal_like_qmd() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("doc.md"),
+        "---\ntitle: T\nformat: pdf\n---\n\nhi\n",
+    );
+
+    let out = run_q2(&dir, &["doc.md"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "expected refusal for non-native format; stderr: {stderr}",
+    );
+    assert!(
+        stderr.contains("not yet supported"),
+        "expected the same early bail-out a .qmd gets; got stderr: {stderr}",
+    );
+    assert!(
+        !dir.join("doc.pdf").exists(),
+        "must not write a fake .pdf output"
+    );
+}
+
+/// bd-6d2wj4zp S7: render-list `.md` pages participate in navigation
+/// and body-link rewriting exactly like `.qmd` — the Connect-docs
+/// shape (`file: admin/index.md` in the sidebar, `[x](other.md)` in
+/// body text).
+#[test]
+fn md_pages_get_nav_and_body_links_rewritten() {
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+    write_file(
+        &project.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n  render:\n    - \"*.qmd\"\n    - \"*.md\"\n\
+         website:\n  title: T\n  sidebar:\n    contents:\n      - index.qmd\n      - text: Notes\n        file: notes.md\n",
+    );
+    write_file(
+        &project.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nSee [the notes](notes.md).\n",
+    );
+    write_file(
+        &project.join("notes.md"),
+        "---\ntitle: Notes\n---\n\nBack [home](index.qmd).\n",
+    );
+
+    let out = run_q2(&project, &[]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "render failed; stderr: {stderr}");
+
+    let index_html = std::fs::read_to_string(project.join("_site/index.html")).expect("index.html");
+    assert!(
+        index_html.contains("href=\"notes.html\""),
+        "body link [the notes](notes.md) must rewrite to notes.html; got:\n{}",
+        &index_html[..index_html.len().min(4000)]
+    );
+
+    let notes_html = std::fs::read_to_string(project.join("_site/notes.html")).expect("notes.html");
+    assert!(
+        notes_html.contains("href=\"index.html\""),
+        "body link [home](index.qmd) from a .md page must rewrite to index.html"
+    );
+    // The sidebar entry `file: notes.md` must resolve on both pages.
+    assert!(
+        notes_html.contains("notes.html") && index_html.contains("notes.html"),
+        "sidebar entry for notes.md must resolve to notes.html on every page"
+    );
+
+    // Subset render (Mode B): Pass 1 profiles every project file
+    // regardless of mode, so links into a `.md` page must still
+    // rewrite when only the linking page is re-rendered. (The `.md`
+    // dependency-graph *edges* are pinned at the unit level in
+    // navigation_href.rs — their pass-2 augmentation effect only
+    // shows with always-render pages, which are listing territory.)
+    std::fs::remove_file(project.join("_site/index.html")).unwrap();
+    let out = run_q2(&project, &["index.qmd"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success(),
+        "subset render failed; stderr: {stderr}"
+    );
+    let index_html = std::fs::read_to_string(project.join("_site/index.html")).expect("index.html");
+    assert!(
+        index_html.contains("href=\"notes.html\""),
+        "subset render must still rewrite the body link into the .md page"
+    );
+}
+
 /// Regression guard for bd-87fu: native default-project renders
 /// must continue to write theme CSS to `{stem}_files/quarto/...`
 /// and embed a matching `<link>` in the HTML. The WASM-side fix

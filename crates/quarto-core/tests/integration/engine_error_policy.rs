@@ -114,6 +114,46 @@ fn document_execute_error_true_allows_plain_cell_error() {
     );
 }
 
+/// knitr's half of the doc-level allow (bd-nn2fou8h). The two engines
+/// must agree on `execute: error: true`, and until the document's
+/// `execute:` scope reached knitr they could not: `build_format_config`
+/// ignored the document and `ExecuteConfig::with_defaults` pinned
+/// `error: false`, so R halted on the failing chunk no matter what the
+/// front matter said.
+#[test]
+fn knitr_document_execute_error_true_allows_plain_cell_error() {
+    if !engine_available("knitr") {
+        eprintln!("Skipping test: knitr not available");
+        return;
+    }
+    let captures = run(
+        "---\ntitle: Error policy\nengine: knitr\nexecute:\n  error: true\n---\n\nBefore.\n\n```{r}\nstop(\"boom\")\n```\n",
+    )
+    .expect("document-level execute.error: true must allow the render to proceed under knitr too");
+    let md = result_markdown(&captures);
+    assert!(
+        md.contains("boom"),
+        "error text must be embedded under doc-level allow; got:\n{md}"
+    );
+}
+
+/// The mirror: with no `execute: error:` anywhere, knitr must still
+/// fail the render — the overlay must not have loosened the default.
+#[test]
+fn knitr_plain_cell_error_still_fails_the_render() {
+    if !engine_available("knitr") {
+        eprintln!("Skipping test: knitr not available");
+        return;
+    }
+    let result = run(
+        "---\ntitle: Error policy\nengine: knitr\n---\n\nBefore.\n\n```{r}\nstop(\"boom\")\n```\n",
+    );
+    assert!(
+        result.is_err(),
+        "an un-annotated cell error must still fail the render under knitr"
+    );
+}
+
 #[test]
 fn cell_error_false_overrides_document_allow() {
     if !engine_available("jupyter") {

@@ -14,8 +14,10 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { installLinkHandlers } from './iframeLinkHandlers';
 
+type QmdLinkClickArg = { path: string; anchor: string | null } | { anchor: string };
+
 let doc: Document;
-let onQmdLinkClick: ReturnType<typeof vi.fn>;
+let onQmdLinkClick: ReturnType<typeof vi.fn<(arg: QmdLinkClickArg) => void>>;
 let postMessageSpy: ReturnType<typeof vi.spyOn>;
 let openSpy: ReturnType<typeof vi.spyOn>;
 
@@ -25,7 +27,7 @@ beforeEach(() => {
     // returns an unattached XML doc with `body === null` under jsdom.
     doc = document.implementation.createHTMLDocument();
 
-    onQmdLinkClick = vi.fn();
+    onQmdLinkClick = vi.fn<(arg: QmdLinkClickArg) => void>();
     postMessageSpy = vi.spyOn(window.parent, 'postMessage');
     openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
 });
@@ -324,6 +326,76 @@ describe('installLinkHandlers', () => {
         expect(onQmdLinkClick).toHaveBeenCalledWith({
             path: 'index.qmd',
             anchor: 'intro',
+        });
+    });
+
+    // ─── bd-6d2wj4zp Phase 5: .md pages in the preview ──────────────
+
+    test('.md link is intercepted like .qmd and resolved relative to current file', () => {
+        installLinkHandlers(doc, {
+            currentFilePath: '/foo/bar.qmd',
+            onQmdLinkClick,
+        });
+
+        const a = appendAnchor('other.md#sec');
+        const continued = clickFromBody(a);
+
+        expect(onQmdLinkClick).toHaveBeenCalledWith({
+            path: '/foo/other.md',
+            anchor: 'sec',
+        });
+        expect(continued).toBe(false);
+    });
+
+    test('artifact-rooted .html link maps back to its .md via projectFilePaths', () => {
+        installLinkHandlers(doc, {
+            currentFilePath: 'index.qmd',
+            projectFilePaths: ['index.qmd', 'admin/index.md'],
+            onQmdLinkClick,
+        });
+
+        const a = appendAnchor('/.quarto/project-artifacts/admin/index.html');
+        const continued = clickFromBody(a);
+
+        expect(onQmdLinkClick).toHaveBeenCalledWith({
+            path: 'admin/index.md',
+            anchor: null,
+        });
+        expect(continued).toBe(false);
+    });
+
+    test('artifact-rooted missing page still falls back to the .qmd candidate', () => {
+        // The always-intercept policy is unchanged: with neither a
+        // .qmd nor .md source in projectFilePaths, the handler keeps
+        // the .qmd candidate so the missing-page overlay UX works.
+        installLinkHandlers(doc, {
+            currentFilePath: 'index.qmd',
+            projectFilePaths: ['index.qmd', 'admin/index.md'],
+            onQmdLinkClick,
+        });
+
+        const a = appendAnchor('/.quarto/project-artifacts/missing.html');
+        clickFromBody(a);
+
+        expect(onQmdLinkClick).toHaveBeenCalledWith({
+            path: 'missing.qmd',
+            anchor: null,
+        });
+    });
+
+    test('bare artifact-root maps to index.md when only index.md exists', () => {
+        installLinkHandlers(doc, {
+            currentFilePath: 'about.qmd',
+            projectFilePaths: ['index.md', 'about.qmd'],
+            onQmdLinkClick,
+        });
+
+        const a = appendAnchor('/.quarto/project-artifacts/');
+        clickFromBody(a);
+
+        expect(onQmdLinkClick).toHaveBeenCalledWith({
+            path: 'index.md',
+            anchor: null,
         });
     });
 

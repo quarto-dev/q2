@@ -193,6 +193,7 @@ impl ExecutionEngine for KnitrEngine {
         // Step 7: Build call options
         let call_options = CallROptions {
             quiet: ctx.quiet,
+            project_env: ctx.project_env.clone(),
             ..Default::default()
         };
 
@@ -284,9 +285,19 @@ impl ExecutionEngine for KnitrEngine {
 
 /// Build format configuration from execution context.
 ///
-/// Creates a [`KnitrFormatConfig`] with settings appropriate for the target format.
+/// Creates a [`KnitrFormatConfig`] with settings appropriate for the target format,
+/// then overlays the document's merged `execute:` scope on top (bd-nn2fou8h).
+///
+/// Before that overlay this function ignored the document entirely, so
+/// `execute: echo: false` was not merely dropped — the hardcoded
+/// `echo: true` default actively overrode it, and every document-scope
+/// execute option was inert for knitr (GH issue #523).
 fn build_format_config(ctx: &ExecutionContext) -> KnitrFormatConfig {
-    KnitrFormatConfig::with_defaults(&ctx.format)
+    let mut config = KnitrFormatConfig::with_defaults(&ctx.format);
+    if let Some(scope) = ctx.execute_scope.as_ref() {
+        config.execute.overlay_document_scope(scope);
+    }
+    config
 }
 
 /// Post-process knitr markdown output.

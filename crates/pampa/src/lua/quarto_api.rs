@@ -184,6 +184,127 @@ pub fn init_script_dir_stack(lua: &Lua) -> Result<()> {
     Ok(())
 }
 
+/// Replace the global `require` with a script-dir-aware loader.
+///
+/// Q1 extensions `require` sibling modules relative to the requiring
+/// script's directory (TS Quarto patches `require` through its script-file
+/// stack, `init.lua:259-305`). This loader:
+///
+/// 1. resolves `name` against the top of the script-dir stack, trying
+///    `<dir>/<name>.lua`, `<dir>/<name with . -> />.lua`, and
+///    `<dir>/<name>/init.lua`;
+/// 2. executes the module in a sandboxed environment (globals-inheriting,
+///    like shortcode scripts) with the module's own directory pushed on the
+///    script-dir stack, so nested `require`s resolve relative to the module;
+/// 3. caches by resolved absolute path (a module evaluating to `nil` caches
+///    as `true`, matching Lua's `require`);
+/// 4. falls back to the original `require` (when the target has one — the
+///    WASM stdlib has no `package` lib) for anything not found on disk.
+///
+/// File access goes through [`SystemRuntime`], so the same code serves
+/// native and WASM (VFS) targets.
+pub fn register_scoped_require(
+    lua: &Lua,
+    runtime: Arc<dyn crate::lua::runtime::SystemRuntime>,
+) -> Result<()> {
+    let globals = lua.globals();
+    let original: Option<mlua::Function> = globals.get("require").ok();
+    globals.set("_quarto_require_cache", lua.create_table()?)?;
+
+    let require = lua.create_function(move |lua, name: String| {
+        let cache: Table = lua.globals().get("_quarto_require_cache")?;
+
+        // Candidate paths, walking the script-dir stack top-down: the
+        // currently-executing module's dir first (sibling-relative
+        // requires), then the dirs of the scripts that required it
+        // (Q1-style extension-root-relative paths like
+        // `require("modules/brand/brand")` from a nested module).
+        let stack: Table = lua.globals().get("_quarto_script_dir_stack")?;
+        let mut dirs: Vec<String> = Vec::new();
+        for i in (1..=stack.raw_len()).rev() {
+            if let Ok(d) = stack.get::<String>(i)
+                && !d.is_empty()
+                && !dirs.contains(&d)
+            {
+                dirs.push(d);
+            }
+        }
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        for dir in &dirs {
+            let base = PathBuf::from(dir);
+            candidates.push(base.join(format!("{}.lua", name)));
+            if name.contains('.') {
+                candidates.push(base.join(format!("{}.lua", name.replace('.', "/"))));
+            }
+            candidates.push(base.join(&name).join("init.lua"));
+        }
+
+        for candidate in &candidates {
+            let key = candidate.to_string_lossy().to_string();
+            if let Ok(cached) = cache.get::<Value>(key.as_str())
+                && !matches!(cached, Value::Nil)
+            {
+                return Ok(cached);
+            }
+            let Ok(bytes) = runtime.file_read(candidate) else {
+                continue;
+            };
+            let source = String::from_utf8(bytes).map_err(mlua::Error::external)?;
+
+            // Sandboxed module environment inheriting globals.
+            let env = lua.create_table()?;
+            let env_mt = lua.create_table()?;
+            env_mt.set("__index", lua.globals())?;
+            env.set_metatable(Some(env_mt))?;
+
+            let module_dir = candidate
+                .parent()
+                .unwrap_or(Path::new(""))
+                .to_string_lossy()
+                .to_string();
+            push_script_dir(lua, &module_dir)?;
+            let result = lua
+                .load(&source)
+                .set_name(key.clone())
+                .set_environment(env)
+                .eval::<Value>();
+            pop_script_dir(lua)?;
+
+            let value = result?;
+            // A module that returns nothing caches as `true`, like Lua.
+            let value = if matches!(value, Value::Nil) {
+                Value::Boolean(true)
+            } else {
+                value
+            };
+            cache.set(key.as_str(), value.clone())?;
+            return Ok(value);
+        }
+
+        // Not found relative to the script dir: defer to the original
+        // require (native stdlib) when available.
+        if let Some(orig) = &original {
+            return orig.call::<Value>(name);
+        }
+        Err(mlua::Error::RuntimeError(format!(
+            "module '{}' not found (searched relative to the current script directory: {})",
+            name,
+            if candidates.is_empty() {
+                "no script directory on the stack".to_string()
+            } else {
+                candidates
+                    .iter()
+                    .map(|c| c.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
+        )))
+    })?;
+
+    globals.set("require", require)?;
+    Ok(())
+}
+
 /// Push a directory onto the script-dir stack.
 pub fn push_script_dir(lua: &Lua, dir: &str) -> Result<()> {
     let stack: Table = lua.globals().get("_quarto_script_dir_stack")?;
@@ -259,23 +380,37 @@ pub fn register_quarto_attribution(
     let quarto: Table = lua.globals().get("quarto")?;
     let attribution = lua.create_table()?;
 
-    // `quarto.attribution.lookup_range(start, end)` — primitive raw
-    // lookup. Returns `{actor, time}` table on hit, nil otherwise.
+    // `quarto.attribution.lookup_range(start, end[, file_id])` —
+    // primitive raw lookup. Returns `{actor, time}` table on hit, nil
+    // otherwise. The optional third argument declares which file the
+    // byte range indexes into: when given and different from the
+    // handle's blamed file, the call returns nil instead of colliding
+    // into the blamed file's runs (bd-thagcbfq). Omitting it keeps
+    // the historical "caller asserts primary-doc offsets" contract —
+    // pass `r.file_id` from `si:byte_range()` whenever the range came
+    // from a node.
     let h_for_range = handle.clone();
     attribution.set(
         "lookup_range",
-        lua.create_function(move |lua, (start, end_): (usize, usize)| {
-            let Some(h) = h_for_range.as_ref() else {
-                return Ok(Value::Nil);
-            };
-            let Some(hit) = h.lookup_range(start, end_) else {
-                return Ok(Value::Nil);
-            };
-            let t = lua.create_table()?;
-            t.set("actor", hit.actor)?;
-            t.set("time", hit.time)?;
-            Ok(Value::Table(t))
-        })?,
+        lua.create_function(
+            move |lua, (start, end_, file_id): (usize, usize, Option<usize>)| {
+                let Some(h) = h_for_range.as_ref() else {
+                    return Ok(Value::Nil);
+                };
+                if let Some(fid) = file_id
+                    && fid != h.blamed_file_id()
+                {
+                    return Ok(Value::Nil);
+                }
+                let Some(hit) = h.lookup_range(start, end_) else {
+                    return Ok(Value::Nil);
+                };
+                let t = lua.create_table()?;
+                t.set("actor", hit.actor)?;
+                t.set("time", hit.time)?;
+                Ok(Value::Table(t))
+            },
+        )?,
     )?;
 
     // `quarto.attribution.identities()` — read-only snapshot of the
@@ -323,10 +458,10 @@ pub fn register_quarto_attribution(
             if si == nil then return nil end
             local r = si:byte_range()
             if r == nil then return nil end
-            -- v1 single-doc invariant: skip non-primary file.
-            local fid = si:file_id()
-            if fid ~= nil and fid ~= 0 then return nil end
-            local hit = lookup_range(r[1], r[2])
+            -- Single-doc invariant: lookup_range refuses ranges from
+            -- any file other than the blamed one (compared Rust-side
+            -- against the handle's actual blamed file, bd-thagcbfq).
+            local hit = lookup_range(r[1], r[2], r.file_id)
             if hit == nil then return nil end
             local idents = identities()
             local id = idents[hit.actor]

@@ -1,0 +1,47 @@
+---
+title: Website breadcrumbs
+---
+
+## Overview
+
+Website pages that appear in a sidebar get a breadcrumb trail above
+their title, showing the path of sidebar sections that leads to the
+page:
+
+```
+Guide  ›  Advanced  ›  Deep Page
+```
+
+Each crumb is a link. Section crumbs link to the section's first
+entry (or to the section's own `href:` when it has one), and the
+current page appears as the final crumb, linked to itself.
+
+Breadcrumbs are enabled by default whenever a page belongs to a
+sidebar and sits at least one section deep. Top-level pages — whose
+trail would contain only themselves — don't show one.
+
+## Disabling breadcrumbs
+
+Turn breadcrumbs off for the whole site in `_quarto.yml`:
+
+```yaml
+website:
+  bread-crumbs: false
+```
+
+Or for a single page, in its front matter:
+
+```yaml
+---
+title: My Page
+bread-crumbs: false
+---
+```
+
+## Notes
+
+- Breadcrumbs are shown on wide viewports as part of the page's title
+  block. (Quarto 1 also shows a compact breadcrumb bar on narrow
+  viewports; that bar is not yet available.)
+- The trail is derived from the sidebar structure, so a page that
+  doesn't appear in any sidebar has no breadcrumbs.

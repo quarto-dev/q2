@@ -71,3 +71,77 @@ a <foo
           (pandoc_str)
           (pandoc_str)
           (pandoc_str))))
+================================================================================
+lt-as-str — `< text >` does not swallow an emphasis closer (bd-ly83qewg)
+================================================================================
+*a < b text.* a > b
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (emphasis_delimiter))
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+lt-as-str — `a < b > c` is all Strs, not html_element (bd-ly83qewg)
+================================================================================
+a < b > c
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+lt-as-str — `<` at end of line with `>` on next line is a Str (bd-ly83qewg)
+================================================================================
+foo <
+bar > baz
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_soft_break)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+lt-as-str — `<div >` (whitespace before `>` only) stays html_element (regression)
+================================================================================
+<div >
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (html_element))))
+================================================================================
+lt-as-str — `<not a tag>` (interior-only whitespace) stays html_element (regression)
+================================================================================
+<not a tag>
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (html_element))))

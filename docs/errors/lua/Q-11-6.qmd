@@ -1,0 +1,111 @@
+---
+title: "Invalid Lua filter script return value"
+description: "A Lua filter script returned something that is not a filter."
+code: Q-11-6
+subsystem: lua
+status: stub
+since: "99.9.9"
+categories:
+  - lua
+---
+
+# `Q-11-6` — Invalid Lua filter script return value
+
+> A Lua filter script returned a value that is not a filter.
+
+## What this means
+
+A filter *script* — the `.lua` file itself — may end in one of three
+ways, and Quarto reads each differently:
+
+| The script…                        | Quarto uses…                                  |
+| ---------------------------------- | --------------------------------------------- |
+| returns nothing                    | the script's **global** functions              |
+| returns a table of handlers        | that **table**, and ignores the globals        |
+| returns a list of handler tables   | each table as a **successive pass**, in order  |
+
+Anything else — a number, a string, a boolean, a function, or an
+explicit `return nil` — is not a filter, so Quarto stops and names the
+file and what it returned:
+
+```
+Q-11-6: Lua filter 'my-filter.lua' returned number, which is not a filter.
+```
+
+This is distinct from [`Q-11-4`](Q-11-4.qmd), which is about the value
+returned by *one handler function* such as `Str` or `Para`. `Q-11-6` is
+about the value returned by the file as a whole.
+
+## Why this happens
+
+- **An explicit `return nil` at the end of the script.** This looks
+  harmless, and it is the most common cause. But returning `nil` is
+  still *returning a value*, and Quarto cannot read it as a filter.
+  Falling off the end of the script without any `return` is the way to
+  say "use my global functions".
+- **A leftover debugging `return`.** `return true` or `return 0` added
+  while testing and never removed.
+- **Returning a single handler function** instead of a table holding
+  it: `return function(el) … end` rather than
+  `return { Str = function(el) … end }`.
+- **Returning something computed by the last statement.** In Lua the
+  final expression of a file is not returned implicitly, but an
+  explicit `return some_helper()` at the bottom may return whatever
+  that helper happens to produce.
+
+## How to fix
+
+To use the script's global functions, end the script without returning
+anything at all — **delete** the trailing `return nil`:
+
+```lua
+function Str(elem)
+  return pandoc.Str(elem.text:upper())
+end
+-- no return statement here
+```
+
+To keep handlers out of the global namespace, return them in a table:
+
+```lua
+return {
+  Str = function(elem)
+    return pandoc.Str(elem.text:upper())
+  end,
+}
+```
+
+To run several passes over the document in a fixed order, return a
+*list* of such tables. Each one is applied to the whole document before
+the next begins, so the second pass sees the first pass's output:
+
+```lua
+return {
+  { Str = function(elem) return pandoc.Str(elem.text:upper()) end },
+  { Str = function(elem) return pandoc.Str("<" .. elem.text .. ">") end },
+}
+```
+
+## A returned table replaces the globals entirely
+
+If a script both defines global handler functions and returns a table,
+only the returned table runs — the globals are ignored. This matches
+Pandoc. It also means an *empty* returned table disables every global
+handler in the file:
+
+```lua
+function Str(elem)          -- never runs
+  return pandoc.Str("!")
+end
+return {}                   -- an empty filter: the document is untouched
+```
+
+If your handlers stopped running after you added a `return`, this is
+almost certainly why.
+
+## Related errors
+
+- [`Q-11-4`](Q-11-4.qmd) — the value returned by a single filter
+  *function* could not be converted to AST elements.
+- [`Q-11-3`](Q-11-3.qmd) — a wrong-typed argument to a `pandoc.*`
+  constructor.

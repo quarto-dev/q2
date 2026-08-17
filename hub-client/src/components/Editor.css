@@ -409,6 +409,18 @@
   flex-shrink: 0;
 }
 
+/* Ephemeral-session banner — `q2 preview --ui editor` without --allow-edit */
+.ephemeral-session-banner {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border-bottom: 1px solid var(--warning-border);
+  padding: 4px 16px;
+  font-size: 12px;
+  text-align: center;
+  flex-shrink: 0;
+  cursor: help;
+}
+
 /* Replay mode banner — overlays bottom edge of header */
 .replay-mode-banner {
   position: absolute;

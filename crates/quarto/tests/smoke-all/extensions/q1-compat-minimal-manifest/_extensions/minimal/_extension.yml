@@ -1,0 +1,3 @@
+contributes:
+  shortcodes:
+    - minimal.lua

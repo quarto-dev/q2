@@ -7,3 +7,8 @@ title: Guides
 - [Markdown basics](./authoring/markdown-basics.qmd)
 - [Multiformat branding with `_brand.yml`](./authoring/brand.qmd)
 - [Lua filters](./authoring/lua-filters.qmd)
+
+## Projects
+
+- [Creating projects with `q2 create`](./projects/create.qmd)
+- [Project environment files](./projects/environment.qmd)

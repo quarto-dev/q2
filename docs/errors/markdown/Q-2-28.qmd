@@ -1,6 +1,6 @@
 ---
 title: "Line Break Before Escaped Shortcode Close"
-description: "A `{{{< … >}}}` escaped shortcode contains a line break immediately before its closing `>}}}`."
+description: "A `{{{< … >}}}`{shortcodes='false'} escaped shortcode contains a line break immediately before its closing `>}}}`."
 code: Q-2-28
 subsystem: markdown
 status: stub
@@ -11,12 +11,12 @@ categories:
 
 # `Q-2-28` — Line Break Before Escaped Shortcode Close
 
-> A `{{{< … >}}}` escaped shortcode contains a line break
+> A `{{{< … >}}}`{shortcodes="false"} escaped shortcode contains a line break
 > immediately before its closing `>}}}`.
 
 ## What this means
 
-The escaped shortcode form `{{{< … >}}}` (one extra brace on
+The escaped shortcode form `{{{< … >}}}`{shortcodes="false"} (one extra brace on
 each side) prints the shortcode source literally instead of
 evaluating it — useful in documentation about shortcodes. Like
 the evaluated form, it is a single-line construct. This error
@@ -31,13 +31,13 @@ an unintended newline.
 
 Collapse the escaped shortcode onto a single line:
 
-```markdown
+```{.markdown shortcodes="false"}
 {{{< hello world >}}}
 ```
 
 ## Example
 
-```markdown
+```{.markdown shortcodes="false"}
 {{{< hello
 >}}}
 ```

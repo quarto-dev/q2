@@ -385,6 +385,54 @@ pub fn resolve_engines(
 
 // ── Shared prep + tier core (Phase 4) ─────────────────────────────────────────
 
+/// The engines the author **explicitly declared**, in declared order, with
+/// `markdown` filtered out (it is never a real owner).
+///
+/// Two surface forms, and this is the single place that knows both:
+///
+/// 1. an `engine:` key (scalar, single-key map, or array) — parsed by
+///    [`detect_engines`];
+/// 2. the top-level shorthand (`knitr: …`, `julia: …`) when there is no
+///    `engine:` key — a key matching any *registered* engine name acts like
+///    `engine: {<name>: <config>}`. Registry names rather than a hardcoded
+///    `KNOWN_ENGINES` list is what lets an extension engine such as `julia:`
+///    work. Single engine only (the shorthand has no array form), first match
+///    wins, scanned in sorted order for determinism.
+///
+/// This is "what the author asked for", which is deliberately *not* the same
+/// question as [`resolve_engines`]'s result — resolution also derives owners
+/// from the languages present in the document, so a file that declares an
+/// engine but contains no code cells resolves to an empty sequence while
+/// still having declared one. `EngineExecutionStage`'s `.md` guard
+/// (`Q-2-40`) needs the declared answer, which is why this is shared rather
+/// than inlined in [`prepare_resolution`].
+pub(crate) fn explicitly_declared_engines(
+    meta: &ConfigValue,
+    registry: &EngineRegistry,
+) -> Vec<DetectedEngine> {
+    if meta.get("engine").is_some() {
+        return detect_engines(meta)
+            .into_iter()
+            .filter(|e| e.name != "markdown")
+            .collect();
+    }
+
+    let mut names = registry.engine_names();
+    names.sort_unstable(); // deterministic scan order
+    for name in names {
+        if name == "markdown" {
+            continue;
+        }
+        if let Some(config) = meta.get(name) {
+            return vec![DetectedEngine::with_config(
+                name.to_string(),
+                config.clone(),
+            )];
+        }
+    }
+    Vec::new()
+}
+
 /// Per-engine claim tables built by [`prepare_resolution`] (Phase 3): engine
 /// name → language → claim Vec (the 4c0 multi-claim shape).
 type ClaimTables =
@@ -492,33 +540,7 @@ fn prepare_resolution(
     // `engine:` key is present. We distinguish "user gave an explicit list"
     // from "we got the markdown default" by checking for the `engine:` key.
     let has_engine_key = meta.get("engine").is_some();
-    let raw_explicit: Vec<DetectedEngine> = if has_engine_key {
-        detect_engines(meta)
-            .into_iter()
-            .filter(|e| e.name != "markdown") // markdown is never a real explicit owner
-            .collect()
-    } else {
-        // Top-level engine key shorthand (e.g. `knitr: ...` or `julia: ...`).
-        // Scan registry engine names — a key matching any registered engine
-        // (other than markdown) acts like `engine: {<name>: <config>}`.
-        // Single engine only (the shorthand has no array form). First match wins.
-        let mut found: Vec<DetectedEngine> = Vec::new();
-        let mut names = registry.engine_names();
-        names.sort_unstable(); // deterministic scan order
-        for name in names {
-            if name == "markdown" {
-                continue;
-            }
-            if let Some(config) = meta.get(name) {
-                found.push(DetectedEngine::with_config(
-                    name.to_string(),
-                    config.clone(),
-                ));
-                break;
-            }
-        }
-        found
-    };
+    let raw_explicit: Vec<DetectedEngine> = explicitly_declared_engines(meta, registry);
 
     // P3: explicit `engine: markdown` (raw_explicit empty after filter +
     // has an engine key) → user opted out of execution entirely. Return

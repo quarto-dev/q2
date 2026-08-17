@@ -11,15 +11,16 @@
  * (sliding) expiry, which `onAuthState` feeds back into `useAuth` so
  * its schedules follow the session; the request itself is what
  * triggers the server-side re-issue. No IdP round-trip is involved —
- * this is the renewal path that works where One Tap is blocked
- * (FedCM / third-party-cookie policies).
+ * renewal is entirely server-side.
  *
  * Failure semantics mirror the evidence-based rules from bd-3o8zmz46:
- * a definitive 401/403 asks for silent renewal (`triggerRefresh`) —
- * e.g. the session was revoked via logout-everywhere elsewhere, where
- * re-login is legitimate; network errors take no action (offline
- * editing must survive them). While sync is *disconnected*,
- * `useAuthProbe`'s faster two-strike probe governs instead.
+ * a definitive 401/403 ends the session (`onAuthRejected`) — e.g. the
+ * session was revoked via logout-everywhere elsewhere, or hit the
+ * absolute cap — and the user re-logs-in through the GIS button (the
+ * One-Tap silent-renewal fallback was retired in bd-s042qcxj); network
+ * errors take no action (offline editing must survive them). While sync
+ * is *disconnected*, `useAuthProbe`'s faster two-strike probe governs
+ * instead.
  */
 
 import { useEffect, useRef } from 'react';
@@ -39,17 +40,17 @@ interface SessionKeepAliveOpts {
   enabled: boolean;
   /** Fresh session info (sliding expiry) from a successful probe. */
   onAuthState: (me: AuthState) => void;
-  /** Definitive rejection: ask for silent renewal. */
-  triggerRefresh: () => void;
+  /** Definitive rejection: the session is over. */
+  onAuthRejected: () => void;
 }
 
-export function useSessionKeepAlive({ enabled, onAuthState, triggerRefresh }: SessionKeepAliveOpts) {
+export function useSessionKeepAlive({ enabled, onAuthState, onAuthRejected }: SessionKeepAliveOpts) {
   // Latest callbacks in refs so the interval keys on `enabled` alone.
   const onAuthStateRef = useRef(onAuthState);
-  const triggerRefreshRef = useRef(triggerRefresh);
+  const onAuthRejectedRef = useRef(onAuthRejected);
   useEffect(() => {
     onAuthStateRef.current = onAuthState;
-    triggerRefreshRef.current = triggerRefresh;
+    onAuthRejectedRef.current = onAuthRejected;
   });
 
   useEffect(() => {
@@ -64,7 +65,7 @@ export function useSessionKeepAlive({ enabled, onAuthState, triggerRefresh }: Se
         if (me) {
           onAuthStateRef.current(me);
         } else {
-          triggerRefreshRef.current();
+          onAuthRejectedRef.current();
         }
       } catch {
         // Network error / unreachable hub — no evidence, no action.

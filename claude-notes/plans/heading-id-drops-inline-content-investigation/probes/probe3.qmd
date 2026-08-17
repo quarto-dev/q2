@@ -1,0 +1,9 @@
+---
+title: probe3
+---
+
+## $x$
+
+## ~~gone~~
+
+## [also gone](https://example.com)

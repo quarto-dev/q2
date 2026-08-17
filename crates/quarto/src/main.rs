@@ -170,6 +170,10 @@ enum Commands {
         /// non-zero. Useful in CI. Does not stop the render early.
         #[arg(long)]
         strict: bool,
+
+        /// Skip the project's `pre-render` and `post-render` scripts.
+        #[arg(long = "no-render-scripts")]
+        no_render_scripts: bool,
     },
 
     /// Start a live preview of a Quarto document or project.
@@ -213,6 +217,15 @@ enum Commands {
         #[arg(long)]
         no_browser: bool,
 
+        /// Open the preview in a specific browser instead of the
+        /// system default — e.g. `--browser firefox` or `--browser
+        /// "Google Chrome"`. The value is handed to the OS opener
+        /// (`open -a` on macOS), so use a command on PATH or an
+        /// installed application name. Incompatible with
+        /// --no-browser.
+        #[arg(long, value_name = "BROWSER", conflicts_with = "no_browser")]
+        browser: Option<String>,
+
         /// Override the directory the preview uses for ephemeral
         /// per-session state. Default: a fresh tempdir that is
         /// deleted when `q2 preview` exits.
@@ -236,6 +249,62 @@ enum Commands {
         /// document changes to your files.
         #[arg(long)]
         allow_edit: bool,
+
+        /// Share this preview session over an end-to-end encrypted
+        /// peer-to-peer tunnel (via iroh). Prints a join string;
+        /// anyone who has it can VIEW the project and RE-RUN its code
+        /// on this machine (and EDIT the files if --allow-edit is also
+        /// set), so treat the string like a password.
+        #[arg(long)]
+        share: bool,
+
+        /// Which frontend to serve: the read-only preview UI
+        /// (`viewer`, the default) or the full collaborative editor
+        /// (`editor`: Monaco, file sidebar, live preview pane).
+        ///
+        /// Choosing `editor` never changes the write policy: without
+        /// --allow-edit, edits made in the editor drive the live
+        /// session for everyone connected but are never written to
+        /// your files (and a file change on disk converges the
+        /// session back to the disk content). The editor keeps no
+        /// browser storage across sessions (each preview session is a
+        /// fresh origin, so nothing could be reused anyway). One
+        /// caveat: with --share the host's --ui choice is what all
+        /// guests get.
+        #[arg(long, value_enum, default_value_t = PreviewUiArg::Viewer)]
+        ui: PreviewUiArg,
+
+        /// Print the embedded SPA asset manifest hashes and exit.
+        /// Release CI compares these across the per-platform builds —
+        /// a mismatch silently disables live-share local asset serving
+        /// for cross-platform pairs (live-share plan Phase 2,
+        /// bd-ee2fqm95). Not a user-facing command.
+        #[arg(long, hide = true)]
+        print_asset_manifest_hashes: bool,
+
+        /// Join a shared preview session using the `q2preview…` string
+        /// printed by `q2 preview --share` on the host machine.
+        ///
+        /// Runs a local proxy for the host's session — no local project
+        /// is read and nothing is written to disk on this machine, so
+        /// the host-mode flags (a path, --share, --no-project,
+        /// --allow-edit, --ui, --data-dir, --preview-dir) don't combine
+        /// with it. --port/--host pick where the local proxy listens;
+        /// --no-browser and --browser still apply.
+        ///
+        /// When this binary embeds the exact UI asset build the host
+        /// advertises (a manifest hash compared while joining), the UI
+        /// is served from this binary and only the session's dynamic
+        /// traffic crosses the tunnel, so a first join downloads a few
+        /// kilobytes instead of the whole UI. On any mismatch — an
+        /// older or newer q2, or a dev build — everything is tunneled:
+        /// the join still works, it just boots slower.
+        #[arg(
+            long,
+            value_name = "TICKET",
+            conflicts_with_all = ["path", "share", "no_project", "allow_edit", "data_dir", "preview_dir", "ui"]
+        )]
+        join: Option<String>,
     },
 
     /// Serve a Shiny interactive document
@@ -282,12 +351,8 @@ enum Commands {
 
     /// Automate document or project setup tasks
     Use {
-        /// Type of setup task
-        #[arg(value_name = "TYPE")]
-        type_: String,
-
-        /// Target for the setup task
-        target: Option<String>,
+        #[command(subcommand)]
+        command: UseCommand,
     },
 
     /// Add an extension to this folder or project
@@ -396,6 +461,10 @@ enum Commands {
         #[arg(long = "dry-run", action = clap::ArgAction::SetTrue)]
         dry_run: bool,
 
+        /// Active project profile(s) (comma-separated or repeated).
+        #[arg(long)]
+        profile: Vec<String>,
+
         /// Emit machine-readable output (implies --no-prompt;
         /// final PublishOutcome on stdout, NDJSON events on stderr)
         #[arg(long, action = clap::ArgAction::SetTrue)]
@@ -450,6 +519,10 @@ enum Commands {
         /// Emit compact single-line JSON instead of pretty-printed.
         #[arg(long)]
         compact: bool,
+
+        /// Active project profile(s) (comma-separated or repeated).
+        #[arg(long)]
+        profile: Vec<String>,
     },
 
     /// Inspect pipeline execution traces under `.quarto/trace/`.
@@ -649,6 +722,49 @@ enum CallCommands {
 }
 
 #[derive(Subcommand)]
+enum UseCommand {
+    /// Add a brand (`_brand.yml`) to this project and declare it in
+    /// `_quarto.yml`
+    ///
+    /// With no TARGET, writes a starter `_brand.yml` you can edit.
+    /// With a TARGET, copies a brand from a local path or a remote
+    /// source (e.g. `<gh-org>/<gh-repo>`).
+    ///
+    /// Unlike Quarto 1, Quarto 2 does not auto-discover `_brand.yml`,
+    /// so this command also writes the `brand:` key that makes the
+    /// brand take effect.
+    Brand {
+        /// Where to get the brand from: a local path, `<org>/<repo>`,
+        /// or an archive URL. Omit to scaffold a starter brand.
+        target: Option<String>,
+
+        /// Report what would happen without writing anything
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Proceed even though this project already has a brand file
+        /// or a `brand:` declaration. Does **not** waive the
+        /// remote-source trust prompt — see --trust.
+        #[arg(long)]
+        force: bool,
+
+        /// Skip the trust prompt for a remote source. Does **not**
+        /// override local-state checks — see --force.
+        #[arg(long)]
+        trust: bool,
+
+        /// Never prompt interactively, even on a terminal
+        #[arg(long)]
+        no_prompt: bool,
+
+        /// Emit one JSON result object on stdout; diagnostics go to
+        /// stderr as JSON lines
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum TraceCommand {
     /// List available traces under the `.quarto/trace/` directory.
     List {
@@ -697,6 +813,301 @@ enum TraceCommand {
     },
 }
 
+/// `--ui` values for `q2 preview` (live-share plan Phase 4,
+/// bd-jt1etjbn): which embedded frontend the preview server serves.
+/// CLI-side mirror of [`quarto_preview::PreviewUi`] so the library
+/// doesn't grow a clap dependency.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum PreviewUiArg {
+    /// The read-only preview UI (the default).
+    Viewer,
+    /// The full hub-client editor. Does not imply --allow-edit.
+    Editor,
+}
+
+impl From<PreviewUiArg> for quarto_preview::PreviewUi {
+    fn from(arg: PreviewUiArg) -> Self {
+        match arg {
+            PreviewUiArg::Viewer => quarto_preview::PreviewUi::Viewer,
+            PreviewUiArg::Editor => quarto_preview::PreviewUi::Editor,
+        }
+    }
+}
+
+#[cfg(test)]
+mod cli_parse_tests {
+    //! clap parse harness (live-share plan, Phase 2). These are the first
+    //! parse-level tests for the `q2` CLI; the Phase 3 `--join` conflict
+    //! matrix extends this module.
+
+    use clap::Parser;
+
+    use super::{Cli, Commands};
+
+    /// Parse argv (without the implicit binary name) into `Cli`.
+    fn try_parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(std::iter::once("q2").chain(args.iter().copied()))
+    }
+
+    /// Unwrap a parsed `Preview` command or panic with the actual variant.
+    fn parse_preview(args: &[&str]) -> Commands {
+        let cli = try_parse(args).expect("args should parse");
+        match cli.command {
+            cmd @ Commands::Preview { .. } => cmd,
+            _ => panic!("expected a Preview command from {args:?}"),
+        }
+    }
+
+    #[test]
+    fn preview_share_flag_parses() {
+        let Commands::Preview { share, .. } = parse_preview(&["preview", "--share"]) else {
+            unreachable!()
+        };
+        assert!(share, "--share must set PreviewArgs::share");
+    }
+
+    #[test]
+    fn preview_share_defaults_off() {
+        let Commands::Preview { share, .. } = parse_preview(&["preview"]) else {
+            unreachable!()
+        };
+        assert!(!share, "share must default to false");
+    }
+
+    #[test]
+    fn preview_share_composes_with_allow_edit() {
+        // Composition from the plan's CLI surface: `--share --allow-edit`
+        // (viewer with inline-edit write-back for guests).
+        let Commands::Preview {
+            share, allow_edit, ..
+        } = parse_preview(&["preview", "--share", "--allow-edit"])
+        else {
+            unreachable!()
+        };
+        assert!(share && allow_edit, "--share --allow-edit must both parse");
+    }
+
+    #[test]
+    fn preview_print_asset_manifest_hashes_parses() {
+        // Hidden release-CI diagnostic (bd-ee2fqm95): parses on the
+        // host-mode command and defaults off.
+        let Commands::Preview {
+            print_asset_manifest_hashes,
+            ..
+        } = parse_preview(&["preview", "--print-asset-manifest-hashes"])
+        else {
+            unreachable!()
+        };
+        assert!(print_asset_manifest_hashes);
+        let Commands::Preview {
+            print_asset_manifest_hashes,
+            ..
+        } = parse_preview(&["preview"])
+        else {
+            unreachable!()
+        };
+        assert!(!print_asset_manifest_hashes);
+    }
+
+    #[test]
+    fn preview_share_conflicts_with_join() {
+        // (match instead of expect_err: `Cli` deliberately has no Debug impl)
+        let err = match try_parse(&["preview", "--share", "--join", "x"]) {
+            Ok(_) => panic!("--share and --join are host vs. guest; must conflict"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    // ── Phase 3 (bd-6y0p1bne): `--join` conflict matrix ──────────────
+    // The guest path has no local project, hub, or disk surface, so
+    // every host-mode-only flag must be a hard parse error, not a
+    // silent no-op. (`--ui` joins this matrix in Phase 4, when the
+    // flag itself lands.)
+
+    /// Assert argv is rejected specifically as an argument conflict
+    /// (not, say, an unknown-arg error).
+    fn assert_join_conflict(args: &[&str]) {
+        let err = match try_parse(args) {
+            Ok(_) => panic!("{args:?} mixes guest mode with a host-only flag; must conflict"),
+            Err(e) => e,
+        };
+        assert_eq!(
+            err.kind(),
+            clap::error::ErrorKind::ArgumentConflict,
+            "args: {args:?}"
+        );
+    }
+
+    #[test]
+    fn preview_join_parses_and_captures_ticket() {
+        let Commands::Preview { join, .. } = parse_preview(&["preview", "--join", "q2previewabc"])
+        else {
+            unreachable!()
+        };
+        assert_eq!(join.as_deref(), Some("q2previewabc"));
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_positional_path() {
+        assert_join_conflict(&["preview", "some/project", "--join", "x"]);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_share() {
+        assert_join_conflict(&["preview", "--join", "x", "--share"]);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_no_project() {
+        assert_join_conflict(&["preview", "--join", "x", "--no-project"]);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_allow_edit() {
+        assert_join_conflict(&["preview", "--join", "x", "--allow-edit"]);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_data_dir() {
+        assert_join_conflict(&["preview", "--join", "x", "--data-dir", "d"]);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_preview_dir() {
+        assert_join_conflict(&["preview", "--join", "x", "--preview-dir", "d"]);
+    }
+
+    // ── Phase 4 (bd-jt1etjbn): `--ui <viewer|editor>` ────────────────
+    // The flag substitutes which embedded frontend the server serves.
+    // It is orthogonal to `--allow-edit` (UI × write policy is a real
+    // 2×2) and meaningless for a guest (the host's server serves the
+    // UI through the tunnel), hence the `--join` conflict.
+
+    use super::PreviewUiArg;
+
+    #[test]
+    fn preview_ui_defaults_to_viewer() {
+        let Commands::Preview { ui, .. } = parse_preview(&["preview"]) else {
+            unreachable!()
+        };
+        assert_eq!(ui, PreviewUiArg::Viewer, "--ui must default to viewer");
+    }
+
+    #[test]
+    fn preview_ui_parses_viewer_and_editor() {
+        for (value, expected) in [
+            ("viewer", PreviewUiArg::Viewer),
+            ("editor", PreviewUiArg::Editor),
+        ] {
+            let Commands::Preview { ui, .. } = parse_preview(&["preview", "--ui", value]) else {
+                unreachable!()
+            };
+            assert_eq!(ui, expected, "--ui {value}");
+        }
+    }
+
+    #[test]
+    fn preview_ui_rejects_unknown_value_listing_the_valid_ones() {
+        let err = match try_parse(&["preview", "--ui", "monaco"]) {
+            Ok(_) => panic!("--ui monaco is not a frontend we ship; must be rejected"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), clap::error::ErrorKind::InvalidValue);
+        let msg = err.to_string();
+        assert!(
+            msg.contains("viewer") && msg.contains("editor"),
+            "the error must list the valid values; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn preview_ui_composes_with_share_and_allow_edit() {
+        // The full-collaboration composition from the plan's CLI surface:
+        // `--share --ui editor --allow-edit`.
+        let Commands::Preview {
+            share,
+            ui,
+            allow_edit,
+            ..
+        } = parse_preview(&["preview", "--share", "--ui", "editor", "--allow-edit"])
+        else {
+            unreachable!()
+        };
+        assert!(share && allow_edit);
+        assert_eq!(ui, PreviewUiArg::Editor);
+    }
+
+    #[test]
+    fn preview_join_conflicts_with_ui() {
+        // The Phase 3 conflict-matrix entry deferred to Phase 4 (the
+        // flag didn't exist yet).
+        assert_join_conflict(&["preview", "--join", "x", "--ui", "editor"]);
+    }
+
+    #[test]
+    fn preview_join_composes_with_guest_flags() {
+        // `--port` picks the local proxy port, `--host` its bind
+        // interface, `--no-browser` suppresses the auto-open — all
+        // meaningful for a guest and must keep parsing.
+        let Commands::Preview {
+            join,
+            port,
+            host,
+            no_browser,
+            ..
+        } = parse_preview(&[
+            "preview",
+            "--join",
+            "q2previewabc",
+            "--port",
+            "9280",
+            "--host",
+            "127.0.0.1",
+            "--no-browser",
+        ])
+        else {
+            unreachable!()
+        };
+        assert_eq!(join.as_deref(), Some("q2previewabc"));
+        assert_eq!(port, Some(9280));
+        assert_eq!(host.as_deref(), Some("127.0.0.1"));
+        assert!(no_browser);
+    }
+
+    #[test]
+    fn preview_browser_parses_and_composes_with_share() {
+        let Commands::Preview { browser, share, .. } =
+            parse_preview(&["preview", "--share", "--browser", "firefox"])
+        else {
+            unreachable!()
+        };
+        assert!(share);
+        assert_eq!(browser.as_deref(), Some("firefox"));
+    }
+
+    #[test]
+    fn preview_browser_composes_with_join() {
+        // Guests pick the browser for the local proxy URL too.
+        let Commands::Preview { join, browser, .. } =
+            parse_preview(&["preview", "--join", "q2previewabc", "--browser", "safari"])
+        else {
+            unreachable!()
+        };
+        assert_eq!(join.as_deref(), Some("q2previewabc"));
+        assert_eq!(browser.as_deref(), Some("safari"));
+    }
+
+    #[test]
+    fn preview_browser_conflicts_with_no_browser() {
+        let err = match try_parse(&["preview", "--browser", "firefox", "--no-browser"]) {
+            Ok(_) => panic!("--browser and --no-browser must conflict"),
+            Err(e) => e,
+        };
+        assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+}
+
 fn main() -> Result<()> {
     // Install Quarto's `Q-*` error catalog into the catalog-agnostic
     // `quarto-error-reporting` host, so diagnostics can resolve docs URLs and
@@ -715,7 +1126,9 @@ fn main() -> Result<()> {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| quarto_util::verbose_to_filter(cli.verbose).into()),
         )
-        .with(tracing_subscriber::fmt::layer())
+        // Logs go to stderr like every other q2 diagnostic — stdout
+        // stays reserved for command output (`get-config` JSON, etc.).
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
     match cli.command {
@@ -732,6 +1145,8 @@ fn main() -> Result<()> {
             json_errors,
             fail_fast,
             strict,
+            no_render_scripts,
+            profile,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
             inputs,
@@ -746,26 +1161,54 @@ fn main() -> Result<()> {
             json_errors,
             fail_fast,
             strict,
+            no_render_scripts,
+            profile,
         }),
         Commands::Preview {
             path,
             port,
             host,
             no_browser,
+            browser,
             data_dir,
             preview_dir,
             no_project,
             allow_edit,
-        } => commands::preview::execute(commands::preview::PreviewArgs {
-            path,
-            port,
-            host,
-            no_browser,
-            data_dir,
-            preview_dir,
-            no_project,
-            allow_edit,
-        }),
+            share,
+            ui,
+            print_asset_manifest_hashes,
+            join,
+        } => {
+            if print_asset_manifest_hashes {
+                // Binary diagnostic (release CI drift check); answers
+                // without starting anything, in either mode.
+                commands::preview::print_asset_manifest_hashes()
+            } else if let Some(ticket) = join {
+                // Guest mode (live-share plan Phase 3): clap has already
+                // rejected every host-mode flag via conflicts_with_all.
+                commands::preview::execute_join(commands::preview::JoinArgs {
+                    ticket,
+                    port,
+                    host,
+                    no_browser,
+                    browser,
+                })
+            } else {
+                commands::preview::execute(commands::preview::PreviewArgs {
+                    path,
+                    port,
+                    host,
+                    no_browser,
+                    browser,
+                    data_dir,
+                    preview_dir,
+                    no_project,
+                    allow_edit,
+                    share,
+                    ui: ui.into(),
+                })
+            }
+        }
         Commands::Serve { .. } => commands::serve::execute(),
         Commands::Create {
             type_,
@@ -775,7 +1218,23 @@ fn main() -> Result<()> {
             dry_run,
             no_prompt,
         } => commands::create::execute(type_, args, json, list, dry_run, no_prompt),
-        Commands::Use { .. } => commands::use_cmd::execute(),
+        Commands::Use { command } => match command {
+            UseCommand::Brand {
+                target,
+                dry_run,
+                force,
+                trust,
+                no_prompt,
+                json,
+            } => commands::use_cmd::execute_brand(commands::use_cmd::BrandArgs {
+                target,
+                dry_run,
+                force,
+                trust,
+                no_prompt,
+                json,
+            }),
+        },
         Commands::Add { .. } => commands::add::execute(),
         Commands::Update { .. } => commands::update::execute(),
         Commands::Remove { .. } => commands::remove::execute(),
@@ -796,10 +1255,12 @@ fn main() -> Result<()> {
             no_wait,
             dry_run,
             json,
+            profile,
         } => commands::publish::execute(commands::publish::PublishArgs {
             provider,
             path,
             no_render,
+            profile,
             no_prompt,
             no_browser,
             no_wait,
@@ -829,6 +1290,7 @@ fn main() -> Result<()> {
             output,
             strict,
             compact,
+            profile,
         } => commands::get_config::execute(commands::get_config::GetConfigArgs {
             file,
             path,
@@ -836,6 +1298,7 @@ fn main() -> Result<()> {
             output,
             strict,
             compact,
+            profile,
         }),
         Commands::Mcp { args } => commands::mcp::run(&args),
 

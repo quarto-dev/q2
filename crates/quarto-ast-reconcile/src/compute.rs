@@ -433,21 +433,11 @@ fn compute_custom_node_slot_plan<'a>(
                 // If equal, no plan needed (implicit KeepOriginal)
             }
             (Slot::Blocks(orig_bs), Slot::Blocks(exec_bs)) => {
-                // Compute plan for block sequences
+                // Stored unconditionally — all-KeepBefore does not imply
+                // identical content (bd-9fwn1504). Every Blocks slot present
+                // on both sides gets a plan; apply relies on this.
                 let plan = compute_reconciliation_for_blocks(orig_bs, exec_bs, cache);
-
-                // Only store if there's actual reconciliation work to do
-                let needs_plan = plan
-                    .block_alignments
-                    .iter()
-                    .any(|a| !matches!(a, BlockAlignment::KeepBefore(_)))
-                    || !plan.block_container_plans.is_empty()
-                    || !plan.inline_plans.is_empty()
-                    || !plan.custom_node_plans.is_empty();
-
-                if needs_plan {
-                    block_slot_plans.insert(name.clone(), plan);
-                }
+                block_slot_plans.insert(name.clone(), plan);
             }
             (Slot::Inline(orig_i), Slot::Inline(exec_i)) => {
                 let orig_hash = cache.hash_inline(orig_i);
@@ -463,19 +453,11 @@ fn compute_custom_node_slot_plan<'a>(
                 }
             }
             (Slot::Inlines(orig_is), Slot::Inlines(exec_is)) => {
+                // Stored unconditionally — all-KeepBefore does not imply
+                // identical content (bd-9fwn1504). Every Inlines slot present
+                // on both sides gets a plan; apply relies on this.
                 let plan = compute_inline_alignments(orig_is, exec_is, cache);
-
-                let needs_plan = plan
-                    .inline_alignments
-                    .iter()
-                    .any(|a| !matches!(a, InlineAlignment::KeepBefore(_)))
-                    || !plan.inline_container_plans.is_empty()
-                    || !plan.note_block_plans.is_empty()
-                    || !plan.custom_node_plans.is_empty();
-
-                if needs_plan {
-                    inline_slot_plans.insert(name.clone(), plan);
-                }
+                inline_slot_plans.insert(name.clone(), plan);
             }
             _ => {
                 // Slot type changed - no reconciliation possible
@@ -503,25 +485,15 @@ fn compute_table_plan<'a>(
 ) -> TableReconciliationPlan {
     let mut cell_plans = LinkedHashMap::new();
 
-    // Reconcile caption.long if both tables have one
+    // Reconcile caption.long if both tables have one. The plan is stored
+    // unconditionally: an all-KeepBefore alignment does NOT imply the two
+    // sequences are identical — the original may have extra (deleted) items,
+    // or the same items in a different order — so there is no sound
+    // "no work needed" shortcut (bd-9fwn1504).
     let caption_plan = match (&orig_table.caption.long, &exec_table.caption.long) {
-        (Some(orig_blocks), Some(exec_blocks)) => {
-            let plan = compute_reconciliation_for_blocks(orig_blocks, exec_blocks, cache);
-            // Only include if there's actual reconciliation work
-            let needs_plan = plan
-                .block_alignments
-                .iter()
-                .any(|a| !matches!(a, BlockAlignment::KeepBefore(_)))
-                || !plan.block_container_plans.is_empty()
-                || !plan.inline_plans.is_empty()
-                || !plan.custom_node_plans.is_empty()
-                || !plan.table_plans.is_empty();
-            if needs_plan {
-                Some(Box::new(plan))
-            } else {
-                None
-            }
-        }
+        (Some(orig_blocks), Some(exec_blocks)) => Some(Box::new(
+            compute_reconciliation_for_blocks(orig_blocks, exec_blocks, cache),
+        )),
         _ => None,
     };
 
@@ -541,18 +513,10 @@ fn compute_table_plan<'a>(
                     &exec_cell.content,
                     cache,
                 );
-                // Only include if there's actual reconciliation work
-                let needs_plan = plan
-                    .block_alignments
-                    .iter()
-                    .any(|a| !matches!(a, BlockAlignment::KeepBefore(_)))
-                    || !plan.block_container_plans.is_empty()
-                    || !plan.inline_plans.is_empty()
-                    || !plan.custom_node_plans.is_empty()
-                    || !plan.table_plans.is_empty();
-                if needs_plan {
-                    results.push((make_position(row_idx, cell_idx), plan));
-                }
+                // Stored unconditionally — all-KeepBefore does not imply
+                // identical content (bd-9fwn1504). Every cell position where
+                // both tables have a cell gets a plan; apply relies on this.
+                results.push((make_position(row_idx, cell_idx), plan));
             }
         }
         results

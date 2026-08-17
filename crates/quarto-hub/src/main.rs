@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -15,6 +15,12 @@ use quarto_hub::{StorageManager, auth, context::HubConfig, default_standalone_da
 #[command(name = "hub")]
 #[command(about = "Collaborative sync server for Quarto projects")]
 struct Args {
+    /// Maintainer subcommands (`hub admin …`). When omitted, the hub
+    /// runs as a server with the flags below — the pre-subcommand CLI
+    /// is unchanged.
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// Increase log verbosity. Repeat for more detail:
     /// `-v` adds info, `-vv` adds debug + samod=info,
     /// `-vvv` adds trace + samod=debug + tower_http=debug.
@@ -119,9 +125,230 @@ struct Args {
     additional_audiences: Vec<String>,
 }
 
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Sync-server maintainer tools (storage hygiene, bd-eiku4ymo).
+    /// See claude-notes/instructions/hub-storage-hygiene.md.
+    Admin {
+        #[command(subcommand)]
+        cmd: AdminCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AdminCommand {
+    /// Read-only orphan analysis: inventory every stored doc and emit
+    /// a manifest of safely-removable engine-capture docs. Safe to run
+    /// against a live server.
+    Scan {
+        /// Hub data directory (contains `automerge/` and `hub.lock`).
+        #[arg(long)]
+        data_dir: PathBuf,
+        /// Only captures older than this many days are candidates.
+        /// Negative values (e.g. `--older-than-days=-1`) disable the
+        /// age gate — every orphaned stamped capture qualifies.
+        #[arg(long, default_value_t = 30, allow_hyphen_values = true)]
+        older_than_days: i64,
+        /// Also consider captures without a `meta.createdAt` stamp
+        /// (recorded before the audit envelope existed).
+        #[arg(long)]
+        include_unstamped: bool,
+        /// Write the manifest JSON here (the input `collect` takes).
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Print the manifest JSON to stdout instead of the summary.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Quarantine the docs a scan manifest deems removable, after
+    /// re-verifying each against current storage. Moves doc chunks to
+    /// `<data-dir>/trash/<batch>/`; never deletes. Dry-run unless
+    /// --execute. Refuses while a server holds the data dir.
+    Collect {
+        #[arg(long)]
+        data_dir: PathBuf,
+        /// Manifest produced by `hub admin scan --output`.
+        #[arg(long)]
+        manifest: PathBuf,
+        /// Actually quarantine (default is a dry-run report).
+        #[arg(long)]
+        execute: bool,
+    },
+    /// Move a quarantined batch (or named docs from it) back into the
+    /// store, verifying chunk hashes recorded at collection time.
+    Restore {
+        #[arg(long)]
+        data_dir: PathBuf,
+        /// Batch directory under `<data-dir>/trash/`.
+        #[arg(long)]
+        batch: PathBuf,
+        /// Restore only these doc ids (default: the whole batch).
+        doc_ids: Vec<String>,
+    },
+    /// Delete trash batches older than the retention window. The only
+    /// operation that permanently removes bytes. Dry-run unless
+    /// --execute.
+    Purge {
+        #[arg(long)]
+        data_dir: PathBuf,
+        /// Negative values disable the retention gate.
+        #[arg(long, default_value_t = 30, allow_hyphen_values = true)]
+        retention_days: i64,
+        /// Actually delete eligible batches (default: list them).
+        #[arg(long)]
+        execute: bool,
+    },
+}
+
+/// Dispatch `hub admin …`. Exits the process with a non-zero status
+/// on failure so scripts can gate on it.
+async fn run_admin(cmd: AdminCommand) -> anyhow::Result<()> {
+    use quarto_hub::admin::{collect as collect_mod, scan as scan_mod};
+    match cmd {
+        AdminCommand::Scan {
+            data_dir,
+            older_than_days,
+            include_unstamped,
+            output,
+            json,
+        } => {
+            let canonical = data_dir
+                .canonicalize()
+                .map_err(|e| anyhow::anyhow!("cannot canonicalize {}: {e}", data_dir.display()))?;
+            let automerge_dir = canonical.join("automerge");
+            if !automerge_dir.is_dir() {
+                anyhow::bail!(
+                    "{} has no automerge/ directory — is this a hub data dir?",
+                    canonical.display()
+                );
+            }
+            let storage = samod::storage::TokioFilesystemStorage::new(&automerge_dir);
+            let doc_ids = scan_mod::list_doc_ids_filesystem(&automerge_dir)?;
+            let manifest = scan_mod::scan(
+                &storage,
+                &doc_ids,
+                &canonical.to_string_lossy(),
+                &scan_mod::ScanOptions {
+                    older_than_days,
+                    include_unstamped,
+                },
+            )
+            .await;
+            if let Some(path) = &output {
+                std::fs::write(path, serde_json::to_vec_pretty(&manifest)?)?;
+                eprintln!("Manifest written to {}", path.display());
+            }
+            if json {
+                println!("{}", serde_json::to_string_pretty(&manifest)?);
+            } else {
+                println!("{}", scan_mod::human_summary(&manifest));
+            }
+            Ok(())
+        }
+        AdminCommand::Collect {
+            data_dir,
+            manifest,
+            execute,
+        } => {
+            let manifest: quarto_hub::admin::manifest::ScanManifest =
+                serde_json::from_slice(&std::fs::read(&manifest)?)?;
+            let outcome = collect_mod::collect(&data_dir, &manifest, execute)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
+            for (doc_id, reason) in &outcome.skipped {
+                println!("SKIP {doc_id}: {reason}");
+            }
+            for c in &outcome.verified {
+                println!(
+                    "{} {} ({} bytes)",
+                    if execute {
+                        "QUARANTINED"
+                    } else {
+                        "WOULD COLLECT"
+                    },
+                    c.doc_id,
+                    c.size_bytes
+                );
+            }
+            match &outcome.batch_dir {
+                Some(dir) => println!(
+                    "Batch: {} (restore with `hub admin restore --data-dir {} --batch {}`)",
+                    dir.display(),
+                    data_dir.display(),
+                    dir.display()
+                ),
+                None if !execute && !outcome.verified.is_empty() => {
+                    println!("Dry-run only. Re-run with --execute to quarantine.");
+                }
+                None => {}
+            }
+            Ok(())
+        }
+        AdminCommand::Restore {
+            data_dir,
+            batch,
+            doc_ids,
+        } => {
+            let results = collect_mod::restore(&data_dir, &batch, &doc_ids)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            let mut failed = false;
+            for (doc_id, result) in &results {
+                match result {
+                    Ok(()) => println!("RESTORED {doc_id}"),
+                    Err(reason) => {
+                        failed = true;
+                        println!("FAILED {doc_id}: {reason}");
+                    }
+                }
+            }
+            if failed {
+                anyhow::bail!("some docs were not restored");
+            }
+            Ok(())
+        }
+        AdminCommand::Purge {
+            data_dir,
+            retention_days,
+            execute,
+        } => {
+            let candidates = collect_mod::purge(&data_dir, retention_days, execute)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            if candidates.is_empty() {
+                println!("No trash batches.");
+            }
+            for c in &candidates {
+                println!(
+                    "{} {} (created {:?}, age {:?} days)",
+                    match (c.eligible, execute) {
+                        (true, true) => "PURGED",
+                        (true, false) => "WOULD PURGE",
+                        (false, _) => "KEPT",
+                    },
+                    c.batch_dir.display(),
+                    c.created_at.as_deref().unwrap_or("<no batch.json>"),
+                    c.age_days,
+                );
+            }
+            Ok(())
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+
+    // `hub admin …`: maintainer tools, no server startup.
+    if let Some(Command::Admin { cmd }) = args.command {
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| quarto_util::verbose_to_filter(args.verbose).into()),
+            )
+            .with(tracing_subscriber::fmt::layer())
+            .init();
+        return run_admin(cmd).await;
+    }
 
     // Initialize tracing. `-v` chooses a default filter directive (see
     // `quarto_util::verbose_to_filter`); `RUST_LOG`, when set, takes
@@ -230,6 +457,9 @@ async fn main() -> anyhow::Result<()> {
         register_root_ws: true,
         // The collaborative hub always persists document changes to disk.
         disk_write_policy: quarto_hub::sync::DiskWritePolicy::WriteBack,
+        // Long-running server: shutdown acknowledgment stays in the
+        // tracing log, nothing user-facing on stdout.
+        shutdown_message: None,
     };
 
     server::run_server(storage, config).await?;

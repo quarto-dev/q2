@@ -1,0 +1,15 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Breadcrumbs repro"
+  sidebar:
+    contents:
+      - index.qmd
+      - section: Guide
+        contents:
+          - guide/intro.qmd
+          - section: Advanced
+            contents:
+              - guide/advanced/deep.qmd

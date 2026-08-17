@@ -1,0 +1,12 @@
+---
+title: Q1-compat manifest without title/author loads
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["MINIMAL-MANIFEST-OK"]
+---
+
+{{< minimal >}}

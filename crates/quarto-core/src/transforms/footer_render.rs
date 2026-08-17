@@ -80,9 +80,11 @@ impl AstTransform for FooterRenderTransform {
 
         let mut footer = PageFooter::from_config_value(footer_cv);
 
-        // Rewrite hrefs in each Items region. Text and Empty regions
-        // pass through unchanged — body-content link rewriting is
-        // Phase 6's territory.
+        // Rewrite hrefs in each Items region, and Link/Image targets
+        // inside Text regions' parsed markdown
+        // (bd-root-relative-paths-design-fc5pvkcv, Case C — the AST
+        // body's Phase-6 rewriter never sees footer inlines, which
+        // live in metadata, so this transform owns their resolution).
         let mut local_diags = std::mem::take(&mut ctx.diagnostics);
         rewrite_region_hrefs(
             &mut footer.left,
@@ -121,8 +123,24 @@ fn rewrite_region_hrefs(
     index: Option<&ProjectIndex>,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
-    if let FooterRegion::Items(items) = region {
-        rewrite_items_hrefs(items, resolver, index, diagnostics);
+    match region {
+        FooterRegion::Items(items) => {
+            rewrite_items_hrefs(items, resolver, index, diagnostics);
+        }
+        FooterRegion::Text(cv) => {
+            if let quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines) =
+                &mut cv.value
+            {
+                crate::transforms::navigation_href::rewrite_config_inlines(
+                    inlines,
+                    resolver,
+                    index,
+                    &NavSurface::PageFooter,
+                    diagnostics,
+                );
+            }
+        }
+        FooterRegion::Empty => {}
     }
 }
 
@@ -237,6 +255,84 @@ mod tests {
         (ast.meta, ctx.diagnostics)
     }
 
+    /// Like `run_with`, but wires a website resolver pinned at a
+    /// depth-1 page (`tools/converter.html`) so page-relative
+    /// resolution is observable.
+    async fn run_at_depth(
+        meta: ConfigValue,
+        index: Option<Arc<ProjectIndex>>,
+    ) -> (ConfigValue, Vec<DiagnosticMessage>) {
+        use crate::resource_resolver::ResourceResolverContext;
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/tools/converter.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/tools/converter.html",
+            "site_libs",
+            "converter",
+        );
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_resource_resolver(resolver);
+        if let Some(idx) = index {
+            ctx = ctx.with_project_index(idx);
+        }
+        FooterRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        (ast.meta, ctx.diagnostics)
+    }
+
+    /// A `ConfigValue` holding parsed markdown inlines — the shape
+    /// footer text regions actually take in production (both
+    /// `_quarto.yml` and document metadata parse markdown strings to
+    /// `PandocInlines`).
+    fn inlines_cv(inlines: Vec<quarto_pandoc_types::inline::Inline>) -> ConfigValue {
+        ConfigValue {
+            value: quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines),
+            source_info: SourceInfo::for_test(),
+            merge_op: Default::default(),
+        }
+    }
+
+    fn footer_image(url: &str, alt: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Image, Inline, Str};
+        Inline::Image(Image {
+            attr: Default::default(),
+            content: vec![Inline::Str(Str {
+                text: alt.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    fn footer_link(url: &str, text: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Inline, Link, Str};
+        Inline::Link(Link {
+            attr: Default::default(),
+            content: vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
     // --- Phase 2 behavior preserved -------------------------------
 
     #[tokio::test]
@@ -329,12 +425,21 @@ mod tests {
         assert!(diags.is_empty());
     }
 
-    /// Phase 3 test 42 — a string-valued region (Text) is NOT
-    /// scanned for .qmd links. Body-content link rewriting is Phase 6.
+    /// ~~Phase 3 test 42~~ — DELIBERATELY INVERTED by
+    /// bd-root-relative-paths-design-fc5pvkcv. The original test
+    /// pinned Text regions as pass-through on the theory that
+    /// "body-content link rewriting is Phase 6" — but Phase 6 walks
+    /// the AST body and never sees the footer HTML stashed in
+    /// metadata, so a `.qmd` link in a footer text region survived
+    /// into production output verbatim. Text-region links now resolve
+    /// exactly like Items-region hrefs.
+    ///
+    /// A bare *scalar* Text region (no parsed inlines) still passes
+    /// through: there are no Link nodes in a plain string.
     #[tokio::test]
-    async fn footer_render_leaves_text_regions_unchanged() {
+    async fn footer_render_text_region_links_resolve_like_items() {
         let footer = PageFooter {
-            center: FooterRegion::Text(s("See [docs](docs.qmd) here")),
+            center: FooterRegion::Text(inlines_cv(vec![footer_link("docs.qmd", "docs")])),
             ..PageFooter::default()
         };
         let mut meta = ConfigValue::default();
@@ -350,18 +455,83 @@ mod tests {
             .unwrap()
             .as_plain_text()
             .unwrap();
-        // The literal `docs.qmd` should still appear (rendered through
-        // the text-region emission path; markdown parsing is not
-        // Phase 3's job).
         assert!(
-            html.contains("docs.qmd"),
-            "text region should not be rewritten; got: {}",
+            html.contains("href=\"docs.html\""),
+            "text-region .qmd link must resolve to its output href; got: {}",
+            html
+        );
+        assert!(
+            !html.contains("docs.qmd\""),
+            "raw .qmd href must not survive; got: {}",
             html
         );
         assert!(
             diags.is_empty(),
             "text region rewrite should not emit diagnostics"
         );
+    }
+
+    /// Case C (bd-root-relative-paths-design-fc5pvkcv): a markdown
+    /// image in a footer Text region resolves page-relative — the
+    /// site-root form (`/images/x.svg`) and the bare project-root form
+    /// (`images/x.svg`) both emit `../images/x.svg` from a depth-1
+    /// page. This is the incentive-removal fix: config-declared
+    /// footer imagery no longer needs raw HTML.
+    #[tokio::test]
+    async fn footer_render_text_region_image_resolves_page_relative() {
+        let footer = PageFooter {
+            left: FooterRegion::Text(inlines_cv(vec![footer_image("/images/x.svg", "L")])),
+            center: FooterRegion::Text(inlines_cv(vec![footer_image("images/y.svg", "C")])),
+            ..PageFooter::default()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "footer"], footer.to_config_value());
+        let (out, diags) = run_at_depth(meta, None).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "footer"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("<img src=\"../images/x.svg\" alt=\"L\">"),
+            "site-root image must relativize from the depth-1 page; got: {}",
+            html
+        );
+        assert!(
+            html.contains("<img src=\"../images/y.svg\" alt=\"C\">"),
+            "project-root image must relativize identically; got: {}",
+            html
+        );
+        assert!(diags.is_empty(), "got diagnostics: {:?}", diags);
+    }
+
+    /// Text-region links relativize per page too: from a depth-1 page,
+    /// a `/index.qmd` (site-root) link resolves to `../index.html`.
+    #[tokio::test]
+    async fn footer_render_text_region_root_link_resolves_at_depth() {
+        let footer = PageFooter {
+            right: FooterRegion::Text(inlines_cv(vec![footer_link("/index.qmd", "root")])),
+            ..PageFooter::default()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "footer"], footer.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![profile(
+            "index.qmd",
+            "index.html",
+            "Home",
+        )]));
+        let (out, diags) = run_at_depth(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "footer"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("href=\"../index.html\""),
+            "site-root .qmd link must resolve page-relative; got: {}",
+            html
+        );
+        assert!(diags.is_empty(), "got diagnostics: {:?}", diags);
     }
 
     /// Phase 3 test 43 — unknown .qmd href in a footer item emits a

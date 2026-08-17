@@ -81,6 +81,21 @@ pub struct StageContext {
     /// Extensions discovered for this document
     pub extensions: Vec<Extension>,
 
+    /// Project variables from `_variables.yml` (project root), parsed as
+    /// document metadata so markdown values render as markdown. `None` for
+    /// single-file renders (Q1 parity: `var` is project-scoped) or when the
+    /// file does not exist.
+    pub variables: Option<quarto_pandoc_types::ConfigValue>,
+
+    /// Project environment variables from `_environment` files
+    /// (`_environment` + `_environment.local`; profile variants once
+    /// bd-ev8mk1rp lands). File-defined values only — q2 never mutates
+    /// the process environment, and consumers must check the real
+    /// environment first so it always wins (see
+    /// [`crate::project::environment`]). Empty for single-file renders
+    /// (Q1 parity: env files are project-scoped).
+    pub project_env: hashlink::LinkedHashMap<String, String>,
+
     // === Mutable state ===
     /// Artifact store for dependencies and intermediates
     pub artifacts: ArtifactStore,
@@ -93,6 +108,17 @@ pub struct StageContext {
 
     /// Diagnostics (warnings, errors, info) collected during execution
     pub diagnostics: Vec<DiagnosticMessage>,
+
+    /// Per-code suppression policy declared in `diagnostics:` metadata.
+    ///
+    /// Resolved by `MetadataMergeStage` (the first point at which
+    /// project + directory + document layers have been merged) and applied
+    /// by [`run_pipeline`](crate::pipeline::run_pipeline) to
+    /// [`Self::diagnostics`] just before it returns — the single point every
+    /// per-document diagnostic passes through, for every frontend. Empty by
+    /// default, in which case application is a no-op.
+    /// See [`crate::diagnostic_policy`] (bd-lone-bracket-diagnostic-mxu41qbt).
+    pub diagnostic_policy: crate::diagnostic_policy::DiagnosticPolicy,
 
     /// Ref-type registry: built-in + `crossref.custom` + promised-id prefixes.
     ///
@@ -255,7 +281,7 @@ impl StageContext {
         document: DocumentInfo,
     ) -> Result<Self, PipelineError> {
         let builtin_ext_path = builtin_extensions_path(runtime.as_ref());
-        let extensions = crate::extension::discover_extensions(
+        let (extensions, mut startup_diagnostics) = crate::extension::discover_extensions(
             &document.input,
             if project.is_single_file {
                 None
@@ -268,6 +294,23 @@ impl StageContext {
 
         // Clone the project registry before moving `project` into the struct.
         let registry = project.registry.clone();
+
+        let variables =
+            load_project_variables(runtime.as_ref(), &project, &mut startup_diagnostics);
+
+        let active_profile_names: Vec<String> = project
+            .config
+            .active_config_profiles
+            .iter()
+            .map(|p| p.name.clone())
+            .collect();
+        let project_env = crate::project::environment::load_project_environment(
+            runtime.as_ref(),
+            &project,
+            &active_profile_names,
+            &mut startup_diagnostics,
+        );
+
         Ok(Self {
             runtime,
             format,
@@ -275,9 +318,12 @@ impl StageContext {
             document,
             temp_dir: std::sync::OnceLock::new(),
             extensions,
+            variables,
+            project_env,
             artifacts: ArtifactStore::new(),
             includes: PandocIncludes::default(),
-            diagnostics: Vec::new(),
+            diagnostics: startup_diagnostics,
+            diagnostic_policy: crate::diagnostic_policy::DiagnosticPolicy::default(),
             ref_type_registry: None,
             crossref_index: None,
             resource_report: crate::project_resources::DocumentResourceReport::new(),
@@ -845,27 +891,45 @@ mod tests {
 /// - **Native**: extracts the embedded `ResourceBundle` to a temp dir.
 /// - **WASM**: returns the VFS path `/__quarto_resources__/extensions`
 ///   if it exists (populated during WASM init).
-fn builtin_extensions_path(
-    _runtime: &dyn quarto_system_runtime::SystemRuntime,
-) -> Option<std::path::PathBuf> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        crate::extension::BUILTIN_EXTENSIONS
-            .path()
-            .ok()
-            .map(|p| p.to_path_buf())
+/// Load `<project dir>/_variables.yml` for the `var` shortcode.
+///
+/// Project-scoped like Q1 (no variables in single-file mode). A missing
+/// file is normal; a file that exists but fails to parse produces a
+/// warning diagnostic naming the file.
+fn load_project_variables(
+    runtime: &dyn SystemRuntime,
+    project: &crate::project::ProjectContext,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Option<quarto_pandoc_types::ConfigValue> {
+    if project.is_single_file {
+        return None;
     }
-
-    #[cfg(target_arch = "wasm32")]
-    {
-        let vfs_path = std::path::PathBuf::from("/__quarto_resources__/extensions");
-        if _runtime
-            .path_exists(&vfs_path, Some(quarto_system_runtime::PathKind::Directory))
-            .unwrap_or(false)
-        {
-            Some(vfs_path)
-        } else {
+    let path = project.dir.join("_variables.yml");
+    let content = runtime.file_read_string(&path).ok()?;
+    match quarto_yaml::parse_file(&content, &path.display().to_string()) {
+        Ok(yaml) => {
+            let mut collector = pampa::utils::diagnostic_collector::DiagnosticCollector::new();
+            Some(pampa::pandoc::yaml_to_config_value(
+                yaml,
+                quarto_pandoc_types::InterpretationContext::DocumentMetadata,
+                &mut collector,
+            ))
+        }
+        Err(e) => {
+            diagnostics.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                    "Project variables not loaded",
+                )
+                .problem(format!(
+                    "`{}` could not be parsed: {}; `var` shortcodes will not resolve",
+                    path.display(),
+                    e
+                ))
+                .build(),
+            );
             None
         }
     }
 }
+
+use crate::extension::builtin_extensions_path;

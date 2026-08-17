@@ -1,0 +1,89 @@
+---
+title: "Reference-style links are not supported"
+description: "`[label][ref]` is reference-style link syntax; quarto-markdown reserves `[...]` for spans."
+code: Q-2-45
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-45` — Reference-style links are not supported
+
+> `[label][ref]` is reference-style link syntax, which quarto-markdown
+> does not support — `[...]` is reserved for span syntax.
+
+## What this means
+
+Pandoc and CommonMark let you write a link in two pieces: a use site
+that names a label, and a definition elsewhere that supplies the URL.
+
+```markdown
+See [the RedHat documentation][gcc-toolset].
+
+[gcc-toolset]: https://docs.redhat.com/...
+```
+
+quarto-markdown has no such syntax. `[...]` is the bracket half of
+**span syntax** — `[text]{.class}` — so `[the RedHat documentation]`
+and `[gcc-toolset]` are read as two separate spans that happen to sit
+next to each other. Neither carries an attribute block, so both render
+as bare `<span>` elements and the brackets are discarded:
+
+```html
+<p>See <span>the RedHat documentation</span><span>gcc-toolset</span>.</p>
+```
+
+The reader sees "See the RedHat documentationgcc-toolset." — no link,
+and the label run together with the reference name.
+
+The same applies to images. `![alt][ref]` produces an `<img>` with an
+**empty `src`**, which is a broken image rather than merely missing
+text.
+
+## Why this happens
+
+Almost always a document written for Pandoc or another Markdown
+dialect, or one converted from a source that prefers reference style
+for readability — long URLs collected at the bottom of the file.
+
+All three reference forms produce this error:
+
+```markdown
+[label][ref]     <!-- full -->
+[label][]        <!-- collapsed -->
+[ref]            <!-- shortcut (only when a definition exists) -->
+```
+
+## How to fix
+
+Move the URL to the use site:
+
+```markdown
+See [the RedHat documentation](https://docs.redhat.com/...).
+```
+
+then delete the now-unused definition line, which would otherwise
+render as visible text (see [`Q-2-46`](Q-2-46.qmd)).
+
+`qmd-syntax-helper` does both automatically:
+
+```bash
+# See what would change
+qmd-syntax-helper check -r reference-links "docs/**/*.qmd"
+
+# Apply
+qmd-syntax-helper convert -r reference-links --in-place "docs/**/*.qmd"
+```
+
+It carries titles over, percent-encodes anything the inline form
+cannot express, and drops each definition once its last use is gone.
+
+## Related
+
+- [`Q-2-46`](Q-2-46.qmd) — the definition line that pairs with this
+  use, which renders as a visible paragraph.
+- [`Q-2-41`](Q-2-41.qmd) — curly braces are reserved for attribute
+  syntax: the other half of the `[text]{.class}` construct that `[...]`
+  belongs to.

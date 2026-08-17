@@ -143,6 +143,7 @@ pub fn resolve_project_resource_html(
         root,
         root,
         patterns,
+        runtime,
         || ResourceOrigin::ProjectMetadata,
         ResourceScope::Project,
     ) else {
@@ -202,6 +203,7 @@ pub fn resolve_project_resource_files(
         root,
         root,
         patterns,
+        runtime,
         || ResourceOrigin::ProjectMetadata,
         ResourceScope::Project,
     ) else {
@@ -387,6 +389,7 @@ pub fn resolve_single_file_deps(
                 &canonical_root,
                 &anchor,
                 &patterns,
+                runtime.as_ref(),
                 || ResourceOrigin::DocumentMetadata {
                     source: abs_deck.clone(),
                 },

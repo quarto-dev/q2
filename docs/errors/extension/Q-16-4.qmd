@@ -1,0 +1,68 @@
+---
+title: "Shortcode handler shadowed"
+description: "Two loaded scripts define a handler with the same name; the later registration wins."
+code: Q-16-4
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-4` — Shortcode handler shadowed
+
+> Two loaded scripts define a handler with the same name; the later
+> registration wins.
+
+## What this means
+
+Shortcode handlers live in one flat namespace. When two loaded scripts
+both define `note`, only one of them can answer `{{{< note >}}}`.
+
+Quarto resolves this by load order, and the order is deliberate:
+
+1. the document's own `shortcodes:` scripts, then
+2. extensions, in discovery order.
+
+Later registrations replace earlier ones, so the *most local*
+definition wins — an extension can override a built-in, and a document
+can override an extension.
+
+This is informational, not an error. Overriding is a supported pattern
+and the message tells you which definition is in effect so the choice
+is visible rather than accidental.
+
+## Why this happens
+
+- **Deliberate override.** You installed an extension and then wrote
+  your own handler with the same name to change its behavior. Nothing
+  to fix.
+- **Two extensions that happen to pick the same name.** Common for
+  generic names like `note`, `icon`, `badge`, `include`.
+- **A leftover script.** An older copy of a shortcode file still listed
+  in `shortcodes:` alongside the extension that superseded it.
+
+## How to fix
+
+If the override is intentional, no action is needed. If you want the
+warning gone, remove the definition you are not using.
+
+If it is accidental, decide which handler should answer the name and
+remove or rename the other. For an extension you do not control,
+renaming your own handler is the safer half of the change:
+
+```lua
+return {
+  ["my-note"] = function(args, kwargs, meta) ... end
+}
+```
+
+Then update the invocations to match: `{{{< my-note >}}}`.
+
+If you need both, note that shortcode names are the only handle —
+there is no namespacing syntax at the use site, so distinct names are
+the only way to reach both handlers from one document.
+
+## Related errors
+
+- [`Q-16-3`](Q-16-3.qmd) — no handler defines the name at all.

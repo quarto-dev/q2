@@ -1,0 +1,95 @@
+q2 @ 6dc835c2 (v0.17.0), REPRO_YEAR=2026
+============================================================
+<footer class="footer">
+  <div class="container-fluid">
+    <div class="nav-footer">
+    <div class="nav-footer-left">
+      <ul class="nav footer-items">
+        <li class="nav-item"><a href="https://example.com" class="nav-link">&lt;img src=&quot;logo.svg&quot; alt=&quot;Logo&quot; width=&quot;65px&quot; class=&quot;footer-logo&quot;&gt;</a></li>
+        <li class="nav-item"><a href="Copyright &amp;copy; 2015-{{&lt; env REPRO_YEAR &gt;}} Example, Inc. All Rights Reserved." class="nav-link"></a></li>
+      </ul>
+    </div>
+    <div class="nav-footer-center">Copyright © <b>2015</b>-2026 <em>Example</em>, Inc.</div>
+    <div class="nav-footer-right">
+      <ul class="nav footer-items">
+        <li class="nav-item"><a href="https://example.com/support" class="nav-link">Support</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" aria-label="Cookie Prefs">&lt;a href=&quot;#&quot; id=&quot;open_preferences_center&quot;&gt;Cookie Preferences&lt;/a&gt;</a></li>
+      </ul>
+    </div>
+    </div>
+  </div>
+</footer>
+
+navbar item:
+<li class="nav-item"><a href="https://example.com" class="nav-link">Navbar &amp;copy; &lt;b&gt;bold&lt;/b&gt; *emph* {{&lt; env REPRO_YEAR &gt;}}</a></li>
+      </ul>
+    </div>
+  
+
+sidebar item:
+menu-text">Sidebar &amp;copy; *emph*</span></a>
+        </div>
+      </li>
+    </ul>
+  </div>
+</nav>
+
+<main class="conte
+
+!md control (separate project):
+<li class="nav-item"><a href="https://example.com/tagged" class="nav-link">Tagged © <b>2026</b> <em>emph</em> 2026</a></li>
+      </ul>
+    </div>
+    </div>
+  </div>
+</footer>
+</b
+
+
+Quarto 1 (v99.9.9 dev), REPRO_YEAR=2026
+============================================================
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      <ul class="footer-items list-unstyled">
+    <li class="nav-item">
+    <a class="nav-link" href="https://example.com">
+<p><img src="logo.svg" alt="Logo" width="65px" class="footer-logo"></p>
+</a>
+  </li>  
+    <li class="nav-item">
+ Copyright © 2015-2026 Example, Inc. All Rights Reserved.
+  </li>  
+</ul>
+    </div>   
+    <div class="nav-footer-center">
+<p>Copyright © <b>2015</b>-2026 <em>Example</em>, Inc.</p>
+</div>
+    <div class="nav-footer-right">
+      <ul class="footer-items list-unstyled">
+    <li class="nav-item">
+    <a class="nav-link" href="https://example.com/support">
+<p>Support</p>
+</a>
+  </li>  
+    <li class="nav-item">
+ <a href="#" id="open_preferences_center">Cookie Preferences</a>
+  </li>  
+</ul>
+    </div>
+  </div>
+</footer>
+
+navbar+sidebar items:
+menu-text">Navbar © <b>bold</b> <em>emph</em> 2026</span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+   
+menu-text">Sidebar © *emph*</span></a>
+  </div>
+</li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="

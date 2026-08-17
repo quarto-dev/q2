@@ -53,7 +53,7 @@ export function NonQmdPlaceholderView({ filename }: { filename: string }) {
           &#128196;
         </div>
         <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
-          Preview is available for <span style={{ fontFamily: "'SF Mono', Monaco, monospace" }}>.qmd</span> files
+          Preview is available for <span style={{ fontFamily: "'SF Mono', Monaco, monospace" }}>.qmd</span> and <span style={{ fontFamily: "'SF Mono', Monaco, monospace" }}>.md</span> files
         </div>
         <div style={{ fontSize: '14px', lineHeight: '1.6', marginTop: '8px' }}>
           This <span style={{ fontFamily: "'SF Mono', Monaco, monospace" }}>.{extension}</span> file can be edited in the editor

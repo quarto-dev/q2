@@ -377,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "comrak-to-pandoc"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "comrak",
  "hashlink",
@@ -2074,7 +2074,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-analysis"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-pandoc-types",
@@ -2096,8 +2096,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-brand"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
+ "pathdiff",
  "quarto-util",
  "serde",
  "serde_yaml",
@@ -2106,7 +2107,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-citeproc"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "glob",
  "hashlink",
@@ -2137,7 +2138,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-core"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2154,6 +2155,7 @@ dependencies = [
  "pollster",
  "quarto-analysis",
  "quarto-ast-reconcile",
+ "quarto-brand",
  "quarto-config",
  "quarto-doctemplate",
  "quarto-error-reporting",
@@ -2188,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-csl"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -2224,9 +2226,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-error-reporting"
-version = "0.1.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2aa95153b93fea9754e121137d5a6e38e30dd1184c73d2266958f698b8cb9503"
+checksum = "9ccd85f4df70f08134ac6b3997c76660e679b01d9c0bfd0f11a68e0cf32442f7"
 dependencies = [
  "ariadne",
  "quarto-source-map",
@@ -2239,7 +2241,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "once_cell",
  "quarto-highlight-encoding",
@@ -2265,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight-encoding"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2273,7 +2275,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-lsp-core"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "pampa",
  "pollster",
@@ -2294,7 +2296,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-navigation"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "quarto-config",
  "quarto-pandoc-types",
@@ -2329,16 +2331,17 @@ dependencies = [
 
 [[package]]
 name = "quarto-project-create"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "quarto-doctemplate",
  "serde",
  "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]
 name = "quarto-sass"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "include_dir",
  "once_cell",
@@ -2368,7 +2371,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-system-runtime"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "async-trait",
  "base64",
@@ -2385,7 +2388,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-trace"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "flate2",
  "serde",
@@ -2403,7 +2406,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-util"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "dirs",
  "serde",
@@ -2412,7 +2415,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-xml"
-version = "0.10.0"
+version = "0.22.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -2422,9 +2425,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-yaml"
-version = "0.1.0"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c32ab7b39ffa5c43c8aa6abf7eff392678acee63bad5d21680fe295e69b7c2e0"
+checksum = "fc3a45a71cc89e7f171552a98b786ae0b9b2bd84e8608d708539a869e0bc4d21"
 dependencies = [
  "quarto-source-map",
  "serde",
@@ -3420,6 +3423,7 @@ checksum = "743bd48c283afc0388f9b8827b976905fb217ad9e647fae3a379a9283c4def2c"
 dependencies = [
  "deranged",
  "itoa",
+ "js-sys",
  "num-conv",
  "powerfmt",
  "serde_core",
@@ -4018,7 +4022,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-printf-fmt"
-version = "0.10.0"
+version = "0.22.0"
 
 [[package]]
 name = "wasm-quarto-hub-client"

@@ -23,7 +23,7 @@ export const Figure = (args: NodeArgs<FigureBlock>) => {
     const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
 
     const { node, setLocalAst, onNavigateToDocument } = args;
-    const [[id, classes], [shortCaption, captionBlocks], bodyBlocks] = node.c;
+    const [[id, classes, kvs], [shortCaption, captionBlocks], bodyBlocks] = node.c;
     const props: Record<string, string | number> = {};
     if (id) props.id = id;
     if (classes.length) props.className = classes.join(' ');
@@ -32,38 +32,69 @@ export const Figure = (args: NodeArgs<FigureBlock>) => {
         props.tabIndex = -1;
     }
 
-    return (
-        <figure {...props} {...dataLocProps(node)}>
-            {bodyBlocks.map((b, i) => (
+    // Float figcaption synthesis (bd-hcp8m3ve): the crossref renderer carries
+    // figcaption metadata as `data-qf-*` kvs on the Figure attr (Pandoc's
+    // Caption has no attr). Mirror pampa's HTML writer exactly: consume the
+    // kvs (never emit them), give the figcaption its id + Q1-verbatim class
+    // list, and honor top/bottom placement. Contract:
+    // claude-notes/designs/float-layout-class-taxonomy.md.
+    const kvMap = new Map(kvs ?? []);
+    const qfCaptionId = kvMap.get('data-qf-caption-id');
+    const qfLocation = kvMap.get('data-qf-caption-location') ?? 'bottom';
+    const figcaptionProps: Record<string, string> = {};
+    if (qfCaptionId !== undefined) {
+        const refType = kvMap.get('data-qf-ref-type') ?? 'fig';
+        let captionClasses =
+            `quarto-float-caption-${qfLocation} quarto-float-caption quarto-float-${refType}`;
+        if (kvMap.has('data-qf-uncaptioned')) captionClasses += ' quarto-uncaptioned';
+        figcaptionProps.id = qfCaptionId;
+        figcaptionProps.className = captionClasses;
+    }
+
+    const body = bodyBlocks.map((b, i) => (
+        <Node
+            key={i}
+            node={b}
+            onNavigateToDocument={onNavigateToDocument}
+            setLocalAst={(newBlock: BlockNode | InlineNode) => {
+                const next = bodyBlocks.slice();
+                next[i] = newBlock as BlockNode;
+                setLocalAst({ ...node, c: [node.c[0], node.c[1], next] });
+            }}
+        />
+    ));
+    const figcaption = captionBlocks.length > 0 && (
+        <figcaption {...figcaptionProps}>
+            {captionBlocks.map((b, i) => (
                 <Node
                     key={i}
                     node={b}
                     onNavigateToDocument={onNavigateToDocument}
                     setLocalAst={(newBlock: BlockNode | InlineNode) => {
-                        const next = bodyBlocks.slice();
+                        const next = captionBlocks.slice();
                         next[i] = newBlock as BlockNode;
-                        setLocalAst({ ...node, c: [node.c[0], node.c[1], next] });
+                        setLocalAst({
+                            ...node,
+                            c: [node.c[0], [shortCaption, next], node.c[2]],
+                        });
                     }}
                 />
             ))}
-            {captionBlocks.length > 0 && (
-                <figcaption>
-                    {captionBlocks.map((b, i) => (
-                        <Node
-                            key={i}
-                            node={b}
-                            onNavigateToDocument={onNavigateToDocument}
-                            setLocalAst={(newBlock: BlockNode | InlineNode) => {
-                                const next = captionBlocks.slice();
-                                next[i] = newBlock as BlockNode;
-                                setLocalAst({
-                                    ...node,
-                                    c: [node.c[0], [shortCaption, next], node.c[2]],
-                                });
-                            }}
-                        />
-                    ))}
-                </figcaption>
+        </figcaption>
+    );
+
+    return (
+        <figure {...props} {...dataLocProps(node)}>
+            {qfCaptionId !== undefined && qfLocation === 'top' ? (
+                <>
+                    {figcaption}
+                    {body}
+                </>
+            ) : (
+                <>
+                    {body}
+                    {figcaption}
+                </>
             )}
         </figure>
     );

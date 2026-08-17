@@ -100,32 +100,138 @@ Diagrams render on their slides at natural size — including slides that
 are not visible when the deck first loads. [View source](https://github.com/quarto-dev/q2/tree/main/examples/diagrams/02-mermaid-revealjs)
 ::::
 
+## Captions, cross-references, and alt text
+
+A diagram can carry options, written at the top of the block, one per
+line, after a `%%|` marker. The marker is Mermaid's own comment syntax —
+each language uses its own, the way `#|` serves Python and R — so a
+diagram with options is still valid Mermaid.
+
+`fig-cap` gives the diagram a caption:
+
+````markdown
+```mermaid
+%%| fig-cap: The path a change takes from commit to production.
+flowchart LR
+  commit --> build
+  build --> test
+  test --> deploy
+```
+````
+
+Add a `label` beginning with `fig-` and the diagram becomes a numbered
+figure you can cross-reference with `@fig-…`, exactly like any other
+Quarto figure:
+
+````markdown
+```mermaid
+%%| label: fig-review
+%%| fig-cap: The review cycle, which repeats until a draft is approved.
+%%| fig-alt: A draft moves to review; review either publishes it or sends it back to draft.
+flowchart LR
+  Draft --> Review
+  Review --> Published
+  Review --> Draft
+```
+
+@fig-review shows the loop a draft goes through.
+````
+
+`fig-alt` is the description assistive technology reads. Because a
+diagram is drawn as an SVG rather than an image, the description is
+carried into the diagram itself as Mermaid's `accDescr:` directive,
+which becomes the drawing's accessible description. **A diagram that
+conveys information the surrounding text does not should always have a
+`fig-alt`** — the caption names the diagram, the alt text describes it.
+
+@demo-mermaid-captions shows both forms in one document:
+
+:::: {#demo-mermaid-captions .embed-example-iframe file="/examples/diagrams/03-mermaid-captions/document.html"}
+````markdown
+---
+title: "Diagram captions and alt text"
+---
+
+A `fig-cap` gives the diagram a caption:
+
+```mermaid
+%%| fig-cap: The path a change takes from commit to production.
+flowchart LR
+  commit --> build
+  build --> test
+  test --> deploy
+```
+
+Add a `label` beginning with `fig-` and the diagram becomes numbered and
+cross-referenceable. `fig-alt` supplies the description assistive
+technology reads:
+
+```mermaid
+%%| label: fig-review
+%%| fig-cap: The review cycle, which repeats until a draft is approved.
+%%| fig-alt: A draft moves to review; review either publishes it or sends it back to draft.
+flowchart LR
+  Draft --> Review
+  Review --> Published
+  Review --> Draft
+```
+
+@fig-review shows the loop a draft goes through.
+````
+
+An uncaptioned diagram, a captioned one, and a numbered one that body
+text refers to. [View source](https://github.com/quarto-dev/q2/tree/main/examples/diagrams/03-mermaid-captions)
+::::
+
+Diagram blocks accept `label`, `fig-cap`, `fig-scap`, and `fig-alt`. A
+diagram has no execution engine to interpret anything else, so Quarto
+warns about an option it cannot act on rather than passing it silently
+into the drawing.
+
 ## How diagrams render
 
 Quarto draws diagrams in the browser: the rendered page keeps your
 diagram source and includes one script that loads the Mermaid library
-from the [jsdelivr CDN](https://www.jsdelivr.com/) and converts every
-diagram on the page to an SVG drawing. Two consequences are worth
-knowing:
+and converts every diagram on the page to an SVG drawing.
 
-- **Viewing a page with diagrams requires network access.** Offline,
-  the diagram source appears as preformatted text instead of a drawing.
-- **Documents without diagrams are unaffected.** The library loads only
-  on pages that contain at least one `mermaid` block.
+The library is **written into your rendered output** and referenced by a
+relative path — under `site_libs/mermaid/` in a website project, or
+beside the page in a single-document render. Three consequences are
+worth knowing:
+
+- **Rendered output works without network access.** A site can be
+  archived, or published on a closed or air-gapped network, and its
+  diagrams still draw. Nothing is fetched from a third party when a
+  reader opens the page.
+- **Documents without diagrams are unaffected.** The library is written
+  out and linked only for pages containing at least one `mermaid` block.
+- **Every page shares one copy.** In a website project all diagram pages
+  link the same file, which adds roughly 2.6 MB to the site once.
 
 If Mermaid cannot parse a diagram, the browser console reports the
 error; `q2 preview` goes further and shows the error message, together
 with the diagram source, in place of the drawing.
 
+::: {.callout-note}
+## Preview still needs the network
+
+The bundling described above applies to `q2 render`. During
+`q2 preview`, diagrams are drawn by the preview's own copy of Mermaid,
+which is still fetched from a CDN — so previewing a diagram offline may
+show the diagram source instead of a drawing, even though rendering the
+same document produces a self-contained page.
+:::
+
 ## Differences from Quarto 1
 
 Quarto 1 embeds diagrams through executable cells — ```` ```{mermaid} ````
-with `%%|` cell options — and Quarto 2 does not yet recognize that
-form: only the plain ```` ```mermaid ```` fence renders. The following
-Quarto 1 diagram features are also not yet available:
+— and Quarto 2 does not recognize that form: only the plain
+fence ```` ```mermaid ```` renders. To move a Quarto 1 document over, drop
+the braces; the diagram body and its `%%|` options need no other change.
+
+The following Quarto 1 diagram features are not yet available:
 
 - Graphviz (`{dot}`) diagrams
-- Figure captions, labels, and cross-references on diagrams
 - Sizing options (`fig-width`, `fig-height`, `fig-responsive`)
 - Pre-rendered PNG/SVG output for print formats (`mermaid-format`)
 - Theming (Mermaid currently renders with its default theme regardless

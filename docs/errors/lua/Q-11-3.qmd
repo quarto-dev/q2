@@ -1,0 +1,81 @@
+---
+title: "Invalid Lua argument"
+description: "A value passed to a `pandoc.*` constructor or function has the wrong type."
+code: Q-11-3
+subsystem: lua
+status: stub
+since: "99.9.9"
+categories:
+  - lua
+---
+
+# `Q-11-3` — Invalid Lua argument
+
+> A value passed to a `pandoc.*` constructor or function has the wrong
+> type.
+
+## What this means
+
+The `pandoc.*` constructors build AST elements, and each one expects
+particular argument types. When an argument does not match, Quarto
+stops the filter and reports what was expected and what arrived:
+
+```
+Q-11-3: pandoc.Meta: expected table (Meta), got string
+```
+
+Lua is permissive about types, so this check is deliberately not. A
+constructor that silently coerced its argument would build a
+malformed element, and the failure would surface much later — during
+writing, far from the filter line that caused it.
+
+Note that Lua's truthiness rules do **not** apply. `pandoc.MetaBool('x')`
+is an error, not `true`, matching pandoc's own behavior.
+
+## Why this happens
+
+- **Passing a Lua string where a list of inlines is expected.** Many
+  constructors take inline content, not text: `pandoc.Emph("hi")` works
+  because strings are accepted in inline positions, but structural
+  arguments like a `Meta` table are not coerced.
+- **Argument order.** `pandoc.Pandoc(blocks, meta)` takes blocks first;
+  swapping them produces a type error on the second argument.
+- **A `nil` that was meant to be a value**, typically from a field
+  lookup that missed — `elem.attributes.width` when the attribute is
+  absent.
+- **A plain Lua table where a constructed element is expected.** A
+  table with the right-looking keys is not an AST element; build it
+  with the constructor.
+
+## How to fix
+
+Read the expected type from the message and construct that type
+explicitly.
+
+```lua
+-- error: expected table (Meta), got string
+local m = pandoc.Meta('title')
+
+-- correct
+local m = pandoc.Meta({ title = pandoc.MetaString('title') })
+```
+
+When a value may be absent, guard it rather than passing it through:
+
+```lua
+local width = elem.attributes.width
+if width then
+  -- use width
+end
+```
+
+If you are unsure what a constructor expects, `pandoc.utils.type(value)`
+reports the pandoc type of an existing value, which is usually faster
+than reading it off the error.
+
+## Related errors
+
+- [`Q-11-4`](Q-11-4.qmd) — a filter function returned a value that
+  cannot be converted to AST elements.
+- [`Q-11-5`](Q-11-5.qmd) — an assignment to an element property was
+  rejected.

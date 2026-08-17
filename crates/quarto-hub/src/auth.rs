@@ -215,6 +215,17 @@ pub struct OidcClaims {
     /// refresh from the real expiry (bd-3o8zmz46).
     #[serde(default)]
     pub exp: i64,
+
+    /// OIDC `nonce` (Core §3.1.3.7 step 11): the value the RP supplied
+    /// at authorization time, echoed back by the IdP. It is what binds a
+    /// token to *one* login attempt — signature/`iss`/`aud`/`exp` cannot.
+    ///
+    /// `Option` because not every flow supplies one: the Bearer/MCP path
+    /// and the Generic `/auth/session` mint do not. The Google callback
+    /// **requires** it in secure mode (H2) — see
+    /// [`crate::login_state`].
+    #[serde(default)]
+    pub nonce: Option<String>,
 }
 
 /// Accept either a single-string `aud` or a `["a", "b"]` array.
@@ -762,6 +773,7 @@ mod tests {
             azp: None,
             iat: None,
             exp: 0,
+            nonce: None,
         }
     }
 
@@ -1002,6 +1014,7 @@ mod tests {
             azp: None,
             iat: None,
             exp: 0,
+            nonce: None,
         };
         let allowed = allowed_list();
         assert!(validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60).is_ok());
@@ -1019,6 +1032,7 @@ mod tests {
             azp: None,
             iat: None,
             exp: 0,
+            nonce: None,
         };
         let allowed = allowed_list();
         assert_eq!(
@@ -1039,6 +1053,7 @@ mod tests {
             azp: Some("attacker-client".into()),
             iat: None,
             exp: 0,
+            nonce: None,
         };
         let allowed = allowed_list();
         assert_eq!(
@@ -1059,6 +1074,7 @@ mod tests {
             azp: Some("spa-client".into()),
             iat: None,
             exp: 0,
+            nonce: None,
         };
         let allowed = allowed_list();
         assert!(validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60).is_ok());
@@ -1076,6 +1092,7 @@ mod tests {
             azp: None,
             iat: Some(1_000_000 + 3600),
             exp: 0,
+            nonce: None,
         };
         let allowed = allowed_list();
         assert_eq!(
@@ -1096,6 +1113,7 @@ mod tests {
             azp: None,
             iat: Some(1_000_000 + 30),
             exp: 0,
+            nonce: None,
         };
         let allowed = allowed_list();
         assert!(validate_azp_and_iat(&claims, allowed.iter(), 1_000_000, 60).is_ok());

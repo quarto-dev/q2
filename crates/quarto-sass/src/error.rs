@@ -37,9 +37,17 @@ pub enum SassError {
     #[error("Theme file not found: {0}")]
     ThemeNotFound(String),
 
-    /// Custom theme file not found on filesystem
+    /// Custom theme file not found on filesystem.
+    ///
+    /// `location` is the SourceInfo of the theme entry that named the
+    /// file, when the caller has it (up-front validation in
+    /// quarto-core's compile stage); `None` from the lower-level
+    /// loader, which only knows the resolved path.
     #[error("Custom theme file not found: {path}")]
-    CustomThemeNotFound { path: PathBuf },
+    CustomThemeNotFound {
+        path: PathBuf,
+        location: Option<SourceInfo>,
+    },
 
     /// Custom SCSS file doesn't have layer boundary markers
     #[error("Custom SCSS file doesn't have layer boundary markers: {path}")]
@@ -84,6 +92,7 @@ impl SassError {
         match &mut self {
             SassError::UnknownTheme { location, .. }
             | SassError::InvalidThemeConfig { location, .. }
+            | SassError::CustomThemeNotFound { location, .. }
                 if location.is_none() =>
             {
                 *location = Some(loc);

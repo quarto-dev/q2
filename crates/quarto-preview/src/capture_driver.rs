@@ -29,7 +29,6 @@ use quarto_core::project::ProjectContext;
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_hub::HubContext;
 use quarto_hub::index::CaptureRef;
-use quarto_hub::resource::create_binary_document;
 use quarto_system_runtime::SystemRuntime;
 use quarto_trace::EngineCapture;
 
@@ -40,7 +39,9 @@ use crate::diagnostics;
 /// MIME type marker written into the capture binary doc so the
 /// browser-side reader can verify it's looking at the right payload
 /// shape (gzipped EngineCapture JSON) instead of an unrelated resource.
-pub const CAPTURE_MIME_TYPE: &str = "application/x-engine-capture+gzip";
+/// Re-exported from quarto-hub, the single source of truth
+/// (bd-eiku4ymo).
+pub use quarto_hub::resource::CAPTURE_MIME_TYPE;
 
 /// Walk the project's `.qmd` files and record engine captures for any
 /// file that has code cells but no existing sidecar entry yet.
@@ -180,7 +181,7 @@ async fn record_one(
         return Ok(false);
     }
 
-    let capture_doc_id = write_capture_doc(ctx, &captures).await?;
+    let capture_doc_id = write_capture_doc(ctx, rel_path, &captures).await?;
 
     let capture_ref = CaptureRef {
         capture_doc_id,
@@ -322,8 +323,14 @@ pub async fn recompute_staleness(
 /// Serialize + gzip + store the EngineCapture sequence as a samod binary
 /// doc (bd-5yff4: a JSON array, one per engine). Returns the new doc's
 /// stringified DocumentId for use in the sidecar `captureDocId` field.
+///
+/// `rel_path` is the project-relative source path, stamped (with the
+/// engine names) into the doc's uncompressed `meta` audit map
+/// (bd-eiku4ymo) so `hub admin scan` can read provenance without
+/// gunzipping.
 async fn write_capture_doc(
     ctx: &Arc<HubContext>,
+    rel_path: &str,
     captures: &[EngineCapture],
 ) -> Result<String, RecordError> {
     // Shared wire format (serialize + gzip + 10MB size warning,
@@ -332,7 +339,11 @@ async fn write_capture_doc(
     let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
         .map_err(|e| RecordError::Gzip(format!("{}", e)))?;
 
-    let automerge_doc = create_binary_document(&gzipped, CAPTURE_MIME_TYPE)
+    let meta = quarto_hub::resource::CaptureDocMeta {
+        source_path: rel_path.to_string(),
+        engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
+    };
+    let automerge_doc = quarto_hub::resource::create_capture_document(&gzipped, &meta)
         .map_err(|e| RecordError::CreateBinaryDoc(format!("{}", e)))?;
 
     let handle = ctx
@@ -890,6 +901,42 @@ mod tests {
             "captureDocId should be set"
         );
         assert_eq!(entry.staleness, Some(false));
+    }
+
+    /// bd-6d2wj4zp Phase 5 (S5): `.md` inputs never execute engines —
+    /// even with an explicit engine spec and code cells. Now that the
+    /// hub syncs `.md` into `ProjectFiles::qmd_files` (D10), the eager
+    /// capture walk must skip them, or preview would execute engines
+    /// the render path refuses to run (Q-2-40 warns and skips there).
+    #[tokio::test]
+    async fn md_doc_with_engine_spec_records_no_capture() {
+        let (_tmp, ctx, runtime) = build_ctx_with_files(&[(
+            "notes.md",
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\n42\n```\n",
+        )])
+        .await;
+
+        // Non-vacuity: the .md must actually be in the synced source set
+        // (D10) — otherwise this test would pass for the wrong reason.
+        assert!(
+            ctx.project_files()
+                .expect("project mode")
+                .qmd_files
+                .contains(&std::path::PathBuf::from("notes.md")),
+            "notes.md should be discovered into the hub source set"
+        );
+
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime,
+            Some(make_registry()),
+            EnginePolicy::Manual,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(count, 0, ".md must be skipped by the capture walk (S5)");
+        assert!(!ctx.index().has_capture("notes.md"));
     }
 
     #[tokio::test]

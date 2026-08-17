@@ -57,7 +57,7 @@ pub struct HubConfig {
     pub watch_debounce_ms: u64,
 
     /// Which files surface as watch events. See [`WatchFilter`].
-    /// Default: `WatchFilter::QmdOnly` (legacy hub behaviour).
+    /// Default: `WatchFilter::SourcesOnly` (hub behaviour: `.qmd` + `.md`).
     /// `quarto-preview` overrides this to `WatchFilter::PreviewBroad`
     /// so config + asset edits trigger re-render.
     pub watch_filter: WatchFilter,
@@ -133,6 +133,22 @@ pub struct HubConfig {
     /// sets `ReadOnly` unless `--allow-edit` is given, so browser-originated
     /// document changes can never modify the user's files.
     pub disk_write_policy: DiskWritePolicy,
+
+    /// User-facing line printed to stdout when Ctrl-C initiates
+    /// shutdown (bd-wj9smyxg).
+    ///
+    /// The hub's own "initiating graceful shutdown" line is
+    /// `tracing::info`, hidden at the CLI's default filter — so
+    /// without this the process just vanished. The signal-listener
+    /// task prints it (after a blank line) *before* forwarding the
+    /// shutdown signal: the print is on the shutdown critical path,
+    /// so teardown can never exit the process before the line
+    /// appears. (A detached listener task races exactly that and
+    /// lost in CI.) SIGTERM only logs.
+    ///
+    /// Default: `None` — nothing printed, library-embedding callers
+    /// keep stdout clean.
+    pub shutdown_message: Option<String>,
 }
 
 impl Default for HubConfig {
@@ -153,6 +169,7 @@ impl Default for HubConfig {
             allow_insecure_auth: false,
             register_root_ws: true,
             disk_write_policy: DiskWritePolicy::default(),
+            shutdown_message: None,
         }
     }
 }
@@ -550,23 +567,33 @@ impl HubContext {
     /// Since the sliding-sessions cutover this is never a request-
     /// credential path by itself: it is reachable only from the Bearer
     /// branch of [`Self::authenticate_credential`] and from the
-    /// mint-time validation in `auth_callback`/`auth_refresh`, whose
+    /// mint-time validation in `auth_callback`/`auth_session`, whose
     /// input is a fresh Google credential from the request body — never
     /// the cookie (that path is [`Self::authenticate_session`]).
+    ///
+    /// Mint-time semantics: the revocation ledger is **skipped** here
+    /// (see [`RevocationEnforcement::Skip`]) — bans gate mint
+    /// explicitly in the handlers, and the `min_auth_time` clamp
+    /// handles `not_before` floors so same-second re-login after a
+    /// logout-everywhere keeps working.
     pub async fn authenticate_claims(
         &self,
         token: Option<&str>,
     ) -> std::result::Result<OidcClaims, StatusCode> {
-        self.authenticate_claims_for_kind(token, "unknown").await
+        self.authenticate_claims_for_kind(token, "unknown", RevocationEnforcement::Skip)
+            .await
     }
 
     /// Variant of [`authenticate_claims`] that records the
     /// `credential_kind` (`"bearer"` / `"unknown"`) on every audit
-    /// event, as required by Phase 2 of the device-flow plan.
+    /// event, as required by Phase 2 of the device-flow plan, and lets
+    /// the caller pick the revocation-ledger posture (request
+    /// credentials enforce; mint-time validation skips).
     pub async fn authenticate_claims_for_kind(
         &self,
         token: Option<&str>,
         credential_kind: &'static str,
+        revocation: RevocationEnforcement,
     ) -> std::result::Result<OidcClaims, StatusCode> {
         let auth_config = self.auth_config().ok_or_else(|| {
             tracing::event!(
@@ -658,6 +685,46 @@ impl HubContext {
                 detail = detail,
             );
             return Err(status);
+        }
+
+        // Revocation ledger on the request-credential path (bd-jkih1ql7):
+        // bans and logout-everywhere floors must bite Bearer credentials
+        // too. Anchored at the token's `iat`; a missing `iat` (the type
+        // admits it, OIDC requires it) fails closed against any
+        // `not_before` entry. Must run before the `auth_ok` emission —
+        // an allow-then-deny pair for one request would corrupt the
+        // audit log.
+        if revocation == RevocationEnforcement::Enforce {
+            let anchor = token_data.claims.iat.unwrap_or(0);
+            match self.revocations.check(&token_data.claims.sub, anchor).await {
+                RevocationStatus::Banned => {
+                    tracing::event!(
+                        target: "quarto_hub::audit",
+                        tracing::Level::INFO,
+                        action = "auth_fail",
+                        outcome = "deny",
+                        credential_kind = credential_kind,
+                        sub = %token_data.claims.sub,
+                        detail = "user_banned",
+                    );
+                    return Err(StatusCode::FORBIDDEN);
+                }
+                RevocationStatus::Revoked => {
+                    // Deliberately not `session_revoked` — it isn't a
+                    // session; the dead thing is the Bearer token itself.
+                    tracing::event!(
+                        target: "quarto_hub::audit",
+                        tracing::Level::INFO,
+                        action = "auth_fail",
+                        outcome = "deny",
+                        credential_kind = credential_kind,
+                        sub = %token_data.claims.sub,
+                        detail = "bearer_revoked",
+                    );
+                    return Err(StatusCode::UNAUTHORIZED);
+                }
+                RevocationStatus::Ok => {}
+            }
         }
 
         tracing::event!(
@@ -833,11 +900,28 @@ impl HubContext {
                 .authenticate_claims_for_kind(
                     Some(token),
                     crate::server::CredentialKind::Bearer.label(),
+                    RevocationEnforcement::Enforce,
                 )
                 .await
                 .map(AuthenticatedUser::Google),
         }
     }
+}
+
+/// Whether [`HubContext::authenticate_claims_for_kind`] enforces the
+/// revocation ledger (bans + `not_before` floors) on the validated
+/// claims.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RevocationEnforcement {
+    /// Request-credential path (the Bearer arm of
+    /// [`HubContext::authenticate_credential`]): a banned `sub` is 403,
+    /// an `iat` below the user's `not_before` floor is 401.
+    Enforce,
+    /// Mint-time validation (`auth_callback` / `auth_session`): bans
+    /// gate mint explicitly in the handlers, and the `min_auth_time`
+    /// clamp handles the floor — a raw `iat` check here would break
+    /// same-second re-login after logout-everywhere.
+    Skip,
 }
 
 /// A successfully validated request credential, tagged with the path

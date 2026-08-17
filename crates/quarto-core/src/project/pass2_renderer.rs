@@ -176,7 +176,7 @@ pub trait Pass2Renderer {
 
     /// Build a resolver suitable for project-level post-render
     /// hooks like
-    /// [`crate::project::website_post_render::flush_site_libs`].
+    /// [`crate::artifact_flush::flush_project_artifacts`].
     ///
     /// - Native ([`RenderToFileRenderer`]): produces a
     ///   [`ResourceResolverContext::project_root`] resolver from
@@ -193,7 +193,7 @@ pub trait Pass2Renderer {
     /// applies: the URL embedded in HTML by `html_url_for(Project,
     /// p)` and the on-disk write path returned by
     /// `on_disk_path_for(Project, p)` must round-trip through this
-    /// resolver. Otherwise `flush_site_libs` writes artifacts to a
+    /// resolver. Otherwise the project-artifact flush writes to a
     /// place the rendered HTML never references.
     fn build_project_resolver(
         &self,
@@ -850,29 +850,20 @@ impl Pass2Renderer for RenderToHtmlRenderer {
         )
         .await?;
 
-        // Drain Project-scoped artifacts. Where they go next mirrors
-        // the native `render_document_to_file` lib_dir branch
-        // (`render_to_file.rs:264-297`):
-        //
-        // - **Shared lib dir** (e.g. websites, `lib_dir == "site_libs"`):
-        //   merge into the orchestrator's accumulator so
-        //   `WebsiteProjectType::post_render` can `flush_site_libs`
-        //   them once across the whole project.
-        // - **No shared lib dir** (default projects, `lib_dir == ""`):
-        //   flush in-place via the per-page (vfs_root) resolver.
-        //   `DefaultProjectType::post_render` is a no-op, so anything
-        //   we leave in the accumulator would silently disappear and
-        //   the iframe would VFS-miss on the theme `<link>` URL the
-        //   HTML embeds (bd-87fu).
+        // Drain Project-scoped artifacts. Where they go next is decided
+        // by `route_drained_project_artifacts`, shared with the other
+        // Pass-2 renderer and with native `render_document_to_file`
+        // (bd-gdhk) — accumulate for a once-per-project flush when
+        // there is a shared lib dir, write in place otherwise.
         //
         // Page-scoped artifacts on `ctx.artifacts` travel back to JS
         // alongside the HTML regardless of which branch fires.
         //
         // Plan 2A item 11: capture the theme fingerprint **before**
-        // the drain. After drain + flush_site_libs (default-project
-        // path), the artifact is gone — neither `ctx.artifacts` nor
-        // `project_artifacts` retain it. Stashing on the output
-        // makes the value visible to both project types.
+        // the drain. After the drain the artifact is gone on the
+        // default-project (write-in-place) path — neither
+        // `ctx.artifacts` nor `project_artifacts` retain it. Stashing
+        // on the output makes the value visible to both project types.
         let theme_fingerprint = ctx
             .artifacts
             .get_by_prefix("css:theme:")
@@ -882,17 +873,19 @@ impl Pass2Renderer for RenderToHtmlRenderer {
 
         let drained = ctx.artifacts.drain_project_scoped();
         let lib_dir = super::orchestrator::project_type_for(project).lib_dir();
-        if lib_dir.is_empty() {
-            super::website_post_render::flush_site_libs(&drained, &resolver, runtime.as_ref())?;
-        } else {
-            project_artifacts.merge_into_project(drained).map_err(|e| {
-                crate::error::QuartoError::other(format!(
-                    "Project-scoped artifact merge failed for {}: {}",
-                    doc_info.input.display(),
-                    e
-                ))
-            })?;
-        }
+        let mut sink = crate::output_sink::OutputSink::new(resolver.allowed_output_roots());
+        crate::artifact_flush::route_drained_project_artifacts(
+            drained,
+            Some(project_artifacts),
+            !lib_dir.is_empty(),
+            &resolver,
+            &mut sink,
+            &doc_info.input,
+        )?;
+        // A no-op when the accumulate branch fired: `OutputSink::flush`
+        // short-circuits on empty ops before touching the filesystem.
+        sink.flush(runtime.as_ref())
+            .map_err(crate::error::QuartoError::from)?;
 
         // bd-cfl67: drain user-resource copy intents (images etc.
         // collected by `ResourceCollectorTransform`) into the
@@ -1118,12 +1111,12 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
         )
         .await?;
 
-        // Drain Project-scoped artifacts. Identical branching to
-        // `RenderToHtmlRenderer` — shared lib dir merges into the
-        // accumulator (websites use `flush_site_libs` in
-        // `post_render`), no-lib-dir flushes in-place. The choice
-        // is artifact-flow, not payload-flow, so HTML and q2-preview
-        // share it verbatim.
+        // Drain Project-scoped artifacts. Same routing as
+        // `RenderToHtmlRenderer`, via the shared
+        // `route_drained_project_artifacts` (bd-gdhk): shared lib dir
+        // merges into the accumulator for `post_render` to flush,
+        // no-lib-dir writes in place. The choice is artifact-flow, not
+        // payload-flow, so HTML and q2-preview share it verbatim.
         //
         // Plan 2A item 11: capture the theme fingerprint **before**
         // the drain (see `RenderToHtmlRenderer::render` for the
@@ -1169,17 +1162,19 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
 
         let drained = ctx.artifacts.drain_project_scoped();
         let lib_dir = super::orchestrator::project_type_for(project).lib_dir();
-        if lib_dir.is_empty() {
-            super::website_post_render::flush_site_libs(&drained, &resolver, runtime.as_ref())?;
-        } else {
-            project_artifacts.merge_into_project(drained).map_err(|e| {
-                crate::error::QuartoError::other(format!(
-                    "Project-scoped artifact merge failed for {}: {}",
-                    doc_info.input.display(),
-                    e
-                ))
-            })?;
-        }
+        let mut sink = crate::output_sink::OutputSink::new(resolver.allowed_output_roots());
+        crate::artifact_flush::route_drained_project_artifacts(
+            drained,
+            Some(project_artifacts),
+            !lib_dir.is_empty(),
+            &resolver,
+            &mut sink,
+            &doc_info.input,
+        )?;
+        // A no-op when the accumulate branch fired: `OutputSink::flush`
+        // short-circuits on empty ops before touching the filesystem.
+        sink.flush(runtime.as_ref())
+            .map_err(crate::error::QuartoError::from)?;
 
         // bd-cfl67: see the matching comment in the HTML renderer.
         let copy_warnings = flush_resource_copies(

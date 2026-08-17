@@ -74,7 +74,7 @@ impl AstTransform for SidebarGenerateTransform {
             return Ok(());
         };
 
-        let sidebars = Sidebar::parse_list_from_config(&sidebar_cv);
+        let mut sidebars = Sidebar::parse_list_from_config(&sidebar_cv);
         if sidebars.is_empty() {
             return Ok(());
         }
@@ -86,13 +86,64 @@ impl AstTransform for SidebarGenerateTransform {
         // need to consult the index just to know "which page is this".
         let page_source = page_relative_source(ctx);
 
-        let Some(picked) = sidebar_for_page(&sidebars, &page_source, &ast.meta) else {
+        // bd-4feoon8u — resolve and expand **every** sidebar *before*
+        // picking one. `sidebar_for_page`'s containment rule matches
+        // page source paths against entry hrefs, and an unexpanded
+        // `Auto` entry has no href to match, so selecting first meant a
+        // sidebar defined only by `auto:` was never chosen and its
+        // pages rendered with no sidebar at all. Single-sidebar
+        // projects were masked by the wildcard rule, which is why this
+        // only ever showed up in multi-sidebar projects.
+        //
+        // Each sidebar gets its **own** diagnostics sink: this
+        // transform runs once per page, so emitting the warnings of
+        // sidebars we then discard would repeat them on every page of
+        // the project. Only the picked sidebar's diagnostics survive,
+        // below.
+        let mut per_sidebar_diags: Vec<Vec<quarto_error_reporting::DiagnosticMessage>> =
+            Vec::with_capacity(sidebars.len());
+        for sidebar in &mut sidebars {
+            let mut diags = Vec::new();
+
+            // bd-qor9a — resolve each href against the YAML file it was
+            // authored in. Frontmatter-rooted hrefs (`introduction.qmd`
+            // declared inside `docs/guide/index.qmd`) become
+            // `docs/guide/introduction.qmd` here; `_quarto.yml` and
+            // `_metadata.yml` entries (whose hash-based FileId isn't in
+            // the per-doc SourceContext) degrade to today's
+            // project-root-relative behaviour.
+            if let Some(source_context) = ctx.source_context {
+                resolve_hrefs(&mut sidebar.contents, source_context, &ctx.project.dir);
+            }
+
+            if let Some(index) = ctx.project_index.as_deref() {
+                expand_auto(sidebar, index, &mut diags);
+                // Enrich hand-written bare-path entries (e.g.
+                // `- about.qmd`) with the referenced document's title
+                // when no `text:` was supplied. Format-agnostic: fills
+                // in `text`, never touches `href`.
+                enrich_text_from_index(&mut sidebar.contents, index);
+            } else {
+                // Standalone render: no project index, so any `Auto`
+                // entries can't be expanded. They are dropped with a
+                // warning.
+                strip_auto(sidebar, &mut diags);
+            }
+
+            per_sidebar_diags.push(diags);
+        }
+
+        let Some(picked_idx) = sidebar_for_page(&sidebars, &page_source, &ast.meta)
+            .map(|picked| sidebar_index_of(&sidebars, picked))
+        else {
             // No sidebar matches this page. That's not an error —
             // the template slot is conditional; absence is fine.
             return Ok(());
         };
 
-        let mut resolved: Sidebar = picked.clone();
+        let mut resolved: Sidebar = sidebars.swap_remove(picked_idx);
+        let mut local_diags = std::mem::take(&mut ctx.diagnostics);
+        local_diags.append(&mut per_sidebar_diags[picked_idx]);
 
         // Resolve `SidebarTitle::Default` against `website.title` so
         // `navigation.sidebar` is fully resolved by the time the render
@@ -107,37 +158,11 @@ impl AstTransform for SidebarGenerateTransform {
             resolved.title = SidebarTitle::Text(title_cv);
         }
 
-        // Pull diagnostics out of RenderContext temporarily so
-        // helpers can borrow it mutably. We put them back before
-        // returning.
-        let mut local_diags = std::mem::take(&mut ctx.diagnostics);
-
-        // bd-qor9a — resolve each href against the YAML file it was
-        // authored in. Frontmatter-rooted hrefs (`introduction.qmd`
-        // declared inside `docs/guide/index.qmd`) become
-        // `docs/guide/introduction.qmd` here; `_quarto.yml` and
-        // `_metadata.yml` entries (whose hash-based FileId isn't in
-        // the per-doc SourceContext) degrade to today's
-        // project-root-relative behaviour.
-        if let Some(source_context) = ctx.source_context {
-            resolve_hrefs(&mut resolved.contents, source_context, &ctx.project.dir);
-        }
-
-        if let Some(index) = ctx.project_index.as_deref() {
-            expand_auto(&mut resolved, index, &mut local_diags);
-            // Enrich hand-written bare-path entries (e.g. `- about.qmd`)
-            // with the referenced document's title when no `text:`
-            // was supplied. Format-agnostic: fills in `text`, never
-            // touches `href`.
-            enrich_text_from_index(&mut resolved.contents, index);
-            // Active-state: does the current page appear in this
-            // sidebar's resolved contents? If so, mark and expand.
+        // Active-state: does the current page appear in this sidebar's
+        // resolved contents? If so, mark and expand. Runs after
+        // selection because it mutates only the sidebar we keep.
+        if ctx.project_index.is_some() {
             let _ = resolve_active_state(&mut resolved, &page_source);
-        } else {
-            // Standalone render: no project index, so any `Auto`
-            // entries can't be expanded. They are dropped with a
-            // warning.
-            strip_auto(&mut resolved, &mut local_diags);
         }
 
         ctx.diagnostics = local_diags;
@@ -147,6 +172,19 @@ impl AstTransform for SidebarGenerateTransform {
 
         Ok(())
     }
+}
+
+/// Recover the position of the sidebar `sidebar_for_page` picked.
+///
+/// `sidebar_for_page` hands back a borrow into the slice we passed it,
+/// so pointer identity is exact here — and it lets us take the picked
+/// sidebar by value (and index its diagnostics) without cloning every
+/// sidebar or making the selection API return an index.
+fn sidebar_index_of(sidebars: &[Sidebar], picked: &Sidebar) -> usize {
+    sidebars
+        .iter()
+        .position(|sb| std::ptr::eq(sb, picked))
+        .expect("sidebar_for_page returns a borrow into the slice it was given")
 }
 
 /// bd-qor9a — walk the parsed sidebar and resolve every entry's `href`
@@ -324,6 +362,121 @@ mod tests {
             .await
             .unwrap();
         (ast.meta, ctx.diagnostics)
+    }
+
+    /// bd-4feoon8u — in a project with more than one sidebar, a sidebar
+    /// whose membership comes only from an `auto:` entry must still be
+    /// selected for the pages beneath that directory.
+    ///
+    /// Selection used to run *before* expansion, and
+    /// `contains_source_path` ignores unexpanded `Auto` entries, so
+    /// these pages got no sidebar at all. The single-sidebar wildcard
+    /// (`sidebar_for_page` rule 2) masked this everywhere except
+    /// multi-sidebar projects — which is the Connect-docs shape.
+    #[tokio::test]
+    async fn sidebar_generate_selects_auto_only_sidebar_among_several() {
+        let index = Arc::new(ProjectIndex::new(vec![
+            make_profile("how-to/index.qmd", "How To Guides"),
+            make_profile("how-to/one.qmd", "One"),
+            make_profile("other/alpha.qmd", "Alpha"),
+        ]));
+        let sidebars = arr(vec![
+            config_map(vec![
+                ("id", s("howto")),
+                (
+                    "contents",
+                    arr(vec![config_map(vec![("auto", s("how-to"))])]),
+                ),
+            ]),
+            config_map(vec![
+                ("id", s("other")),
+                ("contents", arr(vec![s("other/alpha.qmd")])),
+            ]),
+        ]);
+        let meta = config_map(vec![("website", config_map(vec![("sidebar", sidebars)]))]);
+
+        let (out, _diags) =
+            run_transform_with(meta.clone(), Some(index.clone()), "how-to/one.qmd").await;
+        let picked = out
+            .get_path(&["navigation", "sidebar"])
+            .expect("how-to/one.qmd must get a sidebar");
+        assert_eq!(
+            picked.get("id").and_then(|v| v.as_plain_text()).as_deref(),
+            Some("howto"),
+        );
+
+        // The other sidebar must still win for its own page.
+        let (out, _diags) = run_transform_with(meta, Some(index), "other/alpha.qmd").await;
+        assert_eq!(
+            out.get_path(&["navigation", "sidebar"])
+                .and_then(|v| v.get("id"))
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("other"),
+        );
+    }
+
+    /// The whole point of the strand: `contents: how-to` must behave
+    /// like `auto: how-to`, end to end through the transform.
+    #[tokio::test]
+    async fn sidebar_generate_expands_directory_shorthand() {
+        let index = Arc::new(ProjectIndex::new(vec![
+            make_profile("how-to/index.qmd", "How To Guides"),
+            make_profile("how-to/one.qmd", "One"),
+            make_profile("how-to/two.qmd", "Two"),
+        ]));
+        let meta = config_map(vec![(
+            "website",
+            config_map(vec![(
+                "sidebar",
+                config_map(vec![("contents", s("how-to"))]),
+            )]),
+        )]);
+        let (out, _diags) = run_transform_with(meta, Some(index), "how-to/one.qmd").await;
+        let contents = out
+            .get_path(&["navigation", "sidebar", "contents"])
+            .and_then(|v| v.as_array().map(|a| a.to_vec()))
+            .expect("expected expanded contents");
+        assert_eq!(contents.len(), 1, "one section for how-to/");
+        let section = &contents[0];
+        assert_eq!(
+            section.get("section").and_then(|v| v.as_plain_text()),
+            Some("How To Guides".to_string()),
+        );
+        let children = section
+            .get("contents")
+            .and_then(|v| v.as_array().map(|a| a.to_vec()))
+            .expect("section children");
+        assert_eq!(children.len(), 2, "one and two; index is the header");
+    }
+
+    /// bd-4feoon8u guard — expanding every sidebar to make selection
+    /// work must not leak the *unselected* sidebars' `auto:`
+    /// diagnostics. This transform runs once per page, so a stray
+    /// Q-13-6 here would be emitted on every page of the project.
+    #[tokio::test]
+    async fn sidebar_generate_hides_unselected_sidebar_diagnostics() {
+        let index = Arc::new(ProjectIndex::new(vec![make_profile(
+            "other/alpha.qmd",
+            "Alpha",
+        )]));
+        let sidebars = arr(vec![
+            config_map(vec![
+                ("id", s("empty")),
+                ("contents", arr(vec![config_map(vec![("auto", s("nope"))])])),
+            ]),
+            config_map(vec![
+                ("id", s("other")),
+                ("contents", arr(vec![s("other/alpha.qmd")])),
+            ]),
+        ]);
+        let meta = config_map(vec![("website", config_map(vec![("sidebar", sidebars)]))]);
+        let (_out, diags) = run_transform_with(meta, Some(index), "other/alpha.qmd").await;
+        assert!(
+            !diags.iter().any(|d| format!("{:?}", d).contains("Q-13-6")),
+            "unselected sidebar's empty-match warning leaked: {:?}",
+            diags
+        );
     }
 
     /// Test 30 — `sidebar: false` at document level suppresses Generate.

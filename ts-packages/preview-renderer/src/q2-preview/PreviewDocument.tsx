@@ -177,13 +177,22 @@ export const PreviewDocument = ({
     const footerHtml = extractMetaString(
         getMetaPath(meta, ['rendered', 'navigation', 'footer']),
     );
-    // TocGenerateTransform always sets `navigation.toc.title`
-    // (default "Table of Contents" — toc_generate.rs:113-119), but
-    // a user can still override or set it to empty. Surface it
-    // verbatim; the slot omits the `<h2>` when the title is empty.
-    const tocTitle =
-        extractMetaString(getMetaPath(meta, ['navigation', 'toc', 'title'])) ??
-        '';
+    // TocGenerateTransform always sets the TOC title (default
+    // "Table of Contents" — toc_generate.rs), but a user can still
+    // override it or set it to empty; the slot omits the `<h2>` when
+    // the title is empty.
+    //
+    // Read the *rendered* value, not `navigation.toc.title`: the title
+    // carries inline markup (`toc-title: "On **this** page"`), so the
+    // metadata value is `PandocInlines`, which `extractMetaString`
+    // cannot see. `TocRenderTransform` renders it to HTML alongside the
+    // entries, and `q2 render`'s template reads the same key — which is
+    // what keeps preview and render in agreement
+    // (bd-toc-smart-quotes-6nro57ed).
+    const tocTitleHtml =
+        extractMetaString(
+            getMetaPath(meta, ['rendered', 'navigation', 'toc-title']),
+        ) ?? '';
     // `meta.rendered.includes.header` collects favicon / RSS links /
     // any user includes-in-header (already a list; q2 render's
     // template wires `$header-includes$` into `<head>`). The banner
@@ -293,7 +302,7 @@ export const PreviewDocument = ({
 
                 {/* TOC — INSIDE quarto-content, before main
                     (template.rs:189-200). */}
-                {tocHtml ? <TocSlot html={tocHtml} title={tocTitle} /> : null}
+                {tocHtml ? <TocSlot html={tocHtml} titleHtml={tocTitleHtml} /> : null}
 
                 <main
                     className={`content${bannerTitleBlock ? ' quarto-banner-title-block' : ''}`}

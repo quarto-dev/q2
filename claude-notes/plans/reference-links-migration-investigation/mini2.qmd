@@ -1,0 +1,5 @@
+A [label][] B ![alt][ref] C [multi
+line] D \[escaped\] E [a][b][c]
+
+[label]: https://l.example
+[ref]: https://r.example

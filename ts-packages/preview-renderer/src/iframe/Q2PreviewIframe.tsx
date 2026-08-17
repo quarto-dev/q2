@@ -94,6 +94,11 @@ interface Q2PreviewIframeProps {
    */
   editingDisabled?: boolean;
   /**
+   * Comment-bubble display mode (host three-way toggle: expand / show /
+   * hide). Forwarded unchanged in the UPDATE_AST payload. Absent ⇒ 'show'.
+   */
+  commentsMode?: 'expand' | 'show' | 'hide';
+  /**
    * P3.2: nesting-cursor mode for nested blocks. When true, the iframe's
    * PreviewContext exposes nesting-cursor behaviour. Default-off
    * (undefined/false). Forwarded unchanged in the UPDATE_AST payload.
@@ -173,6 +178,7 @@ export function Q2PreviewIframe({
   untransformedAstJson,
   currentActor,
   editingDisabled,
+  commentsMode,
   unlockNestingCursor,
   richText,
   nestedEditBuffers,
@@ -369,6 +375,8 @@ export function Q2PreviewIframe({
           currentActor,
           // bd-ov4gqk3m: read-only hosts disable the edit surface.
           editingDisabled,
+          // Comment-bubble mode (expand / show / hide).
+          commentsMode,
           // P3.2: nesting-cursor mode + per-key nested buffers.
           unlockNestingCursor,
           // Phase 1a (bd-sjb4pzx8): opt-in rich-text editor.
@@ -390,6 +398,7 @@ export function Q2PreviewIframe({
     untransformedAstJson,
     currentActor,
     editingDisabled,
+    commentsMode,
     unlockNestingCursor,
     richText,
     nestedEditBuffers,

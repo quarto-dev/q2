@@ -1,0 +1,59 @@
+---
+title: "Alias Paths Differ Only by Case"
+description: "Two paths differ only in capitalization, which macOS and Windows treat as the same file."
+code: Q-5-25
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-25` — Alias Paths Differ Only by Case
+
+> Two paths differ only in capitalization, which macOS and Windows
+> treat as the same file.
+
+## What this means
+
+Linux filesystems are usually case-sensitive: `Deploy.html` and
+`deploy.html` are two files. macOS and Windows, by default, are
+not — there, they are one file, and whichever is written second
+replaces the first.
+
+This error fires when two `aliases:` entries resolve to paths that
+differ only in case, or when one does so against a page the
+project renders:
+
+```yaml
+# one.qmd
+aliases:
+  - /Deploy.html
+
+# two.qmd
+aliases:
+  - /deploy.html      # the same file on macOS and Windows
+```
+
+## Why it is checked everywhere
+
+The check runs on **every platform**, including case-sensitive
+ones. That is deliberate.
+
+A site built on Linux CI where both files were written looks
+correct in the build log. Serve it from a case-insensitive
+filesystem — or let a contributor check it out on a Mac — and one
+redirect silently disappears. Catching it at build time on every
+platform is what makes the output portable.
+
+## How to fix it
+
+Rename one of the two so they differ by more than capitalization.
+If both spellings need to work, pick one as the real alias; a
+case-insensitive host will serve it for either spelling anyway.
+
+## Difference from Quarto 1
+
+Quarto 1 compares paths as exact strings, so it never notices.
+On a case-insensitive filesystem the redirects overwrite each
+other silently.

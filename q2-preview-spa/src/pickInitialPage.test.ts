@@ -57,4 +57,25 @@ describe('pickInitialPage', () => {
     expect(pickInitialPage('?page=', files)).toBe('posts/intro.qmd');
     expect(pickInitialPage('?page=   ', files)).toBe('posts/intro.qmd');
   });
+
+  // ─── bd-6d2wj4zp Phase 5: .md pages ───────────────────────────────
+
+  it('honors a ?page= hint naming a .md file', () => {
+    const mdFiles: FileLike[] = [{ path: 'index.qmd' }, { path: 'admin/index.md' }];
+    expect(pickInitialPage('?page=admin/index.md', mdFiles)).toBe('admin/index.md');
+  });
+
+  it('falls back to the first .md only when no .qmd exists', () => {
+    // .qmd stays the preferred fallback: with extension-based sync,
+    // the index may contain never-rendered .md (a README) — a .qmd,
+    // if present, is always deliberate content.
+    const mixed: FileLike[] = [
+      { path: 'README.md' },
+      { path: 'about.qmd' },
+    ];
+    expect(pickInitialPage('', mixed)).toBe('about.qmd');
+
+    const mdOnly: FileLike[] = [{ path: '_quarto.yml' }, { path: 'guide.md' }];
+    expect(pickInitialPage('', mdOnly)).toBe('guide.md');
+  });
 });

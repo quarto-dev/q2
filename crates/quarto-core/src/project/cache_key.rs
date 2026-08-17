@@ -106,7 +106,10 @@ use crate::document_profile::DOCUMENT_PROFILE_VERSION;
 /// Manual key-version constant. Bump when a head-pipeline behavior
 /// change alters what a profile records without changing
 /// `DOCUMENT_PROFILE_VERSION`.
-pub const PROFILE_KEY_VERSION: u32 = 1;
+///
+/// v2: the key domain gained project-profile inputs (active names +
+/// overlay bytes, bd-fu16z22k).
+pub const PROFILE_KEY_VERSION: u32 = 2;
 
 /// Returns the Quarto build identifier baked into every cache key.
 ///
@@ -154,6 +157,22 @@ pub struct Pass1KeyInputs<'a> {
     /// follow-up (see the module docs). Empty when no engine
     /// extensions are registered.
     pub extension_contributions: &'a [(String, Vec<u8>)],
+
+    /// Active **project-profile** names in activation order
+    /// (bd-fu16z22k). ⚠️ Both meanings of "profile" collide right
+    /// here: this field holds *project profiles* (`--profile` /
+    /// `QUARTO_PROFILE`), which are an input to the *DocumentProfile*
+    /// cache key this struct feeds — switching project profiles must
+    /// not serve stale pass-1 DocumentProfiles. Empty when none are
+    /// active.
+    pub active_config_profiles: &'a [String],
+
+    /// `(project-relative-path, raw-bytes)` of every profile overlay
+    /// (`_quarto-<name>.yml`) and `_quarto.yml.local` actually merged
+    /// into the project config, in merge order. Byte-level like
+    /// [`metadata_files`](Self::metadata_files): a comment-only edit
+    /// to an overlay correctly invalidates the key.
+    pub profile_config_files: &'a [(PathBuf, Vec<u8>)],
 }
 
 /// Compute the SHA-256 cache key for a `DocumentProfile`.
@@ -184,6 +203,23 @@ pub fn pass1_key(inputs: &Pass1KeyInputs<'_>) -> [u8; 32] {
 
     // _quarto.yml bytes (empty slice when absent).
     write_lp_bytes(&mut hasher, inputs.quarto_yml_bytes);
+
+    // Project-profile activation + overlay bytes (bd-fu16z22k). The
+    // name list is hashed even when no overlay files exist: two runs
+    // differing only in `--profile` must not share keys (conditional
+    // content will depend on the active set). Each list is
+    // count-prefixed so a name list can never alias a path/bytes
+    // pair from the file list. With both lists empty the stream
+    // gains only two zero counts, keeping profile-less keys cheap.
+    hasher.update((inputs.active_config_profiles.len() as u32).to_be_bytes());
+    for name in inputs.active_config_profiles {
+        write_lp_str(&mut hasher, name);
+    }
+    hasher.update((inputs.profile_config_files.len() as u32).to_be_bytes());
+    for (path, bytes) in inputs.profile_config_files {
+        write_lp_str(&mut hasher, &path.to_string_lossy());
+        write_lp_bytes(&mut hasher, bytes);
+    }
 
     // Format-extension contributions, sorted by name (caller's
     // responsibility). Hashing in any other order would change the
@@ -244,7 +280,70 @@ mod tests {
             metadata_files: &[],
             quarto_yml_bytes: b"",
             extension_contributions: &[],
+            active_config_profiles: &[],
+            profile_config_files: &[],
         }
+    }
+
+    #[test]
+    fn key_changes_on_active_profile_set() {
+        // Even with no overlay files on disk, a different --profile
+        // selection must change the key (bd-fu16z22k): conditional
+        // content depends on the active set.
+        let a = pass1_key(&minimal_inputs());
+        let names = vec!["prod".to_string()];
+        let mut tweaked = minimal_inputs();
+        tweaked.active_config_profiles = &names;
+        assert_ne!(a, pass1_key(&tweaked));
+    }
+
+    #[test]
+    fn key_changes_on_profile_order() {
+        // First-listed-wins makes activation ORDER semantic.
+        let ab = vec!["a".to_string(), "b".to_string()];
+        let ba = vec!["b".to_string(), "a".to_string()];
+        let mut a = minimal_inputs();
+        a.active_config_profiles = &ab;
+        let mut b = minimal_inputs();
+        b.active_config_profiles = &ba;
+        assert_ne!(pass1_key(&a), pass1_key(&b));
+    }
+
+    #[test]
+    fn key_changes_on_overlay_byte_change() {
+        let f_a = vec![(
+            PathBuf::from("_quarto-prod.yml"),
+            b"toc: true
+"
+            .to_vec(),
+        )];
+        let f_b = vec![(
+            PathBuf::from("_quarto-prod.yml"),
+            b"toc: false
+"
+            .to_vec(),
+        )];
+        let names = vec!["prod".to_string()];
+        let mut a = minimal_inputs();
+        a.active_config_profiles = &names;
+        a.profile_config_files = &f_a;
+        let mut b = minimal_inputs();
+        b.active_config_profiles = &names;
+        b.profile_config_files = &f_b;
+        assert_ne!(pass1_key(&a), pass1_key(&b));
+    }
+
+    #[test]
+    fn profile_name_list_cannot_alias_overlay_file_entry() {
+        // Count prefixes keep the two lists domain-separated: names
+        // ["p", "x"] must not hash like files [("p", b"x")].
+        let names = vec!["p".to_string(), "x".to_string()];
+        let files = vec![(PathBuf::from("p"), b"x".to_vec())];
+        let mut a = minimal_inputs();
+        a.active_config_profiles = &names;
+        let mut b = minimal_inputs();
+        b.profile_config_files = &files;
+        assert_ne!(pass1_key(&a), pass1_key(&b));
     }
 
     #[test]

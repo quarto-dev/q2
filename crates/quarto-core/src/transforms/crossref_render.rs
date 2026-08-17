@@ -77,72 +77,76 @@ impl AstTransform for CrossrefRenderTransform {
         TransformPhase::Finalization
     }
 
-    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         // Localized terms (bd-llhlzd7p): reference text prefers the
         // `crossref-<type>-prefix` term (Q1 semantics; prefix falls back to
         // title), and proof labels use `environment-proof-title`. `None`
         // when the LanguageResolveStage hasn't run (direct unit tests) —
         // the node's `kind` / English defaults apply then.
         let terms = LanguageTerms::from_meta(&ast.meta);
-        render_blocks(&mut ast.blocks, terms.as_ref());
+        let mut fs = FloatState {
+            html_float_dom: ctx.format.identifier.is_html_based(),
+            used_ids: collect_document_ids(&ast.blocks),
+        };
+        render_blocks(&mut ast.blocks, terms.as_ref(), &mut fs);
         Ok(())
     }
 }
 
-fn render_blocks(blocks: &mut Blocks, terms: Option<&LanguageTerms>) {
+fn render_blocks(blocks: &mut Blocks, terms: Option<&LanguageTerms>, fs: &mut FloatState) {
     for block in blocks.iter_mut() {
-        render_block(block, terms);
+        render_block(block, terms, fs);
     }
 }
 
-fn render_block(block: &mut Block, terms: Option<&LanguageTerms>) {
+fn render_block(block: &mut Block, terms: Option<&LanguageTerms>, fs: &mut FloatState) {
     // Recurse into children.
     match block {
-        Block::BlockQuote(bq) => render_blocks(&mut bq.content, terms),
+        Block::BlockQuote(bq) => render_blocks(&mut bq.content, terms, fs),
         Block::OrderedList(ol) => {
             for item in &mut ol.content {
-                render_blocks(item, terms);
+                render_blocks(item, terms, fs);
             }
         }
         Block::BulletList(bl) => {
             for item in &mut bl.content {
-                render_blocks(item, terms);
+                render_blocks(item, terms, fs);
             }
         }
         Block::DefinitionList(dl) => {
             for (term, defs) in &mut dl.content {
-                render_inlines(term, terms);
+                render_inlines(term, terms, fs);
                 for def in defs {
-                    render_blocks(def, terms);
+                    render_blocks(def, terms, fs);
                 }
             }
         }
         Block::Figure(fig) => {
-            render_blocks(&mut fig.content, terms);
+            render_blocks(&mut fig.content, terms, fs);
             if let Some(long) = fig.caption.long.as_mut() {
-                render_blocks(long, terms);
+                render_blocks(long, terms, fs);
             }
             if let Some(short) = fig.caption.short.as_mut() {
-                render_inlines(short, terms);
+                render_inlines(short, terms, fs);
             }
         }
-        Block::Div(div) => render_blocks(&mut div.content, terms),
-        Block::Paragraph(p) => render_inlines(&mut p.content, terms),
-        Block::Plain(p) => render_inlines(&mut p.content, terms),
+        Block::Div(div) => render_blocks(&mut div.content, terms, fs),
+        Block::Paragraph(p) => render_inlines(&mut p.content, terms, fs),
+        Block::Plain(p) => render_inlines(&mut p.content, terms, fs),
         Block::LineBlock(lb) => {
             for line in &mut lb.content {
-                render_inlines(line, terms);
+                render_inlines(line, terms, fs);
             }
         }
-        Block::Header(h) => render_inlines(&mut h.content, terms),
+        Block::Header(h) => render_inlines(&mut h.content, terms, fs),
         Block::Custom(node) => {
             // Recurse into slots first so nested resolved refs are rendered.
             for (_k, slot) in node.slots.iter_mut() {
                 match slot {
-                    Slot::Block(b) => render_block(b, terms),
-                    Slot::Blocks(bs) => render_blocks(bs, terms),
-                    Slot::Inline(i) => render_inline(i, terms),
-                    Slot::Inlines(is) => render_inlines(is, terms),
+                    Slot::Block(b) => render_block(b, terms, fs),
+                    Slot::Blocks(bs) => render_blocks(bs, terms, fs),
+                    Slot::Inline(i) => render_inline(i, terms, fs),
+                    Slot::Inlines(is) => render_inlines(is, terms, fs),
                 }
             }
         }
@@ -152,7 +156,7 @@ fn render_block(block: &mut Block, terms: Option<&LanguageTerms>) {
     // Convert this node if it's a recognized crossref block custom type.
     if let Block::Custom(node) = block {
         if node.type_name == FLOAT_REF_TARGET {
-            let replacement = render_float_ref_target(take_custom_node(node));
+            let replacement = render_float_ref_target(take_custom_node(node), fs);
             *block = replacement;
         } else if node.type_name == THEOREM {
             let replacement = render_theorem(take_custom_node(node));
@@ -162,6 +166,68 @@ fn render_block(block: &mut Block, terms: Option<&LanguageTerms>) {
             *block = replacement;
         }
     }
+
+    // Shape 2 (bd-hcp8m3ve): a standalone (non-crossref) `Figure` on an
+    // HTML-family format gets Q1's `renderHtmlFigure` wrapper —
+    // `Div(.quarto-figure .quarto-figure-<align>)` with the figure's id
+    // moved onto the wrapper. Float figures are excluded by their
+    // `quarto-float` class (they were just built with their own wrapper).
+    if fs.html_float_dom {
+        let needs_wrap = matches!(
+            block,
+            Block::Figure(f) if !f.attr.1.iter().any(|c| c == "quarto-float")
+        );
+        if needs_wrap {
+            let Block::Figure(f) = std::mem::replace(
+                block,
+                Block::Div(Div {
+                    attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+                    content: Vec::new(),
+                    source_info: SourceInfo::generated(quarto_source_map::By::unknown()),
+                    attr_source: AttrSourceInfo::empty(),
+                }),
+            ) else {
+                unreachable!("guarded by needs_wrap");
+            };
+            *block = wrap_standalone_figure(f);
+        }
+    }
+}
+
+/// Q1 `renderHtmlFigure` for a non-crossref figure: move the id to a
+/// `Div(.quarto-figure .quarto-figure-<align>)` wrapper; alignment comes
+/// from the contained image's `fig-align` (default `center`, stripped).
+fn wrap_standalone_figure(mut f: Figure) -> Block {
+    let harvested = harvest_figure_attrs(&mut f.content);
+    let (align, style, forwarded_classes) = match harvested {
+        Some(h) => (
+            h.align.unwrap_or_else(|| "center".to_string()),
+            h.style,
+            h.forwarded_classes,
+        ),
+        None => ("center".to_string(), None, Vec::new()),
+    };
+    let id = std::mem::take(&mut f.attr.0);
+    let mut classes = vec![
+        "quarto-figure".to_string(),
+        format!("quarto-figure-{align}"),
+    ];
+    for c in forwarded_classes {
+        if !classes.contains(&c) {
+            classes.push(c);
+        }
+    }
+    let mut kvs: hashlink::LinkedHashMap<String, String> = hashlink::LinkedHashMap::new();
+    if let Some(style) = style {
+        kvs.insert("style".to_string(), style);
+    }
+    let source_info = f.source_info.clone();
+    Block::Div(Div {
+        attr: (id, classes, kvs),
+        content: vec![Block::Figure(f)],
+        source_info,
+        attr_source: AttrSourceInfo::empty(),
+    })
 }
 
 /// Swap out a `CustomNode` in place with a placeholder, returning the
@@ -179,36 +245,36 @@ fn take_custom_node(node: &mut CustomNode) -> CustomNode {
     )
 }
 
-fn render_inlines(inlines: &mut Inlines, terms: Option<&LanguageTerms>) {
+fn render_inlines(inlines: &mut Inlines, terms: Option<&LanguageTerms>, fs: &mut FloatState) {
     for inline in inlines.iter_mut() {
-        render_inline(inline, terms);
+        render_inline(inline, terms, fs);
     }
 }
 
-fn render_inline(inline: &mut Inline, terms: Option<&LanguageTerms>) {
+fn render_inline(inline: &mut Inline, terms: Option<&LanguageTerms>, fs: &mut FloatState) {
     match inline {
-        Inline::Emph(e) => render_inlines(&mut e.content, terms),
-        Inline::Underline(u) => render_inlines(&mut u.content, terms),
-        Inline::Strong(s) => render_inlines(&mut s.content, terms),
-        Inline::Strikeout(s) => render_inlines(&mut s.content, terms),
-        Inline::Superscript(s) => render_inlines(&mut s.content, terms),
-        Inline::Subscript(s) => render_inlines(&mut s.content, terms),
-        Inline::SmallCaps(s) => render_inlines(&mut s.content, terms),
-        Inline::Quoted(q) => render_inlines(&mut q.content, terms),
-        Inline::Link(l) => render_inlines(&mut l.content, terms),
-        Inline::Image(i) => render_inlines(&mut i.content, terms),
-        Inline::Note(n) => render_blocks(&mut n.content, terms),
-        Inline::Span(s) => render_inlines(&mut s.content, terms),
-        Inline::Insert(i) => render_inlines(&mut i.content, terms),
-        Inline::Delete(d) => render_inlines(&mut d.content, terms),
-        Inline::Highlight(h) => render_inlines(&mut h.content, terms),
+        Inline::Emph(e) => render_inlines(&mut e.content, terms, fs),
+        Inline::Underline(u) => render_inlines(&mut u.content, terms, fs),
+        Inline::Strong(s) => render_inlines(&mut s.content, terms, fs),
+        Inline::Strikeout(s) => render_inlines(&mut s.content, terms, fs),
+        Inline::Superscript(s) => render_inlines(&mut s.content, terms, fs),
+        Inline::Subscript(s) => render_inlines(&mut s.content, terms, fs),
+        Inline::SmallCaps(s) => render_inlines(&mut s.content, terms, fs),
+        Inline::Quoted(q) => render_inlines(&mut q.content, terms, fs),
+        Inline::Link(l) => render_inlines(&mut l.content, terms, fs),
+        Inline::Image(i) => render_inlines(&mut i.content, terms, fs),
+        Inline::Note(n) => render_blocks(&mut n.content, terms, fs),
+        Inline::Span(s) => render_inlines(&mut s.content, terms, fs),
+        Inline::Insert(i) => render_inlines(&mut i.content, terms, fs),
+        Inline::Delete(d) => render_inlines(&mut d.content, terms, fs),
+        Inline::Highlight(h) => render_inlines(&mut h.content, terms, fs),
         Inline::Custom(node) => {
             for (_k, slot) in node.slots.iter_mut() {
                 match slot {
-                    Slot::Block(b) => render_block(b, terms),
-                    Slot::Blocks(bs) => render_blocks(bs, terms),
-                    Slot::Inline(i) => render_inline(i, terms),
-                    Slot::Inlines(is) => render_inlines(is, terms),
+                    Slot::Block(b) => render_block(b, terms, fs),
+                    Slot::Blocks(bs) => render_blocks(bs, terms, fs),
+                    Slot::Inline(i) => render_inline(i, terms, fs),
+                    Slot::Inlines(is) => render_inlines(is, terms, fs),
                 }
             }
         }
@@ -224,14 +290,236 @@ fn render_inline(inline: &mut Inline, terms: Option<&LanguageTerms>) {
     }
 }
 
+/// Traversal state for float rendering (bd-hcp8m3ve).
+struct FloatState {
+    /// HTML-family output → emit the Q1-verbatim float DOM shape
+    /// (see `claude-notes/designs/float-layout-class-taxonomy.md`).
+    html_float_dom: bool,
+    /// Every id in the document, used to pick collision-free figcaption
+    /// ids (`<float-id>-caption`, disambiguated only on real collision —
+    /// replaces Q1's uuid suffix). Generated ids are inserted as chosen.
+    used_ids: std::collections::HashSet<String>,
+}
+
+/// Collect every element id in the document (block and inline attrs).
+fn collect_document_ids(blocks: &Blocks) -> std::collections::HashSet<String> {
+    fn add(id: &str, out: &mut std::collections::HashSet<String>) {
+        if !id.is_empty() {
+            out.insert(id.to_string());
+        }
+    }
+    fn walk_inlines(inlines: &[Inline], out: &mut std::collections::HashSet<String>) {
+        for inline in inlines {
+            match inline {
+                Inline::Span(s) => {
+                    add(&s.attr.0, out);
+                    walk_inlines(&s.content, out);
+                }
+                Inline::Link(l) => {
+                    add(&l.attr.0, out);
+                    walk_inlines(&l.content, out);
+                }
+                Inline::Image(i) => {
+                    add(&i.attr.0, out);
+                    walk_inlines(&i.content, out);
+                }
+                Inline::Emph(e) => walk_inlines(&e.content, out),
+                Inline::Underline(u) => walk_inlines(&u.content, out),
+                Inline::Strong(s) => walk_inlines(&s.content, out),
+                Inline::Strikeout(s) => walk_inlines(&s.content, out),
+                Inline::Superscript(s) => walk_inlines(&s.content, out),
+                Inline::Subscript(s) => walk_inlines(&s.content, out),
+                Inline::SmallCaps(s) => walk_inlines(&s.content, out),
+                Inline::Quoted(q) => walk_inlines(&q.content, out),
+                Inline::Note(n) => walk(&n.content, out),
+                Inline::Custom(c) => {
+                    add(&c.attr.0, out);
+                    for (_k, slot) in c.slots.iter() {
+                        walk_slot(slot, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    fn walk_slot(slot: &Slot, out: &mut std::collections::HashSet<String>) {
+        match slot {
+            Slot::Block(b) => walk(std::slice::from_ref(&**b), out),
+            Slot::Blocks(bs) => walk(bs, out),
+            Slot::Inline(i) => walk_inlines(std::slice::from_ref(&**i), out),
+            Slot::Inlines(is) => walk_inlines(is, out),
+        }
+    }
+    fn walk(blocks: &[Block], out: &mut std::collections::HashSet<String>) {
+        for block in blocks {
+            match block {
+                Block::Div(d) => {
+                    add(&d.attr.0, out);
+                    walk(&d.content, out);
+                }
+                Block::Header(h) => {
+                    add(&h.attr.0, out);
+                    walk_inlines(&h.content, out);
+                }
+                Block::CodeBlock(cb) => add(&cb.attr.0, out),
+                Block::Figure(f) => {
+                    add(&f.attr.0, out);
+                    walk(&f.content, out);
+                    if let Some(long) = &f.caption.long {
+                        walk(long, out);
+                    }
+                }
+                Block::Table(t) => add(&t.attr.0, out),
+                Block::BlockQuote(bq) => walk(&bq.content, out),
+                Block::OrderedList(ol) => {
+                    for item in &ol.content {
+                        walk(item, out);
+                    }
+                }
+                Block::BulletList(bl) => {
+                    for item in &bl.content {
+                        walk(item, out);
+                    }
+                }
+                Block::DefinitionList(dl) => {
+                    for (term, defs) in &dl.content {
+                        walk_inlines(term, out);
+                        for def in defs {
+                            walk(def, out);
+                        }
+                    }
+                }
+                Block::Paragraph(p) => walk_inlines(&p.content, out),
+                Block::Plain(p) => walk_inlines(&p.content, out),
+                Block::LineBlock(lb) => {
+                    for line in &lb.content {
+                        walk_inlines(line, out);
+                    }
+                }
+                Block::Custom(c) => {
+                    add(&c.attr.0, out);
+                    for (_k, slot) in c.slots.iter() {
+                        walk_slot(slot, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut out = std::collections::HashSet::new();
+    walk(blocks, &mut out);
+    out
+}
+
+/// Figure attributes harvested (and stripped) from the float's first
+/// contained image, mirroring Q1's `get_figure_attributes`:
+/// `fig-align` drives the `quarto-figure-<align>` class, `style` is
+/// forwarded to the outer div, and `column-*` / `margin-caption` classes
+/// are forwarded so page-layout CSS keeps working.
+struct HarvestedFigureAttrs {
+    align: Option<String>,
+    style: Option<String>,
+    forwarded_classes: Vec<String>,
+}
+
+/// Find the float's first image (not descending into tables — Q1 #7727)
+/// and harvest alignment/style/forwardable classes from it, stripping
+/// `fig-align` and `style` from the image itself.
+fn harvest_figure_attrs(blocks: &mut Blocks) -> Option<HarvestedFigureAttrs> {
+    fn from_image(img: &mut quarto_pandoc_types::inline::Image) -> HarvestedFigureAttrs {
+        let align = img.attr.2.remove("fig-align");
+        let style = img.attr.2.remove("style");
+        let forwarded_classes = img
+            .attr
+            .1
+            .iter()
+            .filter(|c| c.starts_with("column-") || c.as_str() == "margin-caption")
+            .cloned()
+            .collect();
+        HarvestedFigureAttrs {
+            align,
+            style,
+            forwarded_classes,
+        }
+    }
+    fn scan_inlines(inlines: &mut Inlines) -> Option<HarvestedFigureAttrs> {
+        for inline in inlines {
+            match inline {
+                Inline::Image(img) => return Some(from_image(img)),
+                Inline::Link(l) => {
+                    if let Some(h) = scan_inlines(&mut l.content) {
+                        return Some(h);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+    for block in blocks {
+        match block {
+            Block::Table(_) => continue,
+            Block::Paragraph(p) => {
+                if let Some(h) = scan_inlines(&mut p.content) {
+                    return Some(h);
+                }
+            }
+            Block::Plain(p) => {
+                if let Some(h) = scan_inlines(&mut p.content) {
+                    return Some(h);
+                }
+            }
+            Block::Div(d) => {
+                if let Some(h) = harvest_figure_attrs(&mut d.content) {
+                    return Some(h);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Pick a collision-free figcaption id: `<float-id>-caption`, appending
+/// `-1`, `-2`, … only when a real collision exists. Replaces Q1's uuid
+/// suffix (see the design doc's figcaption-uuid finding). The chosen id
+/// is recorded so later floats can't collide with it either.
+fn allocate_caption_id(
+    identifier: &str,
+    used_ids: &mut std::collections::HashSet<String>,
+) -> String {
+    let base = format!("{identifier}-caption");
+    let chosen = if !used_ids.contains(&base) {
+        base
+    } else {
+        let mut n = 1usize;
+        loop {
+            let candidate = format!("{base}-{n}");
+            if !used_ids.contains(&candidate) {
+                break candidate;
+            }
+            n += 1;
+        }
+    };
+    used_ids.insert(chosen.clone());
+    chosen
+}
+
 /// Convert a FloatRefTarget custom node into the writer-visible shape.
 ///
-/// Figures map to Pandoc's native `Figure` node. Tables and listings map
-/// to a `Div` wrapping the original content with the (numbered) caption
-/// as a trailing Paragraph — a pragmatic choice that avoids needing a
-/// CSS class taxonomy right away. A later pass can replace this with
-/// richer per-category structure if needed.
-fn render_float_ref_target(node: CustomNode) -> Block {
+/// For HTML-family formats this is the Q1-verbatim float DOM
+/// (`claude-notes/designs/float-layout-class-taxonomy.md`):
+///
+/// ```text
+/// Div(id, [.quarto-float .quarto-figure .quarto-figure-<align> …])
+///   └ Figure("", [.quarto-float .quarto-float-<ref>], data-qf-* kvs)
+///       └ Div("", [], aria-describedby=<caption-id>) [content]
+///       + caption (the writers synthesize <figcaption> from the kvs)
+/// ```
+///
+/// Non-HTML formats keep the earlier shapes: native `Figure` for
+/// figure-kind targets, `Div` + trailing caption paragraph otherwise.
+fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
     let identifier = node.attr.0.clone();
     let ref_type = node
         .plain_data
@@ -269,7 +557,158 @@ fn render_float_ref_target(node: CustomNode) -> Block {
         _ => None,
     };
 
+    let is_uncaptioned = caption_long.is_empty();
     let numbered_caption = prefix_caption(caption_long.clone(), &kind, number);
+
+    // Only genuine float kinds get the Q1 float DOM. FloatRefTarget nodes
+    // also exist for non-float registered prefixes (`sec` sections, `demo`
+    // embeds, custom kinds) — those keep the legacy pass-through shapes
+    // below, matching Q1 where only float categories reach
+    // `float_reftarget_render_html_figure`. Custom float kinds join this
+    // set when the crossref.custom float category lands.
+    let is_float_kind = matches!(ref_type.as_str(), "fig" | "tbl" | "lst");
+
+    if fs.html_float_dom && is_float_kind {
+        let mut content = content;
+
+        // bd-4m2n6qf1: a table float's caption is hoisted into the
+        // synthesized `<figcaption>`, but the Table node keeps its own
+        // `caption` — so both writers would emit the text twice, as
+        // `<table><caption>` *and* as `<figcaption>`. Elide the Table's copy,
+        // matching Q1, which does the same at float-parse time
+        // (`quarto-pre/parsefiguredivs.lua`: `table.caption =
+        // pandoc.Caption{}` at L280 for the div-wrapped form,
+        // `el.caption.long = pandoc.Blocks({})` at L544 for the
+        // caption-attr form). Q2 builds the float DOM in this
+        // Finalization-phase transform, so the elision happens here.
+        //
+        // Scoped to top-level Tables in the float content — the ones whose
+        // caption became the float caption. Skipped when the float is
+        // uncaptioned, since then nothing was hoisted and the Table's
+        // caption is the only copy of that text.
+        if !is_uncaptioned {
+            for block in content.iter_mut() {
+                if let Block::Table(t) = block {
+                    t.caption.long = None;
+                    t.caption.short = None;
+                }
+            }
+        }
+
+        // Q1 `get_figure_attributes`: alignment/style/forwardable classes
+        // come from the first contained image (never inside a table).
+        let harvested = if !matches!(content.first(), Some(Block::Table(_))) {
+            harvest_figure_attrs(&mut content)
+        } else {
+            None
+        };
+        let (mut align, style, forwarded_classes) = match harvested {
+            Some(h) => (
+                h.align.unwrap_or_else(|| "center".to_string()),
+                h.style,
+                h.forwarded_classes,
+            ),
+            None => ("center".to_string(), None, Vec::new()),
+        };
+
+        // Caption location: attr-level `cap-location` / `<ref>-cap-location`
+        // (metadata-level configuration lands with the cap-location feature).
+        let (_id0, mut user_classes, mut user_kvs) = node.attr;
+        let caption_location = user_kvs
+            .remove("cap-location")
+            .or_else(|| user_kvs.remove(&format!("{ref_type}-cap-location")))
+            .unwrap_or_else(|| "bottom".to_string());
+
+        // Listings hard-code left alignment and a `listing` class (Q1 #9724).
+        let is_listing = ref_type == "lst";
+        if is_listing {
+            align = "left".to_string();
+            user_classes.push("listing".to_string());
+        }
+
+        let caption_id = allocate_caption_id(&identifier, &mut fs.used_ids);
+
+        // Uncaptioned floats still get a label-only caption ("Figure 1")
+        // plus the `quarto-uncaptioned` marker, matching Q1.
+        let final_caption = if is_uncaptioned {
+            let label = match number {
+                Some(n) => format!("{kind} {n}"),
+                None => kind.clone(),
+            };
+            vec![Block::Paragraph(quarto_pandoc_types::block::Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: label,
+                    source_info: source_info.clone(),
+                })],
+                source_info: source_info.clone(),
+            })]
+        } else {
+            numbered_caption
+        };
+
+        // Content wrapper div carrying aria-describedby (Q1 verbatim).
+        let mut wrapper_kvs: hashlink::LinkedHashMap<String, String> =
+            hashlink::LinkedHashMap::new();
+        wrapper_kvs.insert("aria-describedby".to_string(), caption_id.clone());
+        let content_wrapper = Block::Div(Div {
+            attr: (String::new(), Vec::new(), wrapper_kvs),
+            content,
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        // Inner <figure>: quarto-float + quarto-float-<ref>, and the
+        // data-qf-* kvs both writers use to synthesize the <figcaption>.
+        let mut fig_kvs: hashlink::LinkedHashMap<String, String> = hashlink::LinkedHashMap::new();
+        fig_kvs.insert("data-qf-ref-type".to_string(), ref_type.clone());
+        fig_kvs.insert(
+            "data-qf-caption-location".to_string(),
+            caption_location.clone(),
+        );
+        fig_kvs.insert("data-qf-caption-id".to_string(), caption_id.clone());
+        if is_uncaptioned {
+            fig_kvs.insert("data-qf-uncaptioned".to_string(), "1".to_string());
+        }
+        let figure = Block::Figure(Figure {
+            attr: (
+                String::new(),
+                vec![
+                    "quarto-float".to_string(),
+                    format!("quarto-float-{ref_type}"),
+                ],
+                fig_kvs,
+            ),
+            caption: Caption {
+                short: caption_short,
+                long: Some(final_caption),
+                source_info: source_info.clone(),
+            },
+            content: vec![content_wrapper],
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        // Outer div: user classes + the Q1 taxonomy + forwarded classes.
+        user_classes.extend([
+            "quarto-float".to_string(),
+            "quarto-figure".to_string(),
+            format!("quarto-figure-{align}"),
+        ]);
+        for c in forwarded_classes {
+            if !user_classes.contains(&c) {
+                user_classes.push(c);
+            }
+        }
+        if let Some(style) = style {
+            user_kvs.insert("style".to_string(), style);
+        }
+        return Block::Div(Div {
+            attr: (identifier, user_classes, user_kvs),
+            content: vec![figure],
+            source_info,
+            attr_source: AttrSourceInfo::empty(),
+        });
+    }
 
     if ref_type == "fig" {
         // Prefer Pandoc's native Figure so the HTML writer emits
@@ -911,12 +1350,11 @@ mod tests {
 
     #[tokio::test]
     async fn figure_target_renders_to_pandoc_figure() {
+        // bd-hcp8m3ve: the Figure now sits inside the Q1-shape outer div;
+        // the id lives on the div, and the caption prefix is unchanged.
         let ast = run_full(vec![fig_div("fig-1", "Caption A")]).await;
-        let block = &ast.blocks[0];
-        let Block::Figure(f) = block else {
-            panic!("expected Figure, got {:?}", block);
-        };
-        assert_eq!(f.attr.0, "fig-1");
+        let (outer, f) = float_shape(&ast.blocks[0]);
+        assert_eq!(outer.attr.0, "fig-1");
         let long = f.caption.long.as_ref().unwrap();
         let Block::Paragraph(p) = &long[0] else {
             panic!();
@@ -974,19 +1412,462 @@ mod tests {
             attr_source: AttrSourceInfo::empty(),
         })];
         let ast = run_full(blocks).await;
-        let Block::Div(d) = &ast.blocks[0] else {
-            panic!();
+        // bd-hcp8m3ve: table floats are figure-wrapped now; the table lives
+        // in the aria wrapper and the caption is a real Figure caption with
+        // the "Table 1: " prefix (see table_target_renders_q1_float_shape
+        // for the full shape assertions).
+        let (outer, fig) = float_shape(&ast.blocks[0]);
+        assert_eq!(outer.attr.0, "tbl-one");
+        let Block::Div(content_div) = &fig.content[0] else {
+            panic!()
         };
-        assert_eq!(d.attr.0, "tbl-one");
-        // Div should contain the Table and a trailing caption paragraph
-        // with "Table 1: " prefix.
-        assert!(matches!(d.content[0], Block::Table(_)));
-        let last = d.content.last().unwrap();
-        let Block::Paragraph(p) = last else { panic!() };
+        assert!(matches!(content_div.content[0], Block::Table(_)));
+        let long = fig.caption.long.as_ref().unwrap();
+        let Block::Paragraph(p) = &long[0] else {
+            panic!()
+        };
         let Inline::Str(s) = &p.content[0] else {
             panic!()
         };
         assert_eq!(s.text, "Table 1: ");
+    }
+
+    // ─── Q1-verbatim float DOM shape (bd-hcp8m3ve) ──────────────────────────
+    //
+    // HTML-based formats render floats as:
+    //   Div(id, [quarto-float quarto-figure quarto-figure-<align>])
+    //     └ Figure("", [quarto-float quarto-float-<ref>], data-qf-* kvs)
+    //         └ Div("", [], aria-describedby=<caption-id>) [content]
+    //         + caption (figcaption synthesized by the writers from the kvs)
+    // Contract: claude-notes/designs/float-layout-class-taxonomy.md
+
+    /// Dig `(outer Div, inner Figure)` out of a rendered float block.
+    fn float_shape(block: &Block) -> (&Div, &Figure) {
+        let Block::Div(outer) = block else {
+            panic!("expected outer float Div, got {:?}", block);
+        };
+        let Block::Figure(fig) = &outer.content[0] else {
+            panic!("expected inner Figure, got {:?}", outer.content[0]);
+        };
+        (outer, fig)
+    }
+
+    fn assert_classes(attr: &Attr, expected: &[&str], what: &str) {
+        for c in expected {
+            assert!(
+                attr.1.contains(&c.to_string()),
+                "{what} missing class {c}: {:?}",
+                attr.1
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn figure_target_renders_q1_float_shape() {
+        let ast = run_full(vec![fig_div("fig-1", "Caption A")]).await;
+        let (outer, fig) = float_shape(&ast.blocks[0]);
+        assert_eq!(outer.attr.0, "fig-1");
+        assert_classes(
+            &outer.attr,
+            &["quarto-float", "quarto-figure", "quarto-figure-center"],
+            "outer div",
+        );
+        assert_eq!(fig.attr.0, "");
+        assert_classes(&fig.attr, &["quarto-float", "quarto-float-fig"], "figure");
+        assert_eq!(
+            fig.attr.2.get("data-qf-ref-type").map(String::as_str),
+            Some("fig")
+        );
+        assert_eq!(
+            fig.attr
+                .2
+                .get("data-qf-caption-location")
+                .map(String::as_str),
+            Some("bottom")
+        );
+        assert_eq!(
+            fig.attr.2.get("data-qf-caption-id").map(String::as_str),
+            Some("fig-1-caption")
+        );
+        // Content is wrapped in an aria-describedby div pointing at the caption id.
+        let Block::Div(content_div) = &fig.content[0] else {
+            panic!("expected content wrapper Div, got {:?}", fig.content[0]);
+        };
+        assert_eq!(
+            content_div
+                .attr
+                .2
+                .get("aria-describedby")
+                .map(String::as_str),
+            Some("fig-1-caption")
+        );
+        // Caption still carries the "Figure 1: " prefix.
+        let long = fig.caption.long.as_ref().unwrap();
+        let Block::Paragraph(p) = &long[0] else {
+            panic!()
+        };
+        let Inline::Str(s) = &p.content[0] else {
+            panic!()
+        };
+        assert_eq!(s.text, "Figure 1: ");
+    }
+
+    #[tokio::test]
+    async fn fig_align_attribute_drives_alignment_class() {
+        // Q1 reads `fig-align` from the contained Image and strips it.
+        let mut img_attr: LinkedHashMap<String, String> = LinkedHashMap::new();
+        img_attr.insert("fig-align".to_string(), "left".to_string());
+        let img = Inline::Image(quarto_pandoc_types::inline::Image {
+            attr: (String::new(), Vec::new(), img_attr),
+            content: vec![],
+            target: ("img.png".to_string(), String::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+        let blocks = vec![Block::Div(Div {
+            attr: attr_id("fig-a"),
+            content: vec![
+                Block::Paragraph(Paragraph {
+                    content: vec![img],
+                    source_info: si(),
+                }),
+                para("Cap"),
+            ],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })];
+        let ast = run_full(blocks).await;
+        let (outer, fig) = float_shape(&ast.blocks[0]);
+        assert_classes(&outer.attr, &["quarto-figure-left"], "outer div");
+        // The fig-align attribute is consumed, not emitted on the image.
+        fn find_image(blocks: &Blocks) -> Option<&quarto_pandoc_types::inline::Image> {
+            for b in blocks {
+                match b {
+                    Block::Div(d) => {
+                        if let Some(i) = find_image(&d.content) {
+                            return Some(i);
+                        }
+                    }
+                    Block::Paragraph(Paragraph { content, .. })
+                    | Block::Plain(quarto_pandoc_types::block::Plain { content, .. }) => {
+                        for inl in content {
+                            if let Inline::Image(i) = inl {
+                                return Some(i);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            None
+        }
+        let img = find_image(&fig.content).expect("image survives in content");
+        assert!(
+            !img.attr.2.contains_key("fig-align"),
+            "fig-align must be stripped from the image: {:?}",
+            img.attr.2
+        );
+    }
+
+    #[tokio::test]
+    async fn table_target_renders_q1_float_shape() {
+        use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
+        let table = Block::Table(Table {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            caption: Caption {
+                short: None,
+                long: None,
+                source_info: si(),
+            },
+            colspec: vec![],
+            head: TableHead {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            bodies: vec![TableBody {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rowhead_columns: 0,
+                head: vec![],
+                body: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            foot: TableFoot {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let blocks = vec![Block::Div(Div {
+            attr: attr_id("tbl-one"),
+            content: vec![table, para("Table caption")],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })];
+        let ast = run_full(blocks).await;
+        let (outer, fig) = float_shape(&ast.blocks[0]);
+        assert_eq!(outer.attr.0, "tbl-one");
+        assert_classes(&outer.attr, &["quarto-float", "quarto-figure"], "outer div");
+        assert_classes(&fig.attr, &["quarto-float", "quarto-float-tbl"], "figure");
+        assert_eq!(
+            fig.attr.2.get("data-qf-ref-type").map(String::as_str),
+            Some("tbl")
+        );
+        // The table itself lives inside the aria wrapper.
+        let Block::Div(content_div) = &fig.content[0] else {
+            panic!()
+        };
+        assert!(matches!(content_div.content[0], Block::Table(_)));
+        // Caption prefixed "Table 1: ".
+        let long = fig.caption.long.as_ref().unwrap();
+        let Block::Paragraph(p) = &long[0] else {
+            panic!()
+        };
+        let Inline::Str(s) = &p.content[0] else {
+            panic!()
+        };
+        assert_eq!(s.text, "Table 1: ");
+    }
+
+    /// bd-4m2n6qf1: when a table float's caption comes from the Table's own
+    /// `caption.long`, that caption must be cleared once it has been hoisted
+    /// into the synthesized `<figcaption>` — otherwise the writers emit the
+    /// text twice, as `<table><caption>` *and* as `<figcaption>`.
+    ///
+    /// Note `table_target_renders_q1_float_shape` above supplies the caption
+    /// as a sibling paragraph, so it never exercised this path — which is why
+    /// the workspace suite missed the duplication.
+    ///
+    /// Q1 performs the same elision at float-parse time
+    /// (`quarto-pre/parsefiguredivs.lua`: `table.caption = pandoc.Caption{}`
+    /// at L280, `el.caption.long = pandoc.Blocks({})` at L544). Q2 builds the
+    /// float DOM in the Finalization-phase transform, so it elides here, at
+    /// figcaption-synthesis time.
+    #[tokio::test]
+    async fn table_float_clears_the_tables_own_caption() {
+        use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
+        let table = Block::Table(Table {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            caption: Caption {
+                short: None,
+                long: Some(vec![para("Cap")]),
+                source_info: si(),
+            },
+            colspec: vec![],
+            head: TableHead {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            bodies: vec![TableBody {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rowhead_columns: 0,
+                head: vec![],
+                body: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            foot: TableFoot {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let blocks = vec![Block::Div(Div {
+            attr: attr_id("tbl-one"),
+            content: vec![table],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })];
+        let ast = run_full(blocks).await;
+        let (_outer, fig) = float_shape(&ast.blocks[0]);
+
+        // The figcaption still carries the caption text.
+        let long = fig.caption.long.as_ref().expect("figcaption caption");
+        assert!(
+            format!("{long:?}").contains("Cap"),
+            "figcaption should carry the caption text: {long:?}"
+        );
+
+        // ...and the Table inside the aria wrapper must no longer carry it.
+        let Block::Div(content_div) = &fig.content[0] else {
+            panic!("expected the aria content wrapper")
+        };
+        let Block::Table(t) = &content_div.content[0] else {
+            panic!("expected the table inside the wrapper")
+        };
+        assert!(
+            t.caption.long.as_ref().is_none_or(|b| b.is_empty()),
+            "the table's own caption must be cleared once hoisted into the \
+             figcaption, else it renders twice: {:?}",
+            t.caption.long
+        );
+    }
+
+    #[tokio::test]
+    async fn standalone_captioned_figure_gets_quarto_figure_wrapper() {
+        // Shape 2 (design doc): a non-crossref `![caption](img)` figure —
+        // a native Figure with no id — is wrapped in
+        // `Div(.quarto-figure .quarto-figure-<align>)`, with the figure's id
+        // (when present) moving to the wrapper, Q1's `renderHtmlFigure`.
+        let img = Inline::Image(quarto_pandoc_types::inline::Image {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            content: vec![],
+            target: ("img.png".to_string(), String::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+        let figure = Block::Figure(Figure {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            caption: Caption {
+                short: None,
+                long: Some(vec![para("A caption")]),
+                source_info: si(),
+            },
+            content: vec![Block::Plain(quarto_pandoc_types::block::Plain {
+                content: vec![img],
+                source_info: si(),
+            })],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let ast = run_full(vec![figure]).await;
+        let Block::Div(outer) = &ast.blocks[0] else {
+            panic!("expected wrapper Div, got {:?}", ast.blocks[0]);
+        };
+        assert_classes(
+            &outer.attr,
+            &["quarto-figure", "quarto-figure-center"],
+            "standalone wrapper",
+        );
+        assert!(
+            matches!(outer.content.first(), Some(Block::Figure(_))),
+            "figure inside wrapper"
+        );
+        // Standalone figures carry no float classes or data-qf kvs.
+        let Some(Block::Figure(f)) = outer.content.first() else {
+            unreachable!()
+        };
+        assert!(
+            !f.attr.1.iter().any(|c| c == "quarto-float"),
+            "standalone figure is not a float: {:?}",
+            f.attr.1
+        );
+        assert!(
+            !f.attr.2.keys().any(|k| k.starts_with("data-qf-")),
+            "no float kvs on a standalone figure"
+        );
+    }
+
+    #[tokio::test]
+    async fn section_ref_target_is_not_float_wrapped() {
+        // `## Heading {#sec-x}` sections also become FloatRefTarget nodes
+        // (the sugar transform keys on registered id prefixes), but only
+        // genuine float kinds (fig/tbl/lst) get the Q1 float DOM — a section
+        // must pass through as a plain section Div, never grow a figure
+        // wrapper or a figcaption. (Caught by e2e render of the kitchen-sink
+        // fixture: sections were being swallowed into `quarto-float-sec`
+        // figures.)
+        let blocks = vec![Block::Div(Div {
+            attr: (
+                "sec-x".to_string(),
+                vec!["section".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content: vec![para("Section body text")],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })];
+        let ast = run_full(blocks).await;
+        let Block::Div(d) = &ast.blocks[0] else {
+            panic!("expected section Div, got {:?}", ast.blocks[0]);
+        };
+        assert_eq!(d.attr.0, "sec-x");
+        assert!(
+            d.attr.1.contains(&"section".to_string()),
+            "section class preserved: {:?}",
+            d.attr.1
+        );
+        assert!(
+            !d.attr.1.iter().any(|c| c.starts_with("quarto-float")),
+            "sections must not be float-wrapped: {:?}",
+            d.attr.1
+        );
+        assert!(
+            !matches!(d.content.first(), Some(Block::Figure(_))),
+            "no figure wrapper inside a section"
+        );
+    }
+
+    #[tokio::test]
+    async fn caption_id_collides_with_user_id_and_disambiguates() {
+        // A user-authored element already owns "fig-1-caption": the generated
+        // figcaption id must disambiguate (this replaces Q1's uuid suffix).
+        let user_div = Block::Div(Div {
+            attr: attr_id("fig-1-caption"),
+            content: vec![para("mine")],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let ast = run_full(vec![fig_div("fig-1", "Cap"), user_div]).await;
+        let (_outer, fig) = float_shape(&ast.blocks[0]);
+        assert_eq!(
+            fig.attr.2.get("data-qf-caption-id").map(String::as_str),
+            Some("fig-1-caption-1")
+        );
+        let Block::Div(content_div) = &fig.content[0] else {
+            panic!()
+        };
+        assert_eq!(
+            content_div
+                .attr
+                .2
+                .get("aria-describedby")
+                .map(String::as_str),
+            Some("fig-1-caption-1")
+        );
+    }
+
+    #[tokio::test]
+    async fn uncaptioned_float_gets_uncaptioned_kv_and_label_caption() {
+        // Q1: an uncaptioned float's figcaption holds just the label and the
+        // figcaption gains `quarto-uncaptioned` (via the kv here).
+        let blocks = vec![Block::Div(Div {
+            attr: attr_id("fig-bare"),
+            content: vec![Block::CodeBlock(CodeBlock {
+                attr: (String::new(), vec!["python".into()], LinkedHashMap::new()),
+                text: "x=1".into(),
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })];
+        let ast = run_full(blocks).await;
+        let (_outer, fig) = float_shape(&ast.blocks[0]);
+        assert_eq!(
+            fig.attr.2.get("data-qf-uncaptioned").map(String::as_str),
+            Some("1")
+        );
+        let long = fig.caption.long.as_ref().unwrap();
+        let Block::Paragraph(p) = &long[0] else {
+            panic!()
+        };
+        let Inline::Str(s) = &p.content[0] else {
+            panic!()
+        };
+        assert_eq!(s.text, "Figure 1");
     }
 
     #[tokio::test]
@@ -1065,12 +1946,12 @@ mod tests {
             attr_source: AttrSourceInfo::empty(),
         })];
         let ast = run_full(blocks).await;
-        let Block::Figure(f) = &ast.blocks[0] else {
-            panic!();
-        };
-        assert_eq!(f.attr.0, "fig-bare");
-        // Caption.long stays empty — no "Figure 1: " prefix without a caption.
-        assert!(f.caption.long.as_ref().is_none_or(|v| v.is_empty()));
+        // HTML float shape (bd-hcp8m3ve): outer div carries the id; the
+        // uncaptioned float still gets a label-only caption + the
+        // data-qf-uncaptioned marker (see
+        // uncaptioned_float_gets_uncaptioned_kv_and_label_caption).
+        let (outer, _fig) = float_shape(&ast.blocks[0]);
+        assert_eq!(outer.attr.0, "fig-bare");
     }
 
     #[test]
@@ -1118,7 +1999,11 @@ mod tests {
             .slots
             .insert("content".into(), Slot::Blocks(vec![para("inside")]));
         let mut block = Block::Custom(callout);
-        render_block(&mut block, None);
+        let mut fs = FloatState {
+            html_float_dom: true,
+            used_ids: std::collections::HashSet::new(),
+        };
+        render_block(&mut block, None, &mut fs);
         match block {
             Block::Custom(n) => assert_eq!(n.type_name, "Callout"),
             _ => panic!("callout was mutated"),

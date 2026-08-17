@@ -201,6 +201,25 @@ export interface ASTOptions {
 // ============================================================================
 
 /**
+ * Definitive auth-rejection evidence observed by the Node WebSocket
+ * adapter (bd-l3b1brn8). Only two shapes qualify:
+ *
+ * - `upgrade-status`: a reachable hub refused the WS upgrade with a
+ *   definitive 401/403 (surfaced through the factory's optional
+ *   upgrade-status capability);
+ * - `token-refresh-terminal`: `getBearer` threw an error whose
+ *   `name === 'ReauthRequired'` — the cross-package contract with
+ *   hub-mcp's refresh manager (the class itself cannot be imported
+ *   here; the dependency direction is hub-mcp → sync-client).
+ *
+ * Network errors are never evidence: they leave auth state unchanged
+ * and the retry loop running (the SPA's bd-3o8zmz46 invariant).
+ */
+export type AuthRejectionEvidence =
+  | { kind: 'upgrade-status'; status: 401 | 403 }
+  | { kind: 'token-refresh-terminal' };
+
+/**
  * Bearer-auth options for the sync client's WebSocket upgrade.
  *
  * `getBearer` is a getter (not a static string) so the retry loop sees
@@ -210,6 +229,13 @@ export interface ASTOptions {
  */
 export interface SyncClientAuthOptions {
   getBearer: () => Promise<string>;
+  /**
+   * Fired on definitive auth-rejection evidence only, debounced to one
+   * report per failure episode (an episode ends at the next successful
+   * peer handshake). Policy — refreshing, invalidating credentials,
+   * user messaging — belongs to the caller; the adapter only reports.
+   */
+  onAuthRejected?: (evidence: AuthRejectionEvidence) => void;
 }
 
 /**

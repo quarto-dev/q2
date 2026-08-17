@@ -1066,8 +1066,11 @@ fn t8_echo_file_discovered_and_converted_via_project_walk() {
             profile
         )
     });
+    // `TocEntry::title` carries inlines as of profile v11
+    // (bd-toc-smart-quotes-6nro57ed), so project it to plain text to compare.
     assert_eq!(
-        heading.title, "Echoed: a.echo",
+        pampa::writers::plaintext::inlines_to_string(&heading.title).0,
+        "Echoed: a.echo",
         "a.echo's first outline heading must be the echo-conversion-added \
          title; profile: {:?}",
         profile

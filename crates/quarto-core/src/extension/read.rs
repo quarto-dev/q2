@@ -78,30 +78,16 @@ pub fn read_extension_with_org(
         &mut diagnostics,
     );
 
-    // `title` and `author` are OPTIONAL, matching Quarto 1: `schema/extension.yml`
-    // has no top-level `required:` marker and `readExtension` reads both leniently.
-    // `title` falls back to the extension's id name (Q1's `title || id.name`);
-    // `author` stays `None` when absent (Q1 stores it as `string | undefined`, and
-    // a real shipped Q1 extension — julia-engine — has no `author`). Requiring
-    // either here silently dropped otherwise-valid Q1-era extensions (bd-8b0af414).
-    let title = config
-        .get("title")
-        .and_then(|v| v.as_str())
-        .map_or_else(|| ext_name.clone(), |s| s.to_string());
+    // Optional metadata fields (Q1-compat: no named field is required —
+    // bd-8b0af414). `as_plain_text` rather than `as_str` so values that
+    // parse as PandocInlines still come through.
+    let title = config.get("title").and_then(|v| v.as_plain_text());
+    let author = config.get("author").and_then(|v| v.as_plain_text());
 
-    let author = config
-        .get("author")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    let version = config
-        .get("version")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+    let version = config.get("version").and_then(|v| v.as_plain_text());
     let quarto_required = config
         .get("quarto-required")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .and_then(|v| v.as_plain_text());
 
     // Extract contributes
     let contributes_cv = config.get("contributes").ok_or_else(|| {
@@ -111,7 +97,7 @@ pub fn read_extension_with_org(
         ))
     })?;
 
-    let contributes = parse_contributes(contributes_cv, ext_dir, extension_file)?;
+    let contributes = parse_contributes(contributes_cv, ext_dir, extension_file, runtime)?;
 
     Ok(Extension {
         id: if let Some(org) = ext_org {
@@ -161,12 +147,13 @@ fn parse_contributes(
     contributes: &ConfigValue,
     ext_dir: &Path,
     extension_file: &Path,
+    runtime: &dyn SystemRuntime,
 ) -> Result<Contributes> {
     let mut result = Contributes::default();
 
     // Parse formats with "common" key merging
     if let Some(formats_cv) = contributes.get("formats") {
-        result.formats = parse_formats(formats_cv, ext_dir)?;
+        result.formats = parse_formats(formats_cv, ext_dir, runtime)?;
     }
 
     // Parse filters
@@ -209,7 +196,8 @@ fn parse_contributes(
 /// The `common` key's values serve as defaults for all other format keys.
 fn parse_formats(
     formats_cv: &ConfigValue,
-    _ext_dir: &Path,
+    ext_dir: &Path,
+    runtime: &dyn SystemRuntime,
 ) -> Result<HashMap<String, ConfigValue>> {
     let mut result = HashMap::new();
 
@@ -238,6 +226,11 @@ fn parse_formats(
         // Convert known path-valued keys to ConfigValueKind::Path so that
         // adjust_paths_to_document_dir() will rebase them during metadata merge.
         mark_path_valued_keys(&mut merged_value);
+
+        // Existence-driven marking for keys whose strings may be either
+        // bundled files or something else (builtin theme names, doc-relative
+        // references) — the filesystem disambiguates (bd-of20unsb).
+        super::paths::mark_bundled_format_assets(&mut merged_value, ext_dir, runtime);
 
         result.insert(entry.key.clone(), merged_value);
     }
@@ -696,6 +689,31 @@ mod tests {
     }
 
     #[test]
+    fn test_read_q1_compat_manifest_without_title_author() {
+        // Q1 requires no named fields in _extension.yml; real extensions
+        // (julia-engine, marimo) omit title/author. Only `contributes` is
+        // structurally required (bd-8b0af414).
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/bare-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+contributes:
+  shortcodes:
+    - bare.lua
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        assert_eq!(ext.id.name, "bare-ext");
+        assert_eq!(ext.title, None);
+        assert_eq!(ext.author, None);
+        assert_eq!(ext.contributes.shortcodes.len(), 1);
+    }
+
+    #[test]
     fn test_read_minimal_extension() {
         let tmp = TempDir::new().unwrap();
         let ext_dir = tmp.path().join("_extensions/test-ext");
@@ -715,7 +733,7 @@ contributes:
 
         assert_eq!(ext.id.name, "test-ext");
         assert_eq!(ext.id.organization, None);
-        assert_eq!(ext.title, "Test Extension");
+        assert_eq!(ext.title.as_deref(), Some("Test Extension"));
         assert_eq!(ext.author.as_deref(), Some("Test Author"));
         assert!(ext.version.is_none());
         assert_eq!(ext.contributes.shortcodes.len(), 1);
@@ -836,7 +854,9 @@ contributes:
     /// `== "test-ext"` discriminator also reddens under a lazy
     /// `unwrap_or_default()` (empty string ≠ id name), pinning the id-name default.
     #[test]
-    fn test_read_extension_missing_title_defaults_to_id_name() {
+    fn test_read_extension_missing_title() {
+        // Q1-compat intake (bd-8b0af414): missing title is NOT an error;
+        // it just loads with title: None.
         let tmp = TempDir::new().unwrap();
         let ext_dir = tmp.path().join("_extensions/test-ext");
         let file = write_extension(
@@ -851,14 +871,8 @@ contributes:
 
         let runtime = make_runtime();
         let ext = read_extension(&file, &runtime).unwrap();
-
-        // Title defaults to the extension id name (Q1's `title || id.name`).
-        assert_eq!(ext.id.name, "test-ext");
-        assert_eq!(ext.title, "test-ext");
-        // `author` was present, so it round-trips.
+        assert_eq!(ext.title, None);
         assert_eq!(ext.author.as_deref(), Some("Author"));
-        // Contribution is actually carried (not just a parsed header).
-        assert_eq!(ext.contributes.shortcodes.len(), 1);
     }
 
     /// Q1 does not require `author` (no schema `required:`; a real shipped Q1
@@ -886,7 +900,7 @@ contributes:
         let runtime = make_runtime();
         let ext = read_extension(&file, &runtime).unwrap();
 
-        assert_eq!(ext.title, "Author-less Extension");
+        assert_eq!(ext.title.as_deref(), Some("Author-less Extension"));
         assert!(ext.author.is_none(), "author should be None when omitted");
         // Contribution is actually carried.
         assert_eq!(ext.contributes.shortcodes.len(), 1);
@@ -917,7 +931,7 @@ contributes:
         let runtime = make_runtime();
         let ext = read_extension(&file, &runtime).unwrap();
 
-        assert_eq!(ext.title, "Julia Engine");
+        assert_eq!(ext.title.as_deref(), Some("Julia Engine"));
         assert!(ext.author.is_none(), "author should be None when omitted");
         assert_eq!(ext.version.as_deref(), Some("0.5.0"));
         assert_eq!(ext.contributes.engines.len(), 1);
@@ -1369,6 +1383,267 @@ contributes:
                 items[i].value
             );
         }
+    }
+
+    // --- bd-of20unsb: existence-driven Path marking for bundled ---
+    // --- format assets (theme / css / include-* / format-resources) ---
+
+    /// Create an asset file at `rel` under the extension dir, so the
+    /// existence-driven marking classifies the string as a bundled file.
+    fn write_asset(ext_dir: &Path, rel: &str) {
+        let p = ext_dir.join(rel);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(&p, "/* asset */\n").unwrap();
+    }
+
+    #[test]
+    fn test_theme_bundled_scss_marked_as_path_builtin_stays_scalar() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/fancyfmt");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+contributes:
+  formats:
+    html:
+      theme: [cosmo, fmt-theme.scss]
+"#,
+        );
+        write_asset(&ext_dir, "fmt-theme.scss");
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = &ext.contributes.formats["html"];
+        let items = html_meta.get("theme").unwrap().as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        // Built-in theme name: no such file under the extension dir,
+        // so it must stay Scalar (the theme stage resolves it by name).
+        assert!(
+            matches!(&items[0].value, ConfigValueKind::Scalar(_)),
+            "expected Scalar for builtin name `cosmo`, got {:?}",
+            items[0].value
+        );
+        // Bundled file: exists next to _extension.yml, so it must be
+        // marked Path (ext-dir-relative) for the merge-time rebase.
+        assert!(
+            matches!(&items[1].value, ConfigValueKind::Path(s) if s == "fmt-theme.scss"),
+            "expected Path(\"fmt-theme.scss\"), got {:?}",
+            items[1].value
+        );
+    }
+
+    #[test]
+    fn test_theme_scalar_bundled_file_marked_as_path() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/fancyfmt");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+contributes:
+  formats:
+    html:
+      theme: fmt-theme.scss
+"#,
+        );
+        write_asset(&ext_dir, "fmt-theme.scss");
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = &ext.contributes.formats["html"];
+        let theme = html_meta.get("theme").unwrap();
+        assert!(
+            matches!(&theme.value, ConfigValueKind::Path(s) if s == "fmt-theme.scss"),
+            "expected Path(\"fmt-theme.scss\"), got {:?}",
+            theme.value
+        );
+    }
+
+    #[test]
+    fn test_theme_missing_file_stays_scalar() {
+        // A `.scss` string with no matching bundled file is NOT the
+        // extension's to claim — it stays Scalar and resolves (or
+        // hard-errors) downstream relative to the document.
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/fancyfmt");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+contributes:
+  formats:
+    html:
+      theme: [missing.scss]
+"#,
+        );
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = &ext.contributes.formats["html"];
+        let items = html_meta.get("theme").unwrap().as_array().unwrap();
+        assert!(
+            matches!(&items[0].value, ConfigValueKind::Scalar(_)),
+            "expected Scalar for missing.scss (no bundled file), got {:?}",
+            items[0].value
+        );
+    }
+
+    #[test]
+    fn test_theme_nested_map_leaves_marked() {
+        // The light/dark map form: pattern exhaustion at `theme` marks
+        // every string leaf underneath, existence-driven per leaf.
+        // (Consumption of light/dark maps is bd-o76p01wb; marking now
+        // means that fix composes with this one.)
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/fancyfmt");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+contributes:
+  formats:
+    html:
+      theme:
+        light: [flatly, fmt-light.scss]
+        dark: fmt-dark.scss
+"#,
+        );
+        write_asset(&ext_dir, "fmt-light.scss");
+        write_asset(&ext_dir, "fmt-dark.scss");
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = &ext.contributes.formats["html"];
+        let theme = html_meta.get("theme").unwrap();
+        let light = theme.get("light").unwrap().as_array().unwrap();
+        assert!(
+            matches!(&light[0].value, ConfigValueKind::Scalar(_)),
+            "expected Scalar for builtin `flatly`, got {:?}",
+            light[0].value
+        );
+        assert!(
+            matches!(&light[1].value, ConfigValueKind::Path(s) if s == "fmt-light.scss"),
+            "expected Path(\"fmt-light.scss\"), got {:?}",
+            light[1].value
+        );
+        let dark = theme.get("dark").unwrap();
+        assert!(
+            matches!(&dark.value, ConfigValueKind::Path(s) if s == "fmt-dark.scss"),
+            "expected Path(\"fmt-dark.scss\"), got {:?}",
+            dark.value
+        );
+    }
+
+    #[test]
+    fn test_css_bundled_file_marked_missing_stays_scalar() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/fancyfmt");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+contributes:
+  formats:
+    html:
+      css: [fmt-style.css, not-bundled.css]
+"#,
+        );
+        write_asset(&ext_dir, "fmt-style.css");
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = &ext.contributes.formats["html"];
+        let items = html_meta.get("css").unwrap().as_array().unwrap();
+        assert!(
+            matches!(&items[0].value, ConfigValueKind::Path(s) if s == "fmt-style.css"),
+            "expected Path(\"fmt-style.css\"), got {:?}",
+            items[0].value
+        );
+        assert!(
+            matches!(&items[1].value, ConfigValueKind::Scalar(_)),
+            "expected Scalar for not-bundled.css, got {:?}",
+            items[1].value
+        );
+    }
+
+    #[test]
+    fn test_include_keys_bundled_files_marked() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/fancyfmt");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+contributes:
+  formats:
+    html:
+      include-in-header: header.html
+      include-before-body: [before.html]
+      include-after-body: after.html
+"#,
+        );
+        write_asset(&ext_dir, "header.html");
+        write_asset(&ext_dir, "before.html");
+        write_asset(&ext_dir, "after.html");
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = &ext.contributes.formats["html"];
+        for (key, expected) in [
+            ("include-in-header", "header.html"),
+            ("include-after-body", "after.html"),
+        ] {
+            let v = html_meta.get(key).unwrap();
+            assert!(
+                matches!(&v.value, ConfigValueKind::Path(s) if s == expected),
+                "{}: expected Path(\"{}\"), got {:?}",
+                key,
+                expected,
+                v.value
+            );
+        }
+        let before = html_meta
+            .get("include-before-body")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert!(
+            matches!(&before[0].value, ConfigValueKind::Path(s) if s == "before.html"),
+            "expected Path(\"before.html\"), got {:?}",
+            before[0].value
+        );
+    }
+
+    #[test]
+    fn test_format_resources_bundled_subdir_file_marked() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/fancyfmt");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+contributes:
+  formats:
+    html:
+      format-resources: [fonts/fancy.woff2]
+"#,
+        );
+        write_asset(&ext_dir, "fonts/fancy.woff2");
+
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        let html_meta = &ext.contributes.formats["html"];
+        let items = html_meta
+            .get("format-resources")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert!(
+            matches!(&items[0].value, ConfigValueKind::Path(s) if s == "fonts/fancy.woff2"),
+            "expected Path(\"fonts/fancy.woff2\"), got {:?}",
+            items[0].value
+        );
     }
 
     #[test]

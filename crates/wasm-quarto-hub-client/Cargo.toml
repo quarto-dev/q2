@@ -17,7 +17,7 @@ quarto-core = { path = "../quarto-core" }
 # NOTE: `quarto-error-catalog` is intentionally NOT a dependency here — the WASM
 # bridge never surfaces docs URLs, so installing the catalog would only bloat the
 # bundle past the PWA precache limit. See the comment in `init()` in src/lib.rs.
-quarto-error-reporting = { version = "0.1.0", features = ["json"] }
+quarto-error-reporting = { version = "0.2.1", features = ["json"] }
 # Direct dep so the test-only `quarto_highlight_for_test` export can
 # call the Registry-backed highlight path. Same crate quarto-core uses
 # via CodeHighlightStage — ensuring WASM tests exercise the same code
@@ -60,3 +60,17 @@ wasm-bindgen-futures = { path = "../wasm-bindgen-futures-patch" }
 # c_shim.rs is the single source of truth for C stdlib symbols. See
 # ../../claude-notes/plans/2026-04-20-wasm-shim-merge.md.
 tree-sitter-language = { path = "../tree-sitter-language-wasm-shim" }
+
+# Size-tuned for the live-share join payload (plan
+# `claude-notes/plans/2026-08-13-live-share-local-spa-assets.md`, Phase 1;
+# `hub-client/scripts/build-wasm.js` follows this with `wasm-opt -Oz`).
+# Measured on the shipped `*_bg.wasm` (2026-08-13): baseline 41,909,271 B;
+# per-knob codegen-units=1 → 36,683,806, opt-level="s" → 38,724,917,
+# lto=true → 41,173,913 (lto="thin" alone *regresses*: 46,500,921);
+# combined 32,726,966; combined + wasm-opt -Oz → 26,898,758 (−35.8%).
+# `panic = "abort"` is not an option: Lua needs panic=unwind (see
+# `.cargo/config.toml`).
+[profile.release]
+lto = true
+opt-level = "s"
+codegen-units = 1

@@ -15,9 +15,9 @@ categories:
 
 ## What this means
 
-A shortcode is a `{{< name arg >}}` construct that Quarto
-expands during rendering — `{{< meta title >}}` inserts the
-document title, `{{< var key >}}` inserts a value from
+A shortcode is a `{{{< name arg >}}}` construct that Quarto
+expands during rendering — `{{{< meta title >}}}` inserts the
+document title, `{{{< var key >}}}` inserts a value from
 `_variables.yml`, and so on. Expansion normally happens before
 the writer sees the AST.
 

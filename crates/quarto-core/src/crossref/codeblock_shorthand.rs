@@ -41,51 +41,81 @@
 //!
 //! ## Cell-option partitioning
 //!
-//! The `#|` block is parsed line-by-line. Each line matching `#| <key>:
-//! <value>` (leading whitespace tolerated) is partitioned:
+//! The option marker follows the **cell's language**, not a fixed `#|`:
+//! python/R use `#|`, lua/sql `--|`, js/rust `//|`, and mermaid `%%|`.
+//! The syntax comes from [`crate::cell_options::comment_syntax_for`], and
+//! the option block itself is split off and parsed as YAML by
+//! [`crate::cell_options::partition_cell_options`] — the shared facility,
+//! rather than the ad-hoc `split_once(':')` matcher this module used to
+//! carry (bd-mermaid-cell-options-9wo3crl0, bd-5jcmmj1f). Going through
+//! real YAML is what makes `fig-cap: "A caption."` arrive *without* its
+//! quotes, and what gives every key a source span to hang a diagnostic on.
 //!
-//! - **Consumed** (lifted into the Div scaffold and removed from the code
-//!   block body): `label`, `<reftype>-cap`, `<reftype>-scap`, `<reftype>-alt`.
-//!   The `<reftype>` prefix set is taken from the [`RefTypeRegistry`], so
-//!   user-declared categories work out of the box.
-//! - **Passed to the engine** (left in the body): everything else
-//!   (`echo`, `eval`, engine-specific options, etc.).
+//! Each parsed option is then either:
 //!
-//! Lines that don't match `#| key: value` shape pass through untouched.
-//! The first line that isn't a `#|` line stops cell-option parsing — the
-//! remainder of `text` is treated as code body.
+//! - **Consumed** — lifted into the wrapper and removed from the code
+//!   block body. Only keys q2 can actually route are consumed: `label`
+//!   and `<reftype>-cap` (the `<reftype>` set comes from the
+//!   [`RefTypeRegistry`], so user-declared categories work out of the
+//!   box), plus `fig-scap` on the unlabelled figure path and `fig-alt`
+//!   on a diagram cell.
+//! - **Passed to the engine** — left in the body. This is everything
+//!   else (`echo`, `eval`, engine-specific options), *and* any
+//!   recognized key q2 has nowhere to put in this position. Consuming
+//!   what cannot be routed is how `fig-alt` used to vanish silently
+//!   (bd-il6pxq4f); leaving it in the body keeps it reachable.
+//!
+//! Only the **leading run** of option lines counts — the first line that
+//! isn't an option line starts the code. For mermaid this is what keeps a
+//! `%%|` further down the diagram an ordinary comment.
 
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::attr::AttrSourceInfo;
-use quarto_pandoc_types::block::{Block, Blocks, Div, Paragraph};
+use quarto_pandoc_types::block::{Block, Blocks, Div, Figure, Paragraph, Plain};
+use quarto_pandoc_types::caption::Caption;
 use quarto_pandoc_types::inline::{Inline, Inlines, Str};
-use quarto_source_map::SourceInfo;
+use quarto_source_map::{SourceContext, SourceInfo};
+use yaml_rust2::Yaml;
 
 use super::RefTypeRegistry;
+use crate::cell_options::{CommentSyntax, comment_syntax_for, partition_cell_options};
 
 /// Walk the top-level block list, desugaring any code-block shorthand in
 /// place.
-pub fn desugar_blocks(blocks: &mut Blocks, registry: &RefTypeRegistry) {
+///
+/// `sources` is the document's [`SourceContext`], used to anchor each
+/// cell's option spans in the original file — see [`body_source_for`].
+/// `diagnostics` collects anything the desugar has to say about the
+/// options it read (today: a caption that does not parse as markdown).
+pub fn desugar_blocks(
+    blocks: &mut Blocks,
+    registry: &RefTypeRegistry,
+    sources: &SourceContext,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
     // We iterate by index because we may replace the current slot.
     let mut i = 0;
     while i < blocks.len() {
         // Recurse into containers.
         match &mut blocks[i] {
-            Block::BlockQuote(bq) => desugar_blocks(&mut bq.content, registry),
-            Block::Div(div) => desugar_blocks(&mut div.content, registry),
+            Block::BlockQuote(bq) => {
+                desugar_blocks(&mut bq.content, registry, sources, diagnostics)
+            }
+            Block::Div(div) => desugar_blocks(&mut div.content, registry, sources, diagnostics),
             Block::OrderedList(ol) => {
                 for item in &mut ol.content {
-                    desugar_blocks(item, registry);
+                    desugar_blocks(item, registry, sources, diagnostics);
                 }
             }
             Block::BulletList(bl) => {
                 for item in &mut bl.content {
-                    desugar_blocks(item, registry);
+                    desugar_blocks(item, registry, sources, diagnostics);
                 }
             }
             Block::DefinitionList(dl) => {
                 for (_term, defs) in &mut dl.content {
                     for def in defs {
-                        desugar_blocks(def, registry);
+                        desugar_blocks(def, registry, sources, diagnostics);
                     }
                 }
             }
@@ -94,7 +124,7 @@ pub fn desugar_blocks(blocks: &mut Blocks, registry: &RefTypeRegistry) {
 
         // Try to desugar this block.
         if let Block::CodeBlock(cb) = &blocks[i]
-            && let Some(replacement) = try_desugar_code_block(cb, registry)
+            && let Some(replacement) = try_desugar_code_block(cb, registry, sources, diagnostics)
         {
             blocks[i] = replacement;
         }
@@ -105,126 +135,477 @@ pub fn desugar_blocks(blocks: &mut Blocks, registry: &RefTypeRegistry) {
 fn try_desugar_code_block(
     cb: &quarto_pandoc_types::block::CodeBlock,
     registry: &RefTypeRegistry,
+    sources: &SourceContext,
+    diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Option<Block> {
-    let parsed = parse_cell_options(&cb.text);
+    let language = language_of(cb);
+    let body_source = body_source_for(cb, sources);
+    let parsed = parse_cell_options(&language, &cb.text, body_source.clone());
 
-    // Find a `label:` that classifies as a crossref.
-    let label = parsed.get("label")?;
-    let def = registry.classify_cite_id(label)?;
-    let identifier = label.clone();
-    let ref_type = def.ref_type.clone();
+    if is_diagram_language(&language) {
+        warn_wrong_marker(&cb.text, &parsed, &body_source, diagnostics);
+    }
 
-    // Classify each option key as consumed vs. passed-through.
-    let (consumed, passthrough) = partition_options(&parsed, &ref_type);
+    // Keys this cell's options let us act on. Everything else stays in
+    // the body: an option q2 cannot route is the engine's to interpret,
+    // and consuming it would discard it silently (bd-il6pxq4f).
+    let mut consumed: std::collections::HashMap<String, &OptionValue> =
+        std::collections::HashMap::new();
+    let mut consume = |key: String| {
+        parsed.values.get(&key).inspect(|v| {
+            consumed.insert(key.clone(), v);
+        })
+    };
 
-    // Extract the caption text from the consumed set, if any.
-    let caption_text = consumed.get(&format!("{ref_type}-cap")).cloned();
+    // Which wrapper the caption options call for.
+    let wrapper = match parsed.get("label") {
+        // A `label:` that classifies as a crossref: the float Div the
+        // crossref pipeline numbers and renders. A label that is *not*
+        // a crossref means the author is naming the cell for the
+        // engine — no wrapper, and the label stays in the body.
+        Some(label) => match registry.classify_cite_id(label) {
+            Some(def) => {
+                let ref_type = def.ref_type.clone();
+                let label = label.to_string();
+                consume("label".to_string());
+                let caption = consume(format!("{ref_type}-cap"));
+                Wrapper::Float { label, caption }
+            }
+            None => Wrapper::None,
+        },
+        // No label: a caption still deserves a figure, just an
+        // unnumbered one (decision 1).
+        None => match consume("fig-cap".to_string()) {
+            Some(caption) => {
+                let short = consume("fig-scap".to_string());
+                Wrapper::Figure { caption, short }
+            }
+            None => Wrapper::None,
+        },
+    };
 
-    // Rewrite the code block's text to drop the consumed lines.
-    let new_text = strip_consumed_lines(&cb.text, &consumed);
-    let _ = passthrough; // kept as-is in `new_text`; explicit for clarity.
+    // Accessibility (decision 2), independent of any wrapper: a lone
+    // `fig-alt` on a diagram is reason enough to rewrite the cell.
+    let acc_descr = if is_diagram_language(&language) {
+        consume("fig-alt".to_string()).map(|v| v.value.clone())
+    } else {
+        None
+    };
 
+    // A diagram cell has no engine to hand the leftovers to (decision 4).
+    if is_diagram_language(&language) {
+        warn_unconsumed_options(&parsed, &consumed, diagnostics);
+    }
+
+    if consumed.is_empty() {
+        return None;
+    }
+
+    let mut text = strip_consumed_lines(&cb.text, &consumed, &parsed.syntax);
+    if let Some(description) = acc_descr {
+        text = inject_acc_descr(&text, &description);
+    }
     let new_code_block = Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
         attr: cb.attr.clone(),
-        text: new_text,
+        text,
         source_info: cb.source_info.clone(),
         attr_source: cb.attr_source.clone(),
     });
 
-    // Build the Div scaffold.
-    let mut div_content: Blocks = vec![new_code_block];
-    if let Some(text) = caption_text {
-        div_content.push(caption_paragraph(&text, cb.source_info.clone()));
-    }
-
-    let attr = (identifier, Vec::new(), hashlink::LinkedHashMap::new());
-    Some(Block::Div(Div {
-        attr,
-        content: div_content,
-        source_info: cb.source_info.clone(),
-        attr_source: AttrSourceInfo::empty(),
-    }))
+    Some(match wrapper {
+        Wrapper::Float { label, caption } => {
+            let mut content: Blocks = vec![new_code_block];
+            if let Some(caption) = caption {
+                content.push(caption_paragraph(caption, diagnostics));
+            }
+            Block::Div(Div {
+                attr: (label, Vec::new(), hashlink::LinkedHashMap::new()),
+                content,
+                source_info: cb.source_info.clone(),
+                attr_source: AttrSourceInfo::empty(),
+            })
+        }
+        Wrapper::Figure { caption, short } => {
+            let long = match caption_paragraph(caption, diagnostics) {
+                Block::Paragraph(p) => vec![Block::Plain(Plain {
+                    content: p.content,
+                    source_info: p.source_info,
+                })],
+                other => vec![other],
+            };
+            Block::Figure(Figure {
+                attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+                caption: Caption {
+                    short: short.map(|s| caption_inlines(s, diagnostics)),
+                    long: Some(long),
+                    source_info: caption.value_source.clone(),
+                },
+                content: vec![new_code_block],
+                source_info: cb.source_info.clone(),
+                attr_source: AttrSourceInfo::empty(),
+            })
+        }
+        // Nothing to wrap — the cell was rewritten in place (today only
+        // by the accessibility injection).
+        Wrapper::None => new_code_block,
+    })
 }
 
-/// Parse `#| key: value` lines from the head of `text`. Returns the
-/// parsed map; stops at the first non-`#|` line.
+/// What the cell's caption options call for around the rewritten code
+/// block.
+enum Wrapper<'a> {
+    /// `::: {#fig-x} <code> <caption> :::` — the crossref transforms
+    /// later turn this into a numbered float.
+    Float {
+        label: String,
+        caption: Option<&'a OptionValue>,
+    },
+    /// A plain [`Block::Figure`]: the HTML writer renders it as
+    /// `<figure>…<figcaption>` with no number and no float scaffolding.
+    ///
+    /// Q1 could not do this — its cell handling was textual, so it
+    /// emitted markdown and let a filter rebuild the structure. Working
+    /// on the AST, the node can be constructed directly.
+    ///
+    /// Only `fig-cap`/`fig-scap` reach here: without a label there is no
+    /// ref-type to derive a category from, and an unnumbered non-figure
+    /// float is not a thing q2 models.
+    Figure {
+        caption: &'a OptionValue,
+        short: Option<&'a OptionValue>,
+    },
+    /// No wrapper; the code block stands on its own.
+    None,
+}
+
+/// Languages whose cells q2 renders as a client-side diagram, and for
+/// which [`inject_acc_descr`] therefore knows how to carry `fig-alt`.
+fn is_diagram_language(language: &str) -> bool {
+    language.eq_ignore_ascii_case("mermaid")
+}
+
+/// Every option key a diagram cell can act on. A key outside this set is
+/// unknown; a key inside it that still went unconsumed had nowhere to go
+/// *in this position* (e.g. `fig-scap` on a numbered float).
 ///
-/// Preserves original insertion order is not needed — we only need
-/// lookups, so a HashMap is fine.
-fn parse_cell_options(text: &str) -> std::collections::HashMap<String, String> {
-    let mut out = std::collections::HashMap::new();
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        let rest = match trimmed.strip_prefix("#|") {
-            Some(s) => s,
-            None => break,
+/// **Grow this list when a feature starts honouring a key.** Q1 accepts
+/// `theme` and `mermaid-format` on mermaid cells; q2 does not yet, so
+/// they warn here — correctly, today. The mermaid theming strands
+/// (bd-sehm2rha, bd-nj25kgbu) should add `theme` when they land, or
+/// authors who follow Q1 will get a warning for an option that works.
+const DIAGRAM_OPTION_KEYS: &[&str] = &["label", "fig-cap", "fig-scap", "fig-alt"];
+
+/// Report options a diagram cell carried but nothing acted on
+/// (decision 4).
+///
+/// This is deliberately scoped to diagram cells. On an **executable**
+/// cell an unrecognized key is normally an engine option (`echo`,
+/// `eval`, `warning`, engine-specific keys) that the engine reads from
+/// the body, so warning there would fire on essentially every real
+/// document. A diagram cell has no engine at all — every option is q2's
+/// to interpret, and one q2 does not interpret is a mistake.
+fn warn_unconsumed_options(
+    parsed: &CellOptions,
+    consumed: &std::collections::HashMap<String, &OptionValue>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    // Sorted so a cell with several stray options reports them in a
+    // stable order rather than the hash map's.
+    let mut leftover: Vec<(&String, &OptionValue)> = parsed
+        .values
+        .iter()
+        .filter(|(key, _)| !consumed.contains_key(*key))
+        .collect();
+    leftover.sort_by(|a, b| a.0.cmp(b.0));
+
+    for (key, option) in leftover {
+        let recognized = DIAGRAM_OPTION_KEYS.contains(&key.as_str());
+        let problem = if recognized {
+            format!("`{key}` is a Quarto cell option, but it has no effect on this diagram.")
+        } else {
+            format!("`{key}` is not a cell option a diagram cell understands.")
         };
-        let rest = rest.trim_start();
-        if let Some((key, value)) = rest.split_once(':') {
-            let key = key.trim().to_string();
-            let value = value.trim().to_string();
-            if !key.is_empty() {
-                out.insert(key, value);
-            }
+        let hint = if recognized {
+            "Remove it, or move it to a position where it applies."
+        } else {
+            "Diagram cells accept `label`, `fig-cap`, `fig-scap`, and `fig-alt`. \
+             A diagram has no execution engine, so other options have nowhere to go."
+        };
+        diagnostics.push(
+            DiagnosticMessageBuilder::warning("Cell option ignored on a diagram cell")
+                .with_code("Q-2-47")
+                .with_location(option.key_source.clone())
+                .problem(problem)
+                .add_hint(hint)
+                .build(),
+        );
+    }
+}
+
+/// Report a leading run of `#|` lines in a diagram cell (decision 5).
+///
+/// `#|` used to work here, and stopping is deliberate — but `#` is not a
+/// mermaid comment, so the leftover lines become diagram source and
+/// mermaid fails to parse them. Without this the author sees a broken
+/// diagram and no explanation.
+///
+/// Only fires when the cell's own marker found nothing: a cell that
+/// correctly uses `%%|` and happens to contain a `#|` further down is
+/// writing diagram content, not options.
+fn warn_wrong_marker(
+    text: &str,
+    parsed: &CellOptions,
+    body_source: &SourceInfo,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    if !parsed.values.is_empty() {
+        return;
+    }
+    let Some(first) = text.lines().next() else {
+        return;
+    };
+    let Some(rest) = first.strip_prefix('#') else {
+        return;
+    };
+    if !rest.trim_start_matches([' ', '\t']).starts_with('|') {
+        return;
+    }
+
+    diagnostics.push(
+        DiagnosticMessageBuilder::warning("Wrong cell-option marker for a diagram cell")
+            .with_code("Q-2-48")
+            .with_location(SourceInfo::substring(
+                body_source.clone(),
+                0,
+                first.len().min(body_source.length()),
+            ))
+            .problem("`#|` is not a mermaid comment, so these lines are read as diagram source.")
+            .add_hint("Write mermaid cell options as `%%|` — the marker follows the cell language's own comment syntax.")
+            .build(),
+    );
+}
+
+/// Carry `fig-alt` into a mermaid diagram as its native `accDescr:`
+/// directive (decision 2).
+///
+/// mermaid.js replaces the `<pre class="mermaid">` with an inline
+/// `<svg>` at runtime, so an attribute on the `<pre>` would not reach
+/// assistive technology; `accDescr:` becomes the SVG's own description
+/// and survives the swap. It has to sit **after** the diagram-type
+/// declaration — mermaid rejects it before — so it is inserted after the
+/// first line that is neither blank nor a `%%` comment.
+///
+/// The description is folded onto a single line: a newline would
+/// terminate the single-line form, and mermaid's multi-line
+/// `accDescr { … }` form has no escape for a `}` appearing in the text.
+/// Prose alt text loses no meaning to the fold.
+///
+/// **Revisit when diagrams are rendered server-side** (PDF/print): with
+/// a real image element in the output, the accessible name belongs in
+/// that element's `alt`, and `accDescr:` inside the source stops being
+/// the mechanism that reaches assistive tech.
+fn inject_acc_descr(source: &str, description: &str) -> String {
+    let folded = description.split_whitespace().collect::<Vec<_>>().join(" ");
+    if folded.is_empty() {
+        return source.to_string();
+    }
+
+    let mut out = String::with_capacity(source.len() + folded.len() + 16);
+    let mut injected = false;
+    for line in source.lines() {
+        out.push_str(line);
+        out.push('\n');
+        let trimmed = line.trim();
+        if !injected && !trimmed.is_empty() && !trimmed.starts_with("%%") {
+            out.push_str("  accDescr: ");
+            out.push_str(&folded);
+            out.push('\n');
+            injected = true;
         }
+    }
+    if !injected {
+        // A diagram with no declaration line at all (empty or
+        // comments-only): there is nothing for the directive to attach
+        // to, so leave the source alone.
+        return source.to_string();
+    }
+    if !source.ends_with('\n') && out.ends_with('\n') {
+        out.pop();
     }
     out
 }
 
-/// Partition parsed options into (consumed, passthrough). `ref_type` is
-/// used to recognize `<reftype>-cap`-style keys against the current
-/// category.
-fn partition_options(
-    parsed: &std::collections::HashMap<String, String>,
-    ref_type: &str,
-) -> (
-    std::collections::HashMap<String, String>,
-    std::collections::HashMap<String, String>,
-) {
-    let mut consumed = std::collections::HashMap::new();
-    let mut passthrough = std::collections::HashMap::new();
-
-    let cap_key = format!("{ref_type}-cap");
-    let scap_key = format!("{ref_type}-scap");
-    let alt_key = format!("{ref_type}-alt");
-
-    for (k, v) in parsed {
-        if k == "label" || *k == cap_key || *k == scap_key || *k == alt_key {
-            consumed.insert(k.clone(), v.clone());
-        } else {
-            passthrough.insert(k.clone(), v.clone());
-        }
-    }
-    (consumed, passthrough)
+/// The cell's language: the block's first class, with a brace-form
+/// wrapper removed (` ```{python} ` parses to the class `{python}`, and
+/// its options are still `#|`). An unclassed block reports `""`, which
+/// [`comment_syntax_for`] maps to the `#` default.
+fn language_of(cb: &quarto_pandoc_types::block::CodeBlock) -> String {
+    let Some(first) = cb.attr.1.first() else {
+        return String::new();
+    };
+    first
+        .strip_prefix('{')
+        .and_then(|s| s.strip_suffix('}'))
+        .unwrap_or(first)
+        .to_string()
 }
 
-/// Remove the `#| key: ...` lines in `consumed` from the head of `text`.
-/// Leaves lines for keys not in `consumed` (and all lines after the first
-/// non-`#|` line) untouched.
+/// Provenance for `cb.text`.
+///
+/// `CodeBlock::source_info` spans the **whole fenced block** — opening
+/// fence, info string, content, closing fence — so it cannot be used
+/// directly as the body's source: every offset would be shifted by the
+/// length of the fence line. Locate `cb.text` inside the block's own
+/// source text and return the matching substring span.
+///
+/// Falls back to the block's span when the body is not a contiguous
+/// substring of it. That happens legitimately: a fence inside a
+/// blockquote or a list item has its continuation markers (`> `,
+/// indentation) stripped from `text` by the parser, so no contiguous
+/// range matches. Diagnostics then point at the block rather than the
+/// exact key — coarser, but never *wrong*, which is the property that
+/// matters (the alternative, binding an assumed span to real content,
+/// is the failure mode `add_file_with_id` is lint-gated against).
+fn body_source_for(
+    cb: &quarto_pandoc_types::block::CodeBlock,
+    sources: &SourceContext,
+) -> SourceInfo {
+    let block = cb.source_info.clone();
+    if cb.text.is_empty() {
+        return block;
+    }
+    let Some((file_id, start, end)) = block.resolve_byte_range() else {
+        return block;
+    };
+    let Some(file) = sources.get_file(quarto_source_map::FileId(file_id)) else {
+        return block;
+    };
+    let Some(block_text) = file.content.as_deref().and_then(|c| c.get(start..end)) else {
+        return block;
+    };
+    match block_text.find(&cb.text) {
+        Some(offset) => SourceInfo::substring(block, offset, offset + cb.text.len()),
+        None => block,
+    }
+}
+
+/// A cell's parsed option block: scalar values by key, plus the comment
+/// syntax its language uses (needed to strip the consumed lines back out
+/// of the body).
+struct CellOptions {
+    values: std::collections::HashMap<String, OptionValue>,
+    syntax: CommentSyntax,
+}
+
+/// One option's scalar value and the provenance of its **key**, which is
+/// what a diagnostic about the option should point at.
+struct OptionValue {
+    value: String,
+    #[allow(
+        dead_code,
+        reason = "consumed by the unknown-key diagnostics in Phase 6"
+    )]
+    key_source: SourceInfo,
+    /// Provenance of the value scalar — the anchor a re-parse of the
+    /// value (e.g. a caption read as markdown) hangs its spans off.
+    value_source: SourceInfo,
+}
+
+impl CellOptions {
+    fn get(&self, key: &str) -> Option<&str> {
+        self.values.get(key).map(|v| v.value.as_str())
+    }
+}
+
+/// Split `text` into `<marker> key: value` options + code per
+/// `language`'s comment syntax, and return the options' scalar values.
+///
+/// Non-scalar values (sequences, mappings) are skipped: no key this
+/// module consumes takes one, and the engine reads the body text
+/// directly rather than this map.
+///
+/// A malformed options block yields no options and leaves the block
+/// alone. It is deliberately **not** reported here: the engine-execution
+/// stage re-partitions the same cell and already fails the render with a
+/// located diagnostic (`engine_error_policy::malformed_cell_options_fail_the_render`),
+/// so reporting here too would double-report the same mistake.
+fn parse_cell_options(language: &str, text: &str, body_source: SourceInfo) -> CellOptions {
+    let syntax = comment_syntax_for(language);
+    let mut values = std::collections::HashMap::new();
+
+    if let Ok(part) = partition_cell_options(language, text, body_source)
+        && let Some(options) = part.options
+        && let Some(entries) = options.as_hash()
+    {
+        for entry in entries {
+            let (Some(key), Some(value)) =
+                (entry.key.yaml.as_str(), scalar_to_string(&entry.value))
+            else {
+                continue;
+            };
+            values.insert(
+                key.to_string(),
+                OptionValue {
+                    value,
+                    key_source: entry.key.source_info.clone(),
+                    value_source: entry.value.source_info.clone(),
+                },
+            );
+        }
+    }
+
+    CellOptions { values, syntax }
+}
+
+/// Render a scalar YAML node as the string this module works with.
+/// `None` for arrays, hashes, and null.
+fn scalar_to_string(node: &quarto_yaml::YamlWithSourceInfo) -> Option<String> {
+    if !node.is_scalar() {
+        return None;
+    }
+    match &node.yaml {
+        Yaml::String(s) => Some(s.clone()),
+        Yaml::Integer(i) => Some(i.to_string()),
+        // `Real` keeps the scalar's original text, so a numeric caption
+        // reaches the reader exactly as written.
+        Yaml::Real(r) => Some(r.clone()),
+        Yaml::Boolean(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
+/// Remove the `<marker> key: ...` lines in `consumed` from the head of
+/// `text`. Leaves lines for keys not in `consumed` (and all lines after
+/// the first non-option line) untouched.
+///
+/// This stays line-oriented on purpose: unconsumed options must reach the
+/// engine byte-for-byte as the author wrote them, so the body is edited
+/// rather than re-serialized from the parsed map.
 fn strip_consumed_lines(
     text: &str,
-    consumed: &std::collections::HashMap<String, String>,
+    consumed: &std::collections::HashMap<String, &OptionValue>,
+    syntax: &CommentSyntax,
 ) -> String {
     let mut out = String::new();
     let mut in_header = true;
     for line in text.lines() {
         if in_header {
-            let trimmed = line.trim_start();
-            if let Some(rest) = trimmed.strip_prefix("#|") {
-                let rest = rest.trim_start();
-                if let Some((key, _value)) = rest.split_once(':')
-                    && consumed.contains_key(key.trim())
-                {
-                    // Drop this line.
+            if let Some(rest) = line.strip_prefix(syntax.prefix) {
+                let rest = rest.trim_start_matches([' ', '\t']);
+                if let Some(rest) = rest.strip_prefix('|') {
+                    if let Some((key, _value)) = rest.split_once(':')
+                        && consumed.contains_key(key.trim())
+                    {
+                        // Drop this line.
+                        continue;
+                    }
+                    // Option line that isn't consumed — keep it.
+                    out.push_str(line);
+                    out.push('\n');
                     continue;
                 }
-                // `#|` line that isn't consumed — keep it.
-                out.push_str(line);
-                out.push('\n');
-                continue;
-            } else {
-                in_header = false;
             }
+            in_header = false;
         }
         out.push_str(line);
         out.push('\n');
@@ -236,15 +617,58 @@ fn strip_consumed_lines(
     out
 }
 
-fn caption_paragraph(text: &str, source_info: SourceInfo) -> Block {
-    let content: Inlines = vec![Inline::Str(Str {
-        text: text.to_string(),
-        source_info: source_info.clone(),
-    })];
+/// Build the caption paragraph from a `<reftype>-cap` option.
+///
+/// The caption is **markdown**, not literal text: `fig-cap: A *strong*
+/// claim` must reach the figcaption as an `Emph`, exactly as it would
+/// from front matter (bd-sdpp9rw4). Parsing goes through the same
+/// entry point document metadata uses, anchored at the value's own span
+/// so inline positions resolve into the option line.
+///
+/// A caption that parses to several blocks (rare — it would take a list
+/// or a heading in a `fig-cap`) keeps only the first paragraph's
+/// inlines; a caption that does not parse at all falls back to literal
+/// text, with `parse_config_string_as_markdown`'s own Q-1-20 warning
+/// carried into `diagnostics`.
+fn caption_paragraph(caption: &OptionValue, diagnostics: &mut Vec<DiagnosticMessage>) -> Block {
+    let source_info = caption.value_source.clone();
     Block::Paragraph(Paragraph {
-        content,
+        content: caption_inlines(caption, diagnostics),
         source_info,
     })
+}
+
+/// The inline content of a caption option — see [`caption_paragraph`]
+/// for the parsing contract. Split out because a short caption
+/// (`fig-scap`) is `Inlines`, not a block.
+fn caption_inlines(caption: &OptionValue, diagnostics: &mut Vec<DiagnosticMessage>) -> Inlines {
+    let source_info = caption.value_source.clone();
+    let kind = pampa::pandoc::meta::parse_config_string_as_markdown(
+        &caption.value,
+        &source_info,
+        diagnostics,
+    );
+
+    match kind {
+        quarto_pandoc_types::ConfigValueKind::PandocInlines(inlines) => inlines,
+        quarto_pandoc_types::ConfigValueKind::PandocBlocks(blocks) => blocks
+            .into_iter()
+            .find_map(|b| match b {
+                Block::Paragraph(p) => Some(p.content),
+                Block::Plain(p) => Some(p.content),
+                _ => None,
+            })
+            .unwrap_or_else(|| literal_caption(&caption.value, &source_info)),
+        _ => literal_caption(&caption.value, &source_info),
+    }
+}
+
+/// Fallback caption inlines: the option's text, verbatim.
+fn literal_caption(text: &str, source_info: &SourceInfo) -> Inlines {
+    vec![Inline::Str(Str {
+        text: text.to_string(),
+        source_info: source_info.clone(),
+    })]
 }
 
 #[cfg(test)]
@@ -260,28 +684,448 @@ mod tests {
     }
 
     fn code(text: &str) -> Block {
+        code_in("python", text)
+    }
+
+    fn code_in(language: &str, text: &str) -> Block {
         Block::CodeBlock(CodeBlock {
-            attr: (String::new(), vec!["python".into()], LinkedHashMap::new()),
+            attr: (String::new(), vec![language.into()], LinkedHashMap::new()),
             text: text.to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         })
     }
 
+    /// Tests don't need real provenance — the desugar only uses it to
+    /// give parsed option spans something to hang off.
+    fn sources() -> SourceContext {
+        SourceContext::new()
+    }
+
+    fn desugar(blocks: &mut Blocks, reg: &RefTypeRegistry) {
+        desugar_blocks(blocks, reg, &sources(), &mut Vec::new());
+    }
+
     #[test]
     fn parses_cell_options() {
-        let opts =
-            parse_cell_options("#| label: fig-plot\n#| fig-cap: \"My caption\"\nprint('hi')\n");
-        assert_eq!(&opts["label"], "fig-plot");
-        assert!(opts["fig-cap"].contains("My caption"));
-        assert!(!opts.contains_key("print('hi')"));
+        let opts = parse_cell_options(
+            "python",
+            "#| label: fig-plot\n#| fig-cap: \"My caption\"\nprint('hi')\n",
+            si(),
+        );
+        assert_eq!(opts.get("label"), Some("fig-plot"));
+        assert_eq!(opts.get("fig-cap"), Some("My caption"));
+        assert_eq!(opts.get("print('hi')"), None);
     }
 
     #[test]
     fn stops_at_first_non_pipe_line() {
-        let opts = parse_cell_options("#| label: fig-one\nprint('hi')\n#| fig-cap: Too late");
-        assert_eq!(&opts["label"], "fig-one");
-        assert!(!opts.contains_key("fig-cap"));
+        let opts = parse_cell_options(
+            "python",
+            "#| label: fig-one\nprint('hi')\n#| fig-cap: Too late",
+            si(),
+        );
+        assert_eq!(opts.get("label"), Some("fig-one"));
+        assert_eq!(opts.get("fig-cap"), None);
+    }
+
+    /// The option marker follows the *cell language*, so a mermaid
+    /// diagram uses `%%|` (bd-mermaid-cell-options-9wo3crl0).
+    #[test]
+    fn mermaid_percent_options_desugar() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| label: fig-diagram\n%%| fig-cap: A labelled flowchart.\nflowchart LR\n  A --> B\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Div(div) = &blocks[0] else {
+            panic!("expected Div, got {:?}", blocks[0]);
+        };
+        assert_eq!(div.attr.0, "fig-diagram");
+        let Block::CodeBlock(cb) = &div.content[0] else {
+            panic!("expected the diagram code block");
+        };
+        assert!(
+            !cb.text.contains("%%|"),
+            "consumed option lines must leave the diagram source; got:\n{}",
+            cb.text
+        );
+        assert!(cb.text.contains("flowchart LR"));
+        let Block::Paragraph(p) = &div.content[1] else {
+            panic!("expected a caption paragraph");
+        };
+        assert_eq!(plain_text(&p.content), "A labelled flowchart.");
+    }
+
+    /// Decision 5: mermaid takes `%%|` *only*. `#|` is not a mermaid
+    /// comment at all, so treating it as an option marker would teach
+    /// authors that `#|` is universal. The block is left untouched.
+    #[test]
+    fn mermaid_hash_options_are_not_cell_options() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "#| label: fig-hash\n#| fig-cap: Hash-prefixed.\nflowchart LR\n  A --> B\n",
+        )];
+        let before = blocks.clone();
+        desugar(&mut blocks, &reg);
+        assert_eq!(blocks, before);
+    }
+
+    /// D1 (bd-5jcmmj1f): option values are YAML, so a double-quoted
+    /// caption must reach the figcaption *without* its quotes. The old
+    /// `split_once(':')` matcher carried them through verbatim.
+    #[test]
+    fn quoted_caption_loses_its_quotes() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code(
+            "#| label: fig-q\n#| fig-cap: \"A quoted caption.\"\nprint('hi')\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Div(div) = &blocks[0] else {
+            panic!()
+        };
+        let Block::Paragraph(p) = &div.content[1] else {
+            panic!()
+        };
+        assert_eq!(plain_text(&p.content), "A quoted caption.");
+    }
+
+    /// D2 (bd-sdpp9rw4): a caption is markdown, so `*emphasized*` must
+    /// reach the figcaption as an `Emph` and `[text](url)` as a `Link` —
+    /// not as literal asterisks and brackets in a single `Str`.
+    #[test]
+    fn caption_markdown_is_parsed_into_inlines() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code(
+            "#| label: fig-md\n#| fig-cap: A *strong* claim, see [the docs](https://example.com).\nprint('hi')\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Div(div) = &blocks[0] else {
+            panic!()
+        };
+        let Block::Paragraph(p) = &div.content[1] else {
+            panic!("expected a caption paragraph")
+        };
+        assert!(
+            p.content.iter().any(|i| matches!(i, Inline::Emph(_))),
+            "caption must carry an Emph; got {:?}",
+            p.content
+        );
+        assert!(
+            p.content.iter().any(|i| matches!(i, Inline::Link(_))),
+            "caption must carry a Link; got {:?}",
+            p.content
+        );
+        let flat = plain_text(&p.content);
+        assert!(
+            !flat.contains('*') && !flat.contains('['),
+            "markdown punctuation must not survive literally; got {flat:?}"
+        );
+    }
+
+    /// Flatten inlines to their visible text, for assertions that care
+    /// about what a reader sees rather than the node shape.
+    fn plain_text(inlines: &Inlines) -> String {
+        let mut out = String::new();
+        fn walk(inlines: &Inlines, out: &mut String) {
+            for inline in inlines {
+                match inline {
+                    Inline::Str(s) => out.push_str(&s.text),
+                    Inline::Space(_) => out.push(' '),
+                    Inline::Emph(e) => walk(&e.content, out),
+                    Inline::Strong(s) => walk(&s.content, out),
+                    Inline::Link(l) => walk(&l.content, out),
+                    _ => {}
+                }
+            }
+        }
+        walk(inlines, &mut out);
+        out
+    }
+
+    /// Decision 1: a `fig-cap` with no `label:` is a caption on an
+    /// *unnumbered* figure. Emitting `Block::Figure` directly is the
+    /// AST-level answer Q1 could not reach — its cell handling was
+    /// textual, so it had to emit markdown and let a filter rebuild the
+    /// structure.
+    #[test]
+    fn unlabelled_fig_cap_becomes_a_figure() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| fig-cap: Caption without a label.\nflowchart LR\n  A --> B\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Figure(fig) = &blocks[0] else {
+            panic!("expected Figure, got {:?}", blocks[0]);
+        };
+        assert_eq!(fig.attr.0, "", "an unlabelled figure carries no id");
+        let Block::CodeBlock(cb) = &fig.content[0] else {
+            panic!("figure must wrap the diagram");
+        };
+        assert!(!cb.text.contains("%%|"));
+        assert!(cb.text.contains("flowchart LR"));
+
+        let long = fig.caption.long.as_ref().expect("caption present");
+        let Block::Plain(p) = &long[0] else {
+            panic!("expected a Plain caption block, got {:?}", long[0]);
+        };
+        assert_eq!(plain_text(&p.content), "Caption without a label.");
+        assert!(fig.caption.short.is_none());
+    }
+
+    /// `fig-scap` is the short caption, which `Caption::short` models
+    /// directly. It used to be consumed and dropped (bd-il6pxq4f).
+    #[test]
+    fn unlabelled_fig_scap_sets_the_short_caption() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| fig-cap: The long caption.\n%%| fig-scap: Short.\nflowchart LR\n  A --> B\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Figure(fig) = &blocks[0] else {
+            panic!("expected Figure, got {:?}", blocks[0]);
+        };
+        let short = fig.caption.short.as_ref().expect("short caption present");
+        assert_eq!(plain_text(short), "Short.");
+        let Block::CodeBlock(cb) = &fig.content[0] else {
+            panic!()
+        };
+        assert!(
+            !cb.text.contains("fig-scap"),
+            "a consumed fig-scap must leave the body; got:\n{}",
+            cb.text
+        );
+    }
+
+    /// No label and no caption: nothing to build, block untouched.
+    #[test]
+    fn unlabelled_uncaptioned_block_untouched() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in("mermaid", "flowchart LR\n  A --> B\n")];
+        let before = blocks.clone();
+        desugar(&mut blocks, &reg);
+        assert_eq!(blocks, before);
+    }
+
+    /// Decision 2: `fig-alt` on a mermaid diagram becomes mermaid's own
+    /// `accDescr:` directive, which survives mermaid.js replacing the
+    /// `<pre>` with an inline `<svg>` at runtime. It must land *after*
+    /// the diagram-type line — mermaid rejects it before.
+    #[test]
+    fn mermaid_fig_alt_becomes_acc_descr() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| fig-alt: Two nodes connected by an arrow.\nflowchart LR\n  A --> B\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::CodeBlock(cb) = &blocks[0] else {
+            panic!("a lone fig-alt needs no wrapper; got {:?}", blocks[0]);
+        };
+        assert_eq!(
+            cb.text, "flowchart LR\n  accDescr: Two nodes connected by an arrow.\n  A --> B\n",
+            "accDescr must follow the diagram-type line"
+        );
+    }
+
+    /// A newline in the description would terminate mermaid's
+    /// single-line `accDescr:`, so the text is folded onto one line.
+    /// Prose alt text loses nothing; the block form would instead break
+    /// on any `}` in the description.
+    #[test]
+    fn mermaid_multiline_fig_alt_is_folded() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| fig-alt: |\n%%|   Two nodes.\n%%|   An arrow joins them.\nflowchart LR\n  A --> B\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::CodeBlock(cb) = &blocks[0] else {
+            panic!("expected a CodeBlock, got {:?}", blocks[0]);
+        };
+        assert!(
+            cb.text
+                .contains("accDescr: Two nodes. An arrow joins them.\n"),
+            "multi-line alt must fold to one line; got:\n{}",
+            cb.text
+        );
+    }
+
+    /// fig-alt composes with the caption paths rather than replacing
+    /// them: the figure still gets its caption, the diagram still gets
+    /// its accessible description.
+    #[test]
+    fn mermaid_fig_alt_composes_with_a_caption() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| fig-cap: A tiny flowchart.\n%%| fig-alt: Two nodes.\nflowchart LR\n  A --> B\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Figure(fig) = &blocks[0] else {
+            panic!("expected Figure, got {:?}", blocks[0]);
+        };
+        let Block::CodeBlock(cb) = &fig.content[0] else {
+            panic!()
+        };
+        assert!(
+            cb.text.contains("accDescr: Two nodes."),
+            "got:\n{}",
+            cb.text
+        );
+        assert!(!cb.text.contains("%%|"), "got:\n{}", cb.text);
+    }
+
+    /// D3 (bd-il6pxq4f): `fig-alt` on a cell q2 cannot route it for is
+    /// left in the body so the engine can use it — never consumed and
+    /// silently discarded, which is what used to happen.
+    #[test]
+    fn non_mermaid_fig_alt_is_not_dropped() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code(
+            "#| label: fig-py\n#| fig-cap: A plot.\n#| fig-alt: Alt text here.\nplot()\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Div(div) = &blocks[0] else {
+            panic!()
+        };
+        let Block::CodeBlock(cb) = &div.content[0] else {
+            panic!()
+        };
+        assert!(
+            cb.text.contains("#| fig-alt: Alt text here."),
+            "fig-alt must survive for the engine; got:\n{}",
+            cb.text
+        );
+        assert!(!cb.text.contains("fig-cap"), "got:\n{}", cb.text);
+    }
+
+    fn desugar_collecting(blocks: &mut Blocks, reg: &RefTypeRegistry) -> Vec<DiagnosticMessage> {
+        let mut diagnostics = Vec::new();
+        desugar_blocks(blocks, reg, &sources(), &mut diagnostics);
+        diagnostics
+    }
+
+    /// Decision 4: a diagram cell has no engine to hand leftover options
+    /// to, so an option q2 does not act on is a mistake worth naming —
+    /// and the diagnostic points at the key, not at the block.
+    #[test]
+    fn unknown_option_on_a_diagram_cell_warns() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| fig-cap: A flowchart.\n%%| echo: false\nflowchart LR\n  A --> B\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+
+        assert_eq!(diagnostics.len(), 1, "got {diagnostics:?}");
+        let d = &diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-2-47"));
+        assert!(
+            format!("{d:?}").contains("echo"),
+            "the diagnostic must name the offending key; got {d:?}"
+        );
+        assert!(
+            d.location.is_some(),
+            "the diagnostic must be source-mapped; got {d:?}"
+        );
+    }
+
+    /// The engine path keeps its silence: `echo`/`eval`/engine-specific
+    /// keys are the engine's business, and warning on them would fire on
+    /// essentially every real document.
+    #[test]
+    fn unknown_option_on_an_executable_cell_is_silent() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "{python}",
+            "#| label: fig-p\n#| fig-cap: A plot.\n#| echo: false\n#| warning: false\nplot()\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert!(diagnostics.is_empty(), "got {diagnostics:?}");
+    }
+
+    /// Decision 5's other half: `#|` in a mermaid fence is now inert, so
+    /// say why rather than letting mermaid fail on the leftover lines.
+    #[test]
+    fn hash_marker_in_a_mermaid_cell_warns() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "#| label: fig-hash\n#| fig-cap: Hash-prefixed.\nflowchart LR\n  A --> B\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+
+        assert_eq!(diagnostics.len(), 1, "got {diagnostics:?}");
+        let d = &diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-2-48"));
+        assert!(
+            d.location.is_some(),
+            "the diagnostic must be source-mapped; got {d:?}"
+        );
+    }
+
+    /// A `%%` comment that is not an option line is just a comment.
+    #[test]
+    fn plain_mermaid_comment_does_not_warn() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%% just a comment\nflowchart LR\n  A --> B\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+        assert!(diagnostics.is_empty(), "got {diagnostics:?}");
+    }
+
+    /// A recognized key q2 cannot route *in this position* is still
+    /// reported — `fig-scap` has nowhere to go on a numbered float — but
+    /// the reason differs from an unknown key, so the message says so.
+    #[test]
+    fn recognized_but_unroutable_option_warns_on_a_diagram_cell() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "mermaid",
+            "%%| label: fig-d\n%%| fig-cap: Long.\n%%| fig-scap: Short.\nflowchart LR\n  A --> B\n",
+        )];
+        let diagnostics = desugar_collecting(&mut blocks, &reg);
+
+        assert_eq!(diagnostics.len(), 1, "got {diagnostics:?}");
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-2-47"));
+        assert!(
+            format!("{:?}", diagnostics[0]).contains("fig-scap"),
+            "got {:?}",
+            diagnostics[0]
+        );
+    }
+
+    /// A brace-form executable cell still resolves to its language's
+    /// comment syntax — `{python}` is `#`, not the unknown-language
+    /// default reached by looking up the literal class `{python}`.
+    #[test]
+    fn brace_form_cell_uses_its_language_syntax() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code_in(
+            "{python}",
+            "#| label: fig-brace\n#| fig-cap: Braced.\nprint('hi')\n",
+        )];
+        desugar(&mut blocks, &reg);
+        let Block::Div(div) = &blocks[0] else {
+            panic!("expected Div, got {:?}", blocks[0]);
+        };
+        assert_eq!(div.attr.0, "fig-brace");
     }
 
     #[test]
@@ -290,7 +1134,7 @@ mod tests {
         let mut blocks = vec![code(
             "#| label: fig-plot\n#| fig-cap: A plot.\n#| echo: false\nprint('hi')\n",
         )];
-        desugar_blocks(&mut blocks, &reg);
+        desugar(&mut blocks, &reg);
         assert_eq!(blocks.len(), 1);
         let Block::Div(div) = &blocks[0] else {
             panic!("expected Div, got {:?}", blocks[0]);
@@ -310,10 +1154,7 @@ mod tests {
         let Block::Paragraph(p) = &div.content[1] else {
             panic!();
         };
-        let Inline::Str(s) = &p.content[0] else {
-            panic!()
-        };
-        assert_eq!(s.text, "A plot.");
+        assert_eq!(plain_text(&p.content), "A plot.");
     }
 
     #[test]
@@ -321,7 +1162,7 @@ mod tests {
         let reg = RefTypeRegistry::builtin();
         let mut blocks = vec![code("#| echo: false\nprint('hi')\n")];
         let before = blocks.clone();
-        desugar_blocks(&mut blocks, &reg);
+        desugar(&mut blocks, &reg);
         assert_eq!(blocks, before);
     }
 
@@ -332,7 +1173,7 @@ mod tests {
         let reg = RefTypeRegistry::builtin();
         let mut blocks = vec![code("#| label: my-section\nprint('hi')\n")];
         let before = blocks.clone();
-        desugar_blocks(&mut blocks, &reg);
+        desugar(&mut blocks, &reg);
         assert_eq!(blocks, before);
     }
 
@@ -342,7 +1183,7 @@ mod tests {
         let mut blocks = vec![code(
             "#| label: tbl-data\n#| tbl-cap: Summary.\nsummary(df)\n",
         )];
-        desugar_blocks(&mut blocks, &reg);
+        desugar(&mut blocks, &reg);
         let Block::Div(div) = &blocks[0] else {
             panic!()
         };
@@ -351,10 +1192,7 @@ mod tests {
         let Block::Paragraph(p) = &div.content[1] else {
             panic!()
         };
-        let Inline::Str(s) = &p.content[0] else {
-            panic!()
-        };
-        assert_eq!(s.text, "Summary.");
+        assert_eq!(plain_text(&p.content), "Summary.");
     }
 
     #[test]
@@ -365,7 +1203,7 @@ mod tests {
         let mut blocks = vec![code(
             "#| label: tbl-x\n#| fig-cap: Misplaced.\n#| tbl-cap: Correct.\nsummary(df)\n",
         )];
-        desugar_blocks(&mut blocks, &reg);
+        desugar(&mut blocks, &reg);
         let Block::Div(div) = &blocks[0] else {
             panic!()
         };
@@ -381,11 +1219,13 @@ mod tests {
     #[test]
     fn strip_consumed_lines_preserves_trailing_newline_absence() {
         let text = "#| label: fig-x\nprint('hi')";
-        let consumed = [("label".to_string(), "fig-x".to_string())]
-            .iter()
-            .cloned()
-            .collect();
-        let out = strip_consumed_lines(text, &consumed);
+        let label = OptionValue {
+            value: "fig-x".to_string(),
+            key_source: si(),
+            value_source: si(),
+        };
+        let consumed = [("label".to_string(), &label)].into_iter().collect();
+        let out = strip_consumed_lines(text, &consumed, &comment_syntax_for("python"));
         assert_eq!(out, "print('hi')");
     }
 
@@ -400,7 +1240,7 @@ mod tests {
             attr_source: AttrSourceInfo::empty(),
         });
         let mut blocks = vec![outer];
-        desugar_blocks(&mut blocks, &reg);
+        desugar(&mut blocks, &reg);
         let Block::Div(wrapper) = &blocks[0] else {
             panic!()
         };

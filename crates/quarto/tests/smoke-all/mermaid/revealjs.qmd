@@ -2,9 +2,14 @@
 title: "Mermaid Revealjs"
 format: revealjs
 # bd-5m4ga0s1: same transform output inside a reveal deck — the
-# diagram <pre> sits inside a slide <section>, and the CDN script
-# reaches the deck through the rendered.includes.after-body slot newly
-# wired into the reveal scaffold (render_revealjs_document).
+# diagram <pre> sits inside a slide <section>, and the runtime script
+# reaches the deck through the rendered.includes.after-body slot wired
+# into the reveal scaffold (render_revealjs_document).
+#
+# bd-mermaid-runtime-not-bundled-vxejw159: decks bundle the runtime
+# too. This is the case most at risk of silent regression — the reveal
+# scaffold collects only `js:revealjs:*` artifacts, so keying the
+# runtime as a template script would emit no tag here at all.
 _quarto:
   tests:
     revealjs:
@@ -15,10 +20,10 @@ _quarto:
       ensureFileRegexMatches:
         - [
             "<pre class=\"mermaid\">",
-            "cdn\\.jsdelivr\\.net/npm/mermaid@11\\.12\\.0/dist/mermaid\\.esm\\.min\\.mjs",
+            "<script src=\"[^\"]*mermaid\\.min\\.js\"></script>",
             "mermaid\\.run\\(\\{ querySelector: 'pre\\.mermaid' \\}\\)",
           ]
-        - []
+        - ["cdn\\.jsdelivr\\.net"]
 ---
 
 ## A slide

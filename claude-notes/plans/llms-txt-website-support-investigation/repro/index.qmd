@@ -1,0 +1,6 @@
+---
+title: "Home"
+---
+
+The site index. With `website.llms-txt: true`, Quarto 1 emits
+`_site/llms.txt` plus a `index.llms.md` companion for this page.

@@ -1,0 +1,56 @@
+---
+title: "Line break in link destination"
+description: "An inline link's destination URL was split across two lines; destinations must stay on one line."
+code: Q-2-37
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-37` — Line break in link destination
+
+> An inline link destination cannot contain a line break.
+
+## What this means
+
+The destination of an inline link — the URL between `(` and `)` —
+was interrupted by a line break:
+
+```markdown
+[text](https://example.
+com/path)
+```
+
+A link destination must sit entirely on one line, from the opening
+parenthesis through the closing one.
+
+## Why this happens
+
+- **Hard-wrapped prose.** An editor (or a formatter with a line-length
+  limit) wrapped a long line in the middle of a URL.
+- **A stray newline while editing**, splitting the URL before the
+  closing parenthesis:
+
+  ```markdown
+  [text](https://example.com/path
+  )
+  ```
+
+## How to fix
+
+Join the destination back onto a single line, even if that makes the
+line long:
+
+```markdown
+[text](https://example.com/path)
+```
+
+Markdown source lines can be arbitrarily long; if your editor
+hard-wraps, exempt long link lines from wrapping rather than breaking
+the URL.
+
+## Related errors
+
+- [`Q-2-38`](Q-2-38.qmd) — unclosed attribute specifier.

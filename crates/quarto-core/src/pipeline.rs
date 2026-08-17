@@ -69,18 +69,19 @@ use crate::stage::{
 use crate::transform::TransformPipeline;
 use crate::transforms::{
     AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
-    AuthorsNormalizeTransform, CalloutResolveTransform, CalloutTransform,
-    CategoriesSidebarTransform, CodeBlockGenerateTransform, CodeBlockRenderTransform,
-    CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform,
-    DateNormalizeTransform, EquationLabelTransform, ExampleEmbedRenderTransform,
-    ExampleEmbedTransform, FloatRefTargetSugarTransform, FooterGenerateTransform,
-    FooterRenderTransform, FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform,
-    ListingRenderTransform, MermaidRenderTransform, MetadataNormalizeTransform,
-    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
-    PageNavRenderTransform, ProofSugarTransform, ResourceCollectorTransform, SectionizeTransform,
+    AuthorsNormalizeTransform, BreadcrumbsRenderTransform, CalloutResolveTransform,
+    CalloutTransform, CategoriesSidebarTransform, CodeBlockGenerateTransform,
+    CodeBlockRenderTransform, ConditionalContentTransform, CrossrefIndexTransform,
+    CrossrefRenderTransform, CrossrefResolveTransform, DateNormalizeTransform, DraftAlertTransform,
+    EquationLabelTransform, ExampleEmbedRenderTransform, ExampleEmbedTransform,
+    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
+    FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
+    MermaidRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
+    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ReferenceLinkDiagnosticsTransform, ResourceCollectorTransform, SectionizeTransform,
     ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
     TableBootstrapClassTransform, TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform,
-    TocGenerateTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    TocGenerateTransform, TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
     WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
@@ -810,7 +811,21 @@ pub async fn run_pipeline(
             }
             other => crate::error::QuartoError::Other(other.to_string()),
         })
-        .map(|d| (d, stage_ctx.diagnostics))
+        .map(|d| {
+            // Apply the `diagnostics:` suppression policy resolved by
+            // `MetadataMergeStage`. This is deliberately the *only* place
+            // suppression happens: every per-document diagnostic — from
+            // stages, transforms, pampa, or Lua filters — leaves the
+            // pipeline through this expression, and every frontend
+            // (`quarto render`, `q2 preview`, hub-client) reads it from
+            // here. Doing it inside the render also puts it strictly
+            // before `--strict`'s promotion at the CLI summary boundary,
+            // so a suppressed warning stays suppressed rather than
+            // reappearing as an error (bd-lone-bracket-diagnostic-mxu41qbt).
+            let mut diagnostics = stage_ctx.diagnostics;
+            stage_ctx.diagnostic_policy.apply(&mut diagnostics);
+            (d, diagnostics)
+        })
 }
 
 pub async fn parse_qmd_to_ast(
@@ -949,7 +964,7 @@ pub async fn render_qmd_to_html(
 /// * `source_name` - Name of the source file (for error messages
 ///   and the `ASTContext::filenames` slot the JSON writer reads)
 /// * `ctx` - Render context. Should have a `resource_resolver`
-///   set so `ResourceCollectorTransform` rewrites image URLs to
+///   set so `LinkRewriteTransform` rewrites link and image URLs to
 ///   the same path the consumer (e.g. `RenderToPreviewAstRenderer`)
 ///   uses when flushing artifacts to VFS.
 /// * `runtime` - System runtime for filesystem operations
@@ -1100,6 +1115,10 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 ///     and append a `<link rel="stylesheet">` so `bi-*` icons render (bd-bsut)
 /// 4c. `WebsiteCanonicalUrlTransform` - Set `canonical-url` from
 ///     `website.site-url + output_href` (Phase 7)
+/// 4d. `DraftAlertTransform` - For `draft: true` pages, set the localized
+///     `rendered.draft-alert-text` the template's `#quarto-draft-alert`
+///     banner gates on, and append a `quarto:status` meta tag
+///     (bd-draft-banner-missing-hgx1gkqm)
 /// 5. `TitleBlockTransform` - Add title header from metadata if not present
 /// 6. `SectionizeTransform` - Wrap headers in section Divs (for HTML semantic structure)
 /// 7. `FootnotesTransform` - Extract footnotes and create footnotes section
@@ -1120,6 +1139,8 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 /// 13. `TocRenderTransform` - Render TOC to HTML for template insertion
 /// 14. `NavbarRenderTransform` - Render navbar to HTML for template insertion
 /// 15. `SidebarRenderTransform` - Render sidebar to HTML (w/ .qmd→.html rewrite)
+/// 15a. `BreadcrumbsRenderTransform` - Derive the page's breadcrumb trail from
+///     `navigation.sidebar` into `rendered.navigation.breadcrumbs`
 /// 16. `FooterRenderTransform` - Render page footer to HTML for template insertion
 /// 16a. `AttributionGenerateTransform` - Tail-of-phase: call the installed
 ///     `AttributionSourceProvider` (if any) and merge identities into the
@@ -1179,6 +1200,9 @@ pub fn build_transform_pipeline(
     extensions: Vec<crate::extension::types::Extension>,
     runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
     target_format: String,
+    variables: Option<quarto_pandoc_types::ConfigValue>,
+    project_env: hashlink::LinkedHashMap<String, String>,
+    quarto_profile: Option<String>,
 ) -> TransformPipeline {
     let mut pipeline: TransformPipeline = TransformPipeline::new();
 
@@ -1195,13 +1219,35 @@ pub fn build_transform_pipeline(
     let lua_format = crate::format::lua_format_for(&target_format).to_string();
 
     // === NORMALIZATION PHASE ===
+    // Conditional content runs FIRST: hidden content must disappear
+    // before callouts assemble, shortcodes resolve (no spurious
+    // warnings from deliberately-excluded content), and long before
+    // crossref numbering (bd-fu16z22k Phase 4).
+    pipeline.push(Box::new(ConditionalContentTransform::new()));
+    // Reference-link diagnostics (bd-reference-links-unsupported-ddc4skac):
+    // warn about `[label][ref]` and `[ref]: url` lines, which qmd does not
+    // support and which were previously silent. Read-only. Runs immediately
+    // after conditional content — for the same reason shortcodes do, so
+    // deliberately-excluded content cannot raise spurious warnings — but
+    // before any sugaring rewrites spans, so it still sees the document
+    // essentially as the author wrote it.
+    pipeline.push(Box::new(ReferenceLinkDiagnosticsTransform::new()));
     pipeline.push(Box::new(CalloutTransform::new()));
     pipeline.push(Box::new(CalloutResolveTransform::new()));
+    // Markdown-parse blessed website presentation config strings
+    // (website.title, page-footer regions, …) so the shortcode
+    // transform's metadata walk — registered immediately after — sees
+    // live Shortcode/RawInline nodes instead of literal scalars
+    // (bd-shortcodes-in-metadata-bp06aub8).
+    pipeline.push(Box::new(crate::transforms::ConfigMarkdownTransform::new()));
     pipeline.push(Box::new(ShortcodeResolveTransform::with_lua_support(
         shortcode_paths,
         extensions,
         runtime.clone(),
         lua_format,
+        variables,
+        project_env,
+        quarto_profile,
     )));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     // Date normalization (bd-gx9cic8z P4): resolves today/now/
@@ -1241,6 +1287,13 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(WebsiteFaviconTransform::new()));
     pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
     pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
+    // Draft marking (bd-draft-banner-missing-hgx1gkqm). Not website-scoped
+    // — a standalone `draft: true` document gets the banner too — but it
+    // belongs with the metadata producers above: it only writes
+    // `rendered.draft-alert-text` and a `quarto:status` header include,
+    // both consumed later (by the template and `IncludeResolveStage`
+    // respectively). Self-gates to non-reveal HTML.
+    pipeline.push(Box::new(DraftAlertTransform::new()));
     // Slide construction for `format: revealjs` replaces the generic
     // title-block + sectionize pair: reveal needs an exactly-two-level slide
     // tree built from `slide-level` (Pandoc keeps reveal slide-construction
@@ -1363,8 +1416,18 @@ pub fn build_transform_pipeline(
         crate::project::listing::feed::ListingFeedLinkTransform::new(),
     ));
     pipeline.push(Box::new(TocRenderTransform::new()));
+    // Placement decision for the rendered TOC (bd-e2kpwy7n): must run
+    // after TocRenderTransform (it gates on `rendered.navigation.toc`)
+    // and before SidebarRenderTransform (which consumes the
+    // `toc-in-sidebar` directive to merge the TOC into
+    // `nav#quarto-sidebar` for website pages).
+    pipeline.push(Box::new(TocLocationTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
     pipeline.push(Box::new(SidebarRenderTransform::new()));
+    // Breadcrumbs derive from the resolved `navigation.sidebar`
+    // (bd-breadcrumbs-missing-1vpuqh34); the title-block partial
+    // consumes `rendered.navigation.breadcrumbs`.
+    pipeline.push(Box::new(BreadcrumbsRenderTransform::new()));
     pipeline.push(Box::new(PageNavRenderTransform::new()));
     // Footer *generation* (above) is format-agnostic; footer *rendering* is
     // format-specific — html emits page-footer chrome, revealjs emits a
@@ -1428,6 +1491,17 @@ pub fn build_transform_pipeline(
     // user-filter slot inserted before AttributionRender still sees the
     // un-enriched class list. Idempotent.
     pipeline.push(Box::new(TableBootstrapClassTransform::new()));
+
+    // llms markdown capture (bd-llms-txt-unimplemented-oih6z6j7).
+    // Runs after every content-mutating transform — crossref-render
+    // has resolved numbers, link-rewrite has produced output hrefs,
+    // code-block-render has finished — so the captured clone is the
+    // final semantic content. Self-gated on `llms_view_active`
+    // (website + `llms-txt: true` + html target); also the sole
+    // consumer of the `.quarto-llms-{keep,omit}` marker classes
+    // `conditional-content` plants under the same predicate, so it
+    // must run whenever that transform does.
+    pipeline.push(Box::new(crate::transforms::LlmsCaptureTransform::new()));
 
     // Very last transform: bake the per-node attribution lookup and
     // the pruned actors table onto `ctx.format_options`. No-op when
@@ -1539,9 +1613,19 @@ pub fn build_q2_preview_transform_pipeline(
     extensions: Vec<crate::extension::types::Extension>,
     runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
     target_format: String,
+    variables: Option<quarto_pandoc_types::ConfigValue>,
+    project_env: hashlink::LinkedHashMap<String, String>,
+    quarto_profile: Option<String>,
 ) -> TransformPipeline {
-    let mut pipeline =
-        build_transform_pipeline(shortcode_paths, extensions, runtime, target_format);
+    let mut pipeline = build_transform_pipeline(
+        shortcode_paths,
+        extensions,
+        runtime,
+        target_format,
+        variables,
+        project_env,
+        quarto_profile,
+    );
     pipeline.retain_excluding(Q2_PREVIEW_TRANSFORM_EXCLUDED);
     pipeline
 }
@@ -2763,7 +2847,15 @@ mod tests {
     #[test]
     fn q2_preview_transform_excluded_names_exist_in_html_pipeline() {
         let runtime = make_test_runtime();
-        let html = build_transform_pipeline(vec![], vec![], runtime, "html".to_string());
+        let html = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
         let html_names: Vec<&str> = html.iter().map(|t| t.name()).collect();
 
         let unknown: Vec<&&str> = Q2_PREVIEW_TRANSFORM_EXCLUDED
@@ -2823,6 +2915,72 @@ mod tests {
             output.ast_json.contains("Callout"),
             "expected Callout type-name in JSON; got:\n{}",
             snippet()
+        );
+    }
+
+    /// bd-mermaid-cell-options-9wo3crl0: mermaid `%%|` cell options are
+    /// processed by `PreEngineSugaringStage`, which is a *stage* — while
+    /// `Q2_PREVIEW_TRANSFORM_EXCLUDED` only filters *transforms*. So the
+    /// preview AST must carry the same structure `q2 render` emits: a
+    /// Figure wrapping the diagram, the options gone from the diagram
+    /// source, and `fig-alt` folded into mermaid's `accDescr:`.
+    ///
+    /// The `mermaid-render` transform stays excluded here (the raw
+    /// CodeBlock has to reach `MermaidCodeBlock.tsx`), so the diagram
+    /// arrives as a CodeBlock rather than a `<pre>` RawBlock — that is
+    /// the intended difference, and this test pins it so a future change
+    /// to either list cannot silently diverge the two surfaces.
+    #[test]
+    fn render_qmd_to_preview_ast_processes_mermaid_cell_options() {
+        let content = "---\ntitle: Test\nformat: q2-preview\n---\n\n\
+                        ```mermaid\n\
+                        %%| fig-cap: A tiny flowchart.\n\
+                        %%| fig-alt: Two nodes connected by an arrow.\n\
+                        flowchart LR\n  A --> B\n\
+                        ```\n"
+            .as_bytes();
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            Vec::new(),
+        ))
+        .expect("q2-preview render");
+
+        let json = &output.ast_json;
+        assert!(
+            json.contains("\"Figure\""),
+            "preview AST must carry the Figure wrapper; got:\n{json}"
+        );
+        // The caption is markdown, so it arrives as separate Str/Space
+        // inlines rather than one contiguous string.
+        for word in ["\"tiny\"", "\"flowchart.\""] {
+            assert!(
+                json.contains(word),
+                "preview AST must carry the caption word {word}; got:\n{json}"
+            );
+        }
+        assert!(
+            json.contains("accDescr: Two nodes connected by an arrow."),
+            "preview AST must carry the injected accDescr; got:\n{json}"
+        );
+        assert!(
+            !json.contains("%%|"),
+            "consumed option lines must not reach the preview; got:\n{json}"
+        );
+        assert!(
+            json.contains("\"CodeBlock\""),
+            "the raw CodeBlock must survive for MermaidCodeBlock.tsx; got:\n{json}"
         );
     }
 
@@ -3191,8 +3349,15 @@ mod tests {
     #[test]
     fn q2_preview_pipeline_includes_link_rewrite() {
         let runtime = make_test_runtime();
-        let pipeline =
-            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+        let pipeline = build_q2_preview_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "q2-preview".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         assert!(
             names.contains(&"link-rewrite"),
@@ -3209,8 +3374,15 @@ mod tests {
     #[test]
     fn q2_preview_pipeline_includes_chrome_transforms() {
         let runtime = make_test_runtime();
-        let pipeline =
-            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+        let pipeline = build_q2_preview_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "q2-preview".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         for required in [
             "navbar-render",
@@ -3256,7 +3428,15 @@ mod tests {
     #[test]
     fn html_pipeline_includes_code_block_decoration_transforms() {
         let runtime = make_test_runtime();
-        let pipeline = build_transform_pipeline(vec![], vec![], runtime, "html".to_string());
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
 
         let gen_pos = names.iter().position(|&n| n == "code-block-generate");
@@ -3318,7 +3498,15 @@ mod tests {
         // covers them automatically.
         for format in ["html", "revealjs"] {
             let runtime = make_test_runtime();
-            let pipeline = build_transform_pipeline(vec![], vec![], runtime, format.to_string());
+            let pipeline = build_transform_pipeline(
+                vec![],
+                vec![],
+                runtime,
+                format.to_string(),
+                None,
+                Default::default(),
+                None,
+            );
             let steps: Vec<(&str, TransformPhase)> =
                 pipeline.iter().map(|t| (t.name(), t.phase())).collect();
 
@@ -3359,8 +3547,15 @@ mod tests {
     #[test]
     fn q2_preview_pipeline_includes_code_block_decoration_transforms() {
         let runtime = make_test_runtime();
-        let pipeline =
-            build_q2_preview_transform_pipeline(vec![], vec![], runtime, "q2-preview".to_string());
+        let pipeline = build_q2_preview_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "q2-preview".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
         let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
         for required in ["code-block-generate", "code-block-render"] {
             assert!(
@@ -3379,7 +3574,15 @@ mod tests {
     fn mermaid_render_present_before_code_block_render() {
         for format in ["html", "revealjs"] {
             let runtime = make_test_runtime();
-            let pipeline = build_transform_pipeline(vec![], vec![], runtime, format.to_string());
+            let pipeline = build_transform_pipeline(
+                vec![],
+                vec![],
+                runtime,
+                format.to_string(),
+                None,
+                Default::default(),
+                None,
+            );
             let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
 
             let mermaid_pos = names.iter().position(|&n| n == "mermaid-render");
@@ -3405,8 +3608,15 @@ mod tests {
     fn q2_preview_pipeline_excludes_mermaid_render() {
         for format in ["q2-preview", "q2-slides"] {
             let runtime = make_test_runtime();
-            let pipeline =
-                build_q2_preview_transform_pipeline(vec![], vec![], runtime, format.to_string());
+            let pipeline = build_q2_preview_transform_pipeline(
+                vec![],
+                vec![],
+                runtime,
+                format.to_string(),
+                None,
+                Default::default(),
+                None,
+            );
             let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
             assert!(
                 !names.contains(&"mermaid-render"),
@@ -3537,5 +3747,135 @@ mod tests {
             "expected alice's identity entry with color; got:\n{}",
             output.ast_json
         );
+    }
+
+    // === bd-lone-bracket-diagnostic-mxu41qbt: `diagnostics:` suppression ===
+    //
+    // These exercise the *wiring*, not the policy parser (which has its own
+    // unit tests in `diagnostic_policy.rs`): the policy must be resolved by
+    // `MetadataMergeStage` from merged metadata and applied by
+    // `run_pipeline` on the way out. `Q-2-45` is used as the specimen
+    // because it is a per-document, coded warning that a two-line fixture
+    // reliably triggers.
+
+    /// `[label][ref]` reliably produces `Q-2-45`. This is the baseline the
+    /// suppression tests below are measured against — without it, a
+    /// suppression test could pass simply because the warning never fired.
+    #[test]
+    fn reference_link_warning_fires_without_suppression() {
+        let content = b"---\ntitle: Test\n---\n\nSee [label][ref].\n";
+        let diagnostics = render_and_collect_diagnostics(content);
+        assert!(
+            diagnostics.iter().any(|c| c == "Q-2-45"),
+            "expected Q-2-45 in {diagnostics:?}"
+        );
+    }
+
+    /// Front-matter suppression.
+    #[test]
+    fn document_metadata_suppresses_a_diagnostic() {
+        let content = b"---\ntitle: Test\ndiagnostics:\n  Q-2-45: off\n---\n\nSee [label][ref].\n";
+        let diagnostics = render_and_collect_diagnostics(content);
+        assert!(
+            !diagnostics.iter().any(|c| c == "Q-2-45"),
+            "Q-2-45 should have been suppressed; got {diagnostics:?}"
+        );
+    }
+
+    /// Suppressing one code must not silence the document wholesale.
+    #[test]
+    fn suppression_is_scoped_to_the_named_code() {
+        let content = b"---\ntitle: Test\ndiagnostics:\n  Q-2-46: off\n---\n\nSee [label][ref].\n";
+        let diagnostics = render_and_collect_diagnostics(content);
+        assert!(
+            diagnostics.iter().any(|c| c == "Q-2-45"),
+            "suppressing Q-2-46 must leave Q-2-45 alone; got {diagnostics:?}"
+        );
+    }
+
+    /// The long form, with a reason, behaves identically to the short form.
+    #[test]
+    fn long_form_suppression_works_end_to_end() {
+        let content = b"---\ntitle: Test\ndiagnostics:\n  Q-2-45:\n    level: off\n    reason: legacy corpus\n---\n\nSee [label][ref].\n";
+        let diagnostics = render_and_collect_diagnostics(content);
+        assert!(
+            !diagnostics.iter().any(|c| c == "Q-2-45"),
+            "Q-2-45 should have been suppressed; got {diagnostics:?}"
+        );
+    }
+
+    /// A malformed entry is reported (Q-5-27) rather than silently
+    /// ignored, and does not suppress anything.
+    #[test]
+    fn malformed_suppression_entry_is_reported() {
+        let content =
+            b"---\ntitle: Test\ndiagnostics:\n  Q-2-45: shout\n---\n\nSee [label][ref].\n";
+        let diagnostics = render_and_collect_diagnostics(content);
+        assert!(
+            diagnostics.iter().any(|c| c == "Q-5-27"),
+            "expected the invalid-entry diagnostic; got {diagnostics:?}"
+        );
+        assert!(
+            diagnostics.iter().any(|c| c == "Q-2-45"),
+            "a malformed entry must not suppress; got {diagnostics:?}"
+        );
+    }
+
+    /// Decision 3: suppression applies in the q2-preview pipeline too, not
+    /// only under `quarto render`. Preview is where authors actually live,
+    /// so a project that has opted out must not be nagged there.
+    #[test]
+    fn suppression_applies_in_the_preview_pipeline() {
+        let content = b"---\ntitle: Test\ndiagnostics:\n  Q-2-45: off\n---\n\nSee [label][ref].\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let runtime = make_test_runtime();
+
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            Vec::new(),
+        ))
+        .expect("q2-preview render");
+
+        let codes: Vec<String> = output
+            .diagnostics
+            .iter()
+            .filter_map(|d| d.code.clone())
+            .collect();
+        assert!(
+            !codes.iter().any(|c| c == "Q-2-45"),
+            "preview must honor suppression; got {codes:?}"
+        );
+    }
+
+    /// Render `content` as HTML and return the codes of every diagnostic
+    /// that survived the pipeline.
+    fn render_and_collect_diagnostics(content: &[u8]) -> Vec<String> {
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .expect("render must succeed");
+
+        output
+            .diagnostics
+            .iter()
+            .filter_map(|d| d.code.clone())
+            .collect()
     }
 }

@@ -3,6 +3,8 @@
 //! This module provides lint checks that catch issues standard Rust linters miss.
 //! Each lint rule is implemented as a separate submodule.
 
+mod add_file_with_id;
+mod error_docs;
 mod external_sources;
 mod metadata_as_str;
 
@@ -84,6 +86,13 @@ pub fn run_check(config: &LintConfig) -> Result<()> {
         let violations = check_file(file)?;
         all_violations.extend(violations);
     }
+
+    // Repo-level checks: these reconcile whole trees rather than grepping a
+    // single Rust file, so they run once instead of per file.
+    if config.verbose {
+        eprintln!("Checking error catalog against docs/errors/");
+    }
+    all_violations.extend(error_docs::check(&workspace_root)?);
 
     // Report results
     if all_violations.is_empty() {
@@ -200,6 +209,7 @@ fn check_file(path: &Path) -> Result<Vec<Violation>> {
     let mut violations = Vec::new();
 
     // Run each lint rule
+    violations.extend(add_file_with_id::check(path, &content)?);
     violations.extend(external_sources::check(path, &content)?);
     violations.extend(metadata_as_str::check(path, &content)?);
 

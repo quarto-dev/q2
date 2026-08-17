@@ -41,7 +41,6 @@ use quarto_core::engine::EngineRegistry;
 use quarto_core::engine::preview_record::{compute_input_qmd, record_capture};
 use quarto_core::project::ProjectContext;
 use quarto_hub::index::{CaptureRef, CaptureState, IndexDocument};
-use quarto_hub::resource::create_binary_document;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use quarto_trace::EngineCapture;
 use samod::Repo;
@@ -50,13 +49,14 @@ use crate::ProviderError;
 use crate::consent::ConsentGate;
 use crate::exec_channel::{BEACON_INTERVAL, ExecMessage, parse_exec_message};
 
-/// MIME type stamped on capture binary docs. Must stay byte-identical to
-/// `quarto_preview::capture_driver::CAPTURE_MIME_TYPE` and the literal the TS
-/// consumers use (`ts-packages/quarto-sync-client`,
-/// `hub-client/.../ReactPreview.capture.integration.test.tsx`). Duplicated here
-/// rather than depending on the heavy `quarto-preview` crate (which pulls in an
-/// axum server); the value is a self-describing label, not validated on read.
-pub const CAPTURE_MIME_TYPE: &str = "application/x-engine-capture+gzip";
+/// MIME type stamped on capture binary docs. Re-exported from
+/// quarto-hub, the single source of truth (bd-eiku4ymo) — the former
+/// duplication between here and `quarto-preview` is gone now that
+/// quarto-hub (a dependency of both) owns the constant. The TS
+/// consumers (`ts-packages/quarto-sync-client`,
+/// `hub-client/.../ReactPreview.capture.integration.test.tsx`) hold
+/// the same literal.
+pub use quarto_hub::resource::CAPTURE_MIME_TYPE;
 
 /// Result of a single execution attempt.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -303,7 +303,7 @@ impl Provider {
             return Err("engine produced no capture (no code cells?)".to_string());
         }
 
-        let new_doc_id = write_capture_doc(&self.repo, &captures)
+        let new_doc_id = write_capture_doc(&self.repo, rel_path, &captures)
             .await
             .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
 
@@ -434,11 +434,16 @@ fn is_safe_relative(rel_path: &str) -> bool {
 /// `gzip_captures` — serialize + gzip + 10MB size warning, bd-qbhp2cvv).
 async fn write_capture_doc(
     repo: &Repo,
+    rel_path: &str,
     captures: &[EngineCapture],
 ) -> Result<String, ProviderError> {
     let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
         .map_err(|e| ProviderError::Protocol(format!("serialize/gzip captures: {e}")))?;
-    let doc = create_binary_document(&gzipped, CAPTURE_MIME_TYPE)
+    let meta = quarto_hub::resource::CaptureDocMeta {
+        source_path: rel_path.to_string(),
+        engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
+    };
+    let doc = quarto_hub::resource::create_capture_document(&gzipped, &meta)
         .map_err(|e| ProviderError::Protocol(format!("binary doc: {e}")))?;
     let handle = repo
         .create(doc)

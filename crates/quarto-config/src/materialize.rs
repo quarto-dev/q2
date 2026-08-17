@@ -66,6 +66,33 @@ impl<'a> MergedConfig<'a> {
     }
 }
 
+/// The span to stamp on a materialized container (map or array).
+///
+/// Delegates to [`MergedCursor::container_source`], which returns the
+/// real span from the highest-priority layer holding a value at this
+/// path.
+///
+/// # Why not `unwrap_or_default()`
+///
+/// This used to fall back to `SourceInfo::default()`, which is
+/// `Original { file_id: FileId(0), 0..0 }` — a *well-formed* span that
+/// renders as a genuine location at the first byte of file 0. A
+/// fallback that fabricates a plausible location is worse than one that
+/// admits ignorance: it turns "we don't know where this came from" into
+/// a confident wrong answer that no downstream consumer can detect.
+/// `By::unknown()` is the sanctioned "we don't know" marker
+/// (`claude-notes/designs/provenance-contract.md` §10).
+///
+/// Reaching the fallback means no layer had a value at a path we just
+/// resolved a container for, which should not happen; it is defensive
+/// rather than expected.
+fn container_source(cursor: &MergedCursor<'_>) -> SourceInfo {
+    cursor
+        .container_source()
+        .cloned()
+        .unwrap_or_else(|| SourceInfo::generated(By::unknown()))
+}
+
 /// Materialize a cursor's value into an owned ConfigValue.
 fn materialize_cursor(
     cursor: &MergedCursor<'_>,
@@ -105,16 +132,9 @@ fn materialize_cursor(
                 })
                 .collect();
 
-            // Find source_info from the most recent layer that contributed
-            let source_info = array
-                .items
-                .last()
-                .map(|item| item.value.source_info.clone())
-                .unwrap_or_default();
-
             Ok(ConfigValue {
                 value: ConfigValueKind::Array(items),
-                source_info,
+                source_info: container_source(cursor),
                 merge_op: MergeOp::Concat, // Materialized arrays don't have prefer semantics
             })
         }
@@ -129,37 +149,22 @@ fn materialize_cursor(
                 path.pop();
                 entries.push(ConfigMapEntry {
                     key: key.to_string(),
-                    // Materialization across layers loses per-key source
-                    // info; the programmatic-config sentinel is honest
-                    // about that.
-                    key_source: SourceInfo::generated(By::programmatic_config()),
+                    // The key's real span, from the layer that supplies
+                    // the winning value. Materialization used to discard
+                    // this and stamp a programmatic-config sentinel,
+                    // which silently disabled every diagnostic anchored
+                    // on a key — see `container_source` (bd-2mxo).
+                    key_source: cursor
+                        .key_source(key)
+                        .cloned()
+                        .unwrap_or_else(|| SourceInfo::generated(By::unknown())),
                     value: child_value,
                 });
             }
 
-            // Source info: use the cursor's path to find a representative source
-            // In practice, maps from different layers may have different sources
-            let source_info = cursor
-                .as_map()
-                .and_then(|m| {
-                    m.iter()
-                        .next()
-                        .and_then(|(_, c)| c.as_value())
-                        .map(|v| match v {
-                            MergedValue::Scalar(s) => s.value.source_info.clone(),
-                            MergedValue::Array(a) => a
-                                .items
-                                .first()
-                                .map(|i| i.value.source_info.clone())
-                                .unwrap_or_default(),
-                            MergedValue::Map(_) => SourceInfo::generated(By::programmatic_config()),
-                        })
-                })
-                .unwrap_or_default();
-
             Ok(ConfigValue {
                 value: ConfigValueKind::Map(entries),
-                source_info,
+                source_info: container_source(cursor),
                 merge_op: MergeOp::Concat,
             })
         }
@@ -414,5 +419,149 @@ mod tests {
         let items = result.get("items").unwrap();
         assert!(items.is_array());
         assert!(items.as_array().unwrap().is_empty());
+    }
+
+    // ── source-span preservation (bd-2mxo / bd-9yh3pzfu) ────────────
+    //
+    // The helpers above stamp `SourceInfo::for_test()` on everything,
+    // which is why the span defect was invisible here for so long: with
+    // synthetic inputs, a synthesized output span looks identical to a
+    // preserved one. These tests parse real YAML so the spans mean
+    // something, and assert on the *text* each span covers.
+    mod spans {
+        use super::*;
+        use crate::span_assert::{ResolvedSpan, resolve_span};
+        use quarto_source_map::SourceContext;
+
+        /// Parse real YAML into a `ConfigValue` whose spans point into
+        /// `text`, plus a context that can resolve them.
+        fn layer(name: &str, text: &str) -> (ConfigValue, SourceContext) {
+            let parsed = quarto_yaml::parse_file(text, name).expect("valid yaml");
+            let mut diags = Vec::new();
+            let cv = crate::config_value_from_yaml(parsed, &mut diags);
+            (cv, crate::span_assert::context_for(name, text))
+        }
+
+        fn span_of(value: &ConfigValue, ctx: &SourceContext) -> ResolvedSpan {
+            resolve_span(&value.source_info, ctx)
+                .unwrap_or_else(|p| panic!("span should resolve, got: {p}"))
+        }
+
+        const DOC: &str = "\
+listing:
+    sort: false
+    template: t.ejs
+";
+
+        #[test]
+        fn map_container_span_covers_the_mapping_not_its_first_value() {
+            let (cv, ctx) = layer("doc.yml", DOC);
+            let merged = MergedConfig::new(vec![&cv]).materialize().unwrap();
+
+            let listing = merged.get("listing").expect("listing key");
+            let span = span_of(listing, &ctx);
+
+            // The bug: the container borrowed its first entry's *value*
+            // span, so this was exactly "false".
+            assert_ne!(
+                span.text, "false",
+                "map container span is still borrowing its first entry's value"
+            );
+            // quarto-yaml spans a mapping from its first key to
+            // MappingEnd, so the whole block is the correct answer.
+            assert!(
+                span.text.starts_with("sort:") && span.text.contains("template: t.ejs"),
+                "expected the whole mapping, got {:?}",
+                span.text
+            );
+        }
+
+        #[test]
+        fn map_entries_keep_their_real_key_spans() {
+            let (cv, ctx) = layer("doc.yml", DOC);
+            let merged = MergedConfig::new(vec![&cv]).materialize().unwrap();
+
+            let listing = merged.get("listing").expect("listing key");
+            let ConfigValueKind::Map(entries) = &listing.value else {
+                panic!("expected a map");
+            };
+
+            for entry in entries {
+                let span = resolve_span(&entry.key_source, &ctx).unwrap_or_else(|p| {
+                    panic!(
+                        "key `{}` should have a real key_source, got: {p}",
+                        entry.key
+                    )
+                });
+                assert_eq!(
+                    span.text, entry.key,
+                    "key_source should cover the key itself"
+                );
+            }
+        }
+
+        #[test]
+        fn array_container_span_is_not_merely_its_last_item() {
+            const ARR: &str = "\
+contents:
+    - ./a.qmd
+    - ./b.qmd
+";
+            let (cv, ctx) = layer("arr.yml", ARR);
+            let merged = MergedConfig::new(vec![&cv]).materialize().unwrap();
+
+            let contents = merged.get("contents").expect("contents key");
+            let span = span_of(contents, &ctx);
+
+            // The bug: `.items.last()` gave exactly "./b.qmd".
+            assert_ne!(
+                span.text, "./b.qmd",
+                "array container span is still borrowing its last item"
+            );
+            assert!(
+                span.text.contains("./a.qmd") && span.text.contains("./b.qmd"),
+                "expected the whole sequence, got {:?}",
+                span.text
+            );
+        }
+
+        #[test]
+        fn nested_map_first_child_no_longer_collapses_to_a_sentinel() {
+            // When the first entry was itself a map, the old code gave
+            // up entirely and stamped a programmatic-config sentinel.
+            const NESTED: &str = "\
+outer:
+    inner:
+        a: 1
+    sibling: 2
+";
+            let (cv, ctx) = layer("nested.yml", NESTED);
+            let merged = MergedConfig::new(vec![&cv]).materialize().unwrap();
+
+            let outer = merged.get("outer").expect("outer key");
+            let span = span_of(outer, &ctx);
+            assert!(
+                span.text.starts_with("inner:"),
+                "expected the outer mapping's real span, got {:?}",
+                span.text
+            );
+        }
+
+        #[test]
+        fn winning_layer_supplies_the_span_when_layers_disagree() {
+            // Values are last-wins; the span should follow the value.
+            let (base, _base_ctx) = layer("base.yml", "listing:\n    sort: true\n");
+            let (over, over_ctx) = layer("over.yml", "listing:\n    sort: false\n");
+
+            let merged = MergedConfig::new(vec![&base, &over]).materialize().unwrap();
+            let listing = merged.get("listing").expect("listing key");
+            let sort = listing.get("sort").expect("sort key");
+
+            // `over.yml` won the value, so its span must resolve there.
+            let span = resolve_span(&sort.source_info, &over_ctx)
+                .expect("winning value's span should resolve in the winning layer");
+            assert_eq!(span.path, "over.yml");
+            assert_eq!(span.text, "false");
+        }
     }
 }

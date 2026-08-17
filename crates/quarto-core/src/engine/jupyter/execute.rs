@@ -90,7 +90,6 @@ impl KernelSession {
         code: &str,
         exec_timeout: Duration,
     ) -> Result<ExecuteResult> {
-        self.touch();
         let _execution_count = self.next_execution_count();
 
         // Build execute request
@@ -207,8 +206,6 @@ impl KernelSession {
         if expressions.is_empty() {
             return Ok(Vec::new());
         }
-
-        self.touch();
 
         // Build user_expressions map
         let user_expressions: std::collections::HashMap<String, String> = expressions

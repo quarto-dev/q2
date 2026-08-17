@@ -145,7 +145,7 @@ impl RevocationLedger {
     }
 
     /// Whether `sub` is banned — the mint gate (`auth_callback` /
-    /// `auth_refresh` refuse to mint for a banned user).
+    /// `auth_session` refuse to mint for a banned user).
     pub async fn is_banned(&self, sub: &str) -> bool {
         self.inner.lock().await.banned.contains(sub)
     }

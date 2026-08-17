@@ -1,0 +1,102 @@
+---
+title: "Bracketed text renders without its brackets"
+description: "A `[text]` group with no attribute block renders as an empty span, silently discarding the brackets."
+code: Q-2-49
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-49` — Bracketed text renders without its brackets
+
+> `[...]` is span syntax in quarto-markdown. A bracket group with no
+> attribute block after it renders as an empty span, and the brackets
+> themselves are discarded.
+
+## What this means
+
+In quarto-markdown, square brackets introduce a span:
+
+```markdown
+[important]{.highlight}
+```
+
+The `[...]` half supplies the content and the `{...}` half supplies the
+attributes. When the attribute block is missing, the span is still
+parsed — but it has nothing to say, so it renders as
+
+```html
+<span>important</span>
+```
+
+and the brackets you wrote are gone.
+
+That is usually harmless formatting noise. Occasionally it changes what
+the document *says*:
+
+```markdown
+The default subject prefix is "[Posit Connect]".
+```
+
+renders as
+
+> The default subject prefix is "Posit Connect".
+
+which documents the wrong value. Quarto 1 rendered these brackets
+literally, so this most often appears in documents ported from Quarto 1.
+
+Other shapes that hit the same rule:
+
+```markdown
+Requires Posit Connect [Version TBD] or later.
+Upon an initial user session [1], the server creates a cookie [2].
+```
+
+## How to fix
+
+If you meant the brackets literally, escape them:
+
+```markdown
+The default subject prefix is "\[Posit Connect\]".
+```
+
+Both Quarto 1 and Quarto 2 render `\[...\]` as literal brackets, and
+Quarto 2 produces no span node at all for the escaped form — so
+re-running the fix is safe.
+
+If you meant a span, add the attribute block:
+
+```markdown
+[important]{.highlight}
+```
+
+`qmd-syntax-helper` can find and fix these in bulk. Because escaping is
+a source edit that cannot afterwards be told apart from your own intent,
+run `check` first and read what it proposes:
+
+```bash
+qmd-syntax-helper check   -r literal-brackets "docs/**/*.qmd"
+qmd-syntax-helper convert -r literal-brackets --in-place "docs/**/*.qmd"
+```
+
+## If your project uses bare spans on purpose
+
+A bare span is a usable marker for a Lua filter to rewrite. If that is
+what your project does, say so once in `_quarto.yml` rather than
+escaping every occurrence:
+
+```yaml
+diagnostics:
+  Q-2-49:
+    level: off
+    reason: "bare spans are markers for our annotate.lua filter"
+```
+
+See [suppressing diagnostics](../../guides/publishing/index.qmd#suppressing-diagnostics).
+
+## Related
+
+- [`Q-2-45`](Q-2-45.qmd) — a reference-style *use*, `[label][ref]`.
+- [`Q-2-46`](Q-2-46.qmd) — a link reference *definition* line.

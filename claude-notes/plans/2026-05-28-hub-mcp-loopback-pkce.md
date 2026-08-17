@@ -649,6 +649,9 @@ relevant item only if a spike contradicts an assumption.
     IdP anyway (they expire on their own ≤1 h timer; the hub-side
     `sub_denylist` deferred to future work is the right closure for
     that window, same as it is for stolen-token-without-clear).
+    *(2026-08-03 update: shipped as bd-jkih1ql7 — the revocation
+    ledger now gates the Bearer path; see
+    `2026-08-03-bearer-revocation-and-mcp-auth-followups.md` F1.)*
   - **Best-effort: revocation failure does NOT block local cleanup.**
     Network errors, 5xx, expired-tokens-returning-200/400-with-
     `invalid_token` — the local delete proceeds regardless. The
@@ -992,6 +995,10 @@ relevant item only if a spike contradicts an assumption.
         hub for up to ≤1 h (ID) / indefinitely (refresh, until user
         revokes grant). Closing the ID-token window still requires
         the hub-side `sub_denylist` deferred from v1.
+        *(2026-08-03 update: the ID-token window is now closed for
+        hub-side events — bans and logout-everywhere gate the Bearer
+        path (bd-jkih1ql7). The refresh-token residual stands; see
+        `2026-08-03-bearer-revocation-and-mcp-auth-followups.md` F1.)*
       - **Unchanged:** brand-confusion residual. If an attacker
         already has code execution on the victim's machine, they can
         drive a real loopback flow under our `client_id` and capture
@@ -1188,4 +1195,10 @@ unchecked above):
   it. Revisit if we move to self-hosted OIDC.
 - **`sub_denylist` on the hub side** to close the ≤1 h stolen-ID-token
   window. Already noted as future work in the existing device-flow
-  plan; cross-listed here.
+  plan; cross-listed here. **Done (2026-08-03, bd-jkih1ql7):** rather
+  than a separate denylist, the existing revocation ledger (bans +
+  logout-everywhere `not_before` floors) is enforced on the Bearer
+  path — 403 `user_banned` / 401 `bearer_revoked`, anchored at the
+  token's `iat`, failing closed when `iat` is absent. Refresh-token
+  theft remains a Google-side revocation matter. See
+  `2026-08-03-bearer-revocation-and-mcp-auth-followups.md` F1.

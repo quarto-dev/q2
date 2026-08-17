@@ -1,0 +1,71 @@
+---
+title: "Shortcode edit dropped"
+description: "An edit typed into shortcode-resolved content was reverted; the resolved text is read-only."
+code: Q-3-42
+subsystem: writer
+status: stub
+since: "99.9.9"
+categories:
+  - writer
+---
+
+# `Q-3-42` — Shortcode edit dropped
+
+> An edit typed into shortcode-resolved content was reverted; the
+> resolved text is read-only.
+
+## What this means
+
+This warning comes from the visual editor in `q2 preview` and Quarto
+Hub, not from a command-line render.
+
+When you write a shortcode, what you see in the preview is not what is
+in your source file:
+
+```markdown
+Version {{{< meta version >}}} shipped last week.
+```
+
+The source holds the invocation `{{{< meta version >}}}`; the preview
+shows the resolved value, say `2.1`. Those characters have no
+corresponding bytes in your `.qmd` — they were produced by the
+shortcode, not typed by you. So there is nowhere to write an edit back
+to, and the editor restores what the shortcode produced.
+
+Your document is unchanged, and nothing is lost except the keystrokes
+that landed inside the resolved region.
+
+## Why this happens
+
+- **Clicking into resolved text and typing**, most often when the
+  resolved value looks like ordinary prose and gives no visual clue
+  that it came from a shortcode.
+- **A selection that starts or ends inside resolved content** — a
+  drag-select across a sentence containing a shortcode, followed by
+  typing over it.
+- **Paste over a region** that includes a shortcode's output.
+
+## How to fix
+
+Edit the source of the value, not its rendering.
+
+For a `meta` shortcode, change the metadata it reads:
+
+```yaml
+---
+version: "2.2"
+---
+```
+
+For a `var` shortcode, edit `_variables.yml`. For `env`, change the
+environment variable. To change the *invocation* itself — swapping
+`{{{< meta version >}}}` for different text entirely — edit the `.qmd`
+in a text editor; the invocation token is not reachable from the
+visual editor.
+
+## Related errors
+
+- [`Q-3-43`](Q-3-43.qmd) — the same soft-drop for pipeline-generated
+  content that is not a shortcode.
+- [`Q-16-5`](../extension/Q-16-5.qmd) — a value-lookup shortcode whose
+  key could not be resolved at all.

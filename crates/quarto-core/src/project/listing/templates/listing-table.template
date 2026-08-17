@@ -1,7 +1,8 @@
 ::: {.quarto-listing-table-wrapper}
 
-| Title | Date | Author |
-|-------|------|--------|
-$items:item-table()$
+$listing.table-header$
+$for(items)$
+$it:item-table()$
+$endfor$
 
 :::

@@ -2,4 +2,73 @@
 title: Navigation
 ---
 
-TBD.
+## Overview
+
+HTML pages rendered with Quarto can include a table of contents that
+tracks the section structure of the document and lets readers jump to
+any section. This page covers the table of contents options; for
+site-level navigation (navbars, sidebars, breadcrumbs), see the
+[websites guides](../projects/create.qmd).
+
+## Table of Contents
+
+Enable the table of contents with the `toc` option:
+
+``` yaml
+---
+title: My Document
+toc: true
+---
+```
+
+By default the table of contents shows headings up to level 3 and
+renders in the right margin of the page. You can control both:
+
+``` yaml
+---
+title: My Document
+toc: true
+toc-depth: 4
+toc-title: Contents
+---
+```
+
+- `toc-depth` sets the deepest heading level included (default: 3).
+- `toc-title` sets the heading shown above the table of contents
+  (default: "Table of contents", localized to the document language).
+
+## Location
+
+Use `toc-location` to choose where the table of contents appears:
+
+``` yaml
+---
+title: My Document
+toc: true
+toc-location: left
+---
+```
+
+The available locations:
+
+| Value   | Placement                                             |
+|---------|-------------------------------------------------------|
+| `right` | In the right margin (the default)                     |
+| `left`  | In a sidebar to the left of the document body         |
+| `body`  | In the document body, above the content               |
+
+On pages of a website project, `toc-location: left` places the table
+of contents inside the site's navigation sidebar — after the
+navigation entries when the page has a sidebar, or on its own when it
+does not.
+
+On narrow screens the left and right table-of-contents sidebars are
+hidden; use `toc-location: body` if the table of contents should
+remain visible at every screen size.
+
+::: callout-note
+The `left-body` and `right-body` values (which show the table of
+contents both in a sidebar and in the body) are not supported yet;
+they currently fall back to `left` and `right` respectively, with a
+warning.
+:::

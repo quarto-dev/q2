@@ -20,6 +20,7 @@
 //! short-circuit and trigger capture emission.
 
 use std::net::TcpListener as StdTcpListener;
+use std::str::FromStr as _;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -92,6 +93,8 @@ async fn eager_capture_populates_index_sidecar() {
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,
+        share: false,
+        ui: Default::default(),
     };
 
     let (ready_tx, ready_rx) = oneshot::channel::<Arc<HubContext>>();
@@ -159,6 +162,26 @@ async fn eager_capture_populates_index_sidecar() {
         markdown
     );
 
+    // bd-eiku4ymo: the capture doc carries the uncompressed `meta`
+    // audit map — readable without gunzipping the payload.
+    let doc_id = samod::DocumentId::from_str(&entry.capture_doc_id).unwrap();
+    let handle = ctx
+        .repo()
+        .find(doc_id)
+        .await
+        .expect("repo running")
+        .expect("capture doc present");
+    let meta = handle
+        .with_document(|doc| quarto_hub::resource::read_capture_meta(doc))
+        .expect("capture doc must carry the meta envelope");
+    assert_eq!(meta.kind.as_deref(), Some("engine-capture"));
+    assert_eq!(meta.source_path.as_deref(), Some("doc.qmd"));
+    assert_eq!(meta.engines, vec!["test-passthrough"]);
+    assert!(
+        meta.created_at.is_some(),
+        "createdAt must be stamped for the scan age gate"
+    );
+
     server_handle.abort();
     let _ = server_handle.await;
 }
@@ -187,6 +210,8 @@ async fn prose_only_doc_leaves_sidecar_empty() {
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,
+        share: false,
+        ui: Default::default(),
     };
 
     let (ready_tx, ready_rx) = oneshot::channel::<Arc<HubContext>>();

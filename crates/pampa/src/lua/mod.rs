@@ -21,7 +21,7 @@ mod os_wasm;
 mod pandoc_doc;
 mod path;
 mod quarto_api;
-mod quarto_doc;
+pub mod quarto_doc;
 mod readwrite;
 pub mod runtime;
 pub mod shortcode;
@@ -47,5 +47,6 @@ pub use runtime::NativeRuntime;
 pub use runtime::{RuntimeError, RuntimeResult, SystemRuntime};
 #[allow(unused_imports)]
 pub use shortcode::{
-    LuaShortcodeEngine, LuaShortcodeError, LuaShortcodeResult, ShortcodeArgs, ShortcodeCallContext,
+    LuaShortcodeEngine, LuaShortcodeError, LuaShortcodeResult, ShadowEvent, ShortcodeArgs,
+    ShortcodeCallContext,
 };

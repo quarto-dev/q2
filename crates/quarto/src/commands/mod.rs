@@ -7,6 +7,7 @@ pub mod add;
 pub mod build_ts_extension;
 pub mod call;
 pub mod check;
+pub mod common;
 pub mod convert;
 pub mod create;
 pub mod get_config;

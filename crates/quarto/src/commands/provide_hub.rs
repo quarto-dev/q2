@@ -57,6 +57,10 @@ pub fn execute(args: ProvideHubArgs) -> Result<()> {
     // A full multi-threaded runtime: the auth bridge's stdout reader and the
     // samod sync both run as background tasks.
     let runtime = tokio::runtime::Runtime::new()?;
+    // bd-hxhnnlzs: kernels spawned for execution requests stay warm for
+    // the provider's lifetime; the scope drops after `block_on` returns
+    // (Ctrl-C resolves `run_watch` normally), shutting them all down.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     runtime.block_on(run(args))
 }
 

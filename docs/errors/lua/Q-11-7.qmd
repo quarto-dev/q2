@@ -1,0 +1,90 @@
+---
+title: "Unrecognized Lua filter handler name"
+description: "A Lua filter defines a handler that does not match any element type, so it never runs."
+code: Q-11-7
+subsystem: lua
+status: stub
+since: "99.9.9"
+categories:
+  - lua
+---
+
+# `Q-11-7` — Unrecognized Lua filter handler name
+
+> A Lua filter defines a handler whose name is not an element type
+> Quarto knows about, so it will never run.
+
+## What this means
+
+Quarto dispatches filter handlers **by name**: a function called `Str`
+runs on every `Str` element, `Para` on every paragraph, and so on. A
+handler whose name does not match any element type is never looked up,
+so it sits in the filter doing nothing.
+
+Nothing else goes wrong — the document renders, the other handlers run,
+and the exit code is zero. That silence is exactly what this warning
+exists to break:
+
+```
+Q-11-7: Lua filter 'my-filter.lua' defines a handler 'Strs', which is not an
+element type Quarto knows about, so it will never run. Did you mean 'Str'?
+```
+
+## Why this happens
+
+- **A typo or a plural.** `Strs` for `Str`, `Paragraph` for `Para`,
+  `Headers` for `Header`. The suggestion in the message is the closest
+  name Quarto recognizes.
+- **Wrong case.** Handler names are capitalized exactly as the element
+  type is: `CodeBlock`, not `Codeblock` or `codeBlock`.
+- **A handler from another tool.** Some Pandoc-adjacent tools and older
+  Quarto extensions use names Quarto does not dispatch.
+- **A helper function parked on the filter table.** If you return a
+  table of handlers, every function in it is treated as a handler. Keep
+  helpers in local variables instead:
+
+  ```lua
+  local function shout(text)        -- local: not a handler, not warned
+    return text:upper()
+  end
+
+  return {
+    Str = function(elem) return pandoc.Str(shout(elem.text)) end,
+  }
+  ```
+
+## The handler names Quarto dispatches
+
+Element handlers are named after the element type — `Str`, `Emph`,
+`Strong`, `Link`, `Image`, `Code`, `Math`, `Span`, `Para`, `Plain`,
+`Header`, `CodeBlock`, `RawBlock`, `BlockQuote`, `BulletList`,
+`OrderedList`, `DefinitionList`, `Table`, `Figure`, `Div`, and the
+rest.
+
+Alongside them are the handlers that are *not* element types:
+
+| Handler               | Runs on                                   |
+| --------------------- | ----------------------------------------- |
+| `Pandoc` (or `Doc`)   | the whole document                        |
+| `Meta`                | the document metadata                     |
+| `Inline` / `Block`    | every inline / every block, whatever its type |
+| `Inlines` / `Blocks`  | each *list* of inlines / blocks            |
+
+`traverse` is a setting rather than a handler — it takes the string
+`"topdown"`, not a function — so it is never warned about.
+
+## How to fix
+
+Correct the name to the one in the message's suggestion, or remove the
+handler if it is dead code. If you believe the name *should* be
+supported — it works in Pandoc, or in Quarto 1 — that is worth
+reporting: this warning is deliberately noisy about names Quarto does
+not know, precisely so that a genuine gap surfaces instead of failing
+silently.
+
+## Related errors
+
+- [`Q-11-6`](Q-11-6.qmd) — the filter *script* returned something that
+  is not a filter.
+- [`Q-11-4`](Q-11-4.qmd) — a handler returned a value that could not be
+  converted to AST elements.
