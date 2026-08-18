@@ -3,25 +3,20 @@
 **Date:** 2026-08-18
 **Braid:** bd-duplicate-heading-ids-mou5z7ux (p2, bug, label `markdown`)
 **Checkout:** main checkout, branch `main` @ `4eaede00` at investigation time (implementation branch TBD)
-**Status:** Design aligned with user 2026-08-18 (answers recorded below). One residual design point (whole-document recompute vs. inserted-nodes-only, see Decision 2) surfaced back to the user; **implementation waits on that confirmation.**
+**Status:** Design aligned with user 2026-08-18, refined same day to the **scoped uniqueIdent** shape (Decision 2/5 below). Awaiting implementation go-ahead; Decision 4 (diagnostic) still open.
 
 ## Design decisions (user-aligned, 2026-08-18)
 
-1. **Fix shape: Option B.** Keep the reader assigning ids per-parse; add a document-level dedup pass keyed off `attr_source.id.is_none()`. User note for the future: id duplication is more general than includes (engine output, transform-fabricated headers), and the pass may eventually relocate to a single late stage that dedups everything — Option B's pass is exactly the code that would move.
-2. **Placement: tail of `IncludeExpansionStage::run()`**, gated on "at least one include was actually expanded" so the stage remains a strict no-op on documents without includes. **Residual point (awaiting user confirmation):** the user asked that the pass touch only the just-inserted nodes; the plan instead recomputes over the whole assembled document, for reasons argued in "Why whole-document recompute" below. The gate preserves the spirit (no includes → stage changes nothing); the whole-doc recompute preserves Q1 numbering in mixed inline+included cases.
-3. **Engine-output headings: out of scope.** Filed as **bd-4qjl87ax** (discovered-from this strand).
-4. **Duplicate explicit `{#id}` diagnostic:** implementable — `AttrSourceInfo.id` is `Some(source-span)` exactly when the author wrote the id, `None` when postprocess synthesized it (the qmd writer already relies on this at `crates/pampa/src/writers/qmd.rs:647-649`). Recommendation: follow-up strand, not folded in. **Awaiting user decision.**
-5. **Dedup universe: pandoc `uniqueIdent` parity.** The seen-set contains *all* header ids in document order — explicit and auto alike — and a colliding auto id probes `base-1`, `base-2`, … for the first free candidate (set-membership probe, not a per-base counter: an explicit `{#foo-1}` must push auto "Foo" to `foo-2`). Headers only, matching pandoc's `registerHeader`; explicit ids on divs/spans are not in the set. Explicit ids are never renamed.
-
-### Why whole-document recompute (Decision 2 residual)
-
-Restricting renumbering to just-inserted nodes sounds safer but:
-
-- The seen-set must include ids *outside* the inserted nodes anyway (an included heading colliding with an inline one is the general case), so "only look at inserted nodes" is not available; the question is only what may be *renamed*.
-- Renaming only inserted nodes diverges from Q1 whenever an included heading precedes an inline duplicate: Q1's counter runs in document order and renames the *later* (inline) one; inserted-only renaming would rename the earlier (included) one.
-- Whole-document recompute is idempotent for non-include content **provided the reader's per-parse pass implements the same uniqueIdent semantics** (Decision 5 forces that reader change anyway): every auto id recomputes to the value it already has, so untouched content is observably untouched — except where Q1 would also renumber, which is the bug being fixed.
-
-So: Decision 5 updates the reader's per-parse dedup to uniqueIdent semantics; the doc-level pass is the *same routine* re-run over the assembled document; the include-expansion gate keeps no-include documents byte-identical through the stage.
+1. **Fix shape: Option B.** Keep the reader assigning ids per-parse; add a post-include dedup pass keyed off `attr_source.id.is_none()`. User note for the future: id duplication is more general than includes (engine output, transform-fabricated headers); the scoped-pass mechanism below is designed to be re-runnable over other parts of the document later.
+2. **Placement + scope: tail of `IncludeExpansionStage::run()`, scoped uniqueIdent** (user refinement, second design round). The pass uses pandoc's `uniqueIdent` *algorithm* but scopes the **renameable set** to include-injected auto headers only. The **seen-set is still document-wide** — this asymmetry is load-bearing: an inline "H" colliding with an included "H" must be detected, and only the included one may be renamed. Concretely: pre-pass collects every non-renameable id (all headers outside included files, plus explicit ids anywhere, includes included files); main pass walks include-injected auto headers in document order, probing `base`, `base-1`, `base-2`, … (set-membership, not per-base counter) and inserting each assignment into the set. Recompute the base via `auto_generated_id(content)` rather than probing the fragment-assigned id, so results are independent of the fragment's internal numbering.
+   - **Why scoped beats whole-document recompute:** (a) zero behavior change outside include-injected headers — no reader change, no pampa snapshot churn; (b) **monotonicity composes**: once assigned, an id is never renamed by a later stage, so the same mechanism can run post-engine for bd-4qjl87ax (scope = engine-inserted headers) without invalidating ids `DocumentProfileStage` already observed — the tension that made bd-4qjl87ax hard under whole-doc recompute dissolves; (c) future generalization is "run the same process over a different scope", per the user's framing.
+   - **Injected-ness = file-id provenance:** the stage remaps each included parse's `FileId(0)` to a fresh file id; accumulate the set of included file ids during expansion and classify headers by their `SourceInfo` file id. Covers nested includes (each registered on recursion).
+   - Gate: skip the pass entirely when no include was expanded (stage stays a strict no-op).
+3. **Engine-output headings: out of scope.** Filed as **bd-4qjl87ax** (discovered-from this strand); the scoped mechanism is its intended future implementation.
+4. **Duplicate explicit `{#id}` diagnostic:** implementable — `AttrSourceInfo.id` is `Some(source-span)` exactly when the author wrote the id, `None` when postprocess synthesized it (qmd writer precedent at `crates/pampa/src/writers/qmd.rs:647-649`). Recommendation: follow-up strand, not folded in. **Awaiting user decision.**
+5. **Dedup algorithm: pandoc `uniqueIdent` parity in mechanism, not in document-wide outcome** (user decision, second round). The probe algorithm matches pandoc exactly (set-membership over explicit + assigned ids; headers only, matching pandoc's `registerHeader`; explicit ids never renamed), but it is applied only to the scoped renameable set. Accepted divergences from Q1, stated explicitly:
+   - When an included "H" *precedes* an inline "H": Q1 emits `h` (included) / `h-1` (inline); we emit `h-1` (included) / `h` (inline) — collision-free, reversed, because inline headers are never renameable.
+   - No-include documents are untouched, so the existing reader quirks stay: explicit `{#foo}` then auto "Foo" still both emit `foo`; the reader's per-base counter (vs. set probe) also stays. Pure-include repetition — the filed repro and the Connect-docs hit — matches Q1 exactly.
 
 ## Triage verdict (investigation, 2026-08-18)
 
@@ -63,39 +58,39 @@ Control (`control-inline.qmd`, same heading three times inline) correctly emits 
 
 ### Phase 0 — Tests first (TDD; all must fail or pin current behavior before Phase 1)
 
-pampa (uniqueIdent semantics in the reader — Decision 5):
+quarto-core (the filed bug; extend `crates/quarto-core/tests/integration/` per the integration-test layout rule — module inside the `integration` binary):
 
-- [ ] Explicit `{#foo}` then auto heading "Foo" → `foo-1` (fails today: emits colliding `foo`).
-- [ ] Explicit `{#foo-1}` present, then two auto "Foo" headings → `foo`, `foo-2` (set-probe, not counter — fails today).
-- [ ] Auto heading "Foo" then explicit `{#foo}` → explicit id kept verbatim (pin: explicit never renamed).
-- [ ] Empty-content heading base-id edge case: check `auto_generated_id` output for empty inlines against pandoc's `section` fallback; pin whatever we decide.
-- [ ] qmd-writer round-trip: a deduped header (`foo-1`) round-trips with an explicit `{#foo-1}` (existing behavior for `-N` ids — pin it).
-
-quarto-core (the filed bug):
-
-- [ ] Integration test: repeated include → `x`, `x-1`, `x-2` (fails today). Extend `crates/quarto-core/tests/integration/` per the integration-test layout rule (module inside the `integration` binary).
+- [ ] Repeated include → `x`, `x-1`, `x-2` (fails today).
 - [ ] Nested include (a.qmd includes b.qmd twice; b carries a heading).
-- [ ] Mixed ordering, Q1 parity: inline "H" then included "H" → included gets `-1`; included "H" then inline "H" → *inline* gets `-1` (this is the case that forces whole-document recompute).
-- [ ] Explicit `{#id}` inside an included file, included twice → both keep the id verbatim (no renaming), pinning Decision 4's premise.
+- [ ] Mixed ordering, scoped semantics (Decision 5): inline "H" then included "H" → included gets `h-1`; included "H" then inline "H" → **included** gets `h-1`, inline keeps `h` (documents the accepted Q1 divergence).
+- [ ] Set-probe, not counter: main doc has explicit `{#h-1}`, includes "H" twice → included get `h`, `h-2` (fails today; pins uniqueIdent probing).
+- [ ] Explicit `{#id}` inside an included file, included twice → both keep the id verbatim (no renaming; explicit ids are seen-set members but never renameable).
+- [ ] Non-injected headers are never renamed even on collision: two inline "H" duplicates + one included "H" → inline pair keeps its reader-assigned `h`, `h-1`; included gets `h-2`.
 - [ ] No-include document passes through `IncludeExpansionStage` unchanged (the gate).
 - [ ] Profile outline: `DocumentProfileStage` sees deduped ids (extend `document_profile_pipeline.rs`).
+
+pampa (pins only — the reader is deliberately untouched):
+
+- [ ] Empty-content heading base-id edge case: check `auto_generated_id` output for empty inlines (pandoc falls back to `section`); pin whatever we decide for the probe base.
+- [ ] qmd-writer round-trip: a deduped header (`h-1`) round-trips with an explicit `{#h-1}` (existing behavior for `-N` ids — pin it; applies equally to pass-assigned ids since `attr_source.id` stays `None` but the id no longer equals the recomputed base).
 
 End-to-end (per CLAUDE.md):
 
 - [ ] `cargo run --bin q2 -- render` on the committed fixture; inspect HTML for `x`, `x-1`, `x-2`; add a `toc-depth: 4` variant and inspect distinct `data-scroll-target`s.
 
-### Phase 1 — pampa: shared uniqueIdent routine
+### Phase 1 — the scoped uniqueIdent routine
 
-- [ ] Extract a document-level routine (working name `assign_unique_heading_ids(&mut Pandoc)`) in `pampa` (near `utils::autoid`): walk headers in document order; maintain `HashSet<String>` of used ids; for `attr_source.id.is_some()` insert verbatim; for auto headers recompute `auto_generated_id(content)` and probe `base`, `base-1`, `base-2`, …; write result and leave `attr_source.id` as `None`.
-- [ ] Restructure `postprocess()` to use it: `with_header` keeps attr-extraction/linebreak handling but stops assigning ids; the routine runs as a whole-doc pass at the end of postprocess. Single source of truth for both call sites.
-- [ ] Traversal scope must match current `with_header` filter reach (headers inside divs, blockquotes, list items, etc.).
-- [ ] Run pampa + workspace snapshots; expected churn: only documents mixing explicit and auto ids that now probe differently (intended, Decision 5). Audit and report per the snapshot policy.
+- [ ] Implement (working name `dedup_injected_heading_ids(&mut Pandoc, injected_file_ids: &HashSet<FileId>)`) — home: `quarto-core` next to the stage, since scoping by include provenance is a pipeline concept, but keep the probe helper generic enough to re-scope for bd-4qjl87ax. Pre-pass walk collects the seen-set (all non-injected header ids + explicit ids everywhere); main walk in document order over injected headers with `attr_source.id.is_none()`: recompute `auto_generated_id(content)`, probe `base`, `base-1`, …, assign, insert into set; leave `attr_source.id` as `None`.
+- [ ] Traversal scope must match the reader's `with_header` reach (headers inside divs, blockquotes, list items, footnote definitions, etc.) — use the standard filter traversal, not a top-level-blocks loop.
+- [ ] Unit tests for the routine itself (scoping, probing, explicit-id immunity).
 
-### Phase 2 — quarto-core: wire into IncludeExpansionStage
+### Phase 2 — wire into IncludeExpansionStage
 
-- [ ] At the tail of `run()`, if ≥1 include was expanded, run `assign_unique_heading_ids` over the assembled `Pandoc`.
-- [ ] Doc-comment the stage invariant: "after this stage, heading auto ids are document-unique (uniqueIdent semantics)". Note bd-4qjl87ax as the known post-engine gap.
+- [ ] Accumulate `injected_file_ids` during expansion (the `FileId(0) → new_file_id` remap already names them; nested includes covered by recursion).
+- [ ] At the tail of `run()`, if the set is non-empty, run the routine over the assembled `Pandoc`.
+- [ ] Doc-comment the stage invariant: "after this stage, include-injected heading auto ids are unique against the whole document (pandoc uniqueIdent probe); pre-existing ids are never renamed". Note bd-4qjl87ax as the known post-engine gap and the intended reuse of this mechanism.
 - [ ] Confirm coverage of all builders (native/WASM/analysis/orchestrator) via the Phase 0 integration tests where practical.
+- [ ] Snapshot audit: expected churn is **zero** outside documents with includes whose headings collide; any other churn is a red flag (snapshot policy).
 
 ### Phase 3 — Verification & close-out
 
@@ -108,8 +103,8 @@ End-to-end (per CLAUDE.md):
 
 ## Risks / tradeoffs
 
-- **Intended id changes beyond the filed bug:** Decision 5 changes ids in documents mixing explicit and auto ids (`foo` → `foo-1` after an explicit `{#foo}`). Q1-parity is the defensible target; snapshot diffs must be audited, not rubber-stamped.
-- The doc-level pass recomputes with the same `auto_generated_id` the reader used (pre-shortcode-expansion content; `Shortcode` inlines skipped by explicit decision — bd-2wv8431v), so recompute-to-same-value holds for untouched headers.
-- `attr_source.id.is_none()` as the auto-id discriminator: qmd writer precedent is strong; spot-check transform-fabricated headers (none should exist pre-include-expansion, but verify).
-- Duplicated-logic risk is retired by sharing one routine between postprocess and the stage (Phase 1).
-- Deduped ids round-trip through the qmd writer as explicit `{#foo-1}` (writer's suppress-check compares against the recomputed base). Existing behavior; pinned in Phase 0.
+- **Accepted Q1 divergences are enumerated in Decision 5** (included-before-inline renames the included heading, not the inline one; no-include documents keep today's reader quirks). Both are deliberate; tests document them so future parity work is a conscious change, not drift.
+- The pass recomputes with the same `auto_generated_id` the reader used (pre-shortcode-expansion content; `Shortcode` inlines skipped by explicit decision — bd-2wv8431v), so an injected heading with no collision recomputes to the id it already carries.
+- `attr_source.id.is_none()` as the auto-id discriminator: qmd writer precedent is strong; spot-check that nothing fabricates headers with empty attr_source before include expansion (none should exist that early, but verify).
+- File-id provenance as "injected": verify that every include occurrence's headers land in the accumulated file-id set (per-occurrence remap; nested recursion), and that no main-document header can share a file id with an included file (circular includes are already rejected).
+- Deduped/pass-assigned ids round-trip through the qmd writer as explicit `{#h-1}` (writer's suppress-check compares against the recomputed base). Existing behavior for reader-deduped ids; pinned in Phase 0.
