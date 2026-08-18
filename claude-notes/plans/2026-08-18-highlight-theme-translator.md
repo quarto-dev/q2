@@ -2,8 +2,10 @@
 
 **Strand:** bd-hl-theme-translator-2mdgh4k6 (open, feature, P3 — field evidence
 argues for higher; see below)
-**Status:** design settled 2026-08-18 (all six questions answered — see
-"Design decisions" below); ready for implementation planning/TDD
+**Status:** MERGED and CLOSED 2026-08-18 — PR #547 (commit `8c844241`,
+merged as `4033a266`); strand bd-hl-theme-translator-2mdgh4k6 closed.
+Follow-ups live on as bd-ag5n55ca (user `.theme` paths) and
+bd-o20jxpfc (darkness sentinel).
 **Investigated:** 2026-08-18, on branch `main`
 **Discovered-from:** bd-ld-b-highlight-style-jnb036fz (closed — light/dark
 phase B, stage 1 of highlight-style support)
