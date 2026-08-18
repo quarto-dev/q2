@@ -9,8 +9,10 @@ mod diagnostics;
 mod rule;
 mod utils;
 
-use rule::{Rule, RuleRegistry};
+use rule::{CheckResult, Rule, RuleRegistry};
+use std::collections::HashSet;
 use utils::glob_expand::expand_globs;
+use utils::parse_probe::probe_file;
 
 #[derive(Parser)]
 #[command(name = "qmd-syntax-helper")]
@@ -97,7 +99,21 @@ fn main() -> Result<()> {
             let total_files_checked = file_paths.len();
             let rules = resolve_rules(&registry, &rule_names, RuleUse::Check)?;
 
+            // Rules that walk the AST are skipped on files that fail to
+            // parse; such a file is accounted "unanalyzable", never clean
+            // (bd-syntax-helper-parse-masking-w88mhedp). Sorted because the
+            // registry iterates a HashMap.
+            let mut requires_parse_rules: Vec<String> = rules
+                .iter()
+                .filter(|r| r.requires_parse())
+                .map(|r| r.name().to_string())
+                .collect();
+            requires_parse_rules.sort();
+
             let mut all_results = Vec::new();
+            // Files where a rule (or the parse probe) failed outright — not
+            // checked, so never counted clean.
+            let mut error_files: HashSet<String> = HashSet::new();
 
             for file_path in file_paths {
                 // Print filename first in verbose mode
@@ -105,15 +121,42 @@ fn main() -> Result<()> {
                     println!("Checking: {}", file_path.display());
                 }
 
+                let path_str = file_path.to_string_lossy().to_string();
+
+                // Probe once per file, only when an AST-requiring rule was
+                // requested.
+                let parse_failure = if requires_parse_rules.is_empty() {
+                    None
+                } else {
+                    match probe_file(&file_path) {
+                        Ok(failure) => failure,
+                        Err(e) => {
+                            // Unreadable: every rule would fail identically.
+                            error_files.insert(path_str);
+                            if !json {
+                                if !verbose {
+                                    println!("{}", file_path.display());
+                                }
+                                eprintln!("  {} Error reading file: {}", "✗".red(), e);
+                            }
+                            continue;
+                        }
+                    }
+                };
+
                 // Collect results for this file
                 let mut file_results = Vec::new();
 
                 for rule in &rules {
+                    if parse_failure.is_some() && rule.requires_parse() {
+                        continue;
+                    }
                     match rule.check(&file_path, verbose && !json) {
                         Ok(results) => {
                             file_results.extend(results);
                         }
                         Err(e) => {
+                            error_files.insert(path_str.clone());
                             if !json {
                                 // For errors, print filename first if not verbose
                                 if !verbose {
@@ -125,33 +168,41 @@ fn main() -> Result<()> {
                     }
                 }
 
+                // One synthesized record per unparseable file: the skipped
+                // rules never saw an AST, so "no findings" from them would
+                // read as clean when the file was in fact not checked.
+                if let Some(failure) = &parse_failure {
+                    file_results.push(CheckResult {
+                        rule_name: "unanalyzable".to_string(),
+                        file_path: path_str.clone(),
+                        message: Some(format!(
+                            "{failure}; {} rule(s) not applied: {}",
+                            requires_parse_rules.len(),
+                            requires_parse_rules.join(", ")
+                        )),
+                        error_codes: if failure.error_codes.is_empty() {
+                            None
+                        } else {
+                            Some(failure.error_codes.clone())
+                        },
+                        unanalyzable: true,
+                        skipped_rules: Some(requires_parse_rules.clone()),
+                        ..Default::default()
+                    });
+                }
+
                 // Print results based on mode
                 if !json {
                     if verbose {
                         // Verbose: filename already printed, just print issues
-                        for result in &file_results {
-                            if result.has_issue {
-                                println!(
-                                    "  {} {}",
-                                    "✗".red(),
-                                    result.message.as_ref().unwrap_or(&String::new())
-                                );
-                            }
-                        }
+                        print_file_results(&file_results);
                     } else {
-                        // Non-verbose: only print filename if there are issues
-                        let has_issues = file_results.iter().any(|r| r.has_issue);
-                        if has_issues {
+                        // Non-verbose: only print filename if there is
+                        // something to say
+                        let printable = file_results.iter().any(|r| r.has_issue || r.unanalyzable);
+                        if printable {
                             println!("{}", file_path.display());
-                            for result in &file_results {
-                                if result.has_issue {
-                                    println!(
-                                        "  {} {}",
-                                        "✗".red(),
-                                        result.message.as_ref().unwrap_or(&String::new())
-                                    );
-                                }
-                            }
+                            print_file_results(&file_results);
                             println!(); // Blank line between files
                         }
                     }
@@ -163,7 +214,7 @@ fn main() -> Result<()> {
 
             // Print summary if not in JSON mode
             if !json {
-                print_check_summary(&all_results, total_files_checked);
+                print_check_summary(&all_results, total_files_checked, &error_files);
             }
 
             // Output handling
@@ -198,6 +249,19 @@ fn main() -> Result<()> {
             let rules = resolve_rules(&registry, &rule_names, RuleUse::Convert)?;
             let max_iter = if no_iteration { 1 } else { max_iterations };
 
+            // Rules that walk the AST are skipped while the working copy
+            // fails to parse. Re-probed every iteration: an earlier rule in
+            // the same run (e.g. apostrophe-quotes) may repair the parse
+            // error, after which the skipped rules apply normally. Only if
+            // the file *still* fails to parse at convergence is the skip
+            // reported (bd-syntax-helper-parse-masking-w88mhedp).
+            let mut requires_parse_rules: Vec<String> = rules
+                .iter()
+                .filter(|r| r.requires_parse())
+                .map(|r| r.name().to_string())
+                .collect();
+            requires_parse_rules.sort();
+
             for file_path in file_paths {
                 if verbose {
                     println!("Processing: {}", file_path.display());
@@ -223,9 +287,20 @@ fn main() -> Result<()> {
                         println!("  Iteration {}:", iteration);
                     }
 
+                    // Probe the working copy, only when an AST-requiring rule
+                    // was requested.
+                    let parse_failure = if requires_parse_rules.is_empty() {
+                        None
+                    } else {
+                        probe_file(&temp_path)?
+                    };
+
                     // Apply all rules to temp file (always in_place=true, check_mode=false on temp)
                     // We always write to temp since it's temporary; finalize_temp_file handles check_mode
                     for rule in &rules {
+                        if parse_failure.is_some() && rule.requires_parse() {
+                            continue;
+                        }
                         match rule.convert(&temp_path, true, false, verbose) {
                             Ok(mut result) => {
                                 if result.fixes_applied > 0 {
@@ -309,6 +384,21 @@ fn main() -> Result<()> {
                     }
                 }
 
+                // If the file still fails to parse now that the run has
+                // settled, the AST-requiring rules were never applied —
+                // refuse loudly (per file; the sweep continues).
+                if !requires_parse_rules.is_empty()
+                    && let Some(failure) = probe_file(&temp_path)?
+                {
+                    eprintln!(
+                        "  {} {}: {}; rule(s) not applied: {}",
+                        "⚠".yellow(),
+                        file_path.display(),
+                        failure,
+                        requires_parse_rules.join(", ")
+                    );
+                }
+
                 // Finalize: copy temp to original or print to stdout
                 finalize_temp_file(temp_file, &file_path, in_place, check_mode)?;
             }
@@ -319,22 +409,36 @@ fn main() -> Result<()> {
         Commands::ListRules => {
             println!("{}", "Available rules:".bold());
             let mut any_opt_in = false;
+            let mut any_requires_parse = false;
             for name in registry.list_names() {
                 let rule = registry.get(&name)?;
-                let marker = if rule.opt_in_only() {
+                let mut marker = String::new();
+                if rule.opt_in_only() {
                     any_opt_in = true;
-                    " *"
-                } else {
-                    ""
-                };
+                    marker.push_str(" *");
+                }
+                if rule.requires_parse() {
+                    any_requires_parse = true;
+                    marker.push_str(" †");
+                }
                 println!("  {}{} - {}", name.cyan(), marker, rule.description());
             }
-            if any_opt_in {
+            if any_opt_in || any_requires_parse {
                 println!();
+            }
+            if any_opt_in {
                 println!(
                     "  {} not applied by `convert -r all`; \
                      name it explicitly with `-r <rule>` to opt in.",
                     "*".cyan()
+                );
+            }
+            if any_requires_parse {
+                println!(
+                    "  {} needs the file to parse; on files that don't, `check` \
+                     counts the file unanalyzable and `convert` skips the rule \
+                     (fix parse errors first, e.g. `convert -r apostrophe-quotes`).",
+                    "†".cyan()
                 );
             }
             Ok(())
@@ -422,11 +526,37 @@ fn finalize_temp_file(
     Ok(())
 }
 
-fn print_check_summary(results: &[rule::CheckResult], total_files: usize) {
-    use std::collections::{HashMap, HashSet};
+/// Print one file's check results: `✗` per issue, `⚠` for the synthesized
+/// unanalyzable record.
+fn print_file_results(file_results: &[rule::CheckResult]) {
+    for result in file_results {
+        if result.has_issue {
+            println!(
+                "  {} {}",
+                "✗".red(),
+                result.message.as_ref().unwrap_or(&String::new())
+            );
+        } else if result.unanalyzable {
+            println!(
+                "  {} {}",
+                "⚠".yellow(),
+                result.message.as_ref().unwrap_or(&String::new())
+            );
+        }
+    }
+}
+
+fn print_check_summary(
+    results: &[rule::CheckResult],
+    total_files: usize,
+    error_files: &HashSet<String>,
+) {
+    use std::collections::HashMap;
 
     // Count files with issues (at least one result with has_issue=true)
     let mut files_with_issues = HashSet::new();
+    // Files where requires-parse rules were skipped: not checked, not clean.
+    let mut files_unanalyzable = HashSet::new();
     let mut total_issues = 0;
 
     // Track issues by rule type
@@ -434,6 +564,9 @@ fn print_check_summary(results: &[rule::CheckResult], total_files: usize) {
     let mut files_by_rule: HashMap<String, HashSet<String>> = HashMap::new();
 
     for result in results {
+        if result.unanalyzable {
+            files_unanalyzable.insert(&result.file_path);
+        }
         if result.has_issue {
             files_with_issues.insert(&result.file_path);
             total_issues += result.issue_count;
@@ -448,7 +581,15 @@ fn print_check_summary(results: &[rule::CheckResult], total_files: usize) {
     }
 
     let files_with_issues_count = files_with_issues.len();
-    let files_clean = total_files - files_with_issues_count;
+
+    // Clean means: every requested rule ran and none found anything. A file
+    // can be in more than one non-clean bucket (e.g. a parse-rule issue plus
+    // skipped AST rules), so clean is the complement of the union.
+    let mut not_clean: HashSet<&str> = HashSet::new();
+    not_clean.extend(files_with_issues.iter().map(|s| s.as_str()));
+    not_clean.extend(files_unanalyzable.iter().map(|s| s.as_str()));
+    not_clean.extend(error_files.iter().map(|s| s.as_str()));
+    let files_clean = total_files - not_clean.len();
 
     println!("\n{}", "=== Summary ===".bold());
     println!("Total files:         {}", total_files);
@@ -461,6 +602,20 @@ fn print_check_summary(results: &[rule::CheckResult], total_files: usize) {
             "✓".green()
         }
     );
+    if !files_unanalyzable.is_empty() {
+        println!(
+            "Unanalyzable files:  {} {}",
+            files_unanalyzable.len(),
+            "⚠".yellow()
+        );
+    }
+    if !error_files.is_empty() {
+        println!(
+            "Files with errors:   {} {}",
+            error_files.len(),
+            "⚠".yellow()
+        );
+    }
     println!("Clean files:         {} {}", files_clean, "✓".green());
 
     if !issues_by_rule.is_empty() {

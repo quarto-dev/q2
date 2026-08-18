@@ -195,6 +195,7 @@ impl Rule for Q228Converter {
                 location: v.error_location,
                 error_code: Some("Q-2-28".to_string()),
                 error_codes: None,
+                ..Default::default()
             })
             .collect();
 

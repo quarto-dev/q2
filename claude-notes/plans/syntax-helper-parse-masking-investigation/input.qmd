@@ -1,0 +1,11 @@
+---
+title: "Parse-masking repro"
+---
+
+The admins ' console shows a stray-apostrophe parse error (Q-2-10).
+
+Diagram key: [1] is the gateway node.
+
+See [the docs][gcc] for details.
+
+[gcc]: https://example.com/gcc

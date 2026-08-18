@@ -112,6 +112,50 @@ Two things the rules deliberately do *not* do:
   removing them is what restores parity — but it does delete a line the
   author wrote.
 
+### Rules that require a parsing file
+
+Most rules run on any input: the diagnostic-driven `q-2-*` rules read parse
+*failures* as their input, and `grid-tables` works on raw text. But rules
+that walk the parsed AST — `reference-links`, `literal-brackets`, `q-2-30` —
+can only report findings when the file actually parses. On a file that does
+not, `check` **skips them and counts the file as unanalyzable** (never
+clean — it was not checked):
+
+```
+docs/admin/security/index.md
+  ⚠ file does not parse (Q-2-10); 2 rule(s) not applied: literal-brackets, reference-links
+
+=== Summary ===
+Total files:         1
+Files with issues:   0 ✓
+Unanalyzable files:  1 ⚠
+Clean files:         0 ✓
+```
+
+In `--json` mode the file gets one synthesized record with
+`"rule_name": "unanalyzable"`, `"unanalyzable": true`, the skipped rule
+names, and the parse error codes.
+
+`convert` skips these rules while the working copy fails to parse, re-probing
+each iteration — so a run that also fixes the parse errors (e.g.
+`convert -r apostrophe-quotes -r literal-brackets`) repairs the file first
+and then applies the AST rules in a later iteration. Only if the file
+*still* fails to parse when the run settles is the refusal reported (per
+file, on stderr; the sweep continues).
+
+The workflow for a tree with parse errors is therefore:
+
+```bash
+# 1. See what fails to parse and why
+qmd-syntax-helper check -r parse "docs/**/*.qmd"
+
+# 2. Fix the parse errors (automatically where a rule exists)
+qmd-syntax-helper convert -r all --in-place "docs/**/*.qmd"
+
+# 3. Now the AST-based sweeps are trustworthy
+qmd-syntax-helper check -r literal-brackets -r reference-links "docs/**/*.qmd"
+```
+
 ## Installation
 
 From the quarto-markdown repository:

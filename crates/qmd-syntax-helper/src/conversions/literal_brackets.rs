@@ -77,6 +77,12 @@ impl Rule for LiteralBracketsConverter {
         true
     }
 
+    /// Findings come from walking the parsed AST; without one there is
+    /// nothing to say, and "no findings" must not read as clean.
+    fn requires_parse(&self) -> bool {
+        true
+    }
+
     fn check(&self, file_path: &Path, _verbose: bool) -> Result<Vec<CheckResult>> {
         let content = read_file(file_path)?;
         let analysis = analyze(&content, &file_path.to_string_lossy())?;
@@ -116,6 +122,7 @@ impl Rule for LiteralBracketsConverter {
                 location: Some(source_location(&content, finding.start())),
                 error_code: None,
                 error_codes: None,
+                ..Default::default()
             });
         }
 
