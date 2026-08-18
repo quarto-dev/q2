@@ -2,11 +2,13 @@
 
 **Date:** 2026-08-17
 **Braid:** bd-26bf3j1y
-**Checkout:** `/Users/cscheid/rooms/room-3/q2`, branch
-`braid/bd-26bf3j1y-website-mobile-secondary-nav` off `main` @ `7de02ea2`
-**Status:** In progress. Design settled 2026-08-17 (all seven questions answered
-— see **Resolved decisions**); implementation started with Carlos's go-ahead the
-same day. Work items below are the live tracker.
+**Branch:** `feature/bd-26bf3j1y-website-mobile-secondary-nav`, merged to `main`
+in [PR #543](https://github.com/quarto-dev/q2/pull/543) (merge commit `5b6774d1`)
+**Status:** **DONE — merged 2026-08-18; strand `bd-26bf3j1y` closed.** Design
+settled 2026-08-17 (all seven questions answered — see **Resolved decisions**),
+implemented the same day. All six phases complete. The work-item checklists below
+are a record of what shipped, not a live tracker; the **Findings** section is the
+part worth reading later.
 
 ## Triage verdict
 
@@ -22,8 +24,9 @@ ships no Bootstrap JS**, so a toggle rendered there is inert by construction —
 the exact "toggle wired to nothing" objection that deferred this work in the
 first place, now relocated from render to preview.
 
-None of that blocked design; all of it changed what the phases are. The six
-questions were answered on 2026-08-17 and are recorded below.
+None of that blocked design; all of it changed what the phases are. The
+questions were answered on 2026-08-17 — six as posed, plus a seventh when
+`bd-xva3f8uy` was folded in — and are recorded below.
 
 ## Issue context
 
