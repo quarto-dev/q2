@@ -2,7 +2,8 @@
 
 **Strand:** bd-hl-theme-translator-2mdgh4k6 (open, feature, P3 — field evidence
 argues for higher; see below)
-**Status:** plan skeleton — design questions pending user alignment
+**Status:** design settled 2026-08-18 (all six questions answered — see
+"Design decisions" below); ready for implementation planning/TDD
 **Investigated:** 2026-08-18, on branch `main`
 **Discovered-from:** bd-ld-b-highlight-style-jnb036fz (closed — light/dark
 phase B, stage 1 of highlight-style support)
@@ -130,9 +131,9 @@ cannot (e.g. function name / parameter / type in a Python signature). The
 three hand-written palettes established the group structure; the translator
 formalizes it once.
 
-## Proposed shape (draft — pending design questions)
+## Proposed shape (settled)
 
-**Recommendation: a runtime translator in Rust**, mirroring Q1's own
+**A runtime translator in Rust**, mirroring Q1's own
 architecture (Q1 translates `.theme` JSON at render time too):
 
 - Vendor Q1's `.theme` files into `resources/` (e.g.
@@ -174,8 +175,12 @@ runtime. (Question 1 below.)
       a light/dark theme pair + `{light: github, dark: arrow}` asserting the
       two variant stylesheets carry different `.hl-keyword` colors and no
       warnings (regression for the Connect shape, expressed generically).
-- [ ] Snapshot/existing-test audit: a11y palettes' rendered CSS must not
-      regress (or changes documented if we regenerate them via translator).
+- [ ] Tests for the YAML `code-block-bg` / `code-block-color` keys: value
+      flows through `doc_vars` and beats the palette's `!default`.
+- [ ] Snapshot/existing-test audit: a11y palettes now route through the
+      translator (decision 2) — emitted CSS will change; update affected
+      tests/snapshots and document the diff (pixel stability explicitly
+      waived).
 
 ### Phase 1 — vendored catalog + translator
 
@@ -183,18 +188,24 @@ runtime. (Question 1 below.)
       `external-sources/quarto-cli/src/resources/pandoc/highlight-styles/`
       into `resources/` (+ README noting provenance/update procedure).
 - [ ] Implement `.theme` JSON parse + SCSS emission with the canonical
-      mapping table.
+      mapping table (dotted-name fallback; honor bold/italic/underline and
+      `background-color` per token, not just `text-color`).
 - [ ] Wire into `load_highlight_layer` + derive the known-palette list;
-      grow `ADAPTIVE_HIGHLIGHT_STYLES`.
+      grow `ADAPTIVE_HIGHLIGHT_STYLES` to Q1's 8; delete the hand-written
+      `highlight-a11y-{light,dark}.scss` (replaced by translated output;
+      `highlight-default.scss` stays).
 - [ ] Q-14-5 "available palettes" message: now ~26 names — decide message
       format (sorted, wrapped).
 
-### Phase 2 — item (2) semantics
+### Phase 2 — item (2) semantics + override keys
 
 - [ ] Emit `$btn-code-copy-color` (Comment) / `$btn-code-copy-color-active`
       (Function) defaults from the selected palette.
-- [ ] Settle adaptive-vs-not `$code-block-bg` injection semantics
-      (question 3) and implement; reconcile with the stage-1 a11y files.
+- [ ] Emit `$code-block-bg` / `$code-block-color` `!default` from every
+      translated palette (decision 3: palette wins, adaptive or not).
+- [ ] Add YAML `code-block-bg` / `code-block-color` metadata keys via
+      `derive_doc_scss_layer` (the `doc_vars` seam) as the one-line
+      override escape hatch.
 
 ### Phase 3 — verification + docs
 
@@ -216,48 +227,64 @@ runtime. (Question 1 below.)
 - Per-language `custom-styles` overrides (Q1 ignores them in HTML output
   too).
 
-## Design questions (need user input)
+## Design decisions (settled with user, 2026-08-18)
 
-1. **Translator architecture**: runtime Rust translator over vendored
-   `.theme` JSON (my recommendation — one implementation, natural seam for
-   user `.theme` files, mirrors Q1) vs. xtask codegen of checked-in SCSS
-   files (reviewable, zero runtime parsing)?
-2. **Existing a11y palettes**: keep the three hand-written SCSS files as-is
-   (default stays q2's own either way), or route a11y through the translator
-   too so there's exactly one code path? Routing through the translator may
-   change their emitted CSS slightly (the hand translation made judgment
-   calls, e.g. `.hl-function-call`, `.hl-variable-parameter` refinements) —
-   is pixel-stability of stage-1 output a constraint?
-3. **`$code-block-bg` injection semantics**: Q1 injects bg/fg **only for
-   non-adaptive** themes (adaptive/map-form → theme's own bg wins; that's
-   what Q1 does on the Connect docs, whose theme.scss sets no
-   code-block-bg). Stage 1's a11y files set bg unconditionally. Follow Q1
-   (visual fidelity for ported sites) or keep stage-1's palette-always-sets-bg
-   (arguably better contrast guarantees, e.g. a11y's #fefefe)?
-4. **Mapping-table fidelity policy**: q2's finer-grained captures
-   (`hl-function-call`, `hl-variable-parameter`, `hl-constructor`, ...) must
-   derive colors from coarser Pandoc tokens. OK to fix one canonical
-   derivation table for all palettes (my recommendation), accepting that
-   translated palettes won't exploit q2's extra granularity? (Palette-specific
-   refinements would stay possible via hand-written override files layered
-   after the translated one.)
-5. **Catalog scope**: full Q1 catalog in one pass (my recommendation — the
-   translator makes each additional palette free, and it retires the whole
-   class of Q-14-5 ports) vs. just the 8 adaptive pairs, vs. just
-   github+arrow?
-6. **Item (2)/(3) scoping**: include copy-button colors (cheap once the
-   translator exists — my recommendation) and defer item (3) sentinel work
-   to a follow-up strand?
+1. **Translator architecture: runtime Rust translator** over vendored
+   `.theme` JSON. One implementation, natural seam for user `.theme` files
+   later, mirrors Q1's own runtime translation.
+2. **Route everything through the translator**, including a11y — the three
+   hand-written palette SCSS files are replaced by translated output (q2's
+   own `default` stays hand-written SCSS). Pixel-stability of stage-1 output
+   is explicitly NOT a constraint at this stage of Quarto 2.
+3. **`$code-block-bg`/`$code-block-color`: palette wins.** Translated
+   palettes emit both as `!default` (from `editor-colors.BackgroundColor` /
+   `text-styles.Normal` or top-level `background-color`/`text-color`),
+   adaptive or not — the palette's bg was designed to match its highlights.
+   Escape hatches, verified against the layer machinery:
+   - **Custom SCSS (works today):** user theme layers' defaults land above
+     built-in layers' defaults in the merged band (`assemble_with_user_layers`
+     ordering in `crates/quarto-sass/src/compile.rs`), so one
+     `$code-block-bg: …;` line in a user theme file wins.
+   - **YAML keys (added by this strand):** support Q1's `code-block-bg` /
+     `code-block-color` metadata keys via the existing `doc_vars` seam
+     (`derive_doc_scss_layer` in
+     `crates/quarto-core/src/stage/stages/compile_theme_css.rs:72`, which
+     already lands at the top of the defaults band and wins the `!default`
+     race — currently carries only `$sidebar-border`). ~15 lines + tests.
+     This also reproduces Q1's "user metadata suppresses injection" guard
+     for free via `!default` semantics.
+   Accepted caveat: ported sites diverge from Q1's look (Q1 skips bg/fg
+   injection for adaptive/map-form styles — e.g. Connect docs get github's
+   designed `#ffffff` where Q1 showed the theme-default gray); restoring Q1
+   parity is one YAML/SCSS line.
+4. **One canonical capture→token mapping table** for all translated
+   palettes, with **dotted-name fallback** (`function.builtin` inherits
+   `function`'s bucket unless specifically mapped, so new upstream grammar
+   captures degrade gracefully). Rationale: `.theme` files carry nothing
+   finer than Pandoc's ~30 token names, so a single table hits the quality
+   ceiling (Q1 parity) by construction — there is no per-palette information
+   to lose. The judgment lives in bucket assignment (which of the ~67 known
+   `hl-*` classes counts as Function-like, etc.), which is
+   palette-independent; the stage-1 hand translations already applied
+   exactly such a table (documented in their file headers). Better-than-Q1
+   refinements exploiting q2's finer captures remain possible later via
+   hand-written per-palette overlay SCSS layered after the translated output
+   (the layering mechanism already exists) — opt-in, deferred.
+5. **Full Q1 catalog** in one pass (~26 names, 8 adaptive pairs).
+6. **Copy-button colors in scope** (`$btn-code-copy-color` from Comment,
+   `$btn-code-copy-color-active` from Function, per Q1's
+   `resolveTextHighlightingLayer`); **item (3)** (compiled-CSS darkness
+   sentinel) deferred to a follow-up strand.
 
 ## Verdict
 
-**Ready to design.** The stage-1 machinery is sound and well-seamed
-(`load_highlight_layer`, `resolve_adaptive_highlight`,
-`KNOWN_HIGHLIGHT_PALETTES` are exactly the touch points); the Q1 reference
-implementation is small and fully understood; the concrete acceptance case
-(github/arrow pair) is pinned by field evidence in the strand. The open
-questions are genuine design choices (architecture, fidelity semantics), not
-missing information.
+**Design settled (2026-08-18); ready to implement.** The stage-1 machinery
+is sound and well-seamed (`load_highlight_layer`,
+`resolve_adaptive_highlight`, `KNOWN_HIGHLIGHT_PALETTES` are exactly the
+touch points); the Q1 reference implementation is small and fully
+understood; the concrete acceptance case (github/arrow pair) is pinned by
+field evidence in the strand. All six design questions were answered by the
+user on 2026-08-18 (see "Design decisions" above).
 
 Priority note: filed P3, but the strand comment argues this is now the sole
 diagnostic standing between the 352-page Connect docs port and a clean
