@@ -261,6 +261,7 @@ fn rewrite_hrefs(
     surface: NavSurface<'_>,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
+    use crate::transforms::navigation_href::{rewrite_config_text, rewrite_item_text};
     for entry in entries.iter_mut() {
         match entry {
             SidebarEntry::Link { item } => {
@@ -279,8 +280,12 @@ fn rewrite_hrefs(
                         diagnostics,
                     );
                 }
+                // Parsed-markdown `text:` carries Link/Image targets
+                // (bd-page-footer-image-items-stmpikgo, defect 2).
+                rewrite_item_text(item, resolver, index, &surface, diagnostics);
             }
             SidebarEntry::Section {
+                text,
                 href,
                 href_source,
                 contents,
@@ -297,9 +302,15 @@ fn rewrite_hrefs(
                         diagnostics,
                     );
                 }
+                if let Some(text) = text.as_mut() {
+                    rewrite_config_text(text, resolver, index, &surface, diagnostics);
+                }
                 rewrite_hrefs(contents, resolver, index, surface.clone(), diagnostics);
             }
-            SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => {}
+            SidebarEntry::Heading(text) => {
+                rewrite_config_text(text, resolver, index, &surface, diagnostics);
+            }
+            SidebarEntry::Separator | SidebarEntry::Auto(_) => {}
         }
     }
 }
@@ -389,6 +400,144 @@ mod tests {
             .await
             .unwrap();
         (ast.meta, ctx.diagnostics)
+    }
+
+    /// A `ConfigValue` holding parsed markdown inlines — the shape
+    /// entry `text:` takes after `ConfigMarkdownTransform`.
+    fn inlines_cv(inlines: Vec<quarto_pandoc_types::inline::Inline>) -> ConfigValue {
+        ConfigValue {
+            value: quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines),
+            source_info: SourceInfo::for_test(),
+            merge_op: Default::default(),
+        }
+    }
+
+    fn nav_image(url: &str, alt: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Image, Inline, Str};
+        Inline::Image(Image {
+            attr: Default::default(),
+            content: vec![Inline::Str(Str {
+                text: alt.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    fn nav_link(url: &str, text: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Inline, Link, Str};
+        Inline::Link(Link {
+            attr: Default::default(),
+            content: vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    /// Defect 2 of bd-page-footer-image-items-stmpikgo, sidebar
+    /// edition: parsed-markdown `text:` resolves across every
+    /// text-bearing entry shape — a Link item's label, a Section
+    /// title, a Heading — Image targets relativize per page and
+    /// `.qmd` links resolve through the index.
+    #[tokio::test]
+    async fn render_entry_text_inlines_resolve_at_depth() {
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let sb = Sidebar {
+            contents: vec![
+                SidebarEntry::Link {
+                    item: NavigationItem {
+                        text: Some(inlines_cv(vec![nav_image("/images/x.svg", "logo")])),
+                        ..NavigationItem::default()
+                    },
+                },
+                SidebarEntry::Section {
+                    text: Some(inlines_cv(vec![nav_image("images/y.svg", "sect")])),
+                    href: None,
+                    href_source: SourceInfo::for_test(),
+                    id: Some("sec".to_string()),
+                    contents: vec![SidebarEntry::Link {
+                        item: NavigationItem {
+                            text: Some(inlines_cv(vec![nav_link("docs.qmd", "docs")])),
+                            ..NavigationItem::default()
+                        },
+                    }],
+                    expanded: true,
+                },
+                SidebarEntry::Heading(inlines_cv(vec![nav_image("images/z.svg", "head")])),
+            ],
+            ..Sidebar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "sidebar"], sb.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![make_profile(
+            "docs.qmd",
+            "docs.html",
+            "Docs",
+        )]));
+
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/guide/installation.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/guide/installation.html",
+            "site_libs",
+            "installation",
+        );
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries)
+            .with_project_index(index)
+            .with_resource_resolver(resolver);
+        SidebarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("src=\"../images/x.svg\""),
+            "link-item text image must relativize; got: {}",
+            html
+        );
+        assert!(
+            html.contains("src=\"../images/y.svg\""),
+            "section-title image must relativize; got: {}",
+            html
+        );
+        assert!(
+            html.contains("href=\"../docs.html\""),
+            "nested link-item text .qmd link must resolve; got: {}",
+            html
+        );
+        assert!(
+            html.contains("src=\"../images/z.svg\""),
+            "heading image must relativize; got: {}",
+            html
+        );
+        assert!(
+            ctx.diagnostics.is_empty(),
+            "got diagnostics: {:?}",
+            ctx.diagnostics
+        );
     }
 
     /// Test 28 — .qmd leaf href gets rewritten to the profile's

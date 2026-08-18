@@ -485,6 +485,46 @@ pub fn resolve_root_relative_resource_href(
 /// makes plain markdown the natural form for config-declared imagery
 /// and links — the pure emitter in `quarto-navigation` receives
 /// fully-resolved targets and stays resolver-free.
+/// Rewrite Link/Image targets inside a text-bearing config value — a
+/// nav item's parsed-markdown `text:`, a sidebar section title, a
+/// sidebar heading (bd-page-footer-image-items-stmpikgo, defect 2).
+///
+/// Only `PandocInlines` values carry resolvable targets today;
+/// scalar values are literal text and pass through untouched.
+/// (`PandocBlocks` — multi-block `!md` text — is the Phase 3 blocks
+/// walker's territory.)
+pub fn rewrite_config_text(
+    cv: &mut quarto_pandoc_types::ConfigValue,
+    resolver: Option<&ResourceResolverContext>,
+    index: Option<&ProjectIndex>,
+    surface: &NavSurface<'_>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    if let quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines) =
+        &mut cv.value
+    {
+        rewrite_config_inlines(inlines, resolver, index, surface, diagnostics);
+    }
+}
+
+/// Rewrite the text-bearing field of one navigation item through
+/// [`rewrite_config_text`]. `menu` recursion stays with the callers'
+/// item walkers, which already descend. (`bare_text` needs no
+/// treatment here: the Generate transforms either demote it into
+/// `text` or drop it before Render runs, and the emitter never reads
+/// it.)
+pub fn rewrite_item_text(
+    item: &mut quarto_navigation::NavigationItem,
+    resolver: Option<&ResourceResolverContext>,
+    index: Option<&ProjectIndex>,
+    surface: &NavSurface<'_>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    if let Some(cv) = item.text.as_mut() {
+        rewrite_config_text(cv, resolver, index, surface, diagnostics);
+    }
+}
+
 pub fn rewrite_config_inlines(
     inlines: &mut [quarto_pandoc_types::inline::Inline],
     resolver: Option<&ResourceResolverContext>,

@@ -102,14 +102,19 @@ tests written and verified first.
   → inlines (both with alt text and `![](y)`, which never desugars);
   `render_text` on the resulting value is non-empty. Review snapshot churn
   across the workspace (shared parse path; `!md` values included — see risks).
-- [ ] **Phase 2 — Defect 2: route item text through the inline rewriter.**
-  Shared helper (likely on/near `rewrite_items_hrefs`) that runs
-  `rewrite_config_inlines` over `item.text` and `item.bare_text` when
-  `PandocInlines`, recursing into `item.menu` — wired into all three
-  surfaces: `footer_render.rs`, `navbar_render.rs`, `sidebar_render.rs`
-  (decision 2). Tests: unit per surface (root-absolute + relative image
-  `src`, `.qmd`→`.html` link); end-to-end render of `repro/` asserting the
-  deep page's footer markup.
+- [x] **Phase 2 — Defect 2: route item text through the inline rewriter.**
+  *Done 2026-08-18.* Shared helpers `rewrite_config_text` +
+  `rewrite_item_text` in `navigation_href.rs`, wired into all three
+  surfaces: footer `rewrite_items_hrefs`, navbar
+  `rewrite_navigation_item_hrefs` (menus included), sidebar
+  `rewrite_hrefs` (Link item text, Section titles, Headings — all
+  markdown-blessed by `sidebar.contents.**.text`). `bare_text` needs no
+  render-time handling: the Generate transform demotes it into `text`
+  before Render runs and the emitter never reads it. Failing-first tests
+  per surface at a depth-1 resolver; workspace green (12319). End-to-end:
+  `repro/` deep page's item-level targets now match the region control
+  (`../../images/logo.svg`, `../../index.html`); only the raw-HTML
+  `{=html}` variant remains untouched (fc5pvkcv Case B, out of scope).
 - [ ] **Phase 3 — Blocks walker.** `rewrite_config_blocks` companion in
   `navigation_href.rs` that walks block containers (including *into*
   `Figure` — persisting the node, rewriting targets inside it, decision 3)
