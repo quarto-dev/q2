@@ -71,9 +71,17 @@ the `active` class to its heading:
 ## Python {.active}
 ```
 
-Headings that define tabs do not appear in the page's table of contents —
-only regular section headings do. Deeper headings inside a tab stay part
-of that tab's content.
+No heading inside a tabset appears in the page's table of contents —
+neither the headings that define the tabs nor any deeper headings you
+write inside a tab body. Only regular section headings are listed.
+
+This keeps the table of contents usable. Tabs very often share the same
+sub-headings — one per provider, language, or platform — so listing them
+would fill the contents with repeated entries that give the reader no way
+to tell them apart, and every entry but the one in the open tab would
+point at hidden content. Headings inside a tab still work normally in
+every other respect: they render, they get an id, and you can link to
+them directly.
 
 ## Tab groups
 

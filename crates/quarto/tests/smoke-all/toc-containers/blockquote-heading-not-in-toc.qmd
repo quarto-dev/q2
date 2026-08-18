@@ -1,0 +1,24 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["nav#TOC a[data-scroll-target=\"#outer\"]", "blockquote h4#quoted"]
+        - ["nav#TOC a[data-scroll-target=\"#quoted\"]"]
+---
+
+bd-8yjvs3bj. pandoc's `makeSections` does not descend into a
+`BlockQuote`, so a heading quoted there never becomes a section and never
+reaches the TOC. q2 used to collect it via an explicit `BlockQuote` arm
+in `collect_toc_entries`.
+
+## Outer
+
+> #### Quoted
+>
+> Body.

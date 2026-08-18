@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-18
+
+- [`510b3ae7`](https://github.com/quarto-dev/q2/commits/510b3ae7): q2-preview render components now receive headings wrapped in section Divs, matching the rest of the pipeline; the bundled `kanban_rc.jsx` sample and the component README were updated to read that shape.
+
 ### 2026-08-14
 
 - [`9b60bbe2`](https://github.com/quarto-dev/q2/commits/9b60bbe2): Keep the WASM-driven theme/SASS cache in memory during `q2 preview` sessions (viewer and editor alike), so preview origins leave no IndexedDB databases behind at all.

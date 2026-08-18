@@ -1,0 +1,27 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["nav#TOC a[data-scroll-target=\"#outer\"]", "div.callout-note"]
+        - ["nav#TOC a[data-scroll-target=\"#callout-title\"]"]
+---
+
+A callout's *title* heading is consumed by `CalloutTransform`, which runs
+before `SectionizeTransform`, so it never reaches the TOC.
+
+Regression net: this must keep holding once sectionize recurses into Divs.
+The protection is the consume-first ordering, not sectionize's reach.
+
+## Outer
+
+::: {.callout-note}
+### Callout title
+
+Body.
+:::

@@ -1,0 +1,49 @@
+---
+title: When does makeSections absorb a Div?
+---
+
+## A bare div, one heading
+
+::: {.wrap-a}
+### Case A
+
+Body.
+:::
+
+## Div with an id
+
+::: {#has-id .wrap-b}
+### Case B
+
+Body.
+:::
+
+## Leading content before the heading
+
+::: {.wrap-c}
+Leading para.
+
+### Case C
+
+Body.
+:::
+
+## Two sibling headings
+
+::: {.wrap-d}
+### Case D one
+
+Body.
+
+### Case D two
+
+Body.
+:::
+
+## Div with a key-value attribute
+
+::: {.wrap-e data-thing="x"}
+### Case E
+
+Body.
+:::

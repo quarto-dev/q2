@@ -1,0 +1,27 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["nav#TOC a[data-scroll-target=\"#outer\"]",
+           "nav#TOC a[data-scroll-target=\"#inside-a-plain-div\"]"]
+---
+
+A heading inside a plain Div reaches the TOC, in Quarto 1 and in q2.
+
+Regression net for the TOC-walk restriction: a plain Div is *transparent*
+(pandoc's `makeSections` absorbs it into the section it wraps), so its
+heading must stay listed.
+
+## Outer
+
+::: {.my-wrapper}
+#### Inside a plain div
+
+Body.
+:::

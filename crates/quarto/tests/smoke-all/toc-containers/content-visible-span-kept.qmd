@@ -1,0 +1,21 @@
+---
+format:
+  html:
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["span.keep-me"]
+        - ["span.content-visible", "span.content-hidden"]
+---
+
+Spans and CodeBlocks keep their scaffolding element — Quarto 1 unwraps only
+Divs ("this is only called on spans and codeblocks, so here we keep the
+scaffolding element, as opposed to in the Div where we return the inlined
+content", `customnodes/content-hidden.lua:154`). The marker class is still
+stripped.
+
+## Outer
+
+Visible [text]{.content-visible .keep-me when-format="html"} inline.
