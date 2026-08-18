@@ -31,3 +31,19 @@ declare module 'virtual:quarto-attribution-viewer-css' {
     const content: string;
     export default content;
 }
+
+/**
+ * `import.meta.env` typing for the dev-mode tripwire in
+ * `utils/iframePostProcessor.ts`. Declared locally for the same reason
+ * as the module shims above: the package's standalone `tsc --noEmit`
+ * runs without Vite. The shapes match `vite/client`'s own declarations
+ * exactly, so the two merge cleanly when hub-client compiles this
+ * package's sources with `vite/client` in scope.
+ */
+interface ImportMetaEnv {
+    DEV: boolean;
+}
+
+interface ImportMeta {
+    readonly env: ImportMetaEnv;
+}

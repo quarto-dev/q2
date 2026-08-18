@@ -19,12 +19,18 @@
  */
 
 /**
- * The injected meta tag. `script-src 'none'` blocks every script-
+ * The injected policy. `script-src 'none'` blocks every script-
  * execution surface in the document. User content can only add *stricter*
  * CSPs (multiple CSPs intersect), never loosen this one.
+ *
+ * Exported separately from the meta tag so consumers that match the
+ * parsed meta (the dev-mode tripwire in iframePostProcessor.ts) derive
+ * from the same source instead of hardcoding a drift-prone second copy.
  */
-export const PREVIEW_CSP_META =
-  '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'">';
+export const PREVIEW_CSP_CONTENT = "script-src 'none'";
+
+/** The injected meta tag, built from `PREVIEW_CSP_CONTENT`. */
+export const PREVIEW_CSP_META = `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP_CONTENT}">`;
 
 /**
  * Matches a leading DOCTYPE, including any whitespace/comments the HTML
@@ -42,10 +48,14 @@ const LEADING_DOCTYPE =
 
 /**
  * Return `html` with the preview CSP meta injected as the first element
- * in document order: immediately after the DOCTYPE if one is present
- * (anything preceding the DOCTYPE triggers Quirks Mode — see the srcdoc
- * comment block in MorphIframe.tsx), otherwise at byte 0 (the parser
- * places a leading `<meta>` in the implied `<head>`).
+ * in document order: immediately after the DOCTYPE if one is present,
+ * otherwise at byte 0 (the parser places a leading `<meta>` in the
+ * implied `<head>`). The operative invariant is meta-first — nothing may
+ * precede it, so it always beats any `<script>` in the payload. Keeping
+ * the DOCTYPE first is payload preservation, not Quirks Mode insurance:
+ * the HTML spec forces no-quirks for iframe srcdoc documents no matter
+ * what precedes the DOCTYPE; a leading `<meta>` would only break the
+ * DOCTYPE if the same payload were served as a standalone document.
  *
  * This is deliberately NOT a "first child of <head>" string search:
  * head-like markup inside comments/titles/scripts/textareas, or uppercase

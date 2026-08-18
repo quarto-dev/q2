@@ -9,10 +9,9 @@
  *   switch the active editor file (bd-lnd3).
  */
 
-/// <reference types="vite/client" />
-
 import { vfsReadFile, vfsReadBinaryFile } from '@quarto/preview-runtime';
 import { resolveRelativePath, guessMimeType } from './vfsPaths';
+import { PREVIEW_CSP_CONTENT } from './previewCsp';
 
 /**
  * VFS path under which the website renderer flushes its
@@ -171,7 +170,7 @@ export function postProcessIframe(
   // guard only; no production behavior change.
   if (import.meta.env.DEV) {
     const hasCspMeta = doc.head?.querySelector(
-      'meta[http-equiv="Content-Security-Policy"][content="script-src \'none\'"]',
+      `meta[http-equiv="Content-Security-Policy"][content="${PREVIEW_CSP_CONTENT}"]`,
     );
     if (!hasCspMeta) {
       console.warn(

@@ -68,7 +68,8 @@ describe('MorphIframe sandbox + CSP (q2#128)', () => {
     );
     const iframe = container.querySelector('iframe')!;
     const srcdoc = iframe.getAttribute('srcdoc') ?? '';
-    // Immediately after the DOCTYPE — never before it (Quirks Mode).
+    // Immediately after the DOCTYPE — never before it (injection
+    // contract documented in previewCsp.ts).
     expect(srcdoc.startsWith('<!DOCTYPE html>' + CSP_META)).toBe(true);
     expect(srcdoc.indexOf(CSP_META)).toBeLessThan(srcdoc.indexOf('<script'));
   });

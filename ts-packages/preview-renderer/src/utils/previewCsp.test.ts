@@ -29,8 +29,8 @@ describe('injectPreviewCsp', () => {
 
   it('keeps the DOCTYPE first when leading whitespace/comments precede it', () => {
     // Per HTML5's initial insertion mode, whitespace and comments before
-    // the DOCTYPE are ignored, so this DOCTYPE still opts out of Quirks
-    // Mode — but only if we don't insert anything before it.
+    // the DOCTYPE are ignored, so this DOCTYPE still takes effect — but
+    // only if we don't insert anything before it.
     const html = '  <!-- banner -->\n<!DOCTYPE html><html><body>x</body></html>';
     const out = injectPreviewCsp(html);
     const doctypeEnd = out.indexOf('<!DOCTYPE html>') + '<!DOCTYPE html>'.length;
@@ -42,7 +42,10 @@ describe('injectPreviewCsp', () => {
     expect(out.startsWith(PREVIEW_CSP_META)).toBe(true);
   });
 
-  it('never inserts before the DOCTYPE (anything preceding it triggers Quirks Mode)', () => {
+  // Not Quirks Mode insurance: the HTML spec forces no-quirks for iframe
+  // srcdoc documents regardless of what precedes the DOCTYPE. DOCTYPE-first
+  // keeps the payload valid if it's ever served as a standalone document.
+  it('never inserts before the DOCTYPE', () => {
     const out = injectPreviewCsp('<!DOCTYPE html><html><body>x</body></html>');
     expect(out.indexOf('<!DOCTYPE html')).toBeGreaterThanOrEqual(0);
     expect(out.indexOf('<!DOCTYPE html')).toBeLessThan(out.indexOf(PREVIEW_CSP_META));
