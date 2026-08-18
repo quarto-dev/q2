@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-18
+
+- [`7bb2d80f`](https://github.com/quarto-dev/q2/commits/7bb2d80f): Fix preview links in Safari — clicking a cross-document link in the HTML preview no longer navigates the preview away to a blank frame, and scroll/selection sync work in Safari again.
+
 ### 2026-08-14
 
 - [`9b60bbe2`](https://github.com/quarto-dev/q2/commits/9b60bbe2): Keep the WASM-driven theme/SASS cache in memory during `q2 preview` sessions (viewer and editor alike), so preview origins leave no IndexedDB databases behind at all.
