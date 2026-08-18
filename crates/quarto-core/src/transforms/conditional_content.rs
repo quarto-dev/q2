@@ -23,8 +23,33 @@
 //! - `unless-*` negates its kind;
 //! - `.content-visible` with no conditions is always visible,
 //!   `.content-hidden` with no conditions always hidden;
-//! - surviving elements keep their classes but lose the condition
-//!   attributes (Q1's `clearHiddenVisibleAttributes`).
+//! - surviving elements lose the marker class *and* the condition
+//!   attributes (Q1's `clearHiddenVisibleAttributes`,
+//!   `customnodes/content-hidden.lua:211`).
+//!
+//! ## Resolving the wrapper
+//!
+//! A conditional `Div` is scaffolding: it exists only to carry the
+//! condition. Q1 resolves a visible one by returning its *content*
+//! (`customnodes/content-hidden.lua:66`, `return el.content`), so the
+//! wrapper disappears from the output. Spans and CodeBlocks keep their
+//! element -- "this is only called on spans and codeblocks, so here we
+//! keep the scaffolding element, as opposed to in the Div where we
+//! return the inlined content" (`:154`).
+//!
+//! We unwrap a `Div` only when the wrapper carries nothing of its own
+//! after stripping (see [`is_bare_wrapper`]). Q1 unwraps
+//! unconditionally, discarding any `#id` or extra classes the author
+//! wrote; keeping those costs nothing and loses no parity, because an
+//! empty-id wrapper is absorbed into its section by `sectionize_blocks`
+//! regardless.
+//!
+//! Leaving the wrapper in place was a real defect, not a cosmetic one:
+//! `collect_toc_entries` walks only the section tree, and a surviving
+//! Div terminates that walk, so every heading inside a conditional
+//! block dropped out of the table of contents
+//! (bd-tabset-headings-in-toc-t04ie7f7, plan
+//! `claude-notes/plans/2026-08-18-tabset-headings-in-toc.md`).
 //!
 //! Semantics notes:
 //! - `when-format` uses the same alias table as Lua's
@@ -185,6 +210,18 @@ enum Verdict {
     KeepLlmsOnly,
 }
 
+/// What [`Walker::keep_block`] decided about a block.
+enum BlockAction {
+    /// Drop the block.
+    Drop,
+    /// Keep the block where it is.
+    Keep,
+    /// Replace the block with its own content — a resolved conditional
+    /// `Div` whose wrapper carried nothing of its own. See
+    /// [`is_bare_wrapper`].
+    Splice,
+}
+
 impl Walker<'_> {
     /// Evaluate an element's marker classes + condition attributes.
     fn verdict(&mut self, attr: &Attr, source_info: &quarto_source_map::SourceInfo) -> Verdict {
@@ -326,17 +363,36 @@ impl Walker<'_> {
     // ── recursion ───────────────────────────────────────────────────
 
     fn filter_blocks(&mut self, blocks: &mut Vec<Block>) {
-        blocks.retain_mut(|block| self.keep_block(block));
+        let taken = std::mem::take(blocks);
+        blocks.reserve(taken.len());
+        for mut block in taken {
+            match self.keep_block(&mut block) {
+                BlockAction::Drop => {}
+                BlockAction::Keep => blocks.push(block),
+                BlockAction::Splice => match block {
+                    Block::Div(div) => blocks.extend(div.content),
+                    // `Splice` is only ever issued for a `Div`.
+                    other => blocks.push(other),
+                },
+            }
+        }
     }
 
-    /// Decide whether `block` survives; recurse into whatever content
+    /// Decide what happens to `block`; recurse into whatever content
     /// it keeps.
-    fn keep_block(&mut self, block: &mut Block) -> bool {
+    fn keep_block(&mut self, block: &mut Block) -> BlockAction {
         match block {
             Block::Div(div) => {
+                let mut splice = false;
                 match self.verdict(&div.attr, &div.source_info) {
-                    Verdict::Remove => return false,
-                    Verdict::Keep => strip_condition_attrs(&mut div.attr, &mut div.attr_source),
+                    Verdict::Remove => return BlockAction::Drop,
+                    Verdict::Keep => {
+                        strip_condition_attrs(&mut div.attr, &mut div.attr_source);
+                        // The wrapper existed only to carry the
+                        // condition; with the condition resolved and
+                        // nothing else on it, Q1 returns its content.
+                        splice = is_bare_wrapper(&div.attr);
+                    }
                     Verdict::KeepTargetOnly => {
                         strip_condition_attrs(&mut div.attr, &mut div.attr_source);
                         llms::add_marker_class(
@@ -356,9 +412,12 @@ impl Walker<'_> {
                     Verdict::NotConditional => {}
                 }
                 self.filter_blocks(&mut div.content);
+                if splice {
+                    return BlockAction::Splice;
+                }
             }
             Block::CodeBlock(cb) => match self.verdict(&cb.attr, &cb.source_info) {
-                Verdict::Remove => return false,
+                Verdict::Remove => return BlockAction::Drop,
                 Verdict::Keep => strip_condition_attrs(&mut cb.attr, &mut cb.attr_source),
                 Verdict::KeepTargetOnly => {
                     strip_condition_attrs(&mut cb.attr, &mut cb.attr_source);
@@ -444,8 +503,9 @@ impl Walker<'_> {
                     use quarto_pandoc_types::custom::Slot;
                     match slot {
                         Slot::Block(b) => {
-                            // A slot holds exactly one block; removal
-                            // isn't representable, so only recurse.
+                            // A slot holds exactly one block; neither
+                            // removal nor splicing is representable,
+                            // so only recurse.
                             let _ = self.keep_block(b);
                         }
                         Slot::Blocks(bs) => self.filter_blocks(bs),
@@ -458,7 +518,7 @@ impl Walker<'_> {
             }
             _ => {}
         }
-        true
+        BlockAction::Keep
     }
 
     fn filter_inlines(&mut self, inlines: &mut Vec<Inline>) {
@@ -529,6 +589,40 @@ fn strip_condition_attrs(attr: &mut Attr, attr_source: &mut quarto_pandoc_types:
         attr_source.attributes.clear();
     }
     attr.2.retain(|k, _| !CONDITION_KEYS.contains(&k.as_str()));
+
+    // Q1's `clearHiddenVisibleAttributes` drops the marker classes too
+    // (`customnodes/content-hidden.lua:216`). They have done their job
+    // once the condition is resolved, and leaving them behind puts a
+    // `<div class="content-visible">` in the output that Q1 never emits.
+    let classes_aligned = attr.1.len() == attr_source.classes.len();
+    if classes_aligned {
+        let keep: Vec<bool> = attr
+            .1
+            .iter()
+            .map(|c| c != VISIBLE_CLASS && c != HIDDEN_CLASS)
+            .collect();
+        let mut it = keep.iter();
+        attr_source.classes.retain(|_| *it.next().unwrap());
+    } else {
+        attr_source.classes.clear();
+    }
+    attr.1.retain(|c| c != VISIBLE_CLASS && c != HIDDEN_CLASS);
+}
+
+/// True when a resolved conditional `Div` carries nothing of its own —
+/// no id, no classes, no attributes — once the marker class and the
+/// condition attributes have been stripped.
+///
+/// Q1 unwraps a visible conditional Div unconditionally
+/// (`customnodes/content-hidden.lua:66`, `return el.content`), which
+/// also discards any `#id` or extra classes the author wrote. We unwrap
+/// only what the feature itself contributed, so author attributes
+/// survive. The two rules coincide whenever the Div is a bare marker,
+/// which is every real use we have measured; and when they differ, an
+/// empty-id wrapper is absorbed into its section by `sectionize_blocks`
+/// anyway, so the TOC outcome is identical either way.
+fn is_bare_wrapper(attr: &Attr) -> bool {
+    attr.0.is_empty() && attr.1.is_empty() && attr.2.is_empty()
 }
 
 #[cfg(test)]
@@ -546,6 +640,16 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
         )
+    }
+
+    fn plain(text: &str) -> Block {
+        Block::Plain(quarto_pandoc_types::block::Plain {
+            content: vec![Inline::Str(quarto_pandoc_types::inline::Str {
+                text: text.to_string(),
+                source_info: SourceInfo::generated(By::unknown()),
+            })],
+            source_info: SourceInfo::generated(By::unknown()),
+        })
     }
 
     fn div(classes: &[&str], kvs: &[(&str, &str)], text: &str) -> Block {
@@ -696,7 +800,7 @@ mod tests {
     }
 
     #[test]
-    fn surviving_element_loses_condition_attrs_keeps_class() {
+    fn surviving_element_loses_marker_class_and_conditions_keeps_the_rest() {
         let meta = empty_meta();
         let mut blocks = vec![div(
             &["content-visible", "keep-me"],
@@ -704,13 +808,47 @@ mod tests {
             "X",
         )];
         run(&mut blocks, "html", &["adv"], &meta);
+        // Author attributes remain, so the wrapper is not bare and the
+        // Div stays -- only what the feature contributed is removed.
         let Block::Div(d) = &blocks[0] else {
-            panic!("div survives")
+            panic!("div carrying author attrs survives")
         };
-        assert!(d.attr.1.contains(&"content-visible".to_string()));
+        assert!(
+            !d.attr.1.contains(&"content-visible".to_string()),
+            "marker class stripped (Q1's clearHiddenVisibleAttributes)"
+        );
         assert!(d.attr.1.contains(&"keep-me".to_string()));
         assert!(!d.attr.2.contains_key("when-profile"), "stripped");
         assert!(d.attr.2.contains_key("data-x"), "unrelated attrs kept");
+    }
+
+    #[test]
+    fn bare_wrapper_is_unwrapped() {
+        let meta = empty_meta();
+        let mut blocks = vec![div(&["content-visible"], &[("when-format", "html")], "X")];
+        run(&mut blocks, "html", &[], &meta);
+        assert_eq!(blocks.len(), 1, "content survives: {}", texts(&blocks));
+        assert!(
+            !matches!(blocks[0], Block::Div(_)),
+            "a wrapper carrying nothing of its own is spliced away"
+        );
+        assert!(texts(&blocks).contains("X"), "{}", texts(&blocks));
+    }
+
+    #[test]
+    fn wrapper_with_an_id_is_kept() {
+        let meta = empty_meta();
+        let mut blocks = vec![div(&["content-visible"], &[("when-format", "html")], "X")];
+        let Block::Div(d) = &mut blocks[0] else {
+            panic!("div")
+        };
+        d.attr.0 = "anchor".to_string();
+        run(&mut blocks, "html", &[], &meta);
+        let Block::Div(d) = &blocks[0] else {
+            panic!("a wrapper with an author id is not bare, so it survives")
+        };
+        assert_eq!(d.attr.0, "anchor", "author id preserved");
+        assert!(d.attr.1.is_empty(), "marker class still stripped");
     }
 
     #[test]
@@ -737,17 +875,27 @@ mod tests {
     #[test]
     fn nested_conditionals() {
         let meta = empty_meta();
+        // `adv` is not active, so the inner block is removed; the outer
+        // condition holds, so the outer's *other* content survives.
         let inner = div(&["content-visible"], &[("when-profile", "adv")], "INNER");
         let outer = Block::Div(Div {
             attr: attr(&["content-visible"], &[("when-format", "html")]),
-            content: vec![inner],
+            content: vec![inner, plain("OUTER")],
             source_info: SourceInfo::generated(By::unknown()),
             attr_source: AttrSourceInfo::empty(),
         });
         let mut blocks = vec![outer];
         run(&mut blocks, "html", &[], &meta);
-        assert_eq!(blocks.len(), 1, "outer survives");
         assert!(!texts(&blocks).contains("INNER"), "inner removed");
+        assert!(
+            texts(&blocks).contains("OUTER"),
+            "outer content survives: {}",
+            texts(&blocks)
+        );
+        assert!(
+            !blocks.iter().any(|b| matches!(b, Block::Div(_))),
+            "both bare wrappers are spliced away"
+        );
     }
 
     #[test]
@@ -789,20 +937,33 @@ mod tests {
             classes_of(&blocks[1]).iter().any(|c| c == LLMS_KEEP_CLASS),
             "LLMSONLY tagged keep"
         );
-        let both = classes_of(&blocks[2]);
+        // BOTH is fully resolved and its wrapper carried nothing of
+        // its own, so it is spliced away entirely -- no Div, no marker.
         assert!(
-            !both.iter().any(|c| c.starts_with("quarto-llms-")),
-            "BOTH carries no marker: {both:?}"
+            !matches!(blocks[2], Block::Div(_)),
+            "BOTH's wrapper is unwrapped once both views agree"
         );
-        // Condition attributes stripped from every survivor.
-        for b in &blocks {
-            let Block::Div(d) = b else { panic!("div") };
+        assert!(texts(&blocks).contains("BOTH"), "BOTH's content survives");
+
+        // The two tagged survivors keep their Div (the marker class
+        // makes them non-bare) and lose their condition attributes.
+        for b in &blocks[..2] {
+            let Block::Div(d) = b else {
+                panic!("tagged survivors stay wrapped")
+            };
             assert!(
                 d.attr
                     .2
                     .keys()
                     .all(|k| !k.starts_with("when-") && !k.starts_with("unless-")),
                 "condition attrs stripped"
+            );
+            assert!(
+                !d.attr
+                    .1
+                    .iter()
+                    .any(|c| c == "content-visible" || c == "content-hidden"),
+                "marker classes stripped"
             );
         }
     }

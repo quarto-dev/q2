@@ -264,7 +264,7 @@ WASM Vitest, Playwright — which satisfies the end-to-end rule better than an i
       the consume-first ordering rather than sectionize's reach.
 - [x] Verified the harness really exercises them (inverted one selector, watched it fail).
 
-## Phase 1 — Conditional-content: unwrap the resolved wrapper (prerequisite)
+## Phase 1 — Conditional-content: unwrap the resolved wrapper (prerequisite) ✅ (bd-wbnaa2ud)
 
 Q1's `content-hidden.lua` (`customnodes/content-hidden.lua:56`) resolves a **visible Div** by
 returning `el.content` — the wrapper disappears — after `clearHiddenVisibleAttributes` strips both
@@ -273,11 +273,14 @@ scaffolding element, as opposed to in the Div where we return the inlined conten
 q2 keeps the marker class *and* the Div, so 10 Connect-docs pages carry a
 `<div class="content-visible">` Q1 does not emit.
 
-- [ ] Failing test: a visible `::: {.content-visible when-format="html"}` leaves no Div in the
+- [x] Failing test: a visible `::: {.content-visible when-format="html"}` leaves no Div in the
       output; a visible `[x]{.content-visible …}` Span keeps its Span; marker classes are gone in
-      both cases.
-- [ ] Strip the marker classes on surviving elements (Q1's `clearHiddenVisibleAttributes`).
-- [ ] Unwrap a resolved **Div** — but only what the feature itself contributed. After stripping the
+      both cases. → `toc-containers/content-visible-{div-unwrapped,span-kept}.qmd`; both observed
+      failing on `div.content-visible` / `span.content-visible` before the fix.
+- [x] Strip the marker classes on surviving elements (Q1's `clearHiddenVisibleAttributes`) —
+      `strip_condition_attrs` now filters classes as well as attributes, keeping `attr_source`
+      aligned.
+- [x] Unwrap a resolved **Div** — but only what the feature itself contributed. After stripping the
       marker class and condition attributes, unwrap iff nothing remains (empty id, no classes, no
       attributes); otherwise keep a plain Div carrying the user's own attributes.
       **Divergence from Q1, deliberate:** Q1 unconditionally returns `el.content`, discarding a
@@ -285,10 +288,11 @@ q2 keeps the marker class *and* the Div, so 10 Connect-docs pages carry a
       absorb rule (Phase 2) merges an empty-id wrapper into the section anyway, so the TOC outcome
       is identical. All 33 real uses in the Connect corpus are bare markers, where the two rules
       coincide exactly.
-- [ ] Keep the llms two-view path intact (`.quarto-llms-omit` / `.quarto-llms-keep` markers are
+- [x] Keep the llms two-view path intact — falls out naturally: a tagged element carries
+      `.quarto-llms-omit`/`.quarto-llms-keep`, so it is not bare and keeps its Div. (`.quarto-llms-omit` / `.quarto-llms-keep` markers are
       applied *instead of* resolving; unwrapping must not fire on a marked element).
-- [ ] Update the module docs — the current text says surviving elements "keep their classes", which
-      is the bug.
+- [x] Update the module docs — the old text said surviving elements "keep their classes", which was
+      the bug.
 
 ## Phase 2 — `sectionize_blocks`: recurse into Divs + pandoc's absorb rule (bd-26nryuwh)
 
@@ -334,7 +338,34 @@ q2 keeps the marker class *and* the Div, so 10 Connect-docs pages carry a
 
 - [ ] Close bd-8yjvs3bj (blockquote leak) as absorbed by Phase 3.
 - [ ] Close bd-26nryuwh (sectionize recursion) as delivered by Phase 2.
-- [ ] File the conditional-content unwrap as its own strand (Phase 1) so the fix is attributable.
+- [x] File the conditional-content unwrap as its own strand (Phase 1) — **bd-wbnaa2ud**.
 - [ ] Docs: user-visible behavior change is "headings inside tabsets/callouts no longer appear in
       the TOC" — check whether `docs/` says anything about TOC contents that needs updating.
 - [ ] Commit at each phase boundary; do not push without approval.
+
+### Phase 1 verification (2026-08-18)
+
+`cargo nextest run --workspace` → **12308 passed, 0 failed** (2 new unit tests).
+
+End-to-end on the Connect corpus (clean double render,
+`cargo run --bin q2 -- render .` in `docs-quarto-2/`):
+
+| | baseline | after Phase 1 | Q1 |
+| --- | --- | --- | --- |
+| pages with a surviving `content-visible`/`content-hidden` Div | 10 | **0** | 0 |
+| exact TOC match with Q1 | 421/451 | 421/451 | — |
+| pages whose TOC changed | — | **0** | — |
+
+TOC-neutral by construction, which is the point: Phase 1 removes the obstruction
+Phase 3 would otherwise trip over. Inspected the page that regressed under the
+measurement spike — `admin/authentication/ldap-based/ldap-double-bind/index.html`
+— and it now matches Q1's shape:
+
+```html
+<section id="user-role-mapping" class="section level3">
+<h3>Automatic user role mapping</h3>
+<p>Posit Connect offers ways to map their user information…</p>
+<section id="using-group-memberships" class="section level4">
+```
+
+(no wrapper Div; the heading is an ordinary sibling, exactly as in Q1).

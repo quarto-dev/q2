@@ -1,0 +1,33 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["nav#TOC a[data-scroll-target=\"#outer\"]",
+           "nav#TOC a[data-scroll-target=\"#inside-conditional-content\"]"]
+        - ["div.content-visible", "div.content-hidden"]
+---
+
+Quarto 1 resolves a *visible* conditional Div by returning its content
+(`customnodes/content-hidden.lua:66`, `return el.content`), after
+`clearHiddenVisibleAttributes` strips both marker classes and the condition
+attributes. The wrapper exists only to carry the condition; once the
+condition is resolved there is nothing left for it to say.
+
+q2 used to keep the Div *and* its marker class, so pages carried a
+`<div class="content-visible">` Quarto 1 never emits.
+
+## Outer
+
+::: {.content-visible when-format="html"}
+Leading prose, so the Div is not merely a header wrapper.
+
+#### Inside conditional content
+
+Body.
+:::
