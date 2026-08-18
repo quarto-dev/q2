@@ -294,17 +294,20 @@ q2 keeps the marker class *and* the Div, so 10 Connect-docs pages carry a
 - [x] Update the module docs — the old text said surviving elements "keep their classes", which was
       the bug.
 
-## Phase 2 — `sectionize_blocks`: recurse into Divs + pandoc's absorb rule (bd-26nryuwh)
+## Phase 2 — `sectionize_blocks`: recurse into Divs + pandoc's absorb rule (bd-26nryuwh) ✅
 
-- [ ] Failing test: a heading inside a plain Div is wrapped in a section; a Div with an empty id
-      wrapping a single header-led run is absorbed, merging its classes/attrs into the section
-      (Q1: `class="level4 my-wrapper"`); a Div with a non-empty id keeps the Div and nests the
-      section inside; `BlockQuote` content is *not* sectionized.
-- [ ] Recurse into non-section Divs.
-- [ ] Implement the absorb rule. The spike's version (`spike-B.patch`) required `content.len() == 1`;
-      pandoc's real condition is a header-led run, so verify against a Div holding a section
-      *followed by* trailing blocks, and a Div holding two sibling sections.
-- [ ] Confirm the consume-first transforms still work: `CalloutTransform` / `PanelTabsetTransform`
+- [x] Failing tests — six unit tests in `sectionize.rs` plus the smoke-all fixture
+      `div-heading-becomes-section.qmd`. All six observed failing first; two of them initially
+      passed *vacuously* (satisfied by "nothing is sectionized at all") and were strengthened
+      until they failed for the right reason.
+- [x] Recurse into non-section Divs — `sectionize_div`.
+- [x] Implement the absorb rule. **The spike's `content.len() == 1` turned out to be exactly right**,
+      verified against Q1 rather than assumed — see the new probe
+      `tabset-headings-in-toc-investigation/absorb-rule-probe/`, whose five cases pin it: absorb iff
+      the Div has an **empty id** and its content is **exactly one section**; classes and key-values
+      merge onto that section. A Div with its own id, with content before the first heading, or with
+      two sibling headings is *not* absorbed.
+- [x] Confirm the consume-first transforms still work: `CalloutTransform` / `PanelTabsetTransform`
       run before sectionize and depend on **flat** Headers as direct Div children. Nothing here
       changes that, but the tabset/callout tests must stay green.
 
@@ -369,3 +372,30 @@ measurement spike — `admin/authentication/ldap-based/ldap-double-bind/index.ht
 ```
 
 (no wrapper Div; the heading is an ordinary sibling, exactly as in Q1).
+
+### Phase 2 verification (2026-08-18)
+
+`cargo xtask verify --skip-hub-build` → all steps pass (12324 Rust tests).
+`npm run test:wasm` → 131 passed.
+
+> **Stale-WASM trap, hit and confirmed.** `--skip-hub-build` leaves
+> `wasm-quarto-hub-client` built from *pre-change* Rust, and the WASM vitest
+> runner replays the whole smoke-all suite through it — so the new fixtures
+> failed there while passing natively, plus two spurious
+> "localStorage is not available for opaque origins" errors from the same stale
+> image. `npm run build:wasm` cleared all of it. Exactly the failure mode
+> CLAUDE.md documents; worth re-reading before trusting a `--skip-hub-build` run.
+
+Rendered shape now matches Q1 case for case:
+
+```html
+<section id="case-a" class="section level4 wrap-a">        <!-- absorbed -->
+<div id="has-id" class="wrap-b"><section id="case-b" …>    <!-- Div has an id -->
+<div class="wrap-c">[leading para]<section id="case-c" …> <!-- content first -->
+<blockquote><h4 id="quoted">                              <!-- not descended into -->
+```
+
+Connect corpus (clean double render): TOC changed on **0** pages — Phase 2 is
+TOC-neutral by design — while `<section>` elements rose **3626 → 3678**, i.e. 52
+headings that were bare `<hN>` inside a Div are now real sections. Exact TOC
+parity with Q1 holds at 421/451, waiting on Phase 3.

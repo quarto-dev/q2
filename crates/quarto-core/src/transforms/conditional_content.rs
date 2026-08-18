@@ -832,7 +832,7 @@ mod tests {
             !matches!(blocks[0], Block::Div(_)),
             "a wrapper carrying nothing of its own is spliced away"
         );
-        assert!(texts(&blocks).contains("X"), "{}", texts(&blocks));
+        assert!(texts(&blocks).contains('X'), "{}", texts(&blocks));
     }
 
     #[test]

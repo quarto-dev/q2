@@ -1,0 +1,56 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["section.level4.wrap-a#case-a",
+           "div#has-id.wrap-b > section.level4#case-b",
+           "div.wrap-c > section.level4#case-c",
+           "blockquote > h4#quoted"]
+        - ["div.wrap-a", "section.wrap-b", "section.wrap-c", "blockquote section"]
+---
+
+pandoc's `makeSections` recurses into Divs and replaces a Div by the
+section it wraps when — and only when — the Div has an empty id and its
+content is exactly one section; the Div's classes and key-values are
+merged onto that section.
+
+Ground truth for each case is Quarto 1's render of
+`claude-notes/plans/tabset-headings-in-toc-investigation/absorb-rule-probe/`.
+
+## Absorbed: bare wrapper
+
+::: {.wrap-a}
+#### Case A
+
+Body.
+:::
+
+## Not absorbed: the Div has its own id
+
+::: {#has-id .wrap-b}
+#### Case B
+
+Body.
+:::
+
+## Not absorbed: content precedes the heading
+
+::: {.wrap-c}
+Leading para.
+
+#### Case C
+
+Body.
+:::
+
+## Not descended into: blockquote
+
+> #### Quoted
+>
+> Body.
