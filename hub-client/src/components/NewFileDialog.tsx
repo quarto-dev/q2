@@ -121,9 +121,9 @@ export default function NewFileDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
+    <div className="ph-dialog-backdrop" onClick={onClose}>
       <div
-        className="new-file-dialog"
+        className="ph-dialog new-file-dialog"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
@@ -141,6 +141,7 @@ export default function NewFileDialog({
                 <label htmlFor="template">Template:</label>
                 <select
                   id="template"
+                  className="ph-input focus-accent"
                   value={selectedTemplate?.path ?? ''}
                   onChange={(e) => {
                     const template = templates.find((t) => t.path === e.target.value);
@@ -163,6 +164,7 @@ export default function NewFileDialog({
                 ref={filenameInputRef}
                 id="filename"
                 type="text"
+                className="ph-input focus-accent"
                 value={filename}
                 onChange={(e) => {
                   setFilename(e.target.value);
@@ -171,16 +173,16 @@ export default function NewFileDialog({
                 placeholder="e.g., chapter1.qmd"
               />
             </div>
-            {error && <div className="error-message">{error}</div>}
+            {error && <div className="ph-error inline">{error}</div>}
           </div>
         </div>
 
         <div className="dialog-actions">
-          <button className="cancel-btn" onClick={onClose}>
+          <button className="ph-btn outline" onClick={onClose}>
             Cancel
           </button>
           <button
-            className="create-btn"
+            className="ph-btn primary"
             onClick={handleCreateTextFile}
             disabled={!filename.trim()}
           >

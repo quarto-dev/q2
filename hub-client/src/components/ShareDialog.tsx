@@ -84,9 +84,9 @@ export default function ShareDialog({
   if (!isOpen || !shareableUrl) return null;
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
+    <div className="ph-dialog-backdrop" onClick={onClose}>
       <div
-        className="share-dialog"
+        className="ph-dialog share-dialog"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
@@ -114,6 +114,7 @@ export default function ShareDialog({
               ref={urlInputRef}
               id="shareable-url"
               type="text"
+              className="ph-input focus-accent"
               value={shareableUrl}
               readOnly
               onClick={(e) => (e.target as HTMLInputElement).select()}
@@ -122,11 +123,11 @@ export default function ShareDialog({
         </div>
 
         <div className="dialog-actions">
-          <button className="cancel-btn" onClick={onClose}>
+          <button className="ph-btn outline" onClick={onClose}>
             Cancel
           </button>
           <button
-            className={`copy-btn ${copied ? 'copied' : ''}`}
+            className={`ph-btn primary copy-btn ${copied ? 'copied' : ''}`}
             onClick={handleCopyLink}
           >
             {copied ? 'Copied!' : 'Copy Link'}
