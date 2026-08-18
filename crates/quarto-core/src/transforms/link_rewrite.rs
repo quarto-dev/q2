@@ -499,6 +499,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path("/project/index.qmd")],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         }
     }
 

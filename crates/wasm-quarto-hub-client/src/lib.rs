@@ -649,6 +649,8 @@ fn create_wasm_project_context(path: &Path) -> ProjectContext {
         is_single_file: true,
         files: vec![DocumentInfo::from_path(path)],
         output_dir: dir,
+
+        ..Default::default()
     }
 }
 

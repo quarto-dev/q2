@@ -425,6 +425,7 @@ mod orchestrator_engine_channel {
             report.add_engine_files(
                 "mock-engine",
                 &doc_info.input,
+                runtime.as_ref(),
                 self.engine_files_per_doc
                     .iter()
                     .map(|(rel, _)| project.dir.join(rel)),
@@ -567,7 +568,7 @@ mod orchestrator_engine_channel {
         let qmd_path = project_dir.join("doc.qmd");
         write(
             &qmd_path,
-            "---\nengine: replay-real-pipeline-engine\ntitle: Doc\n---\n\n# Hello\n\nReplay-driven body.\n",
+            "---\nengine: replay-real-pipeline-engine\ntitle: Doc\n---\n\n# Hello\n\nReplay-driven body.\n\n```{replay-real-pipeline-engine}\ncode\n```\n",
         );
 
         // Compute the QMD that EngineExecutionStage will hand to
@@ -599,6 +600,17 @@ mod orchestrator_engine_channel {
                 fn is_available(&self) -> bool {
                     true
                 }
+                fn claims_language(
+                    &self,
+                    language: &str,
+                    _first_class: Option<&str>,
+                ) -> quarto_core::engine::LanguageClaim {
+                    if language == "replay-real-pipeline-engine" {
+                        quarto_core::engine::LanguageClaim::Primary(1)
+                    } else {
+                        quarto_core::engine::LanguageClaim::None
+                    }
+                }
             }
 
             let captured = Arc::new(Mutex::new(None::<String>));
@@ -614,7 +626,7 @@ mod orchestrator_engine_channel {
                     .unwrap();
 
             let probe_options = RenderToFileOptions {
-                engine_registry_override: Some(probe_registry),
+                engine_registry_override: Some(std::sync::Arc::new(probe_registry)),
                 ..Default::default()
             };
 

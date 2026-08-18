@@ -60,6 +60,7 @@ pub async fn render_fixture(files: &[(&str, &str)], main: &str) -> RenderOutput 
         is_single_file: true,
         files: vec![DocumentInfo::from_path(&main_path)],
         output_dir: project_dir.clone(),
+        ..Default::default()
     };
     let doc = DocumentInfo::from_path(&main_path);
     let format = Format::html();

@@ -113,10 +113,12 @@ impl PipelineObserver for CaptureCollector {
 /// extensions, etc.) automatically flow into capture recording — no
 /// drift between the server-side record path and the in-browser
 /// replay path.
-fn build_capture_pipeline_stages(
-    engine_registry: Option<EngineRegistry>,
-) -> Vec<Box<dyn PipelineStage>> {
-    let mut stages = build_html_pipeline_stages_with_options(None, engine_registry);
+///
+/// The engine registry is no longer a stage-level concern (Task 8 of
+/// ts-engine-extensions); `record_capture` sets `ctx.registry` directly
+/// on the `StageContext` after construction.
+fn build_capture_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_html_pipeline_stages_with_options(None);
     if let Some(idx) = stages.iter().position(|s| s.name() == "engine-execution") {
         stages.truncate(idx + 1);
     }
@@ -138,7 +140,7 @@ pub async fn record_capture(
     path: &std::path::Path,
     project: &ProjectContext,
     runtime: Arc<dyn SystemRuntime>,
-    engine_registry: Option<EngineRegistry>,
+    engine_registry: Option<Arc<EngineRegistry>>,
 ) -> Result<Vec<EngineCapture>, PipelineError> {
     let content = runtime
         .file_read(path)
@@ -154,8 +156,15 @@ pub async fn record_capture(
 
     let mut ctx = StageContext::new(runtime, format, project.clone(), document)?
         .with_observer(Arc::new(collector));
+    // Apply the engine registry override when supplied (test seam); otherwise
+    // the project's default registry (already on ctx.registry from
+    // StageContext::new()) is used.  This mirrors the run_pipeline pattern:
+    // StageContext::new() sets the default; callers override via the field.
+    if let Some(reg) = engine_registry {
+        ctx.registry = reg;
+    }
 
-    let stages = build_capture_pipeline_stages(engine_registry);
+    let stages = build_capture_pipeline_stages();
     let pipeline =
         Pipeline::new(stages).expect("preview-record pipeline stages should be compatible");
 
@@ -175,7 +184,7 @@ pub async fn record_capture(
 /// check serializes the same AST and compares byte-for-byte against
 /// the existing capture's `input_qmd`.
 fn build_pre_engine_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
-    let mut stages = build_html_pipeline_stages_with_options(None, None);
+    let mut stages = build_html_pipeline_stages_with_options(None);
     if let Some(idx) = stages
         .iter()
         .position(|s| s.name() == "pre-engine-sugaring")
@@ -269,6 +278,18 @@ mod tests {
             out.push_str("\n<!-- test-passthrough -->\n");
             Ok(ExecuteResult::passthrough(&out))
         }
+
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "test-passthrough" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
+        }
     }
 
     /// Write a fixture file and discover its single-file project context.
@@ -309,7 +330,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(PassthroughTestEngine));
 
-        let result = record_capture(&path, &project, runtime, Some(registry))
+        let result = record_capture(&path, &project, runtime, Some(Arc::new(registry)))
             .await
             .expect("pipeline runs cleanly with test engine");
 
@@ -358,7 +379,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(PassthroughTestEngine));
 
-        let result = record_capture(&path, &project, runtime, Some(registry))
+        let result = record_capture(&path, &project, runtime, Some(Arc::new(registry)))
             .await
             .expect("pipeline runs");
         let capture = result.first().expect("capture present");
@@ -413,6 +434,18 @@ mod tests {
             out.push_str("\n![](doc_files/figure-html/fig.png)\n");
             Ok(ExecuteResult::new(out).with_supporting_files(vec![self.doc_dir.join("doc_files")]))
         }
+
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "test-figures" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
+        }
     }
 
     #[tokio::test]
@@ -430,7 +463,7 @@ mod tests {
             doc_dir: path.parent().unwrap().to_path_buf(),
         }));
 
-        let captures = record_capture(&path, &project, runtime, Some(registry))
+        let captures = record_capture(&path, &project, runtime, Some(Arc::new(registry)))
             .await
             .expect("pipeline runs");
         let capture = captures.first().expect("capture present");
@@ -469,7 +502,7 @@ mod tests {
         let mut registry = EngineRegistry::new();
         registry.register(Arc::new(PassthroughTestEngine));
 
-        let captures = record_capture(&path, &project, runtime.clone(), Some(registry))
+        let captures = record_capture(&path, &project, runtime.clone(), Some(Arc::new(registry)))
             .await
             .expect("record_capture");
         let capture = captures.first().expect("capture present");

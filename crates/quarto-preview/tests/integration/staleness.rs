@@ -55,6 +55,17 @@ impl ExecutionEngine for PassthroughTestEngine {
         out.push_str("\n<!-- test-passthrough -->\n");
         Ok(ExecuteResult::passthrough(&out))
     }
+    fn claims_language(
+        &self,
+        language: &str,
+        _first_class: Option<&str>,
+    ) -> quarto_core::engine::LanguageClaim {
+        if language == "test-passthrough" {
+            quarto_core::engine::LanguageClaim::Primary(1)
+        } else {
+            quarto_core::engine::LanguageClaim::None
+        }
+    }
 }
 
 fn pick_free_port() -> u16 {
@@ -107,7 +118,7 @@ async fn cell_edit_flips_staleness_in_sidecar() {
         single_file: None,
         data_dir: data.path().to_path_buf(),
         spa_dir_override: None,
-        engine_registry: Some(registry),
+        engine_registry: Some(Arc::new(registry)),
         engine_policy: Default::default(),
         resource_html_files: Vec::new(),
         cache_dir: None,

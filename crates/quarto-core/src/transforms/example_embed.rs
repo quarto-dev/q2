@@ -606,6 +606,8 @@ mod tests {
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/doc.qmd")],
             output_dir: std::path::PathBuf::from("/project"),
+
+            ..Default::default()
         }
     }
 
@@ -727,6 +729,8 @@ mod tests {
             is_single_file: output_href.is_none(),
             files: vec![DocumentInfo::from_path(doc_path)],
             output_dir: std::path::PathBuf::from("/project/_site"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(doc_path);
         let format = Format::html();

@@ -1,0 +1,8 @@
+---
+title: "Marimo Minimal"
+---
+
+```{python .marimo}
+import marimo as mo
+1 + 1
+```

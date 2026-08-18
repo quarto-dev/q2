@@ -1,0 +1,12 @@
+[91mERROR: Missing argument(s): engine-name
+
+Stack trace:
+    at Command.parseArguments (https://deno.land/x/cliffy@v1.0.0-rc.3/command/command.ts:2143:19)
+    at Command.parseCommand (https://deno.land/x/cliffy@v1.0.0-rc.3/command/command.ts:1761:25)
+    at eventLoopTick (ext:core/01_core.js:179:7)
+    at async quarto (file:///Users/gordon/src/quarto-cli/src/quarto.ts:198:5)
+    at async file:///Users/gordon/src/quarto-cli/src/quarto.ts:231:5
+    at async file:///Users/gordon/src/quarto-cli/src/core/main.ts:45:14
+    at async mainRunner (file:///Users/gordon/src/quarto-cli/src/core/main.ts:47:5)
+    at async file:///Users/gordon/src/quarto-cli/src/quarto.ts:221:3[39m
+exit=1

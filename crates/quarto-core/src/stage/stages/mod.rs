@@ -51,6 +51,7 @@ mod include_resolve;
 mod language_resolve;
 mod link_resolution;
 mod listing_item_info;
+mod source_conversion;
 // Math-mode stage: injects a math-rendering JS engine (MathJax / KaTeX)
 // when the document contains Math elements. Included on both native
 // and WASM pipelines (math display is safe under iframe reinit).
@@ -97,6 +98,7 @@ pub use parse_document::ParseDocumentStage;
 pub use pre_engine_sugaring::PreEngineSugaringStage;
 pub use render_html::RenderHtmlBodyStage;
 pub use resource_report::ResourceReportStage;
+pub use source_conversion::SourceConversionStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use tabsets_js::TabsetsJsStage;
 pub use unwrap_profile::UnwrapProfileStage;

@@ -19,9 +19,7 @@ use tokio::time::timeout;
 
 use super::error::{JupyterError, Result};
 use super::session::KernelSession;
-
-/// Default timeout for execution (5 minutes).
-const DEFAULT_EXECUTE_TIMEOUT: Duration = Duration::from_secs(300);
+use crate::engine::DEFAULT_EXECUTE_TIMEOUT;
 
 /// Result of executing code in a kernel.
 #[derive(Debug, Clone)]

@@ -39,13 +39,54 @@
 
 use async_trait::async_trait;
 
+use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_trace::EngineCapture;
 
 use crate::engine::capture_splice::apply_capture_splice;
+use crate::stage::data::PandocIncludes;
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
 use crate::trace_event;
+
+/// Fold a capture's engine-produced includes into the document `meta`'s
+/// `rendered.includes.{header,before-body,after-body}` slots — the
+/// preview pane's head/body delivery channel.
+///
+/// **Why the splice stage does this (bd-5oyk1xce).** On the `q2 render`
+/// path, `EngineExecutionStage` accumulates `result.includes` onto
+/// `ctx.includes` (`engine_execution.rs`) and `ApplyTemplateStage`
+/// late-folds `ctx.includes` into `meta.rendered.includes.*`
+/// (`apply_template.rs`). The `q2-preview` pipeline **excludes**
+/// `ApplyTemplateStage` (`Q2_PREVIEW_STAGE_EXCLUDED`) and bypasses
+/// `EngineExecutionStage`, so neither drain runs — engine header includes
+/// (e.g. marimo's `@marimo-team/islands` `<script>`, the
+/// `__MARIMO_EXPORT_CONTEXT__` marker, `<marimo-code>`) would be lost and
+/// widgets never hydrate. The recorded capture already carries the full
+/// `ExecuteResult` (`result.includes` included), so we re-inject those
+/// includes here, directly into the meta slots the preview renderer reads
+/// (`meta.rendered.includes.header` → `HeaderIncludesEffect`).
+///
+/// Fail-soft: a capture with no `includes` key, unparseable `includes`
+/// JSON, or all-empty include lists is a clean no-op — never an error on
+/// the every-keystroke preview path. Append (not overwrite) semantics
+/// preserve any authored `include-in-header` already resolved into the
+/// slot by `IncludeResolveStage`.
+fn fold_capture_includes_into_meta(meta: &mut ConfigValue, capture: &EngineCapture) {
+    let Some(includes_json) = capture.result.get("includes") else {
+        return;
+    };
+    let Ok(includes) = serde_json::from_value::<PandocIncludes>(includes_json.clone()) else {
+        return;
+    };
+    if includes.header_includes.is_empty()
+        && includes.include_before.is_empty()
+        && includes.include_after.is_empty()
+    {
+        return;
+    }
+    super::include_resolve::append_pandoc_includes(meta, &includes);
+}
 
 /// Splices recorded engine output into the live pre-engine AST.
 ///
@@ -166,10 +207,18 @@ impl PipelineStage for CaptureSpliceStage {
         // unmatched cell leaves that engine's cells as raw source without
         // taking the preview down.
         for capture in &self.captures {
-            // Extract result.markdown from the opaque JSON. We don't need
-            // the rest of the ExecuteResult shape here (filters, includes,
-            // supporting_files) — those are engine-side concerns the
-            // splice doesn't reproduce in the AST.
+            // Re-inject the engine's include-in-header / before-body /
+            // after-body content into the document meta (bd-5oyk1xce). This
+            // is what carries e.g. marimo's islands `<script>` +
+            // `__MARIMO_EXPORT_CONTEXT__` marker to the preview pane's
+            // `<head>`, so widgets actually hydrate. Done before (and
+            // independent of) the block splice below: the header script must
+            // reach the pane even if a cell's block output fails to splice.
+            fold_capture_includes_into_meta(&mut doc_ast.ast.meta, capture);
+
+            // Extract result.markdown from the opaque JSON. We use the
+            // markdown field for the block splice below; the includes were
+            // already folded into meta just above.
             let result_markdown = capture
                 .result
                 .get("markdown")
@@ -228,5 +277,116 @@ impl PipelineStage for CaptureSpliceStage {
         }
 
         Ok(PipelineData::DocumentAst(doc_ast))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // bd-5oyk1xce: the engine include-in-header fold. Unit-tests the pure
+    // `fold_capture_includes_into_meta` seam directly (a full `StageContext`
+    // is heavy to construct); the marimo preview e2e proves the whole
+    // stage → pane path in a real browser.
+    use super::*;
+    use quarto_source_map::SourceInfo;
+
+    fn empty_meta() -> ConfigValue {
+        ConfigValue::new_map(Vec::new(), SourceInfo::for_test())
+    }
+
+    /// Read `meta.rendered.includes.<slot>` as a `Vec<String>` (mirrors
+    /// `include_resolve`'s test helper of the same name).
+    fn rendered_strings(meta: &ConfigValue, slot: &str) -> Vec<String> {
+        let arr = meta
+            .get_path(&["rendered", "includes", slot])
+            .and_then(|v| v.as_array())
+            .unwrap_or(&[]);
+        arr.iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect()
+    }
+
+    /// Build an `EngineCapture` whose serialized `result` carries the given
+    /// includes (empty markdown body — the includes fold is independent of
+    /// the block splice).
+    fn capture_with_includes(
+        engine: &str,
+        header: &[&str],
+        before: &[&str],
+        after: &[&str],
+    ) -> EngineCapture {
+        EngineCapture {
+            engine_name: engine.to_string(),
+            input_qmd: String::new(),
+            result: serde_json::json!({
+                "markdown": "",
+                "includes": {
+                    "header_includes": header,
+                    "include_before": before,
+                    "include_after": after,
+                },
+            }),
+            files: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn fold_capture_includes_lands_in_rendered_header_slot() {
+        // The marimo case: an islands <script> in header_includes must land
+        // in meta.rendered.includes.header (the preview delivery slot).
+        let script = "<script type=\"module\" src=\"https://cdn.jsdelivr.net/npm/@marimo-team/islands/main.js\"></script>";
+        let mut meta = empty_meta();
+        let cap = capture_with_includes("marimo", &[script], &[], &[]);
+        fold_capture_includes_into_meta(&mut meta, &cap);
+        assert_eq!(rendered_strings(&meta, "header"), vec![script.to_string()]);
+    }
+
+    #[test]
+    fn fold_capture_includes_covers_all_three_slots() {
+        let mut meta = empty_meta();
+        let cap = capture_with_includes("marimo", &["<h/>"], &["<b/>"], &["<a/>"]);
+        fold_capture_includes_into_meta(&mut meta, &cap);
+        assert_eq!(rendered_strings(&meta, "header"), vec!["<h/>"]);
+        assert_eq!(rendered_strings(&meta, "before-body"), vec!["<b/>"]);
+        assert_eq!(rendered_strings(&meta, "after-body"), vec!["<a/>"]);
+    }
+
+    #[test]
+    fn fold_capture_includes_appends_not_clobbers() {
+        // An authored include-in-header already resolved into the slot by
+        // IncludeResolveStage must survive; the engine's include appends.
+        let mut meta = empty_meta();
+        super::super::include_resolve::append_pandoc_includes(
+            &mut meta,
+            &PandocIncludes {
+                header_includes: vec!["<authored/>".to_string()],
+                include_before: vec![],
+                include_after: vec![],
+            },
+        );
+        let cap = capture_with_includes("marimo", &["<engine/>"], &[], &[]);
+        fold_capture_includes_into_meta(&mut meta, &cap);
+        assert_eq!(
+            rendered_strings(&meta, "header"),
+            vec!["<authored/>", "<engine/>"],
+        );
+    }
+
+    #[test]
+    fn fold_capture_includes_is_fail_soft_on_missing_or_empty() {
+        // No `includes` key at all → clean no-op (no rendered slot created).
+        let mut meta = empty_meta();
+        let cap_no_includes = EngineCapture {
+            engine_name: "marimo".to_string(),
+            input_qmd: String::new(),
+            result: serde_json::json!({ "markdown": "" }),
+            files: Vec::new(),
+        };
+        fold_capture_includes_into_meta(&mut meta, &cap_no_includes);
+        assert!(rendered_strings(&meta, "header").is_empty());
+
+        // Present-but-empty includes → also a no-op.
+        let cap_empty = capture_with_includes("marimo", &[], &[], &[]);
+        fold_capture_includes_into_meta(&mut meta, &cap_empty);
+        assert!(rendered_strings(&meta, "header").is_empty());
     }
 }

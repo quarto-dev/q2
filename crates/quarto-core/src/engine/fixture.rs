@@ -46,6 +46,7 @@
 //! [`new`]: FixtureEngine::new
 //! [`with_results`]: FixtureEngine::with_results
 
+use super::LanguageClaim;
 use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
@@ -125,6 +126,31 @@ impl FixtureEngine {
 impl ExecutionEngine for FixtureEngine {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    /// A `FixtureEngine` named `foo` claims `{foo}` cells as Primary(1).
+    ///
+    /// This makes the cell language equal to the engine name, so the resolver
+    /// can include the engine in the sequence via T1 when `{foo}` cells exist
+    /// in the document. Without this claim the engine would never appear in
+    /// `EngineResolution::sequence` and execution tests that rely on fixture
+    /// engines running would silently do nothing.
+    fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        if language == self.name.as_str() {
+            LanguageClaim::Primary(1)
+        } else {
+            LanguageClaim::None
+        }
+    }
+
+    /// Pure name comparison, always static (Phase 4) — a `FixtureEngine`
+    /// never loads anything.
+    fn try_claims_language(
+        &self,
+        language: &str,
+        first_class: Option<&str>,
+    ) -> Option<LanguageClaim> {
+        Some(self.claims_language(language, first_class))
     }
 
     fn execute(

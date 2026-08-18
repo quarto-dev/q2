@@ -410,6 +410,7 @@ mod tests {
                 is_single_file: false,
                 files: vec![],
                 output_dir: dir.join("_site"),
+                ..Default::default()
             }
         }
 

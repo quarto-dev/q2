@@ -127,6 +127,8 @@ export default defineConfig({
         // workbox emits a warning that vite-plugin-pwa throws as a fatal
         // build error, so a too-tight ceiling breaks CI the moment the WASM
         // creeps past it (see the 35MB ceiling that broke main after #379).
+        // (Supersedes an earlier ts-engine 40MB stopgap; 64MB gives headroom
+        // for the unstripped WASM name section until build-wasm.js strips it.)
         maximumFileSizeToCacheInBytes: 64 * 1024 * 1024,
         // Don't warn about large files - we know they're big
         dontCacheBustURLsMatching: /\.[0-9a-f]{8}\./,

@@ -1266,6 +1266,27 @@
     "docs_url": "https://quarto.org/docs/errors/extension/Q-16-1",
     "since_version": "99.9.9"
   },
+  "Q-16-10": {
+    "subsystem": "extension",
+    "title": "Engine Extension Does Not Declare Static Claims",
+    "message_template": "An engine extension answers `claimsLanguage` / `claimsFile` at run time (the Quarto 1 model) rather than declaring `claims`, `file-extensions`, and `claims-files` in its `_extension.yml`. The engine works, but Quarto cannot tell what it handles without starting it as a subprocess, and must do so for any document that could need an engine. Adding the declarations opts the engine into the no-load path; `[]` or `{}` declares \"this engine handles none of these\".",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-10",
+    "since_version": "99.9.9"
+  },
+  "Q-16-11": {
+    "subsystem": "extension",
+    "title": "Engine Resolution Deferred To Render Time",
+    "message_template": "At least one engine extension in this project declares no static language claims, so Quarto could not decide which engine owns each document before rendering. Documents affected by the fall-through lose execution-language indexing, and the engine must be loaded to resolve them. Declare `claims:` in the extension's `_extension.yml`, or provide a claim table under `engines:` in `_quarto.yml`.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-11",
+    "since_version": "99.9.9"
+  },
+  "Q-16-12": {
+    "subsystem": "extension",
+    "title": "Engine Failed To Load While Answering A Claim",
+    "message_template": "An engine extension had to be started to answer whether it handles a language or file, and it failed to load. Quarto treats the unanswered question as \"not claimed\", so cells in that language are emitted without being executed, or the file reports that no engine could be determined. The underlying load error is included; the render continues rather than stopping.",
+    "docs_url": "https://quarto.org/docs/errors/extension/Q-16-12",
+    "since_version": "99.9.9"
+  },
   "Q-16-2": {
     "subsystem": "extension",
     "title": "Shortcode Script Load Failure",
@@ -1432,6 +1453,13 @@
     "title": "Doubled curly braces are not supported",
     "message_template": "Quarto 2 does not treat doubled curly braces (`{{...}}`) as an escape. To write literal braces in text, escape each brace as `\\{...\\}` or use a code span.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-50",
+    "since_version": "99.9.9"
+  },
+  "Q-2-51": {
+    "subsystem": "markdown",
+    "title": "Engine claim on a Quarto-owned file type ignored",
+    "message_template": "An engine extension claimed `.qmd`, `.md`, `.markdown`, or an extension-less input. Quarto handles markdown natively, so the claim is ignored and the file is rendered by Quarto's own parser.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-51",
     "since_version": "99.9.9"
   },
   "Q-5-27": {

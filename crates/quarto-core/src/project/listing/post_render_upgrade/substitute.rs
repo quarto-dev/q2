@@ -439,6 +439,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: output_dir.to_path_buf(),
+
+            ..Default::default()
         }
     }
 

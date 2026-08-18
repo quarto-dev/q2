@@ -103,7 +103,33 @@ use thiserror::Error;
 ///   profiles must be regenerated. Consumers wanting plain text
 ///   project it themselves with
 ///   `pampa::writers::plaintext::inlines_to_string`.
-pub const DOCUMENT_PROFILE_VERSION: u32 = 11;
+/// - `12`: Plan 6 Phase 5
+///   (`claude-notes/plans/2026-06-29-plan6-pass1-engine-resolution.md`).
+///   Adds `engine_resolution: Option<ProfileEngineResolution>` — the
+///   Pass-1-resolved engine sequence/ownership (names only; configs stay
+///   in merged metadata), stamped by `DocumentProfileStage` from
+///   `resolve_engines_pass1`. `None` means the document could not be
+///   resolved load-free at index time — advisory, not an error; Pass-2
+///   always re-resolves via the full loading resolver regardless.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 12;
+
+/// Reduced, serializable form of [`crate::engine::EngineResolution`] for the
+/// profile (names only — configs stay in merged metadata; Plan 6 decision 6).
+///
+/// Stamped by `DocumentProfileStage` from `resolve_engines_pass1`'s result
+/// when a document resolves load-free at index time. Consumers (LSP
+/// language→engine ownership, freeze key, engine pooling) read this instead
+/// of re-running resolution.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProfileEngineResolution {
+    /// Ordered, distinct engine owners (mirrors
+    /// `EngineResolution::sequence`, names only).
+    pub sequence: Vec<String>,
+    /// Per-language ownership: language → owning engine name, insertion
+    /// order (mirrors `EngineResolution::ownership`, a `LinkedHashMap` in
+    /// the unreduced form).
+    pub ownership: Vec<(String, String)>,
+}
 
 /// Depth used when extracting the heading outline at the profile
 /// checkpoint.
@@ -650,6 +676,15 @@ pub struct DocumentProfile {
     /// (`bd-v7ixzsp5`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub listing_content_globs: Vec<crate::glob::GlobPattern>,
+
+    /// Pass-1-resolved engine sequence/ownership (names only), stamped by
+    /// `DocumentProfileStage` from `resolve_engines_pass1`. `None` means the
+    /// document fell through to Pass-2's loading resolver — advisory, not
+    /// an error. See [`ProfileEngineResolution`] and Plan 6 decision 6.
+    ///
+    /// Added v12 (Plan 6 Phase 5).
+    #[serde(default)]
+    pub engine_resolution: Option<ProfileEngineResolution>,
 }
 
 /// Helper for `#[serde(skip_serializing_if = ...)]` on plain bool
@@ -711,6 +746,7 @@ impl Default for DocumentProfile {
             categories_raw: None,
             listing_item: ListingItemInfo::default(),
             listing_content_globs: Vec::new(),
+            engine_resolution: None,
         }
     }
 }
@@ -788,6 +824,10 @@ impl DocumentProfile {
             // which this pure extractor doesn't take. See the field
             // doc.
             listing_content_globs: Vec::new(),
+            // Stamped by `DocumentProfileStage` from `resolve_engines_pass1`
+            // (needs the registry + AST, not available to this pure
+            // metadata-only extractor) — mirrors the `includes` field.
+            engine_resolution: None,
         }
     }
 
@@ -1809,8 +1849,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_11() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 11);
+    fn document_profile_version_is_12() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 12);
     }
 
     /// A v3 profile (the pre-listings shape) must be rejected by
@@ -2012,5 +2052,95 @@ Body.
             !json.contains("listing_content_globs"),
             "empty listing_content_globs should be omitted from JSON; got: {json}"
         );
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Plan 6 Phase 5: `engine_resolution` field + v6 → v7 bump.
+    // ─────────────────────────────────────────────────────────────────
+
+    /// A default profile (nothing stamped yet) carries `None` and survives
+    /// a round-trip.
+    #[test]
+    fn profile_engine_resolution_default_is_none() {
+        let p = DocumentProfile::default();
+        assert_eq!(p.engine_resolution, None);
+        let json = p.to_json().expect("serialize");
+        let restored = DocumentProfile::from_json(&json).expect("deserialize");
+        assert_eq!(restored.engine_resolution, None);
+    }
+
+    /// A stamped `Some(ProfileEngineResolution)` survives serialize →
+    /// deserialize intact (sequence + ownership order preserved).
+    #[test]
+    fn profile_engine_resolution_round_trip_some() {
+        let p = DocumentProfile {
+            engine_resolution: Some(ProfileEngineResolution {
+                sequence: vec!["knitr".to_string()],
+                ownership: vec![
+                    ("r".to_string(), "knitr".to_string()),
+                    ("python".to_string(), "knitr".to_string()),
+                ],
+            }),
+            ..Default::default()
+        };
+
+        let json = p.to_json().expect("serialize");
+        let restored = DocumentProfile::from_json(&json).expect("deserialize");
+        assert_eq!(p, restored);
+        assert_eq!(
+            restored.engine_resolution,
+            Some(ProfileEngineResolution {
+                sequence: vec!["knitr".to_string()],
+                ownership: vec![
+                    ("r".to_string(), "knitr".to_string()),
+                    ("python".to_string(), "knitr".to_string()),
+                ],
+            })
+        );
+    }
+
+    /// A fallen-through document's `None` also survives the round-trip
+    /// (distinct from "field absent" — `None` is a legitimate, advisory
+    /// value, not an error; see the field doc comment).
+    #[test]
+    fn profile_engine_resolution_round_trip_none() {
+        let p = DocumentProfile {
+            engine_resolution: None,
+            ..Default::default()
+        };
+        let json = p.to_json().expect("serialize");
+        let restored = DocumentProfile::from_json(&json).expect("deserialize");
+        assert_eq!(restored.engine_resolution, None);
+    }
+
+    /// A v6 profile (pre-Phase-5 shape) must be rejected by `from_json`
+    /// with a clean version-mismatch error, not a silent default-None
+    /// read — the cache layer regenerates rather than trusting an old
+    /// shape's missing field.
+    #[test]
+    fn profile_v6_json_rejected_with_clean_error() {
+        let payload = r#"{
+            "profile_version": 6,
+            "source_path": "x.qmd",
+            "output_href": "x.html",
+            "format_id": "html",
+            "title": null,
+            "subtitle": null,
+            "description": null,
+            "authors": [],
+            "date": null,
+            "categories": [],
+            "keywords": [],
+            "image": null,
+            "draft": false,
+            "outline": []
+        }"#;
+        match DocumentProfile::from_json(payload) {
+            Err(DocumentProfileError::VersionMismatch { expected, found }) => {
+                assert_eq!(expected, DOCUMENT_PROFILE_VERSION);
+                assert_eq!(found, 6);
+            }
+            other => panic!("expected VersionMismatch from v6 payload, got {:?}", other),
+        }
     }
 }

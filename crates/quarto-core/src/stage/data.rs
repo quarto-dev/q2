@@ -168,16 +168,28 @@ impl PipelineData {
 }
 
 /// Source file type detection result.
+///
+/// q2 processes exactly **two** kinds of markdown: `qmd` (with code
+/// execution) and `md` (without). Everything else — `.ipynb`, `.Rmd`, an
+/// engine-claimed `.echo` — is converted to qmd *before* the parser by
+/// [`SourceConversionStage`](crate::stage::stages::SourceConversionStage),
+/// so it never reaches this enum under its original identity.
+///
+/// `Ipynb` and `Rmd` variants existed here from 2026-01-06 (`806703bde`)
+/// but never acquired a behavioral consumer: the intended one was a
+/// `PipelinePlanner` that would push a `ConvertNotebook` stage when
+/// `source_type == Ipynb`, and it was never built. Removing them
+/// *completes* that January design rather than discarding it — same
+/// insertion point (pre-parse conversion), but dynamic engine dispatch
+/// instead of static enum dispatch. Under this model bd-19nc56ao
+/// (`.ipynb`) becomes an engine that claims `.ipynb`, and `.Rmd` becomes
+/// knitr claiming `.Rmd`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceType {
     /// Quarto Markdown (.qmd)
     Qmd,
     /// Plain Markdown (.md)
     Markdown,
-    /// Jupyter Notebook (.ipynb)
-    Ipynb,
-    /// R Markdown (.Rmd)
-    Rmd,
 }
 
 impl SourceType {
@@ -186,8 +198,6 @@ impl SourceType {
         match ext.to_lowercase().as_str() {
             "qmd" => Some(Self::Qmd),
             "md" | "markdown" => Some(Self::Markdown),
-            "ipynb" => Some(Self::Ipynb),
-            "rmd" => Some(Self::Rmd),
             _ => None,
         }
     }
@@ -200,37 +210,80 @@ impl SourceType {
     }
 }
 
+/// Provenance of a file-to-QMD conversion performed by `SourceConversionStage`.
+///
+/// v1 / C′ scope: carries only the converting engine's name, which is used to
+/// build the synthetic intermediate-file label
+/// `"<{original} (converted by {engine})>"` consumed by `ParseDocumentStage`.
+///
+/// A′ (deferred): faithful byte-range back-mapping would add `original_content`
+/// and a `source_info` (converted→original map) here. Out of scope for this
+/// plan; see plan1c §1060-1063.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConversionProvenance {
+    /// Name of the engine that produced the converted QMD.
+    pub engine: String,
+}
+
 /// Loaded file with detected source type.
 ///
 /// This is the entry point for the pipeline - a file has been read
 /// from disk (or VFS in WASM) and its type has been detected.
+///
+/// After `SourceConversionStage` runs, `content` may have been replaced with
+/// the QMD bytes produced by the claiming engine, and `conversion` records
+/// which engine performed the conversion. `path` always stays as the user's
+/// original input path.
 #[derive(Debug)]
 pub struct LoadedSource {
-    /// Path to the source file
+    /// Path to the source file (user's original path; never rewritten)
     pub path: PathBuf,
-    /// Raw file content
+    /// File content — QMD bytes after engine conversion, raw bytes otherwise
     pub content: Vec<u8>,
-    /// Detected source type
-    pub source_type: SourceType,
+    /// Detected (or post-conversion) source type.
+    ///
+    /// `None` means "unknown extension, not yet converted" — the file is
+    /// not one q2 handles natively, so a claiming engine must convert it
+    /// first. This is deliberately not defaulted to
+    /// [`SourceType::Markdown`]: that would assert "plain markdown, never
+    /// executes" about a file that is about to be converted and executed.
+    ///
+    /// **Invariant:** after
+    /// [`SourceConversionStage`](crate::stage::stages::SourceConversionStage)
+    /// this is always `Some` — an unclaimed non-native file never gets
+    /// further, because the stage hard-errors on it.
+    pub source_type: Option<SourceType>,
+    /// Set by `SourceConversionStage` when an engine converts this file to QMD.
+    /// `None` for `.qmd` / `.md` inputs (pass-through path).
+    pub conversion: Option<ConversionProvenance>,
 }
 
 impl LoadedSource {
     /// Create a new LoadedSource with auto-detected type.
     pub fn new(path: PathBuf, content: Vec<u8>) -> Self {
-        let source_type = SourceType::from_path(&path).unwrap_or(SourceType::Markdown);
+        // No fallback: native files get `Some(Qmd)` / `Some(Markdown)` at
+        // load, anything else stays `None` until the conversion stage
+        // stamps it. See the field doc.
+        let source_type = SourceType::from_path(&path);
         Self {
             path,
             content,
             source_type,
+            conversion: None,
         }
     }
 
     /// Create a LoadedSource with explicit type.
+    ///
+    /// Takes a bare [`SourceType`] rather than an `Option`: a caller naming
+    /// a type explicitly is asserting one, and "unknown" is what
+    /// [`LoadedSource::new`] already expresses.
     pub fn with_type(path: PathBuf, content: Vec<u8>, source_type: SourceType) -> Self {
         Self {
             path,
             content,
-            source_type,
+            source_type: Some(source_type),
+            conversion: None,
         }
     }
 
@@ -439,9 +492,15 @@ mod tests {
         assert_eq!(SourceType::from_extension("qmd"), Some(SourceType::Qmd));
         assert_eq!(SourceType::from_extension("QMD"), Some(SourceType::Qmd));
         assert_eq!(SourceType::from_extension("md"), Some(SourceType::Markdown));
-        assert_eq!(SourceType::from_extension("ipynb"), Some(SourceType::Ipynb));
-        assert_eq!(SourceType::from_extension("Rmd"), Some(SourceType::Rmd));
+        assert_eq!(
+            SourceType::from_extension("markdown"),
+            Some(SourceType::Markdown)
+        );
         assert_eq!(SourceType::from_extension("txt"), None);
+        // Not native kinds: these reach the parser only via the conversion
+        // stage, which stamps `Qmd`. See `SourceType`'s doc comment.
+        assert_eq!(SourceType::from_extension("ipynb"), None);
+        assert_eq!(SourceType::from_extension("Rmd"), None);
     }
 
     #[test]
@@ -452,7 +511,8 @@ mod tests {
         );
         assert_eq!(
             SourceType::from_path(std::path::Path::new("/path/to/notebook.ipynb")),
-            Some(SourceType::Ipynb)
+            None,
+            "a notebook is not a native kind; the conversion stage stamps Qmd"
         );
         assert_eq!(SourceType::from_path(std::path::Path::new("README")), None);
     }
@@ -460,7 +520,13 @@ mod tests {
     #[test]
     fn test_loaded_source_auto_detect() {
         let source = LoadedSource::new(PathBuf::from("test.qmd"), b"# Hello".to_vec());
-        assert_eq!(source.source_type, SourceType::Qmd);
+        assert_eq!(source.source_type, Some(SourceType::Qmd));
+
+        // A non-native extension stays `None` at load — it has not been
+        // converted yet, and claiming it is `Markdown` would assert
+        // "never executes" about a file that is about to be executed.
+        let unconverted = LoadedSource::new(PathBuf::from("a.echo"), b"x".to_vec());
+        assert_eq!(unconverted.source_type, None);
     }
 
     #[test]

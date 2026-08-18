@@ -16,6 +16,9 @@ concurrency:
 
 env:
   PANDOC_VERSION: "3.8.3"
+  # Deno version provisioned for the QUARTO_CI assertion test in ts_process.rs.
+  # Must provide `Deno.Command`/`Deno.stdin.isTerminal()` (available since Deno 1.40+).
+  DENO_VERSION: "2.9.0"
 
 jobs:
   test-suite:
@@ -119,6 +122,20 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install minisign
 
+      # Deno — required for ts_process.rs engine tests and the deno_available_when_quarto_ci
+      # assertion.  Plain install (curl + $GITHUB_PATH on Linux; brew on macOS) avoids
+      # /opt/hostedtoolcache/ so the "Free disk space" invariant below is not broken.
+      - name: Set up Deno (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          curl -fsSL https://deno.land/install.sh | sh -s -- v${DENO_VERSION}
+          echo "$HOME/.deno/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Deno (macOS)
+        if: runner.os == 'macOS'
+        run: brew install deno
+
       # Free disk space on Linux runners (14 GB SSD is tight for Rust monorepo).
       # `remove_tool_cache: true` is safe — no step in this job uses /opt/hostedtoolcache/
       # (no setup-node, setup-python, etc.). See claude-notes/2026-04-28-ci-disk-space-and-profile-ci.md.
@@ -179,6 +196,9 @@ jobs:
         run: cargo nextest run --tests --cargo-profile ci
         env:
           RUSTFLAGS: "-D warnings"
+          # Turns the silent Deno-skip in deno_available_when_quarto_ci into a hard
+          # failure if the "Set up Deno" step above regresses.
+          QUARTO_CI: "1"
 
   wasm-tests:
     name: WASM Tests

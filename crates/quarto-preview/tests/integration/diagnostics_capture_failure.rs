@@ -45,6 +45,17 @@ impl ExecutionEngine for FailingTestEngine {
             "synthetic test-failing engine failure".to_string(),
         ))
     }
+    fn claims_language(
+        &self,
+        language: &str,
+        _first_class: Option<&str>,
+    ) -> quarto_core::engine::LanguageClaim {
+        if language == "test-failing" {
+            quarto_core::engine::LanguageClaim::Primary(1)
+        } else {
+            quarto_core::engine::LanguageClaim::None
+        }
+    }
 }
 
 fn pick_free_port() -> u16 {
@@ -74,7 +85,7 @@ async fn capture_failure_lands_in_sink() {
         single_file: None,
         data_dir: data.path().to_path_buf(),
         spa_dir_override: None,
-        engine_registry: Some(registry),
+        engine_registry: Some(Arc::new(registry)),
         engine_policy: Default::default(),
         resource_html_files: Vec::new(),
         cache_dir: None,

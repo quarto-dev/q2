@@ -592,6 +592,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -731,6 +733,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: project_dir.clone(),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(&qmd_path);
         let format = Format::html();
@@ -775,6 +779,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: project_dir.clone(),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(&qmd_path);
         let format = Format::html();
@@ -821,6 +827,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: project_dir.clone(),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(&qmd_path);
         let format = Format::html();
@@ -905,6 +913,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: project_dir.clone(),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(&qmd_path);
         let format = Format::html();
@@ -935,6 +945,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -982,6 +994,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: project_dir.clone(),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(&qmd_path);
         let format = Format::html();
@@ -1019,6 +1033,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: project_dir.clone(),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(&qmd_path);
         let format = Format::html();
@@ -1060,6 +1076,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: project_dir.clone(),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(&qmd_path);
         let format = Format::html();

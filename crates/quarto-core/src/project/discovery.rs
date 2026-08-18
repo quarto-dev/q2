@@ -7,25 +7,46 @@
 
 //! Expand the set of source files a project renders.
 //!
-//! Renderable extensions are `.qmd` (always) and `.md` (opt-in, see
-//! below). `.ipynb` / `.Rmd` remain deferred — see bd-xxul and
+//! Two gates, and they answer different questions.
+//!
+//! **Gate 1 — may this extension ever be an input?** `.qmd` and `.md`
+//! always ([`FIXED_RENDERABLE`]), plus any extension an installed engine
+//! statically claims (see [`RenderableExtensions`]). `.ipynb` / `.Rmd` are
+//! not special-cased: they pass gate 1 exactly when an engine claims them —
+//! see bd-xxul, bd-19nc56ao, and
 //! `claude-notes/plans/2026-07-20-ipynb-surface-syntax-design.md`.
 //!
-//! Discovery rules (plan:
-//! `claude-notes/plans/2026-08-07-md-render-support.md`):
+//! **Gate 2 — is this file in the render list?** The `project.render`
+//! patterns, whose default is `**/*.qmd` and nothing else.
+//!
+//! Passing gate 1 does not imply passing gate 2. An engine claim makes
+//! `.echo` renderable *when listed*; it does not put `.echo` files into the
+//! render list.
+//!
+//! Discovery rules (plans:
+//! `claude-notes/plans/2026-08-07-md-render-support.md`; the
+//! engine-claimed widening in D1 of
+//! `claude-notes/plans/2026-08-13-ts-engine-extensions-merge-main.md` is
+//! **superseded** — see [`effective_render_patterns`]):
 //!
 //! 1. Every candidate comes from one recursive walk of the project
-//!    directory collecting `.qmd` and `.md` files.
+//!    directory collecting files whose extension is in the resolved
+//!    [`RenderableExtensions`] set.
 //! 2. Candidates are selected by matching them against the
 //!    `project.render` patterns. When the author wrote no *positive*
 //!    pattern — no `render:` key at all, or only `!` negations —
 //!    discovery supplies the default positive [`DEFAULT_RENDER_PATTERN`]
-//!    (`**/*.qmd`). The invariant users can be told verbatim:
-//!    **omitting `project.render` is exactly equivalent to writing
-//!    `render: ["**/*.qmd"]`**, and a negation-only list subtracts
-//!    from that same default. `.md` files therefore render only when
-//!    an explicitly written pattern matches them (a deliberate
-//!    divergence from Quarto 1, which walks `.md` in by default).
+//!    (`**/*.qmd`). The invariant users can be told verbatim: **omitting
+//!    `project.render` is exactly equivalent to writing
+//!    `render: ["**/*.qmd"]`**. A negation-only list subtracts from that
+//!    same set.
+//!
+//!    Quarto 2 auto-discovers `**/*.qmd` and nothing else. `.md`,
+//!    `.ipynb`, percent/spin scripts and engine-contributed extensions all
+//!    render only when an explicitly written pattern matches them. This is
+//!    a deliberate divergence from Quarto 1, which walked the whole tree
+//!    and asked each engine to claim what it found — content-sniffing
+//!    every `.py` and `.R` on the way.
 //! 3. Exclude in either mode:
 //!    - the output directory (e.g. `_site/`)
 //!    - `.quarto/`, `.git/`, `node_modules/`
@@ -58,6 +79,83 @@ use crate::project::DocumentInfo;
 /// so they can be compared at a glance.
 const RENDER_GLOB_OPTIONS: GlobOptions = GlobOptions::RENDER;
 
+/// The always-renderable extensions, independent of engines. Undotted,
+/// lowercase.
+///
+/// This must stay in sync with [`has_renderable_extension`]'s native arm:
+/// `.md` is a member (bd-6d2wj4zp made `.md` a first-class input), so
+/// dropping it here would silently remove `.md` from discovery.
+pub const FIXED_RENDERABLE: &[&str] = &["qmd", "md"];
+
+/// Extensions q2 owns natively and no engine may claim: the two markdown
+/// kinds plus the extension-less case (treated as qmd). Used both by the
+/// discovery widening below (a native member never becomes a synthetic
+/// default pattern) and by the conversion stage's claim refusal (`Q-2-51`).
+pub const NATIVE_EXTENSIONS: &[&str] = &["", "qmd", "md", "markdown"];
+
+/// A resolved, normalized set of renderable file extensions (undotted
+/// lowercase): [`FIXED_RENDERABLE`] union the engine claims-files
+/// extensions. Discovery consults this instead of a hardcoded "qmd".
+/// Never carries the engine registry — just strings.
+///
+/// This is **gate 1** only: it answers "may this extension ever be an
+/// input", not "is this file discovered by default". Gate 2 — the render
+/// patterns — is where that is decided, and its default is `**/*.qmd`
+/// alone. An engine claim therefore makes `.echo` renderable *when listed*;
+/// it does not put `.echo` files into the render list.
+///
+/// The set deliberately does NOT record which members came from an engine.
+/// It used to, because the superseded D1 widened the default pattern set
+/// per engine-claimed extension and needed to tell them apart. Nothing
+/// widens now, so the distinction has no consumer.
+#[derive(Debug, Clone)]
+pub struct RenderableExtensions {
+    all: std::collections::HashSet<String>,
+}
+
+impl RenderableExtensions {
+    /// Build from [`FIXED_RENDERABLE`] unioned with `engine_exts`. Each
+    /// declared extension must already be undotted lowercase (P4 guarantees
+    /// this on the declared side) — `debug_assert`ed here; the newtype only
+    /// normalizes *candidates* at comparison time (see `ext_in_set`), never
+    /// declared members.
+    pub fn new(engine_exts: impl IntoIterator<Item = String>) -> Self {
+        let mut all: std::collections::HashSet<String> =
+            FIXED_RENDERABLE.iter().map(|s| s.to_string()).collect();
+        for ext in engine_exts {
+            debug_assert!(
+                !ext.starts_with('.') && ext == ext.to_ascii_lowercase(),
+                "engine-declared extension must be undotted lowercase: {ext:?}"
+            );
+            all.insert(ext);
+        }
+        Self { all }
+    }
+
+    /// [`FIXED_RENDERABLE`] only — no engine extensions. Equivalent to
+    /// `new(std::iter::empty())`.
+    pub fn fixed() -> Self {
+        Self::new(std::iter::empty())
+    }
+
+    /// Membership predicate. `candidate` is expected pre-normalized
+    /// (undotted lowercase); see `ext_in_set` for the path-extraction +
+    /// normalization wrapper callers should use instead of calling this
+    /// directly.
+    pub(crate) fn contains(&self, candidate: &str) -> bool {
+        self.all.contains(candidate)
+    }
+}
+
+/// Membership test for a candidate *path*: extracts the extension and
+/// normalizes it (undotted lowercase) before consulting the set.
+fn ext_in_set(path: &Path, set: &RenderableExtensions) -> bool {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some(ext) => set.contains(&ext.to_ascii_lowercase()),
+        None => false,
+    }
+}
+
 /// Input describing what to discover.
 #[derive(Debug, Clone)]
 pub struct DiscoveryConfig<'a> {
@@ -69,8 +167,13 @@ pub struct DiscoveryConfig<'a> {
     /// provenance of the YAML scalar it came from so diagnostics can
     /// point at it. When no positive pattern is present (empty, or
     /// negations only), discovery matches against
-    /// [`DEFAULT_RENDER_PATTERN`] instead.
+    /// [`DEFAULT_RENDER_PATTERN`] plus one `**/*.<ext>` per
+    /// engine-claimed extension instead.
     pub render_patterns: &'a [RawGlob],
+    /// Resolved renderable-extension set: [`FIXED_RENDERABLE`] union engine
+    /// claims-files extensions. Discovery stays a pure path/string module —
+    /// this is never the engine registry.
+    pub renderable_extensions: &'a RenderableExtensions,
 }
 
 /// The positive pattern discovery supplies when the author wrote
@@ -89,7 +192,7 @@ pub fn discover_project_files(
     config: &DiscoveryConfig<'_>,
     runtime: &dyn SystemRuntime,
 ) -> Result<Vec<PathBuf>> {
-    let walked = walk_sources(config.project_dir, runtime)?;
+    let walked = walk_sources(config.project_dir, runtime, config.renderable_extensions)?;
     Ok(select_from_walk(&walked, config))
 }
 
@@ -103,7 +206,7 @@ pub fn unmatched_md_files(
     config: &DiscoveryConfig<'_>,
     runtime: &dyn SystemRuntime,
 ) -> Result<Vec<PathBuf>> {
-    let walked = walk_sources(config.project_dir, runtime)?;
+    let walked = walk_sources(config.project_dir, runtime, config.renderable_extensions)?;
     let selected: std::collections::HashSet<PathBuf> =
         select_from_walk(&walked, config).into_iter().collect();
     Ok(walked
@@ -121,6 +224,28 @@ pub fn unmatched_md_files(
 /// matched is discovery's business, and this way a broken positive
 /// pattern (`Q-5-14`/`Q-5-15`) never silently falls back to
 /// rendering everything.
+///
+/// # The default render set is `**/*.qmd`, and only that
+///
+/// Omitting `project.render` is exactly equivalent to writing
+/// `render: ["**/*.qmd"]`. Every other input type — `.md`, `.ipynb`,
+/// percent/spin scripts, engine-contributed extensions — renders only
+/// when a pattern the author wrote matches it.
+///
+/// **This supersedes D1** of the ts-engine-extensions merge runbook, which
+/// widened the default set with one `**/*.<ext>` per engine-claimed
+/// extension. Deciding whether a `.py` in the tree is a percent script, or
+/// a `.echo` a document rather than a fixture, requires opening it — which
+/// is what Quarto 1 did, and what lets installing an extension silently
+/// change which files a project renders. One line of `render:` cannot
+/// surprise anyone.
+///
+/// A **negation-only** list still subtracts from the default:
+/// `render: ["!drafts/**"]` means every `.qmd` except those. Any
+/// *positive* pattern replaces the default outright — including its
+/// `**/*.qmd` half, which is why advice to add `render:` must always say
+/// to keep `**/*.qmd` as well.
+///
 fn effective_render_patterns(user: &[RawGlob]) -> Vec<RawGlob> {
     if user.iter().any(|r| !r.raw.starts_with('!')) {
         return user.to_vec();
@@ -173,7 +298,7 @@ fn select_from_walk(walked: &[PathBuf], config: &DiscoveryConfig<'_>) -> Vec<Pat
 /// True if a candidate path may appear in a render list at all:
 /// renderable extension, and none of the built-in exclusions apply.
 fn is_renderable_source(candidate: &Path, config: &DiscoveryConfig<'_>) -> bool {
-    if !has_renderable_extension(candidate) {
+    if !has_renderable_extension(candidate, config.renderable_extensions) {
         return false;
     }
     let Ok(relative) = candidate.strip_prefix(config.project_dir) else {
@@ -230,11 +355,19 @@ fn is_agent_instruction_md(file_name: &str) -> bool {
     ) || lower.ends_with(".llms.md")
 }
 
-fn has_renderable_extension(path: &Path) -> bool {
+/// True if `path` carries an extension discovery will consider.
+///
+/// The native arm (`qmd`/`md`) is written out explicitly *and* the resolved
+/// set is consulted, so the predicate is correct even if a caller hands us a
+/// set that somehow lacks a fixed member. [`FIXED_RENDERABLE`] contains both
+/// native extensions, so the second arm alone would suffice today; keeping
+/// the first is what guarantees `.md` can never silently drop out of
+/// discovery and revert bd-6d2wj4zp.
+fn has_renderable_extension(path: &Path, set: &RenderableExtensions) -> bool {
     matches!(
         path.extension().and_then(|e| e.to_str()),
         Some("qmd" | "md")
-    )
+    ) || ext_in_set(path, set)
 }
 
 fn has_md_extension(path: &Path) -> bool {
@@ -384,9 +517,10 @@ pub fn render_pattern_diagnostics(
                 .with_code("Q-5-13")
                 .with_location(raw.source.clone())
                 .problem(
-                    "No renderable source file (`.qmd` or `.md`) in the project \
-                     matches this pattern, so it contributes nothing to the render \
-                     list.",
+                    "No renderable source file in the project matches this pattern, \
+                     so it contributes nothing to the render list. Renderable means \
+                     `.qmd`, `.md`, or an extension claimed by an installed engine \
+                     extension.",
                 )
                 .add_info(
                     "In Quarto 2, `*` matches within one directory level — write \
@@ -406,9 +540,13 @@ pub fn render_pattern_diagnostics(
 /// Recursively walk `project_dir` collecting candidate source files
 /// (`.qmd` and `.md`), already filtered against the cheap excludes
 /// (hidden, underscore components). Paths are absolute and sorted.
-fn walk_sources(project_dir: &Path, runtime: &dyn SystemRuntime) -> Result<Vec<PathBuf>> {
+fn walk_sources(
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+    set: &RenderableExtensions,
+) -> Result<Vec<PathBuf>> {
     let mut out = Vec::new();
-    walk_rec(project_dir, project_dir, runtime, &mut out)?;
+    walk_rec(project_dir, project_dir, runtime, set, &mut out)?;
     out.sort();
     Ok(out)
 }
@@ -417,6 +555,7 @@ fn walk_rec(
     root: &Path,
     dir: &Path,
     runtime: &dyn SystemRuntime,
+    set: &RenderableExtensions,
     out: &mut Vec<PathBuf>,
 ) -> Result<()> {
     let entries = runtime.dir_list(dir).map_err(|e| {
@@ -433,11 +572,11 @@ fn walk_rec(
         let is_dir = runtime.is_dir(&entry).unwrap_or(false);
         if is_dir {
             if entry.strip_prefix(root).is_ok() {
-                walk_rec(root, &entry, runtime, out)?;
+                walk_rec(root, &entry, runtime, set, out)?;
             }
             continue;
         }
-        if has_renderable_extension(&entry) {
+        if has_renderable_extension(&entry, set) {
             out.push(entry);
         }
     }
@@ -485,10 +624,12 @@ mod tests {
         write_file(&project_dir.join("_drafts/in_progress.qmd"), "draft\n");
 
         let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::fixed();
         let config = DiscoveryConfig {
             project_dir: &project_dir,
             output_dir: &output_dir,
             render_patterns: &[],
+            renderable_extensions: &exts,
         };
 
         let files = discover_project_files(&config, &native()).unwrap();
@@ -525,10 +666,12 @@ mod tests {
             .map(|p| RawGlob::new(*p, SourceInfo::generated(By::programmatic_config())))
             .collect();
         let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::fixed();
         let config = DiscoveryConfig {
             project_dir,
             output_dir: &output_dir,
             render_patterns: &patterns,
+            renderable_extensions: &exts,
         };
         let files = discover_project_files(&config, &native()).unwrap();
         // Diagnostics are computed from the post-exclusion file list,
@@ -704,10 +847,12 @@ mod tests {
             .map(|p| RawGlob::new(*p, SourceInfo::generated(By::programmatic_config())))
             .collect();
         let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::fixed();
         let config = DiscoveryConfig {
             project_dir: &project_dir,
             output_dir: &output_dir,
             render_patterns: &patterns,
+            renderable_extensions: &exts,
         };
         let files = discover_project_files(&config, &native()).unwrap();
         let mut rels: Vec<String> = files
@@ -739,10 +884,12 @@ mod tests {
         write_file(&project_dir.join("_site/stale.qmd"), "# stale\n");
 
         let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::fixed();
         let config = DiscoveryConfig {
             project_dir: &project_dir,
             output_dir: &output_dir,
             render_patterns: &[],
+            renderable_extensions: &exts,
         };
         let files = discover_project_files(&config, &native()).unwrap();
         let rels: Vec<_> = files
@@ -767,10 +914,12 @@ mod tests {
         write_file(&project_dir.join("node_modules/lib/readme.qmd"), "# n\n");
 
         let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::fixed();
         let config = DiscoveryConfig {
             project_dir: &project_dir,
             output_dir: &output_dir,
             render_patterns: &[],
+            renderable_extensions: &exts,
         };
         let files = discover_project_files(&config, &native()).unwrap();
         assert_eq!(files.len(), 1);
@@ -785,10 +934,12 @@ mod tests {
         write_file(&project_dir.join("with spaces.qmd"), "# w\n");
 
         let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::fixed();
         let config = DiscoveryConfig {
             project_dir: &project_dir,
             output_dir: &output_dir,
             render_patterns: &[],
+            renderable_extensions: &exts,
         };
         let files = discover_project_files(&config, &native()).unwrap();
         let names: Vec<_> = files
@@ -846,10 +997,12 @@ mod tests {
                 .map(|p| RawGlob::new(*p, SourceInfo::generated(By::programmatic_config())))
                 .collect();
             let output_dir = dir.join("_site");
+            let exts = RenderableExtensions::fixed();
             let config = DiscoveryConfig {
                 project_dir: &dir,
                 output_dir: &output_dir,
                 render_patterns: &patterns,
+                renderable_extensions: &exts,
             };
             discover_project_files(&config, &native()).unwrap()
         };
@@ -994,10 +1147,12 @@ mod tests {
             .map(|p| RawGlob::new(*p, SourceInfo::generated(By::programmatic_config())))
             .collect();
         let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::fixed();
         let config = DiscoveryConfig {
             project_dir,
             output_dir: &output_dir,
             render_patterns: &patterns,
+            renderable_extensions: &exts,
         };
         let mut rels: Vec<String> = unmatched_md_files(&config, &native())
             .unwrap()
@@ -1067,10 +1222,12 @@ mod tests {
         write_file(&project_dir.join("index.qmd"), "# x\n");
         write_file(&project_dir.join("about.qmd"), "# a\n");
 
+        let exts = RenderableExtensions::fixed();
         let config = DiscoveryConfig {
             project_dir: &project_dir,
             output_dir: &project_dir,
             render_patterns: &[],
+            renderable_extensions: &exts,
         };
         let files = discover_project_files(&config, &native()).unwrap();
         let mut rels: Vec<String> = files
@@ -1096,10 +1253,12 @@ mod tests {
         write_file(&project_dir.join("_site/old.qmd"), "# stale\n");
 
         let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::fixed();
         let config = DiscoveryConfig {
             project_dir: &project_dir,
             output_dir: &output_dir,
             render_patterns: &[],
+            renderable_extensions: &exts,
         };
         let files = discover_project_files(&config, &native()).unwrap();
         let rels: Vec<String> = files
@@ -1112,5 +1271,265 @@ mod tests {
             })
             .collect();
         assert_eq!(rels, vec!["index.qmd".to_string()]);
+    }
+
+    // ── Engine-claimed extensions: T6 / T6b / T7 re-port + D1 / D2 ──────────
+    //
+    // Re-ported from the branch's pre-merge discovery tests against main's
+    // rewritten module (walk_sources / select_from_walk / is_renderable_source
+    // replaced walk_qmd / is_renderable_qmd), plus the two tests D1 and D2
+    // require. Without these the engine-claimed path has NO coverage on
+    // either side of the merge.
+
+    /// Project-relative, forward-slashed, sorted.
+    fn rels_of(files: &[PathBuf], project_dir: &Path) -> Vec<String> {
+        let mut v: Vec<String> = files
+            .iter()
+            .map(|p| {
+                p.strip_prefix(project_dir)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace(std::path::MAIN_SEPARATOR, "/")
+            })
+            .collect();
+        v.sort();
+        v
+    }
+
+    /// T6: an engine-claimed extension obeys the SAME exclusion rules that
+    /// already govern `.qmd` (underscore prefix, dot prefix, output dir), and
+    /// a non-member extension (`.ipynb`) stays excluded.
+    ///
+    /// This binds that engine extensions flow through the same predicate, not
+    /// a bypass branch. It needs an explicit `render:` pattern now: engine
+    /// claims no longer widen the default set, so with no patterns there would
+    /// be nothing to apply exclusions to.
+    #[test]
+    fn t6_engine_extension_obeys_the_same_exclusions() {
+        let temp = TempDir::new().unwrap();
+        let project_dir = canonical(temp.path());
+
+        write_file(&project_dir.join("a.echo"), "content\n");
+        write_file(&project_dir.join("_draft.echo"), "draft\n");
+        write_file(&project_dir.join(".hidden.echo"), "hidden\n");
+        write_file(&project_dir.join("out/b.echo"), "stale\n");
+        write_file(&project_dir.join("notebook.ipynb"), "{}\n");
+
+        // `out/` doubles as the output dir, so this exercises the output-dir
+        // exclusion in the same run as the underscore/dot exclusions and the
+        // non-member-extension exclusion.
+        let output_dir = project_dir.join("out");
+        let exts = RenderableExtensions::new(vec!["echo".to_string()]);
+        let patterns = vec![RawGlob::new(
+            "**/*.echo",
+            SourceInfo::generated(By::programmatic_config()),
+        )];
+        let config = DiscoveryConfig {
+            project_dir: &project_dir,
+            output_dir: &output_dir,
+            render_patterns: &patterns,
+            renderable_extensions: &exts,
+        };
+
+        let files = discover_project_files(&config, &native()).unwrap();
+        assert_eq!(
+            rels_of(&files, &project_dir),
+            vec!["a.echo".to_string()],
+            "only a.echo survives: _draft.echo / .hidden.echo / out/b.echo / \
+             notebook.ipynb must all stay excluded"
+        );
+    }
+
+    /// T6b (pattern path): same fixture, but an explicit `render: ["*.echo"]`
+    /// routes through the pattern branch rather than the bare default.
+    #[test]
+    fn t6b_engine_extension_admitted_via_explicit_pattern() {
+        let temp = TempDir::new().unwrap();
+        let project_dir = canonical(temp.path());
+        write_file(&project_dir.join("a.echo"), "content\n");
+        write_file(&project_dir.join("notebook.ipynb"), "{}\n");
+
+        let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::new(vec!["echo".to_string()]);
+        let patterns = vec![RawGlob::new(
+            "*.echo",
+            SourceInfo::generated(By::programmatic_config()),
+        )];
+        let config = DiscoveryConfig {
+            project_dir: &project_dir,
+            output_dir: &output_dir,
+            render_patterns: &patterns,
+            renderable_extensions: &exts,
+        };
+
+        let files = discover_project_files(&config, &native()).unwrap();
+        assert_eq!(
+            rels_of(&files, &project_dir),
+            vec!["a.echo".to_string()],
+            "an explicit *.echo pattern selects the claimed file; .ipynb is not \
+             a member and stays out"
+        );
+    }
+
+    /// T7: a non-member extension is excluded even when a pattern names it
+    /// explicitly. Membership is the gate; a pattern cannot widen it.
+    #[test]
+    fn t7_non_member_extension_excluded_even_when_pattern_names_it() {
+        let temp = TempDir::new().unwrap();
+        let project_dir = canonical(temp.path());
+        write_file(&project_dir.join("notebook.ipynb"), "{}\n");
+        write_file(&project_dir.join("a.echo"), "content\n");
+
+        let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::new(vec!["echo".to_string()]);
+        let patterns = vec![RawGlob::new(
+            "*.ipynb",
+            SourceInfo::generated(By::programmatic_config()),
+        )];
+        let config = DiscoveryConfig {
+            project_dir: &project_dir,
+            output_dir: &output_dir,
+            render_patterns: &patterns,
+            renderable_extensions: &exts,
+        };
+
+        let files = discover_project_files(&config, &native()).unwrap();
+        assert!(
+            files.is_empty(),
+            "`.ipynb` is claimed by no engine, so naming it in `render:` must \
+             not make it an input; got {:?}",
+            rels_of(&files, &project_dir)
+        );
+    }
+
+    /// Quarto 2 auto-discovers `**/*.qmd` and nothing else.
+    ///
+    /// Supersedes D1 of the ts-engine-extensions merge runbook, which had
+    /// engine-claimed extensions widen the default pattern set. One rule now
+    /// covers every non-`.qmd` input — `.md`, `.ipynb`, percent/spin scripts,
+    /// and engine-contributed extensions alike: it renders only when a
+    /// `project.render` pattern matches it.
+    ///
+    /// The rule is deliberately blunt. Deciding whether a `.py` in the tree is
+    /// a percent script, or a `.echo` is a document rather than a fixture,
+    /// requires opening it — which is what Quarto 1 did, and what makes
+    /// installing an extension able to change silently which files a project
+    /// renders. Listing them is one line and cannot surprise anyone.
+    ///
+    /// Named revert: restore the widening loop in `effective_render_patterns`
+    /// and this goes RED.
+    #[test]
+    fn claimed_extension_is_not_auto_discovered() {
+        let temp = TempDir::new().unwrap();
+        let project_dir = canonical(temp.path());
+        write_file(&project_dir.join("a.echo"), "content\n");
+        write_file(&project_dir.join("index.qmd"), "# x\n");
+        write_file(&project_dir.join("notes.md"), "notes\n");
+        write_file(&project_dir.join("notebook.ipynb"), "{}\n");
+
+        let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::new(vec!["echo".to_string()]);
+        let config = DiscoveryConfig {
+            project_dir: &project_dir,
+            output_dir: &output_dir,
+            render_patterns: &[], // ← no `project.render` key at all
+            renderable_extensions: &exts,
+        };
+
+        let files = discover_project_files(&config, &native()).unwrap();
+        let rels = rels_of(&files, &project_dir);
+
+        assert_eq!(
+            rels,
+            vec!["index.qmd".to_string()],
+            "with no `render:` key ONLY `**/*.qmd` is discovered — an \
+             engine-claimed `.echo`, an opt-in `.md`, and an `.ipynb` all \
+             stay out; got {rels:?}"
+        );
+    }
+
+    /// The default pattern set is exactly `**/*.qmd`, whatever the engines
+    /// claim. Unit-level companion to the test above.
+    #[test]
+    fn default_pattern_set_is_qmd_only_regardless_of_claims() {
+        // `effective_render_patterns` no longer takes the extension set at
+        // all — reverting D1 reverted the signature change D1 required. That
+        // the claims cannot reach this function is the guarantee; building a
+        // set here would only be able to test that an unused argument is
+        // unused.
+        let effective = effective_render_patterns(&[]);
+        let raws: Vec<&str> = effective.iter().map(|g| g.raw.as_str()).collect();
+        assert_eq!(
+            raws,
+            vec![DEFAULT_RENDER_PATTERN],
+            "no claimed extension contributes a synthetic default glob"
+        );
+    }
+
+    /// A user-written positive pattern is authoritative and replaces the
+    /// default outright — including the `**/*.qmd` half. This is why any
+    /// advice to add `render:` has to say "keep `**/*.qmd` too".
+    #[test]
+    fn a_positive_user_pattern_replaces_the_default_entirely() {
+        let user = vec![RawGlob::new(
+            "docs/**/*.qmd",
+            SourceInfo::generated(By::programmatic_config()),
+        )];
+        let effective = effective_render_patterns(&user);
+        let raws: Vec<&str> = effective.iter().map(|g| g.raw.as_str()).collect();
+        assert_eq!(
+            raws,
+            vec!["docs/**/*.qmd"],
+            "an explicit positive pattern is authoritative"
+        );
+    }
+
+    /// **D2** — a dynamic claimer (`claims_files: None`) contributes no
+    /// discovery wildcard, and emits no warning.
+    ///
+    /// Discovery only ever sees paths, so an engine that decides by
+    /// inspecting content cannot contribute a static extension. It falls
+    /// through silently, mirroring the language-claim precedent in
+    /// `engine::resolution` (Pass-1 returns `None`, observability is a trace
+    /// target, not a diagnostic). Do not invent a warning for this.
+    #[test]
+    fn d2_dynamic_claimer_contributes_no_wildcard_and_no_warning() {
+        use crate::extension::types::{EngineContribution, claimed_file_extensions};
+
+        let dynamic = EngineContribution::External {
+            path: PathBuf::from("/ext/dyn-engine.js"),
+            extension_yml_path: PathBuf::from("/ext/_extension.yml"),
+            name: Some("dyn-engine".to_string()),
+            claims: None,
+            file_extensions: None,
+            claims_files: None, // ← decides by inspecting content
+        };
+
+        assert!(
+            claimed_file_extensions(&dynamic).is_empty(),
+            "a dynamic claimer declares no static extension"
+        );
+
+        // Therefore it contributes no renderable member, and the default
+        // pattern set is unchanged.
+        let effective = effective_render_patterns(&[]);
+        let raws: Vec<&str> = effective.iter().map(|g| g.raw.as_str()).collect();
+        assert_eq!(
+            raws,
+            vec![DEFAULT_RENDER_PATTERN],
+            "a dynamic claimer must not widen the default pattern set"
+        );
+
+        // And the fall-through is SILENT: discovery emits diagnostics only via
+        // `render_pattern_diagnostics`, which is called with the *user's*
+        // patterns. An empty user list yields nothing to warn about.
+        let temp = TempDir::new().unwrap();
+        let project_dir = canonical(temp.path());
+        write_file(&project_dir.join("index.qmd"), "# x\n");
+        let diags = render_pattern_diagnostics(&project_dir, &[], &[]);
+        assert!(
+            diags.is_empty(),
+            "the dynamic-claimer fall-through must be silent; got {diags:?}"
+        );
     }
 }

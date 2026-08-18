@@ -128,6 +128,8 @@ quarto-config = { workspace = true, features = ["span-assert"] }
 tempfile = "3"
 walkdir.workspace = true
 tokio = { version = "1", features = ["rt", "macros"] }
+tracing-subscriber.workspace = true
+socket2 = "0.6"
 
 [lints]
 workspace = true

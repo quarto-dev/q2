@@ -34,6 +34,23 @@
 # watcher. Limited to one in-flight process at a time.
 quarto-preview-fs-watcher = { max-threads = 1 }
 
+# Julia-engine e2e tests share ONE ambient transport file
+# (`~/Library/Caches/quarto/julia/julia_transport.txt`): each test uses
+# `setup_julia_project()` (temp project dir, but NOT a temp HOME), so
+# concurrent `daemon: false` runs each boot their own QNR server and
+# overwrite each other's transport entry — a client then reads a stale
+# entry and fails the socket handshake with "Incorrect HMAC digest" at
+# `isopen`. Observed 2026-07-03 (bd-h4rhohhy P3 verification): rotating
+# victims (j1/j2 on one run, j3/j4 on a clean-machine rerun) confirm an
+# intra-suite race, not any single bad test. Serializing the suite is
+# the config-level fix; full hermetic isolation for the j-tests is
+# tracked separately (they belong to the julia-validation plan).
+julia-shared-transport = { max-threads = 1 }
+
 [[profile.default.overrides]]
 filter = "package(quarto-preview) & binary(integration) & test(/^(staleness|eager_capture|boot)::/)"
 test-group = "quarto-preview-fs-watcher"
+
+[[profile.default.overrides]]
+filter = "package(quarto-core) & binary(integration) & test(/^julia_engine_e2e::/)"
+test-group = "julia-shared-transport"

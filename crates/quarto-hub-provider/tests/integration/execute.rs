@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use automerge::{Automerge, ObjType, ROOT, transaction::Transactable};
 use flate2::read::GzDecoder;
 use quarto_core::engine::{
-    EngineRegistry, ExecuteResult, ExecutionContext, ExecutionEngine, ExecutionError,
+    EngineRegistry, ExecuteResult, ExecutionContext, ExecutionEngine, ExecutionError, LanguageClaim,
 };
 use quarto_hub::index::{CaptureState, IndexDocument};
 use quarto_hub::resource::read_binary_content;
@@ -46,6 +46,14 @@ impl ExecutionEngine for PassthroughEngine {
         let mut out = String::from(input);
         out.push_str("\n<!-- executed by provider -->\n");
         Ok(ExecuteResult::passthrough(&out))
+    }
+
+    fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        if language == "test-passthrough" {
+            LanguageClaim::Primary(1)
+        } else {
+            LanguageClaim::None
+        }
     }
 }
 
@@ -134,7 +142,7 @@ async fn provider_executes_an_allowed_request_and_writes_a_capture() {
         provider_index,
         "provider-actor",
         Arc::new(AlwaysAccept),
-        Some(passthrough_registry()),
+        Some(Arc::new(passthrough_registry())),
     );
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let run_handle = tokio::spawn({
@@ -212,7 +220,7 @@ async fn one_shot_executes_once_and_flushes_to_the_hub() {
         provider_index,
         "provider-actor",
         Arc::new(AlwaysAccept),
-        Some(passthrough_registry()),
+        Some(Arc::new(passthrough_registry())),
     );
 
     // Execute the single document once (no beacon, no request channel).
@@ -278,7 +286,7 @@ async fn rejected_request_writes_no_capture() {
         provider_index,
         "provider-actor",
         Arc::new(AlwaysReject),
-        Some(passthrough_registry()),
+        Some(Arc::new(passthrough_registry())),
     );
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let run_handle = tokio::spawn({

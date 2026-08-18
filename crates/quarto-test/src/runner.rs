@@ -89,6 +89,17 @@ pub fn run_test_file(path: &Path) -> Result<TestResult> {
                 "tests.run.requires_js: true (no JS in CLI runner)".to_string(),
             ));
         }
+
+        // Skip fixtures whose required engine runtime is not installed on
+        // this machine. Under resolution-driven execution a fixture with a
+        // `{python}` cell resolves `jupyter` as the owning engine, and a
+        // registered-but-unavailable owner is a loud render error (P2-12).
+        // That is correct production behavior, but it must not fail the
+        // smoke suite on a machine that simply lacks the runtime — mirror
+        // the `requires_js` gate and skip instead.
+        if let Some(reason) = required_engine_unavailable(&config.requires) {
+            return Ok(TestResult::Skipped(reason));
+        }
     }
 
     // If no test specs, nothing to do
@@ -111,6 +122,33 @@ pub fn run_test_file(path: &Path) -> Result<TestResult> {
     } else {
         Ok(TestResult::Fail(failures))
     }
+}
+
+/// Return a skip reason if any engine named in `requires` has no
+/// available runtime on this machine, otherwise `None`.
+///
+/// Uses the default [`EngineRegistry`], which registers the same
+/// engines (`markdown`, `knitr`, `jupyter`) the render path uses, then
+/// asks each named engine whether its runtime is present via
+/// [`ExecutionEngine::is_available`]. An engine that is either
+/// unregistered or registered-but-unavailable gates the fixture out —
+/// both cases mean the fixture cannot execute here. This is the engine
+/// analog of the `requires_js` gate.
+fn required_engine_unavailable(requires: &[String]) -> Option<String> {
+    if requires.is_empty() {
+        return None;
+    }
+
+    let registry = quarto_core::engine::EngineRegistry::new();
+    for name in requires {
+        let available = registry.get(name).is_some_and(|e| e.is_available());
+        if !available {
+            return Some(format!(
+                "tests.run.requires: '{name}' runtime not available on this machine"
+            ));
+        }
+    }
+    None
 }
 
 /// Run tests for multiple files.

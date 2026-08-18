@@ -21,11 +21,30 @@
 //!         path                  (length-prefixed UTF-8)
 //!         bytes                 (length-prefixed)
 //!   | _quarto.yml bytes         (length-prefixed; empty if absent)
-//!   | for each format-extension contribution, sorted by name:
+//!   | for each extension contribution, sorted by name:
 //!         name                  (length-prefixed UTF-8)
-//!         metadata bytes        (length-prefixed)
+//!         bytes                 (length-prefixed)
 //! )
 //! ```
+//!
+//! ## What `extension_contributions` carries (Plan 6 decision 9)
+//!
+//! The `extension_contributions` slot is a generic `(name, bytes)` list.
+//! Since Plan 6 Phase 5 it carries **engine-extension** `_extension.yml`
+//! raw bytes — one entry per registered engine that came from an
+//! `EngineContribution::External` (built-ins contribute nothing): the
+//! stamped `DocumentProfile.engine_resolution` is a function of the
+//! registry (which engine extensions exist and what `claims:` they
+//! declare), so it must be in the key domain, or editing an extension's
+//! `claims:` — exactly the fix the Phase-5 fall-through warning
+//! recommends — would serve a stale cached profile. See
+//! `orchestrator::pass1_engine_extension_contributions` for how the pairs
+//! are gathered (from `EngineRegistry::engine_extension_provenance`,
+//! re-reading each file's bytes at key-build time).
+//!
+//! Proper *format*-extension metadata hashing (the slot's original,
+//! pre-Phase-5 intent) remains the pre-existing follow-up — see
+//! `claude-notes/plans/2026-04-27-websites-phase-8.md` §"Sub-phase 8.4".
 //!
 //! ## Where transitive includes fit in
 //!
@@ -131,9 +150,12 @@ pub struct Pass1KeyInputs<'a> {
     /// Empty slice when the project has no config file.
     pub quarto_yml_bytes: &'a [u8],
 
-    /// Format-extension contributions, sorted by name. Each entry
-    /// is `(name, raw-metadata-bytes)`. Empty when no extensions
-    /// apply.
+    /// Extension contributions, sorted by name. Each entry is
+    /// `(name, raw-bytes)`. Since Plan 6 Phase 5 this carries
+    /// engine-extension `_extension.yml` bytes (decision 9); proper
+    /// format-extension metadata hashing remains the pre-existing
+    /// follow-up (see the module docs). Empty when no engine
+    /// extensions are registered.
     pub extension_contributions: &'a [(String, Vec<u8>)],
 
     /// Active **project-profile** names in activation order
@@ -403,6 +425,12 @@ mod tests {
         assert_ne!(a, b);
     }
 
+    // `extension_contributions` is a generic `(name, bytes)` slot; these
+    // two tests predate Plan 6 and already exercise it structurally.
+    // Since Phase 5 the slot's real-world content is engine-extension
+    // `_extension.yml` bytes (decision 9) — the two Phase-5-named tests
+    // below pin that specific scenario; the generic tests stay as the
+    // shape-level contract.
     #[test]
     fn key_changes_on_extension_contribution() {
         let a = pass1_key(&minimal_inputs());
@@ -434,6 +462,50 @@ mod tests {
         let mut b = minimal_inputs();
         b.extension_contributions = &order_b;
         assert_ne!(pass1_key(&a), pass1_key(&b));
+    }
+
+    /// Plan 6 decision 9: editing an engine extension's `_extension.yml`
+    /// (e.g. adding `claims:`) must change the key — same doc, same
+    /// engine NAME, different `_extension.yml` bytes.
+    #[test]
+    fn key_changes_on_engine_extension_yml_byte_edit() {
+        let before = vec![(
+            "legacy-python".to_string(),
+            b"title: T\nauthor: A\ncontributes:\n  engines:\n    - path: engine.js\n".to_vec(),
+        )];
+        let after = vec![(
+            "legacy-python".to_string(),
+            b"title: T\nauthor: A\ncontributes:\n  engines:\n    - path: engine.js\n      claims: [python]\n".to_vec(),
+        )];
+        let mut a = minimal_inputs();
+        a.extension_contributions = &before;
+        let mut b = minimal_inputs();
+        b.extension_contributions = &after;
+        assert_ne!(
+            pass1_key(&a),
+            pass1_key(&b),
+            "adding `claims:` to an engine extension's _extension.yml must change the key"
+        );
+    }
+
+    /// Plan 6 decision 9: registering (or removing) a claims-less engine
+    /// extension changes the key even though no doc content changed —
+    /// the stamped `engine_resolution` depends on the registry, not just
+    /// the document.
+    #[test]
+    fn key_changes_on_engine_extension_pair_added_or_removed() {
+        let a = pass1_key(&minimal_inputs());
+        let ext = vec![(
+            "legacy-python".to_string(),
+            b"title: T\nauthor: A\ncontributes:\n  engines:\n    - path: engine.js\n".to_vec(),
+        )];
+        let mut with_engine = minimal_inputs();
+        with_engine.extension_contributions = &ext;
+        let b = pass1_key(&with_engine);
+        assert_ne!(
+            a, b,
+            "registering an engine extension (empty -> one pair) must change the key"
+        );
     }
 
     #[test]

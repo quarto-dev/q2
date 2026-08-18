@@ -1,0 +1,91 @@
+---
+title: "Engine claim on a Quarto-owned file type ignored"
+description: "An engine extension claimed `.qmd`, `.md`, `.markdown`, or an extension-less input. Quarto renders those itself, so the claim is ignored."
+code: Q-2-51
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+  - extensions
+---
+
+# `Q-2-51` — Engine claim on a Quarto-owned file type ignored
+
+> An engine extension said it wanted to handle a markdown file. Quarto
+> handles markdown natively, so the claim is refused and the file is
+> rendered by Quarto's own parser. Nothing is lost — the document still
+> renders.
+
+## What this means
+
+An engine extension can declare the file extensions it wants to convert.
+A Julia engine might claim `.jl`; a Marimo engine might claim `.py`.
+When Quarto meets a file with a claimed extension, it hands the file to
+that engine, which converts it to quarto-markdown before Quarto parses
+it.
+
+Four inputs are **not** available to claim, because Quarto owns them:
+
+| Input | Why |
+|---|---|
+| `.qmd` | Quarto markdown — Quarto's own format. |
+| `.md` | Plain markdown. |
+| `.markdown` | Plain markdown, long spelling. |
+| *(no extension)* | Treated as `.qmd`. |
+
+An engine that claimed one of these would sit *in front of* Quarto's
+parser and decide what your markdown means. That is not a supported
+position for an extension, so Quarto refuses the claim and warns once.
+
+## What Quarto does instead
+
+The file renders normally, exactly as if the extension were not
+installed:
+
+- the content is **not** passed to the engine for conversion;
+- the file is parsed by Quarto's markdown parser;
+- code cells inside it still execute the usual way, chosen by the
+  document's `engine:` key and the languages the cells use.
+
+The rest of the extension is unaffected. If it also claims a language,
+contributes filters, shortcodes, or formats, those all still work.
+
+## How to fix
+
+This is a message for the extension's *author*, not usually for the
+person rendering the document. If you maintain the extension, claim your
+own extension rather than a markdown one:
+
+```typescript
+// engine.ts
+export function claimsFile(file: string, ext: string): boolean {
+  return ext === "myformat";       // good — your own extension
+  // return ext === "md";          // refused: Quarto owns `.md`
+}
+```
+
+If what you actually want is for your engine to run *code cells* inside
+ordinary `.qmd` documents, that is a **language** claim, not a file
+claim — declare it with `claimsLanguage` (or a static `claims:` map in
+`_extension.yml`) and leave `claimsFile` alone:
+
+```yaml
+contributes:
+  engines:
+    - path: myengine.js
+      claims:
+        mylang: primary
+```
+
+Then cells written as ```` ```{mylang} ```` are routed to your engine,
+while the surrounding markdown stays Quarto's.
+
+If you are simply *using* an extension that does this, the document
+renders correctly and you can report the message to the extension's
+author.
+
+## Related
+
+- [`Q-2-40`](Q-2-40.qmd) — an `engine:` spec ignored because the input is
+  a `.md` file, which never executes code.

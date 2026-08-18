@@ -1,0 +1,248 @@
+/**
+ * echo-engine — static, fully-declared TS execution engine fixture.
+ *
+ * Claims the "echo" language and ".echo" file extension.
+ * Used by Task 13 / Task 14 integration tests.
+ */
+
+import type {
+  ExecutionEngineDiscovery,
+  ExecutionEngineInstance,
+  ExecutionTarget,
+  ExecuteOptions,
+  ExecuteResult,
+  DependenciesOptions,
+  DependenciesResult,
+  PostProcessOptions,
+  EngineProjectContext,
+  PartitionedMarkdown,
+  Format,
+  QuartoAPI,
+} from "@quarto/types";
+
+// Stash the QuartoAPI reference set during init().
+let _quarto: QuartoAPI | undefined;
+
+const echoEngine: ExecutionEngineDiscovery = {
+  name: "echo",
+  defaultExt: ".echo",
+  defaultYaml: (_kernel?: string) => [],
+  defaultContent: (_kernel?: string) => [],
+  validExtensions: () => [".echo"],
+  canFreeze: false,
+  generatesFigures: false,
+
+  init(quarto: QuartoAPI): void {
+    _quarto = quarto;
+  },
+
+  claimsLanguage(language: string, _firstClass?: string): boolean | number {
+    return language === "echo";
+  },
+
+  claimsFile(_file: string, ext: string): boolean {
+    return ext === ".echo";
+  },
+
+  launch(context: EngineProjectContext): ExecutionEngineInstance {
+    // P1.1: capture the per-render project context so execute() can echo it
+    // back. This binds the `LaunchEngine { project }` wiring: the value read
+    // here is whatever `TsEngine::set_project` stored before the FIRST launch.
+    const capturedContext = context;
+    const contextMarker = (): string => {
+      // JSON.stringify drops the function members (getOutputDirectory, …), so
+      // echo an EXPLICIT object that CALLS getOutputDirectory() — this carries
+      // the RESOLVED absolute output dir alongside the RAW relative
+      // config.project.outputDir, letting the e2e assert raw-vs-resolved.
+      const echoed = {
+        dir: capturedContext.dir,
+        isSingleFile: capturedContext.isSingleFile,
+        config: capturedContext.config ?? null,
+        outputDir: capturedContext.getOutputDirectory
+          ? capturedContext.getOutputDirectory()
+          : null,
+      };
+      // Emit inside a fenced code block so Pandoc renders it verbatim (no
+      // smart-quoting / escaping of the JSON's double quotes).
+      return (
+        "\n\n```\nCONTEXT_JSON_START" +
+        JSON.stringify(echoed) +
+        "CONTEXT_JSON_END\n```\n"
+      );
+    };
+    // P1.1b: echo the per-execute Format bin (post-`metadataAsFormat`
+    // partition on the host side) so the e2e can assert that merged
+    // document metadata reached the engine. Echoes the whole `execute`
+    // bin (so a non-default binned value like `daemon: false` round-trips)
+    // plus ONE asserted `format.metadata` key — NOT the whole format
+    // object (the brief is explicit: don't dump the whole format).
+    const formatMarker = (opts: ExecuteOptions): string => {
+      const echoed = {
+        execute: opts.format.execute,
+        customKey: (opts.format.metadata as Record<string, unknown>)[
+          "echo-custom-key"
+        ],
+      };
+      return (
+        "\n\n```\nFORMAT_JSON_START" +
+        JSON.stringify(echoed) +
+        "FORMAT_JSON_END\n```\n"
+      );
+    };
+    return {
+      name: "echo",
+      canFreeze: false,
+
+      async markdownForFile(file: string) {
+        // Read the file content and wrap it as an {echo} fenced block,
+        // plus a second {python} cell so the §8 single-engine pass-through
+        // of a non-echo cell is exercised.
+        //
+        // Plan 1c.2 task 2b: prepend a level-1 heading naming the input
+        // file's basename, so a converted-vs-raw-fall-through render is
+        // distinguishable (the raw fixture body carries no heading of its
+        // own -- see the `t8_*` e2e test in echo_engine_e2e.rs).
+        const text = Deno.readTextFileSync(file);
+        const basename = file.split(/[\\/]/).pop() ?? file;
+        const wrapped =
+          "# Echoed: " + basename + "\n\n" +
+          "```{echo}\n" +
+          text +
+          "\n```\n\n" +
+          "```{python}\nprint('not run by echo')\n```\n";
+
+        // MUST use quarto.mappedString.fromString — NOT a bare { value, fileName }
+        // literal.  The harness serializes provenance via segments() and ignores a
+        // bare sourceMap field, making the literal form a silent no-op bug.
+        return _quarto!.mappedString.fromString(wrapped, file);
+      },
+
+      async target(
+        file: string,
+        _quiet?: boolean,
+        markdown?,
+      ): Promise<ExecutionTarget | undefined> {
+        const ms =
+          markdown ?? (await this.markdownForFile(file));
+        return {
+          source: file,
+          input: file,
+          markdown: ms,
+          metadata: {},
+          data: undefined,
+        };
+      },
+
+      async partitionedMarkdown(
+        file: string,
+        _format?: Format,
+      ): Promise<PartitionedMarkdown> {
+        const ms = await this.markdownForFile(file);
+        return {
+          markdown: ms.value,
+          yaml: undefined,
+          headingText: undefined,
+          headingAttr: undefined,
+          containsRefs: false,
+          srcMarkdownNoYaml: ms.value,
+        };
+      },
+
+      async execute(opts: ExecuteOptions): Promise<ExecuteResult> {
+        // Transform only {echo} fenced blocks → an executed-cell wrapper;
+        // leave every other cell (e.g. {python}) untouched (pass-through).
+        //
+        // The output wraps `**ECHO_EXECUTED**` in a `::: {.cell}` Div carrying a
+        // `.cell-output` child — the SAME shape real engines (jupyter/julia via
+        // the engine-host's `mdFromCodeCell`) emit for an executed cell. This is
+        // load-bearing for the q2-preview capture-splice path: the splice
+        // (`derive_cell_outputs` / `is_cell_wrapper`) maps each engine cell to
+        // the next `.cell` wrapper in the executed markdown. A bare paragraph
+        // (the fixture's earlier shape) has no wrapper, so the splice can't
+        // match it and the preview pane stays inert (bd-h4rhohhy / Bug B).
+        const input = opts.target.markdown.value;
+
+        // plan1a.6 Phase 3, seam #6a (stdout garbage harmless over TCP):
+        // sentinel-gated raw-stdout-garbage branch for
+        // echo_engine_e2e.rs's p3_6a_stdout_garbage_harmless. Fires ONLY
+        // when the document body carries the sentinel -- none of the other
+        // echo E2E fixtures use it. Writes 20 lines of a known NON-JSON
+        // marker directly to the stdout fd (bypassing the protocol framing
+        // entirely), then FALLS THROUGH to the normal transform -- unlike
+        // QUARTO_ECHO_CRASH above, this branch must NOT exit, because the
+        // point of the test is that the render still succeeds. Under the
+        // flipped TCP transport (production today) this garbage never
+        // touches the protocol channel; it is drained by `stdout_loop` and
+        // forwarded to `tracing` as harmless `engine_host`-target INFO
+        // events. 20 lines is deliberate: it is comfortably above the
+        // demux reader's MAX_CONSECUTIVE_MALFORMED_LINES=5 leniency, so a
+        // reverted (stdio-transport) build would escalate->kill on this
+        // input instead of silently tolerating a single stray line.
+        if (input.includes("QUARTO_ECHO_STDOUT_GARBAGE")) {
+          const enc = new TextEncoder();
+          for (let i = 0; i < 20; i++) {
+            Deno.stdout.writeSync(
+              enc.encode(`ECHO_STDOUT_GARBAGE_MARKER not-json line ${i}\n`),
+            );
+          }
+        }
+
+        // plan1a.6 Phase 3, seam #7 (console.log harmless over TCP):
+        // sentinel-gated `console.log` branch for
+        // echo_engine_e2e.rs's p3_7_console_log_harmless. Same shape and
+        // rationale as the #6a branch just above -- `console.log` writes to
+        // stdout too, which is exactly why it's harmless under the TCP
+        // transport (drained by `stdout_loop`) and dangerous under stdio
+        // (interleaves with protocol frames). 20 lines for the same
+        // above-leniency-threshold reason.
+        if (input.includes("QUARTO_ECHO_CONSOLE_LOG")) {
+          for (let i = 0; i < 20; i++) {
+            console.log(`ECHO_CONSOLE_LOG_MARK line ${i}`);
+          }
+        }
+
+        // T13 (plan 1c.2 P4, OPTIONAL): sentinel-gated crash branch for the
+        // real-process crash-path e2e (echo_engine_e2e.rs's
+        // t13_crash_mid_execute_yields_process_crashed_with_stderr). Fires
+        // ONLY when the document body carries the sentinel -- none of the
+        // other 9 echo E2E fixtures use it, so this branch is dead code for
+        // them. Writes an identifiable marker to stderr, THEN crashes via
+        // Deno.exit(1) BEFORE returning any ExecuteResult, i.e. mid-execute
+        // while the request is still in flight on the demux -- exercising
+        // the engine-host's reader-thread EOF -> ProcessCrashed broadcast
+        // path against a real Deno subprocess.
+        if (input.includes("QUARTO_ECHO_CRASH")) {
+          console.error(
+            "ECHO_CRASH_MARKER: intentional crash for T13 crash-path e2e",
+          );
+          Deno.exit(1);
+        }
+
+        const executed = input.replace(
+          /```\{echo\}[\s\S]*?```/g,
+          "::: {.cell}\n::: {.cell-output .cell-output-stdout}\n" +
+            "**ECHO_EXECUTED**\n:::\n:::",
+        );
+        return {
+          markdown: executed + contextMarker() + formatMarker(opts),
+          supporting: [],
+          filters: [],
+        };
+      },
+
+      async dependencies(
+        _opts: DependenciesOptions,
+      ): Promise<DependenciesResult> {
+        return {
+          includes: {},
+        };
+      },
+
+      async postprocess(_opts: PostProcessOptions): Promise<void> {
+        // nothing to do
+      },
+    };
+  },
+};
+
+export default echoEngine;

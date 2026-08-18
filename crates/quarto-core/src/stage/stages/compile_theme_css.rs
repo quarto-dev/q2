@@ -1022,6 +1022,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1041,6 +1043,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::from_format_string("q2-slides").unwrap();
@@ -1840,6 +1844,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from(project_dir),
+
+            ..Default::default()
         };
         let doc_path = format!("{}/test.qmd", project_dir);
         let doc = DocumentInfo::from_path(&doc_path);

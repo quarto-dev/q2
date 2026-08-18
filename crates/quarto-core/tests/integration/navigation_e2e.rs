@@ -53,6 +53,8 @@ fn make_test_project() -> ProjectContext {
         is_single_file: true,
         files: vec![DocumentInfo::from_path("/project/doc.qmd")],
         output_dir: PathBuf::from("/project"),
+
+        ..Default::default()
     }
 }
 

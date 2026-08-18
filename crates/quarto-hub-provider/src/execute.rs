@@ -80,9 +80,10 @@ pub struct Provider {
     /// Operator consent, consulted before every engine run.
     consent: Arc<dyn ConsentGate>,
     /// Engine registry override for the capture run. `None` in production (the
-    /// default registry); tests pass a passthrough engine. `Clone` is cheap
-    /// (engines are `Arc`ed) so each run gets its own copy.
-    registry: Option<EngineRegistry>,
+    /// default registry); tests pass a passthrough engine. The registry is
+    /// itself `Arc`-wrapped (ts-engine-extensions Arc migration) so cloning the
+    /// handle for each run is cheap and shares one registry instance.
+    registry: Option<Arc<EngineRegistry>>,
     /// Paths currently executing, to collapse a duplicate request for a path
     /// already in flight (mirrors `re_execute.rs`'s `IN_FLIGHT`).
     in_flight: Mutex<HashSet<String>>,
@@ -95,7 +96,7 @@ impl Provider {
         index: IndexDocument,
         self_actor_id: impl Into<String>,
         consent: Arc<dyn ConsentGate>,
-        registry: Option<EngineRegistry>,
+        registry: Option<Arc<EngineRegistry>>,
     ) -> Arc<Self> {
         let probe = registry.clone().unwrap_or_default();
         let engines = available_engines(&probe);

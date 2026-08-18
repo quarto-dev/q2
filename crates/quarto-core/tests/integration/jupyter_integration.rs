@@ -235,6 +235,8 @@ fn make_test_project() -> ProjectContext {
             std::env::current_dir().unwrap().join("test.qmd"),
         )],
         output_dir: std::env::current_dir().unwrap(),
+
+        ..Default::default()
     }
 }
 

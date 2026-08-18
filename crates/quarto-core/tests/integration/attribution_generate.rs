@@ -36,6 +36,8 @@ fn make_project(dir: &std::path::Path) -> ProjectContext {
         is_single_file: true,
         files: vec![DocumentInfo::from_path(dir.join("test.qmd"))],
         output_dir: dir.to_path_buf(),
+
+        ..Default::default()
     }
 }
 

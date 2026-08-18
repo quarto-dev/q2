@@ -46,13 +46,17 @@ pub mod llms_post_render;
 pub mod website_post_render;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use quarto_brand::ResolvedBrand;
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::config_value::ConfigValueKind;
 use quarto_system_runtime::SystemRuntime;
 
+use crate::engine::EngineRegistry;
 use crate::error::{QuartoError, Result};
+use crate::extension::Extension;
+use crate::render::BinaryDependencies;
 
 /// Default output directory for a project when `project.output-dir`
 /// is unset.
@@ -1179,8 +1183,593 @@ impl DocumentInfo {
     }
 }
 
+// ── Engine registry construction ──────────────────────────────────────────────
+
+/// Returns `true` if any extension contributes an `External` engine (i.e.
+/// requires a `TsEngineHost` to be constructed).
+///
+/// A `Reorder`-only or empty extension list returns `false`, which means
+/// `build_engine_registry` can skip the IO-creating `quarto_runtime_dir()` /
+/// `quarto_data_dir()` calls entirely — restoring the pre-Task-7b behavior for
+/// the common single-file / no-extension case.
+#[cfg(not(target_arch = "wasm32"))]
+fn any_external_engine(extensions: &[Extension]) -> bool {
+    use crate::extension::types::EngineContribution;
+    extensions.iter().any(|e| {
+        e.contributes
+            .engines
+            .iter()
+            .any(|c| matches!(c, EngineContribution::External { .. }))
+    })
+}
+
+/// Lower a project-config [`ConfigValue`] subtree to its wire
+/// [`TsMetadataValue`](crate::engine::ts_protocol::TsMetadataValue) mirror
+/// (a plain JSON value).
+///
+/// - maps/arrays recurse (map keys stringified),
+/// - bool / integer / float / null scalars map directly,
+/// - every string-like value (`Scalar(String)`, `Path`, `Glob`, `Expr`, and
+///   `PandocInlines`) goes through [`ConfigValue::as_plain_text`] — the
+///   metadata-as-str lint lesson: a bare front-matter string can be stored as
+///   `PandocInlines`, for which `as_str()` returns `None`.
+///
+/// Source info is dropped. Invoked on the `engines` subtree by
+/// [`build_engine_config_map`] (DQ-5) and over the full merged document
+/// metadata by [`document_metadata_to_ts_map`] (Plan 1c.2 P1.1b).
+#[cfg(not(target_arch = "wasm32"))]
+fn config_value_to_ts_metadata(cv: &ConfigValue) -> crate::engine::ts_protocol::TsMetadataValue {
+    use crate::engine::ts_protocol::TsMetadataValue;
+    use yaml_rust2::Yaml;
+
+    if let Some(entries) = cv.as_map_entries() {
+        let mut map = std::collections::HashMap::new();
+        for entry in entries {
+            map.insert(entry.key.clone(), config_value_to_ts_metadata(&entry.value));
+        }
+        return TsMetadataValue::Map(map);
+    }
+    if let Some(items) = cv.as_array() {
+        return TsMetadataValue::Array(items.iter().map(config_value_to_ts_metadata).collect());
+    }
+    match cv.as_yaml() {
+        Some(Yaml::Boolean(b)) => return TsMetadataValue::Bool(*b),
+        Some(Yaml::Integer(i)) => return TsMetadataValue::Number(*i as f64),
+        Some(Yaml::Real(r)) => {
+            if let Ok(f) = r.parse::<f64>() {
+                return TsMetadataValue::Number(f);
+            }
+        }
+        Some(Yaml::Null) => return TsMetadataValue::Null,
+        _ => {}
+    }
+    // String-like: Scalar(String), Path, Glob, Expr, PandocInlines.
+    match cv.as_plain_text() {
+        Some(s) => TsMetadataValue::String(s),
+        None => TsMetadataValue::Null,
+    }
+}
+
+/// Flatten a document's merged metadata (e.g. `doc_ast.ast.meta` — always a
+/// top-level mapping) into the wire's flat `Record<string, TsMetadataValue>`
+/// shape used by `TsFormatInfo.metadata` (P1.1b — the execute-options half of
+/// DQ-5's metadata threading; distinct from [`build_engine_config_map`],
+/// which populates the launch-time `config`).
+///
+/// Reuses [`config_value_to_ts_metadata`] — the same recursive lowering P1.1
+/// built for the `engines` subtree — over the FULL merged map, and unwraps
+/// its top-level `Map` variant; non-mapping input (shouldn't occur for
+/// document metadata) degrades to an empty map rather than panicking.
+///
+/// Callable from any target: `ExecutionContext.metadata` (the field this
+/// feeds) is not itself wasm-gated — only the TS-engine *consumer*
+/// (`TsEngine::build_execute_options`) is native-only. On wasm32 there is no
+/// TS engine to consume the value, so this returns an empty map without
+/// invoking the native-only converter.
+pub(crate) fn document_metadata_to_ts_map(
+    meta: &ConfigValue,
+) -> std::collections::HashMap<String, crate::engine::ts_protocol::TsMetadataValue> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        match config_value_to_ts_metadata(meta) {
+            crate::engine::ts_protocol::TsMetadataValue::Map(m) => m,
+            _ => std::collections::HashMap::new(),
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = meta;
+        std::collections::HashMap::new()
+    }
+}
+
+/// Build the wire `config` map carried on `LaunchEngine.project` (DQ-5).
+///
+/// Returns `None` when the project has no parsed metadata (single-file renders
+/// use `ProjectConfig::default()`, matching Q1's `context.config ? … :
+/// undefined`). Otherwise builds `{ "engines": Array(…), "output-dir":
+/// String(…) }`, **omitting** a key when its source is absent:
+/// - `engines` ← `metadata.get("engines")` lowered via
+///   [`config_value_to_ts_metadata`] (the only ConfigValue lowering),
+/// - `output-dir` ← the RAW relative typed `ProjectConfig.output_dir`.
+///
+/// # Wire shape note (top-level `output-dir`, not nested under `project`)
+///
+/// The engine-host-deno harness's `reconstructRichProject` reads a
+/// **top-level** `config["output-dir"]` (or `config["outputDir"]`) and *bridges*
+/// it into the rich Q1 `EngineProjectContext.config.project.outputDir` the
+/// engine actually sees. So the wire carries `output-dir` flat; the host
+/// produces the nested `project.outputDir` on the engine side. (This differs
+/// from Plan 1c.2's "Shape: `project: { output-dir }`" prose and the wire-spec
+/// interface annotation, which describe the *rich* nesting; the shipped host is
+/// the authoritative consumer. See the P1.1 report for the discrepancy.)
+#[cfg(not(target_arch = "wasm32"))]
+fn build_engine_config_map(
+    config: &ProjectConfig,
+) -> Option<std::collections::HashMap<String, crate::engine::ts_protocol::TsMetadataValue>> {
+    use crate::engine::ts_protocol::TsMetadataValue;
+
+    let metadata = config.metadata.as_ref()?;
+    let mut map = std::collections::HashMap::new();
+
+    // Q1 types `engines` as `string[]`. Map-form entries (Plan 6's claim
+    // tables) are legal Rust-side now, but the wire only needs the ORDERING
+    // name — lower to names only via the shared `engine_entry_name`: strings
+    // pass through, a single-key map contributes its key, `path:`-maps are
+    // skipped (no name known Rust-side until Plan 4b's external-engine work).
+    if let Some(engines) = metadata.get("engines").and_then(|v| v.as_array()) {
+        let names: Vec<TsMetadataValue> = engines
+            .iter()
+            .filter_map(engine_entry_name)
+            .map(TsMetadataValue::String)
+            .collect();
+        map.insert("engines".to_string(), TsMetadataValue::Array(names));
+    }
+
+    if let Some(output_dir) = &config.output_dir {
+        map.insert(
+            "output-dir".to_string(),
+            TsMetadataValue::String(output_dir.to_string_lossy().into_owned()),
+        );
+    }
+
+    Some(map)
+}
+
+/// Extract the ordering name (if any) from one project `_quarto.yml`
+/// `engines:` list entry (Plan 6 design contract `engine-and-engines-keys.md`).
+///
+/// The plural, project-level `engines:` key is Q1-compatible: entries come
+/// in THREE forms, only two of which contribute an ordering entry:
+///
+/// - **string** (`knitr`) — a bare ordering entry → `Some(name)`.
+/// - **`{path: …}` map** — Q1's external-engine loader. RESERVED / SKIPPED by
+///   q2 (engines arrive via `_extensions/` discovery instead) — contributes
+///   NO ordering entry and must never error → `None`.
+/// - **`{<name>: {claims: …}}` single-key map** — Plan 6's claim-table entry.
+///   Its KEY is the engine name, so it ALSO contributes an ordering entry;
+///   the payload is Plan 6's and is ignored here → `Some(name)`.
+///
+/// Shared by the project `engines:` ordering splice
+/// ([`build_engine_registry`]'s Task-9 site, native-only) and Plan 6's
+/// claim-table reader (`engine::resolution`, WASM-compatible) — keep this the
+/// single source of entry-name parsing so Plan 6 does not need a second one.
+/// `pub(crate)` and NOT wasm-gated: the body has no native dependencies (pure
+/// `ConfigValue` traversal), and `engine::resolution` — which is documented
+/// WASM-compatible — calls it unconditionally.
+pub(crate) fn engine_entry_name(entry: &ConfigValue) -> Option<String> {
+    // String form: `- knitr`.
+    if let Some(name) = entry.as_plain_text() {
+        return Some(name);
+    }
+    // Map forms: distinguish `{path: …}` (reserved/skipped) from
+    // `{<name>: {claims: …}}` (single-key map; key IS the name).
+    if let Some(entries) = entry.as_map_entries() {
+        if entries.iter().any(|e| e.key == "path") {
+            return None;
+        }
+        if let [only] = entries {
+            return Some(only.key.clone());
+        }
+    }
+    None
+}
+
+/// Compute the set of project `engines:` entry names that carry a `claims`
+/// table (Plan 6 Phase 3/5) — the single-key-map entries whose payload has a
+/// `claims` key, via the shared [`engine_entry_name`] parser. Empty when the
+/// project has no `engines:` key, or none of its entries table anything.
+/// Stashed on [`ProjectContext::tabled_engines`] for Phase 5's warning, which
+/// needs to tell "untabled, claims-less engine" apart from "deliberately
+/// tabled" when deciding whether a Pass-1 fall-through is actionable.
+fn tabled_engine_names(config: Option<&ProjectConfig>) -> std::collections::HashSet<String> {
+    let Some(engines) = config
+        .and_then(|c| c.metadata.as_ref())
+        .and_then(|m| m.get("engines"))
+        .and_then(|e| e.as_array())
+    else {
+        return std::collections::HashSet::new();
+    };
+    engines
+        .iter()
+        .filter_map(|entry| {
+            let name = engine_entry_name(entry)?;
+            entry.get(&name)?.get("claims")?;
+            Some(name)
+        })
+        .collect()
+}
+
+/// Build the project's engine registry: built-ins + every extension-contributed
+/// engine, plus the shared `TsEngineHost` (constructed lazily — only when at
+/// least one `External` engine contribution is present).
+///
+/// Errors on: missing .js bundle, name collision, or a `Reorder` hint naming an
+/// unregistered engine.
+///
+/// Native-only: `TsEngine` / `TsEngineHost` are not available on wasm32.
+#[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::too_many_arguments)]
+fn build_engine_registry(
+    extensions: &[Extension],
+    project_dir: Option<&Path>,
+    is_single_file: bool,
+    output_dir: &Path,
+    config: Option<&ProjectConfig>,
+    binary_dependencies: &BinaryDependencies,
+    runtime: &dyn SystemRuntime,
+) -> Result<Arc<EngineRegistry>> {
+    use std::collections::{HashMap, HashSet};
+
+    use crate::engine::TsEngine;
+    use crate::engine::ts_process::TsEngineHost;
+    use crate::engine::ts_protocol::{EngineProjectContext, HostGlobalConfig};
+    use crate::extension::BUILTIN_EXTENSIONS;
+    use crate::extension::types::{EngineContribution, engine_contribution_static_claims_warning};
+
+    // ── Per-render project context (P1.1 / DQ-5) ─────────────────────────────
+    // Built once from the ProjectContext fields the caller resolved and set on
+    // every TsEngine at construction (the concrete type is erased at
+    // registry.register, so the TsEngine::new site is the dominating write
+    // point). First-write-wins: launch caches make any later write inert.
+    let engine_project_context = EngineProjectContext {
+        project_dir: project_dir.map(|p| p.to_string_lossy().into_owned()),
+        is_single_file,
+        output_dir: Some(output_dir.to_string_lossy().into_owned()),
+        config: config.and_then(build_engine_config_map),
+    };
+
+    // ── Needs-host check ──────────────────────────────────────────────────────
+    // Skip HostGlobalConfig / TsEngineHost construction — and the directory-
+    // creating quarto_runtime_dir() / quarto_data_dir() calls they imply — when
+    // no extension contributes an External engine. A Reorder hint alone only
+    // references an existing built-in and is validated in step 6 without a host.
+    let needs_host = any_external_engine(extensions);
+
+    // ── Step 1: Built-ins registry (markdown / knitr / jupyter) ──────────────
+    let mut registry = EngineRegistry::new();
+
+    // Track key → contributor label for collision detection.
+    let mut key_to_contributor: HashMap<String, String> = {
+        let mut m = HashMap::new();
+        m.insert("markdown".to_string(), "built-in".to_string());
+        m.insert("knitr".to_string(), "built-in".to_string());
+        m.insert("jupyter".to_string(), "built-in".to_string());
+        m
+    };
+
+    let mut order: Vec<String> = Vec::new();
+
+    if needs_host {
+        // ── Step 2: Build the process-stable HostGlobalConfig ────────────────
+        let resource_dir = BUILTIN_EXTENSIONS
+            .path()
+            .ok()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+
+        let runtime_dir = quarto_util::quarto_runtime_dir()
+            .map_err(|e| QuartoError::Other(format!("failed to locate Quarto runtime dir: {}", e)))?
+            .display()
+            .to_string();
+
+        let data_dir = quarto_util::quarto_data_dir()
+            .map_err(|e| QuartoError::Other(format!("failed to locate Quarto data dir: {}", e)))?
+            .display()
+            .to_string();
+
+        let pandoc_path = binary_dependencies
+            .pandoc
+            .as_ref()
+            .map(|p| p.display().to_string());
+
+        let global = HostGlobalConfig {
+            resource_dir,
+            runtime_dir,
+            data_dir,
+            pandoc_path,
+            is_interactive_session: runtime.is_interactive(),
+            running_in_ci: runtime.running_in_ci(),
+            quarto_version: crate::version().to_string(),
+        };
+
+        // ── Step 3: Build the shared host (NOT spawned; first round-trip spawns) ──
+        let host = Arc::new(TsEngineHost::new(global));
+
+        // ── Step 4: Process each extension's engine contributions ─────────────────
+        for ext in extensions {
+            let ext_label = ext.id.to_string();
+
+            for contribution in &ext.contributes.engines {
+                match contribution {
+                    // Reorder hint: record in order list, do NOT register
+                    EngineContribution::Reorder { name } => {
+                        order.push(name.clone());
+                    }
+
+                    EngineContribution::External {
+                        path,
+                        extension_yml_path,
+                        name,
+                        claims,
+                        file_extensions,
+                        claims_files,
+                    } => {
+                        // Step 4a: Bundle-exists check
+                        if !path.exists() {
+                            return Err(QuartoError::Other(format!(
+                                "Engine extension '{}' has no bundled .js file at {}. \
+                                Run 'q2 call build-ts-extension' in {} to build it.",
+                                ext_label,
+                                path.display(),
+                                ext.path.display()
+                            )));
+                        }
+
+                        // Step 4b: Registry key and name_declared flag
+                        let key = name.clone().unwrap_or_else(|| ext.id.to_string());
+                        let name_declared = name.is_some();
+
+                        // Step 4c: Collision check (P1-4)
+                        if registry.has_engine(&key) {
+                            let prev = key_to_contributor
+                                .get(&key)
+                                .map_or("unknown", |s| s.as_str());
+                            return Err(QuartoError::Other(format!(
+                                "Engine name collision: both '{}' and '{}' register engine '{}'. \
+                                Engine names must be unique.",
+                                prev, ext_label, key
+                            )));
+                        }
+
+                        // Step 4d: Construct TsEngine and register
+                        let engine = TsEngine::new(
+                            key.clone(),
+                            name_declared,
+                            path.clone(),
+                            Arc::clone(&host),
+                            claims.clone(),
+                            file_extensions.clone(),
+                            claims_files.clone(),
+                            ext.id.clone(),
+                            registry.aliases.clone(),
+                            registry.diagnostics.clone(),
+                        );
+                        // P1.1: thread the per-render project context in before the
+                        // engine is launched. Construction time is the dominating
+                        // write point — the registry erases the concrete type at
+                        // `register`, and launch caches make later writes inert.
+                        engine.set_project(engine_project_context.clone());
+                        // Plan 6 Phase 5: record the contributing extension's
+                        // `_extension.yml` path for the fall-through warning
+                        // and the Pass-1 cache key.
+                        engine.set_extension_yml_path(extension_yml_path.clone());
+                        registry.register(Arc::new(engine));
+                        key_to_contributor.insert(key.clone(), ext_label.clone());
+
+                        // External engines push their name into the user-specified order.
+                        order.push(key.clone());
+
+                        // Step 4e: Q-16-10 — engine still claims dynamically.
+                        // Drained into `project_diagnostics` at end of render
+                        // by `ProjectPipeline::run_inner` (bd-exhbc6h8).
+                        if let Some(w) =
+                            engine_contribution_static_claims_warning(&ext_label, contribution)
+                        {
+                            registry.diagnostics.lock().unwrap().push(w);
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // No External contributions. Collect only Reorder hints into the order
+        // vec. No host construction, no subprocess, no quarto_runtime_dir() /
+        // quarto_data_dir() IO — zero additional disk operations vs. pre-Task-7b.
+        for ext in extensions {
+            for contribution in &ext.contributes.engines {
+                if let EngineContribution::Reorder { name } = contribution {
+                    order.push(name.clone());
+                }
+            }
+        }
+    }
+
+    // ── Step 5: Set contribution_order (dedup, first-occurrence wins) ─────────
+    let mut seen = HashSet::new();
+    registry.contribution_order = order
+        .into_iter()
+        .filter(|n| seen.insert(n.clone()))
+        .collect();
+
+    // ── Task 9 / Plan 4b-C: splice project `_quarto.yml` `engines:` list ─────
+    // Q1 ordering semantics: user-declared project entries win the tiebreak —
+    // prepend their (deduped, in listed order) names ahead of the
+    // extension-contributed order already in `registry.contribution_order`,
+    // so they take effect BEFORE extension auto-promotion. All three grammar
+    // forms are parsed via `engine_entry_name` (Plan 6 reuses it). The
+    // prepended names re-enter the SAME step-6 validation below as any other
+    // contribution_order entry — the single validation site Plan 6 relies on,
+    // no second check needed here.
+    if let Some(project_engines) = config
+        .and_then(|c| c.metadata.as_ref())
+        .and_then(|m| m.get("engines"))
+        .and_then(|e| e.as_array())
+    {
+        let project_names: Vec<String> = project_engines
+            .iter()
+            .filter_map(engine_entry_name)
+            .collect();
+
+        let mut combined: Vec<String> = project_names;
+        combined.extend(registry.contribution_order.iter().cloned());
+        let mut seen = HashSet::new();
+        registry.contribution_order = combined
+            .into_iter()
+            .filter(|n| seen.insert(n.clone()))
+            .collect();
+    }
+
+    // ── Step 6: Validate every name in contribution_order is registered (P1-3) ─
+    for name in &registry.contribution_order {
+        if !registry.has_engine(name) {
+            let mut available = registry.engine_names();
+            available.sort_unstable();
+            return Err(QuartoError::Other(format!(
+                "'{}' was specified in the list of engines but it is not a valid engine. \
+                Available engines are: {}",
+                name,
+                available.join(", ")
+            )));
+        }
+    }
+
+    // ── Step 7: Return ────────────────────────────────────────────────────────
+    // `registry.diagnostics` is drained by `ProjectPipeline::run_inner` at END
+    // of render, not here: engines also push into it *during* Pass 1 / Pass 2
+    // (e.g. Q-16-12 load failures), so an init-time drain would miss them.
+    Ok(Arc::new(registry))
+}
+
+/// Discover extensions -- the cheap, host-free parse half of the old
+/// `discover_extensions_and_build_registry` (Corollary-0 split, plan 1c.2
+/// task 2b). Split out so `ProjectContext::discover`'s walk can consult
+/// contributed engine claims-files (via `RenderableExtensions::new`) BEFORE
+/// walking, instead of after.
+///
+/// Returns the intake diagnostics alongside the extensions (main's
+/// `discover_extensions` gained them with the Q1-compat intake relaxation,
+/// bd-8b0af414). The caller folds them into `ProjectConfig::config_diagnostics`
+/// so a malformed `_extension.yml` is still reported even though this half of
+/// the split runs before the config is finalized.
+fn discover_extensions_only(
+    discovery_anchor: &Path,
+    project_dir: Option<&Path>,
+    runtime: &dyn SystemRuntime,
+) -> (
+    Vec<Extension>,
+    Vec<quarto_error_reporting::DiagnosticMessage>,
+) {
+    // Builtin extensions dir — present on native, irrelevant on WASM (VFS path).
+    #[cfg(not(target_arch = "wasm32"))]
+    let builtin_dir = crate::extension::BUILTIN_EXTENSIONS
+        .path()
+        .ok()
+        .map(|p| p.to_path_buf());
+    #[cfg(target_arch = "wasm32")]
+    let builtin_dir: Option<PathBuf> = None;
+
+    crate::extension::discover_extensions(
+        discovery_anchor,
+        project_dir,
+        builtin_dir.as_deref(),
+        runtime,
+    )
+}
+
+/// Build the engine registry from already-discovered extensions -- the
+/// host-touching finalize half of the old `discover_extensions_and_build_registry`
+/// (Corollary-0 split, plan 1c.2 task 2b). Internally unchanged: still calls
+/// `build_engine_registry`, preserving P1.1's `set_project` threading
+/// (`build_engine_registry` -> `EngineProjectContext` -> `TsEngine::set_project`).
+#[allow(clippy::too_many_arguments)]
+fn build_registry(
+    extensions: &[Extension],
+    project_dir: Option<&Path>,
+    is_single_file: bool,
+    output_dir: &Path,
+    config: Option<&ProjectConfig>,
+    binary_dependencies: &BinaryDependencies,
+    runtime: &dyn SystemRuntime,
+) -> Result<Arc<EngineRegistry>> {
+    #[cfg(not(target_arch = "wasm32"))]
+    let registry = build_engine_registry(
+        extensions,
+        project_dir,
+        is_single_file,
+        output_dir,
+        config,
+        binary_dependencies,
+        runtime,
+    )?;
+    #[cfg(target_arch = "wasm32")]
+    let registry = {
+        // WASM has no subprocess engine host, so binary_dependencies (used only
+        // to build the host's global config on native) is unused here — and the
+        // per-render project-context fields (plus the parsed `extensions`, which
+        // only `build_engine_registry` consumes on native) are inert here too.
+        let _ = (
+            extensions,
+            project_dir,
+            is_single_file,
+            output_dir,
+            config,
+            binary_dependencies,
+            runtime,
+        );
+        Arc::new(EngineRegistry::new())
+    };
+
+    Ok(registry)
+}
+
+/// Discover extensions and build the engine registry in one step.
+///
+/// Thin wrapper over [`discover_extensions_only`] + [`build_registry`],
+/// kept for `ProjectContext::single_file` -- which has no walk to interleave
+/// between the two halves, so the pre-2b one-step shape stays behaviorally
+/// identical. `ProjectContext::discover` calls the two halves directly
+/// (task 2b) so its walk can run between them.
+#[allow(clippy::too_many_arguments)]
+fn discover_extensions_and_build_registry(
+    discovery_anchor: &Path,
+    project_dir: Option<&Path>,
+    is_single_file: bool,
+    output_dir: &Path,
+    config: Option<&ProjectConfig>,
+    binary_dependencies: &BinaryDependencies,
+    runtime: &dyn SystemRuntime,
+) -> Result<(Vec<Extension>, Arc<EngineRegistry>)> {
+    // This wrapper has no diagnostic sink of its own; `ProjectContext::discover`
+    // is the path that surfaces intake diagnostics (see the call there).
+    let (extensions, _intake_diagnostics) =
+        discover_extensions_only(discovery_anchor, project_dir, runtime);
+    let registry = build_registry(
+        &extensions,
+        project_dir,
+        is_single_file,
+        output_dir,
+        config,
+        binary_dependencies,
+        runtime,
+    )?;
+    Ok((extensions, registry))
+}
+
+// ── Project context ────────────────────────────────────────────────────────────
+
 /// Project context for rendering
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ProjectContext {
     /// Project root directory (directory containing `_quarto.yml`, or input file directory)
     pub dir: PathBuf,
@@ -1199,6 +1788,25 @@ pub struct ProjectContext {
 
     /// Output directory (resolved, absolute path)
     pub output_dir: PathBuf,
+
+    /// Engine registry built once at project construction (built-ins now; Task 7b adds
+    /// extension engines). Shared via `Arc` so per-file `StageContext` clones are cheap.
+    pub registry: Arc<EngineRegistry>,
+
+    /// Extensions discovered at the project level (Task 7b uses these to build the registry;
+    /// hoisted from per-document discovery in a later task).
+    pub extensions: Vec<Extension>,
+
+    /// Discovered binary dependencies (pandoc/dart-sass/esbuild). Task 7b reads `pandoc` for the
+    /// engine host's global config.
+    pub binary_dependencies: BinaryDependencies,
+
+    /// Names of project-level `engines:` entries that carry a `claims` table
+    /// (Plan 6 Phase 3). Consumed by Phase 5's index-pass warning to tell
+    /// "this engine is untabled and claims-less" apart from "this engine was
+    /// deliberately given a table" when deciding whether a fall-through is
+    /// actionable. Empty when the project has no `engines:` key (default).
+    pub tabled_engines: std::collections::HashSet<String>,
 }
 
 /// What [`ProjectContext::apply_project_profiles`] resolved: the
@@ -1321,6 +1929,27 @@ impl ProjectContext {
                 |o| dir.join(o),
             );
 
+        // Capture single-file input path for extension discovery before it's consumed below.
+        let single_file_input = input_file.clone();
+
+        // Anchor for `discover_extensions`:
+        // - single-file: use the actual input file so start_dir = its parent.
+        // - project: use `dir/_quarto.yml` so start_dir = dir (searches dir/_extensions).
+        let discovery_anchor: PathBuf = if is_single_file {
+            single_file_input.unwrap_or_else(|| dir.clone())
+        } else {
+            dir.join("_quarto.yml")
+        };
+        let project_dir_for_extensions: Option<&Path> =
+            if is_single_file { None } else { Some(&dir) };
+
+        // 2b (Corollary-0 split): parse extensions BEFORE the walk, so the
+        // walk can consult contributed engine claims-files via
+        // `RenderableExtensions`. The registry (host-touching half) still
+        // builds AFTER the walk, unchanged in shape from pre-2b.
+        let (extensions, extension_intake_diagnostics) =
+            discover_extensions_only(&discovery_anchor, project_dir_for_extensions, runtime);
+
         // Build file list
         let files = if let Some(input) = input_file {
             vec![DocumentInfo::from_path(input)]
@@ -1331,10 +1960,24 @@ impl ProjectContext {
                 .as_ref()
                 .map(|c| c.render_patterns.clone())
                 .unwrap_or_default();
+            // 2b: real FIXED_RENDERABLE union of engine claims-files
+            // extensions, computed from the extensions parsed above.
+            // Target-agnostic by construction: on WASM, `discover_extensions`
+            // naturally yields fewer/no External engines (no subprocess
+            // engine host there), so `claimed_file_extensions` returns `[]`
+            // for those and this degrades to `{qmd}` without a wasm #[cfg]
+            // branch of its own.
+            let renderable_extensions = discovery::RenderableExtensions::new(
+                extensions
+                    .iter()
+                    .flat_map(|e| &e.contributes.engines)
+                    .flat_map(crate::extension::types::claimed_file_extensions),
+            );
             let discovery_cfg = discovery::DiscoveryConfig {
                 project_dir: &dir,
                 output_dir: &output_dir,
                 render_patterns: &render_patterns,
+                renderable_extensions: &renderable_extensions,
             };
             let paths = discovery::discover_project_files(&discovery_cfg, runtime)?;
             paths.into_iter().map(DocumentInfo::from_path).collect()
@@ -1379,12 +2022,45 @@ impl ProjectContext {
             }
         };
 
+        // Surface the extension-intake diagnostics produced by the pre-walk
+        // half of the Corollary-0 split. `discover_extensions` gained these
+        // with the Q1-compat intake relaxation (bd-8b0af414); on main the
+        // only caller was `StageContext`, which folds them into its startup
+        // diagnostics. This path runs earlier (before the config exists), so
+        // they are appended here instead — dropping them would silently lose
+        // every malformed-`_extension.yml` report under a project render.
+        let mut config = config;
+        config
+            .config_diagnostics
+            .extend(extension_intake_diagnostics);
+
+        let binary_dependencies = BinaryDependencies::discover(runtime);
+        // `config` is no longer an `Option` at this point (main rebound it
+        // just above for project-less profile resolution). A default
+        // `ProjectConfig` yields no tabled engines, exactly as the old
+        // `None` did for single-file renders.
+        let tabled_engines = tabled_engine_names(Some(&config));
+
+        let registry = build_registry(
+            &extensions,
+            project_dir_for_extensions,
+            is_single_file,
+            &output_dir,
+            Some(&config),
+            &binary_dependencies,
+            runtime,
+        )?;
+
         Ok(Self {
             dir,
             config,
             is_single_file,
             files,
             output_dir,
+            registry,
+            extensions,
+            binary_dependencies,
+            tabled_engines,
         })
     }
 
@@ -1401,12 +2077,34 @@ impl ProjectContext {
             .ok_or_else(|| QuartoError::Other("Input file has no parent directory".into()))?
             .to_path_buf();
 
+        let binary_dependencies = BinaryDependencies::discover(runtime);
+
+        // Single-file: no project_dir, search only input's directory.
+        // (No production callers — grep 2026-07-02 — but keep the per-render
+        // context consistent with `discover`'s single-file branch: no project
+        // dir, single-file true, output dir = the input's directory, no config.)
+        let (extensions, registry) = discover_extensions_and_build_registry(
+            &input,
+            None,
+            true,
+            &dir,
+            None,
+            &binary_dependencies,
+            runtime,
+        )?;
+
         Ok(Self {
             dir: dir.clone(),
             config: ProjectConfig::default(),
             is_single_file: true,
             files: vec![DocumentInfo::from_path(input)],
             output_dir: dir,
+            registry,
+            extensions,
+            binary_dependencies,
+            // No project config for a single-file pseudo-project → no
+            // `engines:` key to read.
+            tabled_engines: std::collections::HashSet::new(),
         })
     }
 
@@ -2035,6 +2733,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         };
 
         assert_eq!(context.project_kind(), ProjectKind::Website);
@@ -2048,6 +2748,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
 
         assert_eq!(context.project_kind(), ProjectKind::Default);
@@ -2064,6 +2766,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         };
 
         assert!(context.is_multi_document());
@@ -2080,6 +2784,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_book"),
+
+            ..Default::default()
         };
 
         assert!(context.is_multi_document());
@@ -2096,6 +2802,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project/_manuscript"),
+
+            ..Default::default()
         };
 
         assert!(context.is_multi_document());
@@ -2113,6 +2821,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
 
         assert!(!context.is_multi_document());
@@ -2130,6 +2840,8 @@ mod tests {
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/index.qmd")],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
 
         assert!(!context.is_multi_document());
@@ -2144,9 +2856,93 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
 
         assert!(!context.is_multi_document());
+    }
+
+    // === any_external_engine predicate tests ===
+    //
+    // These unit tests bind the needs_host predicate used in build_engine_registry
+    // to gate the IO-creating quarto_runtime_dir()/quarto_data_dir() calls.
+    // The predicate is false when no extension contributes an External engine, so
+    // a no-extension or Reorder-only project does zero extra IO.
+
+    #[cfg(not(target_arch = "wasm32"))]
+    mod needs_host_tests {
+        use std::collections::HashMap;
+        use std::path::PathBuf;
+
+        use crate::extension::Extension;
+        use crate::extension::types::{Contributes, EngineContribution, ExtensionId};
+
+        use super::any_external_engine;
+
+        fn make_ext(contributions: Vec<EngineContribution>) -> Extension {
+            Extension {
+                id: ExtensionId::new("test-ext"),
+                title: Some("Test".to_string()),
+                author: Some("Test".to_string()),
+                version: None,
+                quarto_required: None,
+                path: PathBuf::from("/test"),
+                contributes: Contributes {
+                    engines: contributions,
+                    ..Default::default()
+                },
+            }
+        }
+
+        #[test]
+        fn needs_host_false_for_no_extensions() {
+            // Empty extension list → no host IO needed.
+            assert!(!any_external_engine(&[]));
+        }
+
+        #[test]
+        fn needs_host_false_for_reorder_only() {
+            // A Reorder hint is just a priority annotation — no subprocess or
+            // dir-creation is needed to process it.
+            let ext = make_ext(vec![EngineContribution::Reorder {
+                name: "knitr".to_string(),
+            }]);
+            assert!(!any_external_engine(&[ext]));
+        }
+
+        #[test]
+        fn needs_host_true_for_external_engine() {
+            // An External contribution requires TsEngineHost → needs_host = true.
+            let ext = make_ext(vec![EngineContribution::External {
+                path: PathBuf::from("/test/engine.js"),
+                extension_yml_path: PathBuf::from("/test/_extension.yml"),
+                name: Some("test-engine".to_string()),
+                claims: Some(HashMap::new()),
+                file_extensions: Some(vec![]),
+                claims_files: Some(vec![]),
+            }]);
+            assert!(any_external_engine(&[ext]));
+        }
+
+        #[test]
+        fn needs_host_true_when_external_mixed_with_reorder() {
+            // Even one External among multiple Reorders → true.
+            let ext = make_ext(vec![
+                EngineContribution::Reorder {
+                    name: "knitr".to_string(),
+                },
+                EngineContribution::External {
+                    path: PathBuf::from("/test/engine.js"),
+                    extension_yml_path: PathBuf::from("/test/_extension.yml"),
+                    name: None,
+                    claims: None,
+                    file_extensions: None,
+                    claims_files: None,
+                },
+            ]);
+            assert!(any_external_engine(&[ext]));
+        }
     }
 
     // === ProjectContext::discover and ::single_file tests ===
@@ -2327,6 +3123,8 @@ mod tests {
                 is_single_file: false,
                 files: vec![],
                 output_dir: canonical,
+
+                ..Default::default()
             }
         }
 
@@ -2537,6 +3335,8 @@ mod tests {
                 is_single_file: true,
                 files: vec![],
                 output_dir: temp.path().to_path_buf(),
+
+                ..Default::default()
             };
             let doc_path = chapters.join("doc.qmd");
 
@@ -2828,6 +3628,327 @@ mod tests {
                 css_value.as_str(),
                 Some("../../shared/styles.css"),
                 "Nested path should be adjusted"
+            );
+        }
+    }
+
+    // === P1.1 T3: ConfigValue → TsMetadataValue helper + config-map builder ===
+    //
+    // Native-only: the helper + builder are gated cfg(not(wasm32)) (they build the
+    // per-render EngineProjectContext for TsEngine, which is native-only).
+    #[cfg(not(target_arch = "wasm32"))]
+    mod engine_context_lowering {
+        use quarto_source_map::{By, SourceInfo};
+
+        use super::super::{
+            build_engine_config_map, config_value_to_ts_metadata, document_metadata_to_ts_map,
+            tabled_engine_names,
+        };
+        use crate::engine::ts_protocol::TsMetadataValue;
+        use crate::project::{ProjectConfig, ProjectKind};
+        use quarto_pandoc_types::ConfigValue;
+        use quarto_pandoc_types::config_value::ConfigMapEntry;
+        use std::path::PathBuf;
+
+        fn si() -> SourceInfo {
+            SourceInfo::generated(By::unknown())
+        }
+
+        /// `engines: ["knitr", {path: "x.js"}]` as a ConfigValue array.
+        fn engines_value() -> ConfigValue {
+            ConfigValue::new_array(
+                vec![
+                    ConfigValue::new_string("knitr", si()),
+                    ConfigValue::new_map(
+                        vec![ConfigMapEntry {
+                            key: "path".to_string(),
+                            key_source: si(),
+                            value: ConfigValue::new_string("x.js", si()),
+                        }],
+                        si(),
+                    ),
+                ],
+                si(),
+            )
+        }
+
+        /// Metadata map `{ engines: [...] }`.
+        fn metadata_with_engines() -> ConfigValue {
+            ConfigValue::new_map(
+                vec![ConfigMapEntry {
+                    key: "engines".to_string(),
+                    key_source: si(),
+                    value: engines_value(),
+                }],
+                si(),
+            )
+        }
+
+        // ── helper: string scalar arm (as_plain_text) + Mapping arm ──────────────
+        //
+        // Named revert (as_plain_text arm): `"knitr"` drops to Null → RED.
+        // Named revert (Map arm): the `{path: "x.js"}` map drops/misshapes → RED.
+        #[test]
+        fn config_value_to_ts_metadata_lowers_array_of_string_and_map() {
+            let lowered = config_value_to_ts_metadata(&engines_value());
+
+            let mut path_map = std::collections::HashMap::new();
+            path_map.insert(
+                "path".to_string(),
+                TsMetadataValue::String("x.js".to_string()),
+            );
+
+            assert_eq!(
+                lowered,
+                TsMetadataValue::Array(vec![
+                    TsMetadataValue::String("knitr".to_string()),
+                    TsMetadataValue::Map(path_map),
+                ]),
+                "string scalar must lower via as_plain_text; the {{path}} entry must lower to a Map"
+            );
+        }
+
+        // ── builder: two-key config map from a real project config ───────────────
+        #[test]
+        fn build_engine_config_map_builds_two_key_map() {
+            let config = ProjectConfig {
+                project_kind: ProjectKind::Default,
+                output_dir: Some(PathBuf::from("out")),
+                render_patterns: Vec::new(),
+                resources: Vec::new(),
+                metadata: Some(metadata_with_engines()),
+                config_path: None,
+                ..Default::default()
+            };
+
+            let map = build_engine_config_map(&config).expect("config map must be Some");
+
+            // engines key present, lowered to NAMES ONLY (Plan 6 Phase 3 item
+            // E): `knitr` (string) passes through; `{path: "x.js"}` names no
+            // engine Rust-side and is skipped — the wire types `engines` as
+            // `string[]`, so a `{path: ...}` entry lowering to a `Map` (the
+            // pre-Phase-3 behavior) was never a valid wire value.
+            assert_eq!(
+                map.get("engines"),
+                Some(&TsMetadataValue::Array(vec![TsMetadataValue::String(
+                    "knitr".to_string()
+                ),])),
+                "engines key must be lowered to names only, dropping the {{path:}} entry"
+            );
+
+            // output-dir carries the RAW relative typed field value, flat at the
+            // top of the wire config map (the host bridges it to the rich
+            // project.outputDir the engine sees).
+            assert_eq!(
+                map.get("output-dir"),
+                Some(&TsMetadataValue::String("out".to_string())),
+                "output-dir must carry the raw relative ProjectConfig.output_dir"
+            );
+        }
+
+        // ── builder: absent engines ⇒ key omitted ────────────────────────────────
+        #[test]
+        fn build_engine_config_map_omits_absent_engines() {
+            let config = ProjectConfig {
+                output_dir: Some(PathBuf::from("out")),
+                // Metadata present but has NO `engines` key.
+                metadata: Some(ConfigValue::new_map(Vec::new(), si())),
+                ..ProjectConfig::default()
+            };
+
+            let map = build_engine_config_map(&config).expect("config map must be Some");
+            assert!(
+                !map.contains_key("engines"),
+                "absent engines ⇒ engines key omitted"
+            );
+            assert!(map.contains_key("output-dir"), "output-dir still present");
+        }
+
+        // ── builder: no metadata ⇒ config: None ──────────────────────────────────
+        //
+        // Named revert ("builder returns Some(map) unconditionally"): this REDs.
+        #[test]
+        fn build_engine_config_map_none_when_no_metadata() {
+            let config = ProjectConfig::default();
+            assert_eq!(
+                build_engine_config_map(&config),
+                None,
+                "a config with no metadata (single-file default) ⇒ config: None"
+            );
+        }
+
+        // ── builder: single-key claim-table map entry lowers to its name ────────
+        //
+        // Plan 6 Phase 3 item E: `engines:` map-form entries (claim tables)
+        // are legal Rust-side now; the wire only needs the ordering NAME.
+        //
+        // Named revert: reverting the `engine_entry_name` filter_map back to
+        // `config_value_to_ts_metadata` verbatim-lowering makes this go RED
+        // (the claim-table entry would lower to a `Map`, and the `{path:}`
+        // entry would NOT be dropped).
+        #[test]
+        fn build_engine_config_map_lowers_claim_table_entry_to_name() {
+            let engines = ConfigValue::new_array(
+                vec![
+                    ConfigValue::new_string("knitr", si()),
+                    ConfigValue::new_map(
+                        vec![ConfigMapEntry {
+                            key: "legacy".to_string(),
+                            key_source: si(),
+                            value: ConfigValue::new_map(
+                                vec![ConfigMapEntry {
+                                    key: "claims".to_string(),
+                                    key_source: si(),
+                                    value: ConfigValue::new_array(
+                                        vec![ConfigValue::new_string("python", si())],
+                                        si(),
+                                    ),
+                                }],
+                                si(),
+                            ),
+                        }],
+                        si(),
+                    ),
+                    ConfigValue::new_map(
+                        vec![ConfigMapEntry {
+                            key: "path".to_string(),
+                            key_source: si(),
+                            value: ConfigValue::new_string("x.js", si()),
+                        }],
+                        si(),
+                    ),
+                ],
+                si(),
+            );
+            let config = ProjectConfig {
+                metadata: Some(ConfigValue::new_map(
+                    vec![ConfigMapEntry {
+                        key: "engines".to_string(),
+                        key_source: si(),
+                        value: engines,
+                    }],
+                    si(),
+                )),
+                ..ProjectConfig::default()
+            };
+
+            let map = build_engine_config_map(&config).expect("config map must be Some");
+
+            assert_eq!(
+                map.get("engines"),
+                Some(&TsMetadataValue::Array(vec![
+                    TsMetadataValue::String("knitr".to_string()),
+                    TsMetadataValue::String("legacy".to_string()),
+                ])),
+                "the claim-table entry's KEY (legacy) lowers to a name; the \
+                 {{path:}} entry is dropped (no name known Rust-side)"
+            );
+        }
+
+        // ── tabled_engine_names: stash for Phase 5's warning ─────────────────────
+        //
+        // Named revert: dropping the `entry.get(&name)?.get("claims")?` guard
+        // (treating every named entry as tabled) makes `knitr` (a bare
+        // ordering entry, no table) appear in the set → RED.
+        #[test]
+        fn tabled_engine_names_collects_claims_bearing_entries() {
+            let engines = ConfigValue::new_array(
+                vec![
+                    ConfigValue::new_string("knitr", si()), // ordering only, no table
+                    ConfigValue::new_map(
+                        vec![ConfigMapEntry {
+                            key: "legacy".to_string(),
+                            key_source: si(),
+                            value: ConfigValue::new_map(
+                                vec![ConfigMapEntry {
+                                    key: "claims".to_string(),
+                                    key_source: si(),
+                                    value: ConfigValue::new_array(
+                                        vec![ConfigValue::new_string("python", si())],
+                                        si(),
+                                    ),
+                                }],
+                                si(),
+                            ),
+                        }],
+                        si(),
+                    ),
+                ],
+                si(),
+            );
+            let config = ProjectConfig {
+                metadata: Some(ConfigValue::new_map(
+                    vec![ConfigMapEntry {
+                        key: "engines".to_string(),
+                        key_source: si(),
+                        value: engines,
+                    }],
+                    si(),
+                )),
+                ..ProjectConfig::default()
+            };
+
+            let tabled = tabled_engine_names(Some(&config));
+
+            assert!(
+                tabled.contains("legacy"),
+                "legacy carries a `claims` table → must be in the set"
+            );
+            assert!(
+                !tabled.contains("knitr"),
+                "knitr is a bare ordering entry (no table) → must NOT be in the set"
+            );
+        }
+
+        #[test]
+        fn tabled_engine_names_empty_when_no_project_engines_key() {
+            assert!(
+                tabled_engine_names(None).is_empty(),
+                "no project config ⇒ empty set"
+            );
+            let config = ProjectConfig::default();
+            assert!(
+                tabled_engine_names(Some(&config)).is_empty(),
+                "no `engines:` key ⇒ empty set"
+            );
+        }
+
+        // === P1.1b: document_metadata_to_ts_map — flattens the top-level Map ====
+        //
+        // Unit-level coverage of the flatten/unwrap step T14 (e2e) exercises
+        // end-to-end. Not itself a frozen seam row (T14 is e2e-only in the
+        // spec) — additive defense-in-depth isolating the unwrap logic.
+        //
+        // Named revert: return `HashMap::new()` unconditionally (as if the
+        // unwrap always hit the `_ => HashMap::new()` fallback arm) → this
+        // goes RED (the "engines" key would be missing).
+        #[test]
+        fn document_metadata_to_ts_map_flattens_top_level_mapping() {
+            let map = document_metadata_to_ts_map(&metadata_with_engines());
+
+            let mut path_map = std::collections::HashMap::new();
+            path_map.insert(
+                "path".to_string(),
+                TsMetadataValue::String("x.js".to_string()),
+            );
+            assert_eq!(
+                map.get("engines"),
+                Some(&TsMetadataValue::Array(vec![
+                    TsMetadataValue::String("knitr".to_string()),
+                    TsMetadataValue::Map(path_map),
+                ])),
+                "top-level 'engines' key must be flattened directly into the \
+                 returned map, not left wrapped in an outer TsMetadataValue::Map"
+            );
+        }
+
+        // ── non-mapping input degrades to empty (not a panic) ────────────────────
+        #[test]
+        fn document_metadata_to_ts_map_non_mapping_input_is_empty() {
+            let map = document_metadata_to_ts_map(&ConfigValue::new_string("not-a-map", si()));
+            assert!(
+                map.is_empty(),
+                "non-mapping document metadata must degrade to an empty map, not panic"
             );
         }
     }

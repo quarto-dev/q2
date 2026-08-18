@@ -384,6 +384,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: project_dir.join("_site"),
+
+            ..Default::default()
         }
     }
 

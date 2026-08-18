@@ -5,6 +5,7 @@
 
 mod add_file_with_id;
 mod error_docs;
+mod error_docs_sidebar;
 mod external_sources;
 mod metadata_as_str;
 
@@ -93,6 +94,11 @@ pub fn run_check(config: &LintConfig) -> Result<()> {
         eprintln!("Checking error catalog against docs/errors/");
     }
     all_violations.extend(error_docs::check(&workspace_root)?);
+
+    if config.verbose {
+        eprintln!("Checking docs/errors/ against the errors sidebar in docs/_quarto.yml");
+    }
+    all_violations.extend(error_docs_sidebar::check(&workspace_root)?);
 
     // Report results
     if all_violations.is_empty() {

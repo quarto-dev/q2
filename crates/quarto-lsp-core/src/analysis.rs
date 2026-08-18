@@ -178,6 +178,8 @@ fn minimal_project_context(document_path: &Path) -> ProjectContext {
         is_single_file: true,
         files: vec![DocumentInfo::from_path(document_path)],
         output_dir: dir,
+
+        ..Default::default()
     }
 }
 

@@ -1,0 +1,13 @@
+---
+engine: julia
+execute:
+  daemon: false
+---
+
+```{julia}
+x = 42
+```
+
+```{julia}
+println("x is $x")
+```

@@ -479,12 +479,8 @@ enum Commands {
 
     /// Access functions of Quarto subsystems such as its rendering engines
     Call {
-        /// Function to call
-        function: Option<String>,
-
-        /// Arguments for the function
-        #[arg(trailing_var_arg = true)]
-        args: Vec<String>,
+        #[command(subcommand)]
+        command: CallCommands,
     },
 
     /// Start the Quarto Language Server Protocol server
@@ -701,6 +697,27 @@ enum Commands {
         /// Plan §Phase 2 — claude-notes/plans/2026-05-05-hub-mcp-device-flow-implementation.md.
         #[arg(long, env = "QUARTO_HUB_ADDITIONAL_AUDIENCES", value_delimiter = ',')]
         additional_audiences: Vec<String>,
+    },
+}
+
+/// Subcommands under `quarto call` — the Q1-parity `call` group.
+/// Q1's group is `{ engine, build-ts-extension, typst-gather }`; q2 ships
+/// `test` + `build-ts-extension` (plan9 adds `engine`).
+#[derive(clap::Subcommand)]
+enum CallCommands {
+    /// Run embedded document tests
+    Test {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Build TypeScript execution engine extensions
+    #[command(name = "build-ts-extension")]
+    BuildTsExtension {
+        path: Option<PathBuf>,
+        #[arg(long)]
+        config: Option<PathBuf>,
+        #[arg(long)]
+        workspace: bool,
     },
 }
 
@@ -1251,7 +1268,20 @@ fn main() -> Result<()> {
             json,
         }),
         Commands::Check { .. } => commands::check::execute(),
-        Commands::Call { function, args } => commands::call::execute(function, args),
+        Commands::Call { command } => match command {
+            CallCommands::Test { args } => commands::call::execute(Some("test".to_string()), args),
+            CallCommands::BuildTsExtension {
+                path,
+                config,
+                workspace,
+            } => commands::build_ts_extension::execute(
+                commands::build_ts_extension::BuildTsExtensionArgs {
+                    path,
+                    config,
+                    workspace,
+                },
+            ),
+        },
         Commands::Lsp => commands::lsp::execute(),
         Commands::GetConfig {
             file,

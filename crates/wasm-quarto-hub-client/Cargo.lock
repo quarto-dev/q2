@@ -2408,6 +2408,7 @@ dependencies = [
 name = "quarto-util"
 version = "0.23.0"
 dependencies = [
+ "dirs",
  "serde",
  "thiserror 2.0.18",
 ]

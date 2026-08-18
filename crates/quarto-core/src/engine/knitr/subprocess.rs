@@ -907,11 +907,10 @@ source("renv/activate.R")
                 cwd: temp_path.to_path_buf(),
                 params: None,
                 resource_dir: resource_dir.to_path_buf(),
-                handled_languages: vec![
-                    "ojs".to_string(),
-                    "mermaid".to_string(),
-                    "dot".to_string(),
-                ],
+                handled_languages: crate::engine::HANDLED_LANGUAGES
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             };
 
             // Call R

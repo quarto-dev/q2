@@ -122,7 +122,7 @@ pub async fn re_execute_handler(
 pub(crate) async fn re_execute_with_registry_and_cache(
     ctx: SharedContext,
     body: ReExecuteRequest,
-    registry: Option<EngineRegistry>,
+    registry: Option<Arc<EngineRegistry>>,
     cache_dir: &Path,
 ) -> Response {
     let rel_path = body.path;
@@ -176,7 +176,7 @@ pub(crate) async fn re_execute_with_registry_and_cache(
 pub(crate) fn trigger_auto_re_execute(
     ctx: SharedContext,
     rel_path: String,
-    registry: Option<EngineRegistry>,
+    registry: Option<Arc<EngineRegistry>>,
     cache_dir: PathBuf,
 ) {
     match claim_and_spawn(ctx, rel_path.clone(), registry, cache_dir) {
@@ -205,7 +205,7 @@ enum ClaimOutcome {
 fn claim_and_spawn(
     ctx: SharedContext,
     rel_path: String,
-    registry: Option<EngineRegistry>,
+    registry: Option<Arc<EngineRegistry>>,
     cache_dir: PathBuf,
 ) -> ClaimOutcome {
     let in_flight_set = in_flight();
@@ -288,7 +288,7 @@ fn claim_and_spawn(
 async fn perform_re_execute(
     ctx: SharedContext,
     rel_path: &str,
-    registry: Option<EngineRegistry>,
+    registry: Option<Arc<EngineRegistry>>,
     cache_dir: &Path,
 ) -> Result<(), String> {
     let project_root = ctx
@@ -379,12 +379,23 @@ mod tests {
             out.push_str("\n<!-- re-execute -->\n");
             Ok(ExecuteResult::passthrough(&out))
         }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> quarto_core::engine::LanguageClaim {
+            if language == "test-passthrough" {
+                quarto_core::engine::LanguageClaim::Primary(1)
+            } else {
+                quarto_core::engine::LanguageClaim::None
+            }
+        }
     }
 
-    fn make_registry() -> EngineRegistry {
+    fn make_registry() -> Arc<EngineRegistry> {
         let mut r = EngineRegistry::new();
         r.register(Arc::new(PassthroughTestEngine));
-        r
+        Arc::new(r)
     }
 
     async fn build_ctx_with_file(content: &str) -> (TempDir, SharedContext) {
@@ -484,6 +495,127 @@ mod tests {
         assert_eq!(final_entry.staleness, Some(false));
         assert_eq!(final_entry.last_error, None);
         assert_ne!(final_entry.capture_doc_id, initial_doc_id);
+    }
+
+    /// PC8 — a failing engine on re-execute must flip the sidecar to
+    /// `CaptureState::Error`, set `last_error`, and emit
+    /// `Q-PREVIEW-RE-1` to the diagnostic sink.
+    ///
+    /// `FailingReExecuteEngine` shares the doc's declared engine name
+    /// (`test-passthrough`) but always fails — it replaces the
+    /// registry wholesale for the re-execute call (registry override
+    /// is a full replacement, not a merge — see
+    /// `quarto_core::engine::preview_record::record_capture`), so the
+    /// seed run (which used the real `PassthroughTestEngine`) is
+    /// unaffected. A separate cache dir for the re-execute call is
+    /// REQUIRED: `record_capture_cached`'s key is
+    /// `sha256(input_qmd)` only (content, not engine — cache.rs:150-163),
+    /// and the doc's content is unchanged between seed and re-execute,
+    /// so reusing the seed's cache dir would replay the cached
+    /// SUCCESSFUL result and never invoke the failing engine.
+    ///
+    /// Fail-on-revert binding (see task-p3-report.md for the
+    /// transcript): commenting out the `ctx_for_task.index().set_capture(&rel_path_for_task, &errored)`
+    /// write turns the `CaptureState::Error`/`last_error` assertions
+    /// RED (sidecar stays at whatever state `claim_and_spawn` set
+    /// before the run — never reaches `Error`).
+    struct FailingReExecuteEngine;
+    impl ExecutionEngine for FailingReExecuteEngine {
+        fn name(&self) -> &str {
+            "test-passthrough"
+        }
+        fn execute(
+            &self,
+            _input: &str,
+            _ctx: &ExecutionContext,
+        ) -> Result<ExecuteResult, ExecutionError> {
+            Err(ExecutionError::Other(
+                "synthetic PC8 re-execute failure".to_string(),
+            ))
+        }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> quarto_core::engine::LanguageClaim {
+            if language == "test-passthrough" {
+                quarto_core::engine::LanguageClaim::Primary(1)
+            } else {
+                quarto_core::engine::LanguageClaim::None
+            }
+        }
+    }
+
+    fn make_failing_registry() -> Arc<EngineRegistry> {
+        let mut r = EngineRegistry::new();
+        r.register(Arc::new(FailingReExecuteEngine));
+        Arc::new(r)
+    }
+
+    #[tokio::test]
+    async fn pc8_re_execute_failure_sets_error_state_and_emits_diagnostic() {
+        reset_in_flight_for_tests();
+        let (_tmp, ctx) = build_ctx_with_file(
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\n1\n```\n",
+        )
+        .await;
+        let seed_cache = TempDir::with_prefix("c8-seed-cache-").unwrap();
+        seed_capture(ctx.clone(), seed_cache.path()).await;
+
+        let initial = ctx.index().get_capture("doc.qmd").unwrap();
+        let initial_doc_id = initial.capture_doc_id.clone();
+
+        let sink = Arc::new(diagnostics::DiagnosticSink::new());
+        diagnostics::set_sink(sink.clone());
+
+        // A fresh cache dir forces a miss — see the doc comment above.
+        let re_execute_cache = TempDir::with_prefix("c8-reexec-cache-").unwrap();
+        let response = re_execute_with_registry_and_cache(
+            ctx.clone(),
+            ReExecuteRequest {
+                path: "doc.qmd".to_string(),
+            },
+            Some(make_failing_registry()),
+            re_execute_cache.path(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let final_entry = loop {
+            let entry = ctx.index().get_capture("doc.qmd").unwrap();
+            if entry.state == Some(CaptureState::Error) {
+                break entry;
+            }
+            if std::time::Instant::now() >= deadline {
+                panic!(
+                    "sidecar did not reach CaptureState::Error within 10s; still {:?}",
+                    entry
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        };
+
+        assert_eq!(
+            final_entry.capture_doc_id, initial_doc_id,
+            "a failed re-execute must not replace the previous (still-valid) capture doc"
+        );
+        let last_error = final_entry
+            .last_error
+            .as_deref()
+            .expect("last_error must be set on a failed re-execute");
+        assert!(
+            last_error.contains("synthetic PC8 re-execute failure"),
+            "last_error should surface the engine's message; got: {last_error}"
+        );
+
+        let diags = sink.get_for_page("doc.qmd");
+        assert_eq!(
+            diags.len(),
+            1,
+            "exactly one diagnostic expected for doc.qmd; got {diags:?}"
+        );
+        assert_eq!(diags[0].code.as_deref(), Some("Q-PREVIEW-RE-1"));
     }
 
     #[tokio::test]

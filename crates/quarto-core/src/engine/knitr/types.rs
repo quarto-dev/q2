@@ -247,7 +247,10 @@ mod tests {
             cwd: PathBuf::from("/project"),
             params: None,
             resource_dir: PathBuf::from("/usr/share/quarto"),
-            handled_languages: vec!["ojs".to_string(), "mermaid".to_string(), "dot".to_string()],
+            handled_languages: crate::engine::HANDLED_LANGUAGES
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
         };
 
         let json = serde_json::to_string(&params).unwrap();

@@ -138,11 +138,42 @@ interface HeaderIncludesProps {
 }
 
 /**
+ * Re-materialize a `<script>` element so the browser will EXECUTE it.
+ *
+ * A `<script>` parsed via `innerHTML` (or `DOMParser` / `insertAdjacentHTML`)
+ * is flagged non-executable by the HTML fragment-parsing algorithm:
+ * appending such a node into a live document does **not** run it. The only
+ * way to get an injected script to execute is to build a fresh element with
+ * `document.createElement('script')` and copy its attributes + inline body
+ * over. This function does exactly that. (bd-5oyk1xce)
+ *
+ * Needed because engine `include-in-header` content can be executable —
+ * e.g. marimo emits `<script type="module" src="…/@marimo-team/islands…">`
+ * plus an inline `__MARIMO_EXPORT_CONTEXT__` marker script; without
+ * re-materialization the islands runtime never loads and widgets stay
+ * inert static markup in the preview pane.
+ */
+export function rematerializeScript(source: HTMLScriptElement): HTMLScriptElement {
+    const script = document.createElement('script');
+    for (const attr of Array.from(source.attributes)) {
+        script.setAttribute(attr.name, attr.value);
+    }
+    // Inline body (e.g. the `__MARIMO_EXPORT_CONTEXT__ = …` assignment).
+    // Empty for `src`-only scripts; copying it is harmless there.
+    script.textContent = source.textContent;
+    return script;
+}
+
+/**
  * Imperative `<head>` injector for `meta.rendered.includes.header`
- * (favicon `<link>`, listing-feed `<link rel="alternate">`, etc.).
- * Not a render-time slot because elements like `<meta>` and `<link>`
- * don't belong in `<body>` — they have to land in `document.head`,
- * which React doesn't own.
+ * (favicon `<link>`, listing-feed `<link rel="alternate">`, engine
+ * `include-in-header` scripts/styles, etc.). Not a render-time slot
+ * because elements like `<meta>` and `<link>` don't belong in `<body>` —
+ * they have to land in `document.head`, which React doesn't own.
+ *
+ * `<script>` children are re-materialized via [`rematerializeScript`] so
+ * they actually execute (see its doc comment); non-script nodes are
+ * inserted as-parsed. Document order is preserved.
  *
  * Cleanup on unmount removes the previously-inserted nodes so
  * test re-mounts (vitest, Playwright) don't accumulate state.
@@ -161,9 +192,13 @@ export function HeaderIncludesEffect({ items }: HeaderIncludesProps) {
         wrapper.innerHTML = items.join('\n');
         const inserted: Element[] = [];
         for (const el of Array.from(wrapper.children)) {
-            el.setAttribute('data-q2-header-include', '1');
-            document.head.appendChild(el);
-            inserted.push(el);
+            const node =
+                el.tagName === 'SCRIPT'
+                    ? rematerializeScript(el as HTMLScriptElement)
+                    : el;
+            node.setAttribute('data-q2-header-include', '1');
+            document.head.appendChild(node);
+            inserted.push(node);
         }
         return () => {
             for (const el of inserted) {

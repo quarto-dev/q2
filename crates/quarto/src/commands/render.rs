@@ -1143,6 +1143,8 @@ fn print_render_diagnostics(
     quarto_core::project::orchestrator::print_pass1_stats_if_enabled();
     // bd-3gj56: pass-2 docs / threads_used / wall_ms gauge.
     quarto_core::project::orchestrator::print_pass2_stats_if_enabled();
+    // Plan 6 Phase 5: pass-1 engine-resolution lifted/fell_through gauge.
+    quarto_core::project::orchestrator::print_pass1_engine_resolution_stats_if_enabled();
 }
 
 /// Text path: the existing ariadne-formatted output. Kept verbatim
@@ -1996,6 +1998,111 @@ mod tests {
             }
             other => panic!("expected NotInRenderList, got {other:?}"),
         }
+    }
+
+    /// Recursively copy `src` into `dst` (dst is created). Used by T8b to
+    /// install the committed echo-engine extension fixture
+    /// (`crates/quarto-core/tests/fixtures/extensions/echo-engine`) into a
+    /// temp project's `_extensions/`.
+    fn copy_dir(src: &Path, dst: &Path) {
+        std::fs::create_dir_all(dst).unwrap();
+        for entry in std::fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let from = entry.path();
+            let to = dst.join(entry.file_name());
+            if from.is_dir() {
+                copy_dir(&from, &to);
+            } else {
+                std::fs::copy(&from, &to).unwrap();
+            }
+        }
+    }
+
+    /// An engine-claimed extension passes gate 1 and is admitted by
+    /// `classify_inputs` **when a `render:` pattern selects it**.
+    ///
+    /// Preserves the original T8b intent (engine extensions are not rejected
+    /// out of hand) under the discovery rule that supersedes runbook D1:
+    /// auto-discovery is `**/*.qmd` only, so the pattern is what puts `a.echo`
+    /// into `project.files`.
+    ///
+    /// Named revert: drop the `.echo` extension from the discovery-set union
+    /// (`RenderableExtensions::fixed()` in `project/mod.rs`'s `discover`) and
+    /// `a.echo` fails gate 1 even with the pattern -> `NotInRenderList` -> RED.
+    #[test]
+    fn classify_echo_file_admitted_when_listed_in_render() {
+        let (dir, _temp) = echo_project_with_render(Some(
+            "project:\n  type: default\n  render:\n    - \"**/*.qmd\"\n    - \"**/*.echo\"\n",
+        ));
+        let runtime = NativeRuntime::new();
+        let target = classify_inputs(&["a.echo".into()], &dir, &runtime, None)
+            .unwrap_or_else(|e| panic!("a listed a.echo must be admitted: {e:?}"));
+        match target {
+            RenderTarget::Subset {
+                project_dir,
+                targets,
+            } => {
+                assert_eq!(project_dir, dir);
+                assert_eq!(targets, vec![dir.join("a.echo")]);
+            }
+            other => panic!("expected Subset admitting a.echo, got {other:?}"),
+        }
+    }
+
+    /// Without a `render:` pattern, an explicitly-named engine-claimed file is
+    /// refused — exactly as `.md` and `_partial.qmd` already are.
+    ///
+    /// This is a BEHAVIOR CHANGE introduced by superseding D1, not a
+    /// pre-existing wart: under D1 `.echo` was auto-discovered, so
+    /// `q2 render a.echo` worked. It documents the consequence rather than
+    /// endorsing it — whether q2 should render an explicitly-named file that
+    /// no pattern selects is an open question (Quarto 1 does, silently, with
+    /// output written beside the source). If that question is answered
+    /// "render it", this test changes with that work.
+    #[test]
+    fn classify_unlisted_echo_file_is_refused() {
+        let (dir, _temp) = echo_project_with_render(None);
+        let runtime = NativeRuntime::new();
+        let err = classify_inputs(&["a.echo".into()], &dir, &runtime, None)
+            .expect_err("an unlisted a.echo must be refused, like an unlisted .md");
+        assert!(
+            matches!(err, DispatchError::NotInRenderList { .. }),
+            "expected NotInRenderList, got {err:?}"
+        );
+    }
+
+    /// Shared fixture for the two tests above: a project with the committed
+    /// echo-engine extension installed and one `a.echo` file. `render` is the
+    /// full `_quarto.yml` body, or `None` for the bare default.
+    fn echo_project_with_render(render: Option<&str>) -> (PathBuf, TempDir) {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(
+            &dir.join("_quarto.yml"),
+            render.unwrap_or("project:\n  type: default\n"),
+        );
+        write_file(
+            &dir.join("index.qmd"),
+            "---\ntitle: Index\n---\n\nContent.\n",
+        );
+        let fixture_ext = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../quarto-core/tests/fixtures/extensions/echo-engine");
+        assert!(
+            fixture_ext.exists(),
+            "echo-engine fixture missing: {}",
+            fixture_ext.display()
+        );
+        copy_dir(&fixture_ext, &dir.join("_extensions/echo-engine"));
+        // The committed bundle is deleted (plan1c3: hermetic fixtures are
+        // regenerated at test time). These classify-only paths never execute
+        // the engine — they only need the bundle to EXIST for
+        // `build_engine_registry`'s bundle-exists guard.
+        write_file(
+            &dir.join("_extensions/echo-engine/dist/echo-engine.js"),
+            "// stub for registry existence check\n",
+        );
+        write_file(&dir.join("a.echo"), "Whole-file echo body.\n");
+        (dir, temp)
     }
 
     #[test]

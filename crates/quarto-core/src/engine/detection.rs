@@ -21,14 +21,14 @@
 //!
 //! # Future Enhancements
 //!
-//! In future phases, detection will also consider:
-//! - Code block languages (`{python}` → jupyter, `{r}` → knitr)
 //! - File extension (`.ipynb` → jupyter, `.Rmd` → knitr)
+//!
+//! Code block languages (`{python}` → jupyter, `{r}` → knitr) are now
+//! handled in `engine/resolution.rs` via `computational_languages` + the
+//! four-tier resolver. This module remains metadata-only (the explicit
+//! `engine:`/`engines:` list); the language axis lives in `resolution.rs`.
 
 use quarto_pandoc_types::ConfigValue;
-
-/// Known execution engine names.
-pub const KNOWN_ENGINES: &[&str] = &["markdown", "knitr", "jupyter"];
 
 /// Result of engine detection.
 ///
@@ -80,11 +80,6 @@ impl Default for DetectedEngine {
     fn default() -> Self {
         Self::new("markdown")
     }
-}
-
-/// Check if a name is a known engine.
-pub fn is_known_engine(name: &str) -> bool {
-    KNOWN_ENGINES.contains(&name)
 }
 
 /// Extract a string value from a ConfigValue.
@@ -227,23 +222,6 @@ pub fn detect_engines(metadata: &ConfigValue) -> Vec<DetectedEngine> {
         }
     }
 
-    // Engine-specific top-level keys (e.g. `jupyter:` / `knitr:` with no
-    // `engine:` key). Single engine only — this shorthand has no array
-    // form.
-    for engine_name in KNOWN_ENGINES {
-        // Skip "markdown" - it doesn't have a top-level config key
-        if *engine_name == "markdown" {
-            continue;
-        }
-
-        if let Some(config) = metadata.get(engine_name) {
-            return vec![DetectedEngine::with_config(
-                engine_name.to_string(),
-                config.clone(),
-            )];
-        }
-    }
-
     // Default: markdown engine (no execution)
     vec![DetectedEngine::default()]
 }
@@ -351,17 +329,6 @@ mod tests {
         assert!(DetectedEngine::new("jupyter").requires_runtime());
     }
 
-    // === is_known_engine tests ===
-
-    #[test]
-    fn test_is_known_engine() {
-        assert!(is_known_engine("markdown"));
-        assert!(is_known_engine("knitr"));
-        assert!(is_known_engine("jupyter"));
-        assert!(!is_known_engine("unknown"));
-        assert!(!is_known_engine(""));
-    }
-
     // === detect_engine tests ===
 
     #[test]
@@ -424,32 +391,6 @@ mod tests {
         // Config should be the "default" string value
         let config = detected.config.unwrap();
         assert!(config.is_string_value("default"));
-    }
-
-    #[test]
-    fn test_detect_engine_top_level_key() {
-        // jupyter:
-        //   kernel: python3
-        let jupyter_config = map_config(vec![("kernel", string_config("python3"))]);
-        let meta = map_config(vec![("jupyter", jupyter_config)]);
-
-        let detected = detect_engine(&meta);
-        assert_eq!(detected.name, "jupyter");
-        assert!(detected.config.is_some());
-    }
-
-    #[test]
-    fn test_detect_engine_top_level_knitr() {
-        // knitr:
-        //   opts_chunk:
-        //     echo: false
-        let opts = map_config(vec![("echo", string_config("false"))]);
-        let knitr_config = map_config(vec![("opts_chunk", opts)]);
-        let meta = map_config(vec![("knitr", knitr_config)]);
-
-        let detected = detect_engine(&meta);
-        assert_eq!(detected.name, "knitr");
-        assert!(detected.config.is_some());
     }
 
     #[test]

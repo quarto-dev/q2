@@ -1,0 +1,2 @@
+Unknown engine: nonexistent
+Available engines: knitr, jupyter, markdown, julia

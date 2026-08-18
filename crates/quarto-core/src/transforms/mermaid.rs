@@ -353,6 +353,7 @@ mod tests {
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/doc.qmd")],
             output_dir: std::path::PathBuf::from("/project"),
+            ..Default::default()
         }
     }
 

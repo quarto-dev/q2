@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use quarto_core::format::Format;
 use quarto_core::language::LanguageTerms;
-use quarto_core::pipeline::{build_html_pipeline_stages, build_wasm_html_pipeline};
+use quarto_core::pipeline::build_html_pipeline_stages;
 use quarto_core::project::{DocumentInfo, ProjectConfig, ProjectContext};
 use quarto_core::stage::{
     LoadedSource, Pipeline, PipelineData, PipelineDataKind, PipelineStage, StageContext,
@@ -28,6 +28,7 @@ fn make_context(project_dir: PathBuf, doc_path: PathBuf, is_single_file: bool) -
         is_single_file,
         files: vec![DocumentInfo::from_path(doc_path.clone())],
         output_dir: project_dir,
+        ..Default::default()
     };
     let document = DocumentInfo::from_path(doc_path);
     StageContext::new(runtime, format, project, document).expect("stage context")
@@ -85,17 +86,10 @@ fn pipelines_run_language_resolve_right_after_metadata_merge() {
         "language-resolve must directly follow metadata-merge: {names:?}"
     );
 
-    let wasm_pipeline = build_wasm_html_pipeline();
-    let wasm_names = wasm_pipeline.stage_names();
-    let wasm_merge = wasm_names
-        .iter()
-        .position(|n| *n == "metadata-merge")
-        .expect("metadata-merge present in wasm pipeline");
-    assert_eq!(
-        wasm_names.get(wasm_merge + 1).copied(),
-        Some("language-resolve"),
-        "wasm pipeline must include language-resolve after metadata-merge: {wasm_names:?}"
-    );
+    // The former `build_wasm_html_pipeline()` half of this test is gone with
+    // that builder (dead code — never had a production caller). It asserted
+    // this same invariant against a hand-maintained parallel stage list; the
+    // browser has always gone through the shared builder above.
 }
 
 // ── Meta injection ─────────────────────────────────────────────────────────

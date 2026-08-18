@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::ConfigValue;
 
 /// Identifies an extension by name and optional organization.
@@ -88,6 +89,273 @@ pub struct Contributes {
 
     /// Raw project contribution.
     pub project: Option<ConfigValue>,
+
+    /// Engine contributions: paths to TS engine modules or engine name
+    /// strings for reordering.
+    pub engines: Vec<EngineContribution>,
+}
+
+/// An engine contributed by an extension.
+#[derive(Debug, Clone)]
+pub enum EngineContribution {
+    /// An external engine module (pre-built .js bundle). `path` is absolute,
+    /// resolved during read_extension.
+    External {
+        path: PathBuf,
+        /// Absolute path to the contributing extension's `_extension.yml`
+        /// (Plan 6 Phase 5 provenance). Distinct from `path` above (the
+        /// engine's `.js` bundle) — this points at the YAML file a user
+        /// would edit to add `claims:`. A plain `PathBuf`, not `SourceInfo`:
+        /// project diagnostics print with `to_text(None)`, so a span
+        /// couldn't render (`commands/render.rs`).
+        extension_yml_path: PathBuf,
+        /// Static declaration of the engine's runtime name (e.g. "julia").
+        /// `None` = not declared (q2 must LoadEngine to learn the name).
+        /// `Some(name)` = registered under `name` with no subprocess load.
+        name: Option<String>,
+        /// Authoritative static language claims, keyed by language
+        /// (engine-resolution.md §3.3 `claims:` map). `None` = undeclared
+        /// (fall back to dynamic load). `Some(map)` = resolve without loading.
+        ///
+        /// Each language key holds a **Vec** of claims (4c0): a YAML sequence
+        /// value parses to one claim per element; a scalar/bool/int/single-object
+        /// value (pre-4c0 shape) still parses to a 1-element Vec. This lets one
+        /// language key carry both a `whenClass`-conditioned primary claim and an
+        /// unconditional interop claim (e.g. marimo's bare-`{sql}` case). See
+        /// `lookup_static_claim`/`combine_claims` for the reduction rule.
+        claims: Option<HashMap<String, Vec<StaticLanguageClaim>>>,
+        /// `valid_extensions` — file extensions this engine handles (e.g. [".jl"]).
+        /// `None` undeclared; `Some(vec![])` handles none; `Some(...)` the set.
+        file_extensions: Option<Vec<String>>,
+        /// Unconditional static `claims_file` — extensions claimed WITHOUT content
+        /// inspection (§3.3 `claims-files:`). `None` = fall back to dynamic claims_file.
+        claims_files: Option<Vec<FileClaim>>,
+    },
+    /// A bare engine name string — reordering hint that moves a previously
+    /// registered engine to higher priority.
+    Reorder { name: String },
+}
+
+/// One static file-claim entry. Extension is stored **undotted, lowercase**
+/// (agrees with `Path::extension()`). Plan 7a will grow this with an optional
+/// `content_pattern` field — additively, no second migration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileClaim {
+    pub extension: String,
+}
+
+/// One authoritative static language claim (§3.3). A pure tabulation of
+/// `claims_language(language, first_class)`.
+#[derive(Debug, Clone)]
+pub struct StaticLanguageClaim {
+    pub kind: ClaimKind,       // primary | interop | fallback
+    pub priority: Option<i32>, // defaults per kind (Primary 1, Interop/Fallback 0)
+    /// `None`: applies for any/no first_class. `Some(c)`: applies ONLY when the
+    /// cell's first class == `c` (the marimo case — `{python .marimo}`).
+    pub when_class: Option<String>,
+}
+
+/// The kind half of `LanguageClaim`, without the priority payload, so a static
+/// claim can carry kind + priority separately.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClaimKind {
+    Primary,
+    Interop,
+    Fallback,
+}
+
+impl ClaimKind {
+    /// Explicit combine-rule rank for the 4c0 Vec-per-language reducer:
+    /// Primary > Interop > Fallback. This is **deliberately new, bespoke
+    /// code** — it is NOT a reuse of the cross-engine resolution-tier
+    /// ordering documented at `resolution.rs:321` ("kind dominates priority").
+    /// That note describes *emergent* behavior of running the T1→T4
+    /// cross-engine tiers in sequence; it is a doc comment, not a reusable
+    /// function. This method is the per-Vec (single-language-key) reducer's
+    /// own, independent comparator.
+    fn combine_rank(self) -> u8 {
+        match self {
+            ClaimKind::Primary => 2,
+            ClaimKind::Interop => 1,
+            ClaimKind::Fallback => 0,
+        }
+    }
+}
+
+/// Convert a single static claim to a `LanguageClaim`, honoring `when_class`.
+/// Returns `LanguageClaim::None` when `when_class` is `Some(c)` and `c != first_class`.
+pub fn static_claim_to_language_claim(
+    claim: &StaticLanguageClaim,
+    first_class: Option<&str>,
+) -> crate::engine::LanguageClaim {
+    use crate::engine::LanguageClaim;
+    // Guard: if when_class is declared, it must match first_class exactly.
+    if let Some(ref required) = claim.when_class
+        && first_class != Some(required.as_str())
+    {
+        return LanguageClaim::None;
+    }
+    match claim.kind {
+        ClaimKind::Primary => LanguageClaim::Primary(claim.priority.unwrap_or(1)),
+        ClaimKind::Interop => LanguageClaim::Interop(claim.priority.unwrap_or(0)),
+        ClaimKind::Fallback => LanguageClaim::Fallback(claim.priority.unwrap_or(0)),
+    }
+}
+
+/// The extensions an engine STATICALLY, UNCONDITIONALLY claims via `claims-files`
+/// (the admission axis -- definitively owns, unlike `file-extensions` = can-handle).
+/// Returns each `FileClaim`'s (already-normalized, undotted-lowercase) extension.
+/// Empty for `Reorder` and for `External { claims_files: None }` (fall-back-to-dynamic --
+/// such files are simply not discovered; do NOT invent a discovery-time fallback load).
+pub fn claimed_file_extensions(contribution: &EngineContribution) -> Vec<String> {
+    match contribution {
+        EngineContribution::External { claims_files, .. } => claims_files
+            .as_ref()
+            .map(|claims| claims.iter().map(|c| c.extension.clone()).collect())
+            .unwrap_or_default(),
+        EngineContribution::Reorder { .. } => Vec::new(),
+    }
+}
+
+/// Look up `language` in a static `claims` map and combine its Vec of claims,
+/// honoring `first_class`. Returns `LanguageClaim::None` if the language has
+/// no entry, or none of its entries' `when_class` match.
+///
+/// See `combine_claims` for the reduction rule applied to a language's Vec.
+pub fn lookup_static_claim<S: ::std::hash::BuildHasher>(
+    claims: &HashMap<String, Vec<StaticLanguageClaim>, S>,
+    language: &str,
+    first_class: Option<&str>,
+) -> crate::engine::LanguageClaim {
+    match claims.get(language) {
+        None => crate::engine::LanguageClaim::None,
+        Some(claim_vec) => combine_claims(claim_vec, first_class),
+    }
+}
+
+/// Extract the `(kind_rank, priority)` pair used to rank a non-`None`
+/// `LanguageClaim` for the combine-rule reducer. Panics if given `None` —
+/// callers must filter those out first (a `None` claim carries no kind to
+/// rank).
+fn claim_rank(claim: &crate::engine::LanguageClaim) -> (u8, i32) {
+    use crate::engine::LanguageClaim;
+    match claim {
+        LanguageClaim::Primary(p) => (ClaimKind::Primary.combine_rank(), *p),
+        LanguageClaim::Interop(p) => (ClaimKind::Interop.combine_rank(), *p),
+        LanguageClaim::Fallback(p) => (ClaimKind::Fallback.combine_rank(), *p),
+        LanguageClaim::None => {
+            unreachable!("claim_rank must only be called on non-None claims")
+        }
+    }
+}
+
+/// Combine a Vec of static claims for one language key into the single
+/// strongest applicable `LanguageClaim` (the 4c0 combine rule).
+///
+/// Maps each claim through `static_claim_to_language_claim` (which returns
+/// `LanguageClaim::None` on a `whenClass` mismatch), drops the `None`s, and
+/// reduces the survivors by `ClaimKind::combine_rank` (kind dominates
+/// priority: Primary > Interop > Fallback, `priority` breaking ties within a
+/// kind). Returns `LanguageClaim::None` if every claim mismatches or the Vec
+/// is empty.
+///
+/// Order-independent by construction: the reducer never looks at Vec
+/// position, only at each element's converted kind/priority.
+pub fn combine_claims(
+    claims: &[StaticLanguageClaim],
+    first_class: Option<&str>,
+) -> crate::engine::LanguageClaim {
+    use crate::engine::LanguageClaim;
+    claims
+        .iter()
+        .map(|c| static_claim_to_language_claim(c, first_class))
+        .filter(|c| *c != LanguageClaim::None)
+        .max_by_key(claim_rank)
+        .unwrap_or(LanguageClaim::None)
+}
+
+/// `Q-16-10` — warn when an External engine declares no static claims for one
+/// or more of `name`/`claims`/`file-extensions`/`claims-files`, naming exactly
+/// which. Returns `None` for `Reorder`, or for an `External` that declares all
+/// four (a field present-but-empty — `Some({})`/`Some([])` — counts as
+/// DECLARED: it is a real answer, "this engine handles none of these").
+///
+/// The engines this fires for are **Quarto 1 engines that answer
+/// `claimsLanguage`/`claimsFile` at run time and have not been updated with
+/// static claiming**. They are not broken and nothing is absent that Quarto
+/// requires — they work exactly as designed. What they cost is a subprocess
+/// start on every render, because asking the engine is the only way to find
+/// out what it handles. Keep the wording on that footing: this is an
+/// opt-into-the-faster-path message, not a "you forgot a required field" one.
+///
+/// Deliberately NOT gated on the engine being *used* by the current render
+/// (bd-exhbc6h8 D1(c)): the load cost is paid per render regardless of use, so
+/// an engine that handles nothing in this project is precisely the case where
+/// the cost buys nothing. The render-impact half is `Q-16-11`, which the
+/// orchestrator emits only when at least one document actually fell through.
+///
+/// The path shown is `extension_yml_path`, NOT the `.js` bundle: the manifest
+/// is the file a user edits to fix this; the bundle is a build artifact.
+///
+/// The caller (registry construction) pushes the message into
+/// `registry.diagnostics`; this fn does not emit anywhere itself.
+pub fn engine_contribution_static_claims_warning(
+    extension_label: &str,
+    contribution: &EngineContribution,
+) -> Option<DiagnosticMessage> {
+    let EngineContribution::External {
+        extension_yml_path,
+        name,
+        claims,
+        file_extensions,
+        claims_files,
+        ..
+    } = contribution
+    else {
+        return None;
+    };
+
+    let mut missing: Vec<&str> = Vec::new();
+    if name.is_none() {
+        missing.push("name");
+    }
+    if claims.is_none() {
+        missing.push("claims");
+    }
+    if file_extensions.is_none() {
+        missing.push("file-extensions");
+    }
+    if claims_files.is_none() {
+        missing.push("claims-files");
+    }
+
+    if missing.is_empty() {
+        return None;
+    }
+
+    let missing_list = missing.join(", ");
+    Some(
+        DiagnosticMessageBuilder::warning(format!(
+            "engine extension `{extension_label}` does not declare static claims"
+        ))
+        .with_code("Q-16-10")
+        .problem(
+            "so Quarto cannot tell which languages and file types it handles without \
+             starting it as a subprocess, and must do so for any document that could \
+             need an engine.",
+        )
+        .add_detail(format!(
+            "not declared in {}: {missing_list}",
+            extension_yml_path.display()
+        ))
+        .add_hint(
+            "add these keys to the extension's `_extension.yml` to let Quarto read \
+             the answer instead of asking — e.g. `claims: [python]`. An empty value \
+             is a real answer: `claims-files: []` declares \"this engine handles no \
+             files\".",
+        )
+        .build(),
+    )
 }
 
 /// A filter contributed by an extension.
@@ -149,5 +417,368 @@ mod tests {
         assert!(c.shortcodes.is_empty());
         assert!(c.metadata.is_none());
         assert!(c.project.is_none());
+        assert!(c.engines.is_empty());
+    }
+
+    // --- static_claim_to_language_claim tests (seam P1-14) ---
+
+    fn make_claim(
+        kind: ClaimKind,
+        priority: Option<i32>,
+        when_class: Option<&str>,
+    ) -> StaticLanguageClaim {
+        StaticLanguageClaim {
+            kind,
+            priority,
+            when_class: when_class.map(|s| s.to_string()),
+        }
+    }
+
+    #[test]
+    fn static_claim_primary_no_when_class_default_priority() {
+        // when_class: None, kind: Primary, priority: None → Primary(1)
+        let claim = make_claim(ClaimKind::Primary, None, None);
+        assert_eq!(
+            static_claim_to_language_claim(&claim, None),
+            crate::engine::LanguageClaim::Primary(1)
+        );
+    }
+
+    #[test]
+    fn static_claim_primary_no_when_class_explicit_priority() {
+        // when_class: None, kind: Primary, priority: Some(5) → Primary(5)
+        let claim = make_claim(ClaimKind::Primary, Some(5), None);
+        assert_eq!(
+            static_claim_to_language_claim(&claim, None),
+            crate::engine::LanguageClaim::Primary(5)
+        );
+    }
+
+    #[test]
+    fn static_claim_interop_and_fallback_default_priority() {
+        // kind: Interop, priority: None → Interop(0)
+        let interop = make_claim(ClaimKind::Interop, None, None);
+        assert_eq!(
+            static_claim_to_language_claim(&interop, None),
+            crate::engine::LanguageClaim::Interop(0)
+        );
+        // kind: Fallback, priority: None → Fallback(0)
+        let fallback = make_claim(ClaimKind::Fallback, None, None);
+        assert_eq!(
+            static_claim_to_language_claim(&fallback, None),
+            crate::engine::LanguageClaim::Fallback(0)
+        );
+    }
+
+    #[test]
+    fn static_claim_when_class_match_converts() {
+        // when_class: Some("marimo"), first_class: Some("marimo") → Primary(1)
+        let claim = make_claim(ClaimKind::Primary, None, Some("marimo"));
+        assert_eq!(
+            static_claim_to_language_claim(&claim, Some("marimo")),
+            crate::engine::LanguageClaim::Primary(1)
+        );
+    }
+
+    #[test]
+    fn static_claim_when_class_mismatch_returns_none() {
+        // when_class: Some("marimo"), first_class: Some("python") → None
+        let claim = make_claim(ClaimKind::Primary, None, Some("marimo"));
+        assert_eq!(
+            static_claim_to_language_claim(&claim, Some("python")),
+            crate::engine::LanguageClaim::None
+        );
+    }
+
+    #[test]
+    fn static_claim_when_class_mismatch_no_first_class_returns_none() {
+        // when_class: Some("marimo"), first_class: None → None
+        let claim = make_claim(ClaimKind::Primary, None, Some("marimo"));
+        assert_eq!(
+            static_claim_to_language_claim(&claim, None),
+            crate::engine::LanguageClaim::None
+        );
+    }
+
+    // --- lookup_static_claim tests (migrated to Vec-per-language, 4c0) ---
+    //
+    // Migration note: each map value became `Vec<StaticLanguageClaim>`. These
+    // three tests keep their original 1-element-Vec discriminators verbatim
+    // (absent key / matching whenClass / mismatched whenClass) so the
+    // pre-4c0 single-claim behavior is proven to survive the widening.
+
+    #[test]
+    fn lookup_absent_language_returns_none() {
+        let claims: HashMap<String, Vec<StaticLanguageClaim>> = HashMap::new();
+        assert_eq!(
+            lookup_static_claim(&claims, "python", None),
+            crate::engine::LanguageClaim::None
+        );
+    }
+
+    #[test]
+    fn lookup_present_matching_when_class_converts() {
+        let mut claims = HashMap::new();
+        claims.insert(
+            "python".to_string(),
+            vec![make_claim(ClaimKind::Primary, None, Some("marimo"))],
+        );
+        assert_eq!(
+            lookup_static_claim(&claims, "python", Some("marimo")),
+            crate::engine::LanguageClaim::Primary(1)
+        );
+    }
+
+    #[test]
+    fn lookup_present_mismatched_when_class_returns_none() {
+        let mut claims = HashMap::new();
+        claims.insert(
+            "python".to_string(),
+            vec![make_claim(ClaimKind::Primary, None, Some("marimo"))],
+        );
+        assert_eq!(
+            lookup_static_claim(&claims, "python", Some("python")),
+            crate::engine::LanguageClaim::None
+        );
+    }
+
+    // --- SC1: Vec combine rule — order-independent, kind dominates priority ---
+    //
+    // The discriminator: `sql`'s Vec lists Interop FIRST, then the
+    // whenClass-conditioned Primary. A naive "return the first non-None
+    // claim" reducer would answer `lookup(sql, Some("marimo"))` with
+    // `Interop(0)` (the first element always converts, since Interop has no
+    // whenClass guard); the correct strongest-kind reducer must instead
+    // combine to `Primary(2)`. This is why Interop is listed first here, not
+    // as an arbitrary ordering choice.
+    #[test]
+    fn sc1_lookup_static_claim_combines_by_strongest_kind_not_vec_order() {
+        let mut claims: HashMap<String, Vec<StaticLanguageClaim>> = HashMap::new();
+        claims.insert(
+            "sql".to_string(),
+            vec![
+                make_claim(ClaimKind::Interop, None, None),
+                make_claim(ClaimKind::Primary, Some(2), Some("marimo")),
+            ],
+        );
+        // All-claims-mismatch case: two Primary claims, both whenClass-gated,
+        // neither matching a `None` first_class.
+        claims.insert(
+            "python".to_string(),
+            vec![
+                make_claim(ClaimKind::Primary, None, Some("marimo")),
+                make_claim(ClaimKind::Primary, None, Some("other")),
+            ],
+        );
+
+        assert_eq!(
+            lookup_static_claim(&claims, "sql", Some("marimo")),
+            crate::engine::LanguageClaim::Primary(2),
+            "tagged sql: the whenClass-matching Primary claim must win over \
+             the always-applicable Interop claim, even though Interop is \
+             listed first in the Vec"
+        );
+        assert_eq!(
+            lookup_static_claim(&claims, "sql", None),
+            crate::engine::LanguageClaim::Interop(0),
+            "bare sql: only the Interop claim applies (the Primary claim's \
+             whenClass mismatches a None first_class)"
+        );
+        assert_eq!(
+            lookup_static_claim(&claims, "python", None),
+            crate::engine::LanguageClaim::None,
+            "every claim in the Vec mismatches whenClass → None"
+        );
+    }
+
+    // --- P1-11: engine_contribution_static_claims_warning matrix (Q-16-10) ---
+
+    fn make_full_external() -> EngineContribution {
+        EngineContribution::External {
+            path: std::path::PathBuf::from("/path/to/engine.js"),
+            extension_yml_path: std::path::PathBuf::from("/path/to/_extension.yml"),
+            name: Some("myengine".to_string()),
+            claims: Some(HashMap::new()),
+            file_extensions: Some(vec![]),
+            claims_files: Some(vec![]),
+        }
+    }
+
+    fn make_external_without(missing_field: &str) -> EngineContribution {
+        EngineContribution::External {
+            path: std::path::PathBuf::from("/path/to/engine.js"),
+            extension_yml_path: std::path::PathBuf::from("/path/to/_extension.yml"),
+            name: if missing_field == "name" {
+                None
+            } else {
+                Some("myengine".to_string())
+            },
+            claims: if missing_field == "claims" {
+                None
+            } else {
+                Some(HashMap::new())
+            },
+            file_extensions: if missing_field == "file-extensions" {
+                None
+            } else {
+                Some(vec![])
+            },
+            claims_files: if missing_field == "claims-files" {
+                None
+            } else {
+                Some(vec![])
+            },
+        }
+    }
+
+    /// Each undeclared static-claim key is named in the RENDERED message.
+    ///
+    /// Asserts against `to_text`, not `title`: the key list lives in the
+    /// detail line (`✖ not declared in <path>: …`), because the title is the
+    /// one-line subject a reader scans. Asserting on `title` here would pass
+    /// only for `claims` (a substring of "does not declare static claims") and
+    /// silently miss the other three.
+    fn assert_names_key(missing_field: &str) {
+        let contrib = make_external_without(missing_field);
+        let w = engine_contribution_static_claims_warning("my-ext", &contrib)
+            .unwrap_or_else(|| panic!("should warn when {missing_field} is not declared"));
+        let text = w.to_text(None);
+        assert!(
+            text.contains(missing_field),
+            "rendered warning should name `{missing_field}`:\n{text}"
+        );
+        assert!(
+            text.contains("my-ext"),
+            "rendered warning should name the extension:\n{text}"
+        );
+    }
+
+    /// `name` not declared → warned, and named. (RED: make emitter return None.)
+    #[test]
+    fn warning_names_undeclared_name_key() {
+        assert_names_key("name");
+    }
+
+    /// `claims` not declared → warned, and named.
+    #[test]
+    fn warning_names_undeclared_claims_key() {
+        assert_names_key("claims");
+    }
+
+    /// `file-extensions` not declared → warned, and named.
+    #[test]
+    fn warning_names_undeclared_file_extensions_key() {
+        assert_names_key("file-extensions");
+    }
+
+    /// `claims-files` not declared → warned, and named.
+    #[test]
+    fn warning_names_undeclared_claims_files_key() {
+        assert_names_key("claims-files");
+    }
+
+    /// Q-16-10 is carried, so the code is addressable by a future
+    /// project-scope `diagnostics:` policy (bd-aow4qio3) and by the docs URL.
+    #[test]
+    fn warning_carries_q_16_10_code() {
+        let contrib = make_external_without("claims");
+        let w = engine_contribution_static_claims_warning("my-ext", &contrib).unwrap();
+        assert_eq!(w.code.as_deref(), Some("Q-16-10"));
+    }
+
+    /// The path shown is the `_extension.yml` a user edits, never the `.js`
+    /// bundle (a build artifact). Named revert: swap `extension_yml_path` back
+    /// to `path` in the emitter and this goes RED.
+    #[test]
+    fn warning_points_at_extension_yml_not_bundle() {
+        let contrib = make_external_without("claims");
+        let text = engine_contribution_static_claims_warning("my-ext", &contrib)
+            .unwrap()
+            .to_text(None);
+        assert!(
+            text.contains("_extension.yml"),
+            "should point at the manifest:\n{text}"
+        );
+        assert!(
+            !text.contains("engine.js"),
+            "should NOT point at the bundle:\n{text}"
+        );
+    }
+
+    /// All four keys declared (some as Some(empty)) → None (no warning).
+    /// An empty value is a real answer, not an omission.
+    /// (RED: treat Some(empty) as undeclared → this assertion fails.)
+    #[test]
+    fn no_warning_when_all_keys_declared_even_empty() {
+        let contrib = make_full_external();
+        assert!(
+            engine_contribution_static_claims_warning("my-ext", &contrib).is_none(),
+            "Some(empty) counts as declared — no warning expected"
+        );
+    }
+
+    /// Reorder variant → None.
+    #[test]
+    fn no_warning_for_reorder_variant() {
+        let contrib = EngineContribution::Reorder {
+            name: "jupyter".to_string(),
+        };
+        assert!(
+            engine_contribution_static_claims_warning("my-ext", &contrib).is_none(),
+            "Reorder should never produce a warning"
+        );
+    }
+
+    // --- T7b: claimed_file_extensions reads the claims-files axis, not
+    // file-extensions (Corollary 3 seam, plan 1c.2 P2). ---
+
+    fn make_external(
+        file_extensions: Option<Vec<&str>>,
+        claims_files: Option<Vec<&str>>,
+    ) -> EngineContribution {
+        EngineContribution::External {
+            path: std::path::PathBuf::from("/path/to/engine.js"),
+            extension_yml_path: std::path::PathBuf::from("/path/to/_extension.yml"),
+            name: Some("myengine".to_string()),
+            claims: Some(HashMap::new()),
+            file_extensions: file_extensions
+                .map(|exts| exts.into_iter().map(|s| s.to_string()).collect()),
+            claims_files: claims_files.map(|exts| {
+                exts.into_iter()
+                    .map(|s| FileClaim {
+                        extension: s.to_string(),
+                    })
+                    .collect()
+            }),
+        }
+    }
+
+    /// (a) file-extensions declared, claims-files undeclared (`None`) →
+    /// empty. `claims_files: None` is fall-back-to-dynamic, not "claim
+    /// nothing via file_extensions" -- the helper must not invent a
+    /// discovery-time fallback onto the other axis.
+    #[test]
+    fn t7b_claimed_file_extensions_none_claims_files_returns_empty() {
+        let contrib = make_external(Some(vec![".jl"]), None);
+        assert_eq!(claimed_file_extensions(&contrib), Vec::<String>::new());
+    }
+
+    /// (b) file-extensions and claims-files DISAGREE (`.py` vs. `echo`) →
+    /// only the claims-files extension is returned. This is the
+    /// wrong-field-read discriminator: a helper that unioned or read
+    /// file_extensions instead would return `["py", "echo"]` or `["py"]`.
+    #[test]
+    fn t7b_claimed_file_extensions_reads_claims_files_not_file_extensions() {
+        let contrib = make_external(Some(vec![".py"]), Some(vec!["echo"]));
+        assert_eq!(claimed_file_extensions(&contrib), vec!["echo".to_string()]);
+    }
+
+    /// (c) Reorder contributes no static file claims → empty.
+    #[test]
+    fn t7b_claimed_file_extensions_reorder_returns_empty() {
+        let contrib = EngineContribution::Reorder {
+            name: "jupyter".to_string(),
+        };
+        assert_eq!(claimed_file_extensions(&contrib), Vec::<String>::new());
     }
 }
