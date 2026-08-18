@@ -169,16 +169,24 @@ pub(super) fn copy_navbar_logo(
     copy_asset_file(project, runtime, normalized, "navbar logo")
 }
 
-/// Copy images referenced from `page-footer` text regions into the
-/// output tree.
+/// Copy images referenced from `page-footer` regions — Text regions
+/// *and* item `text:` (bd-page-footer-image-items-stmpikgo, Phase 4)
+/// — into the output tree.
 ///
 /// Decision 5 of bd-root-relative-paths-design-fc5pvkcv, footer
 /// edition: a footer-region markdown image (`![](/images/x.svg)`) is
-/// a config-declared asset like the favicon and navbar logo, so it
-/// gets the same warn-and-continue copy. External URLs and `data:`
-/// URIs are skipped; a leading `/` is site-root-relative and strips
-/// to the project-relative path; `?query`/`#fragment` tails are
-/// dropped for the file probe.
+/// a config-declared asset like the favicon and navbar logo. External
+/// URLs and `data:` URIs are skipped; a leading `/` is
+/// site-root-relative and strips to the project-relative path;
+/// `?query`/`#fragment` tails are dropped for the file probe.
+///
+/// A missing file raises the same **`Q-5-6`** warning the identical
+/// reference would raise in a document body, located at the reference
+/// inside the config file (the CLI's project-diagnostic printer binds
+/// `_quarto.yml` into the source context, so the span renders as an
+/// Ariadne snippet). Running here — once per project, post-render —
+/// rather than in the per-doc pipeline is what keeps a broken footer
+/// reference from warning once per rendered page.
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn copy_footer_images(
     project: &ProjectContext,
@@ -186,7 +194,6 @@ pub(super) fn copy_footer_images(
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Result<()> {
     use quarto_navigation::FooterRegion;
-    use quarto_pandoc_types::config_value::ConfigValueKind;
 
     let Some(meta) = project.config.metadata.as_ref() else {
         return Ok(());
@@ -195,39 +202,16 @@ pub(super) fn copy_footer_images(
         return Ok(());
     };
 
-    let mut urls: Vec<String> = Vec::new();
+    let mut refs: Vec<ImageRef> = Vec::new();
     for region in [&footer.left, &footer.center, &footer.right] {
-        let FooterRegion::Text(cv) = region else {
-            continue;
-        };
-        match &cv.value {
-            ConfigValueKind::PandocInlines(inlines) => {
-                collect_inline_image_urls(inlines, &mut urls);
-            }
-            // At post-render time the project config still holds the
-            // raw scalar — markdown-izing config strings
-            // (`ConfigMarkdownTransform`) happens in the per-doc
-            // pipeline. Parse the same way here; parse warnings are
-            // dropped, the per-doc pipeline already reported them.
-            ConfigValueKind::Scalar(_) => {
-                let Some(text) = cv.as_plain_text() else {
-                    continue;
-                };
-                let mut parse_diags = Vec::new();
-                let kind = pampa::pandoc::meta::parse_config_string_as_markdown(
-                    &text,
-                    &cv.source_info,
-                    &mut parse_diags,
-                );
-                if let ConfigValueKind::PandocInlines(inlines) = &kind {
-                    collect_inline_image_urls(inlines, &mut urls);
-                }
-            }
-            _ => {}
+        match region {
+            FooterRegion::Text(cv) => collect_config_text_images(cv, &mut refs),
+            FooterRegion::Items(items) => collect_items_images(items, &mut refs),
+            FooterRegion::Empty => {}
         }
     }
 
-    for raw in urls {
+    for ImageRef { url: raw, origin } in refs {
         if quarto_util::is_external_url(&raw) {
             continue;
         }
@@ -245,10 +229,16 @@ pub(super) fn copy_footer_images(
             ))
         })?;
         if !exists {
-            diagnostics.push(DiagnosticMessage::warning(format!(
-                "page-footer image refers to missing file '{}'",
-                normalized
-            )));
+            // Uniform missing-resource shape (Q-5-6): the same
+            // intent-based diagnostic the body's resource-copy drain
+            // emits, anchored at the reference in the YAML.
+            let intent = crate::render::ResourceCopyIntent {
+                src,
+                dest: project.output_dir.join(normalized),
+                origin,
+            };
+            diagnostics
+                .push(crate::resource_copy_diagnostics::missing_resource_diagnostic(&intent));
             continue;
         }
         copy_asset_file(project, runtime, normalized, "page-footer image")?;
@@ -256,35 +246,160 @@ pub(super) fn copy_footer_images(
     Ok(())
 }
 
-/// Collect `Image` target URLs from config-region inlines, in order,
-/// deduplicated, recursing through formatting containers.
+/// One collected image reference: the raw authored URL plus the span
+/// to anchor a `Q-5-6` at — the URL's own span when the parse tracked
+/// it, else the whole image's.
 #[cfg(not(target_arch = "wasm32"))]
-fn collect_inline_image_urls(
+struct ImageRef {
+    url: String,
+    origin: quarto_source_map::SourceInfo,
+}
+
+/// Collect image references from a text-bearing config value in any
+/// of its shapes: parsed inlines, parsed blocks, or a raw scalar.
+///
+/// At post-render time the project config still holds raw scalars —
+/// markdown-izing config strings (`ConfigMarkdownTransform`) happens
+/// in the per-doc pipeline — so scalars are re-parsed the same way
+/// here; parse warnings are dropped, the per-doc pipeline already
+/// reported them. The parse threads the scalar's `SourceInfo`
+/// through, so collected spans remap into the config file.
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_config_text_images(
+    cv: &quarto_pandoc_types::config_value::ConfigValue,
+    out: &mut Vec<ImageRef>,
+) {
+    use quarto_pandoc_types::config_value::ConfigValueKind;
+    match &cv.value {
+        ConfigValueKind::PandocInlines(inlines) => collect_inline_image_refs(inlines, out),
+        ConfigValueKind::PandocBlocks(blocks) => collect_block_image_refs(blocks, out),
+        ConfigValueKind::Scalar(_) => {
+            let Some(text) = cv.as_plain_text() else {
+                return;
+            };
+            let mut parse_diags = Vec::new();
+            let kind = pampa::pandoc::meta::parse_config_string_as_markdown(
+                &text,
+                &cv.source_info,
+                &mut parse_diags,
+            );
+            match &kind {
+                ConfigValueKind::PandocInlines(inlines) => collect_inline_image_refs(inlines, out),
+                ConfigValueKind::PandocBlocks(blocks) => collect_block_image_refs(blocks, out),
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Collect image references from footer items: each item's `text:`
+/// and (bare-scalar) `bare_text`, recursing into `menu` symmetrically
+/// with the render-time walkers.
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_items_images(items: &[quarto_navigation::NavigationItem], out: &mut Vec<ImageRef>) {
+    for item in items {
+        if let Some(cv) = &item.text {
+            collect_config_text_images(cv, out);
+        }
+        if let Some(cv) = &item.bare_text {
+            collect_config_text_images(cv, out);
+        }
+        collect_items_images(&item.menu, out);
+    }
+}
+
+/// Collect image references from block containers. Coverage mirrors
+/// `transforms::navigation_href::rewrite_config_blocks` for the
+/// container shapes that plausibly occur in config text; figures
+/// contribute the image in their content (and any images in their
+/// caption).
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_block_image_refs(blocks: &[quarto_pandoc_types::block::Block], out: &mut Vec<ImageRef>) {
+    use quarto_pandoc_types::block::Block;
+    for block in blocks {
+        match block {
+            Block::Plain(p) => collect_inline_image_refs(&p.content, out),
+            Block::Paragraph(p) => collect_inline_image_refs(&p.content, out),
+            Block::Header(h) => collect_inline_image_refs(&h.content, out),
+            Block::LineBlock(lb) => {
+                for line in &lb.content {
+                    collect_inline_image_refs(line, out);
+                }
+            }
+            Block::BlockQuote(bq) => collect_block_image_refs(&bq.content, out),
+            Block::OrderedList(ol) => {
+                for item in &ol.content {
+                    collect_block_image_refs(item, out);
+                }
+            }
+            Block::BulletList(bl) => {
+                for item in &bl.content {
+                    collect_block_image_refs(item, out);
+                }
+            }
+            Block::DefinitionList(dl) => {
+                for (term, defs) in &dl.content {
+                    collect_inline_image_refs(term, out);
+                    for def in defs {
+                        collect_block_image_refs(def, out);
+                    }
+                }
+            }
+            Block::Div(d) => collect_block_image_refs(&d.content, out),
+            Block::Figure(f) => {
+                if let Some(short) = &f.caption.short {
+                    collect_inline_image_refs(short, out);
+                }
+                if let Some(long) = &f.caption.long {
+                    collect_block_image_refs(long, out);
+                }
+                collect_block_image_refs(&f.content, out);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Collect `Image` target references from config-region inlines, in
+/// order, deduplicated by URL (the first occurrence keeps its span),
+/// recursing through formatting containers. The span follows the body
+/// collector's rule (`ResourceCollectorTransform`): the URL's own
+/// span when the parse tracked it, else the whole image's.
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_inline_image_refs(
     inlines: &[quarto_pandoc_types::inline::Inline],
-    out: &mut Vec<String>,
+    out: &mut Vec<ImageRef>,
 ) {
     use quarto_pandoc_types::inline::Inline;
     for inline in inlines {
         match inline {
             Inline::Image(img) => {
-                if !out.contains(&img.target.0) {
-                    out.push(img.target.0.clone());
+                if !out.iter().any(|r| r.url == img.target.0) {
+                    out.push(ImageRef {
+                        url: img.target.0.clone(),
+                        origin: img
+                            .target_source
+                            .url
+                            .clone()
+                            .unwrap_or_else(|| img.source_info.clone()),
+                    });
                 }
-                collect_inline_image_urls(&img.content, out);
+                collect_inline_image_refs(&img.content, out);
             }
-            Inline::Link(l) => collect_inline_image_urls(&l.content, out),
-            Inline::Emph(e) => collect_inline_image_urls(&e.content, out),
-            Inline::Strong(s) => collect_inline_image_urls(&s.content, out),
-            Inline::Underline(u) => collect_inline_image_urls(&u.content, out),
-            Inline::Strikeout(s) => collect_inline_image_urls(&s.content, out),
-            Inline::Superscript(s) => collect_inline_image_urls(&s.content, out),
-            Inline::Subscript(s) => collect_inline_image_urls(&s.content, out),
-            Inline::SmallCaps(s) => collect_inline_image_urls(&s.content, out),
-            Inline::Quoted(q) => collect_inline_image_urls(&q.content, out),
-            Inline::Span(s) => collect_inline_image_urls(&s.content, out),
-            Inline::Insert(i) => collect_inline_image_urls(&i.content, out),
-            Inline::Delete(d) => collect_inline_image_urls(&d.content, out),
-            Inline::Highlight(h) => collect_inline_image_urls(&h.content, out),
+            Inline::Link(l) => collect_inline_image_refs(&l.content, out),
+            Inline::Emph(e) => collect_inline_image_refs(&e.content, out),
+            Inline::Strong(s) => collect_inline_image_refs(&s.content, out),
+            Inline::Underline(u) => collect_inline_image_refs(&u.content, out),
+            Inline::Strikeout(s) => collect_inline_image_refs(&s.content, out),
+            Inline::Superscript(s) => collect_inline_image_refs(&s.content, out),
+            Inline::Subscript(s) => collect_inline_image_refs(&s.content, out),
+            Inline::SmallCaps(s) => collect_inline_image_refs(&s.content, out),
+            Inline::Quoted(q) => collect_inline_image_refs(&q.content, out),
+            Inline::Span(s) => collect_inline_image_refs(&s.content, out),
+            Inline::Insert(i) => collect_inline_image_refs(&i.content, out),
+            Inline::Delete(d) => collect_inline_image_refs(&d.content, out),
+            Inline::Highlight(h) => collect_inline_image_refs(&h.content, out),
             _ => {}
         }
     }

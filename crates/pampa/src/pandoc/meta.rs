@@ -745,6 +745,40 @@ mod tests {
         );
     }
 
+    /// Sub-spans (an image target's URL span) must reroot through the
+    /// parent `SourceInfo` exactly like node spans do
+    /// (bd-page-footer-image-items-stmpikgo, Phase 4): a consumer that
+    /// anchors a diagnostic at `target_source.url` must land inside
+    /// the config file the scalar was authored in, not at raw
+    /// offsets-into-the-scalar against `FileId(0)`.
+    #[test]
+    fn config_string_image_target_source_reroots_through_parent() {
+        use quarto_source_map::FileId;
+        let parent = quarto_source_map::SourceInfo::original(FileId(7), 100, 160);
+        let mut diagnostics = Vec::new();
+        let kind =
+            parse_config_string_as_markdown("![x](images/logo.svg)", &parent, &mut diagnostics);
+        let ConfigValueKind::PandocInlines(inlines) = kind else {
+            panic!("expected PandocInlines");
+        };
+        let Inline::Image(img) = &inlines[0] else {
+            panic!("expected Image inline");
+        };
+        let url_si = img
+            .target_source
+            .url
+            .as_ref()
+            .expect("URL span must be tracked");
+        let (fid, start, end) = url_si
+            .resolve_byte_range()
+            .expect("URL span must resolve to a byte range");
+        assert_eq!(fid, 7, "URL span must resolve into the parent's file");
+        // "![x](" is 5 bytes into the scalar, which starts at parent
+        // offset 100.
+        assert_eq!(start, 105, "URL span must shift by the parent's start");
+        assert_eq!(end, 105 + "images/logo.svg".len());
+    }
+
     #[test]
     fn explicit_md_lone_image_keeps_figure_semantics() {
         // `!md`-tagged values are explicit block-context markdown:

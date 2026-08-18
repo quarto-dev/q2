@@ -132,15 +132,27 @@ tests written and verified first.
   `repro-md-blocks/`: an `!md` two-block center region renders
   `<img src="../../images/logo.svg">` and `<a href="../../index.html">`
   on the deep page.
-- [ ] **Phase 4 — Uniform Q-5-6 for footer images (decision 4).**
-  Extend `copy_footer_images` to walk `Items` regions (item `text:` +
-  `bare_text`, recursing into `menu`) and `PandocBlocks` values using the
-  shared collectors; build a `ResourceCopyIntent` per collected URL with
-  `origin` = the Image node's span (remaps into `_quarto.yml`), and report
-  misses via `missing_resource_diagnostic` (Q-5-6) instead of the uncoded
-  string warning. Once per project (post-render) to avoid per-page warning
-  duplication. Tests: `repro-missing/` end-to-end — all four rows of the
-  matrix produce exactly one spanned Q-5-6 each (plus the body control).
+- [x] **Phase 4 — Uniform Q-5-6 for footer images (decision 4).**
+  *Done 2026-08-18.* `copy_footer_images` now collects `ImageRef`s
+  (URL + span, body-collector origin rule) from Text regions (inlines,
+  blocks, raw scalars) *and* Items regions (item `text:` + `bare_text`,
+  `menu` recursion); misses go through `ResourceCopyIntent` +
+  `missing_resource_diagnostic` — a real Q-5-6, once per project.
+  Root-caused and fixed a mis-anchoring bug this surfaced in pampa:
+  `range_to_source_info_with_context` (`location.rs`) ignored
+  `parent_source_info`, so every attr/target sub-span in a *re-parsed*
+  string (image URL spans, link targets, code-fence info strings, 11 call
+  sites) was `Original(FileId(0), offsets-into-the-string)` — the exact
+  wrong-text hazard the pipe_table/section comments warn about. It now
+  reroots as a `Substring` of the parent like node spans do. Failing-first
+  tests: 4 integration tests (missing Text-region → Q-5-6 with location;
+  missing item image → Q-5-6; present item image → copied; `!md` blocks →
+  Q-5-6) + a pampa reroot unit test. Workspace green (12328), zero
+  snapshot churn. End-to-end (`repro-missing/`): footer Q-5-6 renders an
+  Ariadne snippet into `_quarto.yml` line 6 at the reference; one known
+  imprecision — quoted scalars underline one column early because
+  quarto-yaml scalar spans include the quotes; filed **bd-70krno7a**
+  (discovered-from) for content spans rather than hacking a `-1`.
 - [ ] **Phase 5 — Verification + docs.** Full `cargo xtask verify`;
   end-to-end render of both repros recorded in this plan; changelog/strand
   notes. Check whether `docs/errors/quarto/Q-5-6.qmd` needs wording updates

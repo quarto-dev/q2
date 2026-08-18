@@ -457,8 +457,11 @@ fn pipeline_navbar_logo_missing_diagnoses_continues() {
     );
 }
 
-/// Decision 5, footer edition: a footer text-region image whose file
-/// is missing warns (naming the file) and the render continues.
+/// Decision 5, footer edition — upgraded by
+/// bd-page-footer-image-items-stmpikgo Phase 4: a footer text-region
+/// image whose file is missing raises the same **Q-5-6** the identical
+/// reference would raise in a document body, located at the reference
+/// in `_quarto.yml`, and the render continues.
 #[test]
 fn pipeline_footer_image_missing_diagnoses_continues() {
     let (project_dir, summary) = render_project(|project_dir| {
@@ -477,18 +480,120 @@ fn pipeline_footer_image_missing_diagnoses_continues() {
         !project_dir.join("_site/images/gone.svg").exists(),
         "missing footer image must not be written"
     );
+    assert_footer_q_5_6(&summary, "gone.svg");
+}
+
+/// Assert exactly the uniform-diagnostic contract of Phase 4
+/// (bd-page-footer-image-items-stmpikgo): a Q-5-6 warning whose
+/// rendered text names the missing file and which carries a source
+/// location (the reference inside `_quarto.yml`).
+fn assert_footer_q_5_6(summary: &ProjectRenderSummary, missing: &str) {
+    let diag = summary
+        .project_diagnostics
+        .iter()
+        .find(|d| d.code.as_deref() == Some("Q-5-6"))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected a Q-5-6 diagnostic; got: {:?}",
+                summary
+                    .project_diagnostics
+                    .iter()
+                    .map(|d| (d.code.clone(), d.title.clone()))
+                    .collect::<Vec<_>>()
+            )
+        });
+    let text = diag.to_text(None);
     assert!(
-        summary
+        text.contains(missing),
+        "Q-5-6 must name the missing file `{missing}`; got: {text}"
+    );
+    assert!(
+        diag.location.is_some(),
+        "Q-5-6 must carry the reference's source location"
+    );
+}
+
+/// Phase 4, items edition: an *item's* `text:` image gets the same
+/// treatment — missing file raises Q-5-6, present file is copied into
+/// the output tree (previously Items regions were skipped entirely).
+#[test]
+fn pipeline_footer_item_image_missing_raises_q_5_6() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  page-footer:\n    right:\n      - text: \"![](/images/gone.svg)\"\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    assert!(
+        !project_dir.join("_site/images/gone.svg").exists(),
+        "missing footer item image must not be written"
+    );
+    assert_footer_q_5_6(&summary, "gone.svg");
+}
+
+/// Phase 4, items edition, present-file half: the item image is
+/// copied to the output tree like a Text region's.
+#[test]
+fn pipeline_footer_item_image_present_is_copied() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  page-footer:\n    right:\n      - text: \"![](/images/logo.svg)\"\n",
+        );
+        std::fs::create_dir_all(project_dir.join("images")).unwrap();
+        write(&project_dir.join("images/logo.svg"), "<svg></svg>");
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    assert!(
+        project_dir.join("_site/images/logo.svg").exists(),
+        "footer item image must be copied into the output tree"
+    );
+    assert!(
+        !summary
             .project_diagnostics
             .iter()
-            .any(|d| d.title.contains("gone.svg")),
-        "expected a diagnostic mentioning 'gone.svg'; got: {:?}",
+            .any(|d| d.code.as_deref() == Some("Q-5-6")),
+        "no Q-5-6 for a present file; got: {:?}",
         summary
             .project_diagnostics
             .iter()
             .map(|d| d.title.clone())
             .collect::<Vec<_>>()
     );
+}
+
+/// Phase 4, blocks edition: an `!md` multi-block region's missing
+/// image raises Q-5-6 too (the collector walks `PandocBlocks`).
+#[test]
+fn pipeline_footer_md_blocks_image_missing_raises_q_5_6() {
+    let (project_dir, summary) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  page-footer:\n    center: !md |\n      ![](/images/gone.svg)\n\n      second paragraph\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    assert!(
+        !project_dir.join("_site/images/gone.svg").exists(),
+        "missing footer image must not be written"
+    );
+    assert_footer_q_5_6(&summary, "gone.svg");
 }
 
 // ═══════════════════════════════════════════════════════════════════
