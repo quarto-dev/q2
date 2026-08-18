@@ -1,6 +1,15 @@
 const React = window.React;
 const { renderChildren } = window.__REACT_AST_DEBUG_RENDERER__;
 
+const inlineText = (inlines) => inlines.map(inline => {
+    if (inline.t === 'Str') return inline.c;
+    if (inline.t === 'Space') return ' ';
+    return '';
+}).join('');
+
+const isSection = (block) =>
+    block.t === 'Div' && block.c[0][1].includes('section');
+
 export const Div = (args) => {
     const { node: div, setLocalAst } = args;
 
@@ -11,39 +20,39 @@ export const Div = (args) => {
         return <div id={id} className={classes.join(' ')}>{renderChildren(args)}</div>;
     }
 
-    // Parse kanban structure
+    // Parse kanban structure.
+    //
+    // A component reads the AST as the pipeline leaves it, and by this
+    // point `SectionizeTransform` has wrapped every heading -- including
+    // headings nested inside a Div like this one -- together with the
+    // content that follows it:
+    //
+    //   Div(.kanban)
+    //     Div(#backlog .section .level2)[ Header(2) "backlog", BulletList ]
+    //     Div(#doing   .section .level2)[ Header(2) "doing",   BulletList ]
+    //
+    // So a column is a section Div, not a bare Header. The grouping is a
+    // convenience: the heading and its cards arrive together.
     const blocks = div.c[1];
     const columns = [];
-    let currentColumn = null;
 
     for (const block of blocks) {
-        if (block.t === 'Header' && block.c[0] === 2) {
-            // New column header
-            const title = block.c[2].map(inline => {
-                if (inline.t === 'Str') return inline.c;
-                if (inline.t === 'Space') return ' ';
-                return '';
-            }).join('');
+        if (!isSection(block)) continue;
+        const children = block.c[1];
+        const header = children.find(b => b.t === 'Header' && b.c[0] === 2);
+        if (!header) continue;
 
-            currentColumn = { title, items: [] };
-            columns.push(currentColumn);
-        } else if (block.t === 'BulletList' && currentColumn) {
-            // Items for current column
-            const items = block.c.map(listItem => {
-                // Each listItem is [Block] - an array of blocks
-                return listItem.map(b => {
-                    if (b.t === 'Plain' || b.t === 'Para') {
-                        return b.c.map(inline => {
-                            if (inline.t === 'Str') return inline.c;
-                            if (inline.t === 'Space') return ' ';
-                            return '';
-                        }).join('');
-                    }
-                    return '';
-                }).join('');
-            });
-            currentColumn.items.push(...items);
+        const column = { title: inlineText(header.c[2]), items: [] };
+        for (const child of children) {
+            if (child.t !== 'BulletList') continue;
+            // Each listItem is [Block] - an array of blocks.
+            column.items.push(...child.c.map(listItem =>
+                listItem.map(b =>
+                    (b.t === 'Plain' || b.t === 'Para') ? inlineText(b.c) : ''
+                ).join('')
+            ));
         }
+        columns.push(column);
     }
 
     return <KanbanBoard columns={columns} div={div} setLocalAst={setLocalAst} />;

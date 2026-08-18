@@ -482,3 +482,47 @@ The same 7 pre-existing differences remain.
 > the new `ts-packages/quarto-engine-host-deno` workspace needed `npm install`
 > after the rebase, and `@esbuild/darwin-arm64` was missing from `node_modules`
 > (optional platform dep), which failed `quarto-hub-mcp`'s bundle test.
+
+## Phase 6 — render-component fallout from Phase 2 (found by CI)
+
+PR #548's first CI run was green except **Hub-Client E2E**, where two kanban
+tests failed. Not flake, and not a test-only problem: Phase 2's sectionize
+recursion is visible to q2-preview render components, which read the AST as the
+pipeline leaves it.
+
+`kanban.tsx` scanned its own Div's direct children for `Header` blocks to build
+columns. After Phase 2 those children are section Divs, so it found none and
+rendered nothing. Reproduced outside the browser — `q2 render` on the fixture
+gives `<div class="kanban"><section id="backlog" class="section level2">` where
+it used to give `<div class="kanban"><h2 id="backlog">`.
+
+Three options were weighed (full write-up in the PR discussion): recurse only
+where the Div gets absorbed; update the component contract; or add a declaration
+mechanism so Rust can leave component-owned subtrees alone. **Rust cannot
+currently know which classes a component owns** — the binding lives in the TSX,
+which checks `classes.includes('kanban')` at render time — so the targeted skip
+was not available without new API.
+
+Worth recording: **recursion into non-absorbed Divs was never needed for the TOC
+fix.** A non-absorbed Div terminates the walk whether or not its contents are
+sectionized. The recursion buys DOM parity with Q1 and nothing else. That made
+"absorb-only recursion" a real option, at the cost of leaving bd-26nryuwh half
+delivered.
+
+**Decision (user, 2026-08-18): update the component contract.** Full Q1 DOM
+parity is kept; render-components are undocumented in `docs/` and some churn
+between components and the pipeline is expected while the API settles.
+
+- [x] `kanban.tsx` reads section Divs. The **write** path is deliberately left
+      alone — `edit.resolveSource` hands back the *source* node, which is
+      pre-transform, and emitting sections there would write them into the
+      user's `.qmd`. Both paths now carry comments saying so.
+- [x] `kanban_rc.jsx` (the copy-paste sample under `hub-client/`) had the same
+      pattern and would have shipped broken; same fix.
+- [x] Checked the other components: `comment.tsx` overrides `Block` and handles
+      a `Header` wherever it appears, so sectionizing does not hide it;
+      `drag.tsx` does not inspect headings. Both passed CI, consistent.
+- [x] Documented what a component receives, including the read/write asymmetry,
+      in `experimental-components/new/README.md`.
+- [x] Verified locally rather than by pushing and waiting: the two kanban specs
+      pass, and the full Playwright suite is **59 passed**.
