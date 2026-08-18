@@ -230,3 +230,103 @@ phases differ substantially between them.
 - **Q1 comparison used a quarto-cli dev checkout** (`quarto --version` → `99.9.9`). The structural
   facts above (real AST from `render_tabset`; sections inside panes; the four probe rows) are
   stable behavior, not release-specific, but a release-Q1 spot-check is cheap if you want it.
+
+---
+
+# Implementation plan (approved 2026-08-18)
+
+**Direction: (B).** Branch `braid/bd-tabset-headings-in-toc-t04ie7f7` off `main` @ `0aa7cb7c`.
+
+Design questions 1–5 are settled (see above). Phases land in dependency order; each is
+independently green, so the tree is never in a state where the TOC is wrong in a *new* way.
+
+**Ordering constraint.** Phase 3 (restrict the walk) must come last: it is the only phase that can
+*remove* a TOC entry, and it is correct only once Phases 1 and 2 guarantee that every heading Q1
+lists lives in the section tree.
+
+## Phase 0 — Test harness and characterization tests
+
+- [ ] Promote `div-toc-probe` / `div-recursion-probe` fixtures into the workspace as a container
+      matrix: for each of {plain div, `content-visible`, `content-hidden`, `column-margin`,
+      `layout-ncol`, callout title, callout body, tabset pane, blockquote}, assert the TOC entries
+      and the section/div shape.
+- [ ] Write these as **characterization tests first** (asserting today's behavior, with the
+      divergent rows marked), so each later phase flips a known set of assertions rather than
+      landing untested behavior.
+- [ ] Route through an end-to-end entry point (`render_document_to_file` or the tabset-pipeline
+      integration style), not `render_qmd_to_html` with defaults — per CLAUDE.md's end-to-end rule.
+
+## Phase 1 — Conditional-content: unwrap the resolved wrapper (prerequisite)
+
+Q1's `content-hidden.lua` (`customnodes/content-hidden.lua:56`) resolves a **visible Div** by
+returning `el.content` — the wrapper disappears — after `clearHiddenVisibleAttributes` strips both
+marker classes and the condition attributes. Spans/CodeBlocks keep their element ("we keep the
+scaffolding element, as opposed to in the Div where we return the inlined content", `:154`).
+q2 keeps the marker class *and* the Div, so 10 Connect-docs pages carry a
+`<div class="content-visible">` Q1 does not emit.
+
+- [ ] Failing test: a visible `::: {.content-visible when-format="html"}` leaves no Div in the
+      output; a visible `[x]{.content-visible …}` Span keeps its Span; marker classes are gone in
+      both cases.
+- [ ] Strip the marker classes on surviving elements (Q1's `clearHiddenVisibleAttributes`).
+- [ ] Unwrap a resolved **Div** — but only what the feature itself contributed. After stripping the
+      marker class and condition attributes, unwrap iff nothing remains (empty id, no classes, no
+      attributes); otherwise keep a plain Div carrying the user's own attributes.
+      **Divergence from Q1, deliberate:** Q1 unconditionally returns `el.content`, discarding a
+      user's `#id` and extra classes. Preserving them is not lossy and costs nothing — pandoc's
+      absorb rule (Phase 2) merges an empty-id wrapper into the section anyway, so the TOC outcome
+      is identical. All 33 real uses in the Connect corpus are bare markers, where the two rules
+      coincide exactly.
+- [ ] Keep the llms two-view path intact (`.quarto-llms-omit` / `.quarto-llms-keep` markers are
+      applied *instead of* resolving; unwrapping must not fire on a marked element).
+- [ ] Update the module docs — the current text says surviving elements "keep their classes", which
+      is the bug.
+
+## Phase 2 — `sectionize_blocks`: recurse into Divs + pandoc's absorb rule (bd-26nryuwh)
+
+- [ ] Failing test: a heading inside a plain Div is wrapped in a section; a Div with an empty id
+      wrapping a single header-led run is absorbed, merging its classes/attrs into the section
+      (Q1: `class="level4 my-wrapper"`); a Div with a non-empty id keeps the Div and nests the
+      section inside; `BlockQuote` content is *not* sectionized.
+- [ ] Recurse into non-section Divs.
+- [ ] Implement the absorb rule. The spike's version (`spike-B.patch`) required `content.len() == 1`;
+      pandoc's real condition is a header-led run, so verify against a Div holding a section
+      *followed by* trailing blocks, and a Div holding two sibling sections.
+- [ ] Confirm the consume-first transforms still work: `CalloutTransform` / `PanelTabsetTransform`
+      run before sectionize and depend on **flat** Headers as direct Div children. Nothing here
+      changes that, but the tabset/callout tests must stay green.
+
+## Phase 3 — `collect_toc_entries`: walk only the section tree
+
+- [ ] Failing test: headings inside a tabset pane, a callout body, and a blockquote are absent from
+      the TOC; headings inside `content-visible` / `column-margin` / `layout-ncol` / a plain Div are
+      still present.
+- [ ] A non-section Div terminates the walk (pandoc's `sectionToListItem`).
+- [ ] Remove the `BlockQuote` arm.
+- [ ] Decide the un-sectionized fallback. `SectionizeTransform` is skipped for revealjs
+      (`pipeline.rs:1332`) while `TocGenerateTransform` is ungated (`:1387`). q2 emits no `nav#TOC`
+      for reveal today, so nothing breaks — but leave the code honest: either run sectionize for
+      reveal too, or document the precondition at `generate_toc`.
+- [ ] `document_profile.rs::extract_outline` calls `generate_toc` on the **pre-transform** AST
+      (`DocumentProfileStage` at `pipeline.rs:314` runs before `AstTransformsStage` at `:353`), so
+      its outline is un-sectionized. Check what the new rule does to it and record the answer.
+
+## Phase 4 — End-to-end verification
+
+- [ ] `cargo nextest run --workspace`, then `cargo xtask verify` (full — pampa/quarto-core are in
+      hub-client's WASM closure).
+- [ ] Re-render the Connect corpus with the clean double-render method (see `FALLOUT-B.md` — an
+      incremental baseline invalidates the diff) and confirm: exact TOC parity with Q1 rises from
+      **421 → 444 of 451**, TOC entries added **= 0**, and the 2 `content-visible` regressions are
+      gone (target ≥ 446 once Phase 1 lands).
+- [ ] Review every changed page against Q1, not just the counts.
+- [ ] Record the invocations and observed output in this plan.
+
+## Phase 5 — Bookkeeping
+
+- [ ] Close bd-8yjvs3bj (blockquote leak) as absorbed by Phase 3.
+- [ ] Close bd-26nryuwh (sectionize recursion) as delivered by Phase 2.
+- [ ] File the conditional-content unwrap as its own strand (Phase 1) so the fix is attributable.
+- [ ] Docs: user-visible behavior change is "headings inside tabsets/callouts no longer appear in
+      the TOC" — check whether `docs/` says anything about TOC contents that needs updating.
+- [ ] Commit at each phase boundary; do not push without approval.
