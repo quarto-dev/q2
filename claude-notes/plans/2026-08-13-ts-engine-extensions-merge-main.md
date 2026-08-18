@@ -693,16 +693,17 @@ no environment at all, so merged as-is TS engines see neither.
 > --workspace` can be **fully green with every test that binds D1, D2 and D5
 > skipped** — i.e. green while proving nothing about this merge's actual subject.
 
-- [ ] `deno --version` succeeds
-- [ ] `cargo build --workspace` clean
-- [ ] `cargo nextest run --workspace` green (run directly, not piped)
-- [ ] **Zero SKIP lines in the engine suites.** Grep the nextest output for
+- [x] `deno --version` succeeds → deno 2.9.0
+- [x] `cargo build --workspace` clean
+- [x] `cargo nextest run --workspace` green → **12,624 passed, 0 failed**
+- [x] **Zero SKIP lines in the engine suites.** → 0 skips; 41 engine-suite tests ran.
+      This is the check that makes the rest meaningful. Grep the nextest output for
       skipped tests in `echo_engine_e2e`, `julia_engine_e2e` and siblings; a skip
       here means the D1/D2/D5 work is unverified, not passing.
-- [ ] `cargo xtask lint`
-- [ ] **`cargo xtask verify`** — full, **not** `--skip-hub-build`: `quarto-core`
+- [x] `cargo xtask lint` → all checks passed (1018 files)
+- [x] **`cargo xtask verify`** — full, **not** `--skip-hub-build`: `quarto-core`
       and `wasm-quarto-hub-client` both change
-- [ ] **End-to-end** (project rule — tests alone are insufficient for a
+- [x] **End-to-end** (project rule — tests alone are insufficient for a
       user-visible feature). At minimum:
   - `cargo run --bin q2 -- render docs/` — inspect output
   - a project with a claimed `.echo` extension and **no** `project.render` key,
@@ -714,11 +715,134 @@ no environment at all, so merged as-is TS engines see neither.
     the extension first (`q2 call build-ts-extension`) or copy the fixture into a
     scratch project the test harness has already bundled.
   - record the exact invocations and output snippets below
-- [ ] Report snapshot changes (count, summary, surprises)
+- [x] Report snapshot changes → 6 `.snap` files (3 added, 3 modified), **all
+      byte-identical to main's**: purely incoming, none regenerated here.
+      Added: entity-references, smart-typography-positions,
+      llms_companion_rich_content. Modified: the three listing_pipeline
+      categories snapshots. Nothing surprising; none touched by Phase B/C.
 - [ ] **Ask Gordon for push permission.** Stop here.
 
 ```
-(paste verified end-to-end invocations + output snippets on completion)
+All output below was run through the real `q2` binary and inspected — not
+inferred from an exit code.
+
+── D1: a claimed `.echo` renders with NO `project.render` key ──────────────
+
+Fixture: `_quarto.yml` = `project: {type: default}` (no `render:` key),
+`_extensions/echo-engine` (the committed fixture; `dist/` is deliberately
+uncommitted, so built first), plus `a.echo`, `index.qmd`, `notes.md`.
+
+    $ cargo run --bin q2 -- call build-ts-extension /tmp/d1-e2e/_extensions/echo-engine
+    Built: .../src/echo-engine.ts → .../dist/echo-engine.js
+
+    $ cargo run --bin q2 -- render /tmp/d1-e2e
+    Rendering project: /private/tmp/d1-e2e (type: default)
+    Rendered 2 of 2 files to /private/tmp/d1-e2e
+
+Inspected:
+
+  * `a.html` exists and contains `ECHO_EXECUTED` — the `.echo` was
+    discovered with no `render:` key, converted, AND executed. This is D1;
+    before the widening the file was silently dropped by a gate-2 default of
+    literally `**/*.qmd`.
+  * `index.html` exists — widening ADDS to the default, never replaces it.
+  * `notes.html` does NOT exist ("2 of 2", not 3) — `.md` stays opt-in, so
+    engine claims do not drag the native set into the default pattern set
+    (bd-6d2wj4zp preserved).
+  * zero `Q-2-50` warnings — a non-native claim is legitimate and silent.
+
+── B3/D5: `Q-2-50` refuses a native-set claim ──────────────────────────────
+
+Same fixture with the echo engine made greedy (`.md` added to both
+`_extension.yml`'s `claims-files`/`file-extensions` AND the module's
+`claimsFile`, so the engine's own self-enforcement check passes), and
+`render: ["*.md", "*.echo"]` so the `.md` reaches the stage at all.
+
+    $ cargo run --bin q2 -- render /tmp/b3-e2e
+    Rendering project: /private/tmp/b3-e2e (type: default)
+    Warning [Q-2-50]: engine claim on `/private/tmp/b3-e2e/notes.md` ignored
+    The engine `echo` claimed `.md` files, but Quarto handles markdown
+    natively. The claim is ignored and the file is rendered by Quarto's own
+    parser.
+    ℹ Quarto owns `.qmd`, `.md`, `.markdown` and extension-less inputs. An
+    engine that claimed one of them would bypass Quarto's parser entirely.
+    Engine extensions should claim their own file extension instead.
+
+    Rendered 2 of 2 files to /private/tmp/b3-e2e — 1 warning
+
+Inspected:
+
+  * `notes.html` contains its source text verbatim and **zero**
+    `ECHO_EXECUTED` — the claim was refused and the file passed through to
+    q2's own parser unconverted.
+  * `a.html` still contains `ECHO_EXECUTED` — the refusal is scoped to the
+    native set; legitimate `.echo` claiming still works.
+  * exactly **one** `Q-2-50` line for the one file (the once-per-file, not
+    once-per-engine, requirement).
+
+Incidental finding on the way: an earlier iteration edited only the YAML and
+not the module, and q2 correctly hard-errored with "statically declares
+claims_file true for extension 'md' but the loaded module's claimsFile
+reports false" — engine self-enforcement (plan 4b) working as designed.
+
+── Engine suites actually ran (the Phase C trap) ───────────────────────────
+
+`grep -c 'SKIP: deno not on PATH'` over the full run = **0**, with 41
+engine-suite tests passing (echo/julia/marimo/synth/behave). deno 2.9.0 was
+on PATH, so the D1/D2/D5 work is genuinely verified rather than skipped —
+which was the specific way this phase could have been green while proving
+nothing.
+
+── The one test failure, resolved ──────────────────────────────────────────
+
+`quarto-preview config_reports_embedded_asset_manifest_hashes` failed
+through Phase A and B. Diagnosis: this worktree's `q2-preview-spa/dist/`
+dated from 2026-07-24 and so predated main's addition of
+`scripts/manifest-dist.mjs` to the SPA build, leaving no `spa-manifest.json`
+for the test to find. Note `cargo xtask verify` cannot self-heal this — it
+runs Rust tests (step 5/14) BEFORE the hub build that regenerates the SPA.
+
+Running `cargo xtask build-q2-preview-spa` (→ "spa manifest: 74 entries,
+hash 90748d7c…") makes the test pass. Confirmed, not assumed. `dist/` is
+gitignored, so nothing to commit.
+
+── `cargo xtask verify` (full, not --skip-hub-build) ───────────────────────
+
+    ✓ All verification steps passed!      (all 14 steps, exit 0)
+
+Step 5 alone: **12,624 tests passed, 0 failed, 198 skipped.**
+
+Two local tool gaps had to be closed first; neither was a code defect:
+
+  * `wasm-opt` (binaryen) was absent, hard-failing step 7. It is a NEW
+    requirement main introduced — `8024198be` added it to the hub-client
+    e2e, ts-test and release workflows — and one `cargo xtask dev-setup`
+    installs. Installed with `brew install binaryen`.
+  * the stale `q2-preview-spa/dist/` above.
+
+── `q2 render docs/` ───────────────────────────────────────────────────────
+
+    $ cargo run --bin q2 -- render docs/
+    Rendered 244 of 245 files to .../docs/_site — 1 error, 12 warnings
+
+Inspected: 258 HTML pages produced; `index.html` carries its title block and
+TOC; the new `docs/errors/markdown/Q-2-50.qmd` renders as
+`<h1 class="title">Engine claim on a Quarto-owned file type ignored</h1>`.
+
+The 1 error is environmental, not a regression: *"Engine 'jupyter' is
+registered but its runtime is not available"* — `which jupyter` finds
+nothing on this machine, so a doc page declaring `engine: jupyter` cannot
+execute. The 12 warnings are pre-existing missing-image resource
+references in `docs/guides/authoring/`.
+
+**Gotcha for the next person:** `cargo xtask stage-doc-examples` (which
+generates the gitignored `docs/examples/` that `docs/_quarto.yml` declares
+as a resource) stages into the **main checkout**, not the worktree you run
+it from — `repo_root()` resolves `git rev-parse --git-common-dir`, which in
+a worktree is deliberately the main repo's `.git`. It reports success while
+writing elsewhere, and because the output is gitignored on both sides
+nothing contradicts it. Filed as **bd-afi4avsf**. Workaround used here: copy
+`<main>/docs/examples` into the worktree.
 ```
 
 ## Post-merge follow-ups to spot-check

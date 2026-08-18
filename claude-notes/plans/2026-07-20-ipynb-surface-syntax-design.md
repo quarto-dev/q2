@@ -2,7 +2,33 @@
 
 **Date**: 2026-07-20
 **Strand**: bd-19nc56ao (related: k-zr88, bd-xxul, bd-kik3s1vt)
-**Status**: Design discussion / plan skeleton — awaiting review
+**Status**: **DESIGN REFERENCE — execution moved to Plan 7c** (2026-08-17)
+
+> **Where this work lives now.** The design below is sound and is absorbed
+> wholesale into
+> [`2026-07-08-plan7c-ipynb-content-processor.md`](2026-07-08-plan7c-ipynb-content-processor.md)
+> — the source-location design (per-cell ephemeral `SourceFile`s), cell
+> emission rules, presentation P1/P2, the stored-output decision (option B),
+> and the three implementation seams. **Execute 7c, not the phases here.**
+>
+> **One thing changed: the attachment point.** This doc puts conversion "in
+> front of the parser, keyed off the already-existing `SourceType` detection —
+> *not* a new pipeline stage, and *not* (yet) the full `ConverterRegistry`."
+> Both halves are now superseded:
+>
+> - `SourceType` **lost its `Ipynb` variant** in the ts-engine-extensions ←
+>   main merge (decision D3 in
+>   `2026-08-13-ts-engine-extensions-merge-main.md`). `.ipynb` lands as an
+>   **engine claiming `.ipynb`**, converted by `SourceConversionStage`.
+> - The registry this doc declined as "speculative for one converter" is being
+>   built anyway by Plan 7b, for percent and spin. ipynb is therefore the
+>   *third* converter, not the first — which is the condition this doc itself
+>   names for slotting a registry in ("when a second converter (percent
+>   scripts) arrives").
+>
+> Everything else here stands, including the assumption audit that retired the
+> sidecar mechanism and the `SourceInfo::NotebookCell` variant — 7c adopts both
+> conclusions, and they simplify Plan 7b in turn.
 
 ## Overview
 
