@@ -345,15 +345,20 @@ q2 keeps the marker class *and* the Div, so 10 Connect-docs pages carry a
 
 ## Phase 5 — Bookkeeping
 
-- [ ] Close bd-8yjvs3bj (blockquote leak) as absorbed by Phase 3.
-- [ ] Close bd-26nryuwh (sectionize recursion) as delivered by Phase 2.
+- [ ] Close bd-8yjvs3bj (blockquote leak) as absorbed by Phase 3. *(outcome recorded as a comment;
+      holding the close for user review)*
+- [ ] Close bd-26nryuwh (sectionize recursion) as delivered by Phase 2. *(same)*
 - [x] File the conditional-content unwrap as its own strand (Phase 1) — **bd-wbnaa2ud**.
 - [x] Docs: `docs/guides/authoring/tabsets.qmd:74` said tab-title headings are excluded and that
       "deeper headings inside a tab stay part of that tab's content" — true but ambiguous, and
       written when those headings *did* appear in the TOC. Rewritten to state the rule plainly, say
       why, and reassure that the headings still render, get ids, and can be linked to. Rendered and
       read the result; full `docs/` render clean (247 of 247).
-- [ ] Commit at each phase boundary; do not push without approval.
+- [x] Commit at each phase boundary; do not push without approval. Five commits, `58dd896c` →
+      `cbf65a6b`, on `braid/bd-tabset-headings-in-toc-t04ie7f7`. **Not pushed.**
+- [x] Follow-ups filed during implementation: **bd-ca17fck0** (profile outline lists callout titles
+      the rendered TOC omits) and **bd-tebu6o4a** (reveal skips sectionize, so a future reveal TOC
+      would be empty).
 
 ### Phase 1 verification (2026-08-18)
 
