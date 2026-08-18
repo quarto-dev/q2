@@ -236,6 +236,10 @@ Rejected alternatives:
       on webkit-2287). The third-party-embed / PDF-`<object>` spot-checks
       and the `object-src 'none'` decision remain for user verification on
       production.**
+      → **2026-08-18 later: user verified manually in real Safari —
+      clicking a cross-document link in the preview now works. The
+      third-party-embed / PDF-`<object>` spot-checks (which gate the
+      optional `object-src 'none'` addition) remain open.**
 - [x] Note expected cosmetic change: Chrome may log an "allow-scripts +
       allow-same-origin can escape sandboxing" console warning (already present
       for the q2-preview iframe); script tags in rendered HTML now log CSP
