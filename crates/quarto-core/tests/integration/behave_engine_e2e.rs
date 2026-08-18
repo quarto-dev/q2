@@ -493,8 +493,13 @@ fn f3_timeout_poisons_then_transparently_relaunches() {
     // execute-1 and execute-2 -- not just that Rust's local cache was
     // cleared. Without this, "execute-2 succeeds" is vacuous theater: it
     // would pass identically even if execute-1 never poisoned anything.
+    // Bounded poll, not a bare count: the marker is delivered by the
+    // background stderr forwarder, so counting the instant `execute()`
+    // returns races it. See `wait_for_count_containing`.
+    let relaunches =
+        capture.wait_for_count_containing("BEHAVE_LAUNCH_MARKER:2", 1, Duration::from_secs(10));
     assert_eq!(
-        capture.count_containing("BEHAVE_LAUNCH_MARKER:2"),
+        relaunches,
         1,
         "expected exactly one RELAUNCH (a second, independent `launch()` call) \
          between execute-1 and execute-2; captured engine_host messages: {:?}",
@@ -866,6 +871,43 @@ impl LaunchMarkerCapture {
             .iter()
             .filter(|m| m.contains(needle))
             .count()
+    }
+
+    /// Wait up to `timeout` for `needle` to appear at least `expected` times,
+    /// then let the stream settle briefly and return the final count.
+    ///
+    /// Launch markers reach this capture ASYNCHRONOUSLY: the fixture writes
+    /// them to stderr via `console.error`, and `stderr_loop` forwards them
+    /// into `tracing` from a background thread. A bare `count_containing()`
+    /// therefore races that forwarder. That race is not hypothetical — it is
+    /// how `f3_timeout_poisons_then_transparently_relaunches` failed on a
+    /// loaded ubuntu CI runner (0 relaunches observed) while passing on
+    /// macos-latest in the same run, on the same commit (2026-08-18).
+    ///
+    /// Polling instead of sleeping a fixed interval keeps the common case
+    /// fast, and the binding the caller's assertion exists for is preserved
+    /// rather than weakened: if the relaunch genuinely never happens, this
+    /// still returns the wrong count and the assertion still fires. The
+    /// trailing settle keeps the caller's `== expected` upper bound
+    /// meaningful, so a spurious EXTRA relaunch is still caught — which a
+    /// bare `count_containing()` could also have missed.
+    fn wait_for_count_containing(
+        &self,
+        needle: &str,
+        expected: usize,
+        timeout: std::time::Duration,
+    ) -> usize {
+        let deadline = std::time::Instant::now() + timeout;
+        while self.count_containing(needle) < expected {
+            if std::time::Instant::now() >= deadline {
+                return self.count_containing(needle);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        // Settle: give a spurious extra marker the same chance to land that
+        // the fixed 200ms sleep before the marker-1 check gives it.
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        self.count_containing(needle)
     }
 
     fn all(&self) -> Vec<String> {
