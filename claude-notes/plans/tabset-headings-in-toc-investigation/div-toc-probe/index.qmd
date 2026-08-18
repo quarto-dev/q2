@@ -1,0 +1,31 @@
+---
+title: Headings inside non-section Divs
+---
+
+## Real heading one
+
+### Plain div
+
+::: {.my-wrapper}
+#### Heading inside a plain div
+
+Body.
+:::
+
+### Callout
+
+::: {.callout-note}
+#### Heading inside a callout
+
+Body.
+:::
+
+### Blockquote
+
+> #### Heading inside a blockquote
+>
+> Body.
+
+## Real heading two
+
+Done.
