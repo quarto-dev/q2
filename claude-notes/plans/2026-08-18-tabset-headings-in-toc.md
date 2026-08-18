@@ -311,20 +311,26 @@ q2 keeps the marker class *and* the Div, so 10 Connect-docs pages carry a
       run before sectionize and depend on **flat** Headers as direct Div children. Nothing here
       changes that, but the tabset/callout tests must stay green.
 
-## Phase 3 — `collect_toc_entries`: walk only the section tree
+## Phase 3 — `collect_toc_entries`: walk only the section tree ✅
 
-- [ ] Failing test: headings inside a tabset pane, a callout body, and a blockquote are absent from
-      the TOC; headings inside `content-visible` / `column-margin` / `layout-ncol` / a plain Div are
-      still present.
-- [ ] A non-section Div terminates the walk (pandoc's `sectionToListItem`).
-- [ ] Remove the `BlockQuote` arm.
-- [ ] Decide the un-sectionized fallback. `SectionizeTransform` is skipped for revealjs
-      (`pipeline.rs:1332`) while `TocGenerateTransform` is ungated (`:1387`). q2 emits no `nav#TOC`
-      for reveal today, so nothing breaks — but leave the code honest: either run sectionize for
-      reveal too, or document the precondition at `generate_toc`.
-- [ ] `document_profile.rs::extract_outline` calls `generate_toc` on the **pre-transform** AST
-      (`DocumentProfileStage` at `pipeline.rs:314` runs before `AstTransformsStage` at `:353`), so
-      its outline is un-sectionized. Check what the new rule does to it and record the answer.
+- [x] Failing tests — three smoke-all fixtures (`tabset-pane-`, `callout-body-`,
+      `blockquote-heading-not-in-toc.qmd`) plus three unit tests in `toc.rs`. All observed failing
+      first. The unit tests needed **two** corrections before they failed honestly: the default
+      `TocConfig` depth of 3 was excluding the level-4 headings outright, and asserting on
+      `toc.entries` missed the leak entirely because `build_hierarchy` nests a leaked entry
+      *under* the preceding top-level section rather than beside it.
+- [x] A non-section Div terminates the walk (pandoc's `sectionToListItem`).
+- [x] Remove the `BlockQuote` arm (bd-8yjvs3bj).
+- [x] Un-sectionized fallback: documented the precondition in `pampa::toc`'s module docs and filed
+      **bd-tebu6o4a**. Running sectionize for reveal would change reveal's slide DOM and wants its
+      own testing; reveal emits no `nav#TOC` today, so this is a trap for the next person, not a
+      live bug.
+- [x] `document_profile.rs::extract_outline` — checked, and it *did* degrade: on un-sectionized
+      blocks the new rule dropped every heading written inside any `:::` block. Fixed by
+      sectionizing a copy before the walk, which restores the absorb rule so a transparent wrapper
+      disappears. One gap remains — a callout **title** is absorbed here and listed, while the
+      rendered TOC omits it, because heading-consuming transforms run after the profile checkpoint.
+      Filed as **bd-ca17fck0** and pinned by `outline_sees_headings_inside_divs`.
 
 ## Phase 4 — End-to-end verification
 
@@ -399,3 +405,47 @@ Connect corpus (clean double render): TOC changed on **0** pages — Phase 2 is
 TOC-neutral by design — while `<section>` elements rose **3626 → 3678**, i.e. 52
 headings that were bare `<hN>` inside a Div are now real sections. Exact TOC
 parity with Q1 holds at 421/451, waiting on Phase 3.
+
+### Phase 3 verification (2026-08-18)
+
+`cargo xtask verify` (full, including the hub-client build and its tests) → all
+steps pass; 12328 Rust tests.
+
+The strand's own repro, `q2-connect-docs/llms-info/repros/tabset-headings-in-toc/`:
+
+```
+$ cargo run --bin q2 -- render .
+Q1 TOC: ['configuration', 'next-steps']
+q2 TOC: ['configuration', 'next-steps']     ← was 4 entries, two of them dead
+```
+
+and the panes keep their real sections, exactly as Q1 does — the content is still
+there and still addressable, it is simply not listed:
+
+```html
+<div id="tabset-1-2" class="tab-pane" role="tabpanel" …>
+<section id="create-the-integration-1" class="section level4">
+```
+
+Connect corpus (451 pages, clean double render), inspected rather than counted:
+
+| | baseline | Phase 3 |
+| --- | --- | --- |
+| exact TOC match with Q1 | 421/451 | **444/451** |
+| pages closer to Q1 / unchanged / **further** | — | 25 / 426 / **0** |
+| TOC entries removed / **added** | — | 44 / **0** |
+
+Every one of the 44 removed entries was inside a `div.tab-pane` (checked with an
+HTML parser, not a regex); **20** of them sat in a pane carrying no `active`
+class — dead links a reader could not follow. The strand predicted 44 leaked
+entries and 18 dead; we measure 44 and 20.
+
+The 7 pages still differing from Q1 are all **pre-existing and unrelated**,
+byte-identical in their difference to the baseline:
+
+- two LDAP pages where *Q1* emits a garbled id containing an unresolved shortcode
+  blob (`b58fc729-…-group-membership-synchronization`); q2's ids are the correct
+  ones;
+- `admin/process-management` — em-dash slug (`…selection---shiny…` vs `…selection-shiny…`);
+- four pages, incl. `how-to/use-renv-…`, with a pre-existing extra entry — the
+  benign `toc:N` difference the strand already called out.

@@ -1053,9 +1053,36 @@ fn extract_structured_authors(meta: &ConfigValue) -> Vec<ProfileAuthor> {
 /// naturally produces `TocEntry::number == None`, but we scrub the
 /// tree defensively so the invariant holds even if `generate_toc`
 /// grows new numbering behavior.
+///
+/// ## Why this sectionizes first
+///
+/// `generate_toc` walks the *section tree* and stops at any `Div` that
+/// is not a section. The profile is extracted at `DocumentProfileStage`,
+/// long before `SectionizeTransform` runs, so the blocks here are flat
+/// `Header`s wrapped in raw author `Div`s. Walking them directly would
+/// drop every heading written inside a `:::` block — including ordinary
+/// ones like `::: {.content-visible}`, which the rendered TOC does list.
+/// Sectionizing a copy first restores the absorb rule, so a transparent
+/// wrapper disappears and its heading is an ordinary section.
+///
+/// ## Known limitation
+///
+/// This is close to, but not identical with, the rendered TOC. Transforms
+/// that *consume* a heading run after the profile checkpoint, so a callout
+/// **title** written as a heading is still absorbed into a section here
+/// and appears in the outline, while the rendered TOC omits it
+/// (`CalloutTransform` ate the `Header` before `SectionizeTransform` saw
+/// it). Tab titles and tabset/callout **body** headings are excluded
+/// correctly, because their wrappers hold more than a single section and
+/// so are never absorbed. Closing the gap entirely would mean running the
+/// heading-consuming transforms before the profile, which the profile
+/// contract deliberately does not do — see
+/// `claude-notes/designs/document-profile-contract.md`. Tracked as
+/// bd-ca17fck0.
 fn extract_outline(blocks: &[quarto_pandoc_types::block::Block]) -> Vec<TocEntry> {
+    let sectionized = pampa::transforms::sectionize_blocks(blocks.to_vec());
     let toc = generate_toc(
-        blocks,
+        &sectionized,
         &TocConfig {
             depth: OUTLINE_MAX_DEPTH,
             title: None,
@@ -1165,6 +1192,49 @@ Deep text.
         assert!(
             all_unnumbered(&profile.outline),
             "profile outline must be un-numbered"
+        );
+    }
+
+    /// The outline is built from the section tree, so it needs the same
+    /// sectionizing the render does — otherwise every heading written
+    /// inside a `:::` block disappears from it. Pins both the fix and
+    /// the known gap (see `extract_outline`'s docs).
+    #[test]
+    fn outline_sees_headings_inside_divs() {
+        let qmd = r#"---
+title: Outline containers
+---
+
+# Top
+
+::: {.content-visible when-format="html"}
+## Inside a transparent wrapper
+:::
+
+::: {.panel-tabset}
+## Tab one
+
+## Tab two
+:::
+"#;
+        let ast = parse_qmd(qmd);
+        let profile = DocumentProfile::extract(
+            &ast,
+            Path::new("outline-containers.qmd"),
+            "outline-containers.html",
+            "html",
+        );
+
+        let ids = entry_ids(&profile.outline[0].children);
+        assert!(
+            ids.contains(&"inside-a-transparent-wrapper"),
+            "an empty-id wrapper around one section is absorbed, so its \
+             heading is an ordinary section: {ids:?}"
+        );
+        assert!(
+            !ids.contains(&"tab-one") && !ids.contains(&"tab-two"),
+            "a tabset holds two sections, so it is never absorbed and the \
+             walk stops at it: {ids:?}"
         );
     }
 

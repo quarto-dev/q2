@@ -1,0 +1,50 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["nav#TOC a[data-scroll-target=\"#configuration\"]",
+           "nav#TOC a[data-scroll-target=\"#next-steps\"]",
+           "div.panel-tabset div.tab-pane#tabset-1-2 section#create-the-integration-1"]
+        - ["nav#TOC a[data-scroll-target=\"#create-the-integration\"]",
+           "nav#TOC a[data-scroll-target=\"#create-the-integration-1\"]"]
+---
+
+bd-tabset-headings-in-toc-t04ie7f7. A heading written *inside* a tab body
+must not reach the TOC.
+
+Quarto 1 lists only `#configuration` and `#next-steps` here. The section
+for each tab body does exist in Q1's output — it is simply unreachable
+from the TOC walk, which stops at the non-section `div.panel-tabset`.
+
+Two of the three original symptoms are visible in this document: the two
+entries were indistinguishable (same text, no tab context), and
+`#create-the-integration-1` sits in a pane with no `active` class, so
+following it scrolled to nothing.
+
+## Configuration
+
+::: {.panel-tabset}
+
+### Azure
+
+#### Create the integration
+
+Azure-specific instructions.
+
+### Google
+
+#### Create the integration
+
+Google-specific instructions.
+
+:::
+
+## Next steps
+
+Done.

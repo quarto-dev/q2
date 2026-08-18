@@ -1,0 +1,32 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["nav#TOC a[data-scroll-target=\"#outer\"]",
+           "div.callout-note section#body-heading"]
+        - ["nav#TOC a[data-scroll-target=\"#body-heading\"]"]
+---
+
+A heading in a callout *body* must not reach the TOC either — the same
+root cause as the tabset case, and a third container beyond the two the
+strand named.
+
+Quarto 1 sectionizes it (`<section id="body-heading" class="level4
+callout-body-container callout-body">`) but the walk stops at the
+enclosing `div.callout`.
+
+## Outer
+
+::: {.callout-note}
+### Callout title
+
+#### Body heading
+
+Body.
+:::

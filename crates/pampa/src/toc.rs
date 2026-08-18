@@ -43,6 +43,30 @@
 //! - **Sectionized blocks**: Walk section Divs created by `sectionize_blocks`
 //!
 //! The function detects sectionized structure and extracts headers accordingly.
+//!
+//! ## The walk stops at a non-section Div
+//!
+//! The table of contents *is* the section tree. A `Div` that is not a
+//! section ends the walk, with no recursion past it — this is pandoc's
+//! rule, whose `sectionToListItem` matches only `Div(_, _, Header:rest)`
+//! and yields nothing for anything else.
+//!
+//! This is not a loss of reach, because `sectionize_blocks` *absorbs* a
+//! transparent wrapper — an empty-id `Div` around a single header-led
+//! run — into the section itself, so a heading inside `::: {.column-margin}`
+//! or a plain `:::` block is a section by the time we get here. What stays
+//! wrapped in a plain `Div` is filter-built chrome: a callout body, a
+//! tabset pane. Quarto 1 does not list those either, and listing them was
+//! actively harmful — the entries were indistinguishable from one another
+//! and every one past the first pointed at `display: none` content
+//! (bd-tabset-headings-in-toc-t04ie7f7).
+//!
+//! **Precondition:** callers that want headings nested in Divs to appear
+//! must pass blocks that have been through `sectionize_blocks`. See
+//! `SectionizeTransform`, which runs before `TocGenerateTransform`;
+//! `DocumentProfile::extract_outline` sectionizes a copy for the same
+//! reason. Revealjs skips `SectionizeTransform` and would therefore get
+//! an empty TOC — it emits none today, and bd-tebu6o4a tracks the trap.
 
 use crate::pandoc::block::{Block, Div, Header};
 use crate::pandoc::inline::{Inline, Inlines, Str};
@@ -343,18 +367,16 @@ fn collect_toc_entries(blocks: &[Block], max_depth: i32) -> Vec<FlatTocEntry> {
 
     for block in blocks {
         match block {
-            Block::Div(div) => {
-                // Check if this is a section Div
-                if is_section_div(div) {
-                    if let Some(entry) = extract_entry_from_section(div, max_depth) {
-                        entries.push(entry);
-                    }
-                    // Recurse into section content for nested sections
-                    entries.extend(collect_toc_entries(&div.content, max_depth));
-                } else {
-                    // Non-section Div - recurse into content
-                    entries.extend(collect_toc_entries(&div.content, max_depth));
+            // Only section Divs are walked. A Div that is not a section
+            // ends the walk, with no recursion past it — pandoc's
+            // `sectionToListItem` matches `Div(_, _, Header:rest)` and
+            // returns nothing for anything else.
+            Block::Div(div) if is_section_div(div) => {
+                if let Some(entry) = extract_entry_from_section(div, max_depth) {
+                    entries.push(entry);
                 }
+                // Recurse into section content for nested sections
+                entries.extend(collect_toc_entries(&div.content, max_depth));
             }
             Block::Header(header) => {
                 // Direct header (non-sectionized document)
@@ -362,12 +384,12 @@ fn collect_toc_entries(blocks: &[Block], max_depth: i32) -> Vec<FlatTocEntry> {
                     entries.push(entry);
                 }
             }
-            // Other block types: recurse if they contain blocks
-            Block::BlockQuote(bq) => {
-                entries.extend(collect_toc_entries(&bq.content, max_depth));
-            }
             _ => {
-                // Other blocks don't contain headers
+                // Nothing else carries a section. In particular
+                // `BlockQuote`: `sectionize_blocks` does not descend
+                // into one (matching pandoc's `makeSections`), so a
+                // quoted heading is never a section and is never
+                // listed. bd-8yjvs3bj.
             }
         }
     }
@@ -700,6 +722,107 @@ mod tests {
         assert_eq!(toc.entries[0].id, "main");
         assert_eq!(toc.entries[0].children.len(), 1);
         assert_eq!(toc.entries[0].children[0].id, "sub");
+    }
+
+    // ── the walk stops at a non-section Div ────────────────────────
+    //
+    // pandoc's `toTableOfContents` matches only `Div(_, _, Header:rest)`
+    // — a section — so a Div that is not one ends the walk with no
+    // recursion past it. Everything a reader expects to see in the TOC
+    // has already been *absorbed* into the section tree by
+    // `sectionize_blocks`; what remains wrapped in a plain Div is filter
+    // chrome (a callout, a tabset pane), and Quarto 1 does not list it.
+
+    /// Every id in the tree, depth-first. Checking only `toc.entries`
+    /// would miss a leaked entry, which `build_hierarchy` nests *under*
+    /// the preceding top-level section rather than beside it.
+    fn all_ids(entries: &[TocEntry]) -> Vec<String> {
+        let mut out = Vec::new();
+        for e in entries {
+            out.push(e.id.clone());
+            out.extend(all_ids(&e.children));
+        }
+        out
+    }
+
+    /// The default depth is 3, which would exclude the level-4 headings
+    /// these tests use for reasons that have nothing to do with the walk.
+    fn deep_config() -> TocConfig {
+        TocConfig {
+            depth: 4,
+            title: None,
+        }
+    }
+
+    fn make_plain_div(id: &str, classes: Vec<&str>, content: Vec<Block>) -> Block {
+        Block::Div(Div {
+            attr: (
+                id.to_string(),
+                classes.iter().map(|s| s.to_string()).collect(),
+                LinkedHashMap::new(),
+            ),
+            content,
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    #[test]
+    fn test_non_section_div_terminates_the_walk() {
+        // The shape a resolved tabset leaves behind: a section, real and
+        // correct, buried under two plain Divs.
+        let blocks = vec![
+            make_section(2, "configuration", vec![], "Configuration", vec![]),
+            make_plain_div(
+                "",
+                vec!["panel-tabset"],
+                vec![make_plain_div(
+                    "tabset-1-1",
+                    vec!["tab-pane"],
+                    vec![make_section(4, "in-a-tab", vec![], "In a tab", vec![])],
+                )],
+            ),
+            make_section(2, "next-steps", vec![], "Next steps", vec![]),
+        ];
+        let toc = generate_toc(&blocks, &deep_config());
+        assert_eq!(
+            all_ids(&toc.entries),
+            vec!["configuration", "next-steps"],
+            "the section inside the tab pane is real, but unreachable"
+        );
+    }
+
+    #[test]
+    fn test_section_nested_in_a_section_is_still_collected() {
+        // The walk must still recurse through *sections*, or the TOC
+        // would flatten to top-level headings only.
+        let blocks = vec![make_section(
+            2,
+            "outer",
+            vec![],
+            "Outer",
+            vec![make_section(3, "inner", vec![], "Inner", vec![])],
+        )];
+        let toc = generate_toc(&blocks, &TocConfig::default());
+        assert_eq!(toc.entries.len(), 1);
+        assert_eq!(toc.entries[0].id, "outer");
+        assert_eq!(toc.entries[0].children.len(), 1);
+        assert_eq!(toc.entries[0].children[0].id, "inner");
+    }
+
+    /// bd-8yjvs3bj. `makeSections` never descends into a `BlockQuote`, so
+    /// a heading quoted there is not a section and is not listed.
+    #[test]
+    fn test_blockquote_heading_is_not_collected() {
+        let blocks = vec![
+            make_section(2, "outer", vec![], "Outer", vec![]),
+            Block::BlockQuote(quarto_pandoc_types::block::BlockQuote {
+                content: vec![make_header(4, "quoted", vec![], "Quoted")],
+                source_info: dummy_source_info(),
+            }),
+        ];
+        let toc = generate_toc(&blocks, &deep_config());
+        assert_eq!(all_ids(&toc.entries), vec!["outer"]);
     }
 
     #[test]
