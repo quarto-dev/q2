@@ -457,3 +457,28 @@ byte-identical in their difference to the baseline:
 - `admin/process-management` — em-dash slug (`…selection---shiny…` vs `…selection-shiny…`);
 - four pages, incl. `how-to/use-renv-…`, with a pre-existing extra entry — the
   benign `toc:N` difference the strand already called out.
+
+## Re-measured after rebase onto current `main` (2026-08-18)
+
+`origin/main` moved from `5b6774d1` to `0c3542d0` during implementation, picking up
+bd-duplicate-heading-ids-mou5z7ux (heading-id dedup across include boundaries) —
+which touches the same pages. Rebased and re-measured both sides rather than
+trusting the earlier numbers.
+
+| | main `0c3542d0` | branch |
+| --- | --- | --- |
+| exact TOC match with Q1 | 421/451 | **444/451** |
+| TOC changed / entries removed / **added** | — | 25 pages / 44 / **0** |
+| vs Q1: closer / unchanged / **further** | — | 25 / 426 / **0** |
+
+All 44 removals inside a `div.tab-pane`; **18** in a pane with no `active` class.
+That dead-link count moved 20 → 18 because the id-dedup fix changed which pane a
+duplicated id resolves into — and 18 is exactly what the strand predicted.
+The same 7 pre-existing differences remain.
+
+`cargo xtask verify` (full) green on the rebased branch.
+
+> Two local environment stumbles worth noting, neither caused by this branch:
+> the new `ts-packages/quarto-engine-host-deno` workspace needed `npm install`
+> after the rebase, and `@esbuild/darwin-arm64` was missing from `node_modules`
+> (optional platform dep), which failed `quarto-hub-mcp`'s bundle test.
