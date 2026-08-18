@@ -179,6 +179,27 @@ pub trait ExecutionEngine: Send + Sync {
         false
     }
 
+    /// A static file claim if one exists, or `None` meaning "I would have to
+    /// load to answer." The file counterpart of [`Self::try_claims_language`],
+    /// and side-effect-free in the same way: no load, no cache write, no
+    /// `static_file_answers` record.
+    ///
+    /// Default `Some(false)`, which differs from `try_claims_language`'s
+    /// `None` on purpose. There, `None` is fail-safe because a missed language
+    /// claim silently misroutes a cell. Here the default mirrors
+    /// [`Self::claims_file`]'s own default of `false`: no built-in engine
+    /// overrides `claims_file`, so "definitively does not claim, no load
+    /// needed" is the truth for every engine that does not opt in — and
+    /// answering `None` would instead assert that built-ins might need
+    /// loading, which they never do.
+    ///
+    /// Used where q2 must decide a claim it is going to refuse anyway (the
+    /// natively-owned extensions, `Q-2-50`). Asking `claims_file` there would
+    /// spawn a subprocess to produce an answer that is immediately discarded.
+    fn try_claims_file(&self, _file: &str, _ext: &str) -> Option<bool> {
+        Some(false)
+    }
+
     /// Convert a non-QMD file to QMD text. Called only for files this engine
     /// claimed via `claims_file`. For QMD files, q2 handles parsing directly
     /// and this method is never called.

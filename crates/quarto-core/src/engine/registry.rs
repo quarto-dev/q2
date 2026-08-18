@@ -52,9 +52,17 @@ pub struct EngineRegistry {
     /// Populated lazily by `TsEngine` on first `LoadEngine` response.
     /// `Arc<Mutex<…>>` so `TsEngine` can hold a clone without a cycle.
     pub aliases: Arc<Mutex<HashMap<String, ExtensionId>>>,
-    /// Diagnostics accumulated during registry lifetime (e.g. hint-validation
-    /// warnings from `TsEngine` lazy init). Drained by the stage at
-    /// end-of-render and forwarded to the pipeline's diagnostic sink.
+    /// Diagnostics accumulated over the registry's lifetime, from two eras:
+    /// `build_engine_registry` pushes `Q-16-10` while constructing the
+    /// registry, and each `TsEngine` holds an `Arc` clone of this same vec and
+    /// pushes into it *during* a render (`Q-16-12` claim-load failures, the
+    /// intermediate-files warning).
+    ///
+    /// Drained by `ProjectPipeline::drain_registry_diagnostics` at **end of
+    /// render** into `ProjectRenderSummary::project_diagnostics`, where the
+    /// entries are counted by `diagnostic_counts` and promoted by `--strict`.
+    /// End-of-render rather than post-build precisely because of the second
+    /// era above (bd-exhbc6h8).
     pub diagnostics: Arc<Mutex<Vec<DiagnosticMessage>>>,
     /// User-/extension-specified engine ordering: External engine names (registration order)
     /// followed by Reorder hints, in declared order. Consumed by resolution's auto-promotion

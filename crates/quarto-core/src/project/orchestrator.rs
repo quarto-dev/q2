@@ -288,10 +288,12 @@ fn pass1_engine_resolution_warning(
         ),
     };
 
-    let mut builder = DiagnosticMessageBuilder::warning(subject).problem(format!(
-        "so engine resolution must wait for render time. Execution-language \
-         indexing is unavailable for {fell_through} of {total} documents."
-    ));
+    let mut builder = DiagnosticMessageBuilder::warning(subject)
+        .with_code("Q-16-11")
+        .problem(format!(
+            "so engine resolution must wait for render time. Execution-language \
+             indexing is unavailable for {fell_through} of {total} documents."
+        ));
 
     for (name, path) in engines {
         let path_str = path
@@ -1069,6 +1071,29 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         result
     }
 
+    /// Take everything the engine registry has accumulated this render and
+    /// hand it to the project-grain diagnostic sink (bd-exhbc6h8).
+    ///
+    /// **Called at END of render, never at registry-build time.** The vec is
+    /// written from two eras: `build_engine_registry` pushes `Q-16-10` while
+    /// constructing the registry, but `TsEngine` pushes into the *same*
+    /// `Arc<Mutex<…>>` during Pass 1 and Pass 2 — `Q-16-12` load failures and
+    /// the intermediate-files warning. Draining early would silently lose the
+    /// second group, which is most of the point.
+    ///
+    /// `drain(..)` rather than `clone()`: the registry can outlive one render
+    /// (`q2 preview` reuses a `ProjectContext`), and a re-render must not
+    /// reprint diagnostics already reported.
+    fn drain_registry_diagnostics(&self) -> Vec<DiagnosticMessage> {
+        self.project
+            .registry
+            .diagnostics
+            .lock()
+            .unwrap()
+            .drain(..)
+            .collect()
+    }
+
     async fn run_inner(&mut self) -> Result<ProjectRenderSummary<R::Output>> {
         let mut initial_diagnostics = self.empty_render_set_diagnostic();
         // `project.render` patterns that contributed nothing
@@ -1097,21 +1122,27 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         pass1_engine_resolution_record(lifted, fell_through);
 
         // Decision 5: emit the human-facing warning per
-        // `pass1_engine_resolution_should_warn`'s gate — this is a new
-        // print site inside quarto-core (WASM-compiled); behaviorally WASM
+        // `pass1_engine_resolution_should_warn`'s gate. Behaviorally WASM
         // never fires it — its registry has no TS engines, so
         // `fell_through` is always 0.
+        //
+        // bd-exhbc6h8: this goes into the project-grain diagnostic vec
+        // rather than a bare `eprintln!`. The print is equivalent (the
+        // `project_diagnostics` loop in `commands/render.rs` is outside the
+        // `quiet` gate, as this was), but routing it here is what makes it
+        // *counted* by `diagnostic_counts` and *promotable* by `--strict`
+        // (bd-yjs54ptg / GH #220) — which a raw stderr write can never be.
+        // It prints at end of render now instead of between the passes.
         let engines_needing_load = self
             .project
             .registry
             .engines_needing_load(&self.project.tabled_engines);
         if pass1_engine_resolution_should_warn(fell_through, &engines_needing_load) {
-            let warning = pass1_engine_resolution_warning(
+            initial_diagnostics.push(pass1_engine_resolution_warning(
                 &engines_needing_load,
                 fell_through,
                 profiles.len(),
-            );
-            eprintln!("{}", warning.to_text(None));
+            ));
         }
 
         let index = Arc::new(ProjectIndex::new(profiles));
@@ -1121,11 +1152,16 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // copy, and the manifest write. We report the failures we have
         // and flag the summary as truncated.
         if self.fail_fast && !pass1_failures.is_empty() {
+            // Drain here too: this early return builds its own summary, so
+            // without it a `--fail-fast` run would swallow every engine
+            // diagnostic the render had already produced (bd-exhbc6h8).
+            let mut project_diagnostics = initial_diagnostics;
+            project_diagnostics.extend(self.drain_registry_diagnostics());
             return Ok(ProjectRenderSummary {
                 outputs: Vec::new(),
                 pass1_failures,
                 pass2_failures: Vec::new(),
-                project_diagnostics: initial_diagnostics,
+                project_diagnostics,
                 stopped_early: true,
             });
         }
@@ -1276,6 +1312,12 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                     other => QuartoError::other(format!("post_resources failed: {other}")),
                 })?;
         }
+
+        // The end-of-render drain (bd-exhbc6h8). Last diagnostic-producing
+        // point before the summary is sealed, so it catches both registry-build
+        // pushes (Q-16-10) and everything the engines pushed while executing
+        // (Q-16-12, intermediate-files).
+        project_diagnostics.extend(self.drain_registry_diagnostics());
 
         let stopped_early = self.fail_fast && !pass2_failures.is_empty();
         Ok(ProjectRenderSummary {

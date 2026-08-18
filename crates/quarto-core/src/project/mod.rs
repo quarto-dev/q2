@@ -1424,7 +1424,7 @@ fn build_engine_registry(
     use crate::engine::ts_process::TsEngineHost;
     use crate::engine::ts_protocol::{EngineProjectContext, HostGlobalConfig};
     use crate::extension::BUILTIN_EXTENSIONS;
-    use crate::extension::types::{EngineContribution, engine_contribution_missing_fields_warning};
+    use crate::extension::types::{EngineContribution, engine_contribution_static_claims_warning};
 
     // ── Per-render project context (P1.1 / DQ-5) ─────────────────────────────
     // Built once from the ProjectContext fields the caller resolved and set on
@@ -1569,9 +1569,11 @@ fn build_engine_registry(
                         // External engines push their name into the user-specified order.
                         order.push(key.clone());
 
-                        // Step 4e: Missing-static-fields warning
+                        // Step 4e: Q-16-10 — engine still claims dynamically.
+                        // Drained into `project_diagnostics` at end of render
+                        // by `ProjectPipeline::run_inner` (bd-exhbc6h8).
                         if let Some(w) =
-                            engine_contribution_missing_fields_warning(&ext_label, contribution)
+                            engine_contribution_static_claims_warning(&ext_label, contribution)
                         {
                             registry.diagnostics.lock().unwrap().push(w);
                         }
@@ -1642,7 +1644,9 @@ fn build_engine_registry(
     }
 
     // ── Step 7: Return ────────────────────────────────────────────────────────
-    // Task: drain registry.diagnostics at orchestrator (plan step 10)
+    // `registry.diagnostics` is drained by `ProjectPipeline::run_inner` at END
+    // of render, not here: engines also push into it *during* Pass 1 / Pass 2
+    // (e.g. Q-16-12 load failures), so an init-time drain would miss them.
     Ok(Arc::new(registry))
 }
 

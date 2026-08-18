@@ -180,6 +180,31 @@ pub struct TsEngine {
     #[allow(dead_code)] // Task 10 consumes this
     conversion_cache: Mutex<HashMap<PathBuf, String>>,
 
+    /// Set the first time a **claim probe** cannot reach the engine, doing two
+    /// jobs with one flag (bd-7keh8iwn):
+    ///
+    /// 1. **Report once.** `Q-16-12` is pushed exactly when this transitions to
+    ///    set, so a 200-page project reports one diagnostic, not 200.
+    /// 2. **Stop retrying.** Neither `Err` arm below caches its answer, so
+    ///    before this existed a broken engine was re-`ensure_loaded`-ed on
+    ///    *every* `(language, first_class)` probe of *every* document — a
+    ///    failing subprocess load per probe, not one per render.
+    ///
+    /// Deliberately **sticky for the life of the engine**. A probe can fail
+    /// two ways, and both are deterministic within a render: the shared deno
+    /// host could not start, or the host started fine and the engine's module
+    /// threw on import. Neither gets better by asking again, so retrying only
+    /// multiplies the cost of a broken extension.
+    ///
+    /// This does NOT interact with crash recovery, despite sitting in front of
+    /// `ensure_loaded`. That function's `host.spawn_count()` generation check
+    /// exists for an engine that **loaded successfully** and then lost its host
+    /// process — it re-sends `LoadEngine` on the respawned one. An engine that
+    /// never loaded is not in that state, so there is no retry here to give up.
+    /// `execute`'s `ProcessCrashed` arm is likewise untouched; this flag covers
+    /// the claim verbs only.
+    load_failed: OnceLock<()>,
+
     // ── Registry sinks (leaf-Arc sharing; no cycle back to EngineRegistry) ───
     extension_id: ExtensionId,
     aliases: Arc<Mutex<HashMap<String, ExtensionId>>>,
@@ -218,6 +243,7 @@ impl TsEngine {
             static_answers: Mutex::new(Vec::new()),
             static_file_answers: Mutex::new(Vec::new()),
             conversion_cache: Mutex::new(HashMap::new()),
+            load_failed: OnceLock::new(),
             extension_id,
             aliases,
             diagnostics,
@@ -227,6 +253,44 @@ impl TsEngine {
     // ========================================================================
     // Two-step lazy lifecycle helpers
     // ========================================================================
+
+    /// Record a claim-probe load failure, emitting `Q-16-12` the **first** time
+    /// only (bd-7keh8iwn).
+    ///
+    /// Callers still answer "no claim" afterwards — claim resolution has to
+    /// stay infallible, because it runs while q2 is still deciding what to do
+    /// and a hard error there would let one broken extension prevent a project
+    /// from rendering at all, including documents that never touch it. What
+    /// changes is that the answer is no longer given *silently*: before this,
+    /// a failed load produced a page with the user's code echoed rather than
+    /// executed, at exit 0, with nothing anywhere saying the engine failed.
+    fn note_claim_load_failure(&self, e: &ExecutionError) {
+        // `set` succeeds exactly once; every later probe returns here.
+        if self.load_failed.set(()).is_err() {
+            return;
+        }
+        self.diagnostics.lock().unwrap().push(
+            quarto_error_reporting::DiagnosticMessageBuilder::warning(format!(
+                "engine extension `{}` failed to load",
+                self.name
+            ))
+            .with_code("Q-16-12")
+            .problem(
+                "so Quarto could not ask it which languages and files it handles, and \
+                 treated the unanswered question as \"not claimed\". Cells it would have \
+                 run are emitted without being executed; files it would have converted \
+                 report that no engine could be determined.",
+            )
+            .add_detail(format!("{e}"))
+            .add_hint(
+                "rebuild the engine's bundle (for a TypeScript engine, \
+                 `q2 call build-ts-extension` in the extension directory), or load it \
+                 directly to see the failure on its own. Use `--strict` to make this \
+                 stop the render instead of continuing.",
+            )
+            .build(),
+        );
+    }
 
     /// The name the *harness* addresses this engine by on the wire.
     ///
@@ -765,6 +829,11 @@ impl ExecutionEngine for TsEngine {
                 .insert(cache_key, claim);
             claim
         } else {
+            // A previous probe already found this engine unloadable: answer "no
+            // claim" without paying for another failing load (bd-7keh8iwn).
+            if self.load_failed.get().is_some() {
+                return LanguageClaim::None;
+            }
             // Legacy dynamic path — ensure_loaded + ClaimsLanguage wire call + cache.
             let c = Cancellation::new();
             let result = (|| -> Result<LanguageClaim, ExecutionError> {
@@ -791,7 +860,13 @@ impl ExecutionEngine for TsEngine {
                         .insert(cache_key, claim);
                     claim
                 }
-                Err(_) => LanguageClaim::None,
+                // Answer "no claim", but say so out loud (bd-7keh8iwn). Not
+                // cached: `load_failed` is what stops the retry, and it covers
+                // every key rather than just this one.
+                Err(e) => {
+                    self.note_claim_load_failure(&e);
+                    LanguageClaim::None
+                }
             }
         }
     }
@@ -811,6 +886,26 @@ impl ExecutionEngine for TsEngine {
         self.claims
             .as_ref()
             .map(|map| static_claim_from_map(map, language, first_class))
+    }
+
+    /// Static-only mirror of the no-load half of [`Self::claims_file`]:
+    /// the `file_extensions` pre-filter, then the authoritative
+    /// `claims_files` answer. `None` exactly when `claims_file` would have
+    /// had to load (a content-inspecting / Q1-style dynamic claimer).
+    ///
+    /// Deliberately does NOT write `claims_file_cache` or
+    /// `static_file_answers` — same side-effect-free-probe contract as
+    /// `try_claims_language`, so a discovery-time question never mutates
+    /// execute-time validation state.
+    fn try_claims_file(&self, _file: &str, ext: &str) -> Option<bool> {
+        if let Some(exts) = &self.file_extensions
+            && !exts.iter().any(|e| e == ext)
+        {
+            return Some(false);
+        }
+        self.claims_files
+            .as_ref()
+            .map(|cf| cf.iter().any(|c| c.extension == ext))
     }
 
     fn extension_yml_path(&self) -> Option<PathBuf> {
@@ -852,6 +947,11 @@ impl ExecutionEngine for TsEngine {
             return claimed;
         }
 
+        // A previous probe already found this engine unloadable (bd-7keh8iwn).
+        if self.load_failed.get().is_some() {
+            return false;
+        }
+
         // 3. Dynamic path — cache per canonical path + ClaimsFile wire call.
         let c = Cancellation::new();
         let result = (|| -> Result<bool, ExecutionError> {
@@ -878,7 +978,14 @@ impl ExecutionEngine for TsEngine {
                     .insert(path_key, claim);
                 claim
             }
-            Err(_) => false,
+            // As in `claims_language`: answer "unclaimed", but report why.
+            // Without this the user gets "Can't determine execution engine for
+            // <file>" — which points at engine *configuration* when the real
+            // cause was an engine *load failure*.
+            Err(e) => {
+                self.note_claim_load_failure(&e);
+                false
+            }
         }
     }
 

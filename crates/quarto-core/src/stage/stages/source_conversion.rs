@@ -161,31 +161,47 @@ impl PipelineStage for SourceConversionStage {
         // one file when N engines claim it. One file, one diagnostic.
         let mut refused_native: Vec<String> = Vec::new();
 
-        for engine in &engines {
-            if !engine.claims_file(&file_str, &ext_for_engine) {
-                continue;
+        // D5: q2 owns the native set outright, so a claim on it is refused no
+        // matter what an engine would answer. Decide that WITHOUT asking.
+        //
+        // Asking would be actively harmful, not merely redundant: a
+        // dynamically-claiming engine answers `claims_file` by loading, so a
+        // project of nothing but `.qmd` paid a subprocess spawn per engine to
+        // produce an answer this stage then discarded. `try_claims_file` reads
+        // the extension's static declarations instead — free, and `None` for
+        // exactly the engines that would have needed the load.
+        //
+        // The cost of not asking is that a dynamic claimer is no longer named
+        // in `Q-2-50`; we cannot know what it would have said. That is the
+        // intended trade (bd-exhbc6h8 follow-up, Gordon's 2(b)): the diagnostic
+        // is kept where it is free — a declared `claims-files: [".md"]` is the
+        // case actually worth telling an extension author about — and dropped
+        // where it costs a subprocess.
+        //
+        // The refusal itself also closes a real bug rather than merely
+        // tightening policy: without it an engine *can* claim `.md`, and the
+        // converted file (source_type stamped Qmd) then has execution
+        // suppressed anyway by `EngineExecutionStage`'s Q-2-40 guard, which
+        // reads the *original* path — still `.md`. The user would get a
+        // spurious "engine specification ignored" warning for a conversion
+        // that silently happened.
+        if is_qmd_or_md {
+            for engine in &engines {
+                if engine.try_claims_file(&file_str, &ext_for_engine) == Some(true) {
+                    trace_event!(
+                        ctx,
+                        EventLevel::Debug,
+                        "engine '{}' static claim on native extension {:?} refused (Q-2-50)",
+                        engine.name(),
+                        source.path
+                    );
+                    refused_native.push(engine.name().to_string());
+                }
             }
+        }
 
-            // D5: q2 owns the native set outright. Refuse the claim and fall
-            // through to the normal pass-through path.
-            //
-            // This also closes a real bug rather than merely tightening
-            // policy: without the guard an engine *can* claim `.md`, and the
-            // converted file (source_type stamped Qmd) then has execution
-            // suppressed anyway by `EngineExecutionStage`'s Q-2-40 guard,
-            // which reads the *original* path — still `.md`. The user would
-            // get a spurious "engine specification ignored" warning for a
-            // conversion that silently happened. Neither side's tests caught
-            // it: main has no claiming engines, the branch had no guard.
-            if is_qmd_or_md {
-                trace_event!(
-                    ctx,
-                    EventLevel::Debug,
-                    "engine '{}' claim on native extension {:?} refused (Q-2-50)",
-                    engine.name(),
-                    source.path
-                );
-                refused_native.push(engine.name().to_string());
+        for engine in engines.iter().filter(|_| !is_qmd_or_md) {
+            if !engine.claims_file(&file_str, &ext_for_engine) {
                 continue;
             }
 
@@ -460,6 +476,9 @@ mod tests {
         markdown_for_file_calls: Arc<std::sync::atomic::AtomicUsize>,
         /// Simulates the per-engine conversion cache (as TsEngine does).
         conversion_cache: Mutex<std::collections::HashMap<PathBuf, String>>,
+        /// When true, `try_claims_file` answers `None` ("I would have to load
+        /// to tell you"), modelling a Q1-style dynamically-claiming engine.
+        dynamic: bool,
     }
 
     impl MockEngine {
@@ -469,6 +488,19 @@ mod tests {
                 claimed_extensions: claimed_extensions.iter().map(|s| s.to_string()).collect(),
                 markdown_for_file_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
                 conversion_cache: Mutex::new(std::collections::HashMap::new()),
+                dynamic: false,
+            })
+        }
+
+        /// A dynamically-claiming engine: `claims_file` still answers, but the
+        /// static probe reports "I would have to load".
+        fn new_dynamic(name: &str, claimed_extensions: &[&str]) -> Arc<Self> {
+            Arc::new(Self {
+                engine_name: name.to_string(),
+                claimed_extensions: claimed_extensions.iter().map(|s| s.to_string()).collect(),
+                markdown_for_file_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                conversion_cache: Mutex::new(std::collections::HashMap::new()),
+                dynamic: true,
             })
         }
 
@@ -499,6 +531,23 @@ mod tests {
             self.claimed_extensions
                 .iter()
                 .any(|e| e.as_str() == ext.to_lowercase().as_str())
+        }
+
+        /// `claimed_extensions` is a fixed list known without loading, so
+        /// `MockEngine` models a **static** claimer and the static probe must
+        /// give the same answer as `claims_file`.
+        ///
+        /// Leaving this at the trait default (`Some(false)`) would silently
+        /// re-model it as a dynamic claimer, and the native-set tests below
+        /// would stop covering anything — they would pass because nothing is
+        /// ever refused, not because refusal works. Use
+        /// [`MockEngine::new_dynamic`] when a dynamic claimer is what you
+        /// actually want.
+        fn try_claims_file(&self, file: &str, ext: &str) -> Option<bool> {
+            if self.dynamic {
+                return None;
+            }
+            Some(self.claims_file(file, ext))
         }
 
         fn markdown_for_file(
@@ -858,6 +907,84 @@ mod tests {
 
     /// Every member of the native set is refused, not just `.md`. An engine
     /// claiming `.qmd` would bypass q2's own parser entirely.
+    /// A DYNAMIC claimer of a native extension is never asked, and therefore
+    /// never named in `Q-2-50`.
+    ///
+    /// This is the deliberate cost of not probing (2(b)): q2 refuses the claim
+    /// regardless, so asking would spawn a subprocess purely to produce an
+    /// answer that is then discarded. We cannot name an engine whose answer we
+    /// declined to obtain.
+    ///
+    /// Named revert: make `SourceConversionStage` call `claims_file` for the
+    /// native set again and this goes RED -- `greedy` reappears in the warning.
+    #[tokio::test]
+    async fn dynamic_claimer_of_native_extension_is_not_probed_or_named() {
+        let mut reg = EngineRegistry::new();
+        reg.register(MockEngine::new_dynamic("greedy", &["md", "qmd"]));
+        let mut ctx = make_ctx_with_registry(reg);
+
+        let original = b"# native content".to_vec();
+        let source = LoadedSource::new(PathBuf::from("/project/notes.md"), original.clone());
+        let stage = SourceConversionStage::new();
+        let output = stage
+            .run(PipelineData::LoadedSource(source), &mut ctx)
+            .await
+            .expect("native file must render");
+
+        let PipelineData::LoadedSource(result) = output else {
+            panic!("expected LoadedSource output");
+        };
+        assert_eq!(result.content, original, "content must pass through");
+        assert!(result.conversion.is_none(), "no conversion provenance");
+
+        let q_2_50: Vec<_> = ctx
+            .diagnostics
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("Q-2-50"))
+            .collect();
+        assert!(
+            q_2_50.is_empty(),
+            "a dynamic claimer must not be named in Q-2-50 -- it was never asked; got {:?}",
+            q_2_50.iter().map(|d| d.to_text(None)).collect::<Vec<_>>()
+        );
+    }
+
+    /// A STATIC claimer of a native extension IS still named. The static
+    /// declarations are free to read, so the diagnostic is kept exactly where
+    /// it costs nothing -- and a declared `claims-files: [".md"]` is the case
+    /// actually worth telling an extension author about.
+    #[tokio::test]
+    async fn static_claimer_of_native_extension_is_still_named() {
+        let mut reg = EngineRegistry::new();
+        reg.register(MockEngine::new("declared", &["md"]));
+        let mut ctx = make_ctx_with_registry(reg);
+
+        let stage = SourceConversionStage::new();
+        stage
+            .run(
+                PipelineData::LoadedSource(LoadedSource::new(
+                    PathBuf::from("/project/notes.md"),
+                    b"# native".to_vec(),
+                )),
+                &mut ctx,
+            )
+            .await
+            .expect("native file must render");
+
+        let text = ctx
+            .diagnostics
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("Q-2-50"))
+            .map(|d| d.to_text(None))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            text.contains("declared"),
+            "a statically-declared claim on a native extension must still be \
+             reported; Q-2-50 output was:\n{text}"
+        );
+    }
+
     #[tokio::test]
     async fn native_extension_claims_are_refused_with_q_2_50() {
         for (file, ext_label) in [

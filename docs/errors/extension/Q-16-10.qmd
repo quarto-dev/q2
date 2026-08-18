@@ -1,0 +1,103 @@
+---
+title: "Engine extension does not declare static claims"
+description: "An engine extension decides what it handles at run time instead of declaring it in `_extension.yml`, so Quarto must start it to find out."
+code: Q-16-10
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-10` — Engine extension does not declare static claims
+
+> An engine extension decides what it handles at run time instead of
+> declaring it in `_extension.yml`, so Quarto must start it to find out.
+
+## What this means
+
+An execution engine has to tell Quarto two things: which *languages* it
+runs (`{python}`, `{julia}`, …) and which *file types* it converts
+(`.ipynb`, `.py`, …).
+
+There are two ways to answer.
+
+**At run time.** Quarto starts the engine as a subprocess and calls its
+`claimsLanguage` / `claimsFile` functions. This is how engines worked in
+Quarto 1, and it still works — the engine just has to be running before
+Quarto can ask.
+
+**Ahead of time.** The engine writes the answers into its
+`_extension.yml`, and Quarto reads them straight from the file. No
+subprocess, no questions.
+
+This warning means the engine is using the first approach. Nothing is
+broken; the engine will run your code correctly. But Quarto cannot know
+whether the engine is needed without starting it, so it pays that cost
+for any document that could need an engine — including documents this
+engine turns out not to handle.
+
+## How to fix
+
+Add the declarations to the extension's `_extension.yml`:
+
+```yaml
+title: My Python Engine
+version: 1.0.0
+contributes:
+  engines:
+    - path: dist/my-engine.js
+      name: my-engine
+      claims:
+        python: true
+      file-extensions: [".py"]
+      claims-files:
+        - extension: ".py"
+```
+
+Each key answers one question:
+
+- `name` — the engine's runtime name, so Quarto can register it without
+  loading the module to ask.
+- `claims` — which languages the engine executes.
+- `file-extensions` — which file extensions it can handle at all. Used
+  as a fast pre-filter.
+- `claims-files` — which file extensions it claims *unconditionally*,
+  without needing to look inside the file.
+
+An empty value counts as a real answer. If your engine genuinely handles
+no files, write `claims-files: []` — that tells Quarto "none", which is
+different from not saying anything.
+
+The warning names exactly which of these keys are absent, so you only
+need to add the ones it lists.
+
+## If you do not maintain the extension
+
+Report it to the extension's author — the fix belongs in the extension.
+
+You can add the keys to the copy in your project's `_extensions/`
+directory as a local workaround, but updating the extension will
+overwrite them.
+
+## Why this warns even when the engine is unused
+
+The warning is about the extension's declarations, not about what this
+particular render happened to do. Quarto reports it whenever such an
+extension is installed, because the cost is a property of the extension:
+any document that could need an engine will pay it, and Quarto cannot
+tell in advance which documents those are.
+
+Quarto does avoid the cost where it provably cannot apply. A file type
+Quarto owns natively — `.qmd`, `.md`, `.markdown` — is never offered to
+an engine at all (see [`Q-2-50`](../markdown/Q-2-50.qmd)), so a project
+of plain markdown starts no engine even with such an extension
+installed. The warning still appears, because installing the extension
+is what needs fixing, not that particular render.
+
+## Related errors
+
+- [`Q-16-11`](Q-16-11.qmd) — the render-time consequence: Quarto could
+  not work out which engine owns a document ahead of time.
+- [`Q-16-12`](Q-16-12.qmd) — what happens when such an engine fails to
+  load.

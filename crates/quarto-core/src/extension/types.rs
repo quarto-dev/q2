@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 
-use quarto_error_reporting::DiagnosticMessage;
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::ConfigValue;
 
 /// Identifies an extension by name and optional organization.
@@ -274,18 +274,37 @@ pub fn combine_claims(
         .unwrap_or(LanguageClaim::None)
 }
 
-/// Returns a warning if an External engine omits any static-declaration field
-/// (`name`/`claims`/`file-extensions`/`claims-files`), naming exactly which are
-/// missing. Returns `None` for `Reorder`, or for an `External` that declares all
-/// four (a field present-but-empty — `Some({})`/`Some([])` — counts as DECLARED,
-/// not missing). The caller (Task 7, registry construction) pushes the message
-/// into `registry.diagnostics`; this fn does not emit anywhere itself.
-pub fn engine_contribution_missing_fields_warning(
+/// `Q-16-10` — warn when an External engine declares no static claims for one
+/// or more of `name`/`claims`/`file-extensions`/`claims-files`, naming exactly
+/// which. Returns `None` for `Reorder`, or for an `External` that declares all
+/// four (a field present-but-empty — `Some({})`/`Some([])` — counts as
+/// DECLARED: it is a real answer, "this engine handles none of these").
+///
+/// The engines this fires for are **Quarto 1 engines that answer
+/// `claimsLanguage`/`claimsFile` at run time and have not been updated with
+/// static claiming**. They are not broken and nothing is absent that Quarto
+/// requires — they work exactly as designed. What they cost is a subprocess
+/// start on every render, because asking the engine is the only way to find
+/// out what it handles. Keep the wording on that footing: this is an
+/// opt-into-the-faster-path message, not a "you forgot a required field" one.
+///
+/// Deliberately NOT gated on the engine being *used* by the current render
+/// (bd-exhbc6h8 D1(c)): the load cost is paid per render regardless of use, so
+/// an engine that handles nothing in this project is precisely the case where
+/// the cost buys nothing. The render-impact half is `Q-16-11`, which the
+/// orchestrator emits only when at least one document actually fell through.
+///
+/// The path shown is `extension_yml_path`, NOT the `.js` bundle: the manifest
+/// is the file a user edits to fix this; the bundle is a build artifact.
+///
+/// The caller (registry construction) pushes the message into
+/// `registry.diagnostics`; this fn does not emit anywhere itself.
+pub fn engine_contribution_static_claims_warning(
     extension_label: &str,
     contribution: &EngineContribution,
 ) -> Option<DiagnosticMessage> {
     let EngineContribution::External {
-        path,
+        extension_yml_path,
         name,
         claims,
         file_extensions,
@@ -315,17 +334,28 @@ pub fn engine_contribution_missing_fields_warning(
     }
 
     let missing_list = missing.join(", ");
-    let msg = format!(
-        "Engine extension '{}' (path: {}) is missing static declarations: {}. \
-        An engine missing name/claims/claims-files is treated as a legacy Q1 engine \
-        and LoadEngined on every render (slow dynamic path) vs. zero-load when declared. \
-        Declare [] or {{}} to silence a field the engine genuinely has none of.",
-        extension_label,
-        path.display(),
-        missing_list,
-    );
-
-    Some(DiagnosticMessage::warning(msg))
+    Some(
+        DiagnosticMessageBuilder::warning(format!(
+            "engine extension `{extension_label}` does not declare static claims"
+        ))
+        .with_code("Q-16-10")
+        .problem(
+            "so Quarto cannot tell which languages and file types it handles without \
+             starting it as a subprocess, and must do so for any document that could \
+             need an engine.",
+        )
+        .add_detail(format!(
+            "not declared in {}: {missing_list}",
+            extension_yml_path.display()
+        ))
+        .add_hint(
+            "add these keys to the extension's `_extension.yml` to let Quarto read \
+             the answer instead of asking — e.g. `claims: [python]`. An empty value \
+             is a real answer: `claims-files: []` declares \"this engine handles no \
+             files\".",
+        )
+        .build(),
+    )
 }
 
 /// A filter contributed by an extension.
@@ -561,7 +591,7 @@ mod tests {
         );
     }
 
-    // --- P1-11: engine_contribution_missing_fields_warning matrix ---
+    // --- P1-11: engine_contribution_static_claims_warning matrix (Q-16-10) ---
 
     fn make_full_external() -> EngineContribution {
         EngineContribution::External {
@@ -601,66 +631,89 @@ mod tests {
         }
     }
 
-    /// Missing `name` alone → Some(warning) that names "name". (RED: make emitter return None.)
-    #[test]
-    fn warning_names_missing_name_field() {
-        let contrib = make_external_without("name");
-        let w = engine_contribution_missing_fields_warning("my-ext", &contrib)
-            .expect("should produce a warning when name is absent");
+    /// Each undeclared static-claim key is named in the RENDERED message.
+    ///
+    /// Asserts against `to_text`, not `title`: the key list lives in the
+    /// detail line (`✖ not declared in <path>: …`), because the title is the
+    /// one-line subject a reader scans. Asserting on `title` here would pass
+    /// only for `claims` (a substring of "does not declare static claims") and
+    /// silently miss the other three.
+    fn assert_names_key(missing_field: &str) {
+        let contrib = make_external_without(missing_field);
+        let w = engine_contribution_static_claims_warning("my-ext", &contrib)
+            .unwrap_or_else(|| panic!("should warn when {missing_field} is not declared"));
+        let text = w.to_text(None);
         assert!(
-            w.title.contains("name"),
-            "warning message should mention 'name': {}",
-            w.title
+            text.contains(missing_field),
+            "rendered warning should name `{missing_field}`:\n{text}"
+        );
+        assert!(
+            text.contains("my-ext"),
+            "rendered warning should name the extension:\n{text}"
         );
     }
 
-    /// Missing `claims` alone → Some(warning) that names "claims". (RED: make emitter return None.)
+    /// `name` not declared → warned, and named. (RED: make emitter return None.)
     #[test]
-    fn warning_names_missing_claims_field() {
+    fn warning_names_undeclared_name_key() {
+        assert_names_key("name");
+    }
+
+    /// `claims` not declared → warned, and named.
+    #[test]
+    fn warning_names_undeclared_claims_key() {
+        assert_names_key("claims");
+    }
+
+    /// `file-extensions` not declared → warned, and named.
+    #[test]
+    fn warning_names_undeclared_file_extensions_key() {
+        assert_names_key("file-extensions");
+    }
+
+    /// `claims-files` not declared → warned, and named.
+    #[test]
+    fn warning_names_undeclared_claims_files_key() {
+        assert_names_key("claims-files");
+    }
+
+    /// Q-16-10 is carried, so the code is addressable by a future
+    /// project-scope `diagnostics:` policy (bd-aow4qio3) and by the docs URL.
+    #[test]
+    fn warning_carries_q_16_10_code() {
         let contrib = make_external_without("claims");
-        let w = engine_contribution_missing_fields_warning("my-ext", &contrib)
-            .expect("should produce a warning when claims is absent");
+        let w = engine_contribution_static_claims_warning("my-ext", &contrib).unwrap();
+        assert_eq!(w.code.as_deref(), Some("Q-16-10"));
+    }
+
+    /// The path shown is the `_extension.yml` a user edits, never the `.js`
+    /// bundle (a build artifact). Named revert: swap `extension_yml_path` back
+    /// to `path` in the emitter and this goes RED.
+    #[test]
+    fn warning_points_at_extension_yml_not_bundle() {
+        let contrib = make_external_without("claims");
+        let text = engine_contribution_static_claims_warning("my-ext", &contrib)
+            .unwrap()
+            .to_text(None);
         assert!(
-            w.title.contains("claims"),
-            "warning message should mention 'claims': {}",
-            w.title
+            text.contains("_extension.yml"),
+            "should point at the manifest:\n{text}"
+        );
+        assert!(
+            !text.contains("engine.js"),
+            "should NOT point at the bundle:\n{text}"
         );
     }
 
-    /// Missing `file-extensions` alone → Some(warning) that names "file-extensions".
+    /// All four keys declared (some as Some(empty)) → None (no warning).
+    /// An empty value is a real answer, not an omission.
+    /// (RED: treat Some(empty) as undeclared → this assertion fails.)
     #[test]
-    fn warning_names_missing_file_extensions_field() {
-        let contrib = make_external_without("file-extensions");
-        let w = engine_contribution_missing_fields_warning("my-ext", &contrib)
-            .expect("should produce a warning when file-extensions is absent");
-        assert!(
-            w.title.contains("file-extensions"),
-            "warning message should mention 'file-extensions': {}",
-            w.title
-        );
-    }
-
-    /// Missing `claims-files` alone → Some(warning) that names "claims-files".
-    #[test]
-    fn warning_names_missing_claims_files_field() {
-        let contrib = make_external_without("claims-files");
-        let w = engine_contribution_missing_fields_warning("my-ext", &contrib)
-            .expect("should produce a warning when claims-files is absent");
-        assert!(
-            w.title.contains("claims-files"),
-            "warning message should mention 'claims-files': {}",
-            w.title
-        );
-    }
-
-    /// All four fields present (some as Some(empty)) → None (no warning).
-    /// (RED: treat Some(empty) as missing → this assertion fails.)
-    #[test]
-    fn no_warning_when_all_fields_present_even_empty() {
+    fn no_warning_when_all_keys_declared_even_empty() {
         let contrib = make_full_external();
         assert!(
-            engine_contribution_missing_fields_warning("my-ext", &contrib).is_none(),
-            "Some(empty) fields count as declared — no warning expected"
+            engine_contribution_static_claims_warning("my-ext", &contrib).is_none(),
+            "Some(empty) counts as declared — no warning expected"
         );
     }
 
@@ -671,7 +724,7 @@ mod tests {
             name: "jupyter".to_string(),
         };
         assert!(
-            engine_contribution_missing_fields_warning("my-ext", &contrib).is_none(),
+            engine_contribution_static_claims_warning("my-ext", &contrib).is_none(),
             "Reorder should never produce a warning"
         );
     }

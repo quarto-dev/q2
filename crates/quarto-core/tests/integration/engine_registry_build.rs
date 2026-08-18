@@ -604,13 +604,18 @@ contributes:
         );
     }
 
-    // ── Warning surfaced: missing static fields → registry.diagnostics ───────────
+    // ── Q-16-10 surfaced into registry.diagnostics ───────────────────────────────
     // RED: drop the step-4e push → diagnostics is empty.
+    //
+    // This is the in-process half. The user-visible half — that the vec is
+    // actually DRAINED to stderr — lives in the `quarto` crate's
+    // `engine_diagnostics_cli` (bd-exhbc6h8); this test passing while that one
+    // failed is exactly the gap that bug was.
 
     #[test]
-    fn warning_missing_static_fields_appears_in_diagnostics() {
-        // Extension declares only `path` — all four static fields (name, claims,
-        // file-extensions, claims-files) are absent → one warning expected.
+    fn warning_static_claims_appears_in_diagnostics() {
+        // Extension declares only `path` — all four static-claim keys (name,
+        // claims, file-extensions, claims-files) are absent → one warning.
         let tmp = setup_project_with_engine_ext(
             "bare-engine",
             r#"
@@ -626,7 +631,7 @@ contributes:
         let diagnostics = project.registry.diagnostics.lock().unwrap();
         assert!(
             !diagnostics.is_empty(),
-            "missing static fields should produce at least one diagnostic warning"
+            "an engine that declares no static claims should produce a diagnostic"
         );
         let diag_titles: Vec<&str> = diagnostics.iter().map(|d| d.title.as_str()).collect();
         let combined = diag_titles.join("\n");
