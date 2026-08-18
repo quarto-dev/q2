@@ -206,13 +206,21 @@ fn breadcrumbs_page_level_false_suppresses() {
 /// A top-level page (trail length 1 — just itself) gets no
 /// title-block trail (Q1 renders that instance only when the trail
 /// has more than one crumb).
+///
+/// Narrowed for bd-26bf3j1y: this originally asserted on
+/// `quarto-page-breadcrumbs`, which was unambiguous when the
+/// title-block instance was the only one. The mobile secondary-nav
+/// instance shares that base class and DOES render at one crumb (Q1
+/// parity, verified against rendered Q1 output), so the assertion now
+/// names the title-block-only class. The property under test — the
+/// `> 1` gate on the title-block instance — is unchanged.
 #[test]
 fn breadcrumbs_absent_on_top_level_page() {
     let outputs = render_project(|dir| nested_fixture(dir, ""));
     let html = find_html(&outputs, "index.html");
     assert!(
-        !html.contains("quarto-page-breadcrumbs"),
-        "length-1 trail must not render"
+        !html.contains("quarto-title-breadcrumbs"),
+        "length-1 trail must not render the title-block instance"
     );
 }
 

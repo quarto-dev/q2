@@ -181,7 +181,8 @@ errors sidebar in `docs/_quarto.yml` and fails on three more:
 
 The sidebar list is hand-maintained (a v1 decision recorded in
 `claude-notes/plans/2026-05-22-error-docs-foundation.md`), and before
-this rule existed it had drifted to 153 of 211 pages, with two whole
+this rule existed it had drifted to 153 of the 211 pages then
+present (214 today), with two whole
 subsystems missing their `- section:` block.
 
 **Section order is not policed.** The sections sit in an arbitrary

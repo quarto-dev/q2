@@ -57,5 +57,3 @@ Common causes:
 
 - `Q-14-2` — unknown theme name: the value has no `.scss`/`.css`
   extension and is not a built-in theme name either.
-- `Q-14-3` — dark theme variant not yet supported: the
-  `light:`/`dark:` map form renders only the `light:` half.

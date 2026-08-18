@@ -259,6 +259,16 @@ converts.
 
 ## D5 — Refuse engine claims on the whole native set, with `Q-2-50`
 
+> **RENUMBERED to `Q-2-51` (2026-08-18 merge from main).** main's v0.23.0
+> shipped its own `Q-2-50` ("Doubled curly braces are not supported",
+> commit 297f5cc2d), so the released code owns the number and this one
+> moved. Everything below — and the Phase C e2e transcripts further down,
+> which still print `Q-2-50` because that is what the tool said at the time
+> — describes the code now catalogued as `Q-2-51`, documented at
+> `docs/errors/markdown/Q-2-51.qmd`. The design is unchanged; only the
+> number is.
+
+
 If an engine tries to claim a file q2 owns natively, **warn and ignore the
 claim**, falling through to the normal pass-through path.
 

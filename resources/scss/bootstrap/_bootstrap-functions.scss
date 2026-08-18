@@ -1,3 +1,13 @@
+// Renders a color as an rgba() string (used to interpolate colors
+// into SVG data-URI fills, e.g. the color-scheme toggle icons).
+// Ported from Q1's _quarto-functions.scss; without it, the call
+// inside a string interpolation silently emits the literal function
+// text and the SVG fill is invalid (bd-0pic6 A4).
+@function colorToRGBA($color) {
+  @return "rgba(" + red($color) + ", " + green($color) + ", " + blue($color) +
+    ", " + alpha($color) + ")";
+}
+
 // Dims a color (either making it more white or more black)
 @function theme-dim($baseColor, $amount) {
   @if (tone($baseColor) == "dark") {

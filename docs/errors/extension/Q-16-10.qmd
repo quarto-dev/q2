@@ -90,7 +90,7 @@ tell in advance which documents those are.
 
 Quarto does avoid the cost where it provably cannot apply. A file type
 Quarto owns natively — `.qmd`, `.md`, `.markdown` — is never offered to
-an engine at all (see [`Q-2-50`](../markdown/Q-2-50.qmd)), so a project
+an engine at all (see [`Q-2-51`](../markdown/Q-2-51.qmd)), so a project
 of plain markdown starts no engine even with such an extension
 installed. The warning still appears, because installing the extension
 is what needs fixing, not that particular render.

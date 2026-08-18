@@ -79,6 +79,15 @@ impl AstTransform for NavbarGenerateTransform {
             return Ok(());
         };
 
+        // Dark-mode toggle: emitted whenever the format has a dark
+        // theme variant (bd-0pic6 A4). Derived from the THEME config,
+        // not `navbar:` YAML — same trigger as Q1's
+        // `formatDarkMode(format) !== undefined` navbar/sidebar
+        // darkToggle. Parse errors mean the theme stage will fail the
+        // render anyway; treat as "no toggle" here.
+        navbar.dark_mode_toggle =
+            quarto_sass::ThemeConfig::from_config_value(&ast.meta).is_ok_and(|c| c.dark.is_some());
+
         // bd-qor9a — resolve each href against the YAML file it was
         // authored in. Frontmatter-rooted hrefs become project-root-
         // relative; `_quarto.yml`-rooted ones (the common case for

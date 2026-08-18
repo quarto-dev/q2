@@ -90,7 +90,7 @@ pub const FIXED_RENDERABLE: &[&str] = &["qmd", "md"];
 /// Extensions q2 owns natively and no engine may claim: the two markdown
 /// kinds plus the extension-less case (treated as qmd). Used both by the
 /// discovery widening below (a native member never becomes a synthetic
-/// default pattern) and by the conversion stage's claim refusal (`Q-2-50`).
+/// default pattern) and by the conversion stage's claim refusal (`Q-2-51`).
 pub const NATIVE_EXTENSIONS: &[&str] = &["", "qmd", "md", "markdown"];
 
 /// A resolved, normalized set of renderable file extensions (undotted

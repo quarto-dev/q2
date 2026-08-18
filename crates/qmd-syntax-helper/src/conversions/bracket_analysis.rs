@@ -152,9 +152,15 @@ pub fn normalize_label(label: &str) -> String {
 
 /// Analyze `source`, returning every definition and finding.
 ///
-/// A file that does not parse yields an empty `Analysis`, so the rules leave
-/// it alone rather than editing a document whose structure we cannot trust.
-/// Parse errors are the `parse` rule's business, not ours.
+/// A file that does not parse is an **error** ([`ParseFailure`] carrying the
+/// diagnostic codes), never an empty analysis: an empty analysis is
+/// indistinguishable from "checked and clean", which once let scoped sweeps
+/// report unparseable files as clean (bd-syntax-helper-parse-masking-w88mhedp).
+/// The check/convert drivers probe files first (via
+/// [`crate::rule::Rule::requires_parse`]), so in driver flow the rules never
+/// reach this path; it protects direct library callers.
+///
+/// [`ParseFailure`]: crate::utils::parse_probe::ParseFailure
 pub fn analyze(source: &str, filename: &str) -> Result<Analysis> {
     let mut sink = std::io::sink();
     let parsed =
@@ -162,7 +168,9 @@ pub fn analyze(source: &str, filename: &str) -> Result<Analysis> {
 
     let (doc, _ctx, _diags) = match parsed {
         Ok(triple) => triple,
-        Err(_) => return Ok(Analysis::default()),
+        Err(diags) => {
+            return Err(crate::utils::parse_probe::ParseFailure::from_diagnostics(&diags).into());
+        }
     };
 
     let parts = collect_parts(doc, source);

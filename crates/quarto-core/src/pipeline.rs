@@ -335,6 +335,12 @@ pub fn build_html_pipeline_stages_with_options(
     // companion init handler is added in Phase 2 Commit 3.
     #[cfg(not(target_arch = "wasm32"))]
     stages.push(Box::new(ClipboardJsStage::new()));
+    // Inject the grouped-tabset sync module alongside Bootstrap JS
+    // (bd-toc-tabset-titles-zq93gjvf, design decision 4: ships
+    // whenever Bootstrap does — inert on pages without grouped
+    // tabsets). Same WASM-exclusion reasoning as the two above.
+    #[cfg(not(target_arch = "wasm32"))]
+    stages.push(Box::new(crate::stage::stages::TabsetsJsStage::new()));
     // Attribution-generate runs *before* user filters so the
     // `quarto.attribution.*` Lua host binding sees a populated
     // sidecar in both `pre` and `post` filter passes. No-op when
@@ -1152,6 +1158,16 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(ReferenceLinkDiagnosticsTransform::new()));
     pipeline.push(Box::new(CalloutTransform::new()));
     pipeline.push(Box::new(CalloutResolveTransform::new()));
+    // Panel-tabset pair (bd-toc-tabset-titles-zq93gjvf), mirroring the
+    // callout pair above. Position is load-bearing: the parse half
+    // consumes the tab-title Headers *before* SectionizeTransform and
+    // TocGenerateTransform run, which is what keeps tab titles out of
+    // sections and the TOC (Q1 does the same by filter ordering).
+    // Both self-gate to non-reveal, non-minimal HTML.
+    pipeline.push(Box::new(crate::transforms::PanelTabsetTransform::new()));
+    pipeline.push(Box::new(
+        crate::transforms::PanelTabsetResolveTransform::new(),
+    ));
     // Markdown-parse blessed website presentation config strings
     // (website.title, page-footer regions, …) so the shortcode
     // transform's metadata walk — registered immediately after — sees
@@ -1205,6 +1221,12 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(WebsiteFaviconTransform::new()));
     pipeline.push(Box::new(WebsiteBootstrapIconsTransform::new()));
     pipeline.push(Box::new(WebsiteCanonicalUrlTransform::new()));
+    // User-declared stylesheets (bd-format-css-not-copied-crn3bjdz):
+    // copy `css:` files into the output tree and rewrite the entries
+    // to per-page hrefs. Not website-scoped — default projects (and
+    // books, which ride the same dispatch) and single-doc renders get
+    // the same treatment. Self-gates to HTML-family formats.
+    pipeline.push(Box::new(crate::transforms::FormatCssTransform::new()));
     // Draft marking (bd-draft-banner-missing-hgx1gkqm). Not website-scoped
     // — a standalone `draft: true` document gets the banner too — but it
     // belongs with the metadata producers above: it only writes
@@ -1346,6 +1368,23 @@ pub fn build_transform_pipeline(
     // (bd-breadcrumbs-missing-1vpuqh34); the title-block partial
     // consumes `rendered.navigation.breadcrumbs`.
     pipeline.push(Box::new(BreadcrumbsRenderTransform::new()));
+    // The narrow-viewport secondary nav (bd-26bf3j1y) derives its own
+    // trail from the same sidebar — Q1 gates the two breadcrumb
+    // instances differently, so they don't share a result. See the
+    // comparison table in `transforms/secondary_nav_render.rs`.
+    //
+    // NATIVE ONLY, deliberately (decision 3 in the plan). The bar's
+    // only purpose is the sidebar toggle, which needs Bootstrap's
+    // collapse JS; `BootstrapJsStage` is gated the same way because
+    // the hub-client preview reinitializes its iframe every render
+    // tick. Rendering an inert toggle in preview is worse than
+    // rendering none. This means preview and render differ in DOM at
+    // narrow widths ON PURPOSE — `bd-e7b7` owns the preview JS story,
+    // and when it lands this `cfg` comes off.
+    #[cfg(not(target_arch = "wasm32"))]
+    pipeline.push(Box::new(
+        crate::transforms::SecondaryNavRenderTransform::new(),
+    ));
     pipeline.push(Box::new(PageNavRenderTransform::new()));
     // Footer *generation* (above) is format-agnostic; footer *rendering* is
     // format-specific — html emits page-footer chrome, revealjs emits a
@@ -1514,6 +1553,18 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     // mermaid component (ts-packages/preview-renderer) renders the
     // diagram live for both q2-preview and q2-slides (bd-5m4ga0s1).
     "mermaid-render",
+    // The tabset pair (bd-toc-tabset-titles-zq93gjvf) builds its nav
+    // as *split* RawInlines (`<ul…>`, `<li…><a…>`, title inlines,
+    // `</a></li>`, `</ul>`) — correct for the string-concatenating
+    // HTML writer, but q2-preview's React `RawInline` component
+    // renders each fragment via its own `dangerouslySetInnerHTML`
+    // span, where unbalanced fragments get auto-closed and the tab
+    // structure collapses. Excluding BOTH halves keeps the preview at
+    // the passthrough (stacked headings) it showed before tabsets
+    // existed. A React Tabset component consuming the CustomNode is
+    // the proper preview story — tracked as a follow-up strand.
+    "panel-tabset",
+    "panel-tabset-resolve",
 ];
 
 /// Build the q2-preview transform pipeline (Plan 1).
@@ -2025,11 +2076,12 @@ mod tests {
     #[test]
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
-        // Merged pipeline (ts-engine-extensions rebase): both new stages are
-        // present — SourceConversionStage at [0] (Task 10 / plan1c, branch) and
-        // LanguageResolveStage after metadata-merge (bd-llhlzd7p, main) — so the
-        // length is 24, not the 23 either side had alone.
-        assert_eq!(stages.len(), 24);
+        // Merged pipeline: SourceConversionStage at [0] (branch) plus two
+        // stages main added — LanguageResolveStage after metadata-merge
+        // (bd-llhlzd7p) and TabsetsJsStage in the JS block
+        // (bd-toc-tabset-titles-zq93gjvf) — so the length is 25, not the 24
+        // either side had alone.
+        assert_eq!(stages.len(), 25);
         // Pre-parse file-claim/convert (Task 10).
         assert_eq!(stages[0].name(), "source-conversion");
         assert_eq!(stages[1].name(), "parse-document");
@@ -2065,31 +2117,35 @@ mod tests {
         // gated on minimal-HTML. clipboard-js additionally gates on
         // `code-copy != false`.
         assert_eq!(stages[14].name(), "clipboard-js");
+        // TabsetsJsStage (bd-toc-tabset-titles-zq93gjvf) ships the
+        // grouped-tabset sync module whenever Bootstrap does — same
+        // gate as bootstrap-js, so it sits in the same JS block.
+        assert_eq!(stages[15].name(), "tabsets-js");
         // Attribution-generate runs before user filters so the
         // `quarto.attribution.*` Lua host binding sees a populated
         // sidecar (bd-0fd0). No-op when no provider is installed.
-        assert_eq!(stages[15].name(), "attribution-generate");
-        assert_eq!(stages[16].name(), "user-filters-pre");
-        assert_eq!(stages[17].name(), "ast-transforms");
-        assert_eq!(stages[18].name(), "user-filters-post");
+        assert_eq!(stages[16].name(), "attribution-generate");
+        assert_eq!(stages[17].name(), "user-filters-pre");
+        assert_eq!(stages[18].name(), "ast-transforms");
+        assert_eq!(stages[19].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[19].name(), "resource-report");
-        assert_eq!(stages[20].name(), "code-highlight");
+        assert_eq!(stages[20].name(), "resource-report");
+        assert_eq!(stages[21].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, crossref `\tag{N}`) is visible.
-        assert_eq!(stages[21].name(), "math-js");
-        assert_eq!(stages[22].name(), "render-html-body");
-        assert_eq!(stages[23].name(), "apply-template");
+        assert_eq!(stages[22].name(), "math-js");
+        assert_eq!(stages[23].name(), "render-html-body");
+        assert_eq!(stages[24].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
         // Merged pipeline carries both SourceConversionStage (Task 10, branch)
-        // and LanguageResolveStage (bd-llhlzd7p, main) → 24 stages.
-        assert_eq!(pipeline.len(), 24);
+        // LanguageResolveStage and TabsetsJsStage (main) → 25 stages.
+        assert_eq!(pipeline.len(), 25);
     }
 
     #[test]
@@ -3348,6 +3404,44 @@ mod tests {
             "code-block-generate must run after metadata-normalize; got positions \
              metadata={metadata_pos}, gen={:?} in {names:?}",
             gen_pos,
+        );
+    }
+
+    /// bd-26bf3j1y: the secondary nav is registered on native builds and
+    /// suppressed under WASM (decision 3 — the hub-client preview ships
+    /// no Bootstrap JS, so the toggle would be inert).
+    ///
+    /// The suppression itself is a `#[cfg(not(target_arch = "wasm32"))]`
+    /// on the `pipeline.push`, which no native test can observe. What
+    /// this pins is the other half: that the push exists at all, and in
+    /// the Navigation phase. Without it a refactor could silently drop
+    /// the bar from every website and only the integration tests would
+    /// notice.
+    #[test]
+    fn test_secondary_nav_registered_in_navigation_phase() {
+        use crate::transform::TransformPhase;
+
+        let runtime = make_test_runtime();
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
+        let found = pipeline
+            .iter()
+            .find(|t| t.name() == "secondary-nav-render")
+            .map(|t| t.phase());
+
+        assert_eq!(
+            found,
+            Some(TransformPhase::Navigation),
+            "secondary-nav-render must be registered in the Navigation phase; \
+             pipeline was: {:?}",
+            pipeline.iter().map(|t| t.name()).collect::<Vec<_>>()
         );
     }
 

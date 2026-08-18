@@ -1081,6 +1081,50 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     }
                 }
             })
+            // Warn on doubled-brace fence openers (Quarto 1's display escape,
+            // e.g. ```{{python}}). A class beginning with `{{` can only arise
+            // from such an opener: attribute-form openers ({python}, {.foo})
+            // parse into single-brace or bare classes, and fence *content* is
+            // never a class. Q2 deliberately does not support the escape
+            // (bd-escaped-executable-fence-uuvv37pk); the block is left as-is
+            // and renders as literal code.
+            .with_code_block(|code_block, _ctx| {
+                for (i, class) in code_block.attr.1.iter().enumerate() {
+                    if !class.starts_with("{{") {
+                        continue;
+                    }
+                    let location = code_block
+                        .attr_source
+                        .classes
+                        .get(i)
+                        .and_then(|s| s.clone())
+                        .unwrap_or_else(|| code_block.source_info.clone());
+                    let lang = class.trim_start_matches('{').trim_end_matches('}');
+                    let execute_hint = if lang.is_empty() || lang.contains(['{', '}']) {
+                        "To execute the cell, write the language with single braces, e.g. `{python}`.".to_string()
+                    } else {
+                        format!("To execute the cell, write single braces: `{{{}}}`.", lang)
+                    };
+                    error_collector_ref.borrow_mut().add(
+                        DiagnosticMessageBuilder::warning(
+                            "Doubled curly braces are not supported",
+                        )
+                        .with_code("Q-2-50")
+                        .with_location(location)
+                        .problem(format!(
+                            "Quarto 2 does not treat doubled curly braces as an escape, so `{}` is not a language specifier; this block renders as literal code.",
+                            class
+                        ))
+                        .add_hint(execute_hint)
+                        .add_hint(
+                            "To display the cell, wrap it in a `markdown` code block and write single braces; fenced code blocks are displayed verbatim.",
+                        )
+                        .build(),
+                    );
+                    break;
+                }
+                Unchanged(code_block)
+            })
             // Remove single empty spans from bullet list items
             // This allows `* []` to create truly empty list items in the AST
             .with_bullet_list(|mut bullet_list, _ctx| {

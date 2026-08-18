@@ -141,6 +141,7 @@ impl Rule for Q219Converter {
                 location: v.error_location,
                 error_code: Some("Q-2-19".to_string()),
                 error_codes: None,
+                ..Default::default()
             })
             .collect();
 

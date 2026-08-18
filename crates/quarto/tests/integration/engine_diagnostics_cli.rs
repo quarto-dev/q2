@@ -258,7 +258,7 @@ fn dynamic_claiming_warning_promoted_under_strict() {
 ///
 /// Inverts `markdown_only_project_still_loads_the_engine`, which bound the
 /// pre-fix behavior and is deliberately deleted rather than kept: q2 owns the
-/// native set outright (`Q-2-50` / `NATIVE_EXTENSIONS`), so a claim on `.qmd`
+/// native set outright (`Q-2-51` / `NATIVE_EXTENSIONS`), so a claim on `.qmd`
 /// or `.md` is refused no matter what an engine answers. Asking a
 /// dynamically-claiming engine therefore paid a subprocess load for an answer
 /// that was then discarded — pure waste, and the reason a project with zero

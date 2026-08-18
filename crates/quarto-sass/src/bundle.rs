@@ -207,26 +207,75 @@ pub fn load_title_block_layer() -> Result<SassLayer, SassError> {
     parse_layer(content, Some("title-block.scss"))
 }
 
-/// Load the default syntax-highlight SCSS layer.
+/// The syntax-highlight palettes shipped with Quarto 2 (bd-0pic6
+/// phase B). `default` is the solarized-inspired original; the a11y
+/// pair is hand-translated from Q1's `.theme` files. The general
+/// `.theme`-translator follow-up grows this set.
+pub const KNOWN_HIGHLIGHT_PALETTES: &[&str] = &["default", "a11y-light", "a11y-dark"];
+
+/// Whether `name` is a shipped highlight palette.
+/// [`load_highlight_layer`] falls back to `default` for unknown
+/// names; `CompileThemeCssStage` uses this to emit the user-facing
+/// warning for that fallback.
+pub fn is_known_highlight_palette(name: &str) -> bool {
+    KNOWN_HIGHLIGHT_PALETTES.contains(&name)
+}
+
+/// Load the syntax-highlight SCSS layer for a palette.
 ///
-/// Reads `highlight.scss` from the embedded templates directory. The
-/// layer provides color rules for every `.hl-<capture>` class the HTML
-/// writer can produce from a tree-sitter grammar's `highlights.scm`
-/// query (see `claude-notes/plans/2026-04-19-syntax-highlighting-design.md`).
+/// The layer combines two embedded files:
+/// - `highlight.scss` — palette-independent structural rules
+///   (`pre > code` display, white-space, sourceCode margins);
+/// - `highlight-<palette>.scss` — the `.hl-<capture>` color rules
+///   (see `claude-notes/plans/2026-04-19-syntax-highlighting-design.md`
+///   for the class vocabulary), plus palette-level `$code-block-bg` /
+///   `$code-block-color` defaults for the non-default palettes.
+///
+/// `None` and unknown names load the `default` palette (the caller
+/// warns for unknown names — quarto-sass stays diagnostics-free).
 ///
 /// Included as a user-layer — after Bootstrap / Quarto defaults, before
 /// user-supplied theme overrides — so user themes can redefine any
 /// `.hl-*` class without touching markup.
-pub fn load_highlight_layer() -> Result<SassLayer, SassError> {
+pub fn load_highlight_layer(palette: Option<&str>) -> Result<SassLayer, SassError> {
     use crate::resources::TEMPLATES_RESOURCES;
 
-    let content = TEMPLATES_RESOURCES
+    let palette = match palette {
+        Some(name) if is_known_highlight_palette(name) => name,
+        _ => "default",
+    };
+
+    let structural = TEMPLATES_RESOURCES
         .read_str(Path::new("highlight.scss"))
         .ok_or_else(|| SassError::CompilationFailed {
             message: "highlight.scss not found in templates resources".to_string(),
         })?;
+    let palette_file = format!("highlight-{palette}.scss");
+    let palette_content = TEMPLATES_RESOURCES
+        .read_str(Path::new(&palette_file))
+        .ok_or_else(|| SassError::CompilationFailed {
+            message: format!("{palette_file} not found in templates resources"),
+        })?;
 
-    parse_layer(content, Some("highlight.scss"))
+    let structural_layer = parse_layer(structural, Some("highlight.scss"))?;
+    let palette_layer = parse_layer(palette_content, Some(&palette_file))?;
+    Ok(SassLayer {
+        uses: join_band(&structural_layer.uses, &palette_layer.uses),
+        defaults: join_band(&structural_layer.defaults, &palette_layer.defaults),
+        functions: join_band(&structural_layer.functions, &palette_layer.functions),
+        mixins: join_band(&structural_layer.mixins, &palette_layer.mixins),
+        rules: join_band(&structural_layer.rules, &palette_layer.rules),
+    })
+}
+
+/// Concatenate two optional layer bands, preserving `structural`
+/// first.
+fn join_band(a: &str, b: &str) -> String {
+    match (a.is_empty(), b.is_empty()) {
+        (true, _) => b.to_string(),
+        (_, true) => a.to_string(),
+        (false, false) => format!("{a}\n{b}"),
+    }
 }
 
 /// Load the default code-copy-button SCSS layer.
@@ -452,7 +501,7 @@ pub fn assemble_reveal_scss(theme_layers: &[SassLayer]) -> Result<String, SassEr
     // matching the HTML layer order. It rides in the `theme` slot of
     // `assemble_scss` (rules emitted after framework + quarto), so its
     // colours win over reveal's generic code rules at equal specificity.
-    let highlight = load_highlight_layer()?;
+    let highlight = load_highlight_layer(None)?;
     // Bundle the copy-button rules (`copy-code.scss`, the same layer the
     // HTML path includes via `load_copy_code_layer`) so revealjs honors
     // `code-copy:` — the deck's copy buttons get styled + hover-hidden

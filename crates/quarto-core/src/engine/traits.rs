@@ -194,7 +194,7 @@ pub trait ExecutionEngine: Send + Sync {
     /// loading, which they never do.
     ///
     /// Used where q2 must decide a claim it is going to refuse anyway (the
-    /// natively-owned extensions, `Q-2-50`). Asking `claims_file` there would
+    /// natively-owned extensions, `Q-2-51`). Asking `claims_file` there would
     /// spawn a subprocess to produce an answer that is immediately discarded.
     fn try_claims_file(&self, _file: &str, _ext: &str) -> Option<bool> {
         Some(false)

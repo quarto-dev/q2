@@ -61,6 +61,11 @@ mod parse_document;
 mod pre_engine_sugaring;
 mod render_html;
 mod resource_report;
+// Tabsets-sync JS injection (bd-toc-tabset-titles-zq93gjvf): vendors
+// the grouped-tabset sync module as a Project-scoped artifact whenever
+// Bootstrap is active. Same WASM-exclusion reasoning as `bootstrap_js`.
+#[cfg(not(target_arch = "wasm32"))]
+mod tabsets_js;
 mod unwrap_profile;
 mod user_filters;
 
@@ -94,5 +99,7 @@ pub use pre_engine_sugaring::PreEngineSugaringStage;
 pub use render_html::RenderHtmlBodyStage;
 pub use resource_report::ResourceReportStage;
 pub use source_conversion::SourceConversionStage;
+#[cfg(not(target_arch = "wasm32"))]
+pub use tabsets_js::TabsetsJsStage;
 pub use unwrap_profile::UnwrapProfileStage;
 pub use user_filters::UserFiltersStage;

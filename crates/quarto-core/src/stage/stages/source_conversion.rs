@@ -172,7 +172,7 @@ impl PipelineStage for SourceConversionStage {
         // exactly the engines that would have needed the load.
         //
         // The cost of not asking is that a dynamic claimer is no longer named
-        // in `Q-2-50`; we cannot know what it would have said. That is the
+        // in `Q-2-51`; we cannot know what it would have said. That is the
         // intended trade (bd-exhbc6h8 follow-up, Gordon's 2(b)): the diagnostic
         // is kept where it is free — a declared `claims-files: [".md"]` is the
         // case actually worth telling an extension author about — and dropped
@@ -191,7 +191,7 @@ impl PipelineStage for SourceConversionStage {
                     trace_event!(
                         ctx,
                         EventLevel::Debug,
-                        "engine '{}' static claim on native extension {:?} refused (Q-2-50)",
+                        "engine '{}' static claim on native extension {:?} refused (Q-2-51)",
                         engine.name(),
                         source.path
                     );
@@ -251,7 +251,7 @@ impl PipelineStage for SourceConversionStage {
                     "engine claim on `{}` ignored",
                     source.path.display()
                 ))
-                .with_code("Q-2-50")
+                .with_code("Q-2-51")
                 .problem(format!(
                     "The {plural} {engine_list} claimed {display_ext}, but Quarto handles \
                      markdown natively. The claim is ignored and the file is rendered by \
@@ -903,12 +903,12 @@ mod tests {
         assert_eq!(ctx.claimed_engine_name, Some("echo-engine".to_string()));
     }
 
-    // ── D5 / B3: engines may not claim the native set (Q-2-50) ──────────────
+    // ── D5 / B3: engines may not claim the native set (Q-2-51) ──────────────
 
     /// Every member of the native set is refused, not just `.md`. An engine
     /// claiming `.qmd` would bypass q2's own parser entirely.
     /// A DYNAMIC claimer of a native extension is never asked, and therefore
-    /// never named in `Q-2-50`.
+    /// never named in `Q-2-51`.
     ///
     /// This is the deliberate cost of not probing (2(b)): q2 refuses the claim
     /// regardless, so asking would spawn a subprocess purely to produce an
@@ -940,11 +940,11 @@ mod tests {
         let q_2_50: Vec<_> = ctx
             .diagnostics
             .iter()
-            .filter(|d| d.code.as_deref() == Some("Q-2-50"))
+            .filter(|d| d.code.as_deref() == Some("Q-2-51"))
             .collect();
         assert!(
             q_2_50.is_empty(),
-            "a dynamic claimer must not be named in Q-2-50 -- it was never asked; got {:?}",
+            "a dynamic claimer must not be named in Q-2-51 -- it was never asked; got {:?}",
             q_2_50.iter().map(|d| d.to_text(None)).collect::<Vec<_>>()
         );
     }
@@ -974,14 +974,14 @@ mod tests {
         let text = ctx
             .diagnostics
             .iter()
-            .filter(|d| d.code.as_deref() == Some("Q-2-50"))
+            .filter(|d| d.code.as_deref() == Some("Q-2-51"))
             .map(|d| d.to_text(None))
             .collect::<Vec<_>>()
             .join("\n");
         assert!(
             text.contains("declared"),
             "a statically-declared claim on a native extension must still be \
-             reported; Q-2-50 output was:\n{text}"
+             reported; Q-2-51 output was:\n{text}"
         );
     }
 
@@ -1027,12 +1027,12 @@ mod tests {
             let q2_50: Vec<_> = ctx
                 .diagnostics
                 .iter()
-                .filter(|d| d.code.as_deref() == Some("Q-2-50"))
+                .filter(|d| d.code.as_deref() == Some("Q-2-51"))
                 .collect();
             assert_eq!(
                 q2_50.len(),
                 1,
-                "{ext_label}: expected exactly one Q-2-50; got {:?}",
+                "{ext_label}: expected exactly one Q-2-51; got {:?}",
                 ctx.diagnostics
             );
             assert!(
@@ -1064,7 +1064,7 @@ mod tests {
         let q2_50: Vec<_> = ctx
             .diagnostics
             .iter()
-            .filter(|d| d.code.as_deref() == Some("Q-2-50"))
+            .filter(|d| d.code.as_deref() == Some("Q-2-51"))
             .collect();
         assert_eq!(
             q2_50.len(),
@@ -1105,7 +1105,7 @@ mod tests {
         assert!(
             !ctx.diagnostics
                 .iter()
-                .any(|d| d.code.as_deref() == Some("Q-2-50")),
+                .any(|d| d.code.as_deref() == Some("Q-2-51")),
             "a non-native claim must not warn; got {:?}",
             ctx.diagnostics
         );

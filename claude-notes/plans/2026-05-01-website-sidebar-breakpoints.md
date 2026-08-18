@@ -279,6 +279,32 @@ are at half-width (around 850 px) with the editor on the left.
 has full width — instead of broken. Once **B** lands, the
 sidebar reappears as a collapsible stripe even in that view.
 
+## SUPERSEDED 2026-08-17 — Decision B shipped (bd-26bf3j1y)
+
+**Decision A is gone.** `body.floating .sidebar.sidebar-navigation
+{ display: none }` has been *replaced* (not stacked on) by the full
+Decision-B rollup, in `bd-26bf3j1y`. Below `lg` the floating sidebar
+now leaves the grid (`position: static`) and becomes a Bootstrap
+collapse drawer opened by `nav.quarto-secondary-nav`'s toggle. See
+`claude-notes/plans/2026-08-17-website-secondary-nav-mobile.md`.
+
+What changed since Resolved Decision 2 said "B is not feasible yet":
+the JS-loading prerequisite is met on the native path — `BootstrapJsStage`
+ships `site_libs/quarto/bootstrap.bundle.min.js` with every
+Bootstrap-themed render. The hub-client half of `bd-e7b7` is still
+open, so the secondary nav is **not** rendered under WASM; the preview
+keeps the sidebar-less narrow view this plan described. That divergence
+is deliberate.
+
+`bd-yxlh`, which tracked Decision B, is closed as superseded — the
+markup and the SCSS could not be tested apart.
+
+**Still standing from this plan:** the `docked` and `toc-left` mid-range
+defects in "Future deferred work" below. The rollup is floating-only,
+which a body-class census of the Posit Connect Q1 site confirmed is
+enough for the porting target (342 `floating`, 0 `docked`, 0 `toc-left`).
+Decision 4 (print media) also still stands.
+
 ## Resolved decisions (2026-05-01)
 
 1. **Ship A now.** Floating-only. B is deferred behind a JS-

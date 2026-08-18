@@ -1,0 +1,34 @@
+=== AFTER FIX: AST rules on input.qmd (was the bug: reported clean) ===
+claude-notes/plans/syntax-helper-parse-masking-investigation/input.qmd
+  ⚠ file does not parse (Q-2-10); 2 rule(s) not applied: literal-brackets, reference-links
+
+
+=== Summary ===
+Total files:         1
+Files with issues:   0 ✓
+Unanalyzable files:  1 ⚠
+Clean files:         0 ✓
+
+Total issues found:  0
+Success rate:        0.0%
+
+=== AFTER FIX: --json ===
+{"rule_name":"unanalyzable","file_path":"claude-notes/plans/syntax-helper-parse-masking-investigation/input.qmd","has_issue":false,"issue_count":0,"message":"file does not parse (Q-2-10); 2 rule(s) not applied: literal-brackets, reference-links","error_codes":["Q-2-10"],"unanalyzable":true,"skipped_rules":["literal-brackets","reference-links"]}
+
+=== AFTER FIX: control still finds both ===
+claude-notes/plans/syntax-helper-parse-masking-investigation/input-parseable.qmd
+  ✗ Brackets in `[1]` will be silently deleted; they need escaping
+  ✗ `[the docs][gcc]` is a reference-style link to `gcc`, which does not render; it can be rewritten to the inline form
+
+
+=== Summary ===
+Total files:         1
+Files with issues:   1 ✗
+Clean files:         0 ✓
+
+Issues by rule:
+  literal-brackets: 1 issue(s) in 1 file(s)
+  reference-links: 1 issue(s) in 1 file(s)
+
+Total issues found:  2
+Success rate:        0.0%

@@ -52,6 +52,7 @@ website:
             - guides/authoring/shortcodes.qmd
             - guides/authoring/brand.qmd
             - guides/authoring/layout.qmd
+            - guides/authoring/tabsets.qmd
             - guides/authoring/title-blocks.qmd
             - guides/authoring/dates.qmd
             - guides/authoring/scholarly-writing.qmd
@@ -154,6 +155,7 @@ website:
             - errors/markdown/Q-2-48.qmd
             - errors/markdown/Q-2-49.qmd
             - errors/markdown/Q-2-50.qmd
+            - errors/markdown/Q-2-51.qmd
         - section: "writer"
           contents:
             - errors/writer/Q-3-1.qmd
@@ -238,6 +240,7 @@ website:
             - errors/navigation/Q-13-6.qmd
             - errors/navigation/Q-13-7.qmd
             - errors/navigation/Q-13-8.qmd
+            - errors/navigation/Q-13-9.qmd
         - section: "template"
           contents:
             - errors/template/Q-10-1.qmd
@@ -277,6 +280,7 @@ website:
             - errors/project/Q-5-26.qmd
             - errors/project/Q-5-27.qmd
             - errors/project/Q-5-28.qmd
+            - errors/project/Q-5-29.qmd
         - section: "include"
           contents:
             - errors/include/Q-17-1.qmd
@@ -291,8 +295,8 @@ website:
           contents:
             - errors/theme/Q-14-1.qmd
             - errors/theme/Q-14-2.qmd
-            - errors/theme/Q-14-3.qmd
             - errors/theme/Q-14-4.qmd
+            - errors/theme/Q-14-5.qmd
         - section: "lua"
           contents:
             - errors/lua/Q-11-1.qmd
