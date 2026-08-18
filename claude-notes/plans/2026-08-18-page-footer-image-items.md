@@ -153,13 +153,18 @@ tests written and verified first.
   imprecision — quoted scalars underline one column early because
   quarto-yaml scalar spans include the quotes; filed **bd-70krno7a**
   (discovered-from) for content spans rather than hacking a `-1`.
-- [ ] **Phase 5 — Verification + docs.** Full `cargo xtask verify`;
-  end-to-end render of both repros recorded in this plan; changelog/strand
-  notes. Check whether `docs/errors/quarto/Q-5-6.qmd` needs wording updates
-  for the config-reference case.
+- [x] **Phase 5 — Verification + docs.** *Done 2026-08-18.* Full
+  `cargo xtask verify` (Rust + hub-client/WASM legs) passed; `cargo xtask
+  lint` clean. All three fixtures re-rendered and recorded above.
+  `docs/errors/project/Q-5-6.qmd` updated for the config-reference case
+  (once-per-render, anchored in `_quarto.yml`). No hub-client changes, so
+  no changelog entry needed.
 
-Possible follow-up strands (file, don't do here): upgrade `copy_navbar_logo`'s
-generic warning to the same Q-5-6 shape; sidebar `logo`; favicon.
+Follow-up strands filed (discovered-from this strand):
+- **bd-0jo6fnb7** — upgrade `copy_navbar_logo` / `copy_favicon` warnings to
+  the same spanned Q-5-6 shape.
+- **bd-70krno7a** — quarto-yaml content spans for quoted scalars (footer
+  Q-5-6 underlines one column early on quoted scalars).
 
 ## Design decisions (2026-08-18, aligned with user)
 
@@ -286,3 +291,19 @@ Matches the strand's tables exactly: lone-image items render empty; item-level
 targets are untouched (root-absolute stays root-absolute, relative stays
 page-relative-wrong, `.qmd` never becomes `.html`); the region-level control
 in the same footer is fully resolved.
+
+## End-to-end results after the fixes (2026-08-18, post-Phase-4)
+
+All three fixtures re-rendered with the fixed binary
+(`cargo run --bin q2 -- render <fixture>`), output inspected:
+
+- **`repro/`** deep page: every markdown item now matches the region control —
+  lone images render `<img src="../../images/logo.svg">`, item-level links
+  emit `href="../../index.html"`. Only the raw-HTML `{=html}` item keeps its
+  literal `/images/logo.svg` (fc5pvkcv Case B, expected).
+- **`repro-md-blocks/`** deep page: the `!md` two-block center region renders
+  `<img src="../../images/logo.svg" alt="block image"><a href="../../index.html">block link</a>`.
+- **`repro-missing/`**: "Rendered 1 of 1 — 2 warnings": one **Q-5-6** for the
+  footer (deduped by URL across the three footer references), with an Ariadne
+  snippet into `_quarto.yml` line 6 underlining the reference (one column
+  early for the quoted scalar — bd-70krno7a), plus the body-control Q-5-6.
