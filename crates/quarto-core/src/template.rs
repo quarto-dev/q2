@@ -272,7 +272,9 @@ $if(rendered.draft-alert-text)$
 <div id="quarto-draft-alert" class="alert alert-warning"><i class="bi bi-pencil-square"></i>$rendered.draft-alert-text$</div>
 $endif$
 $if(rendered.navigation.navbar)$
-$rendered.navigation.navbar$
+$quarto-header()$
+$elseif(rendered.navigation.secondary-nav)$
+$quarto-header()$
 $endif$
 $for(include-before)$
 $include-before$
@@ -398,7 +400,7 @@ $endif$
 pub const TITLE_BLOCK_PARTIAL: &str = r#"$if(rendered.has-title-block)$
 $if(rendered.title-block-none)$
 <header id="title-block-header">
-$if(title)$<h1 class="title">$title$</h1>
+$if(title)$<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
 $endif$
 $if(subtitle)$
 <p class="subtitle">$subtitle$</p>
@@ -424,7 +426,7 @@ $if(rendered.navigation.breadcrumbs)$
 $rendered.navigation.breadcrumbs$
 $endif$
 $if(title)$
-<h1 class="title">$title$</h1>
+<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
 $endif$
 $if(subtitle)$
 <p class="subtitle lead">$subtitle$</p>
@@ -456,7 +458,7 @@ $rendered.navigation.breadcrumbs$
 $endif$
 <div class="quarto-title">
 $if(title)$
-<h1 class="title">$title$</h1>
+<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
 $endif$
 $if(subtitle)$
 <p class="subtitle lead">$subtitle$</p>
@@ -611,6 +613,46 @@ $rendered.navigation.toc$
 </nav>
 "#;
 
+/// The site header: `<header id="quarto-header">` wrapping the navbar
+/// and the narrow-viewport secondary nav (bd-26bf3j1y).
+///
+/// Q1's equivalent (`nav-before-body.ejs:13`) gates on
+/// `nav.navbar || nav.sidebar || nav.announcement` and emits
+/// `class="headroom fixed-top"`. Two deliberate differences:
+///
+/// - **Static, not fixed.** No `headroom` / `fixed-top`, and
+///   correspondingly no `body.nav-fixed` (whose only Q1 consumer is a
+///   `padding-top` compensating for the fixed header). Those three go
+///   together; adding one without the others overlaps content. Deferred
+///   as a unit to bd-ersobfbt.
+/// - **Gated on content, not on config.** q2 emits the wrapper when
+///   there is a navbar or a secondary nav to put in it. Q1's extra
+///   `nav.sidebar` term covers the case of a sidebar whose secondary
+///   nav is suppressed, which for q2 would produce an empty header with
+///   no styling consumer.
+///
+/// `.quarto-banner` in banner mode is Q1's
+/// `format-html-title.ts:278-281`; its only styling consumer is
+/// `.quarto-banner nav.quarto-secondary-nav` (bd-xva3f8uy, folded in
+/// here).
+///
+/// The partial holds only the markup; the "is there a header at all?"
+/// gate lives at the **call site** in [`FULL_HTML_TEMPLATE`]. That split
+/// is deliberate: the template language has no boolean `or`, so the
+/// two-way gate has to be an `$if$`/`$elseif$` pair somewhere, and
+/// putting it around the call keeps the `<header>` markup
+/// single-sourced. It also keeps the no-header case emitting *nothing* —
+/// a bare `$quarto-header()$` line would leave a stray blank line in
+/// every document that has no navbar.
+pub const QUARTO_HEADER_PARTIAL: &str = r#"<header id="quarto-header"$if(rendered.title-block-banner)$ class="quarto-banner"$endif$>
+$if(rendered.navigation.navbar)$
+$rendered.navigation.navbar$
+$endif$
+$if(rendered.navigation.secondary-nav)$
+$rendered.navigation.secondary-nav$
+$endif$
+</header>"#;
+
 /// Resolver holding the built-in HTML template partials.
 ///
 /// Each partial is registered under both its bare name
@@ -624,6 +666,7 @@ pub fn builtin_html_partials() -> MemoryResolver {
         ("title-metadata", TITLE_METADATA_PARTIAL),
         ("_title-meta-author", TITLE_META_AUTHOR_PARTIAL),
         ("toc-block", TOC_BLOCK_PARTIAL),
+        ("quarto-header", QUARTO_HEADER_PARTIAL),
     ] {
         resolver.add(name, content);
         resolver.add(format!("{name}.html"), content);
@@ -2435,6 +2478,168 @@ mod tests {
                 || html.contains("class=\"quarto-container ") && html.contains("quarto-content"),
             "expected quarto-container class on #quarto-content; got: {}",
             &html[..html.len().min(800)]
+        );
+    }
+
+    // === #quarto-header wrapper (bd-26bf3j1y, phase 1) ===
+
+    /// Build a context with the given `rendered.navigation.*` string
+    /// entries, plus the keys every full-template render needs.
+    fn ctx_with_navigation(entries: &[(&str, &str)]) -> TemplateContext {
+        use std::collections::HashMap;
+
+        let mut nav_map = HashMap::new();
+        for (k, v) in entries {
+            nav_map.insert(k.to_string(), TemplateValue::String(v.to_string()));
+        }
+        let mut rendered_map = HashMap::new();
+        rendered_map.insert("navigation".to_string(), TemplateValue::Map(nav_map));
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+        ctx.insert("rendered", TemplateValue::Map(rendered_map));
+        ctx
+    }
+
+    /// Q1 nests the navbar and the narrow-viewport secondary nav inside
+    /// a single `<header id="quarto-header">`, and its SCSS selects
+    /// through that wrapper (`#quarto-header > nav` padding,
+    /// `.quarto-banner nav.quarto-secondary-nav`). Both must land
+    /// inside it, navbar first.
+    #[test]
+    fn test_quarto_header_wraps_navbar_and_secondary_nav() {
+        let template = full_html_template().unwrap();
+        let ctx = ctx_with_navigation(&[
+            ("navbar", "<nav class=\"navbar\">NAVBAR_BODY</nav>"),
+            (
+                "secondary-nav",
+                "<nav class=\"quarto-secondary-nav\">SECONDARY_BODY</nav>",
+            ),
+        ]);
+
+        let html = template.render(&ctx).unwrap();
+
+        let header_open = html
+            .find("<header id=\"quarto-header\"")
+            .expect("#quarto-header present");
+        let header_close = html[header_open..]
+            .find("</header>")
+            .map(|i| i + header_open)
+            .expect("#quarto-header closes");
+        let navbar = html.find("NAVBAR_BODY").expect("navbar rendered");
+        let secondary = html.find("SECONDARY_BODY").expect("secondary nav rendered");
+
+        assert!(
+            header_open < navbar && navbar < secondary && secondary < header_close,
+            "navbar then secondary nav must both sit inside #quarto-header; \
+             open={header_open} navbar={navbar} secondary={secondary} close={header_close}"
+        );
+        assert!(
+            header_close < html.find("id=\"quarto-content\"").unwrap(),
+            "#quarto-header must close before #quarto-content opens"
+        );
+    }
+
+    /// Decision 2: the wrapper is STATIC. `headroom` and `fixed-top`
+    /// (and the `body.nav-fixed` padding compensation that pairs with
+    /// them) are deferred to bd-ersobfbt and must land together there —
+    /// `fixed-top` without the padding overlaps content.
+    #[test]
+    fn test_quarto_header_is_static_not_fixed() {
+        let template = full_html_template().unwrap();
+        let ctx = ctx_with_navigation(&[("navbar", "<nav class=\"navbar\">NAVBAR_BODY</nav>")]);
+
+        let html = template.render(&ctx).unwrap();
+
+        assert!(
+            !html.contains("headroom"),
+            "headroom is deferred to bd-ersobfbt; got: {html}"
+        );
+        assert!(
+            !html.contains("fixed-top"),
+            "fixed-top is deferred to bd-ersobfbt; got: {html}"
+        );
+        assert!(
+            !html.contains("nav-fixed"),
+            "body.nav-fixed only makes sense with a fixed header; got: {html}"
+        );
+    }
+
+    /// A page with neither navbar nor secondary nav gets no empty
+    /// wrapper — Q1 gates the whole header on there being something to
+    /// put in it.
+    #[test]
+    fn test_quarto_header_absent_without_nav() {
+        let template = full_html_template().unwrap();
+        let ctx = ctx_with_navigation(&[]);
+
+        let html = template.render(&ctx).unwrap();
+
+        assert!(
+            !html.contains("quarto-header"),
+            "no navbar and no secondary nav means no header wrapper; got: {html}"
+        );
+    }
+
+    /// bd-xva3f8uy, folded in: Q1 adds `.quarto-banner` to
+    /// `#quarto-header` in banner mode
+    /// (`format-html-title.ts:278-281`). Its only styling consumer is
+    /// the `.quarto-banner nav.quarto-secondary-nav` rule.
+    #[test]
+    fn test_quarto_header_banner_class_in_banner_mode() {
+        let template = full_html_template().unwrap();
+
+        let mut ctx = ctx_with_navigation(&[("navbar", "<nav class=\"navbar\">NAVBAR_BODY</nav>")]);
+        let html_plain = template.render(&ctx).unwrap();
+        assert!(
+            !html_plain.contains("quarto-banner"),
+            "no banner class outside banner mode; got: {html_plain}"
+        );
+
+        // Re-render with banner mode on.
+        let TemplateValue::Map(mut rendered_map) = ctx.get("rendered").unwrap().clone() else {
+            panic!("rendered must be a map");
+        };
+        rendered_map.insert("title-block-banner".to_string(), TemplateValue::Bool(true));
+        ctx.insert("rendered", TemplateValue::Map(rendered_map));
+
+        let html_banner = template.render(&ctx).unwrap();
+        assert!(
+            html_banner.contains("<header id=\"quarto-header\" class=\"quarto-banner\">"),
+            "banner mode must decorate the header; got: {html_banner}"
+        );
+    }
+
+    /// Finding F1: Q1's `header > .quarto-title-block` selector never
+    /// matches — the class always sits ON the `<header>`, so its
+    /// parent is never a `header`. Across the Connect site, 0 of 350
+    /// pages have `d-none` on the title block, including pages that DO
+    /// render the secondary nav. Parity therefore means NOT hiding it.
+    /// This pin exists so a future parity pass doesn't "fix" the
+    /// absence by porting the dead branch.
+    #[test]
+    fn test_title_block_not_hidden_when_secondary_nav_present() {
+        let template = full_html_template().unwrap();
+        let mut ctx = ctx_with_navigation(&[(
+            "secondary-nav",
+            "<nav class=\"quarto-secondary-nav\">SECONDARY_BODY</nav>",
+        )]);
+        ctx.insert("title", TemplateValue::String("A Page".to_string()));
+        ctx.insert("rendered.has-title-block", TemplateValue::Bool(true));
+
+        let html = template.render(&ctx).unwrap();
+
+        let Some(idx) = html.find("quarto-title-block") else {
+            return; // no title block rendered in this context; nothing to pin
+        };
+        let tag_start = html[..idx].rfind('<').unwrap();
+        let tag_end = idx + html[idx..].find('>').unwrap();
+        let tag = &html[tag_start..=tag_end];
+        assert!(
+            !tag.contains("d-none"),
+            "Q1 does not hide the title block (see plan finding F1); got: {tag}"
         );
     }
 

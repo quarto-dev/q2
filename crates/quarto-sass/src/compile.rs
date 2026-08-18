@@ -679,6 +679,215 @@ mod tests {
     use quarto_system_runtime::NativeRuntime;
     use std::path::PathBuf;
 
+    /// Split `css` into `(prelude, body)` pairs for every top-level
+    /// `@media` block, by brace matching. Nested braces inside the body
+    /// are preserved.
+    fn media_blocks(css: &str) -> Vec<(String, String)> {
+        let bytes = css.as_bytes();
+        let mut out = Vec::new();
+        let mut search = 0usize;
+        while let Some(rel) = css[search..].find("@media") {
+            let at = search + rel;
+            let Some(brace_rel) = css[at..].find('{') else {
+                break;
+            };
+            let open = at + brace_rel;
+            let prelude = css[at..open].to_string();
+            let mut depth = 0i32;
+            let mut i = open;
+            let mut close = None;
+            while i < bytes.len() {
+                match bytes[i] {
+                    b'{' => depth += 1,
+                    b'}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            close = Some(i);
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                i += 1;
+            }
+            let Some(close) = close else { break };
+            out.push((prelude, css[open + 1..close].to_string()));
+            search = close + 1;
+        }
+        out
+    }
+
+    /// Split a media-block body into `(selector, declarations)` pairs.
+    fn rules(body: &str) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        let mut rest = body;
+        while let Some(open) = rest.find('{') {
+            let selector = rest[..open].trim().to_string();
+            let Some(close) = rest[open..].find('}') else {
+                break;
+            };
+            let close = open + close;
+            out.push((selector, rest[open + 1..close].to_string()));
+            rest = &rest[close + 1..];
+        }
+        out
+    }
+
+    /// bd-26bf3j1y: the sidebar carries Bootstrap's `collapse` class so
+    /// the narrow-viewport toggle can open it. Bootstrap ships
+    /// `.collapse:not(.show) { display: none }`, which — without an
+    /// override — hides the sidebar at EVERY width, on every website
+    /// page. Q1 beats it at `lg`+ with an `#quarto-sidebar` rule
+    /// (`quarto-nav.scss:640-656`); id specificity (1,0,0) wins over
+    /// the class pair (0,2,0).
+    ///
+    /// This failure mode is invisible to markup tests: the `<nav
+    /// id="quarto-sidebar">` element is still emitted, still carries
+    /// every expected class, and every DOM assertion still passes. Only
+    /// the compiled cascade shows it. Hence a CSS-level test.
+    #[test]
+    fn test_sidebar_stays_visible_at_lg_despite_collapse_class() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+
+        // Sanity: the Bootstrap rule this override has to beat.
+        assert!(
+            css.contains(".collapse:not(.show)"),
+            "expected Bootstrap's .collapse:not(.show) rule in the bundle"
+        );
+
+        let lg_blocks: Vec<_> = media_blocks(&css)
+            .into_iter()
+            .filter(|(prelude, _)| prelude.replace(' ', "").contains("min-width:992px"))
+            .collect();
+        assert!(
+            !lg_blocks.is_empty(),
+            "expected at least one min-width:992px (lg) media block"
+        );
+
+        let mut found = Vec::new();
+        for (_, body) in &lg_blocks {
+            for (selector, decls) in rules(body) {
+                if !selector.contains("#quarto-sidebar") {
+                    continue;
+                }
+                for decl in decls.split(';') {
+                    let Some((prop, value)) = decl.split_once(':') else {
+                        continue;
+                    };
+                    if prop.trim() == "display" {
+                        found.push((selector.clone(), value.trim().to_string()));
+                    }
+                }
+            }
+        }
+
+        assert!(
+            !found.is_empty(),
+            "no `#quarto-sidebar` rule sets `display` inside a min-width:992px \
+             block — the sidebar's `collapse` class will hide it at every width. \
+             Port Q1 quarto-nav.scss:640-656."
+        );
+        assert!(
+            found.iter().any(|(_, value)| value != "none"),
+            "every #quarto-sidebar display rule at lg+ resolves to `none`: {found:?}"
+        );
+    }
+
+    /// bd-26bf3j1y: `role="doc-toc"` is NOT a safe hook for hiding
+    /// things. q2 puts it on two different elements — the real TOC
+    /// (`nav#TOC`) and, as a divergence from Q1 tracked in
+    /// bd-eczdzfqo, the navigation sidebar (`nav#quarto-sidebar`).
+    ///
+    /// A bare `nav[role="doc-toc"] { display: none }` under
+    /// `media-breakpoint-down(md)` therefore hid the *sidebar* as
+    /// well as the TOC. Harmless while the sidebar was hidden below
+    /// `lg` anyway (Decision A); a real bug once it became a drawer,
+    /// because `.show` does not restore a `display: none` that came
+    /// from somewhere other than Bootstrap's own
+    /// `.collapse:not(.show)` rule. The toggle latched `.show`, the
+    /// glass pane dimmed, and nothing appeared.
+    ///
+    /// Caught in a headless browser, not by any markup or CSS
+    /// assertion that existed at the time — hence this one.
+    #[test]
+    fn test_narrow_viewport_hiding_does_not_catch_the_sidebar() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+
+        let mut offenders = Vec::new();
+        for (prelude, body) in media_blocks(&css) {
+            if !prelude.contains("max-width") {
+                continue;
+            }
+            for (selector, decls) in rules(&body) {
+                if !selector.contains("doc-toc") {
+                    continue;
+                }
+                let hides = decls.split(';').any(|d| {
+                    d.split_once(':')
+                        .is_some_and(|(p, v)| p.trim() == "display" && v.trim() == "none")
+                });
+                // Naming `#TOC` scopes the rule to the real TOC.
+                if hides && !selector.contains("#TOC") {
+                    offenders.push(format!("{prelude} {{ {selector} }}"));
+                }
+            }
+        }
+
+        assert!(
+            offenders.is_empty(),
+            "these rules hide by `role=doc-toc` alone, which also matches \
+             nav#quarto-sidebar and prevents the mobile drawer from ever \
+             opening — scope them to `#TOC`: {offenders:?}"
+        );
+    }
+
+    /// bd-26bf3j1y: the navigation sidebar needs an opaque background.
+    ///
+    /// Docked or floating in its own grid column it never overlaps
+    /// anything, so a transparent sidebar looked fine for as long as q2
+    /// had one — and q2 never ported Q1's
+    /// `nav.sidebar.sidebar-navigation { background-color: … }`
+    /// (`quarto-nav.scss:543-551`). The mobile drawer overlays the
+    /// article, so transparency stops being invisible: the page text
+    /// shows straight through the open drawer and the two interleave.
+    ///
+    /// Caught by looking at a screenshot of the real docs site, not by
+    /// any assertion — computed styles all reported the drawer open and
+    /// correctly sized.
+    #[test]
+    fn test_sidebar_has_an_opaque_background() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+
+        // Strip @media blocks: the sidebar's background must be
+        // unconditional, not only inside some breakpoint.
+        let mut top_level = css.clone();
+        for (prelude, body) in media_blocks(&css) {
+            let whole = format!("{prelude}{{{body}}}");
+            top_level = top_level.replace(&whole, "");
+        }
+
+        let found = rules(&top_level).into_iter().any(|(selector, decls)| {
+            selector.contains(".sidebar.sidebar-navigation")
+                && decls.split(';').any(|d| {
+                    d.split_once(':').is_some_and(|(p, v)| {
+                        p.trim() == "background-color"
+                            && !v.trim().is_empty()
+                            && v.trim() != "transparent"
+                    })
+                })
+        });
+
+        assert!(
+            found,
+            "no unconditional `background-color` on `.sidebar.sidebar-navigation` — \
+             the mobile drawer will be see-through and page text will show through it. \
+             Port Q1 quarto-nav.scss:543-551."
+        );
+    }
+
     #[test]
     fn test_compile_default_css() {
         let runtime = NativeRuntime::new();
@@ -1314,6 +1523,27 @@ mod tests {
 
     /// Phase 1 of the sidebar-vertical-border port (bd-k8y0).
     ///
+    /// Does the compiled CSS carry the `$sidebar-border` separator rule?
+    ///
+    /// Detects the rule by its `border-right` declaration, not by its
+    /// selector. bd-26bf3j1y added a second rule on a selector that
+    /// *contains* `.sidebar.sidebar-navigation:not(.rollup)` (the
+    /// sidebar background, `nav.`-prefixed), so a bare substring search
+    /// for the selector no longer distinguishes the two.
+    fn has_sidebar_border_rule(css: &str) -> bool {
+        let needle = ".sidebar.sidebar-navigation:not(.rollup)";
+        let mut from = 0;
+        while let Some(rel) = css[from..].find(needle) {
+            let at = from + rel;
+            let body_end = css[at..].find('}').map_or(css.len(), |i| at + i);
+            if css[at..body_end].contains("border-right") {
+                return true;
+            }
+            from = at + needle.len();
+        }
+        false
+    }
+
     /// Q1 emits `.sidebar.sidebar-navigation:not(.rollup) { border-right:
     /// 1px solid $table-border-color !important; }` when `$sidebar-border`
     /// is truthy (`quarto-cli/.../quarto-nav.scss:552-556`). The rule is
@@ -1351,8 +1581,9 @@ mod tests {
         // `$table-border-color` and may shift if the framework default
         // changes).
         assert!(
-            css.contains(".sidebar.sidebar-navigation:not(.rollup)"),
-            "$sidebar-border=true must produce a .sidebar.sidebar-navigation:not(.rollup) rule"
+            has_sidebar_border_rule(&css),
+            "$sidebar-border=true must produce a .sidebar.sidebar-navigation:not(.rollup) \
+             rule declaring border-right"
         );
         // Look for the border-right within the surrounding rule body.
         let rule_idx = css
@@ -1381,9 +1612,9 @@ mod tests {
         let runtime = NativeRuntime::new();
         let css = compile_default_css(&runtime, true).unwrap();
         assert!(
-            !css.contains(".sidebar.sidebar-navigation:not(.rollup)"),
-            "no .sidebar.sidebar-navigation:not(.rollup) rule should appear when \
-             $sidebar-border is false (its framework default)"
+            !has_sidebar_border_rule(&css),
+            "no .sidebar.sidebar-navigation:not(.rollup) border-right rule should \
+             appear when $sidebar-border is false (its framework default)"
         );
     }
 

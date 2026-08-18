@@ -2403,9 +2403,30 @@ mod tests {
 
         let css = get_css_artifact(&ctx);
         assert!(
-            !css.contains(".sidebar.sidebar-navigation:not(.rollup)"),
+            !has_sidebar_border_rule(&css),
             "explicit `border: false` must suppress the sidebar-border rule"
         );
+    }
+
+    /// Does the compiled CSS carry the `$sidebar-border` separator rule?
+    ///
+    /// Detects the rule by its `border-right` declaration, not by its
+    /// selector. bd-26bf3j1y added a second rule on a selector that
+    /// *contains* `.sidebar.sidebar-navigation:not(.rollup)` (the
+    /// sidebar background, `nav.`-prefixed), so a bare substring search
+    /// for the selector no longer distinguishes the two.
+    fn has_sidebar_border_rule(css: &str) -> bool {
+        let needle = ".sidebar.sidebar-navigation:not(.rollup)";
+        let mut from = 0;
+        while let Some(rel) = css[from..].find(needle) {
+            let at = from + rel;
+            let body_end = css[at..].find('}').map_or(css.len(), |i| at + i);
+            if css[at..body_end].contains("border-right") {
+                return true;
+            }
+            from = at + needle.len();
+        }
+        false
     }
 
     /// End-to-end stage test for Phase 2 of bd-k8y0: a document whose
@@ -2423,11 +2444,12 @@ mod tests {
 
         let css = get_css_artifact(&ctx);
         assert!(
-            css.contains(".sidebar.sidebar-navigation:not(.rollup)"),
-            "stage CSS for a docked sidebar must include the sidebar-border selector"
+            has_sidebar_border_rule(&css),
+            "stage CSS for a docked sidebar must include the sidebar-border rule"
         );
         let idx = css
-            .find(".sidebar.sidebar-navigation:not(.rollup)")
+            .find(".sidebar.sidebar-navigation:not(.rollup){border-right")
+            .or_else(|| css.find(".sidebar.sidebar-navigation:not(.rollup) {"))
             .unwrap();
         let tail = &css[idx..idx.saturating_add(400).min(css.len())];
         assert!(
@@ -2452,7 +2474,7 @@ mod tests {
 
         let css = get_css_artifact(&ctx);
         assert!(
-            !css.contains(".sidebar.sidebar-navigation:not(.rollup)"),
+            !has_sidebar_border_rule(&css),
             "plain doc (no website sidebar) must not emit sidebar-border rule"
         );
     }
@@ -2497,11 +2519,11 @@ mod tests {
             "docked and floating sidebars must produce different CSS — cache aliasing!"
         );
         assert!(
-            css_docked.contains(".sidebar.sidebar-navigation:not(.rollup)"),
+            has_sidebar_border_rule(&css_docked),
             "docked CSS should have the rule"
         );
         assert!(
-            !css_floating.contains(".sidebar.sidebar-navigation:not(.rollup)"),
+            !has_sidebar_border_rule(&css_floating),
             "floating CSS should NOT have the rule"
         );
     }

@@ -62,6 +62,7 @@ pub mod render_to_html_user_grammars;
 pub mod replay_engine;
 pub mod revealjs_features;
 pub mod revealjs_format;
+pub mod secondary_nav_pipeline;
 pub mod shortcode_config_pipeline;
 pub mod shortcode_text_contexts;
 pub mod sidebar_pipeline;

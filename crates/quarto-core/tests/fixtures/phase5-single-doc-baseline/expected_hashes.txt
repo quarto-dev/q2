@@ -293,10 +293,85 @@
 # string interpolation), leaving the toggle icon invisible; they now
 # carry concrete `fill="rgba(…)"` values. Verified the only delta is
 # those six data-URI fills. doc.html hash unchanged: CSS-only.
+# Re-captured 2026-08-17 (bd-26bf3j1y, phase 1 — #quarto-header wrapper):
+# styles.css hash updated because the shared horizontal gutter rule from Q1's
+# `quarto-nav.scss:63-66` — `footer.footer .nav-footer, #quarto-header > nav
+# { padding-left: 1em; padding-right: 1em }` — was ported into
+# `_bootstrap-rules.scss`. Q1 pairs both selectors in one rule; q2 could only
+# use the footer half until this strand introduced the `#quarto-header`
+# wrapper. doc.html hash UNCHANGED, and that is the interesting part: the new
+# `$quarto-header()$` partial is gated on `rendered.navigation.navbar` /
+# `rendered.navigation.secondary-nav`, neither of which a single-doc render
+# sets, so the template change is byte-neutral outside websites. (An earlier
+# draft called the partial from a bare line and DID shift doc.html by one
+# blank line; the gate was moved to the call site precisely to avoid that.)
+# Re-captured 2026-08-17 (bd-26bf3j1y, phases 3+4 — mobile nav):
+# styles.css hash updated because the narrow-viewport navigation SCSS was
+# ported from Q1 `quarto-nav.scss`: the media-breakpoint-down(lg) sidebar
+# rollup (558-590), the `.quarto-secondary-nav` rules (411-450, 470-520,
+# 592-610), the media-breakpoint-up(lg) display overrides (640-656), and the
+# `#quarto-sidebar-glass` rules (665-693), plus two new variables
+# ($sidebar-glass-bg, $sidebar-anim-duration). It also REPLACES the Decision-A
+# rule `body.floating .sidebar.sidebar-navigation { display: none }` added
+# 2026-05-01 — that entry above is now superseded.
+#
+# The lg+ `#quarto-sidebar { display: flex }` override is load-bearing, not
+# cosmetic: nav#quarto-sidebar now carries Bootstrap's `collapse` class, and
+# without the override `.collapse:not(.show){display:none}` would hide the
+# sidebar at every width on every website page. quarto-sass's
+# test_sidebar_stays_visible_at_lg_despite_collapse_class reads the compiled
+# CSS to guard exactly that pairing.
+#
+# doc.html hash unchanged: none of the new selectors match a single-doc body
+# (no sidebar, no secondary nav), and SecondaryNavRenderTransform skips when
+# `navigation.sidebar` is absent, so the header partial emits nothing.
+# Re-captured 2026-08-17 (bd-26bf3j1y, doc-toc scoping fix):
+# styles.css hash updated because the narrow-viewport TOC-hiding rule was
+# scoped from `nav[role="doc-toc"]` to `nav#TOC[role="doc-toc"]`. q2 puts
+# role="doc-toc" on BOTH nav#TOC and nav#quarto-sidebar (the latter a
+# divergence from Q1, tracked in bd-eczdzfqo), so the bare-role selector also
+# hid the navigation sidebar below md. That was invisible while the sidebar
+# was hidden below lg anyway, and a real bug once it became a collapse drawer:
+# the toggle latched .show and the glass pane dimmed, but the drawer stayed
+# display:none, because .show only defeats Bootstrap's own
+# `.collapse:not(.show)` rule, not an unrelated one. Found in a headless
+# browser; guarded now by quarto-sass's
+# test_narrow_viewport_hiding_does_not_catch_the_sidebar.
+# doc.html hash unchanged: CSS-only change.
+# Re-captured 2026-08-17 (bd-26bf3j1y, sidebar background):
+# styles.css hash updated because Q1's `nav.sidebar.sidebar-navigation:not(
+# .rollup) { background-color: $sidebar-bg }` (quarto-nav.scss:543-551) was
+# ported. q2 had never applied it: in its own grid column the sidebar overlaps
+# nothing, so a transparent background was invisible. The mobile drawer
+# overlays the article, where it is not — page text showed straight through the
+# open drawer. Found by looking at a screenshot; computed styles reported the
+# drawer open and correctly sized. Guarded by
+# test_sidebar_has_an_opaque_background.
+#
+# This is a VISIBLE change on desktop too: sidebars now paint $sidebar-bg
+# instead of inheriting the page. That is Q1 parity, not a new look — Q1 emits
+# the same rule, and both projects define `$sidebar-bg: if(variable-exists(
+# light), $light, #fff) !default` identically, so any color difference is a
+# pre-existing theme-variable question rather than something introduced here.
+# doc.html hash unchanged: CSS-only change (the fixture has no sidebar).
 #
 # Re-captured 2026-08-17 (bd-toc-tabset-titles-zq93gjvf): doc.html hash
 # updated because every Bootstrap-themed page now ships the grouped-tabset
 # sync module (`<script src="doc_files/tabsets.js">`, TabsetsJsStage).
 # doc_files/styles.css hash unchanged: template/script-list change only.
+#
+# MERGE NOTE 2026-08-17: bd-26bf3j1y (mobile secondary nav) and
+# bd-toc-tabset-titles-zq93gjvf (panel-tabset support) landed independently and
+# each re-captured this baseline. Both sets of notes are kept below. NEITHER
+# side's hashes survive the merge: the merged tree has both the tabsets.js
+# <script> (which moves doc.html) and the mobile-nav SCSS (which moves
+# styles.css), so both hashes were recomputed from the merged tree rather than
+# taken from either branch.
+#
+# The recomputed values happen to match one branch each -- doc.html equals the
+# tabset branch's, styles.css equals the mobile-nav branch's -- which is a
+# useful cross-check rather than a coincidence: it confirms both notes' claims
+# that the tabset change is script-list-only and the mobile-nav template change
+# is byte-neutral for single-doc renders (no navbar, no secondary nav).
 doc.html a0540297514ad41734a23e91c9511134b1fa469281ec470339571ffd5d404494
-doc_files/styles.css 5228869a7216859350164870ea4a62f40fb59222475530ee59fe796cf6364335
+doc_files/styles.css 8de4e546dab01d3a04e713987e89c8796e218edd1cb30207bc6dda73c58ff845

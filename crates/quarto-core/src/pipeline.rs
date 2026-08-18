@@ -1447,6 +1447,23 @@ pub fn build_transform_pipeline(
     // (bd-breadcrumbs-missing-1vpuqh34); the title-block partial
     // consumes `rendered.navigation.breadcrumbs`.
     pipeline.push(Box::new(BreadcrumbsRenderTransform::new()));
+    // The narrow-viewport secondary nav (bd-26bf3j1y) derives its own
+    // trail from the same sidebar — Q1 gates the two breadcrumb
+    // instances differently, so they don't share a result. See the
+    // comparison table in `transforms/secondary_nav_render.rs`.
+    //
+    // NATIVE ONLY, deliberately (decision 3 in the plan). The bar's
+    // only purpose is the sidebar toggle, which needs Bootstrap's
+    // collapse JS; `BootstrapJsStage` is gated the same way because
+    // the hub-client preview reinitializes its iframe every render
+    // tick. Rendering an inert toggle in preview is worse than
+    // rendering none. This means preview and render differ in DOM at
+    // narrow widths ON PURPOSE — `bd-e7b7` owns the preview JS story,
+    // and when it lands this `cfg` comes off.
+    #[cfg(not(target_arch = "wasm32"))]
+    pipeline.push(Box::new(
+        crate::transforms::SecondaryNavRenderTransform::new(),
+    ));
     pipeline.push(Box::new(PageNavRenderTransform::new()));
     // Footer *generation* (above) is format-agnostic; footer *rendering* is
     // format-specific — html emits page-footer chrome, revealjs emits a
@@ -3448,6 +3465,44 @@ mod tests {
             "code-block-generate must run after metadata-normalize; got positions \
              metadata={metadata_pos}, gen={:?} in {names:?}",
             gen_pos,
+        );
+    }
+
+    /// bd-26bf3j1y: the secondary nav is registered on native builds and
+    /// suppressed under WASM (decision 3 — the hub-client preview ships
+    /// no Bootstrap JS, so the toggle would be inert).
+    ///
+    /// The suppression itself is a `#[cfg(not(target_arch = "wasm32"))]`
+    /// on the `pipeline.push`, which no native test can observe. What
+    /// this pins is the other half: that the push exists at all, and in
+    /// the Navigation phase. Without it a refactor could silently drop
+    /// the bar from every website and only the integration tests would
+    /// notice.
+    #[test]
+    fn test_secondary_nav_registered_in_navigation_phase() {
+        use crate::transform::TransformPhase;
+
+        let runtime = make_test_runtime();
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
+        let found = pipeline
+            .iter()
+            .find(|t| t.name() == "secondary-nav-render")
+            .map(|t| t.phase());
+
+        assert_eq!(
+            found,
+            Some(TransformPhase::Navigation),
+            "secondary-nav-render must be registered in the Navigation phase; \
+             pipeline was: {:?}",
+            pipeline.iter().map(|t| t.name()).collect::<Vec<_>>()
         );
     }
 

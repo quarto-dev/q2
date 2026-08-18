@@ -172,6 +172,13 @@ $sidebar-font-size-collapse: 1rem !default;
 $sidebar-font-size-section-collapse: 1.1rem !default;
 $sidebar-border: false !default;
 
+// Narrow-viewport sidebar drawer (bd-26bf3j1y). `$sidebar-glass-bg`
+// tints the click-catching pane behind an open drawer;
+// `$sidebar-anim-duration` times both the drawer slide and the tint
+// fade. Values from quarto-cli `quarto-nav.scss:38-39`.
+$sidebar-glass-bg: #66666666 !default;
+$sidebar-anim-duration: 0.15s !default;
+
 // Title block variables
 $title-block-color: $body-contrast-color !default;
 $title-block-contast-color: $body-contrast-bg !default;
