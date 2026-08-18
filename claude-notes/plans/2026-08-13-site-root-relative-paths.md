@@ -3,7 +3,10 @@
 **Date:** 2026-08-13
 **Braid:** bd-root-relative-paths-design-fc5pvkcv (type: question, priority 1, label: websites)
 **Checkout:** main @ `81d31cbc` (investigation committed to `main`; implementation branch TBD by user)
-**Status:** Design aligned 2026-08-13 (decisions below). **Awaiting explicit go-ahead before implementation.**
+**Status:** MERGED & CLOSED 2026-08-18. All four phases on `main`
+(`1d17a9ce`, `0b4683fc`, `5da1e5f4`, `8bdb97c6`). Remaining field
+breakage (page-footer item images dropped/unrebased) tracked in
+bd-page-footer-image-items-stmpikgo.
 
 **Session constraint (from the user, at investigation kickoff):** we must
 not end up parsing HTML to rewrite root-relative paths. Instead, watch
@@ -255,7 +258,7 @@ Work items:
       by design). Copy side verified with `project.resources:`
       removed: `_site/images/x.svg` still created by the collector.
       Output inspected directly.
-- [ ] Full workspace tests + commit
+- [x] Full workspace tests + commit (`1d17a9ce`, merged to main)
 
 ### Phase 2 — Case A (navbar logo)
 
@@ -360,9 +363,9 @@ Work items:
       gate). Links keep rewriting in VFS mode (bd-kw93.14 behavior,
       unchanged). This is exactly why the CLAUDE.md rule says plain
       workspace tests are not sufficient for quarto-core changes.
-- [ ] Update Connect-docs-side repro READMEs (outside this repo) —
-      deferred until this work is pushed/landed; the repros document
-      released behavior.
+- [x] Update Connect-docs-side repro READMEs (outside this repo) —
+      done during the 0.21.0/0.22.0 release sweeps over there (both
+      READMEs now carry FIXED statuses for the shipped cases).
 - [x] Final `cargo xtask verify` (full, WASM leg included): all
       verification steps passed.
 
