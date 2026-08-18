@@ -158,7 +158,7 @@
 }
 
 .browse-btn:hover {
-  background: var(--dialog-primary-hover);
+  filter: brightness(1.08);
 }
 
 /* File previews */
@@ -318,7 +318,7 @@
 
 .create-btn:hover,
 .upload-btn:hover {
-  background: var(--dialog-primary-hover);
+  filter: brightness(1.08);
 }
 
 .create-btn:disabled,

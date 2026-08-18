@@ -144,7 +144,7 @@
 }
 
 .share-dialog .copy-btn:hover {
-  background: var(--dialog-primary-hover);
+  filter: brightness(1.08);
 }
 
 .share-dialog .copy-btn.copied {

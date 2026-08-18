@@ -54,12 +54,11 @@
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s, border-color 0.15s;
+  transition: filter 0.15s;
 }
 
 .minimal-header .preview-btn:hover {
-  background: var(--header-preview-hover);
-  border-color: var(--header-preview-hover);
+  filter: brightness(1.08);
 }
 
 /* Vertical divider separating the actions from the document identity. */
