@@ -161,7 +161,7 @@ impl EngineRegistry {
     /// alphabetically. Engines absent from the registry are skipped.
     ///
     /// This mirrors the candidate-engine ordering used by `resolve_engines`
-    /// (the shared `resolution::BUILTIN_ORDER`) so `EngineClaimsFileStage`
+    /// (the shared `resolution::BUILTIN_ORDER`) so `SourceConversionStage`
     /// picks the same first-claimer that language resolution would.
     pub fn engines_in_order(&self) -> Vec<Arc<dyn ExecutionEngine>> {
         use super::resolution::BUILTIN_ORDER;

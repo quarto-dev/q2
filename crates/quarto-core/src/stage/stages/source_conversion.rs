@@ -1,13 +1,30 @@
 /*
- * stage/stages/engine_claims_file.rs
+ * stage/stages/source_conversion.rs
  * Copyright (c) 2025 Posit, PBC
  *
- * Pre-parse file-claim and conversion stage.
+ * Pre-parse source-conversion stage.
  */
 
-//! Pre-parse file-claim and conversion stage.
+//! Pre-parse source-conversion stage.
 //!
-//! `EngineClaimsFileStage` runs immediately before `ParseDocumentStage` in
+//! # Naming (D4)
+//!
+//! **Conversion is the action; claiming is only the predicate that selects
+//! it.** Hence `SourceConversionStage` / `"source-conversion"` rather than
+//! the older `EngineClaimsFileStage` / `"engine-claims-file"`. The name
+//! stays accurate if built-in (non-engine) converters ever appear, it reads
+//! correctly immediately before `parse-document`, and it follows the house
+//! convention (`metadata-merge`, `language-resolve`, `include-expansion`).
+//!
+//! The engine-facing name `claims_file` / `claimsFile` is deliberately
+//! **not** renamed: it is a wire message pair
+//! (`ToEngine::ClaimsFile` / `FromEngine::ClaimsFileResult`) and a required
+//! export of the public engine-author API — `engine-loader.ts` throws
+//! `engine module … is missing required export: claimsFile`. Renaming it
+//! would break every third-party engine. The engine claims; the stage
+//! converts.
+//!
+//! `SourceConversionStage` runs immediately before `ParseDocumentStage` in
 //! both the full HTML pipeline and the Pass-1 profile pipeline.  Its job:
 //!
 //! 1. Ask each registered engine (in deterministic order) whether it claims
@@ -25,9 +42,18 @@
 //!
 //! # Scope note
 //!
-//! This stage is inserted in the **native** pipeline builders only.  The WASM
-//! pipeline will need it once built-in engines claim non-QMD files, but that
-//! is a future plan item.
+//! This stage runs on **every** target, native and WASM alike. It is
+//! inserted by the shared `build_html_pipeline_stages_with_options`, which
+//! has no `cfg` gate, and the live WASM entry points reach it through
+//! `render_qmd_to_html` and `render_qmd_to_preview_ast` (the latter via
+//! `build_q2_preview_pipeline_stages`, itself a filtered call to the shared
+//! builder). So WASM already converts, and already hard-errors on an
+//! unclaimed non-native extension.
+//!
+//! (An earlier version of this note claimed the stage was native-only. That
+//! was wrong, and the wrongness outlived the code it described — the one
+//! builder that genuinely lacked this stage, `build_wasm_html_pipeline`, was
+//! dead code with no production caller and has been deleted.)
 
 use std::path::PathBuf;
 
@@ -41,24 +67,24 @@ use crate::trace_event;
 
 /// Pre-parse stage: ask engines whether they claim the input file and, if so,
 /// convert it to QMD before `ParseDocumentStage` sees the bytes.
-pub struct EngineClaimsFileStage;
+pub struct SourceConversionStage;
 
-impl EngineClaimsFileStage {
+impl SourceConversionStage {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Default for EngineClaimsFileStage {
+impl Default for SourceConversionStage {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait(?Send)]
-impl PipelineStage for EngineClaimsFileStage {
+impl PipelineStage for SourceConversionStage {
     fn name(&self) -> &str {
-        "engine-claims-file"
+        "source-conversion"
     }
 
     fn input_kind(&self) -> PipelineDataKind {
@@ -104,7 +130,10 @@ impl PipelineStage for EngineClaimsFileStage {
         // Determine whether the file is a native QMD / MD type that never
         // needs an engine to claim it.  Empty extension is treated as QMD
         // (the common case for virtual / in-memory documents).
-        let is_qmd_or_md = ext.is_empty() || ext == "qmd" || ext == "md" || ext == "markdown";
+        //
+        // Single source of truth with discovery's widening rule (D1), which
+        // must exclude exactly this set from the synthetic default patterns.
+        let is_qmd_or_md = crate::project::discovery::NATIVE_EXTENSIONS.contains(&ext.as_str());
 
         // Extensions are undotted, lowercase everywhere on the Rust side
         // (canonical form, established at parse time in `extension/read.rs`'s
@@ -126,8 +155,37 @@ impl PipelineStage for EngineClaimsFileStage {
         let engines = ctx.registry.engines_in_order();
         let mut claimer: Option<(String, String)> = None; // (engine_name, qmd_text)
 
+        // Engines that tried to claim a natively-owned extension (D5). Names
+        // are collected rather than warned about inline: the refusal sits
+        // inside this loop, so an inline warning would emit N diagnostics for
+        // one file when N engines claim it. One file, one diagnostic.
+        let mut refused_native: Vec<String> = Vec::new();
+
         for engine in &engines {
             if !engine.claims_file(&file_str, &ext_for_engine) {
+                continue;
+            }
+
+            // D5: q2 owns the native set outright. Refuse the claim and fall
+            // through to the normal pass-through path.
+            //
+            // This also closes a real bug rather than merely tightening
+            // policy: without the guard an engine *can* claim `.md`, and the
+            // converted file (source_type stamped Qmd) then has execution
+            // suppressed anyway by `EngineExecutionStage`'s Q-2-40 guard,
+            // which reads the *original* path — still `.md`. The user would
+            // get a spurious "engine specification ignored" warning for a
+            // conversion that silently happened. Neither side's tests caught
+            // it: main has no claiming engines, the branch had no guard.
+            if is_qmd_or_md {
+                trace_event!(
+                    ctx,
+                    EventLevel::Debug,
+                    "engine '{}' claim on native extension {:?} refused (Q-2-50)",
+                    engine.name(),
+                    source.path
+                );
+                refused_native.push(engine.name().to_string());
                 continue;
             }
 
@@ -155,11 +213,53 @@ impl PipelineStage for EngineClaimsFileStage {
             break; // first claimer wins
         }
 
+        // One file, one diagnostic — naming every engine that was refused.
+        if !refused_native.is_empty() {
+            let engine_list = refused_native
+                .iter()
+                .map(|n| format!("`{n}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let plural = if refused_native.len() == 1 {
+                "engine"
+            } else {
+                "engines"
+            };
+            let display_ext = if ext.is_empty() {
+                "a file with no extension".to_string()
+            } else {
+                format!("`.{ext}` files")
+            };
+            ctx.add_diagnostic(
+                quarto_error_reporting::DiagnosticMessageBuilder::warning(format!(
+                    "engine claim on `{}` ignored",
+                    source.path.display()
+                ))
+                .with_code("Q-2-50")
+                .problem(format!(
+                    "The {plural} {engine_list} claimed {display_ext}, but Quarto handles \
+                     markdown natively. The claim is ignored and the file is rendered by \
+                     Quarto's own parser."
+                ))
+                .add_info(
+                    "Quarto owns `.qmd`, `.md`, `.markdown` and extension-less inputs. An \
+                     engine that claimed one of them would bypass Quarto's parser entirely. \
+                     Engine extensions should claim their own file extension instead.",
+                )
+                .build(),
+            );
+        }
+
         match claimer {
             Some((engine_name, qmd_text)) => {
                 // Convert: replace content with QMD bytes, stamp provenance.
                 source.content = qmd_text.into_bytes();
-                source.source_type = SourceType::Qmd;
+                // Only the conversion branch stamps a type. The
+                // pass-through branch below is already correct from load
+                // (`.qmd`/`.md` got `Some(...)` in `LoadedSource::new`), and
+                // the unclaimed-non-native branch hard-errors — which is what
+                // makes "always `Some` after this stage" an invariant.
+                source.source_type = Some(SourceType::Qmd);
                 source.conversion = Some(ConversionProvenance {
                     engine: engine_name.clone(),
                 });
@@ -470,7 +570,7 @@ mod tests {
             b"some echo content".to_vec(),
         );
         let input = PipelineData::LoadedSource(source);
-        let stage = EngineClaimsFileStage::new();
+        let stage = SourceConversionStage::new();
 
         let output = stage.run(input, &mut ctx).await.unwrap();
 
@@ -479,7 +579,7 @@ mod tests {
         };
 
         // source_type must be Qmd after conversion.
-        assert_eq!(result.source_type, SourceType::Qmd);
+        assert_eq!(result.source_type, Some(SourceType::Qmd));
         // conversion provenance must be set to the claiming engine.
         let conv = result
             .conversion
@@ -515,7 +615,7 @@ mod tests {
         let source =
             LoadedSource::new(PathBuf::from("/project/test.qmd"), original_content.clone());
         let input = PipelineData::LoadedSource(source);
-        let stage = EngineClaimsFileStage::new();
+        let stage = SourceConversionStage::new();
 
         let output = stage.run(input, &mut ctx).await.unwrap();
 
@@ -550,7 +650,7 @@ mod tests {
 
         let source = LoadedSource::new(PathBuf::from("/project/data.foo"), b"some data".to_vec());
         let input = PipelineData::LoadedSource(source);
-        let stage = EngineClaimsFileStage::new();
+        let stage = SourceConversionStage::new();
 
         let result = stage.run(input, &mut ctx).await;
 
@@ -575,7 +675,7 @@ mod tests {
     ///
     /// The `MockEngine` simulates `TsEngine`'s `conversion_cache`: second call
     /// for the same path hits the cache and does NOT increment the call counter.
-    /// Running `EngineClaimsFileStage` twice (Pass 1, Pass 2) with the same
+    /// Running `SourceConversionStage` twice (Pass 1, Pass 2) with the same
     /// engine Arc therefore incurs only one actual conversion.
     ///
     /// Named revert: remove the conversion_cache block from `MockEngine::
@@ -618,7 +718,7 @@ mod tests {
         )
         .unwrap();
 
-        let stage = EngineClaimsFileStage::new();
+        let stage = SourceConversionStage::new();
         let source1 = LoadedSource::new(
             PathBuf::from("/project/hello.echo"),
             b"echo content".to_vec(),
@@ -673,7 +773,7 @@ mod tests {
             b"any".to_vec(),
         );
         let input = PipelineData::LoadedSource(source);
-        let claims_stage = EngineClaimsFileStage::new();
+        let claims_stage = SourceConversionStage::new();
         let after_claims = claims_stage.run(input, &mut ctx).await.unwrap();
 
         // Manually stamp the content with known-good QMD to isolate parsing.
@@ -738,7 +838,7 @@ mod tests {
             b"some echo content".to_vec(),
         );
         let input = PipelineData::LoadedSource(source);
-        let stage = EngineClaimsFileStage::new();
+        let stage = SourceConversionStage::new();
 
         let output = stage.run(input, &mut ctx).await.unwrap();
 
@@ -748,9 +848,139 @@ mod tests {
 
         assert_eq!(
             result.source_type,
-            SourceType::Qmd,
+            Some(SourceType::Qmd),
             "X.ECHO must be claimed and converted by the undotted-lowercase-'echo' engine"
         );
         assert_eq!(ctx.claimed_engine_name, Some("echo-engine".to_string()));
+    }
+
+    // ── D5 / B3: engines may not claim the native set (Q-2-50) ──────────────
+
+    /// Every member of the native set is refused, not just `.md`. An engine
+    /// claiming `.qmd` would bypass q2's own parser entirely.
+    #[tokio::test]
+    async fn native_extension_claims_are_refused_with_q_2_50() {
+        for (file, ext_label) in [
+            ("/project/notes.md", "md"),
+            ("/project/doc.qmd", "qmd"),
+            ("/project/doc.markdown", "markdown"),
+            ("/project/README", "(extension-less)"),
+        ] {
+            let mut reg = EngineRegistry::new();
+            reg.register(MockEngine::new("greedy", &["md", "qmd", "markdown", ""]));
+            let mut ctx = make_ctx_with_registry(reg);
+
+            let original = b"# native content".to_vec();
+            let source = LoadedSource::new(PathBuf::from(file), original.clone());
+            let stage = SourceConversionStage::new();
+            let output = stage
+                .run(PipelineData::LoadedSource(source), &mut ctx)
+                .await
+                .expect("a refused claim must still render, not error");
+
+            let PipelineData::LoadedSource(result) = output else {
+                panic!("expected LoadedSource output");
+            };
+
+            // Fell through to the pass-through path: content untouched, no
+            // conversion provenance, no claimed engine.
+            assert_eq!(
+                result.content, original,
+                "{ext_label}: content must pass through unconverted"
+            );
+            assert!(
+                result.conversion.is_none(),
+                "{ext_label}: a refused claim must not stamp conversion provenance"
+            );
+            assert_eq!(
+                ctx.claimed_engine_name, None,
+                "{ext_label}: a refused claim must not set claimed_engine_name"
+            );
+
+            let q2_50: Vec<_> = ctx
+                .diagnostics
+                .iter()
+                .filter(|d| d.code.as_deref() == Some("Q-2-50"))
+                .collect();
+            assert_eq!(
+                q2_50.len(),
+                1,
+                "{ext_label}: expected exactly one Q-2-50; got {:?}",
+                ctx.diagnostics
+            );
+            assert!(
+                format!("{:?}", q2_50[0]).contains("greedy"),
+                "{ext_label}: the diagnostic must name the refused engine"
+            );
+        }
+    }
+
+    /// The diagnostic is emitted once per FILE, not once per claiming
+    /// engine. The refusal sits inside the engine loop, so a naive
+    /// `continue` with an inline warning would produce N diagnostics for one
+    /// file when N engines claim it.
+    #[tokio::test]
+    async fn q_2_50_is_emitted_once_per_file_naming_every_refused_engine() {
+        let mut reg = EngineRegistry::new();
+        reg.register(MockEngine::new("greedy-one", &["md"]));
+        reg.register(MockEngine::new("greedy-two", &["md"]));
+        reg.register(MockEngine::new("greedy-three", &["md"]));
+        let mut ctx = make_ctx_with_registry(reg);
+
+        let source = LoadedSource::new(PathBuf::from("/project/notes.md"), b"x".to_vec());
+        let stage = SourceConversionStage::new();
+        stage
+            .run(PipelineData::LoadedSource(source), &mut ctx)
+            .await
+            .unwrap();
+
+        let q2_50: Vec<_> = ctx
+            .diagnostics
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("Q-2-50"))
+            .collect();
+        assert_eq!(
+            q2_50.len(),
+            1,
+            "three claiming engines must still yield ONE diagnostic; got {:?}",
+            ctx.diagnostics
+        );
+
+        let text = format!("{:?}", q2_50[0]);
+        for name in ["greedy-one", "greedy-two", "greedy-three"] {
+            assert!(
+                text.contains(name),
+                "the single diagnostic must name every refused engine; {name} missing from {text}"
+            );
+        }
+    }
+
+    /// The refusal is scoped to the native set: a claim on a non-native
+    /// extension still succeeds, so B3 does not disable engine claiming.
+    #[tokio::test]
+    async fn non_native_extension_claim_still_succeeds_after_b3() {
+        let mut reg = EngineRegistry::new();
+        reg.register(MockEngine::new("echo-engine", &["echo"]));
+        let mut ctx = make_ctx_with_registry(reg);
+
+        let source = LoadedSource::new(PathBuf::from("/project/a.echo"), b"x".to_vec());
+        let stage = SourceConversionStage::new();
+        let output = stage
+            .run(PipelineData::LoadedSource(source), &mut ctx)
+            .await
+            .unwrap();
+
+        let PipelineData::LoadedSource(result) = output else {
+            panic!("expected LoadedSource output");
+        };
+        assert_eq!(result.source_type, Some(SourceType::Qmd));
+        assert_eq!(ctx.claimed_engine_name, Some("echo-engine".to_string()));
+        assert!(
+            !ctx.diagnostics
+                .iter()
+                .any(|d| d.code.as_deref() == Some("Q-2-50")),
+            "a non-native claim must not warn; got {:?}",
+            ctx.diagnostics
+        );
     }
 }

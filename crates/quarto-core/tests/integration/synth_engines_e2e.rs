@@ -336,7 +336,7 @@ fn b10_static_dynamic_mismatch_hard_errors() {
 // inspects file CONTENT: it claims a `.syn` file whose first line is exactly
 // `# synth-claim`, and declines otherwise (see the fixture's
 // src/content-claim.ts header). This drives the REAL
-// `EngineClaimsFileStage` -> `TsEngine::claims_file` -> `ClaimsFile` wire
+// `SourceConversionStage` -> `TsEngine::claims_file` -> `ClaimsFile` wire
 // dispatch (`crates/quarto-core/src/engine/ts_engine.rs:762-786`, the
 // content-inspecting fallback branch reached when `self.claims_files` is
 // `None`).
@@ -348,8 +348,8 @@ fn b10_static_dynamic_mismatch_hard_errors() {
 //   executed — CONTENT_CLAIM_EXECUTED appears in the rendered HTML.
 // - WITHOUT the marker: no engine claims `.syn` (content-claim declines;
 //   nothing else in this single-fixture project owns the extension), so
-//   `EngineClaimsFileStage` hard-errors with "Can't determine execution
-//   engine" (`engine_claims_file.rs:24`) rather than silently rendering as
+//   `SourceConversionStage` hard-errors with "Can't determine execution
+//   engine" (`source_conversion.rs:24`) rather than silently rendering as
 //   plain text or falling through to some other engine.
 //
 // revert seam: in `TsEngine::claims_file`'s dynamic branch
@@ -399,7 +399,7 @@ fn b11_dynamic_claims_file_round_trip() {
         let msg = format!("{:#}", result.unwrap_err());
         assert!(
             msg.contains("Can't determine execution engine"),
-            "an unclaimed .syn file must fail with EngineClaimsFileStage's \
+            "an unclaimed .syn file must fail with SourceConversionStage's \
              'Can't determine execution engine' error, proving no engine \
              (including content-claim) claimed it; got: {msg}"
         );

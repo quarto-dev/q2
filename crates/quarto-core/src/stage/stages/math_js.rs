@@ -45,8 +45,10 @@
 //! Math display is safe under hub-client's iframe-per-render preview
 //! model: each iframe load gets a fresh DOM and the engine typesets
 //! once on `DOMContentLoaded`. There's no JS-object state held across
-//! reinits like Bootstrap had, so this stage IS included in
-//! `build_wasm_html_pipeline()`.
+//! reinits like Bootstrap had, so this stage IS included in the shared
+//! pipeline the browser runs. (Note the q2-preview pipeline excludes
+//! `math-js` for unrelated architectural reasons — see
+//! `build_q2_preview_pipeline_stages`.)
 
 use async_trait::async_trait;
 

@@ -304,14 +304,14 @@ runbook can satisfy it.
 
 ## A0. Start
 
-- [ ] `git status --short` → clean; confirm safety branch exists
-- [ ] `git config --get rerere.enabled` → must print `false`
-- [ ] `git merge main` → expect 23 conflicts
-- [ ] `git diff --name-only --diff-filter=U | wc -l` → expect 23
+- [x] `git status --short` → clean; confirm safety branch exists
+- [x] `git config --get rerere.enabled` → must print `false`
+- [x] `git merge main` → expect 23 conflicts
+- [x] `git diff --name-only --diff-filter=U | wc -l` → expect 23
 
 ## A1. Regenerated files
 
-- [ ] Clear `.braid/snapshot.jsonl` (either side), then
+- [x] Clear `.braid/snapshot.jsonl` (either side), then
       `braid export > .braid/snapshot.jsonl`
 
 > **Lockfiles do not conflict in this merge.** `Cargo.lock`,
@@ -324,21 +324,21 @@ runbook can satisfy it.
 
 Keep **both** sides at each hunk; no side is discarded.
 
-- [ ] `.gitignore` — main's `.posit/assistant/` + the branch's extension-dist entries
-- [ ] `crates/quarto-core/tests/integration/main.rs` and
+- [x] `.gitignore` — main's `.posit/assistant/` + the branch's extension-dist entries
+- [x] `crates/quarto-core/tests/integration/main.rs` and
       `crates/quarto/tests/integration/main.rs` — union the `pub mod` lists, alphabetized
-- [ ] `crates/quarto-util/src/lib.rs` — union. **Must include main's
+- [x] `crates/quarto-util/src/lib.rs` — union. **Must include main's
       `is_external_url`**: `pub use path::{is_external_url, is_rooted, to_forward_slashes};`
       plus the branch's `data_dir` / `runtime_dir` re-exports. Dropping
       `is_external_url` breaks `quarto-brand`, which never conflicts and so gives
       you no warning.
-- [ ] `crates/quarto-core/src/extension/mod.rs` — union `pub use` + the branch's
+- [x] `crates/quarto-core/src/extension/mod.rs` — union `pub use` + the branch's
       native-gated build module
-- [ ] `crates/quarto-core/src/engine/mod.rs` — union `pub(crate) use`
+- [x] `crates/quarto-core/src/engine/mod.rs` — union `pub(crate) use`
       (main's `find_rscript` + the branch's additions)
-- [ ] `crates/quarto-core/src/project/mod.rs` **hunks 2–3 only** — both sides
+- [x] `crates/quarto-core/src/project/mod.rs` **hunks 2–3 only** — both sides
       added test modules at the same spot; keep both. (Hunk 1 is A6.)
-- [ ] `claude-notes/designs/document-profile-contract.md` — reconcile to version 11
+- [x] `claude-notes/designs/document-profile-contract.md` — reconcile to version 11
       (follows A4)
 
 ## A3. `Extension::title` sweep — take main's side
@@ -349,16 +349,16 @@ Q1-compat intake: a missing title is no longer an error). The branch still has
 reversed**. Verified: the branch's engine/extension code never reads `.title`, so
 there is no hidden dependency.
 
-- [ ] `extension/types.rs` — `pub title: Option<String>`
-- [ ] `filter_resolve.rs`, `stage/stages/metadata_merge.rs`,
+- [x] `extension/types.rs` — `pub title: Option<String>`
+- [x] `filter_resolve.rs`, `stage/stages/metadata_merge.rs`,
       `transforms/shortcode_resolve.rs` — `title: Some(name.to_string())`
-- [ ] `extension/discover.rs` hunk 1 — the `bad-ext` test fixture. The branch
+- [x] `extension/discover.rs` hunk 1 — the `bad-ext` test fixture. The branch
       omits `contributes` with a comment saying title "defaults to the id name";
       main uses unparseable YAML. **Take main's side** (the branch's premise is
       what A3 is reversing). This file has **7** hunks, not 6.
-- [ ] `extension/discover.rs` hunks 2–7 — `title: Some("…".to_string())`
-- [ ] `extension/read.rs` hunk 1 — main's optional-metadata reads via `as_plain_text()`
-- [ ] `extension/read.rs` hunks 4–6 — **delete** the branch's
+- [x] `extension/discover.rs` hunks 2–7 — `title: Some("…".to_string())`
+- [x] `extension/read.rs` hunk 1 — main's optional-metadata reads via `as_plain_text()`
+- [x] `extension/read.rs` hunks 4–6 — **delete** the branch's
       `test_read_extension_missing_title_defaults_to_id_name`; keep main's
       `test_read_extension_missing_title` asserting `title == None`
 
@@ -366,18 +366,18 @@ there is no hidden dependency.
 
 Per **D6**.
 
-- [ ] Keep **both** field sets and both supporting types (`authors_structured`
+- [x] Keep **both** field sets and both supporting types (`authors_structured`
       from main, `engine_resolution` from the branch)
-- [ ] Adopt main's `listing_content_globs: Vec<crate::glob::GlobPattern>` — the
+- [x] Adopt main's `listing_content_globs: Vec<crate::glob::GlobPattern>` — the
       branch's `Vec<String>` is superseded, and `dependency_graph.rs` (which
       merges clean) requires `&[GlobPattern]`
-- [ ] `DOCUMENT_PROFILE_VERSION = 11`; single `11:` changelog entry; delete the
+- [x] `DOCUMENT_PROFILE_VERSION = 11`; single `11:` changelog entry; delete the
       `7 → 8` narrative
-- [ ] Rename the test `document_profile_version_is_10` → `_is_11`
-- [ ] `stage/stages/document_profile.rs` — **pure union**, verified: main adds
+- [x] Rename the test `document_profile_version_is_10` → `_is_11`
+- [x] `stage/stages/document_profile.rs` — **pure union**, verified: main adds
       listing/resource glob resolution, the branch stamps `engine_resolution`.
       Disjoint profile fields, no interaction.
-- [ ] `cargo nextest run -p quarto-core -- document_profile profile_version`
+- [x] `cargo nextest run -p quarto-core -- document_profile profile_version`
 
 ## A5. `project/discovery.rs` — RE-PORT (the real work)
 
@@ -395,7 +395,7 @@ The branch's contribution to keep: `RenderableExtensions` — the resolved
 `FIXED_RENDERABLE ∪ engine-claims-file extensions` set. It exists **nowhere** on
 main.
 
-- [ ] **Delete** the branch's superseded hand-rolled glob code: `expand_patterns`,
+- [x] **Delete** the branch's superseded hand-rolled glob code: `expand_patterns`,
       `normalize_pattern`, `glob_match`, `glob_match_path`, `segment_match`,
       `wildcard_match`, `path_to_forward_slashes`, `to_forward_slashes`, and
       **`relative_to_dir`**. Main's `crate::glob::GlobPattern` / `RawGlob` system
@@ -408,8 +408,8 @@ main.
       `dependency_graph.rs` is main-only-modified so main's version wins
       automatically; **`listing_generate.rs` is modified on both sides and
       auto-merges — check it explicitly after the build.**
-- [ ] Add `renderable_extensions: &'a RenderableExtensions` to main's `DiscoveryConfig`
-- [ ] **Set `FIXED_RENDERABLE = &["qmd", "md"]`.** It is `&["qmd"]` on the branch
+- [x] Add `renderable_extensions: &'a RenderableExtensions` to main's `DiscoveryConfig`
+- [x] **Set `FIXED_RENDERABLE = &["qmd", "md"]`.** It is `&["qmd"]` on the branch
       (`discovery.rs:42`) while main's `has_renderable_extension` is
       `matches!(ext, Some("qmd" | "md"))`. **This matters:** if
       `has_renderable_extension` is switched to consult the set while the set
@@ -419,36 +419,36 @@ main.
       constant alone: write the predicate as
       `matches!(ext, Some("qmd" | "md")) || ext_in_set(path, set)`. Pick one and
       say which in the commit message.
-- [ ] Keep `RenderableExtensions` + `ext_in_set`, adapted to main's call shape,
+- [x] Keep `RenderableExtensions` + `ext_in_set`, adapted to main's call shape,
       plus the engine-claimed accessor D1 requires
-- [ ] Thread the set through `walk_sources` → `walk_rec` → `is_renderable_source`
-- [ ] **D1:** widen `effective_render_patterns` (signature change required) —
+- [x] Thread the set through `walk_sources` → `walk_rec` → `is_renderable_source`
+- [x] **D1:** widen `effective_render_patterns` (signature change required) —
       when no positive user pattern exists, emit `**/*.qmd` plus one
       `**/*.<ext>` per **statically** claimed extension (D2), each with
       `SourceInfo::generated(By::programmatic_config())`, **excluding the native
       set unconditionally**. Do **not** touch the `render_pattern_diagnostics`
       path.
-- [ ] Update `Q-5-13`'s message text — it hard-codes "No renderable source file
+- [x] Update `Q-5-13`'s message text — it hard-codes "No renderable source file
       (`.qmd` or `.md`) in the project matches this pattern", which becomes wrong
       once engine-claimed extensions are renderable
-- [ ] Re-port the branch's T6/T6b/T7 tests against the new function names, and
+- [x] Re-port the branch's T6/T6b/T7 tests against the new function names, and
       confirm they still bind: the same exclusion rules (underscore, dot,
       output-dir) must apply to a claimed `.echo` as to `.qmd`, and a non-member
       extension (`.ipynb`) must stay excluded
-- [ ] **Add a test for D1** — a project with a claimed `.echo` extension and **no**
+- [x] **Add a test for D1** — a project with a claimed `.echo` extension and **no**
       `project.render` key renders its `.echo` files. This is the regression that
       neither side's suite would otherwise catch.
-- [ ] **Add a test for D2** — a dynamic (`claims_files: None`) engine contributes
+- [x] **Add a test for D2** — a dynamic (`claims_files: None`) engine contributes
       no discovery wildcard, and no warning is emitted
-- [ ] Update the `RenderableExtensions` construction sites in `project/mod.rs`
+- [x] Update the `RenderableExtensions` construction sites in `project/mod.rs`
       and `crates/quarto/src/commands/render.rs`
 
 ## A6. Signature threading
 
-- [ ] `extension/read.rs` hunks 2–3 — `parse_contributes` gained
+- [x] `extension/read.rs` hunks 2–3 — `parse_contributes` gained
       `runtime: &dyn SystemRuntime` on main and `extension_file: &Path` on the
       branch. They serve different purposes; **thread both**, keep both doc comments.
-- [ ] `project/mod.rs` hunk 1 — main rebound `config` from `Option<ProjectConfig>`
+- [x] `project/mod.rs` hunk 1 — main rebound `config` from `Option<ProjectConfig>`
       to `ProjectConfig` (project-less profile resolution, so `--profile bad/name`
       errors and `when-profile` sees the active set). The branch's
       `build_registry(…, config.as_ref(), …)`, `RenderableExtensions::new(…)` and
@@ -456,7 +456,7 @@ main.
       rebinding, adapt the branch's calls to the non-`Option` `config`.
       (Verified behaviorally equivalent for single-file renders: a default
       `ProjectConfig` yields no tabled engines, same as the old `None`.)
-- [ ] `parse_config` gained `cli_selection: Option<&[String]>` on main. The branch
+- [x] `parse_config` gained `cli_selection: Option<&[String]>` on main. The branch
       has exactly **2** call sites (`project/mod.rs:1223`, `:1233`) plus the
       definition at `:1248` — both sit *outside* the conflict hunks and arrive by
       auto-merge, so main's 3-arg definition and the branch's 2-arg calls can
@@ -468,21 +468,21 @@ main.
 
 Keep both sides at each hunk.
 
-- [ ] `engine/context.rs` — main's `project_env` field + doc **and** the branch's
+- [x] `engine/context.rs` — main's `project_env` field + doc **and** the branch's
       `handled_languages` / `cancellation` defaults; both initialized in
       `Default`/constructor
-- [ ] `stage/stages/engine_execution.rs` h1 — main's `.md`-never-executes guard
+- [x] `stage/stages/engine_execution.rs` h1 — main's `.md`-never-executes guard
       (`Q-2-40`) **and** the branch's engine-resolution path. Per **D5**, the
       guard itself is unchanged.
-- [ ] `stage/stages/engine_execution.rs` h2 — both extended the same builder
+- [x] `stage/stages/engine_execution.rs` h2 — both extended the same builder
       chain: main's `.with_project_env(…)` (including the unconditional
       `QUARTO_PROFILE`) **and** the branch's `.with_handled_languages(…)`
-- [ ] `stage/context.rs` — main's `load_project_variables` + `active_profile_names`
+- [x] `stage/context.rs` — main's `load_project_variables` + `active_profile_names`
       **and** the branch's additions. (Verified: `ctx.variables` feeds only
       `shortcode_resolve`, a post-execution transform — engines do not need it.)
-- [ ] `project/orchestrator.rs` — main's unmatched-pattern diagnostic
+- [x] `project/orchestrator.rs` — main's unmatched-pattern diagnostic
       (bd-mt7a6uc4 D7) **and** the branch's additions
-- [ ] `engine/jupyter/text_execute.rs` — main's `kernel_scope` guard (bd-hxhnnlzs)
+- [x] `engine/jupyter/text_execute.rs` — main's `kernel_scope` guard (bd-hxhnnlzs)
       **and** the branch's cede/claim filtering. **Placement matters:** main puts
       the guard after its `blocks.is_empty()` early return, immediately before
       `execute_blocks_async`. The branch adds a *second* early return
@@ -496,22 +496,22 @@ Merge-tree flags only **textual** conflicts. The branch adds ~100k lines calling
 `quarto-core` APIs that main changed underneath, so expect clean-merged-but-broken
 call sites.
 
-- [ ] `cargo build --workspace 2>&1 | tee /tmp/mergebuild.log | tail -40`
-- [ ] For **every** error ask **"did I drop one of main's fields/modules in
+- [x] `cargo build --workspace 2>&1 | tee /tmp/mergebuild.log | tail -40`
+- [x] For **every** error ask **"did I drop one of main's fields/modules in
       A2–A7?"** before "adapt the caller." That was the measured failure mode:
       picking a side in a hub file silently deletes main's newer surface
       (`project::aliases`, `ProjectConfig::brand`, `profile_config_paths`,
       `StageContext::{variables, project_env, diagnostic_policy}`,
       `DocumentProfile::resource_globs`) and the damage lands in files the merge
       never flagged.
-- [ ] Known-genuine ones: `dependency_graph.rs` wants `&[GlobPattern]`;
+- [x] Known-genuine ones: `dependency_graph.rs` wants `&[GlobPattern]`;
       `quarto-brand` wants `quarto_util::is_external_url`
-- [ ] Repeat until `cargo build --workspace` is clean
+- [x] Repeat until `cargo build --workspace` is clean
 
 **Silent collisions in auto-merged files** — these do not conflict, so nothing
 flags them; they surface as test failures in A9 unless you look:
 
-- [ ] **`pipeline.rs` stage-count assertions.** The file auto-merges but both
+- [x] **`pipeline.rs` stage-count assertions.** The file auto-merges but both
       sides hard-code counts: main asserts `stages.len(), 23` / `pipeline.len(), 23`;
       the branch asserts `24` / `24`. Git silently takes one side and the test
       fails later. **Do not hand-count the tail.** Run the ordering test, read the
@@ -519,15 +519,15 @@ flags them; they surface as test failures in A9 unless you look:
       the observed order — confirming every entry is a stage you *expect* (both
       new stages present, none accidentally dropped). Same for the
       `build_analysis_pipeline` count if it shifts.
-- [ ] **`listing_generate.rs`** — modified on both sides, auto-merges, and imports
+- [x] **`listing_generate.rs`** — modified on both sides, auto-merges, and imports
       glob helpers A5 deletes (see A5's note)
 
 ## A9. Commit the merge
 
-- [ ] `cargo nextest run --workspace` (run directly — **never** pipe through `tail`)
-- [ ] Report snapshot changes: count `.snap` added/modified/removed, summarize,
+- [x] `cargo nextest run --workspace` (run directly — **never** pipe through `tail`)
+- [x] Report snapshot changes: count `.snap` added/modified/removed, summarize,
       flag anything surprising (project rule)
-- [ ] `git commit` the merge. Do **not** push.
+- [x] `git commit` the merge. Do **not** push.
 
 ---
 
@@ -540,14 +540,14 @@ them separate so the merge stays reviewable.
 
 Per **D3**.
 
-- [ ] Remove the `Ipynb` and `Rmd` variants and their `from_extension` arms
-- [ ] Update the affected assertions in `crates/quarto-core/src/stage/data.rs`
+- [x] Remove the `Ipynb` and `Rmd` variants and their `from_extension` arms
+- [x] Update the affected assertions in `crates/quarto-core/src/stage/data.rs`
       tests: `:467`, `:468`, `:480`, and **`:488`**
       (`assert_eq!(source.source_type, SourceType::Qmd)` becomes `Some(…)`)
-- [ ] `LoadedSource.source_type` → `Option<SourceType>` per the D3 contract:
+- [x] `LoadedSource.source_type` → `Option<SourceType>` per the D3 contract:
       `LoadedSource::new` uses `from_path()` directly with no fallback; the
       conversion stage stamps `Some(Qmd)` only on the conversion branch
-- [ ] Update `crates/quarto-core/src/stage/trace.rs` `:419` and `:505` (Debug
+- [x] Update `crates/quarto-core/src/stage/trace.rs` `:419` and `:505` (Debug
       formatting of the field), and `:554`
       (`assert_eq!(json["source_type"], "Qmd")` — decide the rendering for `Some`
       vs `None` and make the assertion match)
@@ -589,16 +589,16 @@ a seam**:
   contradicts the real preview pipeline, which excludes `math-js` for unrelated
   architectural reasons — it encodes a superseded design.
 
-- [ ] Delete `build_wasm_html_pipeline` and its re-export at
+- [x] Delete `build_wasm_html_pipeline` and its re-export at
       `crates/quarto-core/src/lib.rs:80`
-- [ ] Delete `test_build_wasm_html_pipeline` (`pipeline.rs:2094`)
-- [ ] Retarget the two integration call sites —
+- [x] Delete `test_build_wasm_html_pipeline` (`pipeline.rs:2094`)
+- [x] Retarget the two integration call sites —
       `tests/integration/document_profile_pipeline.rs:91` and
       `tests/integration/language_pipeline.rs:89` — at the shared builder.
       **No unique coverage is lost:** both files already assert the identical
       invariant against `build_html_pipeline_stages` a few lines away, so the
       retargeted assertions become duplicates and may simply be dropped.
-- [ ] Fix the stale doc comment on the conversion stage that claims it is
+- [x] Fix the stale doc comment on the conversion stage that claims it is
       inserted "in the **native** pipeline builders only" — it is in the shared
       builder and runs on WASM too. That comment is what produced the false
       premise in the first place; leaving it would re-mislead the next reader.
@@ -612,34 +612,34 @@ a seam**:
 
 Per **D4**.
 
-- [ ] `EngineClaimsFileStage` → `SourceConversionStage`; `name()` →
+- [x] `EngineClaimsFileStage` → `SourceConversionStage`; `name()` →
       `"source-conversion"`; `engine_claims_file.rs` → `source_conversion.rs`
-- [ ] Update `stage/stages/mod.rs`, `stage/mod.rs` re-exports, `pipeline.rs` import
+- [x] Update `stage/stages/mod.rs`, `stage/mod.rs` re-exports, `pipeline.rs` import
       and insertion site
-- [ ] Update the pipeline-order assertions that check `stages[0].name()`
-- [ ] **Do not** rename `claims_file` / `claimsFile` — wire protocol + public
+- [x] Update the pipeline-order assertions that check `stages[0].name()`
+- [x] **Do not** rename `claims_file` / `claimsFile` — wire protocol + public
       engine-author API
 
 ## B3. Refuse native-set claims (`Q-2-50`)
 
 Per **D5**.
 
-- [ ] In the claims loop, if the extension is in the native set (`""`, `qmd`,
+- [x] In the claims loop, if the extension is in the native set (`""`, `qmd`,
       `md`, `markdown`) and an engine claims it: refuse the claim, `continue`,
       fall through to pass-through
-- [ ] **Emit `Q-2-50` once per file, not once per claiming engine.** The refusal
+- [x] **Emit `Q-2-50` once per file, not once per claiming engine.** The refusal
       sits inside `for engine in &engines`, so a naive `continue` with an inline
       warning produces N diagnostics for one file when N engines claim it.
       Collect the refused engine names and emit a single diagnostic after the
       loop, naming them all.
-- [ ] Add `Q-2-50` to `crates/quarto-error-catalog/error_catalog.json`
+- [x] Add `Q-2-50` to `crates/quarto-error-catalog/error_catalog.json`
       (subsystem `markdown`; `Q-2-49` is the current highest in both the catalog
       and `docs/errors/markdown/`)
-- [ ] Add `docs/errors/markdown/Q-2-50.qmd` **in the same commit** — the
+- [x] Add `docs/errors/markdown/Q-2-50.qmd` **in the same commit** — the
       `error-docs-page-missing` lint fails CI otherwise. Template: `docs/errors/README.md`
-- [ ] Test: an engine claiming `.md` is refused with `Q-2-50` and the file passes
+- [x] Test: an engine claiming `.md` is refused with `Q-2-50` and the file passes
       through unconverted; a claim on `.echo` still succeeds
-- [ ] `cargo xtask lint`
+- [x] `cargo xtask lint`
 
 ## B4. TS engine `project_env` / `QUARTO_PROFILE` parity
 
@@ -649,19 +649,36 @@ Per Gordon's decision: **in this merge if it is small.** Main threads
 unconditionally (bd-fu16z22k). The branch's deno spawn (`ts_process.rs:891`) sets
 no environment at all, so merged as-is TS engines see neither.
 
-- [ ] **First, size it.** Trace whether `project_env` is reachable at the deno
+- [x] **First, size it.** Trace whether `project_env` is reachable at the deno
       spawn site. If it threads through cleanly, do it here.
-- [ ] **If it is invasive, STOP and report** rather than growing the merge — file
+      → **Sized: it is NOT reachable, and not for a threading reason.** The
+      deno spawn lives in `TsEngineHost::ensure_started`, whose contract is
+      that init "runs at most once across concurrent callers" — one
+      long-lived host shared by every document and engine. No
+      `ExecutionContext` is in scope there and structurally cannot be.
+      knitr differs because it spawns a *fresh* Rscript per execution, which
+      is what makes `.envs()` at its spawn site inherently per-document.
+- [x] **If it is invasive, STOP and report** rather than growing the merge — file
       a strand instead. This is an explicit off-ramp, not a failure.
-- [ ] If done: `.envs(project_env.iter())` at the deno spawn, plus a test that a
-      TS engine observes an `_environment` variable and `QUARTO_PROFILE`
+      → **Off-ramp taken. Filed as bd-x30l7ee5 (p1, bug).**
+- [ ] ~~If done: `.envs(project_env.iter())` at the deno spawn, plus a test that a
+      TS engine observes an `_environment` variable and `QUARTO_PROFILE`~~
+      **NOT DONE — deliberately.** A naive `.envs()` at the deno spawn would
+      bake in whichever document happened to start the host first, which is
+      silently wrong whenever `_environment` or the active profile differs
+      per document — arguably worse than today's honest "no env at all",
+      because it would be right often enough to stop checking. The correct
+      fix needs the env to travel per-execute on the wire (`TsExecuteOptions`
+      has no env field today) or host keying by env-set; both are protocol/
+      architecture changes that do not belong inside a merge. See
+      bd-x30l7ee5.
 
 ## B5. Update the strand record
 
-- [ ] Comment on **bd-xxul** that its "extend the pipeline's `SourceType`
+- [x] Comment on **bd-xxul** that its "extend the pipeline's `SourceType`
       handling" line is resolved in the *opposite* direction (D3), so the record
       does not mislead
-- [ ] Comment on **bd-19nc56ao** that `.ipynb` now lands as an engine claiming
+- [x] Comment on **bd-19nc56ao** that `.ipynb` now lands as an engine claiming
       `.ipynb`, and that bd-zlemoc6w is its provenance prerequisite
 
 ---

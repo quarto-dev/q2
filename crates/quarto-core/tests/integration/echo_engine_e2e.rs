@@ -5,7 +5,7 @@
  * Task 14 — the plan-1c END-TO-END gate. Drives the committed echo-engine /
  * echo-legacy fixtures (Task 13) through the REAL render path — a TS engine
  * spawning the Deno engine-host subprocess — and asserts the whole chain works:
- * discovery → registry → `EngineClaimsFileStage` (for `.echo`) → `resolve_engines`
+ * discovery → registry → `SourceConversionStage` (for `.echo`) → `resolve_engines`
  * → LoadEngine / LaunchEngine / execute → result, plus orchestrator-driven
  * teardown (`registry.shutdown_all()` reaping the Deno subprocess).
  *
@@ -131,7 +131,7 @@ fn p3_1a_language_claim_executes_echo() {
 
 // ── P3-1b: whole-file `.echo` claim + §8 single-engine pass-through ───────────
 //
-// Renders a whole-file `.echo`. Exercises `EngineClaimsFileStage` (claims_file
+// Renders a whole-file `.echo`. Exercises `SourceConversionStage` (claims_file
 // on `.echo`) → `markdown_for_file` (real subprocess converts the file, wrapping
 // it as an `{echo}` block plus an appended non-echo `{python}` cell) →
 // ParseDocumentStage synthetic name → `claimed_engine_name` → `resolve_engines`

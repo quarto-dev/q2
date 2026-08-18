@@ -22,9 +22,7 @@ use std::sync::Arc;
 
 use quarto_core::document_profile::DocumentProfile;
 use quarto_core::format::Format;
-use quarto_core::pipeline::{
-    HtmlRenderConfig, build_html_pipeline_stages, build_wasm_html_pipeline, render_qmd_to_html,
-};
+use quarto_core::pipeline::{HtmlRenderConfig, build_html_pipeline_stages, render_qmd_to_html};
 use quarto_core::project::{DocumentInfo, ProjectConfig, ProjectContext};
 use quarto_core::render::{BinaryDependencies, RenderContext};
 use quarto_core::stage::{
@@ -85,39 +83,6 @@ fn position_of(stages: &[Box<dyn PipelineStage>], target: &str) -> Option<usize>
 // ---------------------------------------------------------------------------
 // Test 12: wasm pipeline includes the checkpoint stages.
 // ---------------------------------------------------------------------------
-
-#[test]
-fn wasm_pipeline_includes_profile_stage() {
-    let pipeline = build_wasm_html_pipeline();
-    let names = pipeline.stage_names();
-    assert!(
-        names.contains(&"document-profile"),
-        "WASM HTML pipeline must include DocumentProfileStage; got {names:?}"
-    );
-    assert!(
-        names.contains(&"unwrap-profile"),
-        "WASM HTML pipeline must include UnwrapProfileStage; got {names:?}"
-    );
-
-    // After Phase-8 sub-phase 8.0d, link-resolution sits between
-    // document-profile and unwrap-profile. Both stages take/produce
-    // AtProfile, so downstream stages still receive DocumentAst from
-    // unwrap-profile as before.
-    let p = names
-        .iter()
-        .position(|n| *n == "document-profile")
-        .expect("document-profile present");
-    assert_eq!(
-        names.get(p + 1).copied(),
-        Some("link-resolution"),
-        "link-resolution must follow document-profile"
-    );
-    assert_eq!(
-        names.get(p + 2).copied(),
-        Some("unwrap-profile"),
-        "unwrap-profile must follow link-resolution"
-    );
-}
 
 #[test]
 fn html_pipeline_includes_profile_stage() {

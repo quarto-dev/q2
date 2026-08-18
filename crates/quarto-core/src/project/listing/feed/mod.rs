@@ -39,8 +39,8 @@
 //! `#[cfg(not(target_arch = "wasm32"))]` because they pull
 //! native-only deps (`imagesize`, `scraper`) or perform file I/O.
 //! `link_inject` is the exception: it does no I/O and is registered
-//! in both `build_html_pipeline_stages_with_apply_config` and
-//! `build_wasm_html_pipeline`.
+//! in the shared `build_html_pipeline_stages_with_apply_config`, which
+//! serves native and WASM alike.
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod binding;

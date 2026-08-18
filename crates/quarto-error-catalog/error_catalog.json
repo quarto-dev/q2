@@ -1427,6 +1427,13 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-49",
     "since_version": "99.9.9"
   },
+  "Q-2-50": {
+    "subsystem": "markdown",
+    "title": "Engine claim on a Quarto-owned file type ignored",
+    "message_template": "An engine extension claimed `.qmd`, `.md`, `.markdown`, or an extension-less input. Quarto handles markdown natively, so the claim is ignored and the file is rendered by Quarto's own parser.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-50",
+    "since_version": "99.9.9"
+  },
   "Q-5-27": {
     "subsystem": "project",
     "title": "Invalid `diagnostics:` Entry",

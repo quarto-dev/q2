@@ -113,10 +113,10 @@ pub use stages::BootstrapJsStage;
 pub use stages::CodeHighlightStage;
 pub use stages::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CaptureSpliceStage,
-    CompileThemeCssStage, DocumentProfileStage, EngineClaimsFileStage, EngineExecutionStage,
-    IncludeExpansionStage, IncludeResolveStage, LanguageResolveStage, LinkResolutionStage,
-    ListingItemInfoStage, MathJsStage, MetadataMergeStage, ParseDocumentStage,
-    PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, UnwrapProfileStage,
+    CompileThemeCssStage, DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage,
+    IncludeResolveStage, LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage,
+    MathJsStage, MetadataMergeStage, ParseDocumentStage, PreEngineSugaringStage,
+    RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage, UnwrapProfileStage,
     UserFiltersStage,
 };
 

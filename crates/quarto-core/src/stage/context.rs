@@ -197,7 +197,7 @@ pub struct StageContext {
     /// registry for testing, set from `HtmlRenderConfig.engine_registry`).
     pub registry: Arc<EngineRegistry>,
 
-    /// Set by `EngineClaimsFileStage` (Task 10) when an engine claims a
+    /// Set by `SourceConversionStage` (Task 10) when an engine claims a
     /// non-QMD file; consumed by `resolve_engines` (Task 9) to
     /// short-circuit to the single claiming engine. `None` for `.qmd`.
     pub claimed_engine_name: Option<String>,
@@ -873,7 +873,7 @@ mod tests {
     }
 
     /// Task 8: `claimed_engine_name` must default to `None` at construction.
-    /// It is set later by `EngineClaimsFileStage` (Task 10) for non-QMD files.
+    /// It is set later by `SourceConversionStage` (Task 10) for non-QMD files.
     #[test]
     fn test_claimed_engine_name_defaults_to_none() {
         let runtime = Arc::new(MockRuntime::new());

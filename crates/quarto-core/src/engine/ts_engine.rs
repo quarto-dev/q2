@@ -176,7 +176,7 @@ pub struct TsEngine {
     /// Records each statically-answered claims_file extension for execute-time validation.
     static_file_answers: Mutex<Vec<String>>,
     /// Per-render markdown_for_file conversion cache (canonical path → converted QMD).
-    /// Field added here; CONSUMED by Task 10's EngineClaimsFileStage — unused for now.
+    /// Field added here; CONSUMED by Task 10's SourceConversionStage — unused for now.
     #[allow(dead_code)] // Task 10 consumes this
     conversion_cache: Mutex<HashMap<PathBuf, String>>,
 
@@ -643,7 +643,7 @@ fn build_source_map(
 ///
 /// The canonical Rust-side form is **undotted** everywhere (parse-time
 /// normalization in `extension::read::normalize_ext`; matching in
-/// `claims_file` / `EngineClaimsFileStage` compares undotted candidate
+/// `claims_file` / `SourceConversionStage` compares undotted candidate
 /// against undotted stored extensions). The wire contract stays **dotted**
 /// (Q1 `extname()` parity; the engine-side JS contract compares
 /// `ext === ".echo"`, e.g. `echo-engine.ts`'s `claimsFile`). This is the
@@ -993,7 +993,7 @@ impl ExecutionEngine for TsEngine {
         // P2-17: cache the converted QMD per canonical path so both passes of a
         // two-pass (website) render share one conversion, not two subprocess
         // round-trips.  The key is the file path as supplied by the caller (already
-        // normalized to absolute + lexically clean by `EngineClaimsFileStage`).
+        // normalized to absolute + lexically clean by `SourceConversionStage`).
         {
             let guard = self.conversion_cache.lock().unwrap();
             if let Some(cached) = guard.get(file) {

@@ -60,11 +60,11 @@ use crate::stage::stages::BootstrapJsStage;
 use crate::stage::stages::ClipboardJsStage;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
-    DocumentProfileStage, EngineClaimsFileStage, EngineExecutionStage, IncludeExpansionStage,
-    IncludeResolveStage, LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage,
-    LoadedSource, MathJsStage, MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData,
-    PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, StageContext,
-    UnwrapProfileStage, UserFiltersStage,
+    DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage,
+    LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage,
+    MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
+    PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage,
+    StageContext, UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
@@ -274,7 +274,7 @@ pub fn build_html_pipeline_stages_with_options(
         // Convert non-QMD files (e.g. .echo, .jl, .ipynb) to QMD before parse.
         // First engine in deterministic order that claims the file wins.
         // .qmd / .md files pass through unchanged; unclaimed non-QMD files error.
-        Box::new(EngineClaimsFileStage::new()),
+        Box::new(SourceConversionStage::new()),
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
         // Resolve localized terms (`lang` + `language:` → `quarto.language`
@@ -504,88 +504,6 @@ pub fn build_html_pipeline_stages_with_captures(
 /// with the standard stages).
 pub fn build_html_pipeline() -> Pipeline {
     Pipeline::new(build_html_pipeline_stages()).expect("HTML pipeline stages should be compatible")
-}
-
-/// Build a WASM-compatible HTML pipeline (no engine execution).
-///
-/// This creates a pipeline suitable for browser environments where code
-/// execution is not available. It includes all AST transforms for feature
-/// parity with native rendering (callouts, TOC, sectionize, etc.), but
-/// skips the engine execution stage.
-///
-/// Stages:
-/// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
-/// 2. `MetadataMergeStage` - Merge project/directory/document/runtime metadata
-/// 3. `IncludeExpansionStage` - Splice in `{{< include child.qmd >}}` bodies
-/// 4. `IncludeResolveStage` - Resolve `include-in-header` etc. authored keys
-/// 5. `ListingItemInfoStage` - Auto-fill `meta.listing-item.*` (L1, `bd-izqh`)
-/// 6. `DocumentProfileStage` - Extract the static profile at the checkpoint
-/// 7. `LinkResolutionStage` - Walk AST for cross-doc body-link targets (Phase 8)
-/// 8. `UnwrapProfileStage` - Hand the AST back to downstream stages
-/// 9. `CompileThemeCssStage` - Compile theme CSS from merged metadata
-/// 10. `UserFiltersStage::pre()` - Apply user filters before Quarto transforms
-/// 11. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
-/// 12. `UserFiltersStage::post()` - Apply user filters after Quarto transforms
-/// 13. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 14. `ApplyTemplateStage` - Apply HTML template
-///
-/// # Returns
-///
-/// A validated `Pipeline` ready for execution.
-///
-/// # Panics
-///
-/// Panics if the pipeline stages have incompatible types (should never happen
-/// with the standard stages).
-pub fn build_wasm_html_pipeline() -> Pipeline {
-    let mut stages: Vec<Box<dyn PipelineStage>> = vec![
-        Box::new(ParseDocumentStage::new()),
-        // No EngineExecutionStage - code cells pass through as-is
-        Box::new(MetadataMergeStage::new()),
-        // Localized-term resolution — same position/contract as the
-        // native pipeline (bd-llhlzd7p).
-        Box::new(LanguageResolveStage::new()),
-        // Include expansion before the profile checkpoint — bd-xfwx.
-        Box::new(IncludeExpansionStage::new()),
-        // Resolve include-in-header / before-body / after-body
-        // before the profile checkpoint so file-slot dependencies
-        // land in `profile.includes` for cache invalidation
-        // (bd-r82e). See `claude-notes/plans/2026-05-04-includes-feature.md`.
-        Box::new(IncludeResolveStage::new()),
-        // Auto-fill `meta.listing-item.*` for the listings feature
-        // (L1, `bd-izqh`). Same position and contract as the native
-        // pipeline. mtime via `SystemRuntime::path_metadata`; the
-        // WASM impl currently returns `modified: None`, so
-        // hub-client renders skip `date_modified` until `bd-a3we`
-        // teaches the Automerge VFS to surface change-history time.
-        Box::new(ListingItemInfoStage::new()),
-        // Profile checkpoint: post-merge, pre-mutation. Hub-client
-        // Phase 9 will intercept this variant to build project-wide
-        // nav state.
-        Box::new(DocumentProfileStage::new()),
-        // Pass-1 cross-doc body-link resolution (Phase 8 sub-phase 8.0d).
-        Box::new(LinkResolutionStage::new()),
-        Box::new(UnwrapProfileStage::new()),
-        Box::new(PreEngineSugaringStage::new()),
-        Box::new(CompileThemeCssStage::new()),
-        // See native pipeline for the placement rationale.
-        Box::new(AttributionGenerateStage::new()),
-        Box::new(UserFiltersStage::pre()),
-        Box::new(AstTransformsStage::new()),
-        Box::new(UserFiltersStage::post()),
-        Box::new(ResourceReportStage::new()),
-    ];
-    stages.push(Box::new(CodeHighlightStage::new()));
-    // Math-mode (bd-w5ov): unlike Bootstrap (which we omit from WASM
-    // because iframe reinit blows away stateful components), math
-    // display is safe under iframe reinit — each load gets a fresh DOM
-    // and the engine typesets once. Hub-client preview should typeset
-    // math live, so include the stage here too.
-    stages.push(Box::new(MathJsStage::new()));
-    stages.push(Box::new(RenderHtmlBodyStage::new()));
-    stages.push(Box::new(ApplyTemplateStage::new()));
-
-    Pipeline::new(stages).expect("WASM HTML pipeline stages should be compatible")
 }
 
 /// Build an HTML pipeline from custom stages.
@@ -2108,12 +2026,12 @@ mod tests {
     fn test_build_html_pipeline_stages() {
         let stages = build_html_pipeline_stages();
         // Merged pipeline (ts-engine-extensions rebase): both new stages are
-        // present — EngineClaimsFileStage at [0] (Task 10 / plan1c, branch) and
+        // present — SourceConversionStage at [0] (Task 10 / plan1c, branch) and
         // LanguageResolveStage after metadata-merge (bd-llhlzd7p, main) — so the
         // length is 24, not the 23 either side had alone.
         assert_eq!(stages.len(), 24);
         // Pre-parse file-claim/convert (Task 10).
-        assert_eq!(stages[0].name(), "engine-claims-file");
+        assert_eq!(stages[0].name(), "source-conversion");
         assert_eq!(stages[1].name(), "parse-document");
         assert_eq!(stages[2].name(), "metadata-merge");
         // Localized-term resolution (bd-llhlzd7p) directly follows the
@@ -2169,51 +2087,9 @@ mod tests {
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
-        // Merged pipeline carries both EngineClaimsFileStage (Task 10, branch)
+        // Merged pipeline carries both SourceConversionStage (Task 10, branch)
         // and LanguageResolveStage (bd-llhlzd7p, main) → 24 stages.
         assert_eq!(pipeline.len(), 24);
-    }
-
-    #[test]
-    fn test_build_wasm_html_pipeline() {
-        let pipeline = build_wasm_html_pipeline();
-        // WASM pipeline matches the native HTML pipeline minus
-        // `engine-execution` and `bootstrap-js`. Includes the
-        // `include-resolve` stage (bd-8kp3) so the same
-        // `rendered.includes.*` contract holds in the browser.
-        // Includes `listing-item-info` (bd-izqh) so listing-item
-        // metadata is auto-filled symmetrically.
-        // Includes `math-js` (bd-w5ov) — math display is safe under
-        // hub-client iframe reinit and we want live math in preview.
-        // Includes `attribution-generate` (bd-0fd0) so hub-client
-        // preview filters see the same `quarto.attribution.*` host
-        // binding as the CLI.
-        // Includes `language-resolve` (bd-llhlzd7p) so preview output
-        // localizes identically to `q2 render`.
-        assert_eq!(pipeline.len(), 20);
-        let names = pipeline.stage_names();
-        // bd-4eyf: hub-client iframe reinit blows away stateful
-        // Bootstrap components, so we deliberately omit `bootstrap-js`
-        // from the WASM pipeline. This assertion locks the omission in.
-        assert!(
-            !names.contains(&"bootstrap-js"),
-            "wasm pipeline must not include bootstrap-js (hub-client iframe reinit)"
-        );
-        // Same reasoning for clipboard-js (Phase 2 of bd-1tl09): the
-        // hub-client iframe preview doesn't need a working click
-        // handler, and the AST-level copy scaffold rendered by
-        // CodeBlockRenderTransform still appears visually.
-        assert!(
-            !names.contains(&"clipboard-js"),
-            "wasm pipeline must not include clipboard-js (hub-client iframe reinit)"
-        );
-        // bd-w5ov: math display IS safe under iframe reinit (each load
-        // gets a fresh DOM and the engine typesets once). The hub-client
-        // preview should typeset math live, so `math-js` is included.
-        assert!(
-            names.contains(&"math-js"),
-            "wasm pipeline must include math-js (live math in hub-client preview)"
-        );
     }
 
     #[test]

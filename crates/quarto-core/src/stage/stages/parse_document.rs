@@ -522,7 +522,7 @@ mod tests {
         let stage = ParseDocumentStage::new();
         let content = b"---\ntitle: Converted\n---\n\nHello from echo engine.\n";
 
-        // Build a LoadedSource that looks like it came through EngineClaimsFileStage.
+        // Build a LoadedSource that looks like it came through SourceConversionStage.
         let mut source = LoadedSource::new(PathBuf::from("/project/test.echo"), content.to_vec());
         source.conversion = Some(ConversionProvenance {
             engine: "echo-engine".to_string(),

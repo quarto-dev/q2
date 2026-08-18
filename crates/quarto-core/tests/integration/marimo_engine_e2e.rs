@@ -167,7 +167,7 @@ fn setup_marimo_project() -> TempDir {
 // loads the unmodified engine and calls its live `claimsFile`, which
 // regex-scans the raw file text for ANY `.marimo` fence and, if found,
 // short-circuits ALL per-language `claims:` resolution via
-// `EngineClaimsFileStage`'s whole-file claim (`ctx.claimed_engine_name`,
+// `SourceConversionStage`'s whole-file claim (`ctx.claimed_engine_name`,
 // `engine_execution.rs:225`) — `resolve_engines`'s `claimed` short-circuit
 // then returns an EMPTY `ownership` map (`resolution.rs`'s top-of-function
 // early return), regardless of what the per-language dynamic
@@ -333,7 +333,7 @@ fn body_excerpt(html: &str) -> String {
 //   2. add `claims-files: []` to the same engine entry.
 //
 // Part 1 alone is NOT sufficient and does not redden this test — empirically
-// verified. Root cause: `EngineClaimsFileStage` (engine_execution.rs:225's
+// verified. Root cause: `SourceConversionStage` (engine_execution.rs:225's
 // own comment: `claimed_engine_name` "short-circuits ALL tier evaluation and
 // returns exactly that engine") asks every registered engine
 // `claims_file(file, ext)` for the WHOLE file before any per-language tier
@@ -467,7 +467,7 @@ fn p4cb2_dynamic_path_parity_minimal_render_matches_static() {
 // HISTORY (full trail in `.superpowers/sdd/task-4cB2-report.md` and
 // compat doc §13): first attempt reported NEEDS_CONTEXT. The brief's Risk-1
 // evidence-first procedure found the anticipated vacuity (`ownership={}`
-// via `EngineClaimsFileStage`'s whole-file `claims_file` short-circuit when
+// via `SourceConversionStage`'s whole-file `claims_file` short-circuit when
 // `claims-files:` is absent — SC8's own BLOCKING FINDING #3), AND a second,
 // independent, previously-undiscovered defect even after applying the
 // pre-authorized `claims-files: []` fix: `marimo-engine.ts`'s `execute()`
@@ -821,7 +821,7 @@ fn sc13_e2e_tagged_sql_self_activation_renders() {
 // revert (BLOCKING FINDING #3): without it, the committed fixture's
 // DYNAMIC, content-inspecting `claims_file` (`ts_engine.rs:716-717`) still
 // finds a `.marimo` fence anywhere in the file and whole-file-claims it via
-// `EngineClaimsFileStage`, bypassing the per-language `claims:` map (and
+// `SourceConversionStage`, bypassing the per-language `claims:` map (and
 // the python claim) entirely — vacuous without this line.
 //
 // Re-rendering the SAME `TAGGED_SQL_ONLY_DOC` through this reverted tempdir
@@ -948,7 +948,7 @@ fn sc14_e2e_static_sql_interop_both_execute_via_marimo() {
 // text originally specifies) does NOT actually exercise two-engine
 // coexistence.** Empirically confirmed: the committed fixture declares no
 // `claims-files:` key, so — exactly as SC8's BLOCKING FINDING #3 already
-// documented for the ownership dimension — `EngineClaimsFileStage`'s
+// documented for the ownership dimension — `SourceConversionStage`'s
 // DYNAMIC, content-inspecting `claims_file` finds the `.marimo` fence
 // anywhere in a `{python .marimo}` + `{r}` doc and whole-file-claims the
 // ENTIRE render for marimo (`ctx.claimed_engine_name = Some("marimo")`),

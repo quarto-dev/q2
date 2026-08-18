@@ -45,13 +45,13 @@ mod clipboard_js;
 mod code_highlight;
 mod compile_theme_css;
 mod document_profile;
-mod engine_claims_file;
 mod engine_execution;
 mod include_expansion;
 mod include_resolve;
 mod language_resolve;
 mod link_resolution;
 mod listing_item_info;
+mod source_conversion;
 // Math-mode stage: injects a math-rendering JS engine (MathJax / KaTeX)
 // when the document contains Math elements. Included on both native
 // and WASM pipelines (math display is safe under iframe reinit).
@@ -81,7 +81,6 @@ pub(crate) use clipboard_js::{CLIPBOARD_JS, CODE_COPY_INIT_JS};
 pub use code_highlight::CodeHighlightStage;
 pub use compile_theme_css::{CompileThemeCssStage, theme_fingerprint};
 pub use document_profile::DocumentProfileStage;
-pub use engine_claims_file::EngineClaimsFileStage;
 pub use engine_execution::{ENGINE_CAPTURE_KIND, EngineExecutionStage};
 pub use include_expansion::{IncludeExpansionStage, collect_include_paths, extract_include_path};
 pub use include_resolve::IncludeResolveStage;
@@ -94,5 +93,6 @@ pub use parse_document::ParseDocumentStage;
 pub use pre_engine_sugaring::PreEngineSugaringStage;
 pub use render_html::RenderHtmlBodyStage;
 pub use resource_report::ResourceReportStage;
+pub use source_conversion::SourceConversionStage;
 pub use unwrap_profile::UnwrapProfileStage;
 pub use user_filters::UserFiltersStage;

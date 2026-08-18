@@ -2099,8 +2099,8 @@ async fn pass1_profile_single_file_live(
     use crate::pipeline::run_pipeline;
     use crate::render::{BinaryDependencies, RenderContext};
     use crate::stage::{
-        DocumentProfileStage, EngineClaimsFileStage, IncludeExpansionStage, LinkResolutionStage,
-        MetadataMergeStage, ParseDocumentStage, PipelineStage,
+        DocumentProfileStage, IncludeExpansionStage, LinkResolutionStage, MetadataMergeStage,
+        ParseDocumentStage, PipelineStage, SourceConversionStage,
     };
 
     let source_name = doc_info.input.to_string_lossy().to_string();
@@ -2111,7 +2111,7 @@ async fn pass1_profile_single_file_live(
         // Convert non-QMD files to QMD before parse.  A non-QMD input
         // without conversion would yield a garbage DocumentProfile /
         // ProjectIndex entry in Pass 1 (plan1c §1067-1086).
-        Box::new(EngineClaimsFileStage::new()),
+        Box::new(SourceConversionStage::new()),
         Box::new(ParseDocumentStage::new()),
         Box::new(MetadataMergeStage::new()),
         // Include-expansion threads child content through the
