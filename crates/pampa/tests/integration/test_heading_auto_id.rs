@@ -277,3 +277,135 @@ fn test_auto_id_distinct_quoted_headings_do_not_collide() {
     let ids = heading_ids("## Using a \"raw\" volume\n\n## Using a \"cooked\" volume\n");
     assert_eq!(ids, vec!["using-a-raw-volume", "using-a-cooked-volume"]);
 }
+
+// ============================================================================
+// qmd writer round-trip of deduplicated ids
+// (bd-duplicate-heading-ids-mou5z7ux Phase 0 pin)
+// ============================================================================
+
+#[test]
+fn test_deduped_id_roundtrips_as_explicit_attr() {
+    // A deduplicated auto id (`setup-1`) no longer equals what
+    // `auto_generated_id` would recompute from the heading content
+    // (`setup`), so the qmd writer must emit it as an explicit `{#setup-1}`
+    // — otherwise a re-parse would reassign ids and anchors would drift.
+    // This applies identically to ids assigned by the document-level
+    // scoped-dedup pass, which also leaves `attr_source.id` as `None`.
+    let (ast, _, _) = pampa::readers::qmd::read(
+        b"## Setup\n\nFirst.\n\n## Setup\n\nSecond.\n",
+        false,
+        "test.qmd",
+        &mut std::io::sink(),
+        true,
+        None,
+    )
+    .expect("Failed to parse QMD");
+
+    let mut buf = Vec::new();
+    pampa::writers::qmd::write(&ast, &mut buf).expect("Failed to write QMD");
+    let written = String::from_utf8(buf).expect("utf8");
+
+    assert!(
+        !written.contains("{#setup}"),
+        "the first heading's id matches its recomputed base and must be \
+         suppressed; got:\n{written}"
+    );
+    assert!(
+        written.contains("## Setup {#setup-1}"),
+        "the deduped heading must round-trip with an explicit id; got:\n{written}"
+    );
+}
+
+// ============================================================================
+// dedup_scoped_heading_ids (bd-duplicate-heading-ids-mou5z7ux)
+//
+// Unit tests for the scoped uniqueIdent routine. Include-splicing is
+// simulated by parsing fragments separately (so the reader assigns each a
+// fresh per-parse id, exactly like IncludeExpansionStage's standalone child
+// parses) and concatenating their blocks; the scope predicate then selects
+// the "injected" headers by level, standing in for the stage's file-id
+// provenance test.
+// ============================================================================
+
+fn parse_blocks(input: &str) -> Vec<Block> {
+    let (pandoc, _, _) = pampa::readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.qmd",
+        &mut std::io::sink(),
+        true,
+        None,
+    )
+    .expect("Failed to parse QMD");
+    pandoc.blocks
+}
+
+fn doc_from_blocks(blocks: Vec<Block>) -> pampa::pandoc::Pandoc {
+    pampa::pandoc::Pandoc {
+        meta: Default::default(),
+        blocks,
+    }
+}
+
+fn header_ids_in(doc: &pampa::pandoc::Pandoc) -> Vec<String> {
+    doc.blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Header(h) => Some(h.attr.0.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn test_dedup_scoped_renames_only_in_scope() {
+    // "## H" (main) and "### H" (fragment) parsed separately both get `h`.
+    let mut blocks = parse_blocks("## H\n");
+    blocks.extend(parse_blocks("### H\n"));
+    let doc =
+        pampa::utils::autoid::dedup_scoped_heading_ids(doc_from_blocks(blocks), |h| h.level == 3);
+    assert_eq!(header_ids_in(&doc), vec!["h", "h-1"]);
+}
+
+#[test]
+fn test_dedup_scoped_probe_is_set_membership_not_counter() {
+    // An explicit `{#h-1}` outside the scope forces the probe to skip it.
+    let mut blocks = parse_blocks("## Other {#h-1}\n");
+    blocks.extend(parse_blocks("### H\n"));
+    blocks.extend(parse_blocks("### H\n"));
+    let doc =
+        pampa::utils::autoid::dedup_scoped_heading_ids(doc_from_blocks(blocks), |h| h.level == 3);
+    assert_eq!(header_ids_in(&doc), vec!["h-1", "h", "h-2"]);
+}
+
+#[test]
+fn test_dedup_scoped_explicit_ids_in_scope_untouched() {
+    // Explicit ids are never renamed even when in scope and colliding.
+    let mut blocks = parse_blocks("### Stable {#stable}\n");
+    blocks.extend(parse_blocks("### Stable {#stable}\n"));
+    let doc =
+        pampa::utils::autoid::dedup_scoped_heading_ids(doc_from_blocks(blocks), |h| h.level == 3);
+    assert_eq!(header_ids_in(&doc), vec!["stable", "stable"]);
+}
+
+#[test]
+fn test_dedup_scoped_empty_scope_is_identity() {
+    let mut blocks = parse_blocks("## H\n");
+    blocks.extend(parse_blocks("## H\n"));
+    let doc = pampa::utils::autoid::dedup_scoped_heading_ids(doc_from_blocks(blocks), |_| false);
+    // Both keep the colliding reader-assigned id: nothing is in scope.
+    assert_eq!(header_ids_in(&doc), vec!["h", "h"]);
+}
+
+#[test]
+fn test_dedup_scoped_recompute_ignores_fragment_internal_numbering() {
+    // A fragment with two identical headings parses to `h`, `h-1`
+    // internally. The scoped pass recomputes from content, so after an
+    // out-of-scope `h` is seeded, the fragment's pair probes to `h-1`,
+    // `h-2` — not `h-1`, `h-1-1`.
+    let mut blocks = parse_blocks("## H\n");
+    blocks.extend(parse_blocks("### H\n\n### H\n"));
+    let doc =
+        pampa::utils::autoid::dedup_scoped_heading_ids(doc_from_blocks(blocks), |h| h.level == 3);
+    assert_eq!(header_ids_in(&doc), vec!["h", "h-1", "h-2"]);
+}

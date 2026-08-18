@@ -3,7 +3,11 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::{Inline, Inlines};
+use std::collections::HashSet;
+
+use crate::filter_context::FilterContext;
+use crate::filters::{Filter, FilterReturn::Unchanged, topdown_traverse};
+use crate::pandoc::{Header, Inline, Inlines, Pandoc};
 
 /// Identifier Pandoc falls back to when a heading's text yields nothing.
 ///
@@ -133,4 +137,80 @@ pub fn auto_generated_id(inlines: &Inlines) -> String {
     } else {
         ident.to_string()
     }
+}
+
+/// Re-derive and disambiguate the auto-generated ids of a *subset* of a
+/// document's headers, using Pandoc's `uniqueIdent` probe.
+///
+/// `in_scope` selects which headers are **renameable**; a header is
+/// only ever renamed when it is in scope *and* its id was
+/// auto-generated (`attr_source.id.is_none()` — author-written `{#id}`
+/// attributes are never touched, in or out of scope). The collision
+/// seen-set, by contrast, is **document-wide**: it is seeded with every
+/// non-renameable header id (explicit ids anywhere, plus all ids of
+/// out-of-scope headers), so a renameable header collides with — and
+/// probes past — ids it must coexist with, wherever they live.
+///
+/// The probe matches Pandoc's `uniqueIdent`: recompute the base with
+/// [`auto_generated_id`], take it if free, otherwise the first free
+/// `base-1`, `base-2`, …. Set membership, not a per-base counter — an
+/// explicit `{#base-1}` elsewhere pushes the probe to `base-2`.
+///
+/// Scoping is the caller's policy. `IncludeExpansionStage` passes
+/// "headers spliced in from an included file" so that a fragment
+/// included twice stops emitting the same id twice while everything
+/// outside the includes keeps the ids the reader assigned
+/// (bd-duplicate-heading-ids-mou5z7ux); a future post-engine pass can
+/// re-run the same routine scoped to engine-inserted headers
+/// (bd-4qjl87ax). Because assigned ids join the seen-set and
+/// out-of-scope ids are never rewritten, repeated applications over
+/// disjoint scopes compose: once assigned, an id is stable.
+pub fn dedup_scoped_heading_ids<F>(doc: Pandoc, mut in_scope: F) -> Pandoc
+where
+    F: FnMut(&Header) -> bool,
+{
+    // Lookup-only set (never iterated): probing order is document
+    // order, so the output is deterministic regardless of hash order.
+    let mut seen: HashSet<String> = HashSet::new();
+
+    // Pass 1: seed the seen-set with every id this pass must not
+    // rename — explicit ids anywhere, and all out-of-scope header ids.
+    let doc = {
+        let mut filter = Filter::new().with_header(|header, _ctx| {
+            let renameable = header.attr_source.id.is_none() && in_scope(&header);
+            if !renameable && !header.attr.0.is_empty() {
+                seen.insert(header.attr.0.clone());
+            }
+            Unchanged(header)
+        });
+        topdown_traverse(doc, &mut filter, &mut FilterContext::new())
+    };
+
+    // Pass 2: walk renameable headers in document order, probing each
+    // recomputed base against the set. Mutating and returning
+    // `Unchanged` (the postprocess `with_cite` precedent) keeps normal
+    // recursion into the header's content without re-applying the
+    // filter to the header itself — a `FilterResult(_, true)` re-visit
+    // would find its own id in the set and rename it again.
+    let mut filter = Filter::new().with_header(|mut header, _ctx| {
+        if header.attr_source.id.is_none() && in_scope(&header) {
+            let base = auto_generated_id(&header.content);
+            let unique = if seen.contains(&base) {
+                let mut n = 1usize;
+                loop {
+                    let candidate = format!("{base}-{n}");
+                    if !seen.contains(&candidate) {
+                        break candidate;
+                    }
+                    n += 1;
+                }
+            } else {
+                base
+            };
+            seen.insert(unique.clone());
+            header.attr.0 = unique;
+        }
+        Unchanged(header)
+    });
+    topdown_traverse(doc, &mut filter, &mut FilterContext::new())
 }
