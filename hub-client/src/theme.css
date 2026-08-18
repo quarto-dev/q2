@@ -165,7 +165,6 @@
   --page-bg: #ffffff;
   --page-text: #213547;
   --link-hover: var(--posit-blue-dark-1);
-  --button-bg: #f9f9f9;
 }
 
 /* Dark Theme */
@@ -309,8 +308,7 @@
   /* Page-level */
   --page-bg: #242424;
   --page-text: black;
-  --link-hover: var(--posit-blue-light-3);
-  --button-bg: #1a1a1a;
+  --link-hover: var(--posit-blue-light-2);
 }
 
 /* Full-page surfaces (projects home, editor) use a darker, desaturated slate

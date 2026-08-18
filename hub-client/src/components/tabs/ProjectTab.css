@@ -16,13 +16,13 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #888;
+  color: var(--editor-text-muted);
 }
 
 .project-name {
   font-size: 14px;
   font-weight: 500;
-  color: #fff;
+  color: var(--editor-text);
 }
 
 .doc-id-button {
@@ -31,8 +31,8 @@
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  background: #0f3460;
-  border: 1px solid #1f4460;
+  background: var(--editor-accent-bg);
+  border: 1px solid var(--editor-accent-border);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s;
@@ -40,49 +40,50 @@
 }
 
 .doc-id-button:hover {
-  background: #1f4460;
-  border-color: #2f5470;
+  background: var(--input-bg-alpha-hover);
+  border-color: var(--border-focus);
 }
 
 .doc-id-value {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   font-size: 12px;
-  color: #ddd;
+  color: var(--editor-text-dim);
 }
 
 .copy-indicator {
   font-size: 11px;
-  color: #888;
+  color: var(--editor-text-muted);
   padding: 2px 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--input-bg-alpha);
   border-radius: 3px;
 }
 
 .doc-id-button:hover .copy-indicator {
-  background: rgba(255, 255, 255, 0.15);
-  color: #bbb;
+  background: var(--input-bg-alpha-hover);
+  color: var(--editor-text-dim);
 }
 
 .sync-server {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   font-size: 12px;
-  color: #aaa;
+  color: var(--editor-text-muted);
   word-break: break-all;
 }
 
 .project-tab-actions {
   margin-top: 8px;
   padding-top: 16px;
-  border-top: 1px solid #1f3460;
+  border-top: 1px solid var(--border-color);
 }
 
+/* Ghost-accent action, matching .ph-btn.ghost-accent in ui.css. */
 .export-zip-btn {
   width: 100%;
   padding: 10px 16px;
-  background: #1a1a2e;
-  border: 1px solid #646cff;
+  background: none;
+  border: 1px solid var(--posit-teal);
   border-radius: 6px;
-  color: #646cff;
+  color: var(--posit-teal);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
@@ -90,8 +91,7 @@
 }
 
 .export-zip-btn:hover {
-  background: #646cff;
-  color: #fff;
+  background: rgba(65, 149, 153, 0.08);
 }
 
 .export-zip-btn:disabled {
@@ -101,7 +101,7 @@
 
 .export-error {
   font-size: 12px;
-  color: #ff6b6b;
+  color: var(--editor-error);
   padding: 4px 0;
   margin-bottom: 4px;
 }
@@ -110,15 +110,15 @@
   width: 100%;
   padding: 10px 16px;
   background: none;
-  border: 1px solid #333;
+  border: 1px solid var(--border-color);
   border-radius: 6px;
-  color: #888;
+  color: var(--editor-text-muted);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .choose-project-btn:hover {
-  border-color: #646cff;
-  color: #646cff;
+  border-color: var(--posit-teal);
+  color: var(--posit-teal);
 }

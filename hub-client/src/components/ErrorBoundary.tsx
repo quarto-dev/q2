@@ -69,8 +69,8 @@ function DefaultFallback({ error, onReset }: { error: Error; onReset: () => void
       <h3 style={{ margin: '0 0 8px 0' }}>Something went wrong</h3>
       <p style={{ margin: '0 0 12px 0' }}>{error.message}</p>
       <div style={{ display: 'flex', gap: '8px' }}>
-        <button onClick={onReset}>Try again</button>
-        <button onClick={() => window.location.reload()}>Reload</button>
+        <button className="ph-btn outline" onClick={onReset}>Try again</button>
+        <button className="ph-btn outline" onClick={() => window.location.reload()}>Reload</button>
       </div>
     </div>
   );

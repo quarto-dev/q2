@@ -514,7 +514,7 @@ export default function FileSidebar({
       <div className="sidebar-header">
         {canOpenPrintable && (
           <button
-            className="print-file-btn"
+            className="ph-btn small outline print-file-btn"
             onClick={handleOpenPrintable}
             disabled={isPreparingPrintable}
             title="Open a printable version of this document in a new tab (use your browser's Print to save as PDF)"
@@ -523,11 +523,11 @@ export default function FileSidebar({
             {isPreparingPrintable ? '…' : '🖨 Print'}
           </button>
         )}
-        <button className="new-file-btn" onClick={onNewFile} title="New file">
+        <button className="ph-btn small outline new-file-btn" onClick={onNewFile} title="New file">
           + New
         </button>
         <button
-          className="upload-asset-btn"
+          className="ph-btn small outline upload-asset-btn"
           onClick={handleUploadClick}
           title="Upload asset"
         >

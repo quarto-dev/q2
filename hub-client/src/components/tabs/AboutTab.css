@@ -16,12 +16,12 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #888;
+  color: var(--editor-text-muted);
 }
 
 .about-description {
   font-size: 13px;
-  color: #aaa;
+  color: var(--editor-text-dim);
   margin: 0;
   line-height: 1.5;
 }
@@ -40,13 +40,13 @@
 }
 
 .about-links a {
-  color: #646cff;
+  color: var(--accent-secondary);
   text-decoration: none;
   transition: color 0.15s;
 }
 
 .about-links a:hover {
-  color: #8b8fff;
+  color: var(--link-hover);
   text-decoration: underline;
 }
 
@@ -54,7 +54,7 @@
   background: none;
   border: none;
   padding: 0;
-  color: #646cff;
+  color: var(--accent-secondary);
   font-size: 13px;
   cursor: pointer;
   text-align: left;
@@ -62,17 +62,17 @@
 }
 
 .changelog-link-btn:hover:not(:disabled) {
-  color: #8b8fff;
+  color: var(--link-hover);
   text-decoration: underline;
 }
 
 .changelog-link-btn:disabled {
-  color: #666;
+  color: var(--editor-text-muted);
   cursor: not-allowed;
 }
 
 .changelog-error-hint {
-  color: #f87171;
+  color: var(--editor-error);
   font-size: 12px;
 }
 
@@ -87,13 +87,13 @@
 
 .commit-label {
   font-size: 13px;
-  color: #888;
+  color: var(--editor-text-muted);
 }
 
 .commit-hash {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   font-size: 13px;
-  color: #646cff;
+  color: var(--accent-secondary);
   cursor: help;
 }
 
@@ -104,7 +104,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(23, 50, 77, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -112,14 +112,14 @@
 }
 
 .changelog-modal {
-  background: #fff;
+  background: var(--bg-modal);
   border-radius: 8px;
   width: 90%;
   max-width: 700px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--modal-shadow);
 }
 
 .changelog-modal-header {
@@ -127,21 +127,21 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .changelog-modal-header h3 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .changelog-modal-close {
   background: none;
   border: none;
   font-size: 24px;
-  color: #666;
+  color: var(--editor-text-muted);
   cursor: pointer;
   padding: 0;
   width: 32px;
@@ -154,8 +154,8 @@
 }
 
 .changelog-modal-close:hover {
-  background: #f0f0f0;
-  color: #333;
+  background: var(--input-bg-alpha);
+  color: var(--editor-text);
 }
 
 .changelog-modal-content {
@@ -172,6 +172,6 @@
 
 .changelog-modal-content .changelog-loading {
   padding: 24px;
-  color: #666;
+  color: var(--editor-text-muted);
   text-align: center;
 }

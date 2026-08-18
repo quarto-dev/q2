@@ -16,7 +16,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #888;
+  color: var(--editor-text-muted);
 }
 
 .setting-toggle {
@@ -25,14 +25,14 @@
   flex-direction: column;
   gap: 4px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-subtle);
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .setting-toggle:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--input-bg-alpha);
 }
 
 .setting-toggle input[type="checkbox"] {
@@ -44,7 +44,7 @@
 .setting-name {
   font-size: 14px;
   font-weight: 500;
-  color: #ddd;
+  color: var(--editor-text);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -55,15 +55,15 @@
   display: inline-block;
   width: 18px;
   height: 18px;
-  border: 2px solid #444;
+  border: 2px solid var(--border-color);
   border-radius: 4px;
-  background: #1a1a2e;
+  background: var(--bg-input);
   transition: all 0.15s;
 }
 
 .setting-toggle input[type="checkbox"]:checked + .setting-name::before {
-  background: #4ade80;
-  border-color: #4ade80;
+  background: var(--posit-teal);
+  border-color: var(--posit-teal);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/%3E%3C/svg%3E");
   background-size: 14px;
   background-position: center;
@@ -72,6 +72,6 @@
 
 .setting-description {
   font-size: 12px;
-  color: #666;
+  color: var(--editor-text-muted);
   padding-left: 26px;
 }
