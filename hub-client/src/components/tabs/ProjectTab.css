@@ -45,7 +45,7 @@
 }
 
 .doc-id-value {
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   color: var(--editor-text-dim);
 }
@@ -64,7 +64,7 @@
 }
 
 .sync-server {
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   color: var(--editor-text-muted);
   word-break: break-all;
