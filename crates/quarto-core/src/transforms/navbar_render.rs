@@ -35,7 +35,7 @@ use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::is_feature_disabled;
 use crate::transforms::navigation_href::{
-    NavSurface, resolve_href_for_html, resolve_root_relative_resource_href, rewrite_config_inlines,
+    NavSurface, resolve_href_for_html, resolve_root_relative_resource_href,
 };
 
 pub struct NavbarRenderTransform;
@@ -121,13 +121,11 @@ impl AstTransform for NavbarRenderTransform {
             *logo = resolve_root_relative_resource_href(logo, ctx.resource_resolver.as_ref());
         }
         // Navbar title markdown (Case C): Link/Image targets inside
-        // the title's parsed inlines resolve like footer text regions.
-        if let NavbarTitle::Text(cv) = &mut navbar.title
-            && let quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines) =
-                &mut cv.value
-        {
-            rewrite_config_inlines(
-                inlines.as_mut_slice(),
+        // the title's parsed markdown resolve like footer text
+        // regions (inlines and `!md` blocks alike).
+        if let NavbarTitle::Text(cv) = &mut navbar.title {
+            crate::transforms::navigation_href::rewrite_config_text(
+                cv,
                 ctx.resource_resolver.as_ref(),
                 ctx.project_index.as_deref(),
                 &NavSurface::Navbar,

@@ -115,12 +115,23 @@ tests written and verified first.
   `repro/` deep page's item-level targets now match the region control
   (`../../images/logo.svg`, `../../index.html`); only the raw-HTML
   `{=html}` variant remains untouched (fc5pvkcv Case B, out of scope).
-- [ ] **Phase 3 — Blocks walker.** `rewrite_config_blocks` companion in
-  `navigation_href.rs` that walks block containers (including *into*
-  `Figure` — persisting the node, rewriting targets inside it, decision 3)
-  and delegates to `rewrite_config_inlines` at inline positions. Wire into
-  the `PandocBlocks` arms of the Text-region and item-text call sites.
-  Tests: multi-paragraph `!md` region/item text with image + link.
+- [x] **Phase 3 — Blocks walker.** *Done 2026-08-18.*
+  `rewrite_config_blocks` in `navigation_href.rs` (container coverage
+  mirrors `ResourceCollectorTransform`'s visitor; Figures persist —
+  targets inside content and caption rewrite, no unwrap). Wired via
+  `rewrite_config_text`'s `PandocBlocks` arm, which now also serves the
+  footer Text-region and navbar-title call sites (refactored off their
+  inlines-only matches). Two additional gaps found and fixed along the way:
+  (a) `FooterRegion::from_config_value` classified a `PandocBlocks` region
+  as `Empty` (because `as_plain_text` is `None` for blocks), silently
+  dropping the whole region — now classifies as `Text`; (b) `render_text`
+  dropped persisted `Figure`s — `push_blocks_text` now renders a figure's
+  image content (caption stays out of the one-line region). Failing-first
+  tests at the walker, classifier, and renderer levels plus a blocks-shaped
+  footer transform test; workspace green (12323). End-to-end fixture
+  `repro-md-blocks/`: an `!md` two-block center region renders
+  `<img src="../../images/logo.svg">` and `<a href="../../index.html">`
+  on the deep page.
 - [ ] **Phase 4 — Uniform Q-5-6 for footer images (decision 4).**
   Extend `copy_footer_images` to walk `Items` regions (item `text:` +
   `bare_text`, recursing into `menu`) and `PandocBlocks` values using the

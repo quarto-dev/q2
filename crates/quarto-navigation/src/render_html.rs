@@ -896,17 +896,30 @@ fn render_text(cv: &ConfigValue) -> String {
             // Footers written as `!md "multi-paragraph"` arrive as blocks.
             // For our single-line regions, concatenate block text as HTML.
             let mut out = String::new();
-            for block in blocks {
-                if let Some(inlines) = block_inlines(block) {
-                    out.push_str(&inlines_to_html(inlines));
-                }
-            }
+            push_blocks_text(&mut out, blocks);
             out
         }
         _ => cv
             .as_plain_text()
             .map(|s| escape_html(&s))
             .unwrap_or_default(),
+    }
+}
+
+/// Concatenate the inline HTML of a block sequence for single-line
+/// nav regions. Inline-bearing blocks contribute their inlines; a
+/// `Figure` contributes its *content* — the image — and drops the
+/// caption, because a figcaption has no place in a one-line footer
+/// (bd-page-footer-image-items-stmpikgo, Phase 3; an `!md` lone image
+/// parses to a persisted Figure). Other block shapes are skipped.
+fn push_blocks_text(out: &mut String, blocks: &[quarto_pandoc_types::block::Block]) {
+    use quarto_pandoc_types::block::Block;
+    for block in blocks {
+        if let Block::Figure(figure) = block {
+            push_blocks_text(out, &figure.content);
+        } else if let Some(inlines) = block_inlines(block) {
+            out.push_str(&inlines_to_html(inlines));
+        }
     }
 }
 
@@ -1153,6 +1166,55 @@ mod tests {
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
         })
+    }
+
+    /// `render_text` on `PandocBlocks` renders a `Figure`'s image
+    /// (bd-page-footer-image-items-stmpikgo, Phase 3): an `!md` lone
+    /// image parses to a persisted Figure, and nav regions are
+    /// single-line inline contexts, so the figure contributes its
+    /// image — the caption stays out of the footer.
+    #[test]
+    fn render_text_blocks_renders_figure_image() {
+        use quarto_pandoc_types::Caption;
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::block::{Block, Figure, Plain};
+        use quarto_pandoc_types::config_value::ConfigValueKind;
+        use quarto_pandoc_types::inline::Image;
+
+        let image = Inline::Image(Image {
+            attr: Default::default(),
+            content: vec![str_inline("cap")],
+            target: ("images/logo.svg".to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+        let cv = ConfigValue {
+            value: ConfigValueKind::PandocBlocks(vec![Block::Figure(Figure {
+                attr: Default::default(),
+                caption: Caption {
+                    short: None,
+                    long: Some(vec![Block::Plain(Plain {
+                        content: vec![str_inline("cap")],
+                        source_info: SourceInfo::for_test(),
+                    })]),
+                    source_info: SourceInfo::for_test(),
+                },
+                content: vec![Block::Plain(Plain {
+                    content: vec![image],
+                    source_info: SourceInfo::for_test(),
+                })],
+                source_info: SourceInfo::for_test(),
+                attr_source: AttrSourceInfo::empty(),
+            })]),
+            source_info: SourceInfo::for_test(),
+            merge_op: Default::default(),
+        };
+        let html = render_text(&cv);
+        assert_eq!(
+            html, "<img src=\"images/logo.svg\" alt=\"cap\">",
+            "exactly the figure's image — no figcaption text, no wrapper"
+        );
     }
 
     #[test]
