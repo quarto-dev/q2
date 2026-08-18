@@ -67,6 +67,15 @@ static TEMPLATES_DIR: Dir<'static> =
 static REVEALJS_DIR: Dir<'static> =
     include_dir!("$CARGO_MANIFEST_DIR/../../resources/scss/revealjs");
 
+/// Pandoc/skylighting highlight-style `.theme` JSON files embedded at
+/// compile time (Quarto 1's palette catalog, vendored — see
+/// `resources/pandoc/highlight-styles/README.md` for provenance).
+/// Translated into SCSS layers at render time by
+/// [`crate::highlight_theme`]; never resolved by the SASS compiler
+/// itself, so this directory stays out of [`all_resources`].
+static HIGHLIGHT_STYLES_DIR: Dir<'static> =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/pandoc/highlight-styles");
+
 /// Virtual path prefix for embedded resources.
 ///
 /// Files embedded via `EmbeddedResources` are accessible under this prefix.
@@ -302,6 +311,12 @@ pub static TEMPLATES_RESOURCES: EmbeddedResources =
 /// `bundle::load_reveal_framework` / `bundle::load_quarto_reveal_layer`.
 pub static REVEALJS_RESOURCES: EmbeddedResources =
     EmbeddedResources::new(&REVEALJS_DIR, "revealjs");
+
+/// Vendored Quarto 1 highlight-style `.theme` JSON files (the palette
+/// catalog). Read directly by [`crate::highlight_theme`]'s runtime
+/// translator; not part of the SASS compiler's virtual filesystem.
+pub static HIGHLIGHT_STYLES_RESOURCES: EmbeddedResources =
+    EmbeddedResources::new(&HIGHLIGHT_STYLES_DIR, "pandoc/highlight-styles");
 
 /// Get the default load paths for SASS compilation.
 ///

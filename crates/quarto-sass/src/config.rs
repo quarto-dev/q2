@@ -825,11 +825,21 @@ fn brand_err(e: quarto_brand::BrandError) -> SassError {
 }
 
 /// Adaptive highlight styles: bare names that resolve to a
-/// variant-specific palette (Q1 ships `<name>-light.theme` /
-/// `<name>-dark.theme` pairs for these). Stage-1 curated set
-/// (bd-0pic6 phase B); the general `.theme`-translator follow-up
-/// grows this list.
-const ADAPTIVE_HIGHLIGHT_STYLES: &[&str] = &["a11y"];
+/// variant-specific palette. Matches Quarto 1's `isAdaptiveTheme`
+/// list (`src/quarto-core/text-highlighting.ts`); each name has a
+/// vendored `<name>-light.theme` / `<name>-dark.theme` pair in
+/// `resources/pandoc/highlight-styles/` (see that directory's README
+/// for the keep-in-sync rule).
+pub(crate) const ADAPTIVE_HIGHLIGHT_STYLES: &[&str] = &[
+    "a11y",
+    "arrow",
+    "atom-one",
+    "ayu",
+    "breeze",
+    "github",
+    "gruvbox",
+    "monochrome",
+];
 
 /// Resolve an adaptive highlight-style name for a variant's darkness;
 /// non-adaptive names pass through unchanged (unknown ones fall back
@@ -2096,6 +2106,37 @@ mod tests {
                 .as_ref()
                 .map(|h| h.name.as_str()),
             Some("othername")
+        );
+    }
+
+    #[test]
+    fn test_highlight_style_map_form_github_arrow_pair() {
+        // The Quarto 1 catalog's ordinary pairing (e.g. the Posit
+        // Connect docs): both slots name adaptive palettes, each
+        // resolving to its slot's variant file.
+        let theme = map_value(vec![
+            map_entry("light", scalar_value("cosmo")),
+            map_entry("dark", scalar_value("darkly")),
+        ]);
+        let highlight = map_value(vec![
+            map_entry("light", scalar_value("github")),
+            map_entry("dark", scalar_value("arrow")),
+        ]);
+        let cfg =
+            ThemeConfig::from_config_value(&config_with_theme_and_highlight(theme, highlight))
+                .unwrap();
+        assert_eq!(
+            cfg.highlight_style.as_ref().map(|h| h.name.as_str()),
+            Some("github-light")
+        );
+        assert_eq!(
+            cfg.dark
+                .as_ref()
+                .unwrap()
+                .highlight_style
+                .as_ref()
+                .map(|h| h.name.as_str()),
+            Some("arrow-dark")
         );
     }
 

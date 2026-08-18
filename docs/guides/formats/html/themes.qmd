@@ -110,8 +110,9 @@ only in the matching scheme:
 ### Syntax highlighting
 
 The `highlight-style:` option selects the code-highlighting palette.
-The adaptive `a11y` style pairs naturally with a light/dark theme —
-each variant gets the matching palette:
+Quarto ships the full Quarto 1 palette catalog. An *adaptive* style
+pairs naturally with a light/dark theme — each variant gets the
+matching palette:
 
 ``` yaml
 format:
@@ -126,14 +127,31 @@ You can also select palettes explicitly, per variant:
 
 ``` yaml
 highlight-style:
-  light: a11y
-  dark: a11y
+  light: github
+  dark: arrow
 ```
 
-Currently available palettes: `default`, `a11y` (adaptive),
-`a11y-light`, and `a11y-dark`. With a single dark theme (e.g.
-`theme: darkly`), adaptive styles resolve to their dark variant
-automatically.
+The adaptive styles are `a11y`, `arrow`, `atom-one`, `ayu`, `breeze`,
+`github`, `gruvbox`, and `monochrome`; each resolves to its light or
+dark variant per theme (with a single dark theme such as
+`theme: darkly`, the dark variant is chosen automatically), and the
+explicit forms (`github-light`, `arrow-dark`, …) are also accepted.
+The single-variant palettes are `ayu-mirage`, `breezedark`,
+`dracula`, `espresso`, `haddock`, `kate`, `monokai`, `nord`,
+`oblivion`, `printing`, `pygments`, `radical`, `solarized`, `tango`,
+`vim-dark`, and `zenburn`, plus Quarto's own `default` and `none`
+(no highlight colors at all).
+
+A palette also sets the code block's background and text colors to
+its designed canvas. To override those while keeping the token
+colors, set the `code-block-bg` / `code-block-color` options:
+
+``` yaml
+highlight-style: github
+code-block-bg: "#f6f8fa"
+```
+
+(`code-block-bg: false` removes the background entirely.)
 
 ### Light and dark brands
 

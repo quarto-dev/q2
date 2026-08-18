@@ -86,6 +86,32 @@ pub fn derive_doc_scss_layer(meta: &ConfigValue) -> SassLayer {
         }
     }
 
+    // Q1's `code-block-bg` / `code-block-color` metadata keys
+    // (`pandocVariablesToThemeDefaults`). Emitted unconditionally
+    // (no `!default`): doc vars land at the top of the merged
+    // defaults band, so this is what lets one YAML line beat a
+    // highlight palette's `$code-block-bg: … !default` under the
+    // palette-wins policy (bd-hl-theme-translator-2mdgh4k6).
+    // `code-block-bg` also accepts booleans (`false` disables the
+    // background, `true` restores the theme-derived default).
+    for (key, var, allow_bool) in [
+        ("code-block-bg", "code-block-bg", true),
+        ("code-block-color", "code-block-color", false),
+    ] {
+        let Some(value) = meta.get(key) else {
+            continue;
+        };
+        if allow_bool && let Some(b) = value.as_bool() {
+            defaults.push_str(&format!("${var}: {b};\n"));
+            continue;
+        }
+        if let Some(text) = value.as_plain_text()
+            && quarto_sass::highlight_theme::is_safe_css_value(&text)
+        {
+            defaults.push_str(&format!("${var}: {text};\n"));
+        }
+    }
+
     SassLayer {
         defaults,
         ..Default::default()
@@ -424,8 +450,10 @@ impl PipelineStage for CompileThemeCssStage {
                     style.name
                 ))
                 .add_hint(format!(
-                    "Available palettes: {}.",
-                    quarto_sass::KNOWN_HIGHLIGHT_PALETTES.join(", ")
+                    "Available palettes: {}. Adaptive names resolve per theme \
+                     variant; explicit `<name>-light` / `<name>-dark` forms \
+                     are also accepted.",
+                    quarto_sass::known_highlight_palettes().join(", ")
                 ));
                 if let Some(loc) = &style.location {
                     builder = builder.with_location(loc.clone());
@@ -2248,6 +2276,89 @@ mod tests {
         assert!(
             layer.is_empty(),
             "empty metadata should produce an empty SassLayer"
+        );
+    }
+
+    /// Build metadata with a top-level scalar entry.
+    fn meta_with_scalar(key: &str, value: Yaml) -> ConfigValue {
+        let mut meta = empty_meta();
+        meta.insert_path(
+            &[key],
+            ConfigValue {
+                value: ConfigValueKind::Scalar(value),
+                source_info: SourceInfo::for_test(),
+                merge_op: quarto_pandoc_types::MergeOp::Concat,
+            },
+        );
+        meta
+    }
+
+    #[test]
+    fn doc_scss_layer_code_block_bg_and_color_strings() {
+        // Q1 parity: `code-block-bg` / `code-block-color` document
+        // metadata land as unconditional assignments at the top of the
+        // defaults band, beating any highlight palette's `!default`
+        // (the one-line escape hatch from the palette-wins policy —
+        // bd-hl-theme-translator-2mdgh4k6).
+        let mut meta = meta_with_scalar("code-block-bg", Yaml::String("#f5f5f6".to_string()));
+        meta.insert_path(
+            &["code-block-color"],
+            ConfigValue {
+                value: ConfigValueKind::Scalar(Yaml::String("#333334".to_string())),
+                source_info: SourceInfo::for_test(),
+                merge_op: quarto_pandoc_types::MergeOp::Concat,
+            },
+        );
+        let layer = derive_doc_scss_layer(&meta);
+        assert!(
+            layer.defaults.contains("$code-block-bg: #f5f5f6;"),
+            "got: {:?}",
+            layer.defaults
+        );
+        assert!(
+            layer.defaults.contains("$code-block-color: #333334;"),
+            "got: {:?}",
+            layer.defaults
+        );
+        assert!(
+            !layer.defaults.contains("!default"),
+            "doc-vars assignments must be unconditional, got: {:?}",
+            layer.defaults
+        );
+    }
+
+    #[test]
+    fn doc_scss_layer_code_block_bg_boolean() {
+        // `code-block-bg: false` disables the background;
+        // `code-block-bg: true` restores the theme-derived default.
+        // Both flow through as SCSS booleans (the `@if $code-block-bg`
+        // / `type_of == color` branches in _bootstrap-rules.scss).
+        let layer = derive_doc_scss_layer(&meta_with_scalar("code-block-bg", Yaml::Boolean(false)));
+        assert!(
+            layer.defaults.contains("$code-block-bg: false;"),
+            "got: {:?}",
+            layer.defaults
+        );
+        let layer = derive_doc_scss_layer(&meta_with_scalar("code-block-bg", Yaml::Boolean(true)));
+        assert!(
+            layer.defaults.contains("$code-block-bg: true;"),
+            "got: {:?}",
+            layer.defaults
+        );
+    }
+
+    #[test]
+    fn doc_scss_layer_code_block_bg_unsafe_value_skipped() {
+        // A value that could smuggle SCSS syntax is dropped rather
+        // than spliced into the stylesheet.
+        let layer = derive_doc_scss_layer(&meta_with_scalar(
+            "code-block-bg",
+            Yaml::String("#fff; } body { display: none".to_string()),
+        ));
+        assert!(
+            !layer.defaults.contains("code-block-bg"),
+            "unsafe value must be skipped, got: {:?}",
+            layer.defaults
         );
     }
 

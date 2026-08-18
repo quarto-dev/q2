@@ -1,0 +1,39 @@
+---
+title: Adaptive highlight pair (github / arrow)
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+highlight-style:
+  light: github
+  dark: arrow
+_quarto:
+  tests:
+    html:
+      # The whole point: both palette names are Q1 built-ins that the
+      # .theme translator now ships, so the render is warning-free
+      # (regression guard for the Q-14-5 fallback both names used to
+      # trigger — bd-hl-theme-translator-2mdgh4k6).
+      noErrorsOrWarnings: true
+      ensureFileRegexMatches:
+        - [!str 'hl-keyword">def</span>']
+      ensureCssRegexMatches:
+        # github-light keyword red in the light stylesheet and
+        # arrow-dark keyword salmon in the dark one (both stylesheets
+        # are linked, so the combined CSS carries both), plus
+        # github-light's translated code-block canvas.
+        - ["\\.hl-keyword", "#d73a49", "#ffa07a"]
+        # Neither variant may fall back to the default palette's
+        # solarized keyword green.
+        - ["#859900"]
+---
+
+The ordinary Quarto 1 adaptive pairing: `light: github` resolves to the
+`github-light` palette, `dark: arrow` to `arrow-dark`, each translated
+from its vendored `.theme` file onto the `hl-*` class vocabulary.
+
+```python
+def hello():
+    print("Hello, World!")
+```
