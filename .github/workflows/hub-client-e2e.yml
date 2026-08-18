@@ -158,11 +158,15 @@ jobs:
       - name: Pre-build hub binary
         run: cargo build --bin hub
 
-      # Install Playwright browsers
+      # Install Playwright browsers. Webkit is needed for the q2#128
+      # Safari regression specs (the webkit project in
+      # playwright.config.ts); the browser install adds ~1-2 min to CI
+      # even though test time stays flat (the project is testMatch-scoped).
       - name: Install Playwright
         run: |
           cd hub-client
           npx playwright install --with-deps chromium
+          npx playwright install --with-deps webkit
 
       # Delete all snapshots if recreating from scratch
       - name: Delete all snapshots (recreate mode)

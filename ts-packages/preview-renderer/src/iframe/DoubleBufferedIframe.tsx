@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useImperativeHandle } from 'react';
 import type { Ref } from 'react';
 import { postProcessIframe } from '../utils/iframePostProcessor';
+import { injectPreviewCsp } from '../utils/previewCsp';
 
 // Methods exposed via ref
 export interface DoubleBufferedIframeHandle {
@@ -173,10 +174,17 @@ function DoubleBufferedIframe({
 
   // When new HTML arrives, load it into the inactive iframe and mark swap as pending
   useEffect(() => {
+    // quarto-dev/q2#128: the sandbox below carries `allow-scripts` (see
+    // MorphIframe.tsx for the WebKit bug 218086 rationale), so every
+    // srcDoc payload goes through `injectPreviewCsp` — the injected CSP
+    // meta (`script-src 'none'`) is the only script mitigation in these
+    // iframes. The timestamp comment is appended AFTER injection so the
+    // meta stays the first element in document order.
+    //
     // Add unique timestamp to ensure srcDoc always changes, forcing onLoad to fire
     // Without this, if HTML is identical to what's already there, React won't update
     // the DOM and onLoad won't fire, breaking the swap mechanism
-    const uniqueHtml = html + `<!-- render-${Date.now()} -->`;
+    const uniqueHtml = injectPreviewCsp(html) + `<!-- render-${Date.now()} -->`;
 
     if (activeIframe === 'A') {
       setIframeBHtml(uniqueHtml);
@@ -344,7 +352,7 @@ function DoubleBufferedIframe({
         ref={iframeARef}
         srcDoc={iframeAHtml}
         title={`A`}
-        sandbox={'allow-same-origin allow-popups'}
+        sandbox={'allow-same-origin allow-scripts allow-popups'}
         onLoad={activeIframe === 'A' ? handleActiveLoad : handleInactiveLoad}
         className={activeIframe === 'A' ? 'preview-active' : 'preview-hidden'}
       />
@@ -352,7 +360,7 @@ function DoubleBufferedIframe({
         ref={iframeBRef}
         srcDoc={iframeBHtml}
         title={`B`}
-        sandbox={'allow-same-origin allow-popups'}
+        sandbox={'allow-same-origin allow-scripts allow-popups'}
         onLoad={activeIframe === 'B' ? handleActiveLoad : handleInactiveLoad}
         className={activeIframe === 'B' ? 'preview-active' : 'preview-hidden'}
       />

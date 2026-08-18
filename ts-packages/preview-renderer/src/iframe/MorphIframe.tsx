@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback, useImperativeHandle, useState } from 'r
 import type { Ref } from 'react';
 import morphdom from 'morphdom';
 import { postProcessIframe } from '../utils/iframePostProcessor';
+import { injectPreviewCsp } from '../utils/previewCsp';
 import {
   parseDataLoc,
   scrollIframeToLine,
@@ -232,6 +233,20 @@ function MorphIframe({
     const iframe = iframeRef.current;
     if (!iframe) return;
 
+    // quarto-dev/q2#128: the sandbox on this iframe carries
+    // `allow-scripts` so that WebKit runs the parent-attached event
+    // listeners installed by postProcessIframe and the listener effect
+    // below — WebKit bug 218086 blocks them on sandboxed frames lacking
+    // `allow-scripts`, which broke link interception / scroll sync /
+    // selection sync in Safari. Since `allow-scripts` +
+    // `allow-same-origin` is the classic sandbox-escape combination,
+    // EVERY payload — the initial `srcdoc` assignment and each morphdom
+    // update — goes through `injectPreviewCsp`, so the injected CSP meta
+    // (`script-src 'none'`) stays present in <head> for the document's
+    // whole lifetime. Post-fix that meta is the only script mitigation
+    // in the iframe; never set a payload here that bypassed injection.
+    const cspHtml = injectPreviewCsp(html);
+
     // Check if this is the first time we're setting content
     // An uninitialized iframe document will have an empty body
     const isFirstLoad = !isInitializedRef.current;
@@ -266,7 +281,7 @@ function MorphIframe({
         setDocumentReady(true);
       };
       iframe.addEventListener('load', handleLoad, { once: true });
-      iframe.srcdoc = html;
+      iframe.srcdoc = cspHtml;
 
       // If the effect re-runs with a new `html` before the previous
       // load event fires, the cleanup below removes the stale listener
@@ -289,7 +304,7 @@ function MorphIframe({
 
     // Create a temporary container with the new HTML
     const tempContainer = doc.createElement('html');
-    tempContainer.innerHTML = html;
+    tempContainer.innerHTML = cspHtml;
 
     // Morph the document's documentElement — updates both <head> and
     // <body> efficiently in place.
@@ -483,7 +498,11 @@ function MorphIframe({
     <iframe
       ref={iframeRef}
       title="Preview"
-      sandbox={'allow-same-origin allow-popups'}
+      // `allow-scripts` is required for WebKit to run our
+      // parent-attached listeners (bug 218086); the injected CSP meta
+      // (see the content effect above) is what keeps scripts inside the
+      // preview document from executing.
+      sandbox={'allow-same-origin allow-scripts allow-popups'}
       className="preview-active"
     />
   );

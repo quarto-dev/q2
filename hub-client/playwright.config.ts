@@ -70,10 +70,19 @@ export default defineConfig({
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },
     // },
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+      // Scoped to the Safari regression specs (quarto-dev/q2#128,
+      // bd-sxx1az83) so the added test time stays minimal. The
+      // script-blocking spec runs here AND under chromium: jsdom enforces
+      // neither the sandbox nor CSP, so the no-scripts guarantee can only
+      // be pinned in real browsers.
+      testMatch: [
+        '**/preview-link-navigation.spec.ts',
+        '**/preview-script-blocking.spec.ts',
+      ],
+    },
   ],
 
   // Serve the prebuilt hub-client bundle via `vite preview` rather than

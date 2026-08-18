@@ -9,6 +9,8 @@
  *   switch the active editor file (bd-lnd3).
  */
 
+/// <reference types="vite/client" />
+
 import { vfsReadFile, vfsReadBinaryFile } from '@quarto/preview-runtime';
 import { resolveRelativePath, guessMimeType } from './vfsPaths';
 
@@ -160,6 +162,27 @@ export function postProcessIframe(
   const doc = iframe.contentDocument;
   if (!doc) return;
 
+  // Dev-mode tripwire (quarto-dev/q2#128): the preview iframe sandbox now
+  // carries `allow-scripts` (WebKit bug 218086 workaround), so the CSP meta
+  // injected by `injectPreviewCsp` is the ONLY thing blocking script
+  // execution inside the preview document. A document that settled without
+  // it means a payload path forgot to route through `injectPreviewCsp` —
+  // and user scripts would execute same-origin as the hub app. Fail-open
+  // guard only; no production behavior change.
+  if (import.meta.env.DEV) {
+    const hasCspMeta = doc.head?.querySelector(
+      'meta[http-equiv="Content-Security-Policy"][content="script-src \'none\'"]',
+    );
+    if (!hasCspMeta) {
+      console.warn(
+        '[q2#128] Preview iframe document is missing the injected CSP meta ' +
+          "(script-src 'none'). With allow-scripts in the sandbox, scripts in " +
+          'preview content would execute same-origin as the hub app. Route the ' +
+          'payload through injectPreviewCsp (preview-renderer/src/utils/previewCsp.ts).',
+      );
+    }
+  }
+
   // Replace CSS links with data URIs (both /.quarto/ and libs/ paths)
   doc.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
     const href = link.getAttribute('href');
@@ -175,12 +198,18 @@ export function postProcessIframe(
 
   // DISABLED: Script inlining in the preview iframe is disabled until we
   // determine a safe way to allow script execution in the sandboxed iframe.
-  // The iframe sandbox does not include allow-scripts, so even if scripts
-  // were inlined they would not execute. Extension JS (kbd.js, video.min.js)
-  // works in native renders where the browser loads <script src="..."> normally.
+  // Extension JS (kbd.js, video.min.js) works in native renders where the
+  // browser loads <script src="..."> normally.
   //
-  // To re-enable, uncomment the block below AND add allow-scripts to the
-  // sandbox attribute in DoubleBufferedIframe.tsx and MorphIframe.tsx.
+  // To re-enable, uncommenting the block below is NOT sufficient. Since
+  // quarto-dev/q2#128 the sandbox DOES include allow-scripts (WebKit bug
+  // 218086 workaround — see MorphIframe.tsx), but every preview payload
+  // carries an injected CSP meta (`script-src 'none'` — see
+  // utils/previewCsp.ts) that still blocks inlined scripts. Re-enabling
+  // script execution would require removing that CSP, which reopens the
+  // allow-scripts + allow-same-origin sandbox escape and is caught by
+  // hub-client/e2e/preview-script-blocking.spec.ts. Do not strip the CSP
+  // to make this block work.
   //
   // let didInlineScripts = false;
   // doc.querySelectorAll('script[src]').forEach((script) => {
