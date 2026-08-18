@@ -243,18 +243,23 @@ Rejected alternatives:
 
 ### Phase 4 — repo process
 
-- [ ] hub-client `changelog.md` entry (two-commit workflow: change commit, then
+- [x] hub-client `changelog.md` entry (two-commit workflow: change commit, then
       changelog commit with the hash) — the fix lands in `ts-packages/` but
       changes hub-client behavior and touches `hub-client/e2e/`
-- [ ] File follow-up braid strand: unintercepted relative links (non-.qmd)
-      blank the preview iframe in all browsers
-- [ ] File follow-up braid strand: send CSP `frame-ancestors` on hub HTML
+      (change commit `7bb2d80f`, changelog commit `bf211a03`)
+- [x] File follow-up braid strand: unintercepted relative links (non-.qmd)
+      blank the preview iframe in all browsers → `bd-ddfyqmfm`
+- [x] File follow-up braid strand: send CSP `frame-ancestors` on hub HTML
       routes (production nginx lives outside this repo) — covers `object`/
       `embed` framing, which XFO does not, and closes the same-origin framing
       exposure noted in Fix strategy (also a pre-existing clickjacking fix)
-- [ ] `braid close` the strand with a summary; comment on GitHub issue #128
-- [ ] Stage and commit; report snapshot/test status; **do not push without
-      explicit permission**
+      → `bd-23es17uh`; also filed `bd-rpc3skz0` for the pre-existing
+      Q2PreviewIframe inline-handler exposure from the security audit
+- [x] `braid close` the strand with a summary (bd-sxx1az83 closed);
+      GitHub issue #128 comment skipped per user decision
+- [x] Stage and commit; report snapshot/test status; **do not push without
+      explicit permission** — commits `7bb2d80f` + `bf211a03` are local on
+      `main`, not pushed
 
 ## Details
 
