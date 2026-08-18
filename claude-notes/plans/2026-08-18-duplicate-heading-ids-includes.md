@@ -3,7 +3,7 @@
 **Date:** 2026-08-18
 **Braid:** bd-duplicate-heading-ids-mou5z7ux (p2, bug, label `markdown`)
 **Checkout:** main checkout, branch `main` @ `4eaede00` at investigation time (implementation branch TBD)
-**Status:** Implemented 2026-08-18 on branch `braid/bd-duplicate-heading-ids-mou5z7ux` (go-ahead given same day). Phases 0–2 complete, all verification green. Decision 4's diagnostic filed as follow-up **bd-8wf5brc8**. Remaining: PR + merge, then strand close-out (Phase 3 tail items).
+**Status:** **MERGED AND CLOSED.** PR #546 merged to `main` as `736d595a` (2026-08-18); strand bd-duplicate-heading-ids-mou5z7ux closed; origin strand br-duplicate-heading-ids-ye3j3gkr (connect-docs skein) commented — its verification against the full docs port waits on the next q2 release. Open follow-ups: **bd-4qjl87ax** (engine-output headings), **bd-8wf5brc8** (duplicate explicit-id diagnostic).
 
 ## Design decisions (user-aligned, 2026-08-18)
 
@@ -97,9 +97,9 @@ End-to-end (per CLAUDE.md):
 - [x] `cargo nextest run --workspace` — 12334/12334 passed (2026-08-18; build implied). Clippy + `cargo fmt --check` clean on changed crates.
 - [x] Full `cargo xtask verify` — all steps passed (2026-08-18), including the hub-build/WASM legs.
 - [x] E2e render inspection recorded in the session transcript and in this plan (Phase 0 End-to-end item: exact invocation + grep output).
-- [ ] Optional: re-run the site-wide duplicate-id scan on the connect-docs port to confirm 7 → 0.
-- [ ] Close strand; comment on br-duplicate-heading-ids-ye3j3gkr (connect-docs skein) that the fix needs the next q2 release to verify there.
-- [ ] If user opts in on the diagnostic (Decision 4): file the follow-up strand.
+- [ ] Optional, waits on the next q2 release: re-run the site-wide duplicate-id scan on the connect-docs port to confirm 7 → 0 (tracked on br-duplicate-heading-ids-ye3j3gkr; the minimal repro there was already re-rendered clean with the fixed binary).
+- [x] Strand closed (post-merge, 2026-08-18); br-duplicate-heading-ids-ye3j3gkr commented (c-y42xkhd5).
+- [x] Diagnostic follow-up filed as bd-8wf5brc8 (user opted in).
 
 ## Risks / tradeoffs
 
