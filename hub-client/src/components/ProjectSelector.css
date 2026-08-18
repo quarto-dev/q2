@@ -118,6 +118,9 @@
   margin: 0 0 24px;
   font-size: 24px;
   font-weight: 600;
+  /* Was inherited from the global h1 rule (index.css) before the Vite
+     scaffold was removed. */
+  line-height: 1.1;
   color: var(--text-primary);
 }
 
