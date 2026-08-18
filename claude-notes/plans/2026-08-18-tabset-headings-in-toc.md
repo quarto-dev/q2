@@ -12,6 +12,20 @@ materially better fix than either option the strand proposes.** The bug reproduc
 described at HEAD; what does not hold up is the explanation of *why Q1 differs*, and the
 "two-line skip on `.panel-tabset`" that explanation motivates.
 
+> **Update 2026-08-18, after the recursion probe** (`tabset-headings-in-toc-investigation/div-recursion-probe/`).
+> Direction (B) is not merely "the principled option" — it is the only one that reaches parity,
+> and it is cheaper than this plan first estimated:
+>
+> - `.callout` **bodies leak too** — a third container beyond tabset panes and blockquotes. A
+>   narrow `.panel-tabset` skip does not close the bug.
+> - Recursion costs **zero test failures** (12306 passed on the spike). The blast radius feared
+>   in "Risks" below did not materialize.
+> - The three parts are **coupled**: recurse + restrict *without* pandoc's attribute-merge rule
+>   under-collects (`.content-visible`, `.column-margin`, `layout-ncol` entries vanish). All
+>   three must land together.
+> - Non-recursion is **not** what protects callout/tab titles — the transforms consume those
+>   Headers before sectionize runs. Q1 recurses and gets them right by the same mechanism.
+
 ## Issue context
 
 Filed 2026-08-18 by Carlos Scheidegger; `bug`, priority 2, label `html`, `open`. Follow-up to
@@ -184,9 +198,13 @@ phases differ substantially between them.
 
 ## Risks / tradeoffs (draft)
 
-- **(B) has real blast radius.** `sectionize_blocks` output feeds `quarto-ast-reconcile`'s hashing,
-  `llms.rs`, the idempotence tests, and the HTML writer's `section` detection. It is the right fix
-  and the expensive one.
+- **(B)'s blast radius measured lower than feared.** `sectionize_blocks` output feeds
+  `quarto-ast-reconcile`'s hashing, `llms.rs`, the idempotence tests, and the HTML writer's
+  `section` detection — but the recursion spike passed all 12306 workspace tests. The remaining
+  risk is the *attribute-merge* half (finding 5), which the spike did not implement.
+- **The merge rule is the subtle part.** Pandoc absorbs a Div into the section it wraps only under
+  specific conditions (empty Div id, header-led run). Getting it wrong silently drops TOC entries
+  rather than erroring — the exact failure the second spike hit.
 - **(A) is cheap but leaves known divergences on the floor** — the blockquote leak and the
   `div`-vs-`section` structure — both of which are port-visible.
 - **Preview stays divergent under any transform-side fix** until bd-47afd5ro; a collector-side fix

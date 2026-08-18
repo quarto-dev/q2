@@ -1,0 +1,13 @@
+---
+title: Callout with a title heading and a body heading
+---
+
+## Outer
+
+::: {.callout-note}
+### Callout title
+
+#### Body heading
+
+Body.
+:::
