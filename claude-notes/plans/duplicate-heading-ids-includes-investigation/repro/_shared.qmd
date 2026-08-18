@@ -1,0 +1,3 @@
+#### Create the integration
+
+Shared boilerplate, included once per provider.
