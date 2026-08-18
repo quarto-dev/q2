@@ -91,6 +91,32 @@ deviate.
 
 ## D1 — Engine-claimed extensions widen the default render pattern
 
+> **SUPERSEDED (2026-08-18).** Engine-claimed extensions no longer widen the
+> default pattern set. Quarto 2 auto-discovers `**/*.qmd` and nothing else;
+> `.md`, `.ipynb`, percent/spin scripts and engine-contributed extensions all
+> render only when a `project.render` pattern matches them.
+>
+> The widening loop, the `RenderableExtensions::engine_claimed` field and its
+> accessor, and the signature change this decision forced on
+> `effective_render_patterns` are all reverted. Gate 1
+> (`has_renderable_extension`) still admits engine-claimed extensions, so an
+> explicitly-listed `.echo` renders — the claim governs *what q2 can do with a
+> file*, not *whether the file is discovered*.
+>
+> Reason: deciding whether a `.py` is a percent script, or a `.echo` a document
+> rather than a fixture, requires opening it. That is what Quarto 1 did —
+> content-sniffing every `.py` and `.R` during the walk — and it is what lets
+> installing an extension silently change which files a project renders. The
+> rule is now one sentence covering every input type instead of a per-type
+> table. Gordon's call, 2026-08-18.
+>
+> The Phase C e2e below ("a claimed `.echo` renders with NO `project.render`
+> key") records behavior that has been deliberately removed. It is kept as the
+> clearest statement of why the question was live.
+>
+> Everything below this box is the superseded reasoning, retained for context.
+
+
 **Context.** Main and the branch have opposite models of what makes a file an
 input:
 

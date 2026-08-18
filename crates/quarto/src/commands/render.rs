@@ -2018,54 +2018,25 @@ mod tests {
         }
     }
 
-    /// T8b (plan 1c.2 P2): `classify_inputs` given an explicit `a.echo` arg
-    /// in a project whose discovery admits `echo` (the echo-engine extension
-    /// is installed under `_extensions/`) must NOT reject the arg as
-    /// `NotInRenderList` (render.rs:318). Binds the explicit-file-arg entry
-    /// that T8's whole-project render (in `echo_engine_e2e.rs`) never
-    /// reaches: `project_files` here comes from
-    /// `ProjectContext::discover(...).files` (:284/:286), so this needs a
-    /// real `discover` over a temp project with the echo extension
-    /// available, same as the other `classify_*` tests in this module.
+    /// An engine-claimed extension passes gate 1 and is admitted by
+    /// `classify_inputs` **when a `render:` pattern selects it**.
     ///
-    /// Shares T8's revert hunk: reverting the discovery-set union (back to
-    /// `RenderableExtensions::fixed()` in `project/mod.rs`'s `discover`) drops
-    /// `a.echo` from `project.files` -> `NotInRenderList` -> RED. Demonstrated
-    /// live during this task: this test was RED against the base-commit
-    /// wiring (before the Corollary-0 split landed) for exactly that reason.
+    /// Preserves the original T8b intent (engine extensions are not rejected
+    /// out of hand) under the discovery rule that supersedes runbook D1:
+    /// auto-discovery is `**/*.qmd` only, so the pattern is what puts `a.echo`
+    /// into `project.files`.
+    ///
+    /// Named revert: drop the `.echo` extension from the discovery-set union
+    /// (`RenderableExtensions::fixed()` in `project/mod.rs`'s `discover`) and
+    /// `a.echo` fails gate 1 even with the pattern -> `NotInRenderList` -> RED.
     #[test]
-    fn classify_echo_file_admitted_by_extension_discovery_not_rejected() {
-        let temp = TempDir::new().unwrap();
-        let dir = canonical(temp.path());
-        write_file(&dir.join("_quarto.yml"), "project:\n  type: default\n");
-        write_file(
-            &dir.join("index.qmd"),
-            "---\ntitle: Index\n---\n\nContent.\n",
-        );
-        // Install the committed echo-engine extension fixture so discovery's
-        // FIXED_RENDERABLE union picks up `.echo` via its `claims-files`.
-        let fixture_ext = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../quarto-core/tests/fixtures/extensions/echo-engine");
-        assert!(
-            fixture_ext.exists(),
-            "echo-engine fixture missing: {}",
-            fixture_ext.display()
-        );
-        copy_dir(&fixture_ext, &dir.join("_extensions/echo-engine"));
-        // The committed echo-engine bundle is deleted (plan1c3: hermetic
-        // fixtures are regenerated at test time). This classify-only path never
-        // executes the engine — it only needs the bundle file to EXIST for
-        // `build_engine_registry`'s bundle-exists guard — so write a stub,
-        // mirroring `engine_registry_build`'s deno-free T5 stub approach.
-        write_file(
-            &dir.join("_extensions/echo-engine/dist/echo-engine.js"),
-            "// stub for registry existence check\n",
-        );
-        write_file(&dir.join("a.echo"), "Whole-file echo body.\n");
-
+    fn classify_echo_file_admitted_when_listed_in_render() {
+        let (dir, _temp) = echo_project_with_render(Some(
+            "project:\n  type: default\n  render:\n    - \"**/*.qmd\"\n    - \"**/*.echo\"\n",
+        ));
         let runtime = NativeRuntime::new();
         let target = classify_inputs(&["a.echo".into()], &dir, &runtime, None)
-            .unwrap_or_else(|e| panic!("a.echo must NOT be rejected as NotInRenderList: {e:?}"));
+            .unwrap_or_else(|e| panic!("a listed a.echo must be admitted: {e:?}"));
         match target {
             RenderTarget::Subset {
                 project_dir,
@@ -2076,6 +2047,62 @@ mod tests {
             }
             other => panic!("expected Subset admitting a.echo, got {other:?}"),
         }
+    }
+
+    /// Without a `render:` pattern, an explicitly-named engine-claimed file is
+    /// refused — exactly as `.md` and `_partial.qmd` already are.
+    ///
+    /// This is a BEHAVIOR CHANGE introduced by superseding D1, not a
+    /// pre-existing wart: under D1 `.echo` was auto-discovered, so
+    /// `q2 render a.echo` worked. It documents the consequence rather than
+    /// endorsing it — whether q2 should render an explicitly-named file that
+    /// no pattern selects is an open question (Quarto 1 does, silently, with
+    /// output written beside the source). If that question is answered
+    /// "render it", this test changes with that work.
+    #[test]
+    fn classify_unlisted_echo_file_is_refused() {
+        let (dir, _temp) = echo_project_with_render(None);
+        let runtime = NativeRuntime::new();
+        let err = classify_inputs(&["a.echo".into()], &dir, &runtime, None)
+            .expect_err("an unlisted a.echo must be refused, like an unlisted .md");
+        assert!(
+            matches!(err, DispatchError::NotInRenderList { .. }),
+            "expected NotInRenderList, got {err:?}"
+        );
+    }
+
+    /// Shared fixture for the two tests above: a project with the committed
+    /// echo-engine extension installed and one `a.echo` file. `render` is the
+    /// full `_quarto.yml` body, or `None` for the bare default.
+    fn echo_project_with_render(render: Option<&str>) -> (PathBuf, TempDir) {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(
+            &dir.join("_quarto.yml"),
+            render.unwrap_or("project:\n  type: default\n"),
+        );
+        write_file(
+            &dir.join("index.qmd"),
+            "---\ntitle: Index\n---\n\nContent.\n",
+        );
+        let fixture_ext = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../quarto-core/tests/fixtures/extensions/echo-engine");
+        assert!(
+            fixture_ext.exists(),
+            "echo-engine fixture missing: {}",
+            fixture_ext.display()
+        );
+        copy_dir(&fixture_ext, &dir.join("_extensions/echo-engine"));
+        // The committed bundle is deleted (plan1c3: hermetic fixtures are
+        // regenerated at test time). These classify-only paths never execute
+        // the engine — they only need the bundle to EXIST for
+        // `build_engine_registry`'s bundle-exists guard.
+        write_file(
+            &dir.join("_extensions/echo-engine/dist/echo-engine.js"),
+            "// stub for registry existence check\n",
+        );
+        write_file(&dir.join("a.echo"), "Whole-file echo body.\n");
+        (dir, temp)
     }
 
     #[test]

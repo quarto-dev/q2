@@ -36,6 +36,28 @@ list containing only exclusions subtracts from that same default —
 `render: ["!drafts/**"]` means "all `.qmd` files except those under
 `drafts/`".
 
+Quarto renders `.qmd` by default and nothing else. Every other input
+type must be listed:
+
+| Input | Rendered by default? |
+|-------|----------------------|
+| `.qmd` | yes |
+| `.md` | only when a pattern matches it |
+| `.ipynb` | only when a pattern matches it |
+| `.py` / `.R` scripts | only when a pattern matches it |
+| file types added by an extension | only when a pattern matches it |
+
+A positive pattern replaces the default; it does not add to it. Keep
+`"**/*.qmd"` in any list you write, or your `.qmd` files stop
+rendering:
+
+```yaml
+project:
+  render:
+    - "**/*.qmd"      # keep this
+    - "**/*.ipynb"
+```
+
 ## Rendering `.md` files
 
 Plain Markdown files can be full members of a Quarto project — they
@@ -63,6 +85,22 @@ a `.md` file's front matter has no effect. Quarto warns about it
 ([`Q-2-40`](/errors/markdown/Q-2-40.qmd)) and renders the document
 without execution; rename the file to `.qmd` if you need executable
 code.
+
+### Why other file types are opt-in
+
+Quarto 1 built its render list by walking the whole project and asking
+each execution engine whether it claimed each file. The Markdown engine
+claimed `.md` unconditionally. The Jupyter engine claimed `.ipynb`, and
+opened every `.py` to see whether it held `# %%` cells. The knitr engine
+opened every `.R` looking for a `#'` header.
+
+Quarto 2 does not inspect files to decide what to render. The render
+list comes from patterns alone.
+
+Two consequences. A stray `NEWS.md`, a `conftest.py`, or a scratch
+notebook stays out of the render list until you ask for it. And
+installing an extension never changes which files your project
+renders — only what Quarto can do with them once listed.
 
 ## Files that never render
 

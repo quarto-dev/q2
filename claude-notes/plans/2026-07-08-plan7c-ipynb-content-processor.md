@@ -302,3 +302,38 @@ Found in the July-2026 audit of the live code; each is a work item:
 - Conversion provenance prerequisite: bd-zlemoc6w
 - Q1 source: `external-sources/quarto-cli/src/core/jupyter/` (`jupyterToMarkdown`,
   `mdFromCodeCell`); port reference `ts-packages/quarto-api/src/jupyter/`
+
+## Migration note: `.ipynb` is not auto-discovered (2026-08-18)
+
+Quarto 2 auto-discovers `**/*.qmd` and nothing else. **A project consisting
+entirely of notebooks renders nothing** until the author writes:
+
+```yaml
+project:
+  render:
+    - "**/*.qmd"      # a positive pattern replaces the default — keep this
+    - "**/*.ipynb"
+```
+
+This was decided explicitly rather than inherited. `.ipynb` was considered for
+the same treatment as `.qmd` — auto-discovered — on the grounds that a notebook
+in a Quarto project is almost always meant as a document, and that all-notebook
+projects are a real and common Q1 workflow. **Rejected** (Gordon, 2026-08-18):
+`.ipynb` is in exactly the same position as percent and spin scripts, and one
+consistent rule beats a per-type table. Power users who need it should be guided
+to `**/*.ipynb`.
+
+Do not re-open this as part of 7c implementation. The decision is the discovery
+policy, not an artifact of ipynb support being incomplete.
+
+**The failure mode is the worst kind: silent.** A Q1 user pointing Quarto 2 at a
+directory of 40 notebooks gets "Rendered 0 of 0 files" and no diagnostic — we
+deliberately do not warn (matching an extension does not prove a processor would
+take the file; see 7b's note). That makes the docs the entire mitigation, so
+7c's user-facing documentation must state the `render:` requirement prominently
+rather than in passing.
+
+`docs/guides/projects/render-list.qmd` carries the general rule and the
+"keep `**/*.qmd`" trap. This plan owes the notebook-specific guidance.
+
+Supersedes D1 of `2026-08-13-ts-engine-extensions-merge-main.md`.

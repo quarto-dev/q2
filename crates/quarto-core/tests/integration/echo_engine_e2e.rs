@@ -996,17 +996,21 @@ fn p3_7_console_log_harmless() {
 //     is the state after step (1)'s wiring lands but before the echo heading
 //     edit, also walked through live during this task.
 #[test]
-fn t8_echo_file_discovered_and_converted_via_project_walk() {
+fn t8_echo_file_converted_via_project_walk_when_listed() {
     if !deno_available() {
-        eprintln!(
-            "SKIP: deno not on PATH — t8_echo_file_discovered_and_converted_via_project_walk"
-        );
+        eprintln!("SKIP: deno not on PATH — t8_echo_file_converted_via_project_walk_when_listed");
         return;
     }
     let tmp = setup_project(&["echo-engine"]);
+    // The `render:` key is required now. Engine-claimed extensions are no
+    // longer auto-discovered (this supersedes runbook D1; see
+    // `project::discovery::effective_render_patterns`), so without a pattern
+    // `a.echo` would not enter `project.files` and this test would be proving
+    // nothing about conversion. `**/*.qmd` is kept because a positive pattern
+    // REPLACES the default rather than adding to it.
     write_file(
         &tmp.path().join("_quarto.yml"),
-        "project:\n  type: default\n",
+        "project:\n  type: default\n  render:\n    - \"**/*.qmd\"\n    - \"**/*.echo\"\n",
     );
     write_file(&tmp.path().join("a.echo"), "Whole-file echo body.\n");
 
@@ -1022,8 +1026,9 @@ fn t8_echo_file_discovered_and_converted_via_project_walk() {
             .files
             .iter()
             .any(|f| f.input.file_name().and_then(|n| n.to_str()) == Some("a.echo")),
-        "a.echo must be admitted by the project walk (FIXED_RENDERABLE ∪ \
-         claimed_file_extensions); discovered files: {:?}",
+        "a.echo must be admitted by the project walk once a `render:` pattern \
+         selects it (gate 1: FIXED_RENDERABLE ∪ claimed_file_extensions; \
+         gate 2: the pattern); discovered files: {:?}",
         project.files.iter().map(|f| &f.input).collect::<Vec<_>>()
     );
 

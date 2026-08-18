@@ -7,16 +7,27 @@
 
 //! Expand the set of source files a project renders.
 //!
-//! Renderable extensions are `.qmd` (always), `.md` (opt-in, see below),
-//! and any extension an installed engine extension statically claims
-//! (see [`RenderableExtensions`]). `.ipynb` / `.Rmd` are not special-cased:
-//! they become renderable exactly when an engine claims them — see bd-xxul,
-//! bd-19nc56ao, and `claude-notes/plans/2026-07-20-ipynb-surface-syntax-design.md`.
+//! Two gates, and they answer different questions.
+//!
+//! **Gate 1 — may this extension ever be an input?** `.qmd` and `.md`
+//! always ([`FIXED_RENDERABLE`]), plus any extension an installed engine
+//! statically claims (see [`RenderableExtensions`]). `.ipynb` / `.Rmd` are
+//! not special-cased: they pass gate 1 exactly when an engine claims them —
+//! see bd-xxul, bd-19nc56ao, and
+//! `claude-notes/plans/2026-07-20-ipynb-surface-syntax-design.md`.
+//!
+//! **Gate 2 — is this file in the render list?** The `project.render`
+//! patterns, whose default is `**/*.qmd` and nothing else.
+//!
+//! Passing gate 1 does not imply passing gate 2. An engine claim makes
+//! `.echo` renderable *when listed*; it does not put `.echo` files into the
+//! render list.
 //!
 //! Discovery rules (plans:
-//! `claude-notes/plans/2026-08-07-md-render-support.md` and, for the
-//! engine-claimed widening, D1 of
-//! `claude-notes/plans/2026-08-13-ts-engine-extensions-merge-main.md`):
+//! `claude-notes/plans/2026-08-07-md-render-support.md`; the
+//! engine-claimed widening in D1 of
+//! `claude-notes/plans/2026-08-13-ts-engine-extensions-merge-main.md` is
+//! **superseded** — see [`effective_render_patterns`]):
 //!
 //! 1. Every candidate comes from one recursive walk of the project
 //!    directory collecting files whose extension is in the resolved
@@ -25,17 +36,17 @@
 //!    `project.render` patterns. When the author wrote no *positive*
 //!    pattern — no `render:` key at all, or only `!` negations —
 //!    discovery supplies the default positive [`DEFAULT_RENDER_PATTERN`]
-//!    (`**/*.qmd`) **plus one `**/*.<ext>` per engine-claimed extension**.
-//!    The invariant users can be told verbatim: **omitting
+//!    (`**/*.qmd`). The invariant users can be told verbatim: **omitting
 //!    `project.render` is exactly equivalent to writing
-//!    `render: ["**/*.qmd"]`**, extended with the file types your
-//!    installed engines handle. A negation-only list subtracts from that
+//!    `render: ["**/*.qmd"]`**. A negation-only list subtracts from that
 //!    same set.
 //!
-//!    `.md` is deliberately NOT widened in (a divergence from Quarto 1,
-//!    which walks `.md` in by default): it renders only when an
-//!    explicitly written pattern matches it. Engine claims never drag
-//!    the native set in — see [`NATIVE_EXTENSIONS`].
+//!    Quarto 2 auto-discovers `**/*.qmd` and nothing else. `.md`,
+//!    `.ipynb`, percent/spin scripts and engine-contributed extensions all
+//!    render only when an explicitly written pattern matches them. This is
+//!    a deliberate divergence from Quarto 1, which walked the whole tree
+//!    and asked each engine to claim what it found — content-sniffing
+//!    every `.py` and `.R` on the way.
 //! 3. Exclude in either mode:
 //!    - the output directory (e.g. `_site/`)
 //!    - `.quarto/`, `.git/`, `node_modules/`
@@ -87,16 +98,19 @@ pub const NATIVE_EXTENSIONS: &[&str] = &["", "qmd", "md", "markdown"];
 /// extensions. Discovery consults this instead of a hardcoded "qmd".
 /// Never carries the engine registry — just strings.
 ///
-/// The engine-claimed members are retained **separately** as well as
-/// unioned into the flat set. D1 needs to answer "which members came from
-/// an engine?" (only those widen the default render pattern), and the flat
-/// set cannot answer it. Subtracting [`FIXED_RENDERABLE`] at the use site
-/// would be fragile — it would silently change meaning if the fixed set
-/// ever grew.
+/// This is **gate 1** only: it answers "may this extension ever be an
+/// input", not "is this file discovered by default". Gate 2 — the render
+/// patterns — is where that is decided, and its default is `**/*.qmd`
+/// alone. An engine claim therefore makes `.echo` renderable *when listed*;
+/// it does not put `.echo` files into the render list.
+///
+/// The set deliberately does NOT record which members came from an engine.
+/// It used to, because the superseded D1 widened the default pattern set
+/// per engine-claimed extension and needed to tell them apart. Nothing
+/// widens now, so the distinction has no consumer.
 #[derive(Debug, Clone)]
 pub struct RenderableExtensions {
     all: std::collections::HashSet<String>,
-    engine_claimed: Vec<String>,
 }
 
 impl RenderableExtensions {
@@ -108,21 +122,14 @@ impl RenderableExtensions {
     pub fn new(engine_exts: impl IntoIterator<Item = String>) -> Self {
         let mut all: std::collections::HashSet<String> =
             FIXED_RENDERABLE.iter().map(|s| s.to_string()).collect();
-        let mut engine_claimed = Vec::new();
         for ext in engine_exts {
             debug_assert!(
                 !ext.starts_with('.') && ext == ext.to_ascii_lowercase(),
                 "engine-declared extension must be undotted lowercase: {ext:?}"
             );
-            if !engine_claimed.contains(&ext) {
-                engine_claimed.push(ext.clone());
-            }
             all.insert(ext);
         }
-        Self {
-            all,
-            engine_claimed,
-        }
+        Self { all }
     }
 
     /// [`FIXED_RENDERABLE`] only — no engine extensions. Equivalent to
@@ -137,15 +144,6 @@ impl RenderableExtensions {
     /// directly.
     pub(crate) fn contains(&self, candidate: &str) -> bool {
         self.all.contains(candidate)
-    }
-
-    /// The extensions contributed by engines, in declaration order.
-    ///
-    /// Only these widen the default render pattern set (D1). Members of
-    /// [`FIXED_RENDERABLE`] must never appear here, or `.md` would become a
-    /// default pattern and undo bd-6d2wj4zp.
-    pub(crate) fn engine_claimed(&self) -> &[String] {
-        &self.engine_claimed
     }
 }
 
@@ -227,36 +225,28 @@ pub fn unmatched_md_files(
 /// pattern (`Q-5-14`/`Q-5-15`) never silently falls back to
 /// rendering everything.
 ///
-/// # Engine-claimed extensions widen the default set (D1)
+/// # The default render set is `**/*.qmd`, and only that
 ///
-/// bd-6d2wj4zp's invariant — omitting `project.render` ≡
-/// `render: ["**/*.qmd"]` — was written before engines could claim file
-/// extensions. An engine that claims `.echo` must make `.echo` files
-/// inputs, or plan 1c.2's feature would be inert in every project without
-/// an explicit `render:` key: the claimed extension would pass the
-/// extension filter and then be silently dropped by the pattern match.
+/// Omitting `project.render` is exactly equivalent to writing
+/// `render: ["**/*.qmd"]`. Every other input type — `.md`, `.ipynb`,
+/// percent/spin scripts, engine-contributed extensions — renders only
+/// when a pattern the author wrote matches it.
 ///
-/// So when the author wrote no positive pattern, the effective set is
-/// [`DEFAULT_RENDER_PATTERN`] **plus one `**/*.<ext>` per engine-claimed
-/// extension**. Only *engine-claimed* extensions widen: members of
-/// [`NATIVE_EXTENSIONS`] are excluded unconditionally, so `.md` stays
-/// opt-in and bd-6d2wj4zp's deliberate departure from Q1 survives. The
-/// exclusion does not rely on B3's claim refusal having landed — Phase A
-/// ships first, and in between an engine claiming `md` would otherwise
-/// make `**/*.md` a default pattern with nothing to catch it.
+/// **This supersedes D1** of the ts-engine-extensions merge runbook, which
+/// widened the default set with one `**/*.<ext>` per engine-claimed
+/// extension. Deciding whether a `.py` in the tree is a percent script, or
+/// a `.echo` a document rather than a fixture, requires opening it — which
+/// is what Quarto 1 did, and what lets installing an extension silently
+/// change which files a project renders. One line of `render:` cannot
+/// surprise anyone.
 ///
-/// The synthetic globs are generated, so they carry
-/// `SourceInfo::generated(By::programmatic_config())` — the same
-/// provenance main already uses for the default pattern.
+/// A **negation-only** list still subtracts from the default:
+/// `render: ["!drafts/**"]` means every `.qmd` except those. Any
+/// *positive* pattern replaces the default outright — including its
+/// `**/*.qmd` half, which is why advice to add `render:` must always say
+/// to keep `**/*.qmd` as well.
 ///
-/// This widening deliberately does **not** reach
-/// [`render_pattern_diagnostics`], which is called with the *user's*
-/// patterns; synthetic globs must never produce a `Q-5-13`
-/// "pattern matched no renderable files" warning.
-fn effective_render_patterns(
-    user: &[RawGlob],
-    renderable_extensions: &RenderableExtensions,
-) -> Vec<RawGlob> {
+fn effective_render_patterns(user: &[RawGlob]) -> Vec<RawGlob> {
     if user.iter().any(|r| !r.raw.starts_with('!')) {
         return user.to_vec();
     }
@@ -264,16 +254,6 @@ fn effective_render_patterns(
         DEFAULT_RENDER_PATTERN,
         SourceInfo::generated(By::programmatic_config()),
     )];
-    for ext in renderable_extensions.engine_claimed() {
-        // Never widen on a natively-owned extension (see the doc above).
-        if NATIVE_EXTENSIONS.contains(&ext.as_str()) {
-            continue;
-        }
-        patterns.push(RawGlob::new(
-            format!("**/*.{ext}"),
-            SourceInfo::generated(By::programmatic_config()),
-        ));
-    }
     patterns.extend(user.iter().cloned());
     patterns
 }
@@ -285,7 +265,7 @@ fn effective_render_patterns(
 /// entry subtracts from every positive pattern regardless of where
 /// the author wrote it.
 fn select_from_walk(walked: &[PathBuf], config: &DiscoveryConfig<'_>) -> Vec<PathBuf> {
-    let patterns = effective_render_patterns(config.render_patterns, config.renderable_extensions);
+    let patterns = effective_render_patterns(config.render_patterns);
     let resolution = resolve_render_patterns(config.project_dir, &patterns);
     let Ok(compiled) = resolution.compile(&RENDER_GLOB_OPTIONS) else {
         // Unreachable: resolution only emits patterns it compiled.
@@ -1316,15 +1296,16 @@ mod tests {
         v
     }
 
-    /// T6 (walk path): with `{qmd, md, echo}` and **no** render patterns, an
-    /// `.echo` file is admitted, while the SAME exclusion rules that already
-    /// govern `.qmd` (underscore prefix, dot prefix, output dir) still apply
-    /// to `.echo`, and a non-member extension (`.ipynb`) stays excluded.
+    /// T6: an engine-claimed extension obeys the SAME exclusion rules that
+    /// already govern `.qmd` (underscore prefix, dot prefix, output dir), and
+    /// a non-member extension (`.ipynb`) stays excluded.
     ///
     /// This binds that engine extensions flow through the same predicate, not
-    /// a bypass branch.
+    /// a bypass branch. It needs an explicit `render:` pattern now: engine
+    /// claims no longer widen the default set, so with no patterns there would
+    /// be nothing to apply exclusions to.
     #[test]
-    fn t6_engine_extension_admitted_via_walk_with_same_exclusions() {
+    fn t6_engine_extension_obeys_the_same_exclusions() {
         let temp = TempDir::new().unwrap();
         let project_dir = canonical(temp.path());
 
@@ -1339,10 +1320,14 @@ mod tests {
         // non-member-extension exclusion.
         let output_dir = project_dir.join("out");
         let exts = RenderableExtensions::new(vec!["echo".to_string()]);
+        let patterns = vec![RawGlob::new(
+            "**/*.echo",
+            SourceInfo::generated(By::programmatic_config()),
+        )];
         let config = DiscoveryConfig {
             project_dir: &project_dir,
             output_dir: &output_dir,
-            render_patterns: &[],
+            render_patterns: &patterns,
             renderable_extensions: &exts,
         };
 
@@ -1417,21 +1402,30 @@ mod tests {
         );
     }
 
-    /// **D1** — the regression neither side's suite would otherwise catch.
+    /// Quarto 2 auto-discovers `**/*.qmd` and nothing else.
     ///
-    /// A project with a claimed `.echo` extension and **no** `project.render`
-    /// key must render its `.echo` files. Widening only gate 1
-    /// (`has_renderable_extension`) is not enough: gate 2 would still default
-    /// to literally `**/*.qmd`, so the claimed file would pass the extension
-    /// filter and then be silently dropped by the pattern match, making plan
-    /// 1c.2's feature inert in any project without an explicit `render:` key.
+    /// Supersedes D1 of the ts-engine-extensions merge runbook, which had
+    /// engine-claimed extensions widen the default pattern set. One rule now
+    /// covers every non-`.qmd` input — `.md`, `.ipynb`, percent/spin scripts,
+    /// and engine-contributed extensions alike: it renders only when a
+    /// `project.render` pattern matches it.
+    ///
+    /// The rule is deliberately blunt. Deciding whether a `.py` in the tree is
+    /// a percent script, or a `.echo` is a document rather than a fixture,
+    /// requires opening it — which is what Quarto 1 did, and what makes
+    /// installing an extension able to change silently which files a project
+    /// renders. Listing them is one line and cannot surprise anyone.
+    ///
+    /// Named revert: restore the widening loop in `effective_render_patterns`
+    /// and this goes RED.
     #[test]
-    fn d1_claimed_extension_renders_with_no_render_key() {
+    fn claimed_extension_is_not_auto_discovered() {
         let temp = TempDir::new().unwrap();
         let project_dir = canonical(temp.path());
         write_file(&project_dir.join("a.echo"), "content\n");
         write_file(&project_dir.join("index.qmd"), "# x\n");
         write_file(&project_dir.join("notes.md"), "notes\n");
+        write_file(&project_dir.join("notebook.ipynb"), "{}\n");
 
         let output_dir = project_dir.join("_site");
         let exts = RenderableExtensions::new(vec!["echo".to_string()]);
@@ -1445,67 +1439,48 @@ mod tests {
         let files = discover_project_files(&config, &native()).unwrap();
         let rels = rels_of(&files, &project_dir);
 
-        assert!(
-            rels.contains(&"a.echo".to_string()),
-            "an engine-claimed extension must render with no `render:` key; got {rels:?}"
-        );
-        assert!(
-            rels.contains(&"index.qmd".to_string()),
-            "`.qmd` must still render — widening adds to the default, never replaces it; got {rels:?}"
-        );
-        assert!(
-            !rels.contains(&"notes.md".to_string()),
-            "`.md` must stay opt-in (bd-6d2wj4zp): engine claims must not drag \
-             the native set into the default pattern set; got {rels:?}"
+        assert_eq!(
+            rels,
+            vec!["index.qmd".to_string()],
+            "with no `render:` key ONLY `**/*.qmd` is discovered — an \
+             engine-claimed `.echo`, an opt-in `.md`, and an `.ipynb` all \
+             stay out; got {rels:?}"
         );
     }
 
-    /// D1, at the unit level: the synthetic globs are exactly one per
-    /// engine-claimed extension, they carry generated provenance, and no
-    /// member of the native set ever produces one.
+    /// The default pattern set is exactly `**/*.qmd`, whatever the engines
+    /// claim. Unit-level companion to the test above.
     #[test]
-    fn d1_widening_emits_one_generated_glob_per_claimed_extension() {
-        // An engine claiming `md` is refused at conversion time (B3/Q-2-50),
-        // but discovery must not depend on that having happened: Phase A ships
-        // before Phase B, so the exclusion here is unconditional.
-        let exts = RenderableExtensions::new(vec![
-            "echo".to_string(),
-            "md".to_string(),
-            "qmd".to_string(),
-        ]);
-        let effective = effective_render_patterns(&[], &exts);
-
+    fn default_pattern_set_is_qmd_only_regardless_of_claims() {
+        // `effective_render_patterns` no longer takes the extension set at
+        // all — reverting D1 reverted the signature change D1 required. That
+        // the claims cannot reach this function is the guarantee; building a
+        // set here would only be able to test that an unused argument is
+        // unused.
+        let effective = effective_render_patterns(&[]);
         let raws: Vec<&str> = effective.iter().map(|g| g.raw.as_str()).collect();
         assert_eq!(
             raws,
-            vec![DEFAULT_RENDER_PATTERN, "**/*.echo"],
-            "exactly the default plus one glob for the non-native claimed \
-             extension; `md`/`qmd` must never widen"
-        );
-        // Generated provenance, matching the default pattern's — so a
-        // synthetic glob can never be mistaken for something the user wrote.
-        let generated = SourceInfo::generated(By::programmatic_config());
-        assert!(
-            effective.iter().all(|g| g.source == generated),
-            "synthetic globs must carry generated provenance"
+            vec![DEFAULT_RENDER_PATTERN],
+            "no claimed extension contributes a synthetic default glob"
         );
     }
 
-    /// D1 boundary: a user-written positive pattern turns widening OFF
-    /// entirely — the author's list is authoritative.
+    /// A user-written positive pattern is authoritative and replaces the
+    /// default outright — including the `**/*.qmd` half. This is why any
+    /// advice to add `render:` has to say "keep `**/*.qmd` too".
     #[test]
-    fn d1_widening_does_not_apply_when_a_positive_pattern_exists() {
-        let exts = RenderableExtensions::new(vec!["echo".to_string()]);
+    fn a_positive_user_pattern_replaces_the_default_entirely() {
         let user = vec![RawGlob::new(
             "docs/**/*.qmd",
             SourceInfo::generated(By::programmatic_config()),
         )];
-        let effective = effective_render_patterns(&user, &exts);
+        let effective = effective_render_patterns(&user);
         let raws: Vec<&str> = effective.iter().map(|g| g.raw.as_str()).collect();
         assert_eq!(
             raws,
             vec!["docs/**/*.qmd"],
-            "an explicit positive pattern is authoritative; no widening"
+            "an explicit positive pattern is authoritative"
         );
     }
 
@@ -1535,13 +1510,9 @@ mod tests {
             "a dynamic claimer declares no static extension"
         );
 
-        // Therefore it contributes no member, and no synthetic glob.
-        let exts = RenderableExtensions::new(claimed_file_extensions(&dynamic));
-        assert!(
-            exts.engine_claimed().is_empty(),
-            "no engine-claimed member from a dynamic claimer"
-        );
-        let effective = effective_render_patterns(&[], &exts);
+        // Therefore it contributes no renderable member, and the default
+        // pattern set is unchanged.
+        let effective = effective_render_patterns(&[]);
         let raws: Vec<&str> = effective.iter().map(|g| g.raw.as_str()).collect();
         assert_eq!(
             raws,

@@ -473,3 +473,41 @@ Everything lives in `quarto-core`, which feeds `wasm-quarto-hub-client` — full
   `~/src/air/crates/air_r_parser/src/parse.rs`, `treesitter.rs`.
 - Code path (Pass-1 launch): `stage/stages/engine_claims_file.rs:142`; `engine/ts_engine.rs`
   `markdown_for_file`→`ensure_started`; `engine/ts_process.rs:519`; `project/orchestrator.rs:1708`.
+
+## Migration note: percent/spin scripts are not auto-discovered (2026-08-18)
+
+Quarto 2 auto-discovers `**/*.qmd` and nothing else. A project of percent-format
+`.py` or spin-format `.R` scripts renders **nothing** until the author lists them:
+
+```yaml
+project:
+  render:
+    - "**/*.qmd"      # a positive pattern replaces the default — keep this
+    - "**/*.py"
+```
+
+Quarto 1 differed, and the difference is the reason for the change. Q1 walked the
+whole project and asked each engine to claim what it found, which for these types
+meant **opening every `.py` and every `.R`** and regex-matching for `# %%` cells
+(`core/jupyter/percent.ts:32-45`) or a `#' ---` header (`execute/rmd.ts:570-579`),
+at discovery time, on every render. See `claude-notes/research/` — the Q1 discovery
+model was confirmed by source audit on 2026-08-18.
+
+Two things follow for this plan:
+
+1. **Moving conversion into Rust does not make these auto-discovered.** The rule is
+   about the render list, not about which processor handles a file. A native
+   percent processor still only ever sees files a pattern selected. Do not add a
+   content-sniffing discovery pass to "restore Q1 parity" — that is the behavior
+   being removed on purpose.
+2. **This needs user-facing docs, not a diagnostic.** Gordon's call (2026-08-18):
+   matching an extension proves files exist, not that any processor would take
+   them, so a "you have unlisted `.py` files" warning would fire on every
+   `conftest.py` in the world. `docs/guides/projects/render-list.qmd` carries the
+   rule; this plan owes the percent/spin-specific migration guidance.
+
+Power users with existing Q1 script-based projects are the affected population.
+They are a small group, but the failure mode is silent (zero files rendered, no
+message), so the docs have to be findable.
+
+Supersedes D1 of `2026-08-13-ts-engine-extensions-merge-main.md`.
