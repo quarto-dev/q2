@@ -165,64 +165,97 @@ runtime. (Question 1 below.)
 
 ### Phase 0 — tests first (TDD)
 
-- [ ] Unit tests for the translator: given a small `.theme` JSON fixture,
+- [x] Unit tests for the translator: given a small `.theme` JSON fixture,
       assert emitted SCSS contains expected `.hl-*` rules, defaults vars,
-      bold/italic handling, and stable group ordering.
-- [ ] Config tests: `light: github / dark: arrow` resolves to
-      `github-light` / `arrow-dark`; bare `github` on a dark single-variant
-      resolves `github-dark`; unknown name still warns Q-14-5 once.
-- [ ] Smoke-all test(s) under `crates/quarto/tests/smoke-all/highlighting/`:
-      a light/dark theme pair + `{light: github, dark: arrow}` asserting the
-      two variant stylesheets carry different `.hl-keyword` colors and no
-      warnings (regression for the Connect shape, expressed generically).
-- [ ] Tests for the YAML `code-block-bg` / `code-block-color` keys: value
-      flows through `doc_vars` and beats the palette's `!default`.
-- [ ] Snapshot/existing-test audit: a11y palettes now route through the
-      translator (decision 2) — emitted CSS will change; update affected
-      tests/snapshots and document the diff (pixel stability explicitly
-      waived).
+      bold/italic handling, and stable group ordering. (17 tests in
+      `highlight_theme.rs`, written first and observed failing.)
+- [x] Config tests: `light: github / dark: arrow` resolves to
+      `github-light` / `arrow-dark` (`test_highlight_style_map_form_github_arrow_pair`,
+      observed failing before growing the adaptive list); bare adaptive on a
+      dark single-variant already covered by existing a11y tests; unknown
+      name still warns Q-14-5 once (existing coverage).
+- [x] Smoke-all fixture `highlighting/07-adaptive-pair-github-arrow.qmd`:
+      light/dark pair + `{light: github, dark: arrow}`,
+      `noErrorsOrWarnings`, both palettes' keyword colors present, default
+      palette's solarized green absent.
+- [x] Tests for the YAML `code-block-bg` / `code-block-color` keys: unit
+      tests on `derive_doc_scss_layer` (written first, observed failing) +
+      smoke fixture `highlighting/08-code-block-bg-override.qmd` proving the
+      metadata value beats github-light's `!default` end-to-end.
+- [x] Snapshot/existing-test audit: existing a11y integration tests
+      (`theme_light_dark.rs`) and `compile.rs` palette tests pass unchanged
+      through the translator (colors come from the same `.theme` sources).
 
 ### Phase 1 — vendored catalog + translator
 
-- [ ] Copy Q1 `.theme` files from
-      `external-sources/quarto-cli/src/resources/pandoc/highlight-styles/`
-      into `resources/` (+ README noting provenance/update procedure).
-- [ ] Implement `.theme` JSON parse + SCSS emission with the canonical
-      mapping table (dotted-name fallback; honor bold/italic/underline and
-      `background-color` per token, not just `text-color`).
-- [ ] Wire into `load_highlight_layer` + derive the known-palette list;
-      grow `ADAPTIVE_HIGHLIGHT_STYLES` to Q1's 8; delete the hand-written
-      `highlight-a11y-{light,dark}.scss` (replaced by translated output;
-      `highlight-default.scss` stays).
-- [ ] Q-14-5 "available palettes" message: now ~26 names — decide message
-      format (sorted, wrapped).
+- [x] 34 `.theme` files vendored to `resources/pandoc/highlight-styles/`
+      (+ README with provenance quarto-cli `2e6695811` and update
+      procedure); `build.rs` hashes them into `SCSS_RESOURCES_HASH` so
+      palette edits bust the CSS cache.
+- [x] `highlight_theme.rs`: serde model, canonical `CAPTURE_TOKENS` table
+      with dotted-name fallback (`capture_token`), 66-capture cover set,
+      bold/italic/underline + per-token `background-color`, color-value
+      validation (`is_safe_css_value`), empty-`text-styles` palettes (e.g.
+      `none`) translate to a true no-op layer.
+- [x] `load_highlight_layer` translation path; `known_highlight_palettes()`
+      (26 user-facing names, adaptive variants folded) replaces the
+      `KNOWN_HIGHLIGHT_PALETTES` const; `is_known_highlight_palette`
+      accepts catalog stems; `ADAPTIVE_HIGHLIGHT_STYLES` grown to Q1's 8;
+      `highlight-a11y-{light,dark}.scss` deleted.
+- [x] Q-14-5 hint lists the 26 names sorted + a sentence noting adaptive
+      resolution and explicit `-light`/`-dark` forms.
 
 ### Phase 2 — item (2) semantics + override keys
 
-- [ ] Emit `$btn-code-copy-color` (Comment) / `$btn-code-copy-color-active`
-      (Function) defaults from the selected palette.
-- [ ] Emit `$code-block-bg` / `$code-block-color` `!default` from every
-      translated palette (decision 3: palette wins, adaptive or not).
-- [ ] Add YAML `code-block-bg` / `code-block-color` metadata keys via
-      `derive_doc_scss_layer` (the `doc_vars` seam) as the one-line
-      override escape hatch.
+- [x] `$btn-code-copy-color` (Comment) / `$btn-code-copy-color-active`
+      (Function) defaults emitted by the translator.
+- [x] `$code-block-bg` / `$code-block-color` `!default` emitted from every
+      translated palette that defines canvas colors (top-level
+      `background-color`/`text-color` first, then
+      `editor-colors.BackgroundColor` / `Normal`).
+- [x] YAML `code-block-bg` / `code-block-color` metadata keys in
+      `derive_doc_scss_layer` (unconditional assignments, matching the
+      `$sidebar-border` doc-vars pattern; `code-block-bg` also accepts
+      booleans; unsafe values dropped).
 
 ### Phase 3 — verification + docs
 
-- [ ] End-to-end: `cargo run --bin q2 -- render` on a local fixture with the
-      github/arrow pair; inspect both variant stylesheets (record snippet in
-      plan per CLAUDE.md policy).
-- [ ] Full workspace verify (`cargo xtask verify` — WASM leg affected via
-      quarto-sass/quarto-core).
-- [ ] `docs/guides/formats/html/themes.qmd` (and wherever highlight-style is
-      documented): list the full catalog.
-- [ ] Manual visual spot-check of a handful of translated palettes
-      (dracula, github, nord) against Q1 renders.
+- [x] End-to-end (2026-08-18): a scratchpad website project with
+      `theme: {light: cosmo, dark: darkly}` +
+      `highlight-style: {light: github, dark: arrow}` and a Python block,
+      rendered via `cargo run --bin q2 -- render <dir>`. Output inspected:
+      - render summary: `Rendered 1 of 1 files` with **zero warnings**
+        (previously two Q-14-5);
+      - light CSS (`quarto-theme-*.css`):
+        `.hl-keyword,.hl-keyword-operator,…,.hl-tag{color:#d73a49}` and
+        `div.sourceCode{background-color:#fff;…;color:#24292e}` —
+        github-light's token colors and translated canvas;
+      - dark CSS (`quarto-theme-dark-*.css`):
+        `.hl-keyword,…{color:#ffa07a;font-weight:bold}` — arrow-dark's
+        color **and** its `bold` flag;
+      - `#6a737d` (github Comment → `$btn-code-copy-color`) present in the
+        light CSS.
+- [x] Full workspace verify: `cargo nextest run --workspace` green and
+      full `cargo xtask verify` (14/14 steps, including the
+      WASM/hub-client leg) passed 2026-08-18.
+- [x] Docs: `docs/guides/formats/html/themes.qmd` (full catalog, adaptive
+      list, `code-block-bg`/`code-block-color` override) and
+      `docs/errors/theme/Q-14-5.qmd` (catalog list, custom-`.theme`-path
+      not-yet-supported note). Both pages render clean under Q2 (the 4
+      warnings in a single-page docs render are pre-existing llms.txt
+      companion noise, reproduced on an untouched page).
+- [x] Spot-check of translated palettes end-to-end (`q2 render`, output
+      inspected): github-light `#d73a49`, arrow-dark `#ffa07a`+bold, a11y
+      pair (via existing integration tests), dracula `#ff79c6`, nord
+      `#81a1c1`+bold — each matching its `.theme` source exactly,
+      warning-free, correct per-variant selection in light/dark slots.
 
 ### Deferred (design leaves room; not in this strand's concrete scope)
 
-- User-supplied `.theme` file paths (`highlight-style: custom.theme`).
-- Item (3): compiled-CSS darkness sentinel for custom-SCSS single variants.
+- User-supplied `.theme` file paths (`highlight-style: custom.theme`) —
+  filed as bd-ag5n55ca.
+- Item (3): compiled-CSS darkness sentinel for custom-SCSS single
+  variants — filed as bd-o20jxpfc.
 - `syntax-highlighting:` key (Q1's new name for `highlight-style`).
 - Per-language `custom-styles` overrides (Q1 ignores them in HTML output
   too).

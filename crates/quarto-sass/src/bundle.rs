@@ -207,29 +207,62 @@ pub fn load_title_block_layer() -> Result<SassLayer, SassError> {
     parse_layer(content, Some("title-block.scss"))
 }
 
-/// The syntax-highlight palettes shipped with Quarto 2 (bd-0pic6
-/// phase B). `default` is the solarized-inspired original; the a11y
-/// pair is hand-translated from Q1's `.theme` files. The general
-/// `.theme`-translator follow-up grows this set.
-pub const KNOWN_HIGHLIGHT_PALETTES: &[&str] = &["default", "a11y-light", "a11y-dark"];
+/// The user-facing syntax-highlight palette names shipped with
+/// Quarto 2, for diagnostics: `default` (q2's own solarized-inspired
+/// palette), Quarto 1's adaptive bare names (each resolves per theme
+/// variant to `<name>-light` / `<name>-dark`), and Q1's
+/// single-variant palettes — everything in the vendored
+/// `resources/pandoc/highlight-styles/` catalog. Explicit
+/// `<name>-light` / `<name>-dark` stems are also accepted by
+/// [`is_known_highlight_palette`] but folded into their bare adaptive
+/// name here. Sorted.
+pub fn known_highlight_palettes() -> Vec<String> {
+    use crate::resources::HIGHLIGHT_STYLES_RESOURCES;
 
-/// Whether `name` is a shipped highlight palette.
-/// [`load_highlight_layer`] falls back to `default` for unknown
-/// names; `CompileThemeCssStage` uses this to emit the user-facing
-/// warning for that fallback.
+    let mut names: Vec<String> = vec!["default".to_string()];
+    names.extend(
+        crate::config::ADAPTIVE_HIGHLIGHT_STYLES
+            .iter()
+            .map(|s| s.to_string()),
+    );
+    for path in HIGHLIGHT_STYLES_RESOURCES.file_paths() {
+        let Some(stem) = path.strip_suffix(".theme") else {
+            continue;
+        };
+        let is_adaptive_variant = crate::config::ADAPTIVE_HIGHLIGHT_STYLES
+            .iter()
+            .any(|a| stem == format!("{a}-light") || stem == format!("{a}-dark"));
+        if !is_adaptive_variant && !names.iter().any(|n| n == stem) {
+            names.push(stem.to_string());
+        }
+    }
+    names.sort();
+    names
+}
+
+/// Whether `name` is a shipped highlight palette: `default`, or any
+/// stem in the vendored `.theme` catalog (adaptive bare names arrive
+/// here already resolved to their `-light`/`-dark` stem by
+/// `parse_highlight_style`). [`load_highlight_layer`] falls back to
+/// `default` for unknown names; `CompileThemeCssStage` uses this to
+/// emit the user-facing warning for that fallback.
 pub fn is_known_highlight_palette(name: &str) -> bool {
-    KNOWN_HIGHLIGHT_PALETTES.contains(&name)
+    use crate::resources::HIGHLIGHT_STYLES_RESOURCES;
+    name == "default" || HIGHLIGHT_STYLES_RESOURCES.is_file(Path::new(&format!("{name}.theme")))
 }
 
 /// Load the syntax-highlight SCSS layer for a palette.
 ///
-/// The layer combines two embedded files:
+/// The layer combines two parts:
 /// - `highlight.scss` — palette-independent structural rules
 ///   (`pre > code` display, white-space, sourceCode margins);
-/// - `highlight-<palette>.scss` — the `.hl-<capture>` color rules
+/// - the palette's `.hl-<capture>` color rules plus palette-level
+///   `$code-block-bg` / `$code-block-color` / copy-button defaults
 ///   (see `claude-notes/plans/2026-04-19-syntax-highlighting-design.md`
-///   for the class vocabulary), plus palette-level `$code-block-bg` /
-///   `$code-block-color` defaults for the non-default palettes.
+///   for the class vocabulary). For `default` this is the hand-written
+///   `highlight-default.scss`; every other palette is translated at
+///   load time from its vendored Q1 `.theme` file by
+///   [`crate::highlight_theme::translate_dot_theme`].
 ///
 /// `None` and unknown names load the `default` palette (the caller
 /// warns for unknown names — quarto-sass stays diagnostics-free).
@@ -238,7 +271,7 @@ pub fn is_known_highlight_palette(name: &str) -> bool {
 /// user-supplied theme overrides — so user themes can redefine any
 /// `.hl-*` class without touching markup.
 pub fn load_highlight_layer(palette: Option<&str>) -> Result<SassLayer, SassError> {
-    use crate::resources::TEMPLATES_RESOURCES;
+    use crate::resources::{HIGHLIGHT_STYLES_RESOURCES, TEMPLATES_RESOURCES};
 
     let palette = match palette {
         Some(name) if is_known_highlight_palette(name) => name,
@@ -250,15 +283,25 @@ pub fn load_highlight_layer(palette: Option<&str>) -> Result<SassLayer, SassErro
         .ok_or_else(|| SassError::CompilationFailed {
             message: "highlight.scss not found in templates resources".to_string(),
         })?;
-    let palette_file = format!("highlight-{palette}.scss");
-    let palette_content = TEMPLATES_RESOURCES
-        .read_str(Path::new(&palette_file))
-        .ok_or_else(|| SassError::CompilationFailed {
-            message: format!("{palette_file} not found in templates resources"),
-        })?;
+
+    let palette_layer = if palette == "default" {
+        let palette_content = TEMPLATES_RESOURCES
+            .read_str(Path::new("highlight-default.scss"))
+            .ok_or_else(|| SassError::CompilationFailed {
+                message: "highlight-default.scss not found in templates resources".to_string(),
+            })?;
+        parse_layer(palette_content, Some("highlight-default.scss"))?
+    } else {
+        let theme_file = format!("{palette}.theme");
+        let json = HIGHLIGHT_STYLES_RESOURCES
+            .read_str(Path::new(&theme_file))
+            .ok_or_else(|| SassError::CompilationFailed {
+                message: format!("{theme_file} not found in highlight-styles resources"),
+            })?;
+        crate::highlight_theme::translate_dot_theme(json, palette)?
+    };
 
     let structural_layer = parse_layer(structural, Some("highlight.scss"))?;
-    let palette_layer = parse_layer(palette_content, Some(&palette_file))?;
     Ok(SassLayer {
         uses: join_band(&structural_layer.uses, &palette_layer.uses),
         defaults: join_band(&structural_layer.defaults, &palette_layer.defaults),
@@ -754,6 +797,91 @@ pub fn assemble_themes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_known_highlight_palettes_cover_q1_catalog() {
+        let names = known_highlight_palettes();
+        // q2's own palette plus the adaptive bare names and the
+        // single-variant Q1 palettes.
+        for expected in [
+            "default",
+            "a11y",
+            "arrow",
+            "atom-one",
+            "ayu",
+            "ayu-mirage",
+            "breeze",
+            "breezedark",
+            "dracula",
+            "github",
+            "gruvbox",
+            "monochrome",
+            "monokai",
+            "nord",
+            "none",
+            "printing",
+            "pygments",
+            "solarized",
+            "tango",
+            "zenburn",
+        ] {
+            assert!(names.iter().any(|n| n == expected), "missing {expected}");
+        }
+        // Adaptive pair *variants* are folded into their bare name.
+        assert!(!names.iter().any(|n| n == "github-light"));
+        assert!(!names.iter().any(|n| n == "a11y-dark"));
+        // Sorted, deduped.
+        let mut sorted = names.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(names, sorted);
+    }
+
+    #[test]
+    fn test_is_known_highlight_palette_accepts_stems() {
+        assert!(is_known_highlight_palette("default"));
+        assert!(is_known_highlight_palette("github-light"));
+        assert!(is_known_highlight_palette("arrow-dark"));
+        assert!(is_known_highlight_palette("dracula"));
+        // Bare adaptive names are resolved before reaching this
+        // check, so the raw name is not a palette stem.
+        assert!(!is_known_highlight_palette("github"));
+        assert!(!is_known_highlight_palette("no-such-palette"));
+    }
+
+    #[test]
+    fn test_load_highlight_layer_translates_theme_palettes() {
+        // github-light: Keyword #d73a49 on a #ffffff canvas.
+        let layer = load_highlight_layer(Some("github-light")).unwrap();
+        assert!(
+            layer.rules.contains(".hl-keyword"),
+            "translated palette must color keywords"
+        );
+        assert!(layer.rules.contains("#d73a49"));
+        assert!(layer.defaults.contains("$code-block-bg: #ffffff !default;"));
+        // The structural rules ride along, as for every palette.
+        assert!(
+            layer.rules.contains("pre.sourceCode") || layer.rules.contains("sourceCode"),
+            "structural highlight.scss rules must be included"
+        );
+
+        // The a11y pair now routes through the translator and keeps
+        // its .theme-sourced colors (stage-1 parity).
+        let layer = load_highlight_layer(Some("a11y-light")).unwrap();
+        assert!(layer.rules.contains("#d91e18"));
+        assert!(layer.defaults.contains("$code-block-bg: #fefefe !default;"));
+        let layer = load_highlight_layer(Some("a11y-dark")).unwrap();
+        assert!(layer.rules.contains("#ffa07a"));
+        assert!(layer.defaults.contains("$code-block-bg: #2b2b2b !default;"));
+    }
+
+    #[test]
+    fn test_load_highlight_layer_unknown_falls_back_to_default() {
+        let unknown = load_highlight_layer(Some("no-such-palette")).unwrap();
+        let default = load_highlight_layer(None).unwrap();
+        assert_eq!(unknown.rules, default.rules);
+        assert!(default.rules.contains("#859900"), "solarized keyword green");
+    }
 
     #[test]
     fn test_load_bootstrap_framework() {

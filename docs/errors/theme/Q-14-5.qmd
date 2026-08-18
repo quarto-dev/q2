@@ -27,17 +27,25 @@ completes.
 
 Common causes:
 
-- **A typo in the style name.**
-- **A Quarto 1 style that has not yet been ported.** Quarto's
-  highlighting is tree-sitter based, and its palettes are being
-  ported incrementally. Currently available: `default`, `a11y`
-  (adaptive — resolves to a light or dark variant per theme),
-  `a11y-light`, and `a11y-dark`.
+- **A typo in the style name.** The warning lists every available
+  palette; check the configured name against that list.
+- **A custom `.theme` file path.** Quarto 1 accepts a path to a
+  user-supplied `.theme` file here; Quarto 2 does not support that
+  yet — only the shipped catalog names.
+
+Quarto ships the full Quarto 1 palette catalog: the adaptive names
+`a11y`, `arrow`, `atom-one`, `ayu`, `breeze`, `github`, `gruvbox`,
+and `monochrome` (each resolves to its `-light` / `-dark` variant
+per theme, and the explicit forms are accepted too), the
+single-variant palettes `ayu-mirage`, `breezedark`, `dracula`,
+`espresso`, `haddock`, `kate`, `monokai`, `nord`, `oblivion`,
+`printing`, `pygments`, `radical`, `solarized`, `tango`,
+`vim-dark`, and `zenburn`, plus Quarto's own `default` and `none`.
 
 ## How to fix
 
 Pick one of the available palettes, or remove `highlight-style:`
-to use the default. The adaptive form pairs naturally with a
+to use the default. An adaptive name pairs naturally with a
 light/dark theme configuration:
 
 ```yaml
@@ -46,5 +54,5 @@ format:
     theme:
       light: cosmo
       dark: darkly
-highlight-style: a11y
+highlight-style: github
 ```
