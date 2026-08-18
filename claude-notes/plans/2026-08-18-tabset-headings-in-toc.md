@@ -20,9 +20,20 @@ described at HEAD; what does not hold up is the explanation of *why Q1 differs*,
 >   narrow `.panel-tabset` skip does not close the bug.
 > - Recursion costs **zero test failures** (12306 passed on the spike). The blast radius feared
 >   in "Risks" below did not materialize.
-> - The three parts are **coupled**: recurse + restrict *without* pandoc's attribute-merge rule
->   under-collects (`.content-visible`, `.column-margin`, `layout-ncol` entries vanish). All
->   three must land together.
+> - The three parts are **coupled**: recurse + restrict *without* pandoc's absorb rule
+>   under-collects. All three must land together.
+>
+> **Fallout measured 2026-08-18** — full report:
+> `tabset-headings-in-toc-investigation/FALLOUT-B.md`; measured diff:
+> `…/spike-B.patch` (spike reverted). On the Connect docs port (451 pages):
+> **35 HTML pages change, 46 TOC entries removed, 0 added, and exact TOC parity
+> with Q1 goes 421 → 444.** Workspace tests: 12306 passed, 0 failed, no snapshot
+> churn. `docs/` (247 pages): 0 files changed.
+>
+> One new blocker surfaced: **2 pages regress**, and the cause is not (B). Q1
+> *unwraps* `.content-visible` Divs; q2 keeps them (10 pages corpus-wide, Q1: 0),
+> so the restricted walk stops at the Div. **(B) must be preceded by matching
+> Q1's conditional-content unwrapping**, or those 2 pages lose entries.
 > - Non-recursion is **not** what protects callout/tab titles — the transforms consume those
 >   Headers before sectionize runs. Q1 recurses and gets them right by the same mechanism.
 
@@ -159,8 +170,10 @@ phases differ substantially between them.
   asserting a `####` inside a tab does not appear in `nav#TOC`; the probe fixture promoted to a
   committed regression fixture.
 - **Phase 1 — Core change** (see design question 1).
-- **Phase 2 — Reconcile `sectionize_blocks`** (bd-26nryuwh) *(direction B only)* — recurse into Divs, merge attrs
-  when the Div id is empty, do not descend into `BlockQuote`.
+- **Phase 1.5 — Unwrap conditional-content Divs to match Q1** — a prerequisite discovered by the
+  fallout measurement; without it 2 pages lose TOC entries. Needs its own strand.
+- **Phase 2 — Reconcile `sectionize_blocks`** (bd-26nryuwh) *(direction B only)* — recurse into Divs,
+  apply pandoc's absorb rule (empty Div id + header-led run), do not descend into `BlockQuote`.
 - **Phase 3 — Sweep the fallout** — snapshots, `quarto-ast-reconcile` hashing, `llms.rs`,
   `idempotence.rs`, anything asserting on section structure.
 - **Phase 4 — Re-measure against the port** — rerun the Connect-docs chrome sweep; expect the
@@ -187,12 +200,15 @@ phases differ substantially between them.
    profile outline), or a generic pampa-owned opt-out class that quarto-core applies (clean
    layering, but applied by the transform it misses `extract_outline`, and it misses preview until
    bd-47afd5ro lands)?
-3. **Is the blockquote leak (bd-8yjvs3bj) in scope here, or does it stay its own strand?** Same root
-   cause; it falls out of (B) for free, and under (A) it needs its own two lines (delete the
-   `BlockQuote` arm).
-4. **Non-HTML and reveal formats.** `PanelTabsetTransform` self-gates to Bootstrap HTML, so
-   elsewhere the `.panel-tabset` Div passes through with headers intact. Should the TOC rule apply
-   uniformly across formats (it would under both A and B), or only where tabsets actually render?
+3. ~~**Is the blockquote leak (bd-8yjvs3bj) in scope here?**~~ **Settled:** it comes for free with
+   (B); bd-8yjvs3bj closes as absorbed once (B) lands.
+4. ~~**Non-HTML and reveal formats.**~~ **Settled: uniform.** The rule lives in pampa
+   (`sectionize_blocks` + `collect_toc_entries`), so it is format-agnostic by construction —
+   which also keeps the door open for filters that render tabsets for PDF targets. One trap to
+   carry into the plan: `SectionizeTransform` is pushed only in the non-reveal branch
+   (`pipeline.rs:1332`) while `TocGenerateTransform` is ungated (`:1387`), so a future revealjs
+   TOC would find no section tree. Verified q2 emits no `nav#TOC` for revealjs today, so this is
+   latent, not live — but sectionize should run for reveal too before anyone adds one.
 5. **How much snapshot churn is acceptable?** (B) changes rendered section markup for every heading
    nested in a Div. Worth a quick spike to count before committing to it?
 
