@@ -3,7 +3,8 @@
 **Date:** 2026-08-18
 **Braid:** bd-page-footer-image-items-stmpikgo
 **Branch:** `main` (investigation committed in place; implementation branch TBD by user)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design aligned 2026-08-18 (user answered all five questions; see
+§ Design decisions). Ready to turn into implementation phases.
 
 ## Triage verdict
 
@@ -83,60 +84,123 @@ Condensed:
 `repro/` under the investigation dir is a copy of the external repro
 (`~/repos/github/cscheid/q2-connect-docs/llms-info/repros/page-footer-image-items/`).
 
-## Proposed phases (draft)
+## Proposed phases
 
-Skeleton only — contents wait on the design discussion.
+Per-phase test-first per CLAUDE.md TDD; each phase lands with its failing
+tests written and verified first.
 
-- **Phase 0 — Test plan (TDD).** Failing tests first:
-  - unit: `parse_config_string_as_markdown("![x](y)")` yields inlines (or:
-    `render_text` on a lone-image value is non-empty), per the chosen fix level;
-  - unit: `rewrite_items_hrefs` rewrites Image `src` and Link `href` inside
-    `item.text` (root-absolute and relative, `.qmd`→`.html`);
-  - integration: end-to-end render of the repro project asserting the deep
-    page's footer markup (drive the real binary path per CLAUDE.md).
-- **Phase 1 — Defect 1:** make a lone-image config string survive to
-  rendering (fix level per design question 1).
-- **Phase 2 — Defect 2:** route item `text:`/`bare_text` inlines through
-  `rewrite_config_inlines` in `rewrite_items_hrefs`, symmetric with the
-  existing `menu` recursion; decide `PandocBlocks` handling.
-- **Phase 3 — Scope extension (per design question 2):** same routing for
-  navbar/sidebar item text, and/or the `PandocBlocks` Text-region gap.
-- **Phase 4 — Diagnostics (per design question 4):** missing-resource
-  warnings for footer references, if in scope.
-- **Phase 5 — Docs** (user-facing only if behavior visibly changes; likely
-  just changelog/strand notes).
+- [ ] **Phase 1 — Defect 1: lone-Figure unwrap at the config parse.**
+  In `parse_yaml_string_as_markdown_to_config` (`crates/pampa/src/pandoc/meta.rs`),
+  after the existing lone-`Paragraph` unwrap, also unwrap
+  `blocks == [Figure]` back to its `Image` → `PandocInlines([Image])`.
+  Tests: pampa unit tests for `parse_config_string_as_markdown("![x](y)")`
+  → inlines (both with alt text and `![](y)`, which never desugars);
+  `render_text` on the resulting value is non-empty. Review snapshot churn
+  across the workspace (shared parse path; `!md` values included — see risks).
+- [ ] **Phase 2 — Defect 2: route item text through the inline rewriter.**
+  Shared helper (likely on/near `rewrite_items_hrefs`) that runs
+  `rewrite_config_inlines` over `item.text` and `item.bare_text` when
+  `PandocInlines`, recursing into `item.menu` — wired into all three
+  surfaces: `footer_render.rs`, `navbar_render.rs`, `sidebar_render.rs`
+  (decision 2). Tests: unit per surface (root-absolute + relative image
+  `src`, `.qmd`→`.html` link); end-to-end render of `repro/` asserting the
+  deep page's footer markup.
+- [ ] **Phase 3 — Blocks walker.** `rewrite_config_blocks` companion in
+  `navigation_href.rs` that walks block containers (including *into*
+  `Figure` — persisting the node, rewriting targets inside it, decision 3)
+  and delegates to `rewrite_config_inlines` at inline positions. Wire into
+  the `PandocBlocks` arms of the Text-region and item-text call sites.
+  Tests: multi-paragraph `!md` region/item text with image + link.
+- [ ] **Phase 4 — Uniform Q-5-6 for footer images (decision 4).**
+  Extend `copy_footer_images` to walk `Items` regions (item `text:` +
+  `bare_text`, recursing into `menu`) and `PandocBlocks` values using the
+  shared collectors; build a `ResourceCopyIntent` per collected URL with
+  `origin` = the Image node's span (remaps into `_quarto.yml`), and report
+  misses via `missing_resource_diagnostic` (Q-5-6) instead of the uncoded
+  string warning. Once per project (post-render) to avoid per-page warning
+  duplication. Tests: `repro-missing/` end-to-end — all four rows of the
+  matrix produce exactly one spanned Q-5-6 each (plus the body control).
+- [ ] **Phase 5 — Verification + docs.** Full `cargo xtask verify`;
+  end-to-end render of both repros recorded in this plan; changelog/strand
+  notes. Check whether `docs/errors/quarto/Q-5-6.qmd` needs wording updates
+  for the config-reference case.
 
-## Open design questions for the user
+Possible follow-up strands (file, don't do here): upgrade `copy_navbar_logo`'s
+generic warning to the same Q-5-6 shape; sidebar `logo`; favicon.
 
-1. **Fix level for defect 1 (lone image → Figure → dropped).** Two candidates:
-   - **(a) In `parse_yaml_string_as_markdown_to_config`** (`meta.rs`): also
-     unwrap a lone `Figure` back to its image → `PandocInlines([Image])`.
-     Config strings are inline presentation contexts; a figure with caption
-     semantics is arguably never wanted there. This fixes *every* consumer
-     (item text, region text, navbar/sidebar text, titles) and — because the
-     value becomes `PandocInlines` — the existing rewrite branches then work
-     on it, fixing the lone-image resolution case for free.
-   - **(b) In `render_text`/`block_inlines`**: teach the renderer to unwrap
-     `Figure` to its image. Narrower, but leaves the value as `PandocBlocks`,
-     which the rewrite branches skip — so defect 2's fix would then also need
-     a blocks walker. My read is (a) is the right level; confirm?
-2. **Scope of defect 2's fix.** Strand scopes to page-footer items. The navbar
-   item-text gap (bonus finding b) is the same missing call in a sibling
-   transform. Fix footer-only here and file a discovered-from strand for
-   navbar/sidebar, or fix all three surfaces in this pass (shared helper on
-   `NavigationItem`)?
-3. **`PandocBlocks` handling in the rewriters.** With 1(a) chosen, lone images
-   become inlines, but multi-block `!md` text (items or regions) still skips
-   rewriting (bonus finding a). Add a `rewrite_config_blocks` walker now, or
-   file separately? (`render_text` already renders blocks, so blocks *do*
-   reach the page with unresolved targets today.)
-4. **Diagnostics.** The strand notes a broken footer reference is silent while
-   the same reference in body content raises Q-5-6. Does `rewrite_config_inlines`
-   already emit Q-13-x diagnostics once the text is actually routed through it
-   (i.e. does defect 2's fix close most of the gap for free), and is a
-   missing-file warning for footer images in scope here or a separate strand?
-5. **Priority.** Filed P2 to match the origin strand but described as "the
-   blocker under a P1". Bump to P1?
+## Design decisions (2026-08-18, aligned with user)
+
+1. **Fix level for defect 1: (a), confirmed.** Unwrap a lone `Figure` back to
+   its image in `parse_yaml_string_as_markdown_to_config` (`meta.rs`) —
+   "a figure with caption semantics is arguably never wanted there." The value
+   becomes `PandocInlines([Image])`, so every consumer (render, inline
+   rewriters, `copy_footer_images`' image collection) works on it for free.
+2. **Scope of defect 2: all three surfaces.** Route item `text:`/`bare_text`
+   inlines through the rewriter for page-footer, navbar, and sidebar items in
+   this pass (shared helper), not footer-only.
+3. **Blocks walker: yes, in this pass** — with the explicit note that **in
+   block settings `Figure` nodes should persist**: the blocks walker rewrites
+   Link/Image targets *inside* figures (and other block containers), it does
+   not unwrap them. Only the config-string parse (decision 1) unwraps, and
+   only for the lone-image case. The inline and block walkers are
+   intentionally different in this respect.
+4. **Diagnostics: raise Q-5-6 uniformly.** The user's framing: footer content
+   should behave "more or less equivalent to what would happen in our pipeline
+   if it lived inside a `::: footer` div" in the body. Investigation findings
+   (see § Q4 investigation below): `rewrite_config_inlines` emits Q-13-x for
+   *links* only; *images* get a pure URL rewrite with no existence check. The
+   missing-file story is owned by the copy machinery, which today is a
+   three-way asymmetry. The fix direction: footer/nav config images go through
+   `ResourceCopyIntent` + `missing_resource_diagnostic` (Q-5-6, spanned at the
+   YAML reference) instead of the bespoke uncoded warning.
+5. **Priority: stays P2.**
+
+## Q4 investigation: the current diagnostic + copy matrix
+
+Verified by code reading and the `repro-missing/` fixture (all referencing the
+same nonexistent `/images/nope.svg`; `cargo run --bin q2 -- render …/repro-missing`):
+
+| reference site | copy attempted? | diagnostic today |
+|---|---|---|
+| body image (control) | yes (`ResourceCollectorTransform` → intent) | **Q-5-6 warning, spanned at the reference** |
+| region-level `Text`, image with sibling inline | yes (`copy_footer_images`) | generic `Warning: page-footer image refers to missing file '…'` — **no code, no span, no docs URL** |
+| region-level `Text`, **lone** image | **no** — the Figure gap hits `copy_footer_images` too (its `PandocInlines` match fails on `PandocBlocks([Figure])`) | **silent** |
+| item-level `text:` image | **no** — `copy_footer_images` walks only `FooterRegion::Text`, skipping `Items` entirely (the same asymmetry as defect 2) | **silent** |
+
+Mechanics established:
+
+- **Q-5-6 producer/consumer split.** Producers push
+  `ResourceCopyIntent { src, dest, origin: SourceInfo }` onto
+  `RenderContext::resource_copies`; the shared drain
+  (`enqueue_resource_copies`, `resource_copy_diagnostics.rs:121`) probes
+  existence and emits `missing_resource_diagnostic` (Q-5-6, located at
+  `origin`) for missing sources. The body producer is
+  `ResourceCollectorTransform` (Finalization), which walks **`ast.blocks`
+  only** — footer inlines live in `ast.meta`, so they never produce intents.
+- **A config-image precedent exists**: `title_banner.rs:148` pushes a
+  `ResourceCopyIntent` for the banner image (with a generated span;
+  ours can do better — see below).
+- **Spans can point into `_quarto.yml`.** `parse_config_string_as_markdown`
+  threads the YAML scalar's `SourceInfo` into the qmd reader, so Image nodes
+  in parsed config text carry remappable spans — a footer Q-5-6 can underline
+  the reference inside `_quarto.yml` the way the body one underlines the qmd.
+- **`copy_footer_images`** (`website_post_render.rs:183`, native-only,
+  post-render, once per project) re-parses raw scalars itself via
+  `parse_config_string_as_markdown` — so decision 1's Figure unwrap
+  automatically fixes its lone-image gap too. Its missing-file warning is
+  an uncoded, span-less `DiagnosticMessage::warning`. `copy_navbar_logo`
+  has the same generic-warning style (out of scope here, but the same
+  upgrade applies if we want full uniformity later).
+- **Duplication consideration.** The footer appears on every page: if the
+  per-doc pipeline emitted the intents, a missing footer image would warn
+  once *per rendered page* (352× on the Connect docs). The post-render hook
+  runs once per project, which is the natural dedup point. Proposed shape:
+  keep collection/copy in `copy_footer_images` (extended to Items regions
+  and blocks via the shared walkers), but build a `ResourceCopyIntent` per
+  URL and report misses through `missing_resource_diagnostic` so the
+  user-visible warning is the same Q-5-6, spanned at the YAML reference.
+  (A body `::: footer` div would technically warn per page; once-per-project
+  with the same code+span is the "more or less equivalent" reading.)
 
 ## Risks / tradeoffs (draft)
 

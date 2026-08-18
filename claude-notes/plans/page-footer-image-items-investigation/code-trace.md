@@ -70,6 +70,18 @@ A rewrite of item text must at least handle `PandocInlines`; whether
 `PandocBlocks` is handled by a blocks-walking wrapper or made rarer by fixing
 defect 1 at the parse level is a design question (see plan).
 
+## Q4 addendum (diagnostics/copy matrix)
+
+Investigated after design alignment — full findings in the plan's "Q4
+investigation" section. Key sites: `rewrite_config_inlines` emits Q-13-x for
+Links (via `resolve_href_for_html`) but nothing for Images
+(`resolve_root_relative_resource_href` is a pure rewrite); Q-5-6 is produced
+by the `ResourceCopyIntent` drain (`resource_copy_diagnostics.rs:121`) fed by
+`ResourceCollectorTransform`, which walks `ast.blocks` only;
+`copy_footer_images` (`website_post_render.rs:183`) owns the footer-image copy
+but skips `Items` regions and `PandocBlocks` values and warns without code or
+span. Fixture: `repro-missing/`.
+
 ## Repro
 
 `repro/` here is a copy of the sources from

@@ -1,0 +1,9 @@
+project:
+  type: website
+website:
+  title: "missing footer image"
+  page-footer:
+    left: '![region-level missing, with sibling](/images/nope.svg) beside text'
+    center: '![region-level missing, lone](/images/nope.svg)'
+    right:
+      - text: '![item-level missing](/images/nope.svg) beside text'
