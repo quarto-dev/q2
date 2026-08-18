@@ -89,7 +89,12 @@ Condensed:
 Per-phase test-first per CLAUDE.md TDD; each phase lands with its failing
 tests written and verified first.
 
-- [ ] **Phase 1 — Defect 1: lone-Figure unwrap at the config parse.**
+- [x] **Phase 1 — Defect 1: lone-Figure unwrap at the config parse.**
+  *Done 2026-08-18.* `unwrap_lone_figure` in `crates/pampa/src/pandoc/meta.rs`,
+  applied only in `parse_config_string_as_markdown` (the `!md` path keeps
+  Figure semantics; pinned by test). Five unit tests (failing-first); full
+  workspace suite green, zero snapshot churn. End-to-end verified: lone-image
+  footer items now render `<img>` in `repro/` (src still unrebased — Phase 2).
   In `parse_yaml_string_as_markdown_to_config` (`crates/pampa/src/pandoc/meta.rs`),
   after the existing lone-`Paragraph` unwrap, also unwrap
   `blocks == [Figure]` back to its `Image` → `PandocInlines([Image])`.
