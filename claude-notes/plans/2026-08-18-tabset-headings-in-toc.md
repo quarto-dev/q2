@@ -332,24 +332,27 @@ q2 keeps the marker class *and* the Div, so 10 Connect-docs pages carry a
       rendered TOC omits it, because heading-consuming transforms run after the profile checkpoint.
       Filed as **bd-ca17fck0** and pinned by `outline_sees_headings_inside_divs`.
 
-## Phase 4 — End-to-end verification
+## Phase 4 — End-to-end verification ✅
 
-- [ ] `cargo nextest run --workspace`, then `cargo xtask verify` (full — pampa/quarto-core are in
-      hub-client's WASM closure).
-- [ ] Re-render the Connect corpus with the clean double-render method (see `FALLOUT-B.md` — an
-      incremental baseline invalidates the diff) and confirm: exact TOC parity with Q1 rises from
-      **421 → 444 of 451**, TOC entries added **= 0**, and the 2 `content-visible` regressions are
-      gone (target ≥ 446 once Phase 1 lands).
-- [ ] Review every changed page against Q1, not just the counts.
-- [ ] Record the invocations and observed output in this plan.
+- [x] `cargo nextest run --workspace`, then `cargo xtask verify` (full) — both green.
+- [x] Re-rendered clean. **421 → 444 of 451**, 0 entries added, and the 2 `content-visible`
+      regressions never materialized — Phase 1 removed their cause. The 444 (not 446) is because
+      those two pages carry a *separate*, pre-existing Q1-side id defect; see the Phase 3 notes.
+- [x] Reviewed every changed page against Q1: 25 closer, 426 unchanged, **0 further**. Every one
+      of the 44 removed entries was inside a `div.tab-pane` (HTML-parsed, not regex-matched); 20 of
+      them pointed into a pane with no `active` class.
+- [x] Invocations and observed output recorded in the per-phase verification sections above.
 
 ## Phase 5 — Bookkeeping
 
 - [ ] Close bd-8yjvs3bj (blockquote leak) as absorbed by Phase 3.
 - [ ] Close bd-26nryuwh (sectionize recursion) as delivered by Phase 2.
 - [x] File the conditional-content unwrap as its own strand (Phase 1) — **bd-wbnaa2ud**.
-- [ ] Docs: user-visible behavior change is "headings inside tabsets/callouts no longer appear in
-      the TOC" — check whether `docs/` says anything about TOC contents that needs updating.
+- [x] Docs: `docs/guides/authoring/tabsets.qmd:74` said tab-title headings are excluded and that
+      "deeper headings inside a tab stay part of that tab's content" — true but ambiguous, and
+      written when those headings *did* appear in the TOC. Rewritten to state the rule plainly, say
+      why, and reassure that the headings still render, get ids, and can be linked to. Rendered and
+      read the result; full `docs/` render clean (247 of 247).
 - [ ] Commit at each phase boundary; do not push without approval.
 
 ### Phase 1 verification (2026-08-18)
