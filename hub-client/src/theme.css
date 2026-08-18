@@ -327,3 +327,31 @@
   --text-muted: #8494a1;
   --accent-secondary: #93b3d0;
 }
+
+/* Aliases that reference ramp tokens must be re-declared in the ramp's
+   scope: a var() inside a custom property resolves where that property is
+   declared, and the resolved value is what inherits — so the :root.dark
+   aliases above never see the ramp. Only aliases of ramp-overridden tokens
+   need this; alpha tints and brand constants resolve identically anywhere. */
+:root.dark .projects-home,
+:root.dark .editor-container {
+  --dialog-bg: var(--bg-modal);
+  --dialog-border: var(--border-color);
+  --dialog-input-border: var(--border-color);
+  --dialog-file-input-border: var(--border-color);
+}
+
+:root.dark .editor-container {
+  --editor-bg: var(--bg-modal);
+  --editor-header-bg: var(--bg-modal);
+  --editor-header-border: var(--border-color);
+  --editor-accent-border: var(--border-color);
+  --editor-accent-text: var(--accent-secondary);
+  --editor-info: var(--accent-secondary);
+  --editor-disconnected-border: var(--border-color);
+  --sidebar-border: var(--border-color);
+  --context-menu-bg: var(--bg-modal);
+  --context-menu-border: var(--border-color);
+  --view-toggle-bg: var(--bg-modal);
+  --view-toggle-text: var(--accent-secondary);
+}
