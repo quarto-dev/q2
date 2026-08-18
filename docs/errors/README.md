@@ -141,6 +141,11 @@ below. Do both in the same commit.
    above.
 3. Fill the front-matter fields from the catalog entry. Start at
    `status: draft` until you write real prose.
+4. Add the page to the errors sidebar in `docs/_quarto.yml` — one
+   `- errors/<subsystem>/Q-X-Y.qmd` line under the
+   `- section: "<subsystem>"` block, creating the section if this is
+   the subsystem's first page. This is also enforced; see
+   [Enforcement](#enforcement).
 
 The `cargo xtask error-docs new Q-X-Y` generator described in
 [the tooling plan](../../claude-notes/plans/2026-05-22-error-docs-tooling.md)
@@ -148,8 +153,10 @@ The `cargo xtask error-docs new Q-X-Y` generator described in
 
 ## Enforcement
 
-`cargo xtask lint` reconciles the catalog against this directory and
-fails on two problems:
+`cargo xtask lint` runs two repo-level rules over this directory.
+
+`error-docs-page-missing` reconciles the catalog against this
+directory and fails on two problems:
 
 - **A code with no page.** The catalog declares `Q-X-Y`; no file
   exists at `docs/errors/<subsystem>/Q-X-Y.qmd`. Diagnostics carrying
@@ -157,6 +164,37 @@ fails on two problems:
 - **`docs_url` drift.** The entry's `docs_url` is not
   `https://quarto.org/docs/errors/<subsystem>/<code>`, so the link the
   user clicks does not reach the page even when the page exists.
+
+`error-docs-sidebar-unlisted` reconciles this directory against the
+errors sidebar in `docs/_quarto.yml` and fails on three more:
+
+- **An unlisted page.** The page exists but no sidebar entry
+  references it. It still renders and still resolves by direct URL —
+  so no diagnostic ships a 404 — but a reader browsing the error
+  reference cannot find it.
+- **A stale entry.** The sidebar references a page that does not
+  exist, so the rendered sidebar carries a dead link.
+- **An out-of-order entry.** Entries within a `- section:` block must
+  ascend by code number, so `Q-1-2` comes before `Q-1-10`. Without
+  this, appending entries alphabetically drifts the sidebar into
+  lexicographic order.
+
+The sidebar list is hand-maintained (a v1 decision recorded in
+`claude-notes/plans/2026-05-22-error-docs-foundation.md`), and before
+this rule existed it had drifted to 153 of 211 pages, with two whole
+subsystems missing their `- section:` block.
+
+**Section order is not policed.** The sections sit in an arbitrary
+historical order and stay that way; only entries *within* a section
+are sequenced. Note that a numerically ordered section can still look
+lexicographic where codes are sparse — `yaml` runs
+`Q-1-1, Q-1-10, … Q-1-29, Q-1-99` because it has no `Q-1-2` through
+`Q-1-9`.
+
+Sorting the [listing](index.qmd) by code number is a separate,
+unsolved problem (bd-otmqu). It is not the same as sidebar order: the
+listing's sort key has to come from front matter, and neither Quarto 2
+nor Quarto 1 has a numeric-aware build-time comparator.
 
 The check runs as step 1 of `cargo xtask verify` and in CI, so it
 fires before you open a PR. It reports violations against the catalog
