@@ -412,6 +412,53 @@ async fn profile_sees_heading_from_included_file() {
     );
 }
 
+/// Walk an outline (and nested children) collecting entry ids in
+/// document order.
+fn collect_outline_ids(outline: &[pampa::toc::TocEntry]) -> Vec<String> {
+    fn walk(entry: &pampa::toc::TocEntry, out: &mut Vec<String>) {
+        out.push(entry.id.clone());
+        for child in &entry.children {
+            walk(child, out);
+        }
+    }
+    let mut ids = Vec::new();
+    for entry in outline {
+        walk(entry, &mut ids);
+    }
+    ids
+}
+
+#[tokio::test]
+async fn profile_outline_ids_deduped_across_includes() {
+    // bd-duplicate-heading-ids-mou5z7ux: the scoped uniqueIdent pass
+    // runs at the tail of IncludeExpansionStage, i.e. *before* the
+    // DocumentProfile checkpoint — so the profile outline (consumed by
+    // sidebars, cross-doc links, incremental rebuilds) must already see
+    // the disambiguated ids, not three copies of the same one.
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let project_dir = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf());
+
+    let child_path = project_dir.join("child.qmd");
+    std::fs::write(&child_path, "## Child Heading\n\nChild body.\n").expect("write child");
+
+    let parent_path = project_dir.join("parent.qmd");
+    let parent_content: &[u8] = b"---\ntitle: Parent\n---\n\n\
+        {{< include child.qmd >}}\n\n{{< include child.qmd >}}\n";
+
+    let bundle = run_head_pipeline_in_dir(&project_dir, &parent_path, parent_content).await;
+
+    let ids = collect_outline_ids(&bundle.profile.outline);
+    assert_eq!(
+        ids,
+        vec!["child-heading", "child-heading-1"],
+        "profile outline must carry disambiguated ids \
+         (bd-duplicate-heading-ids-mou5z7ux); got: {ids:?}"
+    );
+}
+
 #[tokio::test]
 async fn profile_records_direct_include_in_includes_field() {
     // bd-r82e: a parent that pulls in `{{< include child.qmd >}}`

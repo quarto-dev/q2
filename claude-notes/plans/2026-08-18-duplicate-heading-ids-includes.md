@@ -3,7 +3,7 @@
 **Date:** 2026-08-18
 **Braid:** bd-duplicate-heading-ids-mou5z7ux (p2, bug, label `markdown`)
 **Checkout:** main checkout, branch `main` @ `4eaede00` at investigation time (implementation branch TBD)
-**Status:** Design aligned with user 2026-08-18, refined same day to the **scoped uniqueIdent** shape (Decision 2/5 below). Awaiting implementation go-ahead; Decision 4 (diagnostic) still open.
+**Status:** Implemented 2026-08-18 on branch `braid/bd-duplicate-heading-ids-mou5z7ux` (go-ahead given same day). Phases 0–2 complete, all verification green. Decision 4's diagnostic filed as follow-up **bd-8wf5brc8**. Remaining: PR + merge, then strand close-out (Phase 3 tail items).
 
 ## Design decisions (user-aligned, 2026-08-18)
 
@@ -58,45 +58,45 @@ Control (`control-inline.qmd`, same heading three times inline) correctly emits 
 
 ### Phase 0 — Tests first (TDD; all must fail or pin current behavior before Phase 1)
 
-quarto-core (the filed bug; extend `crates/quarto-core/tests/integration/` per the integration-test layout rule — module inside the `integration` binary):
+quarto-core (the filed bug; new module `tests/integration/include_heading_id_dedup.rs`, registered in `main.rs`; reuses `include_expansion_diagnostics::render_fixture`). **Written 2026-08-18; all 7 behavior tests fail with the expected duplicate-id collisions; the 2 pins pass:**
 
-- [ ] Repeated include → `x`, `x-1`, `x-2` (fails today).
-- [ ] Nested include (a.qmd includes b.qmd twice; b carries a heading).
-- [ ] Mixed ordering, scoped semantics (Decision 5): inline "H" then included "H" → included gets `h-1`; included "H" then inline "H" → **included** gets `h-1`, inline keeps `h` (documents the accepted Q1 divergence).
-- [ ] Set-probe, not counter: main doc has explicit `{#h-1}`, includes "H" twice → included get `h`, `h-2` (fails today; pins uniqueIdent probing).
-- [ ] Explicit `{#id}` inside an included file, included twice → both keep the id verbatim (no renaming; explicit ids are seen-set members but never renameable).
-- [ ] Non-injected headers are never renamed even on collision: two inline "H" duplicates + one included "H" → inline pair keeps its reader-assigned `h`, `h-1`; included gets `h-2`.
-- [ ] No-include document passes through `IncludeExpansionStage` unchanged (the gate).
-- [ ] Profile outline: `DocumentProfileStage` sees deduped ids (extend `document_profile_pipeline.rs`).
+- [x] Repeated include → `x`, `x-1`, `x-2` (`repeated_include_disambiguates_heading_ids` — FAILS as expected).
+- [x] Nested include (`nested_repeated_include_disambiguates` — FAILS as expected).
+- [x] Mixed ordering, scoped semantics (`inline_then_included_duplicate`, `included_then_inline_duplicate_renames_the_included_one` — both FAIL as expected; the latter documents the accepted Q1 divergence).
+- [x] Set-probe, not counter (`probe_skips_explicitly_taken_suffix` — FAILS as expected).
+- [x] Explicit `{#id}` inside an included file, included twice → kept verbatim (`explicit_id_in_included_file_kept_verbatim` — passes today, pins).
+- [x] Non-injected headers never renamed (`inline_duplicates_keep_reader_ids_included_probes_past` — FAILS as expected).
+- [x] No-include document unchanged (`no_include_document_keeps_reader_dedup` — passes today, pins; the byte-identical gate itself gets a unit test in Phase 2).
+- [x] Profile outline sees deduped ids (`profile_outline_ids_deduped_across_includes` in `document_profile_pipeline.rs` — FAILS as expected).
 
 pampa (pins only — the reader is deliberately untouched):
 
-- [ ] Empty-content heading base-id edge case: check `auto_generated_id` output for empty inlines (pandoc falls back to `section`); pin whatever we decide for the probe base.
-- [ ] qmd-writer round-trip: a deduped header (`h-1`) round-trips with an explicit `{#h-1}` (existing behavior for `-N` ids — pin it; applies equally to pass-assigned ids since `attr_source.id` stays `None` but the id no longer equals the recomputed base).
+- [x] Empty-content heading base-id edge: already pinned by existing tests (`test_auto_id_empty_falls_back_to_section`, `test_auto_id_repeated_empty_headings_are_deduplicated` — `auto_generated_id` falls back to `section`, matching pandoc; nothing to add).
+- [x] qmd-writer round-trip of a deduped id (`test_deduped_id_roundtrips_as_explicit_attr` in `test_heading_auto_id.rs` — passes, pins `{#setup-1}` emission).
 
 End-to-end (per CLAUDE.md):
 
-- [ ] `cargo run --bin q2 -- render` on the committed fixture; inspect HTML for `x`, `x-1`, `x-2`; add a `toc-depth: 4` variant and inspect distinct `data-scroll-target`s.
+- [x] `cargo run --bin q2 -- render` on the committed fixture (2026-08-18, post-fix): `index.qmd` emits `id="create-the-integration"`, `-1`, `-2`; new `toc-variant.qmd` (`toc-depth: 4`) emits three distinct `data-scroll-target`s (`#create-the-integration`, `-1`, `-2`). Output inspected directly via grep on the rendered HTML.
 
 ### Phase 1 — the scoped uniqueIdent routine
 
-- [ ] Implement (working name `dedup_injected_heading_ids(&mut Pandoc, injected_file_ids: &HashSet<FileId>)`) — home: `quarto-core` next to the stage, since scoping by include provenance is a pipeline concept, but keep the probe helper generic enough to re-scope for bd-4qjl87ax. Pre-pass walk collects the seen-set (all non-injected header ids + explicit ids everywhere); main walk in document order over injected headers with `attr_source.id.is_none()`: recompute `auto_generated_id(content)`, probe `base`, `base-1`, …, assign, insert into set; leave `attr_source.id` as `None`.
-- [ ] Traversal scope must match the reader's `with_header` reach (headers inside divs, blockquotes, list items, footnote definitions, etc.) — use the standard filter traversal, not a top-level-blocks loop.
-- [ ] Unit tests for the routine itself (scoping, probing, explicit-id immunity).
+- [x] Implemented as **`pampa::utils::autoid::dedup_scoped_heading_ids(doc: Pandoc, in_scope: impl FnMut(&Header) -> bool) -> Pandoc`** — home moved from the planned quarto-core location into `pampa`'s `autoid` module (deliberate improvement: pampa owns id-assignment semantics and the filter machinery; the generic scope predicate keeps include-provenance policy in the caller). Pass 1 seeds the seen-set (all non-renameable ids: explicit anywhere + out-of-scope headers); pass 2 probes renameable headers in document order (`base`, `base-1`, … set-membership), recomputing the base via `auto_generated_id`. `attr_source.id` stays `None`. Assigned via mutate-and-return-`Unchanged` (the `with_cite` precedent) — `FilterResult(_, true)` would re-apply the filter to the returned header and double-probe it.
+- [x] Traversal via pampa's standard `topdown_traverse` filter — same reach as the reader's `with_header`.
+- [x] Unit tests (5) in `crates/pampa/tests/integration/test_heading_auto_id.rs`: scope-only renaming, set-probe vs counter, explicit-id immunity, empty-scope identity, recompute-ignores-fragment-numbering. All pass.
 
 ### Phase 2 — wire into IncludeExpansionStage
 
-- [ ] Accumulate `injected_file_ids` during expansion (the `FileId(0) → new_file_id` remap already names them; nested includes covered by recursion).
-- [ ] At the tail of `run()`, if the set is non-empty, run the routine over the assembled `Pandoc`.
-- [ ] Doc-comment the stage invariant: "after this stage, include-injected heading auto ids are unique against the whole document (pandoc uniqueIdent probe); pre-existing ids are never renamed". Note bd-4qjl87ax as the known post-engine gap and the intended reuse of this mechanism.
-- [ ] Confirm coverage of all builders (native/WASM/analysis/orchestrator) via the Phase 0 integration tests where practical.
-- [ ] Snapshot audit: expected churn is **zero** outside documents with includes whose headings collide; any other churn is a red flag (snapshot policy).
+- [x] `IncludeExpander` accumulates `injected_file_ids: HashSet<FileId>` (inserted at the splice point, per occurrence; error paths never reach it); `expand_includes_in_blocks` returns the set.
+- [x] Tail of `run()`: when the set is non-empty, `dedup_scoped_heading_ids` runs over the assembled AST with the predicate `header.source_info.root_file_id() ∈ injected_file_ids`. Gate keeps no-include documents bit-identical (`no_include_document_ast_is_untouched` unit test, passes).
+- [x] Stage invariant doc-comment written at the call site (uniqueIdent probe, monotonic ids, bd-4qjl87ax gap noted).
+- [x] Builder coverage: native pipeline via the 8 `include_heading_id_dedup` integration tests; profile/orchestrator path via `profile_outline_ids_deduped_across_includes`. (WASM builder shares the same stage; verified by the full `cargo xtask verify` in Phase 3.)
+- [x] Snapshot audit: **zero snapshot churn** — the full workspace run passed with no `.snap` file modified, exactly as predicted (no-include documents are untouched by the gate; the fixture suite has no colliding-include snapshots).
 
 ### Phase 3 — Verification & close-out
 
-- [ ] `cargo build --workspace`, `cargo nextest run --workspace`.
-- [ ] Full `cargo xtask verify` (quarto-core changed → WASM leg affected).
-- [ ] E2e render inspection recorded in the session transcript (invocation + output snippet).
+- [x] `cargo nextest run --workspace` — 12334/12334 passed (2026-08-18; build implied). Clippy + `cargo fmt --check` clean on changed crates.
+- [x] Full `cargo xtask verify` — all steps passed (2026-08-18), including the hub-build/WASM legs.
+- [x] E2e render inspection recorded in the session transcript and in this plan (Phase 0 End-to-end item: exact invocation + grep output).
 - [ ] Optional: re-run the site-wide duplicate-id scan on the connect-docs port to confirm 7 → 0.
 - [ ] Close strand; comment on br-duplicate-heading-ids-ye3j3gkr (connect-docs skein) that the fix needs the next q2 release to verify there.
 - [ ] If user opts in on the diagnostic (Decision 4): file the follow-up strand.

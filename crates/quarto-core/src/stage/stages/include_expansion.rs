@@ -81,7 +81,36 @@ impl PipelineStage for IncludeExpansionStage {
         let doc_path = doc.path.clone();
         include_stack.insert(doc_path.clone());
 
-        expand_includes_in_blocks(&mut doc, ctx, &doc_path, &mut include_stack)?;
+        let injected_file_ids =
+            expand_includes_in_blocks(&mut doc, ctx, &doc_path, &mut include_stack)?;
+
+        // Post-expansion invariant (bd-duplicate-heading-ids-mou5z7ux):
+        // auto-generated ids of include-injected headers are unique
+        // against the whole document, via pandoc's `uniqueIdent` probe.
+        // Only injected headers are ever renamed — ids assigned before
+        // this stage (the reader's per-parse dedup) are stable, so the
+        // stage is a strict no-op on documents without includes, and a
+        // future post-engine pass can re-run the same routine scoped to
+        // engine-inserted headers without invalidating ids downstream
+        // consumers (DocumentProfileStage's outline, cross-doc links)
+        // have already observed (bd-4qjl87ax). Known gap, by that same
+        // decision: a heading emitted by a code cell can still collide
+        // (engines run after this stage).
+        if !injected_file_ids.is_empty() {
+            let ast = std::mem::replace(
+                &mut doc.ast,
+                quarto_pandoc_types::pandoc::Pandoc {
+                    meta: quarto_pandoc_types::config_value::ConfigValue::default(),
+                    blocks: Vec::new(),
+                },
+            );
+            doc.ast = pampa::utils::autoid::dedup_scoped_heading_ids(ast, |header| {
+                header
+                    .source_info
+                    .root_file_id()
+                    .is_some_and(|id| injected_file_ids.contains(&id))
+            });
+        }
 
         Ok(PipelineData::DocumentAst(doc))
     }
@@ -89,12 +118,17 @@ impl PipelineStage for IncludeExpansionStage {
 
 /// Document-level entry point: expand include shortcodes at every
 /// block-list position in the AST (bd-1fz3vh99), recursively.
+///
+/// Returns the set of `FileId`s registered for spliced-in include
+/// content — the provenance record for the post-expansion heading-id
+/// dedup (bd-duplicate-heading-ids-mou5z7ux). Empty iff no include was
+/// expanded.
 fn expand_includes_in_blocks(
     doc: &mut DocumentAst,
     ctx: &mut StageContext,
     current_file: &Path,
     include_stack: &mut HashSet<PathBuf>,
-) -> Result<(), PipelineError> {
+) -> Result<HashSet<quarto_source_map::FileId>, PipelineError> {
     // Destructure so the expander can hold the document-level state
     // alongside a mutable borrow of the block tree.
     let DocumentAst {
@@ -104,14 +138,17 @@ fn expand_includes_in_blocks(
         recorded_includes,
         ..
     } = doc;
+    let mut injected_file_ids = HashSet::new();
     let mut expander = IncludeExpander {
         ctx,
         ast_context,
         source_context,
         recorded_includes,
         include_stack,
+        injected_file_ids: &mut injected_file_ids,
     };
-    expander.expand_blocks(&mut ast.blocks, current_file)
+    expander.expand_blocks(&mut ast.blocks, current_file)?;
+    Ok(injected_file_ids)
 }
 
 /// Walks the block tree expanding include shortcodes, carrying the
@@ -125,6 +162,13 @@ struct IncludeExpander<'a> {
     source_context: &'a mut quarto_source_map::SourceContext,
     recorded_includes: &'a mut Vec<IncludeEntry>,
     include_stack: &'a mut HashSet<PathBuf>,
+    /// `FileId`s registered for spliced-in include content (one per
+    /// include occurrence, nested levels included). This is the
+    /// provenance record the post-expansion heading-id dedup keys on:
+    /// a header whose `SourceInfo` roots in one of these files was
+    /// injected by this stage (bd-duplicate-heading-ids-mou5z7ux).
+    /// Lookup-only set — never iterated.
+    injected_file_ids: &'a mut HashSet<quarto_source_map::FileId>,
 }
 
 impl IncludeExpander<'_> {
@@ -349,6 +393,12 @@ impl IncludeExpander<'_> {
             // (still a stable identifier for hashing). Dedupe so a
             // child included twice in different positions appears once.
             record_include(self.recorded_includes, &canonical, &content);
+
+            // The child's blocks are about to be spliced in; remember
+            // their FileId so the post-expansion heading-id dedup can
+            // recognize them as injected. (Error paths above never get
+            // here — nothing was spliced, nothing to record.)
+            self.injected_file_ids.insert(new_file_id);
 
             // Recursively expand the included blocks BEFORE splicing:
             // nested includes resolve against the included file's own
@@ -2197,6 +2247,35 @@ mod tests {
         assert_eq!(
             first_code_text(&doc.ast.blocks),
             "{{< meta version >}}\nspliced"
+        );
+    }
+
+    #[tokio::test]
+    async fn no_include_document_ast_is_untouched() {
+        // The heading-id dedup at the tail of `run()` gates on "at
+        // least one include was expanded": a document with no includes
+        // must come out of the stage with a bit-identical AST
+        // (bd-duplicate-heading-ids-mou5z7ux, design decision 2).
+        let runtime = Arc::new(MockFileRuntime::new(vec![]));
+        let mut ctx = make_stage_context(runtime);
+        let doc = parse_to_doc_ast(
+            "## Setup\n\nFirst.\n\n## Setup\n\nSecond.\n",
+            "/project/doc.qmd",
+        );
+        let before = doc.ast.clone();
+
+        let out = IncludeExpansionStage::new()
+            .run(PipelineData::DocumentAst(doc), &mut ctx)
+            .await
+            .expect("stage runs");
+        let PipelineData::DocumentAst(doc) = out else {
+            panic!("stage must return DocumentAst");
+        };
+
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(
+            doc.ast, before,
+            "a document with no includes must pass through the stage unchanged"
         );
     }
 
