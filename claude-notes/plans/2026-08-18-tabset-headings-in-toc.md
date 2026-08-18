@@ -244,17 +244,25 @@ independently green, so the tree is never in a state where the TOC is wrong in a
 *remove* a TOC entry, and it is correct only once Phases 1 and 2 guarantee that every heading Q1
 lists lives in the section tree.
 
-## Phase 0 — Test harness and characterization tests
+## Phase 0 — Regression net for the rows that must keep working ✅
 
-- [ ] Promote `div-toc-probe` / `div-recursion-probe` fixtures into the workspace as a container
-      matrix: for each of {plain div, `content-visible`, `content-hidden`, `column-margin`,
-      `layout-ncol`, callout title, callout body, tabset pane, blockquote}, assert the TOC entries
-      and the section/div shape.
-- [ ] Write these as **characterization tests first** (asserting today's behavior, with the
-      divergent rows marked), so each later phase flips a known set of assertions rather than
-      landing untested behavior.
-- [ ] Route through an end-to-end entry point (`render_document_to_file` or the tabset-pipeline
-      integration style), not `render_qmd_to_html` with defaults — per CLAUDE.md's end-to-end rule.
+Revised from the original "characterization tests" idea. Writing tests that assert *today's buggy*
+behavior and flipping them later would leave the tree red across phase boundaries, which conflicts
+with the commit-at-clean-boundaries rule. Instead the fixtures split by direction:
+
+- **Phase 0** covers rows that already agree with Q1 and must not regress — these pass now and are
+  the safety net for Phase 3, the only phase that can remove an entry.
+- **Phases 1–3** each add fixtures for the rows they change: red before the fix, green after.
+
+Fixtures live in `crates/quarto/tests/smoke-all/toc-containers/` (declarative `ensureHtmlElements`
+with must-match / must-NOT-match selector lists; exercised by all three smoke-all runners — Rust,
+WASM Vitest, Playwright — which satisfies the end-to-end rule better than an in-process call).
+
+- [x] `plain-div-heading-in-toc.qmd` — a heading inside a plain Div stays listed.
+- [x] `column-margin-heading-in-toc.qmd` — same for `.column-margin`.
+- [x] `callout-title-not-in-toc.qmd` — a callout *title* stays unlisted, proving the protection is
+      the consume-first ordering rather than sectionize's reach.
+- [x] Verified the harness really exercises them (inverted one selector, watched it fail).
 
 ## Phase 1 — Conditional-content: unwrap the resolved wrapper (prerequisite)
 
