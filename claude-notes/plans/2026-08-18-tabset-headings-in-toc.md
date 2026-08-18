@@ -50,6 +50,12 @@ Thin — one edge out, none in.
     Bootstrap HTML, so on reveal (and on non-HTML formats) the `.panel-tabset` Div passes through
     with its headers intact.
 - No incoming `blocks`. Urgency comes from the Connect-docs port, not from a dependent strand.
+- **Filed during this investigation** (both `discovered-from` this strand):
+  - bd-8yjvs3bj — headings inside a blockquote leak into the TOC (same root cause, different
+    container).
+  - bd-26nryuwh — `sectionize_blocks` does not recurse into Divs, so q2 emits `<div><h4>` where Q1
+    emits `<section class="level4 …">`. This is the second half of the cancelling pair below, and
+    a prerequisite for direction (B).
 
 ## What the code looks like today
 
@@ -96,7 +102,7 @@ One rule, four confirmed predictions (Q1 vs q2 at HEAD):
 | -------------------------- | -------- | -------- |
 | plain `::: {.my-wrapper}`  | included | included |
 | `::: {.callout-note}`      | excluded | excluded |
-| `> blockquote`             | excluded | **included** ← q2-only leak, not yet filed |
+| `> blockquote`             | excluded | **included** ← q2-only leak (bd-8yjvs3bj) |
 | `.panel-tabset` pane       | excluded | **included** ← this strand |
 
 - plain div → absorbed into a genuine section → in the TOC;
@@ -109,7 +115,7 @@ One rule, four confirmed predictions (Q1 vs q2 at HEAD):
 
 1. **`collect_toc_entries` over-collects.** It recurses into *every* non-section Div, and into
    `BlockQuote`, and picks up bare `Header`s wherever it finds them.
-2. **`sectionize_blocks` under-sectionizes.** It never recurses into Divs at all. q2 emits
+2. **`sectionize_blocks` under-sectionizes** (filed as bd-26nryuwh). It never recurses into Divs at all. q2 emits
    `<div class="my-wrapper"><h4 id=…>` where Q1 emits
    `<section id="…" class="level4 my-wrapper">`.
 
@@ -139,7 +145,7 @@ phases differ substantially between them.
   asserting a `####` inside a tab does not appear in `nav#TOC`; the probe fixture promoted to a
   committed regression fixture.
 - **Phase 1 — Core change** (see design question 1).
-- **Phase 2 — Reconcile `sectionize_blocks`** *(direction B only)* — recurse into Divs, merge attrs
+- **Phase 2 — Reconcile `sectionize_blocks`** (bd-26nryuwh) *(direction B only)* — recurse into Divs, merge attrs
   when the Div id is empty, do not descend into `BlockQuote`.
 - **Phase 3 — Sweep the fallout** — snapshots, `quarto-ast-reconcile` hashing, `llms.rs`,
   `idempotence.rs`, anything asserting on section structure.
@@ -167,8 +173,9 @@ phases differ substantially between them.
    profile outline), or a generic pampa-owned opt-out class that quarto-core applies (clean
    layering, but applied by the transform it misses `extract_outline`, and it misses preview until
    bd-47afd5ro lands)?
-3. **Is the blockquote leak in scope here, or its own strand?** It is the same root cause and falls
-   out of (B) for free; under (A) it needs its own two lines.
+3. **Is the blockquote leak (bd-8yjvs3bj) in scope here, or does it stay its own strand?** Same root
+   cause; it falls out of (B) for free, and under (A) it needs its own two lines (delete the
+   `BlockQuote` arm).
 4. **Non-HTML and reveal formats.** `PanelTabsetTransform` self-gates to Bootstrap HTML, so
    elsewhere the `.panel-tabset` Div passes through with headers intact. Should the TOC rule apply
    uniformly across formats (it would under both A and B), or only where tabsets actually render?
