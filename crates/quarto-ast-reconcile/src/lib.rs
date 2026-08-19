@@ -135,6 +135,259 @@ mod tests {
         })
     }
 
+    /// bd-205v6: two Cites whose `citations` differ (id/mode/prefix/suffix)
+    /// must not be paired by the type-based container match — a Cite's
+    /// citations are non-child identity, spliced verbatim from original
+    /// source, so a changed citation must fall through to UseAfter.
+    /// The "anchor" Str makes block phase 2 see a kept inline and recurse
+    /// into the paragraph; without it the whole block is UseAfter and the
+    /// bug is masked.
+    #[test]
+    fn test_reconcile_cite_citations_changed_not_paired() {
+        use quarto_pandoc_types::{Citation, CitationMode, Cite};
+        fn cite_para(
+            id: &str,
+            prefix_text: &str,
+            source: SourceInfo,
+        ) -> quarto_pandoc_types::Block {
+            quarto_pandoc_types::Block::Paragraph(Paragraph {
+                content: vec![
+                    quarto_pandoc_types::Inline::Str(Str {
+                        text: "anchor".to_string(),
+                        source_info: source.clone(),
+                    }),
+                    quarto_pandoc_types::Inline::Cite(Cite {
+                        citations: vec![Citation {
+                            id: id.to_string(),
+                            prefix: vec![quarto_pandoc_types::Inline::Str(Str {
+                                text: prefix_text.to_string(),
+                                source_info: source.clone(),
+                            })],
+                            suffix: vec![],
+                            mode: CitationMode::NormalCitation,
+                            note_num: 0,
+                            hash: 0,
+                            id_source: None,
+                        }],
+                        content: vec![quarto_pandoc_types::Inline::Str(Str {
+                            text: "shared".to_string(),
+                            source_info: source.clone(),
+                        })],
+                        source_info: source.clone(),
+                    }),
+                ],
+                source_info: source,
+            })
+        }
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![cite_para("a", "x", source_original())],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![cite_para("b", "y", source_executed())],
+        };
+        let executed_clone = executed.clone();
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original, executed, &plan);
+        assert!(
+            crate::hash::structural_eq_blocks(&result.blocks, &executed_clone.blocks),
+            "Result: {:?}\nAfter: {:?}",
+            result.blocks,
+            executed_clone.blocks
+        );
+    }
+
+    /// bd-205v6 companion: two Cites with structurally equal `citations` but
+    /// different content SHOULD still pair and recurse, keeping the original
+    /// citation source info and reconciling the content.
+    #[test]
+    fn test_reconcile_cite_same_citations_recurses() {
+        use quarto_pandoc_types::{Citation, CitationMode, Cite};
+        fn cite_para(content_text: &str, source: SourceInfo) -> quarto_pandoc_types::Block {
+            quarto_pandoc_types::Block::Paragraph(Paragraph {
+                content: vec![
+                    quarto_pandoc_types::Inline::Str(Str {
+                        text: "anchor".to_string(),
+                        source_info: source.clone(),
+                    }),
+                    quarto_pandoc_types::Inline::Cite(Cite {
+                        citations: vec![Citation {
+                            id: "key".to_string(),
+                            prefix: vec![],
+                            suffix: vec![],
+                            mode: CitationMode::NormalCitation,
+                            note_num: 0,
+                            hash: 0,
+                            id_source: None,
+                        }],
+                        content: vec![quarto_pandoc_types::Inline::Str(Str {
+                            text: content_text.to_string(),
+                            source_info: source.clone(),
+                        })],
+                        source_info: source.clone(),
+                    }),
+                ],
+                source_info: source,
+            })
+        }
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![cite_para("old rendering", source_original())],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![cite_para("new rendering", source_executed())],
+        };
+        let executed_clone = executed.clone();
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original, executed, &plan);
+        assert!(
+            crate::hash::structural_eq_blocks(&result.blocks, &executed_clone.blocks),
+            "Result: {:?}\nAfter: {:?}",
+            result.blocks,
+            executed_clone.blocks
+        );
+        // The paired Cite keeps the ORIGINAL source info (that's the point
+        // of recursing instead of UseAfter).
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[0] {
+            if let quarto_pandoc_types::Inline::Cite(c) = &p.content[1] {
+                assert_eq!(c.source_info, source_original());
+            } else {
+                panic!("expected Cite");
+            }
+        } else {
+            panic!("expected Paragraph");
+        }
+    }
+
+    /// bd-205v6 sibling audit: every inline container whose non-child
+    /// identity changed must be aligned UseAfter, never paired by the
+    /// type-based match — the identity bytes (quote chars, `]{attr}`) are
+    /// spliced verbatim from original source by the incremental writer,
+    /// so a paired container silently keeps the old identity in written
+    /// qmd output even when apply patches the AST field.
+    fn assert_identity_changed_container_not_paired(
+        make_container: impl Fn(bool, SourceInfo) -> quarto_pandoc_types::Inline,
+        label: &str,
+    ) {
+        fn para_with(
+            inline: quarto_pandoc_types::Inline,
+            source: SourceInfo,
+        ) -> quarto_pandoc_types::Block {
+            quarto_pandoc_types::Block::Paragraph(Paragraph {
+                content: vec![
+                    quarto_pandoc_types::Inline::Str(Str {
+                        text: "anchor".to_string(),
+                        source_info: source.clone(),
+                    }),
+                    inline,
+                ],
+                source_info: source,
+            })
+        }
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![para_with(
+                make_container(false, source_original()),
+                source_original(),
+            )],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![para_with(
+                make_container(true, source_executed()),
+                source_executed(),
+            )],
+        };
+        let plan = compute_reconciliation(&original, &executed);
+        let inline_plan = plan
+            .inline_plans
+            .get(&0)
+            .unwrap_or_else(|| panic!("{label}: expected an inline plan for block 0"));
+        assert!(
+            matches!(
+                inline_plan.inline_alignments[1],
+                crate::types::InlineAlignment::UseAfter(1)
+            ),
+            "{label}: identity-changed container must be UseAfter, got {:?}",
+            inline_plan.inline_alignments[1]
+        );
+    }
+
+    #[test]
+    fn test_reconcile_identity_changed_containers_not_paired() {
+        use quarto_pandoc_types::{Delete, EditComment, Highlight, Insert, QuoteType, Quoted};
+        fn attr_for(changed: bool) -> quarto_pandoc_types::Attr {
+            let class = if changed { "new" } else { "old" };
+            (String::new(), vec![class.to_string()], LinkedHashMap::new())
+        }
+        fn content(source: &SourceInfo) -> Vec<quarto_pandoc_types::Inline> {
+            vec![quarto_pandoc_types::Inline::Str(Str {
+                text: "inner".to_string(),
+                source_info: source.clone(),
+            })]
+        }
+        assert_identity_changed_container_not_paired(
+            |changed, source| {
+                quarto_pandoc_types::Inline::Quoted(Quoted {
+                    quote_type: if changed {
+                        QuoteType::SingleQuote
+                    } else {
+                        QuoteType::DoubleQuote
+                    },
+                    content: content(&source),
+                    source_info: source,
+                })
+            },
+            "Quoted(quote_type)",
+        );
+        assert_identity_changed_container_not_paired(
+            |changed, source| {
+                quarto_pandoc_types::Inline::Insert(Insert {
+                    attr: attr_for(changed),
+                    content: content(&source),
+                    source_info: source,
+                    attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+                })
+            },
+            "Insert(attr)",
+        );
+        assert_identity_changed_container_not_paired(
+            |changed, source| {
+                quarto_pandoc_types::Inline::Delete(Delete {
+                    attr: attr_for(changed),
+                    content: content(&source),
+                    source_info: source,
+                    attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+                })
+            },
+            "Delete(attr)",
+        );
+        assert_identity_changed_container_not_paired(
+            |changed, source| {
+                quarto_pandoc_types::Inline::Highlight(Highlight {
+                    attr: attr_for(changed),
+                    content: content(&source),
+                    source_info: source,
+                    attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+                })
+            },
+            "Highlight(attr)",
+        );
+        assert_identity_changed_container_not_paired(
+            |changed, source| {
+                quarto_pandoc_types::Inline::EditComment(EditComment {
+                    attr: attr_for(changed),
+                    content: content(&source),
+                    source_info: source,
+                    attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+                })
+            },
+            "EditComment(attr)",
+        );
+    }
+
     #[test]
     fn test_reconcile_preserves_unchanged() {
         let original = Pandoc {

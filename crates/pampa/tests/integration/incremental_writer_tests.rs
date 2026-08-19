@@ -1868,3 +1868,27 @@ fn foreign_kept_block_is_not_sliced_from_original() {
         "foreign offsets must not be sliced out of original_qmd, got: {out:?}"
     );
 }
+
+// =============================================================================
+// bd-205v6 sibling audit: container non-child identity must not be inherited
+// across a type-only inline match. Quoted's quote_type lives in the
+// verbatim-spliced delimiters, so a quote-type edit must force UseAfter
+// (re-serialization), not RecurseIntoContainer (stale delimiter bytes).
+// =============================================================================
+
+#[test]
+fn quoted_quote_type_change_survives_incremental_write() {
+    // "anchor" keeps one hash-identical sibling inline so the paragraph
+    // recurses (block phase 2 has_kept_inlines) instead of being wholly
+    // replaced — the path where identity inheritance can occur.
+    let original_qmd = "anchor \"hello\"\n";
+    let new_qmd = "anchor 'hello'\n";
+    let new_ast = parse_qmd(new_qmd);
+    let out = incremental_write_via_json_roundtrip(original_qmd, &new_ast);
+    let reparsed = parse_qmd(&out);
+    let expected = parse_qmd(new_qmd);
+    assert!(
+        quarto_ast_reconcile::structural_eq_blocks(&reparsed.blocks, &expected.blocks),
+        "quote-type edit must survive the incremental write; got: {out:?}"
+    );
+}
