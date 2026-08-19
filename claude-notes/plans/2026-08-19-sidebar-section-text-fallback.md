@@ -3,7 +3,7 @@
 **Date:** 2026-08-19
 **Braid:** bd-sidebar-section-text-ignored-sdp5g7ns
 **Checkout:** `main` @ `e6ac236d` (investigation ran in the main checkout; no worktree created)
-**Status:** Design settled with user (2026-08-19); see "Design decisions" below. Ready to implement pending user go-ahead on this revision.
+**Status:** Complete (2026-08-19). Fix in `a93b908e`, Q-13-10 warning in `5c9ee27d`, verification evidence in `sidebar-section-text-fallback-investigation/observed-output.md`. Full `cargo xtask verify` green.
 
 ## Triage verdict
 
@@ -125,17 +125,18 @@ exist to compile, so they can't precede Phase 1 usefully).
 
 ### Phase 3 — End-to-end verification
 
-- [ ] `cargo run --bin q2 -- render` on the investigation repro; inspect `_site/*.html` sidebar markup (configured text, formatted-inlines case, Q-13-10 warning on a both-keys fixture).
-- [ ] Full `cargo xtask verify` (no skips).
-- [ ] Commit (if anything changed since Phase 2's commit).
+- [x] `cargo run --bin q2 -- render` on the investigation repro; inspect `_site/*.html` sidebar markup (configured text, formatted-inlines case, Q-13-10 warning on a both-keys fixture). Evidence in `sidebar-section-text-fallback-investigation/observed-output.md`.
+- [x] Full `cargo xtask verify` (no skips) — all 14 steps green. *(One environment repair along the way, unrelated to this change: `node_modules/@esbuild/darwin-arm64` had gone missing after this session's earlier `npm install`, failing quarto-hub-mcp's bundle test; fixed with `npm install --no-save @esbuild/darwin-arm64@0.28.0`.)*
+- [x] `cargo run --bin q2 -- render docs/` renders the site including the new Q-13-10 page (253/253 files; `errors/navigation/Q-13-10.html` present with correct title; the 40 render warnings are pre-existing docs-site issues, none referencing this change).
+- [x] Commit (plan + investigation notes updates).
 
 ### Phase 4 — Close out
 
-- [ ] Update this plan's status; close the strand with `braid close`.
+- [x] Update this plan's status; close the strand with `braid close`.
 
 ## Risks / tradeoffs (draft)
 
 - Very low risk: single-expression parse change, well-fenced by branch order (Link and Heading branches unaffected).
 - The `section:`-normalizing serialization means `text:`-authored config changes spelling across a roundtrip. No current consumer is known to care (reparse is stable), but any future "write config back to YAML" feature would rewrite user spelling. Not worth acting on now; noting for the record.
-- The Q-13-10 warning's emission site must not be the parser (reparse paths would double-emit) and must dedup across pages; this is the only genuinely fiddly part of the change.
+- The Q-13-10 warning's emission site must not be the parser (reparse paths would double-emit). Per-page repetition turned out to be a non-issue for this code: `coalesce_by_source` (bd-mg3ckvp7, `render.rs:1250-1272`) groups per-page diagnostics that share a source location, and Q-13-10 carries one — a 4-page site prints the warning once with an "Affected files:" tail (verified end-to-end). Q-13-5/Q-13-6 repeat per page only because they carry no location; that observation moved to bd-drdx1pew.
 - Discovered parity gap, filed separately: Q1's `section:` value doubles as a *file path* (`project-config.ts:54-59` — if the value names an existing file it becomes `href`, and the author's `text:` survives). q2 treats `section:` purely as display text. Filed as bd-byrb9yqi (discovered-from this one).
