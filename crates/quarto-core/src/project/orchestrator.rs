@@ -1115,11 +1115,13 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // exists on disk may simply not be synced), so the same check
         // there produced false Q-5-29 warnings in the preview overlay.
         #[cfg(not(target_arch = "wasm32"))]
-        initial_diagnostics.extend(crate::project::format_css::missing_project_css_diagnostics(
-            self.project,
-            self.format.identifier.as_str(),
-            self.runtime.as_ref(),
-        ));
+        initial_diagnostics.extend(
+            crate::project::format_paths::missing_project_css_diagnostics(
+                self.project,
+                self.format.identifier.as_str(),
+                self.runtime.as_ref(),
+            ),
+        );
 
         let (profiles, pass1_failures) = self.pass_one().await;
 

@@ -30,6 +30,7 @@ pub mod engine_visibility;
 pub mod extension_metadata;
 pub mod fail_fast;
 pub mod format_css;
+pub mod format_path_keys;
 pub mod get_config_merge;
 pub mod idempotence;
 pub mod include_code_fence;
