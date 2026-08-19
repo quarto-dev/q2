@@ -540,7 +540,7 @@ fn plain_config_strings_unchanged() {
         title_line(html)
     );
     assert!(
-        html.contains(">Plain Site</a>"),
+        html.contains(">Plain Site</span></a>"),
         "plain navbar brand unchanged; got: {}",
         line_containing(html, "navbar-brand")
     );

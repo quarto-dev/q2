@@ -81,12 +81,12 @@ Parsing (`navbar.rs` unit tests) — all landed, verified red (30 compile errors
 - [x] Round-trip serialization re-emits the authored shape (`logo_single_roundtrips_as_string_wire_shape`, `logo_variants_roundtrip_as_light_dark_map`).
 - [x] Each variant path carries its own `SourceInfo` (`logo_variant_sources_captured_and_round_tripped`).
 
-Markup (`render_html.rs` unit tests):
-- [ ] Logo + title → `navbar-brand-container` div wrapping a `navbar-brand navbar-brand-logo` anchor (img inside) + separate `navbar-brand` anchor with `navbar-title` span; both anchors href = `logo_href || home_url`.
-- [ ] Identical variants → **one** `<img class="navbar-logo">` (no variant class — deliberate deviation from Q1, which duplicates the img; behavior is identical because the pair is normalized).
-- [ ] Distinct variants → two imgs, `navbar-logo light-content` / `navbar-logo dark-content`.
-- [ ] Title-only → container + title anchor, no logo anchor. Logo-only → container + logo anchor, no title anchor. Neither → no brand at all (existing behavior).
-- [ ] `navbar_to_html` wrapper div carries `navbar-container container-fluid`.
+Markup (`render_html.rs` unit tests) — all landed, verified red (7 failing pre-implementation) then green:
+- [x] Logo + title → container + dual anchors + `navbar-title` span; shared href (`brand_emits_container_with_logo_and_title_anchors`, `brand_both_anchors_share_the_logo_href`).
+- [x] Identical variants → one unclassed `<img class="navbar-logo">` (`brand_single_logo_img_has_no_variant_class`).
+- [x] Distinct variants → `light-content`/`dark-content` img pair (`brand_distinct_variants_emit_light_and_dark_imgs`).
+- [x] Title-only / logo-only / neither (`brand_title_only_omits_logo_anchor`, `brand_logo_only_omits_title_anchor`; hidden-title test pre-existing).
+- [x] Wrapper carries `navbar-container container-fluid` (`navbar_wrapper_carries_navbar_container_class` + updated `navbar_wraps_body_in_container_fluid`).
 
 Theme CSS + end-to-end (drive the real render path per repo policy):
 - [x] Website render test asserting the compiled `quarto-theme-*.css` contains `.navbar-logo` with `max-height` (and `.navbar-brand-container`) — `pipeline_theme_css_ships_navbar_brand_rules` in `navbar_footer_pipeline.rs`; verified failing before the SCSS change, passing after.
@@ -104,8 +104,9 @@ Theme CSS + end-to-end (drive the real render path per repo policy):
 
 ### Phase 3 — Markup restructure
 
-- [ ] Rework `render_brand` to the Q1 container/dual-anchor shape (Phase 0 markup specs), single img when halves are identical, two variant-classed imgs otherwise.
-- [ ] Add `navbar-container` to the navbar wrapper div (line 84 only).
+- [x] Rework `render_brand` to the Q1 container/dual-anchor shape, single img when halves are identical, two variant-classed imgs otherwise.
+- [x] Add `navbar-container` to the navbar wrapper div (navbar only; footer/secondary-nav untouched).
+- [x] Existing-assertion churn: `navbar_with_title_and_left_items` (span shape), `navbar_wraps_body_in_container_fluid` (wrapper class), `shortcode_config_pipeline::plain_config_strings_unchanged` (`</span></a>` suffix). No `.snap` files reference the brand markup; full workspace suite green (12,915).
 
 ### Phase 4 — Downstream consumers
 
