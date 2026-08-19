@@ -1008,8 +1008,11 @@ export default function ProjectsHome({
     );
   }
 
+  // Menus are plain groups of buttons, not ARIA menus: role="menu"
+  // would require menuitem children and the full menu keyboard pattern,
+  // which these action lists don't implement (WCAG 4.1.2).
   const renderProjectMenu = (item: ProjectItem) => (
-    <div className="ph-menu" role="menu">
+    <div className="ph-menu">
       <button className="ph-menu-item strong" onClick={() => { closeAllMenus(); handleOpen(item); }}>
         Open
       </button>
@@ -1407,7 +1410,7 @@ export default function ProjectsHome({
               </svg>
             </button>
             {openMenu === sortMenuKey && (
-              <div className="ph-menu ph-menu-right" role="menu">
+              <div className="ph-menu ph-menu-right">
                 {(['newest', 'oldest', 'name'] as SortOrder[]).map((o) => (
                   <button
                     key={o}
@@ -1437,7 +1440,7 @@ export default function ProjectsHome({
           </button>
           {membersFor === collection.id && renderMembersPopover(collection)}
           {openMenu === menuKey && (
-            <div className="ph-menu ph-menu-right" role="menu">
+            <div className="ph-menu ph-menu-right">
               <button
                 className="ph-menu-item"
                 onClick={() => { setOpenMenu(null); setMembersFor(collection.id); }}
@@ -1539,7 +1542,7 @@ export default function ProjectsHome({
               ＋ New ▾
             </button>
             {newMenuOpen && (
-              <div className="ph-menu ph-menu-right" role="menu">
+              <div className="ph-menu ph-menu-right">
                 <div className="ph-menu-label">START FROM — QUARTO PROJECT TYPES</div>
                 {(projectChoices.length > 0
                   ? projectChoices
@@ -1652,7 +1655,7 @@ export default function ProjectsHome({
       )}
       {isConnecting && <div className="ph-connecting">Connecting to sync server…</div>}
 
-      <main className="ph-main">
+      <main id="main-content" tabIndex={-1} className="ph-main">
         {items.length === 0 && collections.every((c) => c.entries.length === 0) ? (
           <div className="ph-empty-state">
             <h2>No projects yet</h2>
@@ -1777,8 +1780,8 @@ export default function ProjectsHome({
       {/* Duplicate (fork) */}
       {duplicateFor && (
         <div className="ph-dialog-backdrop" onMouseDown={() => { if (!duplicatingId) setDuplicateFor(null); }}>
-          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
-            <h2>Duplicate "{duplicateFor.description}"</h2>
+          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-duplicate" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="ph-dialog-title-duplicate">Duplicate "{duplicateFor.description}"</h2>
             <p className="ph-dialog-hint">
               A fresh copy of all {duplicateFor.summary ? `${duplicateFor.summary.fileCount} ` : ''}files — no
               edit history carries over.
@@ -1822,8 +1825,8 @@ export default function ProjectsHome({
       {/* New collection */}
       {newCollectionDialog && (
         <div className="ph-dialog-backdrop" onMouseDown={() => setNewCollectionDialog(null)}>
-          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
-            <h2>New collection</h2>
+          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-new-collection" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="ph-dialog-title-new-collection">New collection</h2>
             {newCollectionDialog.forProject && (
               <p className="ph-dialog-hint">The project will be moved onto it.</p>
             )}
@@ -1849,8 +1852,8 @@ export default function ProjectsHome({
       {/* Rename collection */}
       {renameCollectionTarget && (
         <div className="ph-dialog-backdrop" onMouseDown={() => setRenameCollectionTarget(null)}>
-          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
-            <h2>Rename collection</h2>
+          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-rename-collection" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="ph-dialog-title-rename-collection">Rename collection</h2>
             <p className="ph-dialog-hint">Renames it for everyone subscribed to it.</p>
             <form
               onSubmit={(e) => {
@@ -1881,8 +1884,8 @@ export default function ProjectsHome({
       {/* Generic destructive confirmation */}
       {confirmState && (
         <div className="ph-dialog-backdrop" onMouseDown={() => setConfirmState(null)}>
-          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
-            <h2>{confirmState.title}</h2>
+          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-confirm" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="ph-dialog-title-confirm">{confirmState.title}</h2>
             <p className="ph-dialog-hint">{confirmState.body}</p>
             <div className="ph-dialog-actions">
               <button type="button" className="ph-btn outline" onClick={() => setConfirmState(null)} autoFocus>
@@ -1903,8 +1906,8 @@ export default function ProjectsHome({
       {/* Shared-collection move warning */}
       {pendingMove && (
         <div className="ph-dialog-backdrop" onMouseDown={() => setPendingMove(null)}>
-          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
-            <h2>Move "{pendingMove.name}" out of {pendingMove.fromName}?</h2>
+          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-move" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="ph-dialog-title-move">Move "{pendingMove.name}" out of {pendingMove.fromName}?</h2>
             <p className="ph-dialog-hint">
               Please note you're changing {pendingMove.othersCount === 1
                 ? "another person's"
@@ -1944,8 +1947,8 @@ export default function ProjectsHome({
       {/* Rename dialog */}
       {renameFor && (
         <div className="ph-dialog-backdrop" onMouseDown={() => setRenameFor(null)}>
-          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
-            <h2>Rename project</h2>
+          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-rename-project" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="ph-dialog-title-rename-project">Rename project</h2>
             <form onSubmit={(e) => { e.preventDefault(); commitRename(); }}>
               <label className="ph-field-label" htmlFor="ph-rename">Name</label>
               <input
@@ -1968,8 +1971,8 @@ export default function ProjectsHome({
       {/* New project dialog */}
       {newDialogChoice && (
         <div className="ph-dialog-backdrop" onMouseDown={() => setNewDialogChoice(null)}>
-          <div className="ph-dialog" onMouseDown={(e) => e.stopPropagation()}>
-            <h2>New {newDialogChoice.name.toLowerCase()}</h2>
+          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-new-choice" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="ph-dialog-title-new-choice">New {newDialogChoice.name.toLowerCase()}</h2>
             <p className="ph-dialog-hint">Starter files will be created for you</p>
             {formError && <div className="ph-error inline">{formError}</div>}
             <form onSubmit={handleCreate}>
@@ -2024,8 +2027,8 @@ export default function ProjectsHome({
       {/* Connect / Import dialog */}
       {addDialogOpen && (
         <div className="ph-dialog-backdrop" onMouseDown={() => setAddDialogOpen(false)}>
-          <div className="ph-dialog wide" onMouseDown={(e) => e.stopPropagation()}>
-            <h2>Add an existing project</h2>
+          <div className="ph-dialog wide" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-add-existing" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="ph-dialog-title-add-existing">Add an existing project</h2>
             <div className="ph-tabs">
               <button
                 className={`ph-tab ${addTab === 'connect' ? 'active' : ''}`}

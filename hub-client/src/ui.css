@@ -348,10 +348,25 @@ select.ph-input { appearance: auto; }
   padding: 0;
   line-height: 1;
   transition: color 0.2s;
+  /* WCAG 2.5.8: the × glyph alone is narrower than the 24x24 CSS px
+     minimum target size; give the button a real 24x24 box. */
+  min-width: 24px;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .close-btn:hover {
   color: var(--editor-text);
+}
+
+/* WCAG 2.4.7: visible focus indicator (the button has no border or
+   background change on focus otherwise). */
+.close-btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .dialog-content {

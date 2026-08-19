@@ -180,8 +180,12 @@
   min-width: 0;
 }
 
+/* WCAG 2.4.7: keep a visible focus indicator — the base style already
+   has an accent border, so focus adds an offset outline in the same
+   accent to stay distinguishable. */
 .rename-input:focus {
-  outline: none;
+  outline: 2px solid var(--sidebar-active-accent);
+  outline-offset: 1px;
 }
 
 /* Drop overlay */

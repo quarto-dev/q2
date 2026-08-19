@@ -9,6 +9,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { discoverTemplates, type ProjectTemplate } from '../services/templateService';
+import ModalDialog from './ModalDialog';
 import './NewFileDialog.css';
 
 export interface NewFileDialogProps {
@@ -107,33 +108,25 @@ export default function NewFileDialog({
     onClose();
   }, [filename, selectedTemplate, validateFilename, onCreateTextFile, onClose]);
 
+  // Enter submits; Escape and Tab containment are owned by ModalDialog.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter') {
         handleCreateTextFile();
-      } else if (e.key === 'Escape') {
-        onClose();
       }
     },
-    [handleCreateTextFile, onClose]
+    [handleCreateTextFile]
   );
 
   if (!isOpen) return null;
 
   return (
-    <div className="ph-dialog-backdrop" onClick={onClose}>
-      <div
-        className="ph-dialog new-file-dialog"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
-      >
-        <div className="dialog-header">
-          <h2>New file</h2>
-          <button className="close-btn" onClick={onClose} aria-label="Close">
-            &times;
-          </button>
-        </div>
-
+    <ModalDialog
+      title="New file"
+      className="new-file-dialog"
+      onClose={onClose}
+      onKeyDown={handleKeyDown}
+    >
         <div className="dialog-content">
           <div className="text-file-form">
             {templates.length > 0 && (
@@ -189,7 +182,6 @@ export default function NewFileDialog({
             Create
           </button>
         </div>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }

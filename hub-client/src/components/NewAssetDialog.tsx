@@ -16,6 +16,7 @@ import {
   validateProjectPath,
   type AssetFilePreview,
 } from './fileUpload';
+import ModalDialog from './ModalDialog';
 import './NewAssetDialog.css';
 
 export interface NewAssetDialogProps {
@@ -216,34 +217,21 @@ export default function NewAssetDialog({
     }
   }, [canUpload, previews, entryErrors, composePath, onUploadAsset, onClose]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    },
-    [onClose]
-  );
-
   if (!isOpen) return null;
 
   const maxMB = FILE_SIZE_LIMITS.MAX_FILE_SIZE / (1024 * 1024);
 
   return (
-    <div className="ph-dialog-backdrop" onClick={onClose}>
-      <div
-        className="ph-dialog new-asset-dialog"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <div className="dialog-header">
-          <h2>Add asset to project</h2>
-          <button className="close-btn" onClick={onClose} aria-label="Close">
-            &times;
-          </button>
-        </div>
-
+    <ModalDialog
+      title="Add asset to project"
+      className="new-asset-dialog"
+      onClose={onClose}
+      dialogProps={{
+        onDragOver: handleDragOver,
+        onDragLeave: handleDragLeave,
+        onDrop: handleDrop,
+      }}
+    >
         <div className="dialog-content">
           <div className="destination-input">
             <label htmlFor="asset-destination">Destination folder:</label>
@@ -361,7 +349,6 @@ export default function NewAssetDialog({
             {isUploading ? 'Uploading...' : 'Upload'}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }

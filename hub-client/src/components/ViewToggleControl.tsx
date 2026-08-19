@@ -15,8 +15,9 @@ export default function ViewToggleControl() {
         onClick={() => setViewMode('markup')}
         title="Expand markup"
         aria-label="Markup view"
+        aria-pressed={viewMode === 'markup'}
       >
-        <svg width="12" height="10" viewBox="0 0 12 10">
+        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true">
           <rect x="0" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
           <rect x="9" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
         </svg>
@@ -26,8 +27,9 @@ export default function ViewToggleControl() {
         onClick={() => setViewMode('both')}
         title="Split equally"
         aria-label="Split view"
+        aria-pressed={viewMode === 'both'}
       >
-        <svg width="12" height="10" viewBox="0 0 12 10">
+        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true">
           <rect x="0" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
           <rect x="7" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
         </svg>
@@ -37,8 +39,9 @@ export default function ViewToggleControl() {
         onClick={() => setViewMode('preview')}
         title="Expand preview"
         aria-label="Preview view"
+        aria-pressed={viewMode === 'preview'}
       >
-        <svg width="12" height="10" viewBox="0 0 12 10">
+        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true">
           <rect x="0" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
           <rect x="5" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
         </svg>

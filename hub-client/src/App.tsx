@@ -17,6 +17,7 @@ function DevHarnessLazy({ page }: { page: string }) {
 }
 import Editor from './components/Editor';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import SkipLink from './components/SkipLink';
 import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
 import { LoginScreen } from './components/auth/LoginScreen';
@@ -870,6 +871,7 @@ function App() {
 
   return (
     <>
+      <SkipLink />
       {!project ? (
         uiVariant === 'collections' ? (
           <ProjectsHome
