@@ -2379,6 +2379,56 @@ div.callout.callout-style-default > .callout-header {
   color: $navbar-fg;
 }
 
+// Navbar brand: container + logo styling (bd-navbar-logo-unstyled-gbzd8vcu).
+// Ported from quarto-cli `projects/website/navigation/quarto-nav.scss`
+// against the Q1 `navbrand.ejs` markup shape, which Q2's
+// `render_brand` (quarto-navigation/src/render_html.rs) now emits:
+// `.navbar-brand-container` wrapping a `.navbar-brand.navbar-brand-logo`
+// anchor (the logo img) and a separate `.navbar-brand` title anchor.
+//
+// Deliberately NOT ported (both bd-y5y10oir): the
+// `.navbar-brand-container { max-width: calc(100% - 115px) }` clamp
+// (reserves toggler+search space on narrow viewports) and the
+// `$navbar-title-order`/`$navbar-toggler-order` `order:` system with
+// its `margin !important` pair — Q2 parses `toggle-position` but does
+// not yet wire it into SCSS.
+
+// quarto-nav.scss:116-118.
+.navbar-container {
+  width: 100%;
+}
+
+// quarto-nav.scss:120-123 — long titles truncate instead of overflowing.
+.navbar-brand {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// quarto-nav.scss:125-134 (minus the width clamp — bd-y5y10oir).
+.navbar-brand-container {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+
+  @include media-breakpoint-up(lg) {
+    margin-right: 1em;
+  }
+}
+
+// quarto-nav.scss:136-139 — spacing between logo anchor and title anchor.
+.navbar-brand.navbar-brand-logo {
+  margin-right: 4px;
+  display: inline-flex;
+}
+
+// quarto-nav.scss:196 — the default logo sizing. Without this a
+// 512px SVG renders at natural size and swallows the navbar.
+.navbar-logo {
+  max-height: 24px;
+  width: auto;
+  padding-right: 4px;
+}
+
 .navbar .quarto-color-scheme-toggle:not(.alternate) .bi::before {
   background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#{colorToRGBA($navbar-light-color)}" class="bi bi-toggle-off" viewBox="0 0 16 16"><path d="M11 4a4 4 0 0 1 0 8H8a4.992 4.992 0 0 0 2-4 4.992 4.992 0 0 0-2-4h3zm-6 8a4 4 0 1 1 0-8 4 4 0 0 1 0 8zM0 8a5 5 0 0 0 5 5h6a5 5 0 0 0 0-10H5a5 5 0 0 0-5 5z"/></svg>');
 }

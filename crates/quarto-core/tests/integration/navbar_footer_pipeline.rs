@@ -21,6 +21,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use regex::Regex;
 use tempfile::TempDir;
 
 use quarto_core::format::Format;
@@ -557,5 +558,94 @@ fn pipeline_footer_text_image_and_link_resolve_per_page_and_copy() {
     assert!(
         project_dir.join("_site/images/x.svg").exists(),
         "footer image must be copied to the output tree (decision 5)"
+    );
+}
+
+// === bd-navbar-logo-unstyled-gbzd8vcu: theme ships navbar brand CSS ======
+
+/// The compiled theme bundle must ship default styling for the navbar
+/// brand: `.navbar-logo` sizing (Q1 quarto-nav.scss:196) plus the
+/// `.navbar-brand-container` / `.navbar-brand-logo` layout rules the
+/// restructured brand markup relies on. Before the fix, the generated
+/// `quarto-theme-*.css` contained no `navbar-logo` occurrence at all,
+/// so a 512px SVG rendered at natural size and swallowed the navbar.
+#[test]
+fn pipeline_theme_css_ships_navbar_brand_rules() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  navbar:\n    title: Site\n    logo: logo.svg\n    left:\n      - index.qmd\n",
+        );
+        write(
+            &project_dir.join("logo.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    let libs_dir = project_dir.join("_site/site_libs/quarto");
+    let theme_css_path = std::fs::read_dir(&libs_dir)
+        .unwrap_or_else(|e| panic!("read {}: {}", libs_dir.display(), e))
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s.starts_with("quarto-theme-") && s.ends_with(".css"))
+        })
+        .expect("a quarto-theme-*.css under site_libs/quarto/");
+    let css = read(&theme_css_path);
+
+    // Q1 quarto-nav.scss:196 — the default logo sizing. Assert the
+    // full declaration set so a partial port can't pass.
+    let logo_rule = Regex::new(
+        r"\.navbar-logo\s*\{[^}]*max-height:\s*24px;[^}]*width:\s*auto;[^}]*padding-right:\s*4px",
+    )
+    .unwrap();
+    assert!(
+        logo_rule.is_match(&css),
+        "theme CSS must ship the .navbar-logo sizing rule; searched {}",
+        theme_css_path.display()
+    );
+
+    // Q1 quarto-nav.scss:125-134 — brand container flex layout
+    // (width clamp deliberately omitted: bd-y5y10oir).
+    let container_rule = Regex::new(
+        r"\.navbar-brand-container\s*\{[^}]*min-width:\s*0;[^}]*display:\s*flex;[^}]*align-items:\s*center",
+    )
+    .unwrap();
+    assert!(
+        container_rule.is_match(&css),
+        "theme CSS must ship the .navbar-brand-container layout rule"
+    );
+
+    // Q1 quarto-nav.scss:136-139 — logo anchor spacing.
+    let brand_logo_rule = Regex::new(
+        r"\.navbar-brand\.navbar-brand-logo\s*\{[^}]*margin-right:\s*4px;[^}]*display:\s*inline-flex",
+    )
+    .unwrap();
+    assert!(
+        brand_logo_rule.is_match(&css),
+        "theme CSS must ship the .navbar-brand.navbar-brand-logo rule"
+    );
+
+    // Q1 quarto-nav.scss:120-123 — long titles truncate with ellipsis.
+    let brand_rule =
+        Regex::new(r"\.navbar-brand\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis")
+            .unwrap();
+    assert!(
+        brand_rule.is_match(&css),
+        "theme CSS must ship the .navbar-brand ellipsis rule"
+    );
+
+    // Q1 quarto-nav.scss:116-118.
+    let navbar_container_rule = Regex::new(r"\.navbar-container\s*\{[^}]*width:\s*100%").unwrap();
+    assert!(
+        navbar_container_rule.is_match(&css),
+        "theme CSS must ship the .navbar-container width rule"
     );
 }

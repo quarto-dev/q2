@@ -89,12 +89,12 @@ Markup (`render_html.rs` unit tests):
 - [ ] `navbar_to_html` wrapper div carries `navbar-container container-fluid`.
 
 Theme CSS + end-to-end (drive the real render path per repo policy):
-- [ ] Website render test asserting the compiled `quarto-theme-*.css` contains `.navbar-logo` with `max-height` (and `.navbar-brand-container`).
+- [x] Website render test asserting the compiled `quarto-theme-*.css` contains `.navbar-logo` with `max-height` (and `.navbar-brand-container`) — `pipeline_theme_css_ships_navbar_brand_rules` in `navbar_footer_pipeline.rs`; verified failing before the SCSS change, passing after.
 - [ ] Existing-assertion inventory to update: `render_html.rs:1236-1294`, `navbar_render.rs:872-984`, `shortcode_config_pipeline.rs` (4 sites), `navbar_footer_pipeline.rs`, `metadata_path_resolution.rs:212-248`, plus a workspace-wide grep for `navbar-brand` in `.snap` files after the change.
 
 ### Phase 1 — SCSS default rules
 
-- [ ] Add the decided rule set (§ decisions 1) to the quarto-nav port region of `resources/scss/bootstrap/_bootstrap-rules.scss`, each with a Q1 source-line comment per house style; note the clamp + order rules as deliberately deferred (follow-up strand id in the comment).
+- [x] Add the decided rule set (§ decisions 1) to the quarto-nav port region of `resources/scss/bootstrap/_bootstrap-rules.scss`, each with a Q1 source-line comment per house style; note the clamp + order rules as deliberately deferred (follow-up strand id in the comment). Placed next to the existing `.navbar` block; `quarto-sass` theme-compile suite green.
 
 ### Phase 2 — Logo variant model
 
