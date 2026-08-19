@@ -128,17 +128,15 @@ fn rewrite_region_hrefs(
             rewrite_items_hrefs(items, resolver, index, diagnostics);
         }
         FooterRegion::Text(cv) => {
-            if let quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines) =
-                &mut cv.value
-            {
-                crate::transforms::navigation_href::rewrite_config_inlines(
-                    inlines,
-                    resolver,
-                    index,
-                    &NavSurface::PageFooter,
-                    diagnostics,
-                );
-            }
+            // Handles both the common `PandocInlines` shape and
+            // multi-block `!md` text (`PandocBlocks`).
+            crate::transforms::navigation_href::rewrite_config_text(
+                cv,
+                resolver,
+                index,
+                &NavSurface::PageFooter,
+                diagnostics,
+            );
         }
         FooterRegion::Empty => {}
     }
@@ -164,6 +162,16 @@ fn rewrite_items_hrefs(
                 diagnostics,
             );
         }
+        // An item's parsed-markdown `text:` carries Link/Image targets
+        // that resolve exactly like a Text region's
+        // (bd-page-footer-image-items-stmpikgo, defect 2).
+        crate::transforms::navigation_href::rewrite_item_text(
+            item,
+            resolver,
+            index,
+            &NavSurface::PageFooter,
+            diagnostics,
+        );
         // Footer items rarely nest `menu`, but the type allows it —
         // handle symmetrically with navbar.
         if !item.menu.is_empty() {
@@ -423,6 +431,104 @@ mod tests {
         assert!(html.contains("href=\"about.html\""), "got: {}", html);
         assert!(!html.contains("href=\"about.qmd\""));
         assert!(diags.is_empty());
+    }
+
+    /// A `ConfigValue` holding parsed markdown blocks — the shape
+    /// multi-block `!md` footer text takes.
+    fn blocks_cv(blocks: Vec<quarto_pandoc_types::block::Block>) -> ConfigValue {
+        ConfigValue {
+            value: quarto_pandoc_types::config_value::ConfigValueKind::PandocBlocks(blocks),
+            source_info: SourceInfo::for_test(),
+            merge_op: Default::default(),
+        }
+    }
+
+    /// Phase 3 of bd-page-footer-image-items-stmpikgo: a
+    /// `PandocBlocks`-shaped Text region (multi-paragraph `!md` text)
+    /// resolves its Link/Image targets like the inline-shaped one.
+    #[tokio::test]
+    async fn footer_render_text_region_blocks_resolve_at_depth() {
+        use quarto_pandoc_types::block::{Block, Paragraph};
+        let footer = PageFooter {
+            center: FooterRegion::Text(blocks_cv(vec![
+                Block::Paragraph(Paragraph {
+                    content: vec![footer_image("/images/x.svg", "logo")],
+                    source_info: SourceInfo::for_test(),
+                }),
+                Block::Paragraph(Paragraph {
+                    content: vec![footer_link("docs.qmd", "docs")],
+                    source_info: SourceInfo::for_test(),
+                }),
+            ])),
+            ..PageFooter::default()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "footer"], footer.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![profile(
+            "docs.qmd",
+            "docs.html",
+            "Docs",
+        )]));
+        let (out, diags) = run_at_depth(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "footer"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("src=\"../images/x.svg\""),
+            "blocks-shaped text-region image must relativize; got: {}",
+            html
+        );
+        assert!(
+            html.contains("href=\"../docs.html\""),
+            "blocks-shaped text-region link must resolve; got: {}",
+            html
+        );
+        assert!(diags.is_empty(), "got diagnostics: {:?}", diags);
+    }
+
+    /// Defect 2 of bd-page-footer-image-items-stmpikgo: an *item's*
+    /// `text:` markdown resolves exactly like a Text region's — Image
+    /// targets relativize per page, `.qmd` links resolve through the
+    /// index. (Menu-child text is covered by the navbar test — the
+    /// footer emitter doesn't render dropdowns.)
+    #[tokio::test]
+    async fn footer_render_item_text_inlines_resolve_at_depth() {
+        let footer = PageFooter {
+            right: FooterRegion::Items(vec![NavigationItem {
+                text: Some(inlines_cv(vec![
+                    footer_image("/images/x.svg", "logo"),
+                    footer_link("docs.qmd", "docs"),
+                ])),
+                ..NavigationItem::default()
+            }]),
+            ..PageFooter::default()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "footer"], footer.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![profile(
+            "docs.qmd",
+            "docs.html",
+            "Docs",
+        )]));
+        let (out, diags) = run_at_depth(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "footer"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("src=\"../images/x.svg\""),
+            "item-text image must relativize from the depth-1 page; got: {}",
+            html
+        );
+        assert!(
+            html.contains("href=\"../docs.html\""),
+            "item-text .qmd link must resolve through the index; got: {}",
+            html
+        );
+        assert!(diags.is_empty(), "got diagnostics: {:?}", diags);
     }
 
     /// ~~Phase 3 test 42~~ — DELIBERATELY INVERTED by

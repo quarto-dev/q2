@@ -1,0 +1,15 @@
+project:
+  type: website
+website:
+  title: "page-footer image items"
+  page-footer:
+    # Region-level text: the control. Its inlines ARE resolved.
+    center: '![region-level](/images/logo.svg) and a [region-level link](/index.qmd)'
+    left:
+      - text: '![lone image](/images/logo.svg)'
+      - text: '![lone image, relative](images/logo.svg)'
+      - text: '[![wrapped in a link](images/logo.svg)](https://posit.co)'
+      - text: '![image](images/logo.svg) beside text'
+      - text: '`<img src="/images/logo.svg" alt="raw html">`{=html}'
+    right:
+      - text: '![item-level](/images/logo.svg) and an [item-level link](/index.qmd)'

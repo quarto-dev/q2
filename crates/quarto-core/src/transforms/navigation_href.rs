@@ -485,6 +485,194 @@ pub fn resolve_root_relative_resource_href(
 /// makes plain markdown the natural form for config-declared imagery
 /// and links — the pure emitter in `quarto-navigation` receives
 /// fully-resolved targets and stays resolver-free.
+/// Rewrite Link/Image targets inside a text-bearing config value — a
+/// nav item's parsed-markdown `text:`, a sidebar section title, a
+/// sidebar heading (bd-page-footer-image-items-stmpikgo, defect 2).
+///
+/// Only `PandocInlines` values carry resolvable targets today;
+/// scalar values are literal text and pass through untouched.
+/// (`PandocBlocks` — multi-block `!md` text — is the Phase 3 blocks
+/// walker's territory.)
+pub fn rewrite_config_text(
+    cv: &mut quarto_pandoc_types::ConfigValue,
+    resolver: Option<&ResourceResolverContext>,
+    index: Option<&ProjectIndex>,
+    surface: &NavSurface<'_>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    match &mut cv.value {
+        quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines) => {
+            rewrite_config_inlines(inlines, resolver, index, surface, diagnostics);
+        }
+        quarto_pandoc_types::config_value::ConfigValueKind::PandocBlocks(blocks) => {
+            rewrite_config_blocks(blocks, resolver, index, surface, diagnostics);
+        }
+        _ => {}
+    }
+}
+
+/// Block-level companion to [`rewrite_config_inlines`] for
+/// `PandocBlocks`-shaped config text (multi-block `!md` values).
+///
+/// Walks block containers and delegates every inline position to
+/// [`rewrite_config_inlines`]. `Figure` nodes **persist** — the walk
+/// descends into their content and caption and rewrites targets
+/// there, it never unwraps them (decision 3 of
+/// bd-page-footer-image-items-stmpikgo: figures keep their semantics
+/// in block settings; only the config-string *parse* unwraps a lone
+/// figure). Container coverage mirrors the body's
+/// `ResourceCollectorTransform` visitor; leaf blocks with no
+/// resolvable targets (code, raw, rules, note-definition scaffolding)
+/// pass through.
+pub fn rewrite_config_blocks(
+    blocks: &mut [quarto_pandoc_types::block::Block],
+    resolver: Option<&ResourceResolverContext>,
+    index: Option<&ProjectIndex>,
+    surface: &NavSurface<'_>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    use quarto_pandoc_types::Slot;
+    use quarto_pandoc_types::block::Block;
+    for block in blocks.iter_mut() {
+        match block {
+            Block::Plain(p) => {
+                rewrite_config_inlines(&mut p.content, resolver, index, surface, diagnostics);
+            }
+            Block::Paragraph(p) => {
+                rewrite_config_inlines(&mut p.content, resolver, index, surface, diagnostics);
+            }
+            Block::Header(h) => {
+                rewrite_config_inlines(&mut h.content, resolver, index, surface, diagnostics);
+            }
+            Block::LineBlock(lb) => {
+                for line in &mut lb.content {
+                    rewrite_config_inlines(line, resolver, index, surface, diagnostics);
+                }
+            }
+            Block::BlockQuote(bq) => {
+                rewrite_config_blocks(&mut bq.content, resolver, index, surface, diagnostics);
+            }
+            Block::OrderedList(ol) => {
+                for item in &mut ol.content {
+                    rewrite_config_blocks(item, resolver, index, surface, diagnostics);
+                }
+            }
+            Block::BulletList(bl) => {
+                for item in &mut bl.content {
+                    rewrite_config_blocks(item, resolver, index, surface, diagnostics);
+                }
+            }
+            Block::DefinitionList(dl) => {
+                for (term, defs) in &mut dl.content {
+                    rewrite_config_inlines(term, resolver, index, surface, diagnostics);
+                    for def in defs {
+                        rewrite_config_blocks(def, resolver, index, surface, diagnostics);
+                    }
+                }
+            }
+            Block::Div(d) => {
+                rewrite_config_blocks(&mut d.content, resolver, index, surface, diagnostics);
+            }
+            Block::Figure(f) => {
+                // The figure persists; only the targets inside it
+                // (its image content and any caption links) rewrite.
+                if let Some(short) = &mut f.caption.short {
+                    rewrite_config_inlines(short, resolver, index, surface, diagnostics);
+                }
+                if let Some(long) = &mut f.caption.long {
+                    rewrite_config_blocks(long, resolver, index, surface, diagnostics);
+                }
+                rewrite_config_blocks(&mut f.content, resolver, index, surface, diagnostics);
+            }
+            Block::Table(t) => {
+                if let Some(short) = &mut t.caption.short {
+                    rewrite_config_inlines(short, resolver, index, surface, diagnostics);
+                }
+                if let Some(long) = &mut t.caption.long {
+                    rewrite_config_blocks(long, resolver, index, surface, diagnostics);
+                }
+                for row in t.head.rows.iter_mut().chain(t.foot.rows.iter_mut()) {
+                    for cell in &mut row.cells {
+                        rewrite_config_blocks(
+                            &mut cell.content,
+                            resolver,
+                            index,
+                            surface,
+                            diagnostics,
+                        );
+                    }
+                }
+                for body in &mut t.bodies {
+                    for row in &mut body.body {
+                        for cell in &mut row.cells {
+                            rewrite_config_blocks(
+                                &mut cell.content,
+                                resolver,
+                                index,
+                                surface,
+                                diagnostics,
+                            );
+                        }
+                    }
+                }
+            }
+            Block::Custom(c) => {
+                for (_name, slot) in &mut c.slots {
+                    match slot {
+                        Slot::Block(block) => rewrite_config_blocks(
+                            std::slice::from_mut(block),
+                            resolver,
+                            index,
+                            surface,
+                            diagnostics,
+                        ),
+                        Slot::Blocks(blocks) => {
+                            rewrite_config_blocks(blocks, resolver, index, surface, diagnostics)
+                        }
+                        Slot::Inline(inline) => rewrite_config_inlines(
+                            std::slice::from_mut(inline),
+                            resolver,
+                            index,
+                            surface,
+                            diagnostics,
+                        ),
+                        Slot::Inlines(inlines) => {
+                            rewrite_config_inlines(inlines, resolver, index, surface, diagnostics)
+                        }
+                    }
+                }
+            }
+            // Leaves with no resolvable targets — same set the body's
+            // `ResourceCollectorTransform` treats as terminal.
+            Block::CodeBlock(_)
+            | Block::RawBlock(_)
+            | Block::HorizontalRule(_)
+            | Block::BlockMetadata(_)
+            | Block::NoteDefinitionPara(_)
+            | Block::NoteDefinitionFencedBlock(_)
+            | Block::CaptionBlock(_) => {}
+        }
+    }
+}
+
+/// Rewrite the text-bearing field of one navigation item through
+/// [`rewrite_config_text`]. `menu` recursion stays with the callers'
+/// item walkers, which already descend. (`bare_text` needs no
+/// treatment here: the Generate transforms either demote it into
+/// `text` or drop it before Render runs, and the emitter never reads
+/// it.)
+pub fn rewrite_item_text(
+    item: &mut quarto_navigation::NavigationItem,
+    resolver: Option<&ResourceResolverContext>,
+    index: Option<&ProjectIndex>,
+    surface: &NavSurface<'_>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    if let Some(cv) = item.text.as_mut() {
+        rewrite_config_text(cv, resolver, index, surface, diagnostics);
+    }
+}
+
 pub fn rewrite_config_inlines(
     inlines: &mut [quarto_pandoc_types::inline::Inline],
     resolver: Option<&ResourceResolverContext>,
@@ -729,6 +917,129 @@ mod tests {
         ctx.add_file("<anonymous>".to_string(), None);
         let id = ctx.add_file(abs, None);
         (ctx, SourceInfo::original(id, 0, 0))
+    }
+
+    // ---- Phase 3 of bd-page-footer-image-items-stmpikgo:
+    // ---- rewrite_config_blocks ------------------------------------
+
+    fn test_image(url: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Image, Inline};
+        Inline::Image(Image {
+            attr: Default::default(),
+            content: vec![],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    fn test_link(url: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Inline, Link};
+        Inline::Link(Link {
+            attr: Default::default(),
+            content: vec![],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    fn plain(
+        inlines: Vec<quarto_pandoc_types::inline::Inline>,
+    ) -> quarto_pandoc_types::block::Block {
+        use quarto_pandoc_types::block::{Block, Plain};
+        Block::Plain(Plain {
+            content: inlines,
+            source_info: SourceInfo::for_test(),
+        })
+    }
+
+    /// The blocks walker rewrites Link/Image targets inside block
+    /// containers — and *persists* Figure nodes, rewriting the image
+    /// inside and the caption's links rather than unwrapping
+    /// (decision 3: figures keep their semantics in block settings;
+    /// only the config-string *parse* unwraps lone figures).
+    #[test]
+    fn config_blocks_walk_rewrites_targets_and_persists_figures() {
+        use quarto_pandoc_types::Caption;
+        use quarto_pandoc_types::block::{Block, Figure, Paragraph};
+
+        let mut blocks = vec![
+            Block::Figure(Figure {
+                attr: Default::default(),
+                caption: Caption {
+                    short: None,
+                    long: Some(vec![plain(vec![test_link("docs.qmd")])]),
+                    source_info: SourceInfo::for_test(),
+                },
+                content: vec![plain(vec![test_image("/images/x.svg")])],
+                source_info: SourceInfo::for_test(),
+                attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+            }),
+            Block::Paragraph(Paragraph {
+                content: vec![test_image("images/y.svg")],
+                source_info: SourceInfo::for_test(),
+            }),
+        ];
+
+        let resolver = crate::resource_resolver::ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/docs/api.html",
+            "site_libs",
+            "api",
+        );
+        let index =
+            crate::project::index::ProjectIndex::new(vec![profile("docs.qmd", "docs.html")]);
+        let mut diags = Vec::new();
+        rewrite_config_blocks(
+            &mut blocks,
+            Some(&resolver),
+            Some(&index),
+            &surf(),
+            &mut diags,
+        );
+
+        let Block::Figure(figure) = &blocks[0] else {
+            panic!("figure must persist, got {:?}", blocks[0]);
+        };
+        let Block::Plain(fig_plain) = &figure.content[0] else {
+            panic!("figure content shape changed");
+        };
+        let quarto_pandoc_types::inline::Inline::Image(img) = &fig_plain.content[0] else {
+            panic!("figure image shape changed");
+        };
+        assert_eq!(
+            img.target.0, "../images/x.svg",
+            "image inside a figure must relativize"
+        );
+        let Some(long) = &figure.caption.long else {
+            panic!("caption dropped");
+        };
+        let Block::Plain(cap_plain) = &long[0] else {
+            panic!("caption shape changed");
+        };
+        let quarto_pandoc_types::inline::Inline::Link(link) = &cap_plain.content[0] else {
+            panic!("caption link shape changed");
+        };
+        assert_eq!(
+            link.target.0, "../docs.html",
+            "caption link must resolve through the index"
+        );
+        let Block::Paragraph(para) = &blocks[1] else {
+            panic!("paragraph shape changed");
+        };
+        let quarto_pandoc_types::inline::Inline::Image(img2) = &para.content[0] else {
+            panic!("paragraph image shape changed");
+        };
+        assert_eq!(
+            img2.target.0, "../images/y.svg",
+            "sibling paragraph image must relativize"
+        );
+        assert!(diags.is_empty(), "got: {:?}", diags);
     }
 
     /// Frontmatter sibling-relative case. The reproducer from

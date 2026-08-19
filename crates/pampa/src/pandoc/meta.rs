@@ -37,9 +37,47 @@ pub fn parse_config_string_as_markdown(
     diagnostics: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> ConfigValueKind {
     let mut collector = crate::utils::diagnostic_collector::DiagnosticCollector::new();
-    let kind = parse_yaml_string_as_markdown_to_config(value, source_info, false, &mut collector);
+    let mut kind =
+        parse_yaml_string_as_markdown_to_config(value, source_info, false, &mut collector);
     diagnostics.extend(collector.into_diagnostics());
+    unwrap_lone_figure(&mut kind);
     kind
+}
+
+/// Undo the qmd reader's single-image-paragraph → `Figure` desugar for
+/// config strings (bd-page-footer-image-items-stmpikgo).
+///
+/// Config strings are inline presentation contexts — footer/navbar
+/// item text, titles, captions — where figure-with-caption semantics
+/// is never wanted: consumers render inlines and would drop a Figure
+/// block on the floor. A lone image with alt text is the one shape
+/// the reader turns into a Figure, so unwrap it back to the image the
+/// author wrote, reassembling the attr the desugar split (id on the
+/// figure, classes/attributes on the image).
+///
+/// Deliberately *not* applied to `!md`-tagged values
+/// ([`parse_yaml_string_as_markdown_to_config`] with
+/// `is_explicit_md = true`): those are explicit block-context
+/// markdown, where figures persist.
+fn unwrap_lone_figure(kind: &mut ConfigValueKind) {
+    use quarto_pandoc_types::Block;
+
+    let ConfigValueKind::PandocBlocks(blocks) = kind else {
+        return;
+    };
+    let [Block::Figure(figure)] = &mut blocks[..] else {
+        return;
+    };
+    let [Block::Plain(plain)] = &mut figure.content[..] else {
+        return;
+    };
+    let [Inline::Image(image)] = &mut plain.content[..] else {
+        return;
+    };
+    image.attr.0 = figure.attr.0.clone();
+    image.attr_source.id = figure.attr_source.id.clone();
+    let image = image.clone();
+    *kind = ConfigValueKind::PandocInlines(vec![Inline::Image(image)]);
 }
 
 /// Parse a YAML string as markdown and return ConfigValue with PandocInlines/PandocBlocks.
@@ -620,6 +658,146 @@ mod tests {
             "map entries under contents extend the key path, so record \
              fields keep the markdown default; got {:?}",
             title.value
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Lone-figure unwrap in config strings
+    // (bd-page-footer-image-items-stmpikgo).
+    //
+    // Config strings are inline presentation contexts (footer/navbar
+    // item text, titles, captions); figure-with-caption semantics is
+    // never wanted there. The qmd reader's postprocess desugars a
+    // single-image paragraph into a Figure, which — without the
+    // unwrap — leaves the value as PandocBlocks([Figure]) that inline
+    // renderers and rewriters drop on the floor.
+    // ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn config_string_lone_image_unwraps_to_inline_image() {
+        let mut diagnostics = Vec::new();
+        let kind = parse_config_string_as_markdown(
+            "![lone image](images/logo.svg)",
+            &si(),
+            &mut diagnostics,
+        );
+        let ConfigValueKind::PandocInlines(inlines) = kind else {
+            panic!("lone image must unwrap to PandocInlines, got {:?}", kind);
+        };
+        assert_eq!(inlines.len(), 1, "exactly the image, got {:?}", inlines);
+        let Inline::Image(img) = &inlines[0] else {
+            panic!("expected Image inline, got {:?}", inlines[0]);
+        };
+        assert_eq!(img.target.0, "images/logo.svg");
+        assert!(
+            !img.content.is_empty(),
+            "alt text must survive the round-trip through the figure desugar"
+        );
+    }
+
+    #[test]
+    fn config_string_lone_image_without_alt_is_inline_image() {
+        // No alt text → the postprocess figure desugar never fires
+        // (it requires a non-empty caption); pin the behavior so both
+        // variants land in the same shape.
+        let mut diagnostics = Vec::new();
+        let kind = parse_config_string_as_markdown("![](images/logo.svg)", &si(), &mut diagnostics);
+        let ConfigValueKind::PandocInlines(inlines) = kind else {
+            panic!("expected PandocInlines, got {:?}", kind);
+        };
+        assert!(
+            matches!(&inlines[..], [Inline::Image(_)]),
+            "got {:?}",
+            inlines
+        );
+    }
+
+    #[test]
+    fn config_string_lone_image_unwrap_restores_attr() {
+        // The figure desugar splits the attr: the id moves to the
+        // figure, classes/attributes stay on the image. The unwrap
+        // must reassemble the image the author wrote.
+        let mut diagnostics = Vec::new();
+        let kind = parse_config_string_as_markdown(
+            "![x](logo.svg){#the-id .the-class}",
+            &si(),
+            &mut diagnostics,
+        );
+        let ConfigValueKind::PandocInlines(inlines) = kind else {
+            panic!("expected PandocInlines, got {:?}", kind);
+        };
+        let Inline::Image(img) = &inlines[0] else {
+            panic!("expected Image inline, got {:?}", inlines[0]);
+        };
+        assert_eq!(img.attr.0, "the-id", "id must move back from the figure");
+        assert_eq!(img.attr.1, vec!["the-class".to_string()]);
+    }
+
+    #[test]
+    fn config_string_image_with_sibling_inline_stays_inlines() {
+        let mut diagnostics = Vec::new();
+        let kind =
+            parse_config_string_as_markdown("![x](logo.svg) beside text", &si(), &mut diagnostics);
+        assert!(
+            matches!(kind, ConfigValueKind::PandocInlines(_)),
+            "got {:?}",
+            kind
+        );
+    }
+
+    /// Sub-spans (an image target's URL span) must reroot through the
+    /// parent `SourceInfo` exactly like node spans do
+    /// (bd-page-footer-image-items-stmpikgo, Phase 4): a consumer that
+    /// anchors a diagnostic at `target_source.url` must land inside
+    /// the config file the scalar was authored in, not at raw
+    /// offsets-into-the-scalar against `FileId(0)`.
+    #[test]
+    fn config_string_image_target_source_reroots_through_parent() {
+        use quarto_source_map::FileId;
+        let parent = quarto_source_map::SourceInfo::original(FileId(7), 100, 160);
+        let mut diagnostics = Vec::new();
+        let kind =
+            parse_config_string_as_markdown("![x](images/logo.svg)", &parent, &mut diagnostics);
+        let ConfigValueKind::PandocInlines(inlines) = kind else {
+            panic!("expected PandocInlines");
+        };
+        let Inline::Image(img) = &inlines[0] else {
+            panic!("expected Image inline");
+        };
+        let url_si = img
+            .target_source
+            .url
+            .as_ref()
+            .expect("URL span must be tracked");
+        let (fid, start, end) = url_si
+            .resolve_byte_range()
+            .expect("URL span must resolve to a byte range");
+        assert_eq!(fid, 7, "URL span must resolve into the parent's file");
+        // "![x](" is 5 bytes into the scalar, which starts at parent
+        // offset 100.
+        assert_eq!(start, 105, "URL span must shift by the parent's start");
+        assert_eq!(end, 105 + "images/logo.svg".len());
+    }
+
+    #[test]
+    fn explicit_md_lone_image_keeps_figure_semantics() {
+        // `!md`-tagged values are explicit block-context markdown:
+        // a lone image there keeps its Figure (decision 3 of the
+        // 2026-08-18 plan — figures persist in block settings).
+        let mut collector = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let kind = parse_yaml_string_as_markdown_to_config(
+            "![lone image](images/logo.svg)",
+            &si(),
+            true,
+            &mut collector,
+        );
+        let ConfigValueKind::PandocBlocks(blocks) = &kind else {
+            panic!("expected PandocBlocks, got {:?}", kind);
+        };
+        assert!(
+            matches!(&blocks[..], [quarto_pandoc_types::Block::Figure(_)]),
+            "got {:?}",
+            blocks
         );
     }
 

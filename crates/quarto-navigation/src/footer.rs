@@ -63,7 +63,17 @@ impl FooterRegion {
         }
 
         // A plain-textable scalar (including PandocInlines) is text.
-        if cv.as_plain_text().is_some() {
+        // So is a `PandocBlocks` value — multi-block `!md` text —
+        // which `as_plain_text` can't flatten
+        // (bd-page-footer-image-items-stmpikgo, Phase 3); `render_text`
+        // renders its blocks and the render transform rewrites their
+        // Link/Image targets.
+        if cv.as_plain_text().is_some()
+            || matches!(
+                cv.value,
+                quarto_pandoc_types::config_value::ConfigValueKind::PandocBlocks(_)
+            )
+        {
             return FooterRegion::Text(cv.clone());
         }
 
@@ -273,6 +283,27 @@ mod tests {
 
     fn arr(items: Vec<ConfigValue>) -> ConfigValue {
         ConfigValue::new_array(items, SourceInfo::for_test())
+    }
+
+    /// A `PandocBlocks`-shaped region value (multi-block `!md` text)
+    /// classifies as `Text`, not `Empty`
+    /// (bd-page-footer-image-items-stmpikgo, Phase 3):
+    /// `as_plain_text` is `None` for blocks, so the plain-textable
+    /// check alone silently dropped the whole region.
+    #[test]
+    fn blocks_shaped_region_is_text() {
+        use quarto_pandoc_types::block::{Block, Paragraph};
+        use quarto_pandoc_types::config_value::ConfigValueKind;
+        let blocks_cv = ConfigValue {
+            value: ConfigValueKind::PandocBlocks(vec![Block::Paragraph(Paragraph {
+                content: vec![],
+                source_info: SourceInfo::for_test(),
+            })]),
+            source_info: SourceInfo::for_test(),
+            merge_op: Default::default(),
+        };
+        let region = FooterRegion::from_config_value(Some(&blocks_cv));
+        assert!(matches!(region, FooterRegion::Text(_)), "got {:?}", region);
     }
 
     /// Defect 2 (bd-page-footer-items-f4th80mj) — a bare string in a

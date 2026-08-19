@@ -248,6 +248,19 @@ pub fn range_to_source_info_with_context(
     range: &quarto_source_map::Range,
     ctx: &ASTContext,
 ) -> quarto_source_map::SourceInfo {
+    // Under a re-parse of an embedded string (config strings, `!md`
+    // metadata), spans must reroot through the parent `SourceInfo`
+    // exactly like node spans do (`node_source_info_with_context`) —
+    // an `Original` at raw offsets-into-the-string would render a
+    // diagnostic against the wrong text
+    // (bd-page-footer-image-items-stmpikgo, Phase 4).
+    if let Some(parent) = &ctx.parent_source_info {
+        return quarto_source_map::SourceInfo::substring(
+            parent.clone(),
+            range.start.offset,
+            range.end.offset,
+        );
+    }
     let file_id = ctx
         .primary_file_id()
         .unwrap_or(quarto_source_map::FileId(0));

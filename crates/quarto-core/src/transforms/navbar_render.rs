@@ -35,7 +35,7 @@ use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::is_feature_disabled;
 use crate::transforms::navigation_href::{
-    NavSurface, resolve_href_for_html, resolve_root_relative_resource_href, rewrite_config_inlines,
+    NavSurface, resolve_href_for_html, resolve_root_relative_resource_href,
 };
 
 pub struct NavbarRenderTransform;
@@ -121,13 +121,11 @@ impl AstTransform for NavbarRenderTransform {
             *logo = resolve_root_relative_resource_href(logo, ctx.resource_resolver.as_ref());
         }
         // Navbar title markdown (Case C): Link/Image targets inside
-        // the title's parsed inlines resolve like footer text regions.
-        if let NavbarTitle::Text(cv) = &mut navbar.title
-            && let quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines) =
-                &mut cv.value
-        {
-            rewrite_config_inlines(
-                inlines.as_mut_slice(),
+        // the title's parsed markdown resolve like footer text
+        // regions (inlines and `!md` blocks alike).
+        if let NavbarTitle::Text(cv) = &mut navbar.title {
+            crate::transforms::navigation_href::rewrite_config_text(
+                cv,
                 ctx.resource_resolver.as_ref(),
                 ctx.project_index.as_deref(),
                 &NavSurface::Navbar,
@@ -180,6 +178,16 @@ fn rewrite_navigation_item_hrefs(
                 diagnostics,
             );
         }
+        // An item's parsed-markdown `text:` carries Link/Image targets
+        // that resolve like the navbar title's
+        // (bd-page-footer-image-items-stmpikgo, defect 2).
+        crate::transforms::navigation_href::rewrite_item_text(
+            item,
+            resolver,
+            index,
+            &NavSurface::Navbar,
+            diagnostics,
+        );
         if !item.menu.is_empty() {
             rewrite_navigation_item_hrefs(&mut item.menu, resolver, index, diagnostics);
         }
@@ -369,6 +377,135 @@ mod tests {
             .as_plain_text()
             .unwrap();
         assert!(html.contains("Doc Title"));
+    }
+
+    /// A `ConfigValue` holding parsed markdown inlines — the shape
+    /// item `text:` takes after `ConfigMarkdownTransform`.
+    fn inlines_cv(inlines: Vec<quarto_pandoc_types::inline::Inline>) -> ConfigValue {
+        ConfigValue {
+            value: quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines),
+            source_info: SourceInfo::for_test(),
+            merge_op: Default::default(),
+        }
+    }
+
+    fn nav_image(url: &str, alt: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Image, Inline, Str};
+        Inline::Image(Image {
+            attr: Default::default(),
+            content: vec![Inline::Str(Str {
+                text: alt.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    fn nav_link(url: &str, text: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Inline, Link, Str};
+        Inline::Link(Link {
+            attr: Default::default(),
+            content: vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    /// Like `run_with`, but wires a website resolver pinned at a
+    /// depth-1 page (`docs/api.html`) so page-relative resolution is
+    /// observable.
+    async fn run_at_depth(
+        meta: ConfigValue,
+        index: Option<Arc<ProjectIndex>>,
+    ) -> (ConfigValue, Vec<DiagnosticMessage>) {
+        use crate::resource_resolver::ResourceResolverContext;
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/docs/api.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/docs/api.html",
+            "site_libs",
+            "api",
+        );
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_resource_resolver(resolver);
+        if let Some(idx) = index {
+            ctx = ctx.with_project_index(idx);
+        }
+        NavbarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        (ast.meta, ctx.diagnostics)
+    }
+
+    /// Defect 2 of bd-page-footer-image-items-stmpikgo, navbar
+    /// edition: a navbar item's `text:` markdown resolves like the
+    /// navbar title's — Image targets relativize per page, `.qmd`
+    /// links resolve through the index. Covers a top-level item and a
+    /// dropdown `menu` child (rendered by the navbar, unlike footer
+    /// menus).
+    #[tokio::test]
+    async fn navbar_render_item_text_inlines_resolve_at_depth() {
+        let navbar = Navbar {
+            left: vec![NavigationItem {
+                text: Some(inlines_cv(vec![
+                    nav_image("/images/x.svg", "logo"),
+                    nav_link("docs.qmd", "docs"),
+                ])),
+                menu: vec![NavigationItem {
+                    text: Some(inlines_cv(vec![nav_image("images/y.svg", "nested")])),
+                    ..NavigationItem::default()
+                }],
+                ..NavigationItem::default()
+            }],
+            ..Navbar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "navbar"], navbar.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![profile(
+            "docs.qmd",
+            "docs.html",
+            "Docs",
+        )]));
+        let (out, diags) = run_at_depth(meta, Some(index)).await;
+        let html = out
+            .get_path(&["rendered", "navigation", "navbar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("src=\"../images/x.svg\""),
+            "item-text image must relativize from the depth-1 page; got: {}",
+            html
+        );
+        assert!(
+            html.contains("href=\"../docs.html\""),
+            "item-text .qmd link must resolve through the index; got: {}",
+            html
+        );
+        assert!(
+            html.contains("src=\"../images/y.svg\""),
+            "menu-child item-text image must resolve too; got: {}",
+            html
+        );
+        assert!(diags.is_empty(), "got diagnostics: {:?}", diags);
     }
 
     // --- Phase 3 href rewriting -----------------------------------
