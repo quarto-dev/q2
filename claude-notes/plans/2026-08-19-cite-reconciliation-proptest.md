@@ -144,7 +144,8 @@ already cover citation fields correctly; only Step 2's guard is missing. The
 
 ### Phase 4 — Close out
 
-- [ ] `cargo xtask verify` (full — pampa is in the WASM dependency chain).
+- [x] `cargo xtask verify` (full — pampa is in the WASM dependency chain).
+  All steps passed 2026-08-19.
 - [ ] Close bd-205v6 (ask user first).
 
 ## Risks / tradeoffs (draft)
