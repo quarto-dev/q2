@@ -30,6 +30,8 @@ When making changes to `hub-client/`:
 
 1. **At the start of a dev session**, run `npm install` from the repo root to ensure all workspace dependencies are up to date. This is fast and prevents test failures from missing packages added by other contributors.
 
+2. **If anything fails with `The package "@esbuild/<platform>" could not be found`** (or a similar missing-platform-binary error from rollup/swc/parcel): the *lockfile* is missing that package's optional platform dependencies, which breaks every machine and CI — not just your checkout. Fix the artifact, not your machine: delete the affected package's block from `package-lock.json` (e.g. `jq 'del(.packages["node_modules/esbuild"])' package-lock.json`), run `npm install` from the repo root so npm re-resolves it and records the full `@esbuild/*` platform set, verify with a clean `npm ci`, and **commit the lockfile change**. Do NOT stop at `npm install --no-save @esbuild/darwin-arm64` — that is a machine-local band-aid that leaves CI and colleagues broken. (Incident 2026-08-19: top-level `esbuild@0.28.0` entered the lockfile with zero platform entries — only vite's nested copy had them — so every `npm ci` produced a broken esbuild.)
+
 3. **After making TypeScript changes**, run preflight checks:
    ```bash
    cd hub-client && npm run preflight
