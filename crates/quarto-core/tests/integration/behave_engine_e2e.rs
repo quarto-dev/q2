@@ -461,11 +461,14 @@ fn f3_timeout_poisons_then_transparently_relaunches() {
         "expected Err(Timeout) from the QUARTO_SLOW execute under a 1s window; got {r1:?}"
     );
 
-    // Give the background stderr-forwarding thread a moment to deliver
-    // execute-1's own launch marker before checking the pre-execute-2 count.
-    std::thread::sleep(Duration::from_millis(200));
+    // Execute-1's own launch marker arrives via the background
+    // stderr-forwarding thread, so a bare count races it (the same async
+    // delivery behind the F3/F4 CI flakes — see `wait_for_count_containing`).
+    // Bounded poll, not a fixed sleep; the helper's trailing settle preserves
+    // this `== 1` upper bound and shields the `:2 == 0` absence check below
+    // exactly as the removed 200ms sleep did.
     assert_eq!(
-        capture.count_containing("BEHAVE_LAUNCH_MARKER:1"),
+        capture.wait_for_count_containing("BEHAVE_LAUNCH_MARKER:1", 1, Duration::from_secs(10)),
         1,
         "expected exactly one initial launch (execute-1's own ensure_launched); \
          captured engine_host messages: {:?}",
@@ -627,21 +630,21 @@ fn f4_crash_yields_process_crashed_then_transparently_relaunches() {
         "expected Err(ProcessCrashed) from the BEHAVE_CRASH execute; got {r1:?}"
     );
 
-    // Give the background stderr-forwarding thread a moment to deliver
-    // process #1's launch marker + crash marker before checking the
-    // pre-execute-2 counts. `handle_crash` itself already sleeps ~250ms
-    // waiting for the stderr thread to drain before broadcasting
-    // ProcessCrashed, so this is a small top-up, not the primary wait.
-    std::thread::sleep(Duration::from_millis(200));
+    // The crash marker and process #1's launch marker arrive via the
+    // background stderr-forwarding thread, so bare counts race it — the same
+    // async delivery that made this test's witness-2 assertion flake on a
+    // loaded ubuntu runner (2026-08-19, PR #560 CI; see
+    // `wait_for_count_containing`). Bounded polls, not fixed sleeps; the
+    // helper's trailing settle preserves the `== 1` upper bounds.
     assert_eq!(
-        capture.count_containing("BEHAVE_CRASH_MARKER"),
+        capture.wait_for_count_containing("BEHAVE_CRASH_MARKER", 1, Duration::from_secs(10)),
         1,
         "expected the crash marker behave.ts writes immediately before \
          Deno.exit(1); captured engine_host messages: {:?}",
         capture.all()
     );
     assert_eq!(
-        capture.count_containing("BEHAVE_LAUNCH_MARKER:1"),
+        capture.wait_for_count_containing("BEHAVE_LAUNCH_MARKER:1", 1, Duration::from_secs(10)),
         1,
         "expected exactly one initial launch in process #1 (execute-1's own \
          ensure_launched, before the crash); captured engine_host messages: {:?}",
@@ -677,9 +680,14 @@ fn f4_crash_yields_process_crashed_then_transparently_relaunches() {
     // `launch()` call -- process #2's `_behaveLaunchCount` starts fresh at 0
     // (crash wiped process #1's in-memory state), so a genuine relaunch
     // prints "BEHAVE_LAUNCH_MARKER:1" AGAIN, not ":2" (see the module
-    // comment above for why this differs from F3's witness shape).
+    // comment above for why this differs from F3's witness shape). Bounded
+    // poll, not a bare count: unlike witness 1's synchronous "engine-host
+    // spawned" event, this marker rides the background stderr forwarder, and
+    // a bare count raced it on a loaded ubuntu runner (2026-08-19, PR #560
+    // CI — the F4 twin of the F3 flake `wait_for_count_containing` was
+    // introduced for).
     assert_eq!(
-        capture.count_containing("BEHAVE_LAUNCH_MARKER:1"),
+        capture.wait_for_count_containing("BEHAVE_LAUNCH_MARKER:1", 2, Duration::from_secs(10)),
         2,
         "expected TWO independent first-launches (one per process) between \
          execute-1 and execute-2; captured engine_host messages: {:?}",
