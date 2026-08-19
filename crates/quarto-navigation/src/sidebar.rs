@@ -233,7 +233,14 @@ impl SidebarEntry {
         // key, or has `contents:`. (Q1 lets sections go text-less when
         // they only have `href:` + `contents:`.)
         if section_text.is_some() || has_contents {
-            let text = section_text.filter(|v| v.as_plain_text().is_some());
+            // Display text: `section:` wins, `text:` is the fallback
+            // spelling. Q1 accepts both for a section-with-contents
+            // entry (its `normalizeSidebarItem` overwrites `text` with
+            // the `section:` value when both are present) —
+            // bd-sidebar-section-text-ignored-sdp5g7ns.
+            let text = section_text
+                .or_else(|| cv.get("text").cloned())
+                .filter(|v| v.as_plain_text().is_some());
             let (href, href_source) = cv
                 .get("href")
                 .and_then(|v| v.as_plain_text().map(|s| (s, v.source_info.clone())))
@@ -1296,6 +1303,113 @@ mod tests {
                 assert_eq!(cv.as_plain_text().as_deref(), Some("Section label"));
             }
             other => panic!("expected Heading, got {:?}", other),
+        }
+    }
+
+    /// bd-sidebar-section-text-ignored-sdp5g7ns — an entry with
+    /// `text:` + `file:` + `contents:` is a Section whose display text
+    /// comes from `text:`. Q1 accepts both `section:` and `text:` as a
+    /// section's label spelling; without the fallback the Section's
+    /// text is `None` and enrichment replaces it with the linked
+    /// page's title.
+    #[test]
+    fn parse_sidebar_text_with_contents_is_section_with_text() {
+        let entry = map(vec![
+            ("text", s("Short Name")),
+            ("file", s("landing.qmd")),
+            ("contents", arr(vec![s("inner.qmd")])),
+        ]);
+        let cv = map(vec![("contents", arr(vec![entry]))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        match &list[0].contents[0] {
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                assert_eq!(
+                    text.as_ref().and_then(|v| v.as_plain_text()).as_deref(),
+                    Some("Short Name"),
+                    "Section display text must fall back to `text:` when `section:` is absent"
+                );
+                assert_eq!(href.as_deref(), Some("landing.qmd"));
+                assert_eq!(contents.len(), 1);
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// When an entry carries both `section:` and `text:`, `section:`
+    /// wins — matching Q1's `normalizeSidebarItem`, which overwrites
+    /// `item.text` with the `section:` value.
+    #[test]
+    fn parse_sidebar_section_key_wins_over_text() {
+        let entry = map(vec![
+            ("section", s("From Section")),
+            ("text", s("From Text")),
+            ("contents", arr(vec![s("inner.qmd")])),
+        ]);
+        let cv = map(vec![("contents", arr(vec![entry]))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        match &list[0].contents[0] {
+            SidebarEntry::Section { text, .. } => {
+                assert_eq!(
+                    text.as_ref().and_then(|v| v.as_plain_text()).as_deref(),
+                    Some("From Section"),
+                    "`section:` must take precedence over `text:`"
+                );
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// The `text:` fallback keeps the full inline structure — a
+    /// formatted label (`text: "*Short* Name"` arrives as
+    /// PandocInlines) must survive to the renderer, not flatten to
+    /// plain text.
+    #[test]
+    fn parse_sidebar_text_fallback_preserves_inlines() {
+        use quarto_pandoc_types::config_value::ConfigValueKind;
+        use quarto_pandoc_types::inline::{Emph, Inline, Str};
+        let str_inline = |text: &str| {
+            Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::for_test(),
+            })
+        };
+        let inlines = vec![
+            Inline::Emph(Emph {
+                content: vec![str_inline("Short")],
+                source_info: SourceInfo::for_test(),
+            }),
+            str_inline("Name"),
+        ];
+        let entry = map(vec![
+            (
+                "text",
+                ConfigValue::new_inlines(inlines, SourceInfo::for_test()),
+            ),
+            ("file", s("landing.qmd")),
+            ("contents", arr(vec![s("inner.qmd")])),
+        ]);
+        let cv = map(vec![("contents", arr(vec![entry]))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        match &list[0].contents[0] {
+            SidebarEntry::Section { text, .. } => {
+                let text = text.as_ref().expect("Section text from `text:` fallback");
+                match &text.value {
+                    ConfigValueKind::PandocInlines(inls) => {
+                        assert!(
+                            matches!(inls[0], Inline::Emph(_)),
+                            "Emph inline must survive the fallback; got {:?}",
+                            inls
+                        );
+                    }
+                    other => panic!("expected PandocInlines to be preserved, got {:?}", other),
+                }
+            }
+            other => panic!("expected Section, got {:?}", other),
         }
     }
 

@@ -59,12 +59,24 @@ let text = section_text
    **new warning (next free code: Q-13-10)** when an entry carries *both* keys, since q2
    can diagnose what Q1 silently clobbers.
    - Emission-site constraint: `SidebarEntry::from_config_value` is diagnostic-free and
-     must stay that way (it's called from reparse paths and per-page). Emit from a
-     quarto-core transform holding the `&mut Vec<DiagnosticMessage>` sink, modeled on
-     Q-13-5/Q-13-6 in `crates/quarto-core/src/transforms/sidebar_auto.rs:37-49`, and fire
-     **once per project, not once per page** (see the Q-13-6 dedup guard test at
-     `sidebar_generate.rs:456-476`). Likely site: wherever the sidebar ConfigValue is
-     first scanned project-wide; detect the key conflict on the raw ConfigValue.
+     must stay that way (it's called from reparse paths and per-page; quarto-navigation
+     deliberately has no quarto-error-reporting dependency). Emit from
+     `SidebarGenerateTransform` in quarto-core, modeled on Q-13-5/Q-13-6 in
+     `crates/quarto-core/src/transforms/sidebar_auto.rs:37-49`.
+   - **Correction to the earlier "once per project" assumption** (verified empirically
+     2026-08-19): the existing convention is **per-page emission for the picked sidebar**.
+     A no-match `auto:` on a 4-page site emits Q-13-6 four times at HEAD; the
+     per-sidebar-diags dance in `sidebar_generate.rs:98-146` only prevents *discarded*
+     sidebars from warning. There is no project-level diagnostic dedup machinery anywhere
+     in quarto-core. Q-13-10 follows the same convention (picked sidebar, per page) for
+     consistency; the systemic repetition issue is filed separately (see below).
+   - Mechanism: a pure scanner in quarto-navigation next to the parser
+     (`section_text_conflicts`-style, returning the conflicting entries' source infos and
+     label texts, grouped per sidebar to match `parse_list_from_config` indexing — sidebar
+     shape knowledge stays in the crate that owns the shape), consumed by
+     `sidebar_generate.rs`, which builds the `DiagnosticMessage`s (with
+     `.with_location(...)` on the ignored `text:` value, cf. `toc_location.rs:160-172`)
+     and pushes them into the existing per-sidebar diags vectors.
    - Lint obligations in the same commit: catalog entry in
      `crates/quarto-error-catalog/error_catalog.json`, docs page
      `docs/errors/navigation/Q-13-10.qmd`, sidebar entry in `docs/_quarto.yml`
@@ -83,18 +95,43 @@ let text = section_text
 3. **Verification depth: full `cargo xtask verify`** (quarto-navigation is in
    hub-client's WASM dependency closure).
 
-## Proposed phases
+## Work items
 
-- **Phase 0 — Test plan (TDD).**
-  - Unit test in `sidebar.rs` tests: `text:` + `href:`/`file:` + `contents:` parses as `Section` with `text: Some(…)` (currently fails).
-  - Unit test: `section:` wins when both `section:` and `text:` are present.
-  - Unit test: `text:`-fallback Section preserves `PandocInlines` formatting.
-  - Warning test: both-keys entry emits Q-13-10 exactly once per project (model: Q-13-5 test in `sidebar_auto.rs:858-881`, Q-13-6 dedup test in `sidebar_generate.rs`).
-  - Pipeline/integration test in `crates/quarto-core/tests/integration/sidebar_pipeline.rs`: rendered sidebar HTML shows the configured `text:`, not the page title.
-- **Phase 1 — Parse fix.** `.or_else(|| cv.get("text").cloned())` in the Section branch of `SidebarEntry::from_config_value`.
-- **Phase 2 — Q-13-10 warning.** Catalog entry + emission in quarto-core + docs page `docs/errors/navigation/Q-13-10.qmd` + `docs/_quarto.yml` sidebar entry, all in one commit (lint-enforced).
-- **Phase 3 — End-to-end verification.** `cargo run --bin q2 -- render` on the investigation repro; inspect `_site/*.html` sidebar markup; full `cargo xtask verify`.
-- **Phase 4 — Close out.** Close the strand.
+Each phase is TDD-internally: its tests are written and observed failing before its
+implementation. Warning tests live at the head of Phase 2 (they need the scanner API to
+exist to compile, so they can't precede Phase 1 usefully).
+
+### Phase 0 — Parse + pipeline tests (written first, observed failing)
+
+- [x] Unit test in `sidebar.rs`: `text:` + `file:` + `contents:` parses as `Section` with `text: Some(…)` and the file as `href` (currently fails).
+- [x] Unit test in `sidebar.rs`: `section:` wins when both `section:` and `text:` are present.
+- [x] Unit test in `sidebar.rs`: `text:`-fallback Section preserves `PandocInlines` formatting (not flattened to plain text).
+- [x] Integration test in `crates/quarto-core/tests/integration/sidebar_pipeline.rs`: rendered sidebar HTML shows the configured `text:`, not the linked page's title.
+- [x] Run the new tests; record the expected failures. *(Observed 2026-08-19: `parse_sidebar_text_with_contents_is_section_with_text` and `parse_sidebar_text_fallback_preserves_inlines` fail on `text: None`; `parse_sidebar_section_key_wins_over_text` passes trivially at HEAD as a precedence lock; `pipeline_section_with_text_key_shows_configured_text` fails with the sidebar rendering `sidebar-link">The Much Longer Landing Page Title</a>` — the exact bug symptom.)*
+
+### Phase 1 — Parse fix
+
+- [x] `.or_else(|| cv.get("text").cloned())` in the Section branch of `SidebarEntry::from_config_value`.
+- [x] Phase 0 tests pass; full workspace tests green (12,863 passed); commit.
+
+### Phase 2 — Q-13-10 warning
+
+- [ ] Scanner tests in quarto-navigation (`section_text_conflicts`, per-sidebar grouping, nested contents recursion) — written first, observed failing.
+- [ ] Scanner implementation in `crates/quarto-navigation/src/sidebar.rs`.
+- [ ] Emission test in `sidebar_generate.rs` tests: both-keys entry produces a Q-13-10 diagnostic for the picked sidebar (model: Q-13-5/Q-13-6 tests) — written first, observed failing.
+- [ ] Catalog entry Q-13-10 in `crates/quarto-error-catalog/error_catalog.json` + emission in `sidebar_generate.rs` with `.with_location()` on the ignored `text:` value.
+- [ ] Docs page `docs/errors/navigation/Q-13-10.qmd` + sidebar entry in `docs/_quarto.yml` (lint-enforced, same commit).
+- [ ] `cargo xtask lint` green; full workspace tests green; commit.
+
+### Phase 3 — End-to-end verification
+
+- [ ] `cargo run --bin q2 -- render` on the investigation repro; inspect `_site/*.html` sidebar markup (configured text, formatted-inlines case, Q-13-10 warning on a both-keys fixture).
+- [ ] Full `cargo xtask verify` (no skips).
+- [ ] Commit (if anything changed since Phase 2's commit).
+
+### Phase 4 — Close out
+
+- [ ] Update this plan's status; close the strand with `braid close`.
 
 ## Risks / tradeoffs (draft)
 
