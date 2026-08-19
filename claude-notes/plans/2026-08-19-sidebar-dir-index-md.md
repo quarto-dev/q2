@@ -3,7 +3,7 @@
 **Date:** 2026-08-19
 **Braid:** bd-sidebar-dir-index-md-5khf3lds
 **Branch:** `main` @ `f387bd68` (investigation committed in place; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design questions answered by user 2026-08-19 — approved for TDD implementation. See "Design decisions" below.
 
 ## Triage verdict
 
@@ -50,11 +50,20 @@ In `section_for_dir`, resolve the directory's index profile **by stem** instead 
 - **Phase 2 — End-to-end verification.** `cargo run --bin q2 -- render` on the investigation repro; inspect `#quarto-sidebar` in `guides/alpha.html`; confirm rename-to-`.qmd` equivalence. Spot-check the Connect docs site if available. Full workspace test suite + snapshot audit (report any `.snap` deltas).
 - **Phase 3 — Docs.** Likely none needed (this is parity, not new surface); confirm `docs/` doesn't document the `.qmd`-only limitation anywhere.
 
-## Open design questions for the user
+## Design decisions (answered by user, 2026-08-19)
 
-1. **Tie-break when both `guides/index.qmd` and `guides/index.md` exist.** Q1 uses `engineValidExtensions()` order (first existing wins). Options: (a) fixed preference order `qmd` > `md` (matches Q1's practical outcome, deterministic, cheap); (b) `ProjectIndex` insertion order (simplest but order is walk-dependent). Recommendation: (a).
-2. **Search domain: `members` vs the whole `ProjectIndex`.** Today the header lookup goes through `index.lookup_by_source` (whole index) while children come from `members` (draft-filtered, matcher-filtered candidates). Resolving the index within `members` instead is simpler, guarantees the promoted page actually belongs to the section, and — as a side effect — stops a **draft** `index.qmd` from being promoted to a linked header (today it would be, since drafts are filtered out of candidates but not out of the lookup). Is that draft-behavior change desirable (I believe yes — Q1 doesn't link drafts), or should we preserve the whole-index lookup?
-3. **Case sensitivity of the stem match.** `is_top_level_index` matches `Index.qmd` case-insensitively (`eq_ignore_ascii_case`). Should `section_for_dir` do the same for consistency? (Href would still use the actual path.) Recommendation: yes, mirror `is_top_level_index`.
+1. **Tie-break when both `guides/index.qmd` and `guides/index.md` exist:** fixed preference order, `qmd` > `md` (> anything else, in member order). User: "might need tweaking, but for now it'll do."
+2. **Search domain:** resolve the index within `members` (the draft-filtered, matcher-filtered candidates), not the whole `ProjectIndex`. Side effect accepted: a **draft** directory index is no longer promoted to a linked section header. User also flagged the broader question — does q2 have a *structural* mechanism preventing draft pages from being linked anywhere? — delegated to a study agent; its outcome (summary or new-strand recommendation) is tracked separately from this fix.
+3. **Case sensitivity:** the stem match is **case-sensitive** (`stem == "index"` exactly). User's call: case-insensitive matching invites trouble across case-sensitive vs case-preserving/insensitive filesystems (macOS). Note this deliberately diverges from `is_top_level_index`'s `eq_ignore_ascii_case`; the broader case-handling inconsistency is filed as discovered work (low priority) rather than fixed here.
+
+## Work items
+
+- [x] Phase 0 — failing tests written and observed to fail (6 new tests in `sidebar_auto.rs`; `auto_bare_directory_section_uses_md_dir_index`, `auto_all_promotes_md_dir_index`, `auto_draft_dir_index_is_not_promoted` failed at HEAD exactly as predicted; the nested/tie-break/case-sensitivity guards passed at HEAD by design)
+- [x] Phase 1 — stem-based index resolution in `section_for_dir` (members domain, direct-child only, case-sensitive, `.qmd` > `.md` > other preference; `index: &ProjectIndex` param dropped from `section_for_dir`/`group_with_subdirs`; all 24 sidebar_auto tests pass)
+- [x] Phase 2 — full workspace tests + snapshot audit (12,902 passed, 0 failed; **zero `.snap` files changed**)
+- [x] Phase 2 — end-to-end repro render verified: `cargo run --bin q2 -- render claude-notes/plans/sidebar-dir-index-md-investigation/repro`, inspected `_site/guides/alpha.html` — header is `<a href="index.html">The Guides Landing Page</a>`, children exactly Alpha/Beta. See RESULTS.md "Post-fix verification".
+- [x] File discovered-work strand: case-sensitivity inconsistency → **bd-0yp90370** (p3)
+- [x] Draft-link study agent outcome recorded → audit at `claude-notes/research/2026-08-19-draft-visibility-audit.md`; recommendation accepted, filed **bd-zeormbsa** (p2, "Centralize draft visibility: a single is_linkable predicate on ProjectIndex"), linked related to bd-w0o9 / bd-p4sc / bd-4zdf. Headline: 25 ProjectIndex access sites, only 6 draft-checked; live leaks in sitemap, listings/RSS, body links, explicit nav items.
 
 ## Risks / tradeoffs (draft)
 

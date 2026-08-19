@@ -51,6 +51,26 @@ filter (line 383). `.md` inputs are first-class in discovery
 (`FIXED_RENDERABLE = &["qmd", "md"]`, `crates/quarto-core/src/project/discovery.rs`),
 so the "only .qmd is discoverable" MVP comment is stale.
 
+## Post-fix verification (same day, after the stem-based fix)
+
+Re-ran the identical invocation after implementing stem-based index resolution
+in `section_for_dir`. Observed in `_site/guides/alpha.html`:
+
+```html
+<a href="index.html" class="sidebar-item-text sidebar-link">The Guides Landing Page</a>
+...
+<ul id="quarto-sidebar-section-0" ...>
+  <li>... <a href="alpha.html">Alpha Guide</a> ...</li>
+  <li>... <a href="beta.html">Beta Guide</a> ...</li>
+</ul>
+```
+
+Header promoted with href, landing page no longer a child — the Q1 shape.
+Output inspected directly (not inferred from exit status). The pagination
+symptom is covered at the entry-list level by the unit tests (prev/next is
+derived from the entry list downstream); the repro does not enable page
+navigation, matching the original minimal repro's scope.
+
 ## Repro contents
 
 `repro/`: website project, `sidebar.contents: guides`, `project.render` includes `**/*.md`;
