@@ -1,0 +1,11 @@
+project:
+  type: website
+
+website:
+  title: "Navbar Logo Repro"
+  navbar:
+    logo: logo.svg
+    logo-alt: "Repro logo"
+    left:
+      - href: index.qmd
+        text: Home
