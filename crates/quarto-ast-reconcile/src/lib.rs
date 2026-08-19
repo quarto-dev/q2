@@ -261,6 +261,133 @@ mod tests {
         }
     }
 
+    /// bd-205v6 sibling audit: every inline container whose non-child
+    /// identity changed must be aligned UseAfter, never paired by the
+    /// type-based match — the identity bytes (quote chars, `]{attr}`) are
+    /// spliced verbatim from original source by the incremental writer,
+    /// so a paired container silently keeps the old identity in written
+    /// qmd output even when apply patches the AST field.
+    fn assert_identity_changed_container_not_paired(
+        make_container: impl Fn(bool, SourceInfo) -> quarto_pandoc_types::Inline,
+        label: &str,
+    ) {
+        fn para_with(
+            inline: quarto_pandoc_types::Inline,
+            source: SourceInfo,
+        ) -> quarto_pandoc_types::Block {
+            quarto_pandoc_types::Block::Paragraph(Paragraph {
+                content: vec![
+                    quarto_pandoc_types::Inline::Str(Str {
+                        text: "anchor".to_string(),
+                        source_info: source.clone(),
+                    }),
+                    inline,
+                ],
+                source_info: source,
+            })
+        }
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![para_with(
+                make_container(false, source_original()),
+                source_original(),
+            )],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![para_with(
+                make_container(true, source_executed()),
+                source_executed(),
+            )],
+        };
+        let plan = compute_reconciliation(&original, &executed);
+        let inline_plan = plan
+            .inline_plans
+            .get(&0)
+            .unwrap_or_else(|| panic!("{label}: expected an inline plan for block 0"));
+        assert!(
+            matches!(
+                inline_plan.inline_alignments[1],
+                crate::types::InlineAlignment::UseAfter(1)
+            ),
+            "{label}: identity-changed container must be UseAfter, got {:?}",
+            inline_plan.inline_alignments[1]
+        );
+    }
+
+    #[test]
+    fn test_reconcile_identity_changed_containers_not_paired() {
+        use quarto_pandoc_types::{Delete, EditComment, Highlight, Insert, QuoteType, Quoted};
+        fn attr_for(changed: bool) -> quarto_pandoc_types::Attr {
+            let class = if changed { "new" } else { "old" };
+            (String::new(), vec![class.to_string()], LinkedHashMap::new())
+        }
+        fn content(source: &SourceInfo) -> Vec<quarto_pandoc_types::Inline> {
+            vec![quarto_pandoc_types::Inline::Str(Str {
+                text: "inner".to_string(),
+                source_info: source.clone(),
+            })]
+        }
+        assert_identity_changed_container_not_paired(
+            |changed, source| {
+                quarto_pandoc_types::Inline::Quoted(Quoted {
+                    quote_type: if changed {
+                        QuoteType::SingleQuote
+                    } else {
+                        QuoteType::DoubleQuote
+                    },
+                    content: content(&source),
+                    source_info: source,
+                })
+            },
+            "Quoted(quote_type)",
+        );
+        assert_identity_changed_container_not_paired(
+            |changed, source| {
+                quarto_pandoc_types::Inline::Insert(Insert {
+                    attr: attr_for(changed),
+                    content: content(&source),
+                    source_info: source,
+                    attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+                })
+            },
+            "Insert(attr)",
+        );
+        assert_identity_changed_container_not_paired(
+            |changed, source| {
+                quarto_pandoc_types::Inline::Delete(Delete {
+                    attr: attr_for(changed),
+                    content: content(&source),
+                    source_info: source,
+                    attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+                })
+            },
+            "Delete(attr)",
+        );
+        assert_identity_changed_container_not_paired(
+            |changed, source| {
+                quarto_pandoc_types::Inline::Highlight(Highlight {
+                    attr: attr_for(changed),
+                    content: content(&source),
+                    source_info: source,
+                    attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+                })
+            },
+            "Highlight(attr)",
+        );
+        assert_identity_changed_container_not_paired(
+            |changed, source| {
+                quarto_pandoc_types::Inline::EditComment(EditComment {
+                    attr: attr_for(changed),
+                    content: content(&source),
+                    source_info: source,
+                    attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+                })
+            },
+            "EditComment(attr)",
+        );
+    }
+
     #[test]
     fn test_reconcile_preserves_unchanged() {
         let original = Pandoc {

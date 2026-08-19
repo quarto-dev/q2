@@ -86,41 +86,66 @@ already cover citation fields correctly; only Step 2's guard is missing. The
 
 ### Phase 0 — Test plan (TDD)
 
-- [ ] Re-add the minimal unit test from the investigation dir
+- [x] Re-add the minimal unit test from the investigation dir
   (`minimal-repro-test.rs`) to `lib.rs`'s test module; verify it fails.
-- [ ] Add both saved seeds (`cc 8f798bbf…` from the description, `cc c8f78493…`
+  (`test_reconcile_cite_citations_changed_not_paired`, plus companion
+  `test_reconcile_cite_same_citations_recurses` which passes by design.)
+- [x] Add both saved seeds (`cc 8f798bbf…` from the description, `cc c8f78493…`
   from the comment) to `proptest-regressions/lib.txt`; verify they fail.
 
 ### Phase 1 — Fix
 
-- [ ] Add a `Cite` identity guard to compute Step 2, mirroring bd-3zp3z4jx:
-  pair two Cites only when their `citations` are structurally equal (same
-  length; per-citation `id`/`mode` equal, `prefix`/`suffix` via
-  `structural_eq_inlines`); otherwise fall through to `UseAfter`. Factor the
-  citation comparison shared with `structural_eq_inline`'s Cite arm.
-- [ ] Unit test + both seeds green; crate tests green.
+- [x] Add a `Cite` identity guard to compute Step 2, mirroring bd-3zp3z4jx:
+  new `structural_eq_citations` helper in `hash.rs`, shared with
+  `structural_eq_inline`'s Cite arm; guard falls through to `UseAfter`.
+- [x] Unit test + both seeds green; crate tests green (228/228).
 
 ### Phase 2 — Verify + commit
 
-- [ ] Full `cargo nextest run --workspace`.
-- [ ] Commit fix + regression seeds (strand item 3).
+- [x] Full `cargo nextest run --workspace` — 12909/12909 passed.
+- [x] Committed as `35f5d95a` (fix + both regression seeds + unit tests).
 
 ### Phase 3 — Sibling audit (same branch, after the fix)
 
-- [ ] For each container with non-child identity and no Step-2 guard
-  (`Quoted.quote_type`; `Insert`/`Delete`/`Highlight`/`EditComment` `attr`):
-  determine what `assemble_recursed_container` in
-  `pampa/src/writers/incremental.rs` actually splices — does a recursed
-  container with changed identity emit stale delimiters/attr in the written qmd?
-- [ ] Write failing tests for any confirmed source-level bug; fix with the same
-  Step-2 guard shape (or document why the container is safe).
-- [ ] Record findings in this plan; file strands for anything deliberately
-  scoped out.
+- [x] Audit findings (see table below):
+  - **Quoted** — real, user-reachable source-level bug, confirmed end-to-end:
+    `anchor "hello"` edited to `anchor 'hello'` came back **byte-identical to
+    the original** from `incremental_write` (edit silently dropped). The quote
+    chars are the container delimiters, spliced verbatim from original source.
+  - **Insert/Delete/Highlight/EditComment** — same structural hole (attr is
+    serialized as `]{attr}` inside the closing delimiter), but *not reachable
+    from parsed qmd*: `postprocess.rs` unconditionally desugars all four to
+    `Span` (class `quarto-insert` etc.), and Span is already guarded. Guarded
+    anyway as defense-in-depth — the reconcile crate should not depend on a
+    pampa desugaring invariant.
+  - **Block-level containers (Div/BlockQuote/Header attr)** — safe by
+    construction: `coarsen()` in the incremental writer always Rewrites
+    recursed block containers from the new AST, and inline-content blocks
+    require `block_attrs_eq` before splicing. No strand needed.
+- [x] Failing tests first: `quoted_quote_type_change_survives_incremental_write`
+  (pampa integration, end-to-end through the JSON round-trip path) and
+  `test_reconcile_identity_changed_containers_not_paired` (plan-shape test
+  covering all five containers). Both confirmed failing before the guard.
+- [x] Fix: Step-2 guards for `Quoted.quote_type` and the four marks' `attr`.
+- [x] Findings recorded here; nothing scoped out, no follow-up strands needed.
+
+### Audit table (final state)
+
+| Container | Step-2 identity guard | Notes |
+|---|---|---|
+| Link / Image | target+attr (bd-3zp3z4jx) | |
+| Span | attr (bd-3zp3z4jx) | |
+| Custom | type_name (bd-3zp3z4jx) | |
+| Cite | citations, structural (bd-205v6) | the original bug |
+| Quoted | quote_type (bd-205v6 audit) | confirmed e2e incremental-write bug |
+| Insert/Delete/Highlight/EditComment | attr (bd-205v6 audit) | defense-in-depth; desugared to Span at parse |
+| Emph/Strong/Underline/Strikeout/Super/Subscript | none needed | no non-child identity |
+| Note | none needed | block plan; no identity |
 
 ### Phase 4 — Close out
 
 - [ ] `cargo xtask verify` (full — pampa is in the WASM dependency chain).
-- [ ] Close bd-205v6.
+- [ ] Close bd-205v6 (ask user first).
 
 ## Risks / tradeoffs (draft)
 
