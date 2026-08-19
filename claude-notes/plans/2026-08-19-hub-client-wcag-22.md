@@ -92,8 +92,12 @@ indicator.
   semantics. 3 passed. Updated stale `getByRole('menu')` in
   projects-home.spec.ts (2 passed).
 - [x] Pre-commit checklist (claude-notes/instructions/review.md)
-- [ ] Commit 1: code; Commit 2: `hub-client/changelog.md` entry with
-  hash (two-commit workflow)
+- [x] Commit 1: code (`e71b1ac5`); Commit 2: `hub-client/changelog.md`
+  entry with hash (`0a100657`) — two-commit workflow
+- [x] `cargo xtask verify --skip-hub-build` green (needed a local
+  `npm install @esbuild/darwin-arm64@0.28.0 --no-save` — the optional
+  platform binary was missing from node_modules, breaking the
+  quarto-hub-mcp bundle test; environmental, unrelated to this diff)
 - [ ] Report; do NOT push without explicit approval
 
 ## Details
