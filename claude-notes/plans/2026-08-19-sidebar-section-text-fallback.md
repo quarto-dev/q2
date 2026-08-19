@@ -3,7 +3,7 @@
 **Date:** 2026-08-19
 **Braid:** bd-sidebar-section-text-ignored-sdp5g7ns
 **Checkout:** `main` @ `e6ac236d` (investigation ran in the main checkout; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled with user (2026-08-19); see "Design decisions" below. Ready to implement pending user go-ahead on this revision.
 
 ## Triage verdict
 
@@ -49,25 +49,56 @@ let text = section_text
 
 **Repro:** copied (sources only) to `claude-notes/plans/sidebar-section-text-fallback-investigation/repro/` from the connect-docs repro. **Confirmed end-to-end at `e6ac236d`**: `cargo run --bin q2 -- render` on a scratch copy renders the section label as "The Much Longer Landing Page Title" instead of the configured "Short Name", while the contents-less "Plain Item" entry renders correctly. Observed markup captured in `sidebar-section-text-fallback-investigation/observed-output.md`.
 
-## Proposed phases (draft)
+## Design decisions (settled with user, 2026-08-19)
+
+1. **Precedence: `section:` wins, plus a new warning.** Q1's `normalizeSidebarItem`
+   (`external-sources/quarto-cli/src/project/project-config.ts:47-69`) does
+   `item.text = section` when `section:` is present and is not an existing file path —
+   unconditionally overwriting any author-supplied `text:`. So `section:`-wins matches Q1,
+   and the draft `.or_else` fallback is correct. Per user decision we additionally emit a
+   **new warning (next free code: Q-13-10)** when an entry carries *both* keys, since q2
+   can diagnose what Q1 silently clobbers.
+   - Emission-site constraint: `SidebarEntry::from_config_value` is diagnostic-free and
+     must stay that way (it's called from reparse paths and per-page). Emit from a
+     quarto-core transform holding the `&mut Vec<DiagnosticMessage>` sink, modeled on
+     Q-13-5/Q-13-6 in `crates/quarto-core/src/transforms/sidebar_auto.rs:37-49`, and fire
+     **once per project, not once per page** (see the Q-13-6 dedup guard test at
+     `sidebar_generate.rs:456-476`). Likely site: wherever the sidebar ConfigValue is
+     first scanned project-wide; detect the key conflict on the raw ConfigValue.
+   - Lint obligations in the same commit: catalog entry in
+     `crates/quarto-error-catalog/error_catalog.json`, docs page
+     `docs/errors/navigation/Q-13-10.qmd`, sidebar entry in `docs/_quarto.yml`
+     (`error-docs-page-missing` + `error-docs-sidebar-unlisted` enforce this).
+2. **`text:` as inlines: already consistent with Q1 — no change.** Q1 renders sidebar
+   item/section text as markdown inlines via the navigation markdown pipeline
+   (`sidebarContentsHandler` in `website-navigation-md.ts` feeds `item.text` through
+   Pandoc and splices rendered HTML back in). q2 already does the same:
+   `as_plain_text()` (`config_value.rs:675-684`) accepts `PandocInlines` (it's a shape
+   check, not a formatting restriction), the Section keeps the full inline structure, and
+   `render_text` (`render_html.rs:892-894`) renders it via `inlines_to_html`. Verified
+   end-to-end at HEAD: `text: "*Plain* Item"` renders `<span class="menu-text"><em>Plain</em> Item</span>`.
+   The fix should carry a regression test that a `text:`-fallback Section preserves
+   formatting (my earlier design-question premise that the filter drops formatted values
+   was wrong).
+3. **Verification depth: full `cargo xtask verify`** (quarto-navigation is in
+   hub-client's WASM dependency closure).
+
+## Proposed phases
 
 - **Phase 0 — Test plan (TDD).**
-  - Unit test in `sidebar.rs` tests: object with `text:` + `href:`/`file:` + `contents:` parses as `Section` with `text: Some("…")` (currently fails).
-  - Unit test: `section:` wins over `text:` when both present (or whatever precedence Q1 has — see design question 1).
-  - Pipeline/integration test in `crates/quarto-core/tests/integration/sidebar_pipeline.rs`: rendered sidebar HTML shows the configured `text:`, not the page title (exercises the enrichment interplay).
-- **Phase 1 — Fix.** One-expression change in the Section branch of `SidebarEntry::from_config_value`.
-- **Phase 2 — End-to-end verification.** `cargo run --bin q2 -- render` on the investigation repro; inspect `_site/*.html` sidebar markup. Full workspace tests + `cargo xtask verify --skip-hub-build` (quarto-navigation is WASM-reachable via quarto-core, so consider full verify — see design question 3).
-- **Phase 3 — Close out.** Changelog entry if the repo convention calls for one; close the strand.
-
-No docs phase expected: `docs/` documents `text:` as a sidebar-item key already; this is a conformance fix, not a new feature.
-
-## Open design questions for the user
-
-1. **Precedence when both `section:` and `text:` are present.** The draft gives `section:` priority (`.or_else`). Q1 accepts both spellings; do we know (or care to match) what Q1 does when an author writes *both* on one entry? Straw answer: `section:` wins, matching the draft — but if you'd rather diagnose the conflict (a Q-code warning), that grows the change.
-2. **Non-plain-text `text:` values.** The filter drops a `text:` whose value isn't plain text (e.g. formatted inlines), same as `section:` today — the entry falls back to page title silently. Fine to keep the existing silent behavior for both spellings, or worth a diagnostic while we're here? Straw answer: keep as-is, file a separate strand if desired.
-3. **Verification depth.** `quarto-navigation` feeds the WASM preview path. Plain `--skip-hub-build` verify, or full `cargo xtask verify` before commit? Straw answer: full verify, since the crate is in hub-client's dependency closure.
+  - Unit test in `sidebar.rs` tests: `text:` + `href:`/`file:` + `contents:` parses as `Section` with `text: Some(…)` (currently fails).
+  - Unit test: `section:` wins when both `section:` and `text:` are present.
+  - Unit test: `text:`-fallback Section preserves `PandocInlines` formatting.
+  - Warning test: both-keys entry emits Q-13-10 exactly once per project (model: Q-13-5 test in `sidebar_auto.rs:858-881`, Q-13-6 dedup test in `sidebar_generate.rs`).
+  - Pipeline/integration test in `crates/quarto-core/tests/integration/sidebar_pipeline.rs`: rendered sidebar HTML shows the configured `text:`, not the page title.
+- **Phase 1 — Parse fix.** `.or_else(|| cv.get("text").cloned())` in the Section branch of `SidebarEntry::from_config_value`.
+- **Phase 2 — Q-13-10 warning.** Catalog entry + emission in quarto-core + docs page `docs/errors/navigation/Q-13-10.qmd` + `docs/_quarto.yml` sidebar entry, all in one commit (lint-enforced).
+- **Phase 3 — End-to-end verification.** `cargo run --bin q2 -- render` on the investigation repro; inspect `_site/*.html` sidebar markup; full `cargo xtask verify`.
+- **Phase 4 — Close out.** Close the strand.
 
 ## Risks / tradeoffs (draft)
 
 - Very low risk: single-expression parse change, well-fenced by branch order (Link and Heading branches unaffected).
 - The `section:`-normalizing serialization means `text:`-authored config changes spelling across a roundtrip. No current consumer is known to care (reparse is stable), but any future "write config back to YAML" feature would rewrite user spelling. Not worth acting on now; noting for the record.
+- The Q-13-10 warning's emission site must not be the parser (reparse paths would double-emit) and must dedup across pages; this is the only genuinely fiddly part of the change.
+- Discovered parity gap, filed separately: Q1's `section:` value doubles as a *file path* (`project-config.ts:54-59` — if the value names an existing file it becomes `href`, and the author's `text:` survives). q2 treats `section:` purely as display text. Filed as bd-byrb9yqi (discovered-from this one).
