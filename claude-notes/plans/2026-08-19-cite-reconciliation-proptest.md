@@ -2,8 +2,38 @@
 
 **Date:** 2026-08-19
 **Braid:** bd-205v6
-**Branch:** `main` @ `4b4a63ce` (investigated in the main checkout; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Branch:** `braid/bd-205v6-cite-reconcile-identity` (off `main` @ `4b4a63ce`)
+**Status:** Approved 2026-08-19 — in execution.
+
+## Design decisions (user-aligned 2026-08-19)
+
+1. **Fix shape: compute-side guard only (Option A).** Pair two Cites in Step 2 only
+   when their `citations` are structurally equal; otherwise `UseAfter`. No
+   apply-side copy of `e.citations`: unlike Link's `attr`/`target` (plain data),
+   `citations` carry source-info-bearing inline vecs — copying the exec side would
+   clobber original source info even when structurally equal, and would disagree
+   with the incremental writer's verbatim source splice when not equal.
+2. **Sibling audit in this same branch**, as a phase *after* the Cite fix lands
+   (so the fix shape is proven first).
+3. **Topic branch** off `main` in the main checkout (this branch).
+
+## Real-world manifestation (mechanism)
+
+Two production surfaces consume the reconciliation plan:
+
+- **`q2 render` with engines** (`quarto-core/src/stage/stages/engine_execution.rs:676`):
+  after jupyter/knitr execution, the executed AST is reconciled against the
+  pre-execution AST and the *reconciled* AST flows downstream (`ast = reconciled_ast`)
+  into crossref/citeproc/writers. If execution changes a citation in a paragraph
+  that keeps at least one hash-identical sibling inline (the `has_kept_inlines`
+  recursion gate), the rendered output shows the **stale** citation — output
+  corruption, not just wrong source mapping.
+- **Incremental qmd writing** (hub-client `incremental_write_qmd` in
+  `wasm-quarto-hub-client/src/lib.rs`, and `pampa/src/apply_node_edit.rs`): an
+  editor-side AST edit that changes a citation gets paired as
+  `RecurseIntoContainer`; `assemble_recursed_container` then splices the citation
+  delimiters verbatim from the *original* source, silently dropping the edit from
+  the written qmd.
 
 ## Triage verdict
 
@@ -52,39 +82,45 @@ reconciled AST keeps the stale before-citations. The hash and `structural_eq`
 already cover citation fields correctly; only Step 2's guard is missing. The
 "flakiness" was just generator rarity — every saved seed fails deterministically.
 
-## Proposed phases (draft)
+## Work items
 
-- **Phase 0 — Test plan (TDD).**
-  - Re-add the minimal unit test from the investigation dir
-    (`minimal-repro-test.rs`) to `lib.rs`'s test module; verify it fails at HEAD.
-  - Add both saved seeds (`cc 8f798bbf…` from the description, `cc c8f78493…`
-    from the comment) to `proptest-regressions/lib.txt`; verify both fail.
-- **Phase 1 — Fix.** Add a `Cite` identity guard to compute Step 2, mirroring
-  bd-3zp3z4jx: pair two Cites only when their `citations` are structurally equal
-  (same length; per-citation `id`/`mode` equal, `prefix`/`suffix` via
-  `structural_eq_inlines`); otherwise fall through to `UseAfter`. Consider
-  factoring the citation comparison shared with `structural_eq_inline`'s Cite arm.
-- **Phase 2 — Verify + seed commit.** Unit test + both seeds green; full
-  `cargo nextest run --workspace`; commit the regression seeds (strand item 3).
-- **Phase 3 — Close out.** Decide whether to file the sibling source-splice
-  question (see below) as its own strand; close bd-205v6.
+### Phase 0 — Test plan (TDD)
 
-## Open design questions for the user
+- [ ] Re-add the minimal unit test from the investigation dir
+  (`minimal-repro-test.rs`) to `lib.rs`'s test module; verify it fails.
+- [ ] Add both saved seeds (`cc 8f798bbf…` from the description, `cc c8f78493…`
+  from the comment) to `proptest-regressions/lib.txt`; verify they fail.
 
-1. **Fix shape.** I propose the compute-side guard (Option A, consistent with
-   bd-3zp3z4jx's "fall through to UseAfter" rule), since the incremental writer
-   splices a recursed container's non-child region verbatim from original source —
-   copying `e.citations` in apply (Option B) would fix the AST but disagree with
-   the spliced source text. Belt-and-braces (do both, as Link does with
-   attr/target) is also possible. Guard-only, or guard + apply-side copy?
-2. **Sibling audit follow-up.** For `Quoted`/`Insert`/`Delete`/`Highlight`/
-   `EditComment`, Step 2 has no identity guard but apply copies the exec side's
-   `quote_type`/`attr`, so the AST comes out right — yet the verbatim source
-   splice may then emit the *old* delimiters/attr in incremental output. Should I
-   file that as a separate strand (source-level, not covered by this proptest),
-   and should this fix also add guards for those containers for consistency?
-3. **Where to land the fix.** This investigation was done on `main` in the main
-   checkout. Fix directly on a topic branch off `main`, or do you want a worktree?
+### Phase 1 — Fix
+
+- [ ] Add a `Cite` identity guard to compute Step 2, mirroring bd-3zp3z4jx:
+  pair two Cites only when their `citations` are structurally equal (same
+  length; per-citation `id`/`mode` equal, `prefix`/`suffix` via
+  `structural_eq_inlines`); otherwise fall through to `UseAfter`. Factor the
+  citation comparison shared with `structural_eq_inline`'s Cite arm.
+- [ ] Unit test + both seeds green; crate tests green.
+
+### Phase 2 — Verify + commit
+
+- [ ] Full `cargo nextest run --workspace`.
+- [ ] Commit fix + regression seeds (strand item 3).
+
+### Phase 3 — Sibling audit (same branch, after the fix)
+
+- [ ] For each container with non-child identity and no Step-2 guard
+  (`Quoted.quote_type`; `Insert`/`Delete`/`Highlight`/`EditComment` `attr`):
+  determine what `assemble_recursed_container` in
+  `pampa/src/writers/incremental.rs` actually splices — does a recursed
+  container with changed identity emit stale delimiters/attr in the written qmd?
+- [ ] Write failing tests for any confirmed source-level bug; fix with the same
+  Step-2 guard shape (or document why the container is safe).
+- [ ] Record findings in this plan; file strands for anything deliberately
+  scoped out.
+
+### Phase 4 — Close out
+
+- [ ] `cargo xtask verify` (full — pampa is in the WASM dependency chain).
+- [ ] Close bd-205v6.
 
 ## Risks / tradeoffs (draft)
 

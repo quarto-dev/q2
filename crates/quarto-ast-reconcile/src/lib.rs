@@ -135,6 +135,132 @@ mod tests {
         })
     }
 
+    /// bd-205v6: two Cites whose `citations` differ (id/mode/prefix/suffix)
+    /// must not be paired by the type-based container match — a Cite's
+    /// citations are non-child identity, spliced verbatim from original
+    /// source, so a changed citation must fall through to UseAfter.
+    /// The "anchor" Str makes block phase 2 see a kept inline and recurse
+    /// into the paragraph; without it the whole block is UseAfter and the
+    /// bug is masked.
+    #[test]
+    fn test_reconcile_cite_citations_changed_not_paired() {
+        use quarto_pandoc_types::{Citation, CitationMode, Cite};
+        fn cite_para(
+            id: &str,
+            prefix_text: &str,
+            source: SourceInfo,
+        ) -> quarto_pandoc_types::Block {
+            quarto_pandoc_types::Block::Paragraph(Paragraph {
+                content: vec![
+                    quarto_pandoc_types::Inline::Str(Str {
+                        text: "anchor".to_string(),
+                        source_info: source.clone(),
+                    }),
+                    quarto_pandoc_types::Inline::Cite(Cite {
+                        citations: vec![Citation {
+                            id: id.to_string(),
+                            prefix: vec![quarto_pandoc_types::Inline::Str(Str {
+                                text: prefix_text.to_string(),
+                                source_info: source.clone(),
+                            })],
+                            suffix: vec![],
+                            mode: CitationMode::NormalCitation,
+                            note_num: 0,
+                            hash: 0,
+                            id_source: None,
+                        }],
+                        content: vec![quarto_pandoc_types::Inline::Str(Str {
+                            text: "shared".to_string(),
+                            source_info: source.clone(),
+                        })],
+                        source_info: source.clone(),
+                    }),
+                ],
+                source_info: source,
+            })
+        }
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![cite_para("a", "x", source_original())],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![cite_para("b", "y", source_executed())],
+        };
+        let executed_clone = executed.clone();
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original, executed, &plan);
+        assert!(
+            crate::hash::structural_eq_blocks(&result.blocks, &executed_clone.blocks),
+            "Result: {:?}\nAfter: {:?}",
+            result.blocks,
+            executed_clone.blocks
+        );
+    }
+
+    /// bd-205v6 companion: two Cites with structurally equal `citations` but
+    /// different content SHOULD still pair and recurse, keeping the original
+    /// citation source info and reconciling the content.
+    #[test]
+    fn test_reconcile_cite_same_citations_recurses() {
+        use quarto_pandoc_types::{Citation, CitationMode, Cite};
+        fn cite_para(content_text: &str, source: SourceInfo) -> quarto_pandoc_types::Block {
+            quarto_pandoc_types::Block::Paragraph(Paragraph {
+                content: vec![
+                    quarto_pandoc_types::Inline::Str(Str {
+                        text: "anchor".to_string(),
+                        source_info: source.clone(),
+                    }),
+                    quarto_pandoc_types::Inline::Cite(Cite {
+                        citations: vec![Citation {
+                            id: "key".to_string(),
+                            prefix: vec![],
+                            suffix: vec![],
+                            mode: CitationMode::NormalCitation,
+                            note_num: 0,
+                            hash: 0,
+                            id_source: None,
+                        }],
+                        content: vec![quarto_pandoc_types::Inline::Str(Str {
+                            text: content_text.to_string(),
+                            source_info: source.clone(),
+                        })],
+                        source_info: source.clone(),
+                    }),
+                ],
+                source_info: source,
+            })
+        }
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![cite_para("old rendering", source_original())],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![cite_para("new rendering", source_executed())],
+        };
+        let executed_clone = executed.clone();
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original, executed, &plan);
+        assert!(
+            crate::hash::structural_eq_blocks(&result.blocks, &executed_clone.blocks),
+            "Result: {:?}\nAfter: {:?}",
+            result.blocks,
+            executed_clone.blocks
+        );
+        // The paired Cite keeps the ORIGINAL source info (that's the point
+        // of recursing instead of UseAfter).
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[0] {
+            if let quarto_pandoc_types::Inline::Cite(c) = &p.content[1] {
+                assert_eq!(c.source_info, source_original());
+            } else {
+                panic!("expected Cite");
+            }
+        } else {
+            panic!("expected Paragraph");
+        }
+    }
+
     #[test]
     fn test_reconcile_preserves_unchanged() {
         let original = Pandoc {

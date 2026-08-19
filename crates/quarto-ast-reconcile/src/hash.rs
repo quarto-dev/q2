@@ -918,13 +918,7 @@ pub fn structural_eq_inline(a: &Inline, b: &Inline) -> bool {
             a.quote_type == b.quote_type && structural_eq_inlines(&a.content, &b.content)
         }
         (Inline::Cite(a), Inline::Cite(b)) => {
-            a.citations.len() == b.citations.len()
-                && a.citations.iter().zip(&b.citations).all(|(a, b)| {
-                    a.id == b.id
-                        && a.mode == b.mode
-                        && structural_eq_inlines(&a.prefix, &b.prefix)
-                        && structural_eq_inlines(&a.suffix, &b.suffix)
-                })
+            structural_eq_citations(&a.citations, &b.citations)
                 && structural_eq_inlines(&a.content, &b.content)
         }
         (Inline::Code(a), Inline::Code(b)) => attr_eq(&a.attr, &b.attr) && a.text == b.text,
@@ -977,6 +971,23 @@ pub fn structural_eq_blocks(a: &[Block], b: &[Block]) -> bool {
 }
 
 /// Check structural equality of inline sequences.
+/// Structural equality for a Cite's `citations`: id and mode compared
+/// directly, prefix/suffix inlines compared structurally (ignoring
+/// source info). `note_num` and `hash` are transient Pandoc bookkeeping
+/// and are ignored, matching `hash_inline`'s Cite arm.
+pub fn structural_eq_citations(
+    a: &[quarto_pandoc_types::Citation],
+    b: &[quarto_pandoc_types::Citation],
+) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(a, b)| {
+            a.id == b.id
+                && a.mode == b.mode
+                && structural_eq_inlines(&a.prefix, &b.prefix)
+                && structural_eq_inlines(&a.suffix, &b.suffix)
+        })
+}
+
 pub fn structural_eq_inlines(a: &[Inline], b: &[Inline]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(a, b)| structural_eq_inline(a, b))
 }
