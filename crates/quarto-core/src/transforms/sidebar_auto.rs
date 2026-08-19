@@ -162,7 +162,7 @@ pub fn expand_spec(
     }
 
     match scope {
-        Scope::Grouped => group_with_subdirs(&candidates, index),
+        Scope::Grouped => group_with_subdirs(&candidates),
         Scope::Flat => flatten_as_links(&candidates),
     }
 }
@@ -310,7 +310,7 @@ fn is_top_level_index(profile: &DocumentProfile) -> bool {
 
 /// Group a candidate list into top-level links + per-subdir sections.
 /// Used for `auto: true`.
-fn group_with_subdirs(candidates: &[&DocumentProfile], index: &ProjectIndex) -> Vec<SidebarEntry> {
+fn group_with_subdirs(candidates: &[&DocumentProfile]) -> Vec<SidebarEntry> {
     // Partition: top-level files vs items grouped by their first path
     // component. Built as a `Vec<(dir_name, Vec<&Profile>)>` so
     // insertion order is preserved deterministically (independent of
@@ -344,17 +344,43 @@ fn group_with_subdirs(candidates: &[&DocumentProfile], index: &ProjectIndex) -> 
     // Then subdirectory sections.
     for (dir, mut members) in dir_groups {
         sort_profiles(&mut members);
-        out.push(section_for_dir(&dir, &members, index));
+        out.push(section_for_dir(&dir, &members));
     }
 
     out
 }
 
-fn section_for_dir(dir: &str, members: &[&DocumentProfile], index: &ProjectIndex) -> SidebarEntry {
-    // Find the directory's own `index.*` if present. Only `.qmd` is
-    // discoverable by Phase-1 project walking; that's fine for MVP.
-    let index_src = format!("{}/index.qmd", dir);
-    let index_profile = index.lookup_by_source(std::path::Path::new(&index_src));
+fn section_for_dir(dir: &str, members: &[&DocumentProfile]) -> SidebarEntry {
+    // Find the directory's own landing page among the members: a
+    // *direct* child `<dir>/index.<ext>`, matched by stem so any
+    // extension discovery admitted can win, with a fixed preference
+    // order (`.qmd` over `.md` over anything else, mirroring Q1's
+    // `engineValidExtensions()` probe order). Resolving among the
+    // members — not the whole `ProjectIndex` — keeps drafts out of the
+    // header. The stem match is case-sensitive on purpose:
+    // case-insensitive matching misbehaves across case-sensitive vs
+    // case-preserving filesystems (bd-sidebar-dir-index-md-5khf3lds).
+    let prefix = format!("{}/", dir);
+    let index_profile = members
+        .iter()
+        .filter(|p| {
+            source_fwd_slash(p)
+                .strip_prefix(&prefix)
+                .is_some_and(|rest| {
+                    !rest.contains('/')
+                        && std::path::Path::new(rest)
+                            .file_stem()
+                            .is_some_and(|stem| stem == "index")
+                })
+        })
+        .min_by_key(
+            |p| match p.source_path.extension().and_then(|e| e.to_str()) {
+                Some("qmd") => 0,
+                Some("md") => 1,
+                _ => 2,
+            },
+        )
+        .copied();
 
     let (text_cv, href) = match index_profile {
         Some(p) => {
@@ -364,7 +390,7 @@ fn section_for_dir(dir: &str, members: &[&DocumentProfile], index: &ProjectIndex
                     &title,
                     SourceInfo::generated(By::programmatic_config()),
                 )),
-                Some(index_src.clone()),
+                Some(source_fwd_slash(p)),
             )
         }
         None => (
@@ -376,11 +402,11 @@ fn section_for_dir(dir: &str, members: &[&DocumentProfile], index: &ProjectIndex
         ),
     };
 
-    // Exclude the index from the child list (it's already the section
-    // header's href).
+    // Exclude the promoted index from the child list (it's already the
+    // section header's href).
     let contents: Vec<SidebarEntry> = members
         .iter()
-        .filter(|p| source_fwd_slash(p) != index_src)
+        .filter(|p| href.as_deref() != Some(source_fwd_slash(p).as_str()))
         .map(|p| link_entry(p))
         .collect();
 
@@ -610,6 +636,218 @@ mod tests {
                 );
                 assert_eq!(href.as_deref(), Some("how-to/index.qmd"));
                 assert_eq!(contents.len(), 2, "index is the header, not a child");
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// bd-sidebar-dir-index-md-5khf3lds — the directory index is
+    /// resolved by stem, not by a hardcoded `.qmd` extension. An
+    /// `index.md` landing page (a first-class input when an explicit
+    /// `project.render` pattern admits it) is promoted to the section
+    /// header and excluded from the children, exactly like `index.qmd`.
+    #[test]
+    fn auto_bare_directory_section_uses_md_dir_index() {
+        let profiles = vec![
+            make_profile("guides/index.md", "The Guides Landing Page"),
+            make_profile("guides/alpha.qmd", "Alpha Guide"),
+            make_profile("guides/beta.qmd", "Beta Guide"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(&AutoSpec::Path("guides".to_string()), &index, &mut diags);
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                assert_eq!(
+                    text.as_ref().unwrap().as_plain_text().as_deref(),
+                    Some("The Guides Landing Page"),
+                    "index.md title becomes the section header"
+                );
+                assert_eq!(href.as_deref(), Some("guides/index.md"));
+                assert_eq!(contents.len(), 2, "index.md is the header, not a child");
+                for entry in contents {
+                    match entry {
+                        SidebarEntry::Link { item, .. } => {
+                            let href = item.href.as_deref().unwrap();
+                            assert!(
+                                !href.ends_with("index.md"),
+                                "index.md leaked into children: {}",
+                                href
+                            );
+                        }
+                        other => panic!("expected Link, got {:?}", other),
+                    }
+                }
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// bd-sidebar-dir-index-md-5khf3lds — same promotion under
+    /// `auto: true` grouping, which shares `section_for_dir` with the
+    /// bare-directory shorthand.
+    #[test]
+    fn auto_all_promotes_md_dir_index() {
+        let profiles = vec![
+            make_profile("docs/index.md", "Docs Home"),
+            make_profile("docs/a.qmd", "A"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(&AutoSpec::All, &index, &mut diags);
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                assert_eq!(
+                    text.as_ref().unwrap().as_plain_text().as_deref(),
+                    Some("Docs Home")
+                );
+                assert_eq!(href.as_deref(), Some("docs/index.md"));
+                assert_eq!(contents.len(), 1, "only a.qmd remains a child");
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// bd-sidebar-dir-index-md-5khf3lds — only a *direct* child
+    /// `index.*` is the directory's landing page. A nested
+    /// `docs/deep/index.md` must not be promoted to `docs`' header.
+    #[test]
+    fn auto_nested_index_is_not_promoted() {
+        let profiles = vec![
+            make_profile("docs/top.qmd", "Top"),
+            make_profile("docs/deep/index.md", "Deep Landing"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(&AutoSpec::Path("docs".to_string()), &index, &mut diags);
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                assert_eq!(
+                    text.as_ref().unwrap().as_plain_text().as_deref(),
+                    Some("Docs"),
+                    "nested index.md does not name the section"
+                );
+                assert_eq!(href.as_deref(), None);
+                assert_eq!(contents.len(), 2, "nested index.md stays a child");
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// bd-sidebar-dir-index-md-5khf3lds — when a directory has both
+    /// `index.qmd` and `index.md`, the fixed preference order picks
+    /// `.qmd` (mirroring Q1's `engineValidExtensions()` probe order).
+    /// Only the *promoted* index is excluded from the children; the
+    /// losing index file stays listed. (Two same-stem indexes collide
+    /// on output anyway — this just keeps the loser visible rather
+    /// than silently hiding a document.)
+    #[test]
+    fn auto_dir_index_tie_break_prefers_qmd() {
+        let profiles = vec![
+            make_profile("guides/index.md", "MD Landing"),
+            make_profile("guides/index.qmd", "QMD Landing"),
+            make_profile("guides/a.qmd", "A"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(&AutoSpec::Path("guides".to_string()), &index, &mut diags);
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                assert_eq!(
+                    text.as_ref().unwrap().as_plain_text().as_deref(),
+                    Some("QMD Landing")
+                );
+                assert_eq!(href.as_deref(), Some("guides/index.qmd"));
+                assert_eq!(contents.len(), 2, "a.qmd plus the losing index.md");
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// bd-sidebar-dir-index-md-5khf3lds — the index is resolved among
+    /// the *members* (draft-filtered candidates), not the whole
+    /// `ProjectIndex`, so a draft landing page is not promoted to a
+    /// linked section header.
+    #[test]
+    fn auto_draft_dir_index_is_not_promoted() {
+        let profiles = vec![
+            make_profile_draft("guides/index.qmd", "Draft Landing"),
+            make_profile("guides/a.qmd", "A"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(&AutoSpec::Path("guides".to_string()), &index, &mut diags);
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                assert_eq!(
+                    text.as_ref().unwrap().as_plain_text().as_deref(),
+                    Some("Guides"),
+                    "draft index must not name the section"
+                );
+                assert_eq!(href.as_deref(), None, "draft index must not be linked");
+                assert_eq!(contents.len(), 1, "only a.qmd");
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// bd-sidebar-dir-index-md-5khf3lds — the stem match is
+    /// case-sensitive by design (case-insensitive matching misbehaves
+    /// across case-sensitive vs case-preserving filesystems). An
+    /// `Index.md` is an ordinary child, not the landing page.
+    #[test]
+    fn auto_dir_index_stem_match_is_case_sensitive() {
+        let profiles = vec![
+            make_profile("guides/Index.md", "Cased Landing"),
+            make_profile("guides/a.qmd", "A"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let entries = expand_spec(&AutoSpec::Path("guides".to_string()), &index, &mut diags);
+        assert_eq!(entries.len(), 1);
+        match &entries[0] {
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                assert_eq!(
+                    text.as_ref().unwrap().as_plain_text().as_deref(),
+                    Some("Guides")
+                );
+                assert_eq!(href.as_deref(), None);
+                assert_eq!(contents.len(), 2, "Index.md stays a child");
             }
             other => panic!("expected Section, got {:?}", other),
         }

@@ -1,0 +1,10 @@
+project:
+  type: website
+  render:
+    - "**/*.qmd"
+    - "**/*.md"
+
+website:
+  title: "Sidebar dir-shorthand index.md repro"
+  sidebar:
+    contents: guides
