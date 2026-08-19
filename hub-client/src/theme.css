@@ -68,11 +68,15 @@
   --editor-drag-accent: var(--posit-teal);
   --editor-disconnected-border: var(--border-color);
 
-  /* Sidebar */
-  --sidebar-bg: var(--bg-subtle);
+  /* Sidebar — posit-blue tint (not neutral --bg-subtle) so its saturation
+     matches the other editor chrome (--input-bg-alpha bars). Section
+     headers/content stack a second layer of this alpha over --sidebar-bg,
+     landing at ~8% ≈ --input-bg-alpha; hover therefore steps up to
+     --input-bg-alpha-hover to stay visible. */
+  --sidebar-bg: rgba(68, 112, 153, 0.04);
   --sidebar-border: var(--border-color);
-  --sidebar-section-bg: var(--bg-subtle);
-  --sidebar-section-hover: var(--input-bg-alpha);
+  --sidebar-section-bg: var(--sidebar-bg);
+  --sidebar-section-hover: var(--input-bg-alpha-hover);
   --sidebar-drag-bg: #c8d8ea;
   --sidebar-active-accent: var(--posit-teal);
   --sidebar-drop-accent: var(--posit-teal);
@@ -212,11 +216,13 @@
   --editor-drag-accent: var(--posit-teal);
   --editor-disconnected-border: var(--border-color);
 
-  /* Sidebar */
-  --sidebar-bg: var(--bg-subtle);
+  /* Sidebar — same stacking scheme as light theme; white alpha matches the
+     dark --input-bg-alpha family, so sections land at ~8% like the other
+     editor chrome. */
+  --sidebar-bg: rgba(255, 255, 255, 0.04);
   --sidebar-border: var(--border-color);
-  --sidebar-section-bg: var(--bg-subtle);
-  --sidebar-section-hover: var(--input-bg-alpha);
+  --sidebar-section-bg: var(--sidebar-bg);
+  --sidebar-section-hover: var(--input-bg-alpha-hover);
   --sidebar-drag-bg: #1a2a4e;
   --sidebar-active-accent: var(--posit-teal);
   --sidebar-drop-accent: var(--posit-teal);
