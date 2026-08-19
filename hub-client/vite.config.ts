@@ -60,8 +60,11 @@ const isE2E = process.env.VITE_E2E === '1';
 /**
  * Disable the PWA service worker entirely (`build:preview-embed`).
  * The q2-preview embed serves this app from an ephemeral localhost
- * origin per `q2 preview` session; a service worker would precache
- * ~67 MB (WASM included) into Cache Storage for every random port.
+ * origin per `q2 preview` session; a service worker would fill Cache
+ * Storage (precache + runtime-cached WASM) for every random port.
+ * The plugin stays registered with `disable: true` (rather than being
+ * omitted) so the `virtual:pwa-register` import in `src/main.tsx`
+ * resolves to a no-op stub in these builds.
  */
 const disablePwa = process.env.VITE_DISABLE_PWA === '1';
 
@@ -102,8 +105,12 @@ export default defineConfig({
         server.middlewares.use(middleware as any);
       },
     },
-    // Disable PWA service worker in E2E tests to avoid caching interference
-    ...(!isE2E && !disablePwa ? [VitePWA({
+    // The plugin is always present so `virtual:pwa-register` resolves in
+    // every build (a no-op stub when disabled). `disable` covers E2E
+    // (caching interference) and the preview-embed build (ephemeral
+    // origins); neither generates a service worker.
+    VitePWA({
+      disable: isE2E || disablePwa,
       registerType: 'autoUpdate',
       includeAssets: ['quarto-icon.svg'],
       manifest: {
@@ -120,19 +127,60 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // Precache all static assets including JS/CSS bundles and WASM
-        globPatterns: ['**/*.{html,js,css,svg,woff,woff2,wasm}'],
-        // Increase limit to include WASM files (largest is ~37MB and growing).
-        // Keep generous headroom: when a globbed asset exceeds this limit
-        // workbox emits a warning that vite-plugin-pwa throws as a fatal
-        // build error, so a too-tight ceiling breaks CI the moment the WASM
-        // creeps past it (see the 35MB ceiling that broke main after #379).
-        // (Supersedes an earlier ts-engine 40MB stopgap; 64MB gives headroom
-        // for the unstripped WASM name section until build-wasm.js strips it.)
-        maximumFileSizeToCacheInBytes: 64 * 1024 * 1024,
+        // Precache the app shell only: HTML, JS/CSS bundles, fonts, icons.
+        // WASM and the on-demand chunks below are runtime-cached instead —
+        // an all-or-nothing ~56 MB precache meant one flaky fetch discarded
+        // the new SW and the old one kept serving (GH #447).
+        globPatterns: ['**/*.{html,js,css,svg,woff,woff2}'],
+        // Monaco workers (~9 MB) and the sass chunk (~3.2 MB) load on
+        // demand; they are content-hashed, so CacheFirst at runtime is
+        // correct and keeps them out of the atomic install.
+        globIgnores: ['**/*.worker-*.js', '**/sass.default-*.js'],
+        // Largest remaining precached file is main.js (~7.5 MB); 16 MB
+        // lets it more than double before tripping. Past the limit workbox
+        // warns and vite-plugin-pwa escalates to a fatal build error, so
+        // the ceiling guards against accidental re-inclusion of a large
+        // asset (silent precache re-bloat → install failures → #447) with
+        // a loud red CI instead. The override is required regardless:
+        // workbox's 2 MB default is already exceeded by main.js.
+        maximumFileSizeToCacheInBytes: 16 * 1024 * 1024,
         // Don't warn about large files - we know they're big
         dontCacheBustURLsMatching: /\.[0-9a-f]{8}\./,
         runtimeCaching: [
+          {
+            // Content-hashed WASM (quarto parser ~26 MB, automerge ~3.5 MB,
+            // tree-sitter). CacheFirst is correct: the URL changes when the
+            // bytes change.
+            urlPattern: /\/assets\/.*\.wasm$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'wasm-cache',
+              expiration: {
+                // Hashed URLs accumulate across deploys and runtime caches
+                // have no automatic old-revision cleanup — cap them.
+                maxEntries: 8,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
+              },
+              cacheableResponse: {
+                statuses: [200]
+              }
+            }
+          },
+          {
+            // Monaco workers + sass chunk: loaded on demand, content-hashed.
+            urlPattern: /\/assets\/(.*\.worker-.*|sass\.default-.*)\.js$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ondemand-assets',
+              expiration: {
+                maxEntries: 12,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
+              },
+              cacheableResponse: {
+                statuses: [200]
+              }
+            }
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
@@ -163,7 +211,7 @@ export default defineConfig({
           }
         ]
       }
-    })] : [])
+    })
   ],
   define: {
     __GIT_COMMIT_HASH__: JSON.stringify(gitInfo.commitHash),
