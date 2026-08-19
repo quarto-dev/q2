@@ -55,6 +55,7 @@ pub mod test_inline_locations;
 pub mod test_json_div_transforms;
 pub mod test_json_errors;
 pub mod test_json_roundtrip;
+pub mod test_kv_attr_promotion;
 pub mod test_link_destination_linebreak;
 pub mod test_location_health;
 pub mod test_lua_attr_mutation;

@@ -3,7 +3,22 @@
 **Date:** 2026-08-18
 **Braid:** bd-heading-id-attr-duplicated-xbpcmejr (p2, bug, label `markdown`)
 **Checkout:** main checkout, branch `main` @ `0c3542d0`
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Approved 2026-08-19 — design questions answered by the user; implementation in progress.
+
+## Design decisions (user-aligned, 2026-08-19)
+
+1. **Last-id-wins, matching pandoc.** Promotion happens positionally in the
+   child loop of `process_commonmark_attribute`. Note: q2's grammar enforces
+   component order (id, then classes, then kv) — `{id="kv" #short}` is a
+   parse error at HEAD (probed empirically), so the only reachable mixed case
+   is `{#short id="kv"}` (kv wins) plus duplicate kv keys (last wins). Both
+   fall out of in-loop processing.
+2. **Pure bug fix** — no warning, no escape hatch for documents relying on the
+   old passthrough behavior.
+3. **Writer fallback is id-only** here. The analogous class-charset roundtrip
+   hazard is deferred to **bd-fffjzi5s**.
+4. **Split-class source spans point at the whole quoted value.** Per-word
+   sub-spans deferred to **bd-0vfgz2cl** (p4, label `quarto-source-map`).
 
 ## Triage verdict
 
@@ -76,31 +91,82 @@ All paths verified at `main` @ `0c3542d0`; symptom reproduced (see
   (`postprocess.rs:931-974`) already keys on `attr.0` being empty; a promoted
   id flows through the explicit-id branch exactly like a shorthand id.
 
-## Proposed phases (draft)
+## Work items
 
-Skeleton only — actual phase contents wait on the design discussion.
+### Phase 0 — Failing tests (TDD)
 
-- **Phase 0 — Test plan (TDD).** Failing tests first:
-  - pampa reader tests: kv id / kv class promotion for header, span, div, code
-    span, fenced code block (`{python id="x"}`), image/link; last-id-wins;
-    whitespace-split classes; parity fixtures against committed pandoc output.
-  - HTML end-to-end: `## H {id="get-/v1/x"}` renders one `id` on the
-    `<section>`, no duplicate attribute.
-  - Roundtrip tests (`tests/roundtrip_tests/qmd-json-qmd`): slashy id
-    round-trips via kv form; plain id keeps `{#id}` shorthand.
-- **Phase 1 — Reader promotion.** Promote `id`/`class` kv in
-  `process_commonmark_attribute`, preserving source order for last-wins and
-  class ordering, with `AttrSourceInfo` bookkeeping (id source = value span;
-  one class-source entry per split word, pointing at the value span).
-- **Phase 2 — Writer fallback.** `write_attr`/`write_code_attr`: emit
-  `id="..."` when the id contains characters outside the shorthand charset.
-- **Phase 3 — Sweep + verify.** Full workspace tests; review `.snap` churn
-  (document counts per CLAUDE.md policy); end-to-end `q2 render` of the strand's
-  repro shape, inspect emitted HTML; re-check the span case the strand flags as
-  latently wrong.
-- **Phase 4 — Docs**, if qmd syntax docs describe attribute handling.
+- [x] New `crates/pampa/tests/integration/test_kv_attr_promotion.rs`
+      (registered alphabetized in `main.rs`), covering:
+      heading kv id (slashy + plain) fills attr.0, no `id` left in attr.2,
+      no auto slug; `{#short id="kv"}` → `kv`; `{id="one" id="two"}` → `two`;
+      `{.y class="x z"}` → classes `["y","x","z"]` (source order,
+      whitespace-split); span/div/code-span/fenced-code (`{python id="x"}`)
+      promotion; auto id still generated when only kv `class` present;
+      `attr_source.id` is `Some` for promoted ids.
+- [x] Writer tests: slashy id round-trips as `{id="..."}` (not `{#...}`);
+      plain promoted id normalizes to `{#plain}` and re-parses to the same
+      attr.
+- [x] Run the new tests; verify they fail as expected.
 
-## Open design questions for the user
+### Phase 1 — Reader promotion
+
+- [x] `process_commonmark_attribute`: promote kv `id` → attr.0 (in-loop,
+      last-wins; `attr_source.id` = value span) and kv `class` →
+      whitespace-split words appended to attr.1 (one class-source entry per
+      word, whole value span); neither key enters attr.2.
+
+### Phase 2 — Writer fallback (id-only)
+
+- [x] `write_attr` + `write_code_attr` in `writers/qmd.rs`: emit `id="..."`
+      kv form when the identifier has chars outside `[._A-Za-z0-9-]`
+      (else keep `#id` shorthand).
+
+### Phase 3 — Sweep + verify
+
+- [x] Grep for consumers reading `attr.2` key `"id"` that would now see it
+      moved (expect none).
+- [x] `cargo nextest run --workspace`; review and document any `.snap` churn.
+- [x] End-to-end: `cargo run --bin q2 -- render` a fixture with
+      `## H {id="get-/v1/x"}`, inspect the HTML for exactly one `id=` on the
+      section, record invocation + snippet here.
+- [ ] `cargo xtask verify` (full, WASM leg included — pampa changes flow into
+      the hub client).
+
+### Phase 4 — Docs
+
+- [x] Check `docs/` qmd-syntax pages for attribute documentation; document the
+      kv `id`/`class` forms if attributes are covered there. **Outcome: no-op** —
+      neither `docs/guides/authoring/markdown-basics.qmd` (a stub: headings
+      section lists only levels, `Lists`/`Syntax Characters` are empty FIXME
+      headings) nor `dev-docs/syntax-notes.md` documents attribute syntax at
+      all, so there is no existing coverage to extend. When the markdown-basics
+      page grows an attributes section, it should mention both the `{#id}`
+      shorthand and the `{id="..."}` kv form.
+
+## End-to-end verification record (2026-08-19)
+
+Invocation (real binary, not a library call):
+
+```
+cargo run -q --bin q2 -- render <scratch>/e2e/index.qmd --to html
+```
+
+Fixture headings: `## List API keys {id="get-/v1/users/-guid-/keys"}`,
+`## Plain heading {id="plain-explicit"}`, `## Control {#shorthand-id}`.
+Observed output (inspected in the generated `index.html`):
+
+```html
+<section id="get-/v1/users/-guid-/keys" class="section level2">
+<section id="plain-explicit" class="section level2">
+<section id="shorthand-id" class="section level2">
+```
+
+This matches the strand's pandoc/Q1 reference line for line; a grep for
+elements carrying two `id=` attributes found zero. The full workspace run
+was 12874/12874 with **no `.snap` changes** — no existing fixture used the
+kv form.
+
+## Open design questions for the user (answered 2026-08-19 — see Design decisions)
 
 1. **Last-id-wins fidelity.** Pandoc resolves multiple ids (any mix of `#x` and
    `id="y"`) as last-one-wins. Matching that exactly means promotion must
