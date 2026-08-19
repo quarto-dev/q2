@@ -106,7 +106,9 @@
   margin-bottom: 4px;
 }
 
-.choose-project-btn {
+/* Neutral-outline secondary action, matching the removed choose-project
+   button's role next to the ghost-accent Export ZIP. */
+.screenshot-btn {
   width: 100%;
   padding: 10px 16px;
   background: none;
@@ -118,7 +120,12 @@
   transition: all 0.2s;
 }
 
-.choose-project-btn:hover {
+.screenshot-btn:hover {
   border-color: var(--posit-teal);
   color: var(--posit-teal);
+}
+
+.screenshot-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
 }

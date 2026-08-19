@@ -1050,7 +1050,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                   return (
                     <ProjectTab
                       project={project}
-                      onChooseNewProject={onDisconnect}
                       onExportZip={exportProjectAsZip}
                     />
                   );

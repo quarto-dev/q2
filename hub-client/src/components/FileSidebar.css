@@ -21,19 +21,22 @@
   border-bottom: 1px solid var(--sidebar-border);
 }
 
-/* Sidebar-header buttons are .ph-btn.small.outline (ui.css); the only local
-   override is a fixed line-height so an emoji glyph's taller line box
-   (e.g. ⬆) doesn't make one button taller than the others. */
+/* Sidebar-header buttons are icon-only .ph-btn.small.outline (ui.css).
+   They grow to equal widths so together they fill the header row, whether
+   two or three (conditional Print) are present; inline-flex centers the
+   SVG glyph. */
 .sidebar-header .new-file-btn,
 .sidebar-header .upload-asset-btn,
 .sidebar-header .print-file-btn {
+  flex: 1 1 0;
+  /* Never shrink below the glyph: if the header is ever too narrow, the
+     buttons wrap whole rather than clip. */
+  min-width: min-content;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1.5;
   transition: all 0.2s;
-  /* Keep every button a single line so all three are the same height;
-     when the header is too narrow for all of them, they wrap as whole
-     buttons to a second row rather than one squeezing to two lines. */
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .sidebar-printable-error {
