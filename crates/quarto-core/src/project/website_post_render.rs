@@ -136,37 +136,46 @@ pub(super) fn copy_navbar_logo(
     let Some(navbar) = quarto_navigation::resolve_navbar(meta) else {
         return Ok(());
     };
-    let Some(raw) = navbar.logo else {
+    let Some(logo) = navbar.logo else {
         return Ok(());
     };
-    // External logo URLs are served by whoever hosts them (mirrors
-    // the favicon rule, and checks before slash-stripping so
-    // protocol-relative `//host/x` is never misread as site-rooted).
-    if quarto_util::is_external_url(&raw) {
-        return Ok(());
+    // Copy each distinct variant file (a single logo has identical
+    // halves; copying the same path twice would be harmless but noisy).
+    let mut paths: Vec<&str> = vec![&logo.light.path];
+    if logo.dark.path != logo.light.path {
+        paths.push(&logo.dark.path);
     }
-    let normalized = raw.strip_prefix('/').unwrap_or(&raw);
-    if normalized.is_empty() {
-        return Ok(());
-    }
+    for raw in paths {
+        // External logo URLs are served by whoever hosts them (mirrors
+        // the favicon rule, and checks before slash-stripping so
+        // protocol-relative `//host/x` is never misread as site-rooted).
+        if quarto_util::is_external_url(raw) {
+            continue;
+        }
+        let normalized = raw.strip_prefix('/').unwrap_or(raw);
+        if normalized.is_empty() {
+            continue;
+        }
 
-    let src = project.dir.join(normalized);
-    let exists = runtime.path_exists(&src, None).map_err(|e| {
-        QuartoError::other(format!(
-            "Failed to probe navbar logo source {}: {}",
-            src.display(),
-            e
-        ))
-    })?;
-    if !exists {
-        diagnostics.push(DiagnosticMessage::warning(format!(
-            "website.navbar.logo refers to missing file '{}'",
-            normalized
-        )));
-        return Ok(());
-    }
+        let src = project.dir.join(normalized);
+        let exists = runtime.path_exists(&src, None).map_err(|e| {
+            QuartoError::other(format!(
+                "Failed to probe navbar logo source {}: {}",
+                src.display(),
+                e
+            ))
+        })?;
+        if !exists {
+            diagnostics.push(DiagnosticMessage::warning(format!(
+                "website.navbar.logo refers to missing file '{}'",
+                normalized
+            )));
+            continue;
+        }
 
-    copy_asset_file(project, runtime, normalized, "navbar logo")
+        copy_asset_file(project, runtime, normalized, "navbar logo")?;
+    }
+    Ok(())
 }
 
 /// Copy images referenced from `page-footer` regions — Text regions

@@ -72,14 +72,14 @@ Q1 accepts `logo:` as `false` | string | `{path, alt}` | `{light: <string|{path,
 
 ### Phase 0 — Test plan (TDD: failing tests first)
 
-Parsing (`navbar.rs` unit tests):
-- [ ] `logo: path.svg` → single variant pair with identical halves; `logo_alt` fills alt.
-- [ ] `logo: {path: p, alt: a}` → both halves get `p`/`a`.
-- [ ] `logo: {light: l.svg, dark: d.svg}` → distinct halves; per-variant `{path, alt}` objects honored; per-variant alt wins over top-level `logo-alt`.
-- [ ] `logo: {light: l.svg}` → dark falls back to light (and the mirror case).
-- [ ] `logo: false` → no logo, no error.
-- [ ] Round-trip serialization re-emits the authored shape (string stays string; distinct variants re-emit `{light, dark}`).
-- [ ] Each variant path carries its own `SourceInfo`.
+Parsing (`navbar.rs` unit tests) — all landed, verified red (30 compile errors pre-model) then green:
+- [x] `logo: path.svg` → single variant pair with identical halves; `logo_alt` fills alt (`logo_string_parses_as_single_pair`).
+- [x] `logo: {path: p, alt: a}` → both halves get `p`/`a` (`logo_path_alt_object_parses_as_single_pair`; `logo_object_alt_wins_over_logo_alt_key`).
+- [x] `logo: {light: l.svg, dark: d.svg}` → distinct halves; per-variant `{path, alt}` objects honored; per-variant alt wins over top-level `logo-alt` (`logo_light_dark_distinct_variants`).
+- [x] `logo: {light: l.svg}` → dark falls back to light (and the mirror case) (`logo_light_only_falls_back_to_dark` / `logo_dark_only_falls_back_to_light`).
+- [x] `logo: false` → no logo, no error (`logo_false_is_none`; plus `logo_empty_map_is_none`).
+- [x] Round-trip serialization re-emits the authored shape (`logo_single_roundtrips_as_string_wire_shape`, `logo_variants_roundtrip_as_light_dark_map`).
+- [x] Each variant path carries its own `SourceInfo` (`logo_variant_sources_captured_and_round_tripped`).
 
 Markup (`render_html.rs` unit tests):
 - [ ] Logo + title → `navbar-brand-container` div wrapping a `navbar-brand navbar-brand-logo` anchor (img inside) + separate `navbar-brand` anchor with `navbar-title` span; both anchors href = `logo_href || home_url`.
@@ -98,8 +98,9 @@ Theme CSS + end-to-end (drive the real render path per repo policy):
 
 ### Phase 2 — Logo variant model
 
-- [ ] Replace `Navbar::logo: Option<String>` (+ `logo_source`) with a normalized variant pair, e.g. `logo: Option<NavbarLogo>` where `NavbarLogo { light: LogoVariant, dark: LogoVariant }`, `LogoVariant { path: String, alt: Option<String>, source: SourceInfo }`; keep `logo_alt` parsing folding into variants that lack alt.
-- [ ] Parsing per Phase 0 specs; round-trip serialization preserves authored shape.
+- [x] Replace `Navbar::logo: Option<String>` (+ `logo_source`) with a normalized variant pair: `logo: Option<NavbarLogo>`, `NavbarLogo { light, dark }`, `LogoVariant { path, alt, source }`; `logo_alt` folds into variants that lack alt (the separate `logo_alt` field is gone). Exported from `quarto_navigation`.
+- [x] Parsing per Phase 0 specs; round-trip: single logo re-emits the historical `logo: <path>` + `logo-alt:` wire shape, distinct variants a `{light, dark}` map (string when no alt, `{path, alt}` otherwise), per-variant path `SourceInfo` preserved.
+- [x] Consumers adapted per-variant (pulled forward from Phase 4 by the compile): `copy_navbar_logo` copies each distinct variant; `navbar_generate` resolves each path against its own source; `navbar_render` rebases each path per page. `render_brand` got a minimal single-img shim (light variant) pending Phase 3.
 
 ### Phase 3 — Markup restructure
 

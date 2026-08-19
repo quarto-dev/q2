@@ -496,15 +496,16 @@ fn render_page_nav_side(html: &mut String, side: &str, item: Option<&NavigationI
 
 fn render_brand(navbar: &Navbar, fallback: Option<&ConfigValue>, home_url: &str) -> Option<String> {
     let href = navbar.logo_href.as_deref().unwrap_or(home_url);
-    let logo_img = navbar.logo.as_deref().map(|logo| {
-        let alt = navbar
-            .logo_alt
+    let logo_img = navbar.logo.as_ref().map(|logo| {
+        let alt = logo
+            .light
+            .alt
             .as_deref()
             .map(escape_attr)
             .unwrap_or_default();
         format!(
             "<img src=\"{}\" alt=\"{}\" class=\"navbar-logo\">",
-            escape_attr(logo),
+            escape_attr(&logo.light.path),
             alt
         )
     });

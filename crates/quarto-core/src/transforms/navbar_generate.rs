@@ -103,19 +103,22 @@ impl AstTransform for NavbarGenerateTransform {
                     &ctx.project.dir,
                 );
             }
-            // Same treatment for the logo path itself (Case A of
+            // Same treatment for the logo paths themselves (Case A of
             // bd-root-relative-paths-design-fc5pvkcv): a logo authored
             // in a doc's frontmatter or a directory `_metadata.yml`
             // resolves against the authoring file's directory;
             // `_quarto.yml`-rooted values degrade to project-root-
-            // relative unchanged.
+            // relative unchanged. Each light/dark variant resolves
+            // against its own authoring scalar's source.
             if let Some(logo) = navbar.logo.as_mut() {
-                *logo = resolve_metadata_path(
-                    logo,
-                    &navbar.logo_source,
-                    source_context,
-                    &ctx.project.dir,
-                );
+                for variant in [&mut logo.light, &mut logo.dark] {
+                    variant.path = resolve_metadata_path(
+                        &variant.path,
+                        &variant.source,
+                        source_context,
+                        &ctx.project.dir,
+                    );
+                }
             }
         }
 
