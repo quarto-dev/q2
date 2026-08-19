@@ -25,7 +25,11 @@
 //! - `website.sidebar` absent — nothing to resolve.
 
 use quarto_config::resolve_website_value;
-use quarto_navigation::{Sidebar, SidebarTitle, resolve_active_state, sidebar_for_page};
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
+use quarto_navigation::{
+    SectionTextConflict, Sidebar, SidebarTitle, resolve_active_state,
+    section_text_conflicts_per_sidebar, sidebar_for_page,
+};
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
@@ -100,10 +104,19 @@ impl AstTransform for SidebarGenerateTransform {
         // sidebars we then discard would repeat them on every page of
         // the project. Only the picked sidebar's diagnostics survive,
         // below.
+        // Q-13-10 — entries carrying both `section:` and `text:` are
+        // detected on the raw config value (the parser silently lets
+        // `section:` win); grouped per sidebar so, like the auto:
+        // warnings below, only the picked sidebar's conflicts surface.
+        let conflicts_per_sidebar = section_text_conflicts_per_sidebar(&sidebar_cv);
+
         let mut per_sidebar_diags: Vec<Vec<quarto_error_reporting::DiagnosticMessage>> =
             Vec::with_capacity(sidebars.len());
-        for sidebar in &mut sidebars {
+        for (sidebar_idx, sidebar) in sidebars.iter_mut().enumerate() {
             let mut diags = Vec::new();
+            for conflict in conflicts_per_sidebar.get(sidebar_idx).into_iter().flatten() {
+                diags.push(section_text_conflict_warning(conflict));
+            }
 
             // bd-qor9a — resolve each href against the YAML file it was
             // authored in. Frontmatter-rooted hrefs (`introduction.qmd`
@@ -172,6 +185,26 @@ impl AstTransform for SidebarGenerateTransform {
 
         Ok(())
     }
+}
+
+/// Q-13-10: a sidebar entry carries both `section:` and `text:`.
+/// The two are alternate spellings for a section's display label;
+/// `section:` takes precedence (Q1 parity) and the `text:` value is
+/// ignored — bd-sidebar-section-text-ignored-sdp5g7ns.
+fn section_text_conflict_warning(conflict: &SectionTextConflict) -> DiagnosticMessage {
+    let section_label = conflict.section_label.as_deref().unwrap_or("…");
+    let text_label = conflict.text_label.as_deref().unwrap_or("…");
+    DiagnosticMessageBuilder::warning("Sidebar entry has both `section:` and `text:`")
+        .with_code("Q-13-10")
+        .problem(format!(
+            "`section: \"{section_label}\"` takes precedence; `text: \"{text_label}\"` is ignored."
+        ))
+        .add_hint(
+            "Remove one of the two keys — they are alternate spellings of a \
+             section's display label.",
+        )
+        .with_location(conflict.text_source.clone())
+        .build()
 }
 
 /// Recover the position of the sidebar `sidebar_for_page` picked.
@@ -574,6 +607,67 @@ mod tests {
         assert!(
             diags.iter().any(|d| d.code.as_deref() == Some("Q-13-5")),
             "should emit Q-13-5 for the dropped auto entry; got: {:?}",
+            diags
+        );
+    }
+
+    /// bd-sidebar-section-text-ignored-sdp5g7ns — an entry carrying
+    /// both `section:` and `text:` warns with Q-13-10 (the `text:`
+    /// value is ignored; `section:` wins, Q1 parity).
+    #[tokio::test]
+    async fn sidebar_generate_warns_on_section_text_conflict() {
+        let conflict_entry = config_map(vec![
+            ("section", s("From Section")),
+            ("text", s("From Text")),
+            ("contents", arr(vec![s("about.qmd")])),
+        ]);
+        let sidebar_cv = config_map(vec![("contents", arr(vec![conflict_entry]))]);
+        let meta = config_map(vec![("website", config_map(vec![("sidebar", sidebar_cv)]))]);
+        let index = Arc::new(ProjectIndex::new(vec![make_profile("about.qmd", "About")]));
+        let (_out, diags) = run_transform_with(meta, Some(index), "about.qmd").await;
+        let diag = diags
+            .iter()
+            .find(|d| d.code.as_deref() == Some("Q-13-10"))
+            .unwrap_or_else(|| {
+                panic!("expected Q-13-10 for the both-keys entry; got: {:?}", diags)
+            });
+        let rendered = format!("{:?}", diag);
+        assert!(
+            rendered.contains("From Section") && rendered.contains("From Text"),
+            "warning should name both labels; got: {rendered}"
+        );
+    }
+
+    /// The Q-13-10 warning follows the picked-sidebar rule: a conflict
+    /// in an *unselected* sidebar must not warn on this page (same
+    /// guard as Q-13-6 in
+    /// `sidebar_generate_hides_unselected_sidebar_diagnostics`).
+    #[tokio::test]
+    async fn sidebar_generate_hides_unselected_sidebar_section_text_conflict() {
+        let conflict_entry = config_map(vec![
+            ("section", s("From Section")),
+            ("text", s("From Text")),
+            ("contents", arr(vec![s("elsewhere/page.qmd")])),
+        ]);
+        let sidebars = arr(vec![
+            config_map(vec![
+                ("id", s("conflicted")),
+                ("contents", arr(vec![conflict_entry])),
+            ]),
+            config_map(vec![
+                ("id", s("other")),
+                ("contents", arr(vec![s("other/alpha.qmd")])),
+            ]),
+        ]);
+        let meta = config_map(vec![("website", config_map(vec![("sidebar", sidebars)]))]);
+        let index = Arc::new(ProjectIndex::new(vec![
+            make_profile("elsewhere/page.qmd", "Page"),
+            make_profile("other/alpha.qmd", "Alpha"),
+        ]));
+        let (_out, diags) = run_transform_with(meta, Some(index), "other/alpha.qmd").await;
+        assert!(
+            !diags.iter().any(|d| d.code.as_deref() == Some("Q-13-10")),
+            "unselected sidebar's section/text conflict leaked: {:?}",
             diags
         );
     }

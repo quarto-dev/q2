@@ -31,6 +31,6 @@ pub use item::{BareScalar, NavigationItem};
 pub use navbar::{CollapseBelow, Navbar, NavbarTitle, TogglePosition, resolve_navbar};
 pub use page_nav::PageNavigation;
 pub use sidebar::{
-    AutoSpec, Crumb, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle, breadcrumb_trail,
-    resolve_active_state, sidebar_for_page,
+    AutoSpec, Crumb, SectionTextConflict, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle,
+    breadcrumb_trail, resolve_active_state, section_text_conflicts_per_sidebar, sidebar_for_page,
 };

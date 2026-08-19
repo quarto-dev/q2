@@ -1496,5 +1496,12 @@
     "message_template": "A link carries a `link-format` attribute that names an unknown value or targets a page the requested output format does not cover. `link-format=\"llms\"` needs `website.llms-txt: true` on an HTML website render, a target written as a project source path, and a target page that gets a markdown companion (drafts and the 404 page do not). The attribute is ignored and the link resolves as if it were undecorated.",
     "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-9",
     "since_version": "99.9.9"
+  },
+  "Q-13-10": {
+    "subsystem": "navigation",
+    "title": "Sidebar entry has both section: and text:",
+    "message_template": "A sidebar entry carries both a `section:` and a `text:` key. They are alternate spellings for a section's display label, and `section:` takes precedence — the `text:` value is ignored. Remove one of the two keys.",
+    "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-10",
+    "since_version": "99.9.9"
   }
 }
