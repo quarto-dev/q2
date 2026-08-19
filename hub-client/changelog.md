@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-19
+
+- [`63f2a178`](https://github.com/quarto-dev/q2/commits/63f2a178): Tint the editor file sidebar with the same posit-blue alpha family as the other editor bars, so it no longer reads neutral gray next to them.
+
 ### 2026-08-18
 
 - [`a8944df3`](https://github.com/quarto-dev/q2/commits/a8944df3): Fix the `q2-sandboxed-preview` pane in dark mode — its document paints no background of its own, so the newly theme-following preview pane turned its canvas dark and hid the text; the iframe now keeps a light canvas in both themes.
