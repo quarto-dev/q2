@@ -110,9 +110,9 @@ Theme CSS + end-to-end (drive the real render path per repo policy):
 
 ### Phase 4 — Downstream consumers
 
-- [ ] `copy_navbar_logo`: copy each distinct variant file (dedupe identical paths).
-- [ ] `NavbarRenderTransform` src rebasing + authoring-dir resolution: operate per-variant using each variant's `SourceInfo`.
-- [ ] Sweep remaining `navbar.logo` consumers (`grep -rn '\.logo' crates/quarto-core/src crates/quarto-navigation/src`).
+- [x] `copy_navbar_logo`: copies each distinct variant file (dedupe identical paths). (Landed with Phase 2.)
+- [x] `NavbarRenderTransform` src rebasing + `navbar_generate` authoring-dir resolution: per-variant using each variant's `SourceInfo`. (Landed with Phase 2.)
+- [x] Sweep remaining `navbar.logo` consumers — grep clean; the only consumers are the four known sites. New end-to-end coverage: `pipeline_navbar_logo_variants_rebased_and_copied` (distinct variants rebased per page at depth 0 and 2, variant classes present, both files copied).
 
 ### Phase 5 — End-to-end verification
 

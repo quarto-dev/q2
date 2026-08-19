@@ -649,3 +649,75 @@ fn pipeline_theme_css_ships_navbar_brand_rules() {
         "theme CSS must ship the .navbar-container width rule"
     );
 }
+
+/// Distinct light/dark logo variants flow through the whole pipeline
+/// (bd-navbar-logo-unstyled-gbzd8vcu): both paths are rebased
+/// per-page, both imgs carry their variant content class, and both
+/// files are copied into the output tree.
+#[test]
+fn pipeline_navbar_logo_variants_rebased_and_copied() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  navbar:\n    title: Site\n    logo:\n      light: images/l.svg\n      dark:\n        path: images/d.svg\n        alt: Dark logo\n    left:\n      - index.qmd\n",
+        );
+        write(
+            &project_dir.join("images/l.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("images/d.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+        write(
+            &project_dir.join("deep/deeper/page.qmd"),
+            "---\ntitle: Deep\n---\n\nD.\n",
+        );
+    });
+
+    let root_html = read(&project_dir.join("_site/index.html"));
+    assert!(
+        root_html
+            .contains("<img src=\"images/l.svg\" alt=\"\" class=\"navbar-logo light-content\">"),
+        "root page light img depth-0 relative with light-content class; got: {}",
+        root_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+    assert!(
+        root_html.contains(
+            "<img src=\"images/d.svg\" alt=\"Dark logo\" class=\"navbar-logo dark-content\">"
+        ),
+        "root page dark img with its own alt and dark-content class; got: {}",
+        root_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+
+    let deep_html = read(&project_dir.join("_site/deep/deeper/page.html"));
+    assert!(
+        deep_html.contains("<img src=\"../../images/l.svg\"")
+            && deep_html.contains("<img src=\"../../images/d.svg\""),
+        "depth-2 page must rebase both variant srcs; got: {}",
+        deep_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+
+    assert!(
+        project_dir.join("_site/images/l.svg").exists(),
+        "light variant file must be copied to the output tree"
+    );
+    assert!(
+        project_dir.join("_site/images/d.svg").exists(),
+        "dark variant file must be copied to the output tree"
+    );
+}
