@@ -103,12 +103,19 @@ Three provenance-correct mechanisms coexist today. New code should prefer
    explicit `!path` tags and by the extension marking tables
    (`FRAGMENT_PATH_PATTERNS`, `FORMAT_ASSET_PATTERNS`, `PATH_VALUED_KEYS`).
    Blind spot: user-authored plain strings are never marked.
-3. **Per-layer `layer_base` marking** (`crates/quarto-core/src/project/format_css.rs:104-130`,
-   for `css`) — the merge passes the declaring base per layer
-   (project dir / `_metadata.yml` parent / doc dir), marks the value `Path`,
-   anchors leading `/` at the project root. The most general mechanism: it
-   handles `_quarto.yml` without SourceInfo lookup and runs before any
-   consumer.
+3. **Per-layer `layer_base` marking** (`crates/quarto-core/src/project/format_paths.rs`,
+   `FORMAT_PATH_KEYS` — originally css-only in `format_css.rs`, generalized
+   2026-08-19 for bd-oejuizi9) — the merge passes the declaring base per
+   layer (project dir / `_metadata.yml` parent / doc dir), marks the value
+   `Path` rebased to doc-relative form, anchors leading `/` at the project
+   root. The most general mechanism: it handles `_quarto.yml` without
+   SourceInfo lookup and runs before any consumer. Covers `css`, `theme`,
+   and the three `include-*` slots. Note the registry carries a per-key
+   **marking policy** the original contract text did not anticipate: some
+   keys' strings are only *sometimes* paths (`theme` shares its namespace
+   with builtin theme names → existence-driven, silent), while others are
+   always paths (`include-*` → unconditional, so even a missing file's
+   later diagnostic reports the declaration-resolved location).
 4. **`BaseDirContext`** (`crates/quarto-core/src/glob/provenance.rs:47`) —
    the provenance engine for glob-valued keys (`listing.contents`,
    front-matter `resources:`). Globs stay on this machinery; they are
@@ -134,7 +141,7 @@ Update this table when adding keys or migrating sites.
 |---|---|---|
 | `transforms/{navbar,sidebar,footer}_generate.rs` | nav hrefs, logos | (1) `resolve_metadata_path` |
 | `glob/provenance.rs` + `project/listing/glob_resolve.rs`, `project_resources.rs` | `listing.contents`, front-matter `resources:` | (4) `BaseDirContext` |
-| `project/format_css.rs` + `metadata_merge.rs` call sites | `css` | (3) layer_base marking |
+| `project/format_paths.rs` (`FORMAT_PATH_KEYS`) + `metadata_merge.rs` call sites | `css`, `theme`, `include-in-header`/`-before-body`/`-after-body` | (3) layer_base marking; consumers (`include_resolve.rs`, `ThemeContext.resolve_path`, `FormatCssTransform`) read the marked doc-relative values unchanged (fixed 2026-08-19, bd-oejuizi9 / GH #455) |
 | `project/mod.rs` fragment rebase; `extension/{paths,read}.rs` | extension-contributed theme/css/include-*/template/filters | (2) force-marked `Path` |
 | `website_config.rs`, `website_post_render.rs` | `favicon`, navbar logo / footer image copy | project-root by construction (`_quarto.yml`-only keys) |
 | `discovery.rs`, `project_resources.rs`, `sidebar_auto.rs`, `quarto-sass/src/config.rs` | `project.render`, `project.resources`, sidebar `auto:`, `brand:` | project-root by construction |
@@ -145,9 +152,7 @@ Update this table when adding keys or migrating sites.
 
 | Site | Keys | Defect | Strand |
 |---|---|---|---|
-| `stage/stages/include_resolve.rs:499` | `include-in-header`/`-before-body`/`-after-body` | consuming-doc-dir join; leading `/` OS-absolute | bd-oejuizi9, bd-rdcvjy2s, GH #455 |
-| `quarto-sass/src/themes.rs:469` (+ `compile_theme_css.rs`, `revealjs/theme.rs`) | `theme` custom scss | same | bd-oejuizi9, bd-rdcvjy2s |
-| `stage/stages/apply_template.rs:199,415` | `template`, `template-partials` | same | bd-rdcvjy2s (base-dir fix: file under bd-hjv5o) |
+| `stage/stages/apply_template.rs:199,415` | `template`, `template-partials` | consuming-doc-dir join; leading `/` OS-absolute | bd-rdcvjy2s (base-dir fix: file under bd-hjv5o) |
 | `filter_resolve.rs:255-273` | `filters` | same | bd-rdcvjy2s (base-dir fix: file under bd-hjv5o) |
 | `transforms/title_banner.rs:200` | `title-block-banner` image probe | doc-dir probe, raw string emitted | bd-hjv5o scope |
 | `project_resources.rs:721,835` | engine/filter-declared resources | doc-dir join | bd-hjv5o scope |

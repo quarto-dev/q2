@@ -256,14 +256,16 @@ impl PipelineStage for MetadataMergeStage {
         let project_layer = ctx.project.config.metadata.as_ref().map(|m| {
             let mut flattened = resolve_format_config(m, base_format);
             adjust_paths_to_document_dir(&mut flattened, &ctx.project.dir, &document_dir);
-            // Mark user-declared stylesheets that name existing files as
-            // document-relative Path values (bd-format-css-not-copied-crn3bjdz).
+            // Mark path-shaped format values (css / theme / include-*) as
+            // document-relative Path values against this layer's base
+            // (bd-format-css-not-copied-crn3bjdz; generalized for
+            // bd-oejuizi9 / GH #455 — see project/format_paths.rs).
             // Runs after the `!path` adjustment so explicit Path values are
-            // rebased exactly once. Missing-file diagnostics for the project
+            // rebased exactly once. Missing-css diagnostics for the project
             // layer are dropped here — the orchestrator reports them once per
             // project render (`missing_project_css_diagnostics`), not once
             // per page.
-            let _ = crate::project::format_css::mark_css_path_values(
+            let _ = crate::project::format_paths::mark_format_path_values(
                 &mut flattened,
                 &ctx.project.dir,
                 &ctx.project.dir,
@@ -351,11 +353,12 @@ impl PipelineStage for MetadataMergeStage {
             }
         }
 
-        // Directory-metadata and front-matter `css:` entries resolve
-        // against their declaring file's directory; marking normalizes
-        // existing files to document-relative Path values and returns a
-        // Q-5-29 per missing file, surfaced through this document's own
-        // diagnostics (bd-format-css-not-copied-crn3bjdz).
+        // Directory-metadata and front-matter path-shaped entries
+        // (css / theme / include-*) resolve against their declaring
+        // file's directory; marking normalizes them to document-relative
+        // Path values and returns a Q-5-29 per missing css file,
+        // surfaced through this document's own diagnostics
+        // (bd-format-css-not-copied-crn3bjdz; bd-oejuizi9).
         let mut css_diagnostics: Vec<quarto_error_reporting::DiagnosticMessage> = Vec::new();
         let dir_layers: Vec<_> = dir_layer_entries
             .into_iter()
@@ -364,7 +367,7 @@ impl PipelineStage for MetadataMergeStage {
                 let layer_base = path
                     .parent()
                     .map_or_else(|| ctx.project.dir.clone(), |p| p.to_path_buf());
-                css_diagnostics.extend(crate::project::format_css::mark_css_path_values(
+                css_diagnostics.extend(crate::project::format_paths::mark_format_path_values(
                     &mut flattened,
                     &layer_base,
                     &ctx.project.dir,
@@ -377,7 +380,7 @@ impl PipelineStage for MetadataMergeStage {
 
         // Layer 4: Document metadata (flattened for base format)
         let mut doc_layer = resolve_format_config(&doc.ast.meta, base_format);
-        css_diagnostics.extend(crate::project::format_css::mark_css_path_values(
+        css_diagnostics.extend(crate::project::format_paths::mark_format_path_values(
             &mut doc_layer,
             &document_dir,
             &ctx.project.dir,
