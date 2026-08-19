@@ -99,17 +99,58 @@ impl TogglePosition {
     }
 }
 
+/// One resolved navbar-logo variant: a path, its optional alt text,
+/// and the `SourceInfo` of the YAML scalar that authored the path
+/// (bd-root-relative-paths-design-fc5pvkcv — mirroring
+/// `logo_href_source`, bd-qor9a) so the resolver knows which YAML
+/// file the path was authored in.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LogoVariant {
+    pub path: String,
+    pub alt: Option<String>,
+    pub source: SourceInfo,
+}
+
+/// Normalized navbar logo: always a light/dark pair, mirroring Q1's
+/// `resolveLogo` normalization of the `logo-light-dark-specifier`
+/// YAML shapes (bd-navbar-logo-unstyled-gbzd8vcu). A single-logo
+/// spec (string or `{path, alt}`) fills both halves identically; a
+/// `{light, dark}` spec with one half missing falls back to the
+/// other. Brand.yml logo-name indirection is out of scope
+/// (bd-v5z8w).
+#[derive(Debug, Clone, PartialEq)]
+pub struct NavbarLogo {
+    pub light: LogoVariant,
+    pub dark: LogoVariant,
+}
+
+impl NavbarLogo {
+    /// Both halves render as one image: same path, same alt. (The
+    /// renderer then emits a single unclassed `<img>` instead of a
+    /// `light-content`/`dark-content` pair.)
+    pub fn is_single(&self) -> bool {
+        self.light.path == self.dark.path && self.light.alt == self.dark.alt
+    }
+
+    /// The shared path of a single-image logo, `None` when the
+    /// variants differ.
+    pub fn single_path(&self) -> Option<&str> {
+        if self.is_single() {
+            Some(&self.light.path)
+        } else {
+            None
+        }
+    }
+}
+
 /// Fully resolved navbar configuration.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Navbar {
     pub title: NavbarTitle,
-    pub logo: Option<String>,
-    /// `SourceInfo` of the YAML scalar that produced `logo`.
-    /// bd-root-relative-paths-design-fc5pvkcv — paired with `logo`
-    /// (mirroring `logo_href_source`, bd-qor9a) so the resolver knows
-    /// which YAML file the logo path was authored in.
-    pub logo_source: SourceInfo,
-    pub logo_alt: Option<String>,
+    /// Normalized logo pair; `None` when unset or `logo: false`.
+    /// Alt text lives per-variant (a sibling `logo-alt:` key fills
+    /// variants that lack their own `alt`).
+    pub logo: Option<NavbarLogo>,
     pub logo_href: Option<String>,
     /// `SourceInfo` of the YAML scalar that produced `logo_href`.
     /// bd-qor9a — paired with `logo_href` so the resolver knows which
@@ -140,8 +181,6 @@ impl Navbar {
         Self {
             title: NavbarTitle::Default,
             logo: None,
-            logo_source: SourceInfo::generated(By::programmatic_config()),
-            logo_alt: None,
             logo_href: None,
             logo_href_source: SourceInfo::generated(By::programmatic_config()),
             background: None,
@@ -178,13 +217,10 @@ impl Navbar {
             };
         }
 
+        let logo_alt = cv.get("logo-alt").and_then(|v| v.as_plain_text());
         if let Some(logo_cv) = cv.get("logo") {
-            nav.logo = logo_cv.as_plain_text();
-            if nav.logo.is_some() {
-                nav.logo_source = logo_cv.source_info.clone();
-            }
+            nav.logo = parse_logo(logo_cv, logo_alt.as_deref());
         }
-        nav.logo_alt = cv.get("logo-alt").and_then(|v| v.as_plain_text());
         if let Some(logo_href_cv) = cv.get("logo-href") {
             nav.logo_href = logo_href_cv.as_plain_text();
             if nav.logo_href.is_some() {
@@ -254,11 +290,38 @@ impl Navbar {
             }),
         }
 
-        // logo round-trips its source_info
+        // logo round-trips each variant path's source_info
         // (bd-root-relative-paths-design-fc5pvkcv) so the generate-time
-        // path resolver can locate the authoring YAML file.
-        push_optional_string(&mut entries, "logo", &self.logo, &self.logo_source);
-        push_optional_string(&mut entries, "logo-alt", &self.logo_alt, &info);
+        // path resolver can locate the authoring YAML file. A single
+        // logo re-emits the historical `logo: <path>` + `logo-alt:`
+        // wire shape; distinct variants emit a `{light, dark}` map.
+        if let Some(logo) = &self.logo {
+            if logo.is_single() {
+                entries.push(ConfigMapEntry {
+                    key: "logo".to_string(),
+                    key_source: info.clone(),
+                    value: ConfigValue::new_string(&logo.light.path, logo.light.source.clone()),
+                });
+                push_optional_string(&mut entries, "logo-alt", &logo.light.alt, &info);
+            } else {
+                let variant_entry = |key: &str, v: &LogoVariant| ConfigMapEntry {
+                    key: key.to_string(),
+                    key_source: info.clone(),
+                    value: logo_variant_to_config_value(v, &info),
+                };
+                entries.push(ConfigMapEntry {
+                    key: "logo".to_string(),
+                    key_source: info.clone(),
+                    value: ConfigValue::new_map(
+                        vec![
+                            variant_entry("light", &logo.light),
+                            variant_entry("dark", &logo.dark),
+                        ],
+                        info.clone(),
+                    ),
+                });
+            }
+        }
         // logo-href round-trips its source_info (bd-qor9a) so the
         // diagnostic surface can locate it back in the YAML.
         push_optional_string(
@@ -353,6 +416,97 @@ fn parse_item_list(cv: Option<&ConfigValue>) -> Vec<NavigationItem> {
     arr.iter()
         .filter_map(NavigationItem::from_config_value)
         .collect()
+}
+
+/// Parse the `logo:` value into a normalized light/dark pair.
+///
+/// Accepted shapes (Q1's `logo-light-dark-specifier`, minus brand.yml
+/// logo-name indirection — bd-v5z8w): `false` (returns `None`), a
+/// plain string, a `{path, alt}` map, or a `{light, dark}` map whose
+/// halves are each a string or `{path, alt}`. A missing half falls
+/// back to the other; `logo_alt` (the sibling `logo-alt:` key) fills
+/// any variant that lacks its own `alt`.
+fn parse_logo(cv: &ConfigValue, logo_alt: Option<&str>) -> Option<NavbarLogo> {
+    if cv.as_bool().is_some() {
+        // `logo: false` disables; `logo: true` is meaningless — no path.
+        return None;
+    }
+
+    let fill_alt = |mut v: LogoVariant| {
+        if v.alt.is_none() {
+            v.alt = logo_alt.map(str::to_string);
+        }
+        v
+    };
+
+    // `{light, dark}` shape — take it whenever either key is present.
+    let light = cv.get("light").and_then(parse_logo_variant);
+    let dark = cv.get("dark").and_then(parse_logo_variant);
+    if light.is_some() || dark.is_some() {
+        let light = light.map(&fill_alt);
+        let dark = dark.map(&fill_alt);
+        // Cross-fallback: a missing half mirrors the other (Q1
+        // resolveLogo semantics, unconditional in Q2 — we have no
+        // brand to gate the dark half on).
+        let (light, dark) = match (light, dark) {
+            (Some(l), Some(d)) => (l, d),
+            (Some(l), None) => (l.clone(), l),
+            (None, Some(d)) => (d.clone(), d),
+            (None, None) => unreachable!("guarded by is_some above"),
+        };
+        return Some(NavbarLogo { light, dark });
+    }
+
+    // String or `{path, alt}` shape: one image for both modes.
+    let single = fill_alt(parse_logo_variant(cv)?);
+    Some(NavbarLogo {
+        light: single.clone(),
+        dark: single,
+    })
+}
+
+/// Parse one variant: a plain string or a `{path, alt}` map. The
+/// variant's `source` is the path scalar's `SourceInfo`.
+fn parse_logo_variant(cv: &ConfigValue) -> Option<LogoVariant> {
+    if let Some(path_cv) = cv.get("path") {
+        let path = path_cv.as_plain_text()?;
+        return Some(LogoVariant {
+            path,
+            alt: cv.get("alt").and_then(|v| v.as_plain_text()),
+            source: path_cv.source_info.clone(),
+        });
+    }
+    let path = cv.as_plain_text()?;
+    Some(LogoVariant {
+        path,
+        alt: None,
+        source: cv.source_info.clone(),
+    })
+}
+
+/// Serialize one variant for the `{light, dark}` wire shape: a plain
+/// string (carrying the path's `SourceInfo`) when there is no alt, a
+/// `{path, alt}` map otherwise.
+fn logo_variant_to_config_value(v: &LogoVariant, info: &SourceInfo) -> ConfigValue {
+    let path_value = ConfigValue::new_string(&v.path, v.source.clone());
+    match &v.alt {
+        None => path_value,
+        Some(alt) => ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "path".to_string(),
+                    key_source: info.clone(),
+                    value: path_value,
+                },
+                ConfigMapEntry {
+                    key: "alt".to_string(),
+                    key_source: info.clone(),
+                    value: ConfigValue::new_string(alt, info.clone()),
+                },
+            ],
+            info.clone(),
+        ),
+    }
 }
 
 fn push_optional_string(
@@ -529,7 +683,10 @@ mod tests {
         ]);
         let meta = map(vec![("website", map(vec![("navbar", navbar_cv)]))]);
         let nav = resolve_navbar(&meta).expect("website.navbar must resolve");
-        assert_eq!(nav.logo.as_deref(), Some("quarto.png"));
+        assert_eq!(
+            nav.logo.as_ref().and_then(|l| l.single_path()),
+            Some("quarto.png")
+        );
         assert_eq!(nav.left.len(), 1);
         assert_eq!(nav.left[0].href.as_deref(), Some("index.qmd"));
     }
@@ -550,7 +707,7 @@ mod tests {
         ]);
         let nav = resolve_navbar(&meta).unwrap();
         assert_eq!(
-            nav.logo.as_deref(),
+            nav.logo.as_ref().and_then(|l| l.single_path()),
             Some("top.png"),
             "top-level logo must win"
         );
@@ -581,11 +738,13 @@ mod tests {
         assert!(resolve_navbar(&meta).is_none());
     }
 
-    /// Case A (bd-root-relative-paths-design-fc5pvkcv): `logo` is
-    /// paired with the YAML scalar's `SourceInfo` — like `logo-href`
-    /// (bd-qor9a) — so the generate-transform can resolve a
-    /// frontmatter-authored logo path against the authoring file.
-    /// Capture and round-trip both directions.
+    /// Case A (bd-root-relative-paths-design-fc5pvkcv): a
+    /// string-form `logo` is paired with the YAML scalar's
+    /// `SourceInfo` — like `logo-href` (bd-qor9a) — so the
+    /// generate-transform can resolve a frontmatter-authored logo
+    /// path against the authoring file. Capture and round-trip both
+    /// directions. (The distinct-variant case is covered by
+    /// `logo_variant_sources_captured_and_round_tripped`.)
     #[test]
     fn logo_source_captured_and_round_tripped() {
         use quarto_source_map::FileId;
@@ -596,16 +755,18 @@ mod tests {
         )]);
         let meta = map(vec![("navbar", navbar_cv)]);
         let nav = resolve_navbar(&meta).expect("navbar must resolve");
-        assert_eq!(nav.logo.as_deref(), Some("images/logo.svg"));
+        let logo = nav.logo.as_ref().unwrap();
+        assert_eq!(logo.single_path(), Some("images/logo.svg"));
         assert_eq!(
-            nav.logo_source, logo_loc,
-            "logo_source must capture the YAML scalar's SourceInfo"
+            logo.light.source, logo_loc,
+            "the variant source must capture the YAML scalar's SourceInfo"
         );
 
         let reparsed = Navbar::from_config_value(&nav.to_config_value());
         assert_eq!(
-            reparsed.logo_source, logo_loc,
-            "logo_source must survive the to/from round-trip"
+            reparsed.logo.as_ref().unwrap().light.source,
+            logo_loc,
+            "the variant source must survive the to/from round-trip"
         );
     }
 
@@ -655,5 +816,217 @@ mod tests {
         let cv = original.to_config_value();
         let reparsed = Navbar::from_config_value(&cv);
         assert_eq!(reparsed, original);
+    }
+
+    // === Logo light/dark variants (bd-navbar-logo-unstyled-gbzd8vcu) ====
+    //
+    // Q1's `logo-light-dark-specifier` accepts `false` | string |
+    // `{path, alt}` | `{light, dark}` (each variant string or
+    // `{path, alt}`), and `resolveLogo` normalizes every shape to a
+    // light/dark pair with cross-fallback. These tests pin the same
+    // normalization for Q2 (minus brand.yml indirection — bd-v5z8w).
+
+    #[test]
+    fn logo_string_parses_as_single_pair() {
+        let navbar_cv = map(vec![("logo", s("quarto.png")), ("logo-alt", s("Q logo"))]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).unwrap();
+        let logo = nav.logo.as_ref().expect("logo must parse");
+        assert_eq!(logo.light.path, "quarto.png");
+        assert_eq!(logo.dark.path, "quarto.png");
+        assert_eq!(logo.light.alt.as_deref(), Some("Q logo"));
+        assert_eq!(logo.dark.alt.as_deref(), Some("Q logo"));
+        assert!(logo.is_single(), "identical halves must read as single");
+        assert_eq!(logo.single_path(), Some("quarto.png"));
+    }
+
+    #[test]
+    fn logo_path_alt_object_parses_as_single_pair() {
+        let navbar_cv = map(vec![(
+            "logo",
+            map(vec![("path", s("img/p.svg")), ("alt", s("Alt text"))]),
+        )]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).unwrap();
+        let logo = nav.logo.as_ref().expect("logo must parse");
+        assert!(logo.is_single());
+        assert_eq!(logo.light.path, "img/p.svg");
+        assert_eq!(logo.light.alt.as_deref(), Some("Alt text"));
+        assert_eq!(logo.dark.alt.as_deref(), Some("Alt text"));
+    }
+
+    #[test]
+    fn logo_object_alt_wins_over_logo_alt_key() {
+        // The object's own `alt` is more specific than the sibling
+        // `logo-alt` key.
+        let navbar_cv = map(vec![
+            ("logo", map(vec![("path", s("p.svg")), ("alt", s("inner"))])),
+            ("logo-alt", s("outer")),
+        ]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).unwrap();
+        let logo = nav.logo.as_ref().unwrap();
+        assert_eq!(logo.light.alt.as_deref(), Some("inner"));
+    }
+
+    #[test]
+    fn logo_light_dark_distinct_variants() {
+        let navbar_cv = map(vec![
+            (
+                "logo",
+                map(vec![
+                    ("light", s("l.svg")),
+                    ("dark", map(vec![("path", s("d.svg")), ("alt", s("Dark"))])),
+                ]),
+            ),
+            ("logo-alt", s("Generic")),
+        ]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).unwrap();
+        let logo = nav.logo.as_ref().expect("logo must parse");
+        assert!(!logo.is_single());
+        assert_eq!(logo.single_path(), None);
+        assert_eq!(logo.light.path, "l.svg");
+        assert_eq!(logo.dark.path, "d.svg");
+        // Per-variant alt wins; `logo-alt` fills variants that lack one.
+        assert_eq!(logo.dark.alt.as_deref(), Some("Dark"));
+        assert_eq!(logo.light.alt.as_deref(), Some("Generic"));
+    }
+
+    #[test]
+    fn logo_light_only_falls_back_to_dark() {
+        let navbar_cv = map(vec![("logo", map(vec![("light", s("l.svg"))]))]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).unwrap();
+        let logo = nav.logo.as_ref().expect("logo must parse");
+        assert!(logo.is_single(), "missing dark must fall back to light");
+        assert_eq!(logo.dark.path, "l.svg");
+    }
+
+    #[test]
+    fn logo_dark_only_falls_back_to_light() {
+        let navbar_cv = map(vec![("logo", map(vec![("dark", s("d.svg"))]))]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).unwrap();
+        let logo = nav.logo.as_ref().expect("logo must parse");
+        assert!(logo.is_single(), "missing light must fall back to dark");
+        assert_eq!(logo.light.path, "d.svg");
+    }
+
+    #[test]
+    fn logo_false_is_none() {
+        let navbar_cv = map(vec![("logo", b(false)), ("title", s("Site"))]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).unwrap();
+        assert!(nav.logo.is_none(), "logo: false must disable the logo");
+    }
+
+    #[test]
+    fn logo_empty_map_is_none() {
+        let navbar_cv = map(vec![("logo", map(vec![])), ("title", s("Site"))]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).unwrap();
+        assert!(nav.logo.is_none(), "an empty logo map carries no path");
+    }
+
+    #[test]
+    fn logo_single_roundtrips_as_string_wire_shape() {
+        // A single logo re-emits the historical wire shape
+        // (`logo: <path>` + `logo-alt:`), so stored metadata stays
+        // stable for single-logo sites.
+        let navbar_cv = map(vec![("logo", s("quarto.png")), ("logo-alt", s("Q"))]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).unwrap();
+
+        let cv = nav.to_config_value();
+        assert_eq!(
+            cv.get("logo").and_then(|v| v.as_plain_text()).as_deref(),
+            Some("quarto.png"),
+            "single logo must serialize as a plain string"
+        );
+        assert_eq!(
+            cv.get("logo-alt")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("Q")
+        );
+
+        let reparsed = Navbar::from_config_value(&cv);
+        assert_eq!(reparsed.logo, nav.logo);
+    }
+
+    #[test]
+    fn logo_variants_roundtrip_as_light_dark_map() {
+        let navbar_cv = map(vec![(
+            "logo",
+            map(vec![
+                ("light", map(vec![("path", s("l.svg")), ("alt", s("L"))])),
+                ("dark", s("d.svg")),
+            ]),
+        )]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).unwrap();
+        let cv = nav.to_config_value();
+
+        let logo_cv = cv.get("logo").expect("logo entry");
+        assert_eq!(
+            logo_cv
+                .get("light")
+                .and_then(|l| l.get("path"))
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("l.svg"),
+            "distinct variants must serialize as a light/dark map"
+        );
+
+        let reparsed = Navbar::from_config_value(&cv);
+        assert_eq!(reparsed.logo, nav.logo);
+    }
+
+    /// Case A (bd-root-relative-paths-design-fc5pvkcv), extended to
+    /// variants: each variant's `path` keeps the `SourceInfo` of the
+    /// YAML scalar that authored it, and both survive the round-trip,
+    /// so the generate-transform can resolve each against its own
+    /// authoring file.
+    #[test]
+    fn logo_variant_sources_captured_and_round_tripped() {
+        use quarto_source_map::FileId;
+        let light_loc = SourceInfo::original(FileId(7), 4, 19);
+        let dark_loc = SourceInfo::original(FileId(9), 6, 21);
+        let navbar_cv = map(vec![(
+            "logo",
+            map(vec![
+                (
+                    "light",
+                    ConfigValue::new_string("images/l.svg", light_loc.clone()),
+                ),
+                (
+                    "dark",
+                    ConfigValue::new_string("images/d.svg", dark_loc.clone()),
+                ),
+            ]),
+        )]);
+        let meta = map(vec![("navbar", navbar_cv)]);
+        let nav = resolve_navbar(&meta).expect("navbar must resolve");
+        let logo = nav.logo.as_ref().unwrap();
+        assert_eq!(
+            logo.light.source, light_loc,
+            "light path must capture its YAML scalar's SourceInfo"
+        );
+        assert_eq!(
+            logo.dark.source, dark_loc,
+            "dark path must capture its YAML scalar's SourceInfo"
+        );
+
+        let reparsed = Navbar::from_config_value(&nav.to_config_value());
+        let relogo = reparsed.logo.as_ref().unwrap();
+        assert_eq!(
+            relogo.light.source, light_loc,
+            "light source must survive the to/from round-trip"
+        );
+        assert_eq!(
+            relogo.dark.source, dark_loc,
+            "dark source must survive the to/from round-trip"
+        );
     }
 }

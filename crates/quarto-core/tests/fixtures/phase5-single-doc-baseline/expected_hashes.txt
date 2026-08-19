@@ -373,5 +373,16 @@
 # useful cross-check rather than a coincidence: it confirms both notes' claims
 # that the tabset change is script-list-only and the mobile-nav template change
 # is byte-neutral for single-doc renders (no navbar, no secondary nav).
+# Re-captured 2026-08-19 (bd-navbar-logo-unstyled-gbzd8vcu, phase 1):
+# styles.css hash updated because the navbar-brand rules were ported
+# from Q1's quarto-nav.scss into `_bootstrap-rules.scss`:
+# `.navbar-container { width: 100% }` (116-118), the `.navbar-brand`
+# ellipsis pair (120-123), the `.navbar-brand-container` flex layout
+# minus the width clamp (125-134; clamp deferred to bd-y5y10oir),
+# `.navbar-brand.navbar-brand-logo` spacing (136-139), and the
+# `.navbar-logo { max-height: 24px; … }` sizing rule (196) that stops
+# a natural-size logo from swallowing the navbar. doc.html hash
+# unchanged: none of the new selectors match a single-doc body (no
+# navbar), and `<head>` is unaffected.
 doc.html a0540297514ad41734a23e91c9511134b1fa469281ec470339571ffd5d404494
-doc_files/styles.css 8de4e546dab01d3a04e713987e89c8796e218edd1cb30207bc6dda73c58ff845
+doc_files/styles.css b14c1db209937ed1779b6460ea494dce4c1e762cf770c71df6ecc159a9dd8c37

@@ -25,7 +25,7 @@ use quarto_source_map::{By, SourceInfo};
 
 use crate::footer::{FooterBorder, FooterRegion, PageFooter};
 use crate::item::NavigationItem;
-use crate::navbar::{Navbar, NavbarTitle};
+use crate::navbar::{LogoVariant, Navbar, NavbarTitle};
 use crate::page_nav::PageNavigation;
 use crate::sidebar::{Crumb, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
 
@@ -81,7 +81,10 @@ pub fn navbar_to_html(
     }
     html.push_str(">\n");
 
-    html.push_str("  <div class=\"container-fluid\">\n");
+    // `navbar-container` is a Q1 hook class (quarto-nav.scss sizes it
+    // and user CSS keys on it); `container-fluid` supplies Bootstrap's
+    // gutter padding.
+    html.push_str("  <div class=\"navbar-container container-fluid\">\n");
 
     // Brand (title + logo).
     if let Some(brand_html) = render_brand(navbar, document_title_fallback, home_url) {
@@ -494,22 +497,47 @@ fn render_page_nav_side(html: &mut String, side: &str, item: Option<&NavigationI
 
 // --- Private helpers ---------------------------------------------------------
 
+/// Render the navbar brand in Q1's `navbrand.ejs` shape
+/// (bd-navbar-logo-unstyled-gbzd8vcu): a `.navbar-brand-container`
+/// div wrapping a `.navbar-brand.navbar-brand-logo` anchor for the
+/// logo and a separate `.navbar-brand` anchor with a `.navbar-title`
+/// span — the hooks Q1-documented user CSS keys on. Both anchors use
+/// `logo_href || home_url` (Q2 keeps the relative fallback instead of
+/// Q1's absolute `/index.html` — bd-root-relative-paths-design).
+///
+/// Deliberate deviation from Q1: a single logo (identical normalized
+/// halves) emits ONE unclassed `<img class="navbar-logo">` where Q1
+/// duplicates it as `light-content` + `dark-content`; distinct
+/// variants emit the classed pair, toggled by `_light-dark.scss`'s
+/// `body.quarto-light`/`body.quarto-dark` rules.
 fn render_brand(navbar: &Navbar, fallback: Option<&ConfigValue>, home_url: &str) -> Option<String> {
-    let href = navbar.logo_href.as_deref().unwrap_or(home_url);
-    let logo_img = navbar.logo.as_deref().map(|logo| {
-        let alt = navbar
-            .logo_alt
-            .as_deref()
-            .map(escape_attr)
-            .unwrap_or_default();
+    let href = escape_attr(navbar.logo_href.as_deref().unwrap_or(home_url));
+
+    let logo_anchor = navbar.logo.as_ref().map(|logo| {
+        let img = |variant: &LogoVariant, class: &str| {
+            format!(
+                "<img src=\"{}\" alt=\"{}\" class=\"{}\">",
+                escape_attr(&variant.path),
+                variant.alt.as_deref().map(escape_attr).unwrap_or_default(),
+                class
+            )
+        };
+        let imgs = if logo.is_single() {
+            img(&logo.light, "navbar-logo")
+        } else {
+            format!(
+                "{}{}",
+                img(&logo.light, "navbar-logo light-content"),
+                img(&logo.dark, "navbar-logo dark-content")
+            )
+        };
         format!(
-            "<img src=\"{}\" alt=\"{}\" class=\"navbar-logo\">",
-            escape_attr(logo),
-            alt
+            "<a href=\"{}\" class=\"navbar-brand navbar-brand-logo\">{}</a>",
+            href, imgs
         )
     });
 
-    let title_html = match &navbar.title {
+    let title_anchor = match &navbar.title {
         NavbarTitle::Hidden => None,
         NavbarTitle::Text(cv) => Some(render_text(cv)),
         // The fallback (`website.title` → document `title`) is a
@@ -517,27 +545,29 @@ fn render_brand(navbar: &Navbar, fallback: Option<&ConfigValue>, home_url: &str)
         // once ConfigMarkdownTransform has run — render as inlines
         // (raw HTML honored) instead of being flattened and escaped.
         NavbarTitle::Default => fallback.map(render_text),
-    };
+    }
+    .map(|title_html| {
+        format!(
+            "<a class=\"navbar-brand\" href=\"{}\"><span class=\"navbar-title\">{}</span></a>",
+            href, title_html
+        )
+    });
 
     // Nothing to show? Skip brand entirely.
-    if logo_img.is_none() && title_html.is_none() {
+    if logo_anchor.is_none() && title_anchor.is_none() {
         return None;
     }
 
     let mut inner = String::new();
-    if let Some(l) = logo_img {
+    if let Some(l) = logo_anchor {
         inner.push_str(&l);
     }
-    if let Some(t) = title_html {
-        if !inner.is_empty() {
-            inner.push(' ');
-        }
+    if let Some(t) = title_anchor {
         inner.push_str(&t);
     }
 
     Some(format!(
-        "<a class=\"navbar-brand\" href=\"{}\">{}</a>",
-        escape_attr(href),
+        "<div class=\"navbar-brand-container mx-auto\">{}</div>",
         inner
     ))
 }
@@ -1152,7 +1182,7 @@ mod tests {
     use super::*;
     use crate::footer::PageFooter;
     use crate::item::NavigationItem;
-    use crate::navbar::{CollapseBelow, Navbar, TogglePosition};
+    use crate::navbar::{CollapseBelow, LogoVariant, Navbar, NavbarLogo, TogglePosition};
     use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_pandoc_types::inline::{Inline, Str, Strong};
     use quarto_source_map::SourceInfo;
@@ -1233,7 +1263,9 @@ mod tests {
         assert!(html.contains("<nav class=\"navbar navbar-expand-lg bg-primary\""));
         assert!(html.contains("data-bs-theme=\"dark\""));
         // Brand href falls back to the supplied home_url when no logo_href.
-        assert!(html.contains("<a class=\"navbar-brand\" href=\"./\">My Site</a>"));
+        assert!(html.contains(
+            "<a class=\"navbar-brand\" href=\"./\"><span class=\"navbar-title\">My Site</span></a>"
+        ));
         assert!(html.contains("href=\"index.qmd\""));
         assert!(html.contains("Home"));
     }
@@ -1298,6 +1330,176 @@ mod tests {
         assert!(
             !html.contains("href=\"../\""),
             "home_url must not be used when logo_href is set; html: {}",
+            html
+        );
+    }
+
+    // === Brand structure (bd-navbar-logo-unstyled-gbzd8vcu) =============
+    //
+    // Q1's `navbrand.ejs` shape: a `.navbar-brand-container` div
+    // wrapping a `.navbar-brand.navbar-brand-logo` anchor (the logo
+    // img(s)) and a separate `.navbar-brand` title anchor with a
+    // `.navbar-title` span. User CSS documented against Q1 keys on
+    // these hooks. Q2 deviation (deliberate): a single logo emits ONE
+    // unclassed img where Q1 duplicates it as light-content +
+    // dark-content; behavior is identical because the pair is
+    // normalized (see NavbarLogo::is_single).
+
+    fn logo_variant(path: &str, alt: Option<&str>) -> LogoVariant {
+        LogoVariant {
+            path: path.to_string(),
+            alt: alt.map(str::to_string),
+            source: SourceInfo::for_test(),
+        }
+    }
+
+    fn single_logo(path: &str, alt: Option<&str>) -> NavbarLogo {
+        let v = logo_variant(path, alt);
+        NavbarLogo {
+            light: v.clone(),
+            dark: v,
+        }
+    }
+
+    #[test]
+    fn brand_emits_container_with_logo_and_title_anchors() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("My Site")),
+            logo: Some(single_logo("logo.svg", Some("Site logo"))),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert!(
+            html.contains("<div class=\"navbar-brand-container mx-auto\">"),
+            "brand must be wrapped in the Q1 container; html: {}",
+            html
+        );
+        assert!(
+            html.contains(
+                "<a href=\"./\" class=\"navbar-brand navbar-brand-logo\">\
+                 <img src=\"logo.svg\" alt=\"Site logo\" class=\"navbar-logo\"></a>"
+            ),
+            "logo must live in its own navbar-brand-logo anchor; html: {}",
+            html
+        );
+        assert!(
+            html.contains(
+                "<a class=\"navbar-brand\" href=\"./\">\
+                 <span class=\"navbar-title\">My Site</span></a>"
+            ),
+            "title must live in a separate anchor with a navbar-title span; html: {}",
+            html
+        );
+    }
+
+    #[test]
+    fn brand_distinct_variants_emit_light_and_dark_imgs() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            logo: Some(NavbarLogo {
+                light: logo_variant("l.svg", Some("Light")),
+                dark: logo_variant("d.svg", Some("Dark")),
+            }),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert!(
+            html.contains("<img src=\"l.svg\" alt=\"Light\" class=\"navbar-logo light-content\">"),
+            "light variant img with light-content class; html: {}",
+            html
+        );
+        assert!(
+            html.contains("<img src=\"d.svg\" alt=\"Dark\" class=\"navbar-logo dark-content\">"),
+            "dark variant img with dark-content class; html: {}",
+            html
+        );
+    }
+
+    #[test]
+    fn brand_single_logo_img_has_no_variant_class() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            logo: Some(single_logo("logo.svg", None)),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert!(
+            html.contains("<img src=\"logo.svg\" alt=\"\" class=\"navbar-logo\">"),
+            "single logo emits one unclassed img; html: {}",
+            html
+        );
+        assert!(
+            !html.contains("light-content") && !html.contains("dark-content"),
+            "no variant classes for a single logo; html: {}",
+            html
+        );
+    }
+
+    #[test]
+    fn brand_logo_only_omits_title_anchor() {
+        let navbar = Navbar {
+            title: NavbarTitle::Hidden,
+            logo: Some(single_logo("logo.svg", None)),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert!(html.contains("<div class=\"navbar-brand-container mx-auto\">"));
+        assert!(html.contains("navbar-brand navbar-brand-logo"));
+        assert!(
+            !html.contains("navbar-title"),
+            "no title anchor when the title is hidden; html: {}",
+            html
+        );
+    }
+
+    #[test]
+    fn brand_title_only_omits_logo_anchor() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert!(html.contains("<div class=\"navbar-brand-container mx-auto\">"));
+        assert!(html.contains("<span class=\"navbar-title\">Site</span>"));
+        assert!(
+            !html.contains("navbar-brand-logo"),
+            "no logo anchor without a logo; html: {}",
+            html
+        );
+    }
+
+    #[test]
+    fn brand_both_anchors_share_the_logo_href() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            logo: Some(single_logo("logo.svg", None)),
+            logo_href: Some("about.html".to_string()),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "../");
+        assert!(
+            html.contains("<a href=\"about.html\" class=\"navbar-brand navbar-brand-logo\">"),
+            "logo anchor uses logo_href; html: {}",
+            html
+        );
+        assert!(
+            html.contains("<a class=\"navbar-brand\" href=\"about.html\">"),
+            "title anchor uses the same logo_href; html: {}",
+            html
+        );
+        assert!(!html.contains("href=\"../\""), "home_url must not leak in");
+    }
+
+    #[test]
+    fn navbar_wrapper_carries_navbar_container_class() {
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert!(
+            html.contains("<div class=\"navbar-container container-fluid\">"),
+            "the navbar wrapper div must carry Q1's navbar-container class; html: {}",
             html
         );
     }
@@ -1472,11 +1674,13 @@ mod tests {
     fn navbar_wraps_body_in_container_fluid() {
         // Sanity-check the navbar's existing container wrapper; same
         // rationale as the footer, and guards against regressions.
+        // The wrapper also carries Q1's `navbar-container` hook class
+        // (bd-navbar-logo-unstyled-gbzd8vcu).
         let navbar = Navbar::with_defaults();
         let html = navbar_to_html(&navbar, Some(&s("Doc")), "./");
         assert!(
-            html.contains("<div class=\"container-fluid\">"),
-            "navbar should wrap body in .container-fluid: {}",
+            html.contains("<div class=\"navbar-container container-fluid\">"),
+            "navbar should wrap body in .navbar-container.container-fluid: {}",
             html
         );
     }

@@ -118,7 +118,12 @@ impl AstTransform for NavbarRenderTransform {
         // transform — relativized per page so it resolves at every
         // depth. Not an index lookup: the logo is a file, not a doc.
         if let Some(logo) = navbar.logo.as_mut() {
-            *logo = resolve_root_relative_resource_href(logo, ctx.resource_resolver.as_ref());
+            for variant in [&mut logo.light, &mut logo.dark] {
+                variant.path = resolve_root_relative_resource_href(
+                    &variant.path,
+                    ctx.resource_resolver.as_ref(),
+                );
+            }
         }
         // Navbar title markdown (Case C): Link/Image targets inside
         // the title's parsed markdown resolve like footer text
@@ -991,10 +996,20 @@ mod tests {
 
     async fn render_navbar_logo(logo: &str) -> String {
         use crate::resource_resolver::ResourceResolverContext;
+        use quarto_navigation::{LogoVariant, NavbarLogo};
+        use quarto_source_map::{By, SourceInfo};
 
+        let variant = LogoVariant {
+            path: logo.to_string(),
+            alt: None,
+            source: SourceInfo::generated(By::programmatic_config()),
+        };
         let navbar = Navbar {
             title: NavbarTitle::Text(s("Site")),
-            logo: Some(logo.to_string()),
+            logo: Some(NavbarLogo {
+                light: variant.clone(),
+                dark: variant,
+            }),
             ..Navbar::with_defaults()
         };
         let mut meta = ConfigValue::default();
