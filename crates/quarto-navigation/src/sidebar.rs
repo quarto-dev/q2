@@ -937,6 +937,70 @@ fn dedupe_items_by_href(list: &mut Vec<FlatEntry>) {
     });
 }
 
+/// A sidebar entry that carries both `section:` and `text:` keys.
+/// The two are alternate spellings for a section's display label;
+/// `section:` wins and the `text:` value is ignored (Q1 parity —
+/// bd-sidebar-section-text-ignored-sdp5g7ns). Reported by
+/// [`section_text_conflicts_per_sidebar`] so quarto-core can warn
+/// (Q-13-10) without this crate taking a diagnostics dependency.
+#[derive(Debug, Clone)]
+pub struct SectionTextConflict {
+    /// Plain text of the winning `section:` value, when extractable.
+    pub section_label: Option<String>,
+    /// Plain text of the ignored `text:` value, when extractable.
+    pub text_label: Option<String>,
+    /// Source location of the ignored `text:` value.
+    pub text_source: SourceInfo,
+}
+
+/// Scan the top-level `website.sidebar:` config value for entries
+/// carrying both `section:` and `text:`. Returns one list per
+/// sidebar, indexed to match [`Sidebar::parse_list_from_config`]
+/// (array form → one element per map item; object form → a single
+/// element; anything else → empty), so callers can attribute each
+/// conflict to the sidebar it appears in.
+pub fn section_text_conflicts_per_sidebar(cv: &ConfigValue) -> Vec<Vec<SectionTextConflict>> {
+    if let Some(arr) = cv.as_array() {
+        return arr
+            .iter()
+            .filter(|v| v.as_map_entries().is_some())
+            .map(section_text_conflicts_in_sidebar)
+            .collect();
+    }
+    if cv.as_map_entries().is_some() {
+        return vec![section_text_conflicts_in_sidebar(cv)];
+    }
+    Vec::new()
+}
+
+fn section_text_conflicts_in_sidebar(cv: &ConfigValue) -> Vec<SectionTextConflict> {
+    let mut out = Vec::new();
+    collect_section_text_conflicts(cv.get("contents"), &mut out);
+    out
+}
+
+fn collect_section_text_conflicts(
+    contents: Option<&ConfigValue>,
+    out: &mut Vec<SectionTextConflict>,
+) {
+    let Some(items) = contents.and_then(|cv| cv.as_array()) else {
+        return;
+    };
+    for item in items {
+        if item.as_map_entries().is_none() {
+            continue;
+        }
+        if let (Some(section_cv), Some(text_cv)) = (item.get("section"), item.get("text")) {
+            out.push(SectionTextConflict {
+                section_label: section_cv.as_plain_text(),
+                text_label: text_cv.as_plain_text(),
+                text_source: text_cv.source_info.clone(),
+            });
+        }
+        collect_section_text_conflicts(item.get("contents"), out);
+    }
+}
+
 /// External-URL classifier. Local copy here so `quarto-navigation`
 /// stays free of a `quarto-core` dep; semantics match
 /// `quarto-core::transforms::navigation_href::is_external`.
@@ -1411,6 +1475,77 @@ mod tests {
             }
             other => panic!("expected Section, got {:?}", other),
         }
+    }
+
+    /// Q-13-10 scanner — an entry with both `section:` and `text:` is
+    /// reported with both labels and the ignored `text:` value's
+    /// location; clean entries (either spelling alone) are not.
+    #[test]
+    fn section_text_conflicts_flags_both_keys_entry() {
+        let entry = map(vec![
+            ("section", s("From Section")),
+            ("text", s("From Text")),
+            ("contents", arr(vec![s("inner.qmd")])),
+        ]);
+        let clean_text = map(vec![
+            ("text", s("Clean")),
+            ("file", s("clean.qmd")),
+            ("contents", arr(vec![s("leaf.qmd")])),
+        ]);
+        let clean_section = map(vec![
+            ("section", s("Also Clean")),
+            ("contents", arr(vec![s("other.qmd")])),
+        ]);
+        let cv = map(vec![(
+            "contents",
+            arr(vec![entry, clean_text, clean_section]),
+        )]);
+        let per_sidebar = section_text_conflicts_per_sidebar(&cv);
+        assert_eq!(per_sidebar.len(), 1, "object form is a single sidebar");
+        assert_eq!(
+            per_sidebar[0].len(),
+            1,
+            "exactly the both-keys entry is flagged"
+        );
+        let c = &per_sidebar[0][0];
+        assert_eq!(c.section_label.as_deref(), Some("From Section"));
+        assert_eq!(c.text_label.as_deref(), Some("From Text"));
+    }
+
+    /// The scanner recurses into nested section contents.
+    #[test]
+    fn section_text_conflicts_recurses_into_nested_contents() {
+        let inner_conflict = map(vec![
+            ("section", s("Inner")),
+            ("text", s("Ignored")),
+            ("contents", arr(vec![s("x.qmd")])),
+        ]);
+        let outer = map(vec![
+            ("section", s("Outer")),
+            ("contents", arr(vec![inner_conflict])),
+        ]);
+        let cv = map(vec![("contents", arr(vec![outer]))]);
+        let per_sidebar = section_text_conflicts_per_sidebar(&cv);
+        assert_eq!(per_sidebar[0].len(), 1);
+        assert_eq!(per_sidebar[0][0].section_label.as_deref(), Some("Inner"));
+    }
+
+    /// Array form groups conflicts per sidebar, indexed to match
+    /// `parse_list_from_config`.
+    #[test]
+    fn section_text_conflicts_groups_per_sidebar() {
+        let conflict = map(vec![
+            ("section", s("A")),
+            ("text", s("B")),
+            ("contents", arr(vec![s("x.qmd")])),
+        ]);
+        let sb1 = map(vec![("id", s("one")), ("contents", arr(vec![conflict]))]);
+        let sb2 = map(vec![("id", s("two")), ("contents", arr(vec![s("y.qmd")]))]);
+        let cv = arr(vec![sb1, sb2]);
+        let per_sidebar = section_text_conflicts_per_sidebar(&cv);
+        assert_eq!(per_sidebar.len(), 2);
+        assert_eq!(per_sidebar[0].len(), 1);
+        assert!(per_sidebar[1].is_empty());
     }
 
     /// `collapse-level: 4` overrides the default.

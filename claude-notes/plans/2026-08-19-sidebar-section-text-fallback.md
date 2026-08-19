@@ -116,12 +116,12 @@ exist to compile, so they can't precede Phase 1 usefully).
 
 ### Phase 2 — Q-13-10 warning
 
-- [ ] Scanner tests in quarto-navigation (`section_text_conflicts`, per-sidebar grouping, nested contents recursion) — written first, observed failing.
-- [ ] Scanner implementation in `crates/quarto-navigation/src/sidebar.rs`.
-- [ ] Emission test in `sidebar_generate.rs` tests: both-keys entry produces a Q-13-10 diagnostic for the picked sidebar (model: Q-13-5/Q-13-6 tests) — written first, observed failing.
-- [ ] Catalog entry Q-13-10 in `crates/quarto-error-catalog/error_catalog.json` + emission in `sidebar_generate.rs` with `.with_location()` on the ignored `text:` value.
-- [ ] Docs page `docs/errors/navigation/Q-13-10.qmd` + sidebar entry in `docs/_quarto.yml` (lint-enforced, same commit).
-- [ ] `cargo xtask lint` green; full workspace tests green; commit.
+- [x] Scanner tests in quarto-navigation (`section_text_conflicts_per_sidebar`: both-keys flagging, per-sidebar grouping, nested contents recursion) — written first, observed failing to compile (API absent).
+- [x] Scanner implementation in `crates/quarto-navigation/src/sidebar.rs` (`SectionTextConflict` + `section_text_conflicts_per_sidebar`, exported from lib.rs).
+- [x] Emission tests in `sidebar_generate.rs`: both-keys entry produces Q-13-10 naming both labels; conflict in an *unselected* sidebar does not warn — positive test observed failing first.
+- [x] Catalog entry Q-13-10 in `crates/quarto-error-catalog/error_catalog.json` + emission in `sidebar_generate.rs` with `.with_location()` on the ignored `text:` value.
+- [x] Docs page `docs/errors/navigation/Q-13-10.qmd` + sidebar entry in `docs/_quarto.yml` (lint-enforced, same commit).
+- [x] `cargo xtask lint` green; full workspace tests green (12,868 passed); commit.
 
 ### Phase 3 — End-to-end verification
 
