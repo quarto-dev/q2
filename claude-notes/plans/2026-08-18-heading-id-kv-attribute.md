@@ -3,7 +3,11 @@
 **Date:** 2026-08-18
 **Braid:** bd-heading-id-attr-duplicated-xbpcmejr (p2, bug, label `markdown`)
 **Checkout:** main checkout, branch `main` @ `0c3542d0`
-**Status:** Approved 2026-08-19 — design questions answered by the user; implementation in progress.
+**Status:** Merged and closed 2026-08-19 — PR #556 (`f387bd68`); strand
+bd-heading-id-attr-duplicated-xbpcmejr closed. Open follow-ups:
+bd-fffjzi5s (class-charset writer fallback, p3), bd-0vfgz2cl (per-word
+class source spans, p4), bd-9itqqqe6 (package-lock.json missing
+`@esbuild/*` platform entries, discovered during pre-flight).
 
 ## Design decisions (user-aligned, 2026-08-19)
 
