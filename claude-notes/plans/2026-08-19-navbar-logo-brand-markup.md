@@ -116,14 +116,14 @@ Theme CSS + end-to-end (drive the real render path per repo policy):
 
 ### Phase 5 — End-to-end verification
 
-- [ ] Extend the investigation repro with a dark variant (`logo: {light: logo.svg, dark: logo-dark.svg}` + a dark theme) and re-render via `cargo run --bin q2 -- render …`.
-- [ ] Inspect: theme CSS has the rules; HTML has the new structure; both variant imgs present with correct classes; logo files copied to `_site`.
-- [ ] Browser eyeball (24px logo beside title; toggle flips variants). Record invocation + output snippet per repo policy.
-- [ ] Full workspace suite + `cargo xtask verify` (WASM leg — quarto-navigation feeds the preview path).
+- [x] Repro extended with a dark variant + `theme: {light: cosmo, dark: darkly}`; rendered via `cargo run --bin q2 -- render …`.
+- [x] Inspected: both compiled theme variants ship the rules; HTML has the full Q1 structure with the classed variant pair; both logo files copied. Evidence + snippets in the investigation NOTES.md.
+- [x] Browser eyeball (chrome-devtools MCP over a served `_site`): light logo at computed 24px beside the title, dark img `display:none`; toggle flips `body` to `quarto-dark` and swaps the pair. Screenshots inspected in both modes.
+- [x] Full `cargo xtask verify` (WASM + hub-client leg) passes. Two environment-only hiccups fixed along the way, unrelated to this change: stale `q2-preview-spa/dist` (regenerated, pre-flight) and a missing `@esbuild/darwin-arm64` optional dep in node_modules (installed; the hub-mcp bundle suite then passed).
 
 ### Phase 6 — Docs
 
-- [ ] Update the docs/ website's navbar documentation: logo shapes (string / `{path,alt}` / `{light,dark}` / `false`), default 24px sizing, and the CSS override hooks (`.navbar-brand-logo .navbar-logo { … }`) now matching Q1. Render docs/ with q2 to verify.
+- [x] New page `docs/guides/projects/navbar-logo.qmd` (logo shapes incl. `{light, dark}` and `false`, default 24px sizing, CSS override hooks), wired into the docs sidebar next to breadcrumbs.qmd. `q2 render docs/` succeeds (253/253; no warnings from the new page) and the page appears in the rendered sidebar.
 
 ## Strands
 
