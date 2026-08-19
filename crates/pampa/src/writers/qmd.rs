@@ -412,6 +412,17 @@ fn escape_quotes(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// The `{#id}` shorthand token is `[#][._A-Za-z0-9-]+` in the grammar; an
+/// identifier with any other character (e.g. a slash) can only be written in
+/// the `id="..."` key-value form, which the reader promotes back into the
+/// identifier slot.
+fn id_expressible_as_shorthand(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+}
+
 fn write_attr<W: std::io::Write + ?Sized>(
     attr: &crate::pandoc::Attr,
     writer: &mut W,
@@ -420,7 +431,7 @@ fn write_attr<W: std::io::Write + ?Sized>(
     let (id, classes, keyvals) = attr;
     let mut wrote_something = false;
     write!(writer, "{{")?;
-    if !id.is_empty() {
+    if id_expressible_as_shorthand(id) {
         write!(writer, "#{}", id)?;
         wrote_something = true;
     }
@@ -429,6 +440,15 @@ fn write_attr<W: std::io::Write + ?Sized>(
             write!(writer, " ")?;
         }
         write!(writer, ".{}", class)?;
+        wrote_something = true;
+    }
+    // The grammar orders attr components id → classes → key-values, so an
+    // id that needs the kv fallback goes here, after the classes.
+    if !id.is_empty() && !id_expressible_as_shorthand(id) {
+        if wrote_something {
+            write!(writer, " ")?;
+        }
+        write!(writer, "id=\"{}\"", escape_quotes(id))?;
         wrote_something = true;
     }
     for (key, value) in keyvals {
@@ -462,7 +482,7 @@ fn write_code_attr<W: std::io::Write + ?Sized>(
     let (id, classes, keyvals) = attr;
     let mut wrote_something = false;
     write!(writer, "{{")?;
-    if !id.is_empty() {
+    if id_expressible_as_shorthand(id) {
         write!(writer, "#{}", id)?;
         wrote_something = true;
     }
@@ -475,6 +495,15 @@ fn write_code_attr<W: std::io::Write + ?Sized>(
         } else {
             write!(writer, ".{}", class)?;
         }
+        wrote_something = true;
+    }
+    // The grammar orders attr components id → classes → key-values, so an
+    // id that needs the kv fallback goes here, after the classes.
+    if !id.is_empty() && !id_expressible_as_shorthand(id) {
+        if wrote_something {
+            write!(writer, " ")?;
+        }
+        write!(writer, "id=\"{}\"", escape_quotes(id))?;
         wrote_something = true;
     }
     for (key, value) in keyvals {
