@@ -117,7 +117,7 @@
 }
 
 .current-file-indicator .file-path {
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   color: var(--editor-text-dim);
 }
@@ -249,9 +249,12 @@
   z-index: 10;
 }
 
-/* Editor drag-over state for image drop */
+/* Editor drag-over state for image drop — same drop-target pattern as
+   ProjectsHome (dashed teal outline + faint teal fill). */
 .editor-pane.drag-over {
-  box-shadow: inset 0 0 0 3px var(--editor-drag-accent);
+  outline: 2px dashed var(--posit-teal);
+  outline-offset: -2px;
+  background: rgba(65, 149, 153, 0.05);
 }
 
 .editor-pane.drag-over::after {
@@ -260,8 +263,8 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(74, 222, 128, 0.95);
-  color: var(--editor-bg);
+  background: var(--posit-teal);
+  color: #fff;
   padding: 16px 24px;
   border-radius: 8px;
   font-size: 16px;
@@ -271,23 +274,23 @@
 }
 
 .preview-pane {
-  background: #fff;
+  background: var(--bg-modal);
   position: relative;
 }
 
 /* bd-yai4w8ly: the single merged preview execution status line. Combines the
-   former .executor-online-bar / .run-control / .capture-results-bar. One blue
-   strip (a theme overhaul will revisit the palette); the green dot still
-   signals executor liveness. */
+   former .executor-online-bar / .run-control / .capture-results-bar. A subtle
+   tinted strip on the shared token ramp; the green dot still signals
+   executor liveness. */
 .preview-status-bar {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 3px 10px;
   font-size: 12px;
-  background: #eef6ff;
-  border-bottom: 1px solid #cfe2f5;
-  color: #234;
+  background: var(--input-bg-alpha);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
 }
 
 .preview-status-label {
@@ -296,11 +299,12 @@
 }
 
 .preview-status-error {
-  color: #a12d2d;
+  color: var(--editor-error);
 }
 
 /* Right-aligned action group; Run is last so it stays pinned to the far
-   right across state transitions. */
+   right across state transitions. Buttons are .ph-btn.small (ui.css) with a
+   hairline border and solid surface added here. */
 .preview-status-actions {
   display: flex;
   align-items: center;
@@ -310,17 +314,12 @@
 }
 
 .preview-status-bar button {
-  font-size: 12px;
-  padding: 2px 8px;
-  border: 1px solid #b9c7d6;
-  border-radius: 4px;
-  background: #fff;
-  cursor: pointer;
-  white-space: nowrap;
+  border-color: var(--border-color);
+  background: var(--bg-modal);
 }
 
 .preview-status-bar button:hover:not(:disabled) {
-  background: #f0f4f8;
+  background: var(--input-bg-alpha);
 }
 
 .preview-status-run-btn:disabled {
@@ -328,9 +327,9 @@
   cursor: default;
 }
 
-.preview-status-clear-confirm-btn {
-  border-color: #d08a8a !important;
-  color: #a12d2d;
+.preview-status-bar .preview-status-clear-confirm-btn {
+  border-color: var(--editor-error);
+  color: var(--editor-error);
 }
 
 /* Green liveness dot, shown only while an executor is online. */
@@ -338,7 +337,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #2ea043;
+  background: var(--editor-success);
   flex: 0 0 auto;
 }
 
@@ -429,8 +428,8 @@
   right: 0;
   background: repeating-linear-gradient(
     -45deg,
-    rgba(74, 222, 128, 0.15),
-    rgba(74, 222, 128, 0.15) 4px,
+    var(--success-bg-subtle),
+    var(--success-bg-subtle) 4px,
     transparent 4px,
     transparent 8px
   );

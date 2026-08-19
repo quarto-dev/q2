@@ -131,14 +131,14 @@ export function PreviewStatusBar({
           <>
             <button
               type="button"
-              className="preview-status-clear-confirm-btn"
+              className="ph-btn small preview-status-clear-confirm-btn"
               onClick={handleConfirmClear}
             >
               Clear
             </button>
             <button
               type="button"
-              className="preview-status-cancel-btn"
+              className="ph-btn small preview-status-cancel-btn"
               onClick={() => setConfirming(false)}
             >
               Cancel
@@ -149,7 +149,7 @@ export function PreviewStatusBar({
             {canClear && (
               <button
                 type="button"
-                className="preview-status-clear-btn"
+                className="ph-btn small preview-status-clear-btn"
                 onClick={() => setConfirming(true)}
               >
                 Clear results…
@@ -158,7 +158,7 @@ export function PreviewStatusBar({
             {canRun && (
               <button
                 type="button"
-                className="preview-status-run-btn"
+                className="ph-btn small preview-status-run-btn"
                 onClick={handleRun}
                 disabled={busy}
                 aria-label={hasCapture ? 'Re-run code cells' : 'Run code cells'}

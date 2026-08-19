@@ -23,8 +23,16 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-19
+
+- [`b62746e7`](https://github.com/quarto-dev/q2/commits/b62746e7): Sidebar cleanup — the Project tab no longer duplicates the header's switch-project button, Screenshot Preview moves from Settings to the Project tab next to Export ZIP, the Settings tab drops its Editor/Preview section headings so the toggles read as one flat list, and the Files header's New, Upload, and Print actions become equal-width icon buttons that always share one row (Print last).
+- [`e71b1ac5`](https://github.com/quarto-dev/q2/commits/e71b1ac5): WCAG 2.2 accessibility pass — dialogs are announced as dialogs with titles, Tab stays inside an open dialog and focus returns to the button that opened it, a "Skip to main content" link leads the tab order, view-toggle and dialog close buttons meet the 24px minimum target size, and keyboard focus is always visible.
+- [`63f2a178`](https://github.com/quarto-dev/q2/commits/63f2a178): Tint the editor file sidebar with the same posit-blue alpha family as the other editor bars, so it no longer reads neutral gray next to them.
+
 ### 2026-08-18
 
+- [`a8944df3`](https://github.com/quarto-dev/q2/commits/a8944df3): Fix the `q2-sandboxed-preview` pane in dark mode — its document paints no background of its own, so the newly theme-following preview pane turned its canvas dark and hid the text; the iframe now keeps a light canvas in both themes.
+- [`af0161a5`](https://github.com/quarto-dev/q2/commits/af0161a5): Align the editor UI with the projects-home visual language — white surfaces with hairline borders in light mode, a desaturated slate ramp in dark mode, teal primary actions, blue secondary links, and soft error treatments replace the filled blue-gray chrome and off-brand indigo/purple accents.
 - [`510b3ae7`](https://github.com/quarto-dev/q2/commits/510b3ae7): q2-preview render components now receive headings wrapped in section Divs, matching the rest of the pipeline; the bundled `kanban_rc.jsx` sample and the component README were updated to read that shape.
 
 ### 2026-08-14

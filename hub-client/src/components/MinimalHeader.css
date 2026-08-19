@@ -54,12 +54,11 @@
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s, border-color 0.15s;
+  transition: filter 0.15s;
 }
 
 .minimal-header .preview-btn:hover {
-  background: var(--header-preview-hover);
-  border-color: var(--header-preview-hover);
+  filter: brightness(1.08);
 }
 
 /* Vertical divider separating the actions from the document identity. */
@@ -95,7 +94,7 @@
 }
 
 .header-doc .file-path {
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   color: var(--editor-text-dim);
   white-space: nowrap;
@@ -132,11 +131,11 @@
 }
 
 .header-right .connection-indicator.online {
-  border-color: #4caf50;
+  border-color: var(--editor-success);
 }
 
 .header-right .connection-indicator.offline {
-  border-color: #ff9800;
+  border-color: var(--editor-warning);
 }
 
 .header-right .connection-dot {
@@ -148,13 +147,13 @@
 }
 
 .header-right .connection-indicator.online .connection-dot {
-  background-color: #4caf50;
-  box-shadow: 0 0 4px rgba(76, 175, 80, 0.6);
+  background-color: var(--editor-success);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--editor-success) 60%, transparent);
 }
 
 .header-right .connection-indicator.offline .connection-dot {
-  background-color: #ff9800;
-  box-shadow: 0 0 4px rgba(255, 152, 0, 0.6);
+  background-color: var(--editor-warning);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--editor-warning) 60%, transparent);
 }
 
 .header-right .connection-text {

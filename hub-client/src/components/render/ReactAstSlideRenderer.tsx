@@ -372,7 +372,10 @@ export function renderSlide(
             fontSize: '72px',
             margin: '0 0 40px 0',
             color: '#1a1a1a',
-            fontWeight: 'bold'
+            fontWeight: 'bold',
+            // Was inherited from the global h1 rule (index.css) before the
+            // Vite scaffold was removed.
+            lineHeight: 1.1
           }}>
             {slide.title}
           </h1>

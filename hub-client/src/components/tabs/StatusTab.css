@@ -16,7 +16,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #888;
+  color: var(--editor-text-muted);
 }
 
 .status-indicator {
@@ -29,18 +29,18 @@
 }
 
 .status-indicator.loading {
-  background: #2a2a1e;
-  color: #fbbf24;
+  background: var(--warning-bg);
+  color: var(--editor-warning);
 }
 
 .status-indicator.ready {
-  background: #0a4f0a;
-  color: #4ade80;
+  background: var(--success-bg-subtle);
+  color: var(--editor-success);
 }
 
 .status-indicator.error {
-  background: #4f0a0a;
-  color: #f87171;
+  background: var(--error-bg-subtle);
+  color: var(--editor-error);
 }
 
 .status-dot {
@@ -52,16 +52,16 @@
 
 .status-error {
   font-size: 12px;
-  color: #f87171;
+  color: var(--editor-error);
   padding: 8px;
-  background: #2d1b1b;
+  background: var(--error-bg-subtle);
   border-radius: 4px;
   word-break: break-word;
 }
 
 .no-users {
   font-size: 13px;
-  color: #666;
+  color: var(--editor-text-muted);
   padding: 8px 0;
 }
 
@@ -73,9 +73,9 @@
 
 .user-count-summary {
   font-size: 13px;
-  color: #60a5fa;
+  color: var(--editor-accent-text);
   padding: 8px 12px;
-  background: #1f3460;
+  background: var(--editor-accent-bg);
   border-radius: 6px;
 }
 
@@ -93,7 +93,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-subtle);
   border-radius: 4px;
 }
 
@@ -106,5 +106,5 @@
 
 .user-name {
   font-size: 13px;
-  color: #ddd;
+  color: var(--editor-text-dim);
 }

@@ -1014,7 +1014,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         </div>
       )}
 
-      <main className={`editor-main view-mode-${viewMode}`}>
+      <main id="main-content" tabIndex={-1} className={`editor-main view-mode-${viewMode}`}>
         {!isFullscreenPreview && (
           <SidebarTabs disabled={replayState.isActive}>
             {(activeTab) => {
@@ -1050,7 +1050,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                   return (
                     <ProjectTab
                       project={project}
-                      onChooseNewProject={onDisconnect}
                       onExportZip={exportProjectAsZip}
                     />
                   );

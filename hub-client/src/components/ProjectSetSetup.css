@@ -29,6 +29,9 @@
   color: var(--text-primary);
   font-size: 28px;
   font-weight: 700;
+  /* Was inherited from the global h1 rule (index.css) before the Vite
+     scaffold was removed; keep the setup screens pixel-stable. */
+  line-height: 1.1;
   margin: 0 0 8px;
 }
 
@@ -77,6 +80,9 @@
   border-radius: 6px;
   padding: 8px 16px;
   font-size: 13px;
+  /* Was inherited from the global button scaffold (index.css) before it was
+     slimmed; keep the setup screens pixel-stable. */
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s;
@@ -165,6 +171,9 @@
   border-radius: 8px;
   padding: 10px 16px;
   font-size: 14px;
+  /* Was inherited from the global button scaffold (index.css) before it was
+     slimmed; keep the setup screens pixel-stable. */
+  font-weight: 500;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s;
 }

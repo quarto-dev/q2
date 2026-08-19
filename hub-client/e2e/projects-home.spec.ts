@@ -114,7 +114,7 @@ test.describe('Collections projects home', () => {
 
     // Right-click on a card opens the same contextual menu as its ⋯ button.
     await section.locator('.ph-card', { hasText: 'Alpha Project' }).click({ button: 'right' });
-    const menu = section.locator('.ph-card', { hasText: 'Alpha Project' }).getByRole('menu');
+    const menu = section.locator('.ph-card', { hasText: 'Alpha Project' }).locator('.ph-menu');
     await expect(menu).toBeVisible();
     await expect(menu.getByRole('button', { name: 'Open', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');

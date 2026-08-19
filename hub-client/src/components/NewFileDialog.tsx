@@ -9,6 +9,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { discoverTemplates, type ProjectTemplate } from '../services/templateService';
+import ModalDialog from './ModalDialog';
 import './NewFileDialog.css';
 
 export interface NewFileDialogProps {
@@ -107,33 +108,25 @@ export default function NewFileDialog({
     onClose();
   }, [filename, selectedTemplate, validateFilename, onCreateTextFile, onClose]);
 
+  // Enter submits; Escape and Tab containment are owned by ModalDialog.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter') {
         handleCreateTextFile();
-      } else if (e.key === 'Escape') {
-        onClose();
       }
     },
-    [handleCreateTextFile, onClose]
+    [handleCreateTextFile]
   );
 
   if (!isOpen) return null;
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div
-        className="new-file-dialog"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
-      >
-        <div className="dialog-header">
-          <h2>New file</h2>
-          <button className="close-btn" onClick={onClose} aria-label="Close">
-            &times;
-          </button>
-        </div>
-
+    <ModalDialog
+      title="New file"
+      className="new-file-dialog"
+      onClose={onClose}
+      onKeyDown={handleKeyDown}
+    >
         <div className="dialog-content">
           <div className="text-file-form">
             {templates.length > 0 && (
@@ -141,6 +134,7 @@ export default function NewFileDialog({
                 <label htmlFor="template">Template:</label>
                 <select
                   id="template"
+                  className="ph-input focus-accent"
                   value={selectedTemplate?.path ?? ''}
                   onChange={(e) => {
                     const template = templates.find((t) => t.path === e.target.value);
@@ -163,6 +157,7 @@ export default function NewFileDialog({
                 ref={filenameInputRef}
                 id="filename"
                 type="text"
+                className="ph-input focus-accent"
                 value={filename}
                 onChange={(e) => {
                   setFilename(e.target.value);
@@ -171,23 +166,22 @@ export default function NewFileDialog({
                 placeholder="e.g., chapter1.qmd"
               />
             </div>
-            {error && <div className="error-message">{error}</div>}
+            {error && <div className="ph-error inline">{error}</div>}
           </div>
         </div>
 
         <div className="dialog-actions">
-          <button className="cancel-btn" onClick={onClose}>
+          <button className="ph-btn outline" onClick={onClose}>
             Cancel
           </button>
           <button
-            className="create-btn"
+            className="ph-btn primary"
             onClick={handleCreateTextFile}
             disabled={!filename.trim()}
           >
             Create
           </button>
         </div>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }
