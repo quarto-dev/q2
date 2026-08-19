@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-08-19
 
+- [`b62746e7`](https://github.com/quarto-dev/q2/commits/b62746e7): Sidebar cleanup — the Project tab no longer duplicates the header's switch-project button, Screenshot Preview moves from Settings to the Project tab next to Export ZIP, the Settings tab drops its Editor/Preview section headings so the toggles read as one flat list, and the Files header's New, Upload, and Print actions become equal-width icon buttons that always share one row (Print last).
 - [`e71b1ac5`](https://github.com/quarto-dev/q2/commits/e71b1ac5): WCAG 2.2 accessibility pass — dialogs are announced as dialogs with titles, Tab stays inside an open dialog and focus returns to the button that opened it, a "Skip to main content" link leads the tab order, view-toggle and dialog close buttons meet the 24px minimum target size, and keyboard focus is always visible.
 - [`63f2a178`](https://github.com/quarto-dev/q2/commits/63f2a178): Tint the editor file sidebar with the same posit-blue alpha family as the other editor bars, so it no longer reads neutral gray next to them.
 
