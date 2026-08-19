@@ -9,7 +9,10 @@ import { savePreAuthHash, restorePreAuthHash } from './utils/routing'
 import { AuthProviderRoot, noopAuthProvider } from './auth/AuthProvider'
 import { googleAuthProvider } from './auth/GoogleAuthProvider'
 import { ThemeProvider } from './components/ThemeContext'
+import UpdateAvailableToast from './components/UpdateAvailableToast'
 import { isEphemeralStorage } from './services/ephemeralStorage'
+import { setupSwUpdates } from './pwa'
+import { pwaPrompt } from './pwaPrompt'
 
 // Ephemeral storage mode (bd-91mdd056): keep the WASM bridge's
 // quarto-cache (SASS/theme artifacts) in memory too. The flag is read
@@ -40,10 +43,18 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 const authProvider = GOOGLE_CLIENT_ID ? googleAuthProvider : noopAuthProvider;
 
+// Service-worker update flow (GH #447): register now so the update check
+// starts as early as possible. No env guard — E2E and preview-embed
+// builds get the plugin's no-op stub via `disable: true`.
+setupSwUpdates(pwaPrompt);
+
 const root = (
   <StrictMode>
     <ThemeProvider>
       <App />
+      {/* Sibling of App so the update toast overlays both the login
+          screen (the #447 context) and the editor. */}
+      <UpdateAvailableToast />
     </ThemeProvider>
   </StrictMode>
 );
