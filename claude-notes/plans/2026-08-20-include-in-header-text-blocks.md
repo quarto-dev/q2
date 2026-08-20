@@ -116,7 +116,7 @@ HEAD run.
    text (as inlines already are for `*emph*`). Is silent flattening fine
    (consistent with the inline path today), or should non-raw blocks warn
    with a new code?
-3. **Resolve the `Q-5-4`/`Q-5-5` collision in this strand or a separate one?**
+3. **Resolve the `Q-5-4`/`Q-5-5` collision in this strand or a separate one?** (Filed as bd-x9ujtvnt.)
    It's the same file and the same commit discipline (catalog + page + sidebar),
    so folding it in is cheap; but it changes user-visible codes, which may
    deserve its own strand/PR. Also: which side keeps the old codes — the
