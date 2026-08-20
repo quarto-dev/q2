@@ -891,6 +891,8 @@ function App() {
             onRemoveProjectFromSet={projectSetActions.removeProject}
             onTouchProject={projectSetActions.touchProject}
             onAddProjectToSet={projectSetActions.addProject}
+            onImportProjects={projectSetActions.importProjects}
+            onSubscribeCollection={projectSetActions.subscribeCollection}
             onRenameProject={projectSetActions.updateProjectDescription}
             onUpdateProjectSummary={projectSetActions.updateProjectSummary}
             collections={projectSetState.collections}

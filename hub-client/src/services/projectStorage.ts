@@ -6,6 +6,7 @@
  */
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import type { ExportData, UserSettings } from './storage/types';
+import { getCollectionPointers } from './projectSetStorage';
 import {
   STORES,
   CURRENT_SCHEMA_VERSION,
@@ -122,11 +123,20 @@ export async function exportData(): Promise<string> {
     userSettings = await db.get(STORES.USER_SETTINGS, 'identity');
   }
 
+  // Collection pointers: collections are synced ProjectSetDocuments, so the
+  // docId + syncServer pair is everything a restoring browser needs to
+  // re-subscribe (names/membership arrive with sync).
+  const pointers = await getCollectionPointers();
+
   const exportData: ExportData = {
     schemaVersion,
     exportedAt: new Date().toISOString(),
     projects,
     userSettings,
+    collections: pointers.map((p) => ({
+      projectSetDocId: p.projectSetDocId,
+      syncServer: p.syncServer,
+    })),
   };
 
   return JSON.stringify(exportData, null, 2);

@@ -148,6 +148,27 @@ describe('projectStorage', () => {
       expect(data.projects).toHaveLength(2);
     });
 
+    it('includes collection pointers so a restore can re-subscribe', async () => {
+      // Collections are synced docs; the IDB-level export only knows their
+      // pointers (no names), which is all a re-subscribe needs.
+      const { setCollectionPointers } = await import('./projectSetStorage');
+      await setCollectionPointers([
+        { projectSetDocId: 'root-doc', syncServer: 'ws://s' },
+        { projectSetDocId: 'team-doc', syncServer: 'ws://s' },
+      ]);
+
+      const data = JSON.parse(await exportData());
+      expect(data.collections).toEqual([
+        { projectSetDocId: 'root-doc', syncServer: 'ws://s' },
+        { projectSetDocId: 'team-doc', syncServer: 'ws://s' },
+      ]);
+    });
+
+    it('exports an empty collections array when none are stored', async () => {
+      const data = JSON.parse(await exportData());
+      expect(data.collections).toEqual([]);
+    });
+
     it('should import data from JSON', async () => {
       const exportedData = {
         schemaVersion: 1,

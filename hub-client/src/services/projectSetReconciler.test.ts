@@ -9,8 +9,25 @@
  * Context: see claude-notes/plans/2026-04-16-share-link-project-not-added.md.
  */
 
-import { describe, it, expect } from 'vitest';
-import { computeReconcileAdds, type ReconcilableEntry } from './projectSetReconciler';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('./projectStorage', () => ({
+  importData: vi.fn(),
+  listProjects: vi.fn(),
+}));
+vi.mock('./projectSetService', () => ({
+  isConnected: vi.fn(),
+  listProjects: vi.fn(),
+  addProjectsBulk: vi.fn(),
+}));
+
+import {
+  computeReconcileAdds,
+  importProjectsAndReconcile,
+  type ReconcilableEntry,
+} from './projectSetReconciler';
+import * as projectStorage from './projectStorage';
+import * as projectSetService from './projectSetService';
 
 function idb(partial: Partial<ReconcilableEntry> & Pick<ReconcilableEntry, 'indexDocId'>): ReconcilableEntry {
   return {
@@ -98,5 +115,74 @@ describe('computeReconcileAdds', () => {
     });
     const [out] = computeReconcileAdds([a], []);
     expect(out).toEqual(a);
+  });
+});
+
+describe('importProjectsAndReconcile', () => {
+  // Regression for the 2026-08-04 bug: "Imported 30 project(s)" but the home
+  // displayed none. importData writes only the legacy IDB store; the set-mode
+  // UI renders from the root ProjectSetDocument, and the reconcile sweep only
+  // ran on page load. Import must reconcile immediately so imported projects
+  // are visible without a reload.
+  const mockImportData = vi.mocked(projectStorage.importData);
+  const mockListIdb = vi.mocked(projectStorage.listProjects);
+  const mockIsConnected = vi.mocked(projectSetService.isConnected);
+  const mockListSet = vi.mocked(projectSetService.listProjects);
+  const mockAddBulk = vi.mocked(projectSetService.addProjectsBulk);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('imports into IDB then reconciles the new entries into the connected set', async () => {
+    mockImportData.mockResolvedValue(3);
+    mockIsConnected.mockReturnValue(true);
+    mockListIdb.mockResolvedValue([
+      idb({ indexDocId: 'automerge:a' }),
+      idb({ indexDocId: 'automerge:b' }),
+      idb({ indexDocId: 'automerge:c' }),
+    ] as never);
+    mockListSet.mockReturnValue([]);
+    mockAddBulk.mockReturnValue(3);
+
+    const result = await importProjectsAndReconcile('{"json":true}');
+
+    expect(mockImportData).toHaveBeenCalledWith('{"json":true}');
+    expect(mockAddBulk).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ imported: 3, reconciled: 3, connected: true });
+  });
+
+  it('reports connected: false (and reconciles nothing) when the set is offline', async () => {
+    // Entries land in IDB and will be swept by the on-load reconciler later;
+    // the caller needs `connected` to word its message honestly.
+    mockImportData.mockResolvedValue(5);
+    mockIsConnected.mockReturnValue(false);
+
+    const result = await importProjectsAndReconcile('{}');
+
+    expect(mockAddBulk).not.toHaveBeenCalled();
+    expect(result).toEqual({ imported: 5, reconciled: 0, connected: false });
+  });
+
+  it('reconciles entries already stranded in IDB even when the file adds nothing new', async () => {
+    // Re-importing the same file after the bug: importData dedupes (0 new IDB
+    // rows) but the set is still missing the entries — they must be added.
+    mockImportData.mockResolvedValue(0);
+    mockIsConnected.mockReturnValue(true);
+    mockListIdb.mockResolvedValue([idb({ indexDocId: 'automerge:a' })] as never);
+    mockListSet.mockReturnValue([]);
+    mockAddBulk.mockReturnValue(1);
+
+    const result = await importProjectsAndReconcile('{}');
+
+    expect(result).toEqual({ imported: 0, reconciled: 1, connected: true });
+  });
+
+  it('propagates importData errors without attempting a reconcile', async () => {
+    mockImportData.mockRejectedValue(new Error('Invalid import format'));
+
+    await expect(importProjectsAndReconcile('not json')).rejects.toThrow('Invalid import format');
+    expect(mockIsConnected).not.toHaveBeenCalled();
+    expect(mockAddBulk).not.toHaveBeenCalled();
   });
 });

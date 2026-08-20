@@ -29,7 +29,11 @@ import type { CollectionPointerEntry } from '../services/storage/types';
 import * as projectSetService from '../services/projectSetService';
 import type { CollectionSnapshot } from '../services/projectSetService';
 import * as projectStorage from '../services/projectStorage';
-import { reconcileIntoConnectedProjectSet } from '../services/projectSetReconciler';
+import {
+  reconcileIntoConnectedProjectSet,
+  importProjectsAndReconcile,
+  type ImportReconcileResult,
+} from '../services/projectSetReconciler';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 
 // ============================================================================
@@ -70,6 +74,9 @@ export interface CollectionSetsActions {
   updateProjectDescription: (indexDocId: string, description: string) => void;
   updateProjectSummary: (indexDocId: string, summary: ProjectSetEntrySummary) => void;
   touchProject: (indexDocId: string) => void;
+  /** Import a project-list JSON export and reconcile it into the root set so
+   * the projects appear immediately (no reload needed). */
+  importProjects: (json: string) => Promise<ImportReconcileResult>;
   getProjectSetDocId: () => string | null;
   getSyncServer: () => string | null;
 
@@ -378,6 +385,14 @@ export function useCollectionSets(): [CollectionSetsState, CollectionSetsActions
     projectSetService.touchProjectEverywhere(indexDocId);
   }, []);
 
+  const importProjects = useCallback(async (json: string): Promise<ImportReconcileResult> => {
+    const result = await importProjectsAndReconcile(json);
+    if (result.reconciled > 0) {
+      refresh();
+    }
+    return result;
+  }, [refresh]);
+
   const getProjectSetDocId = useCallback(() => projectSetService.getProjectSetDocId(), []);
   const getSyncServer = useCallback(() => syncServerRef.current, []);
 
@@ -444,6 +459,7 @@ export function useCollectionSets(): [CollectionSetsState, CollectionSetsActions
     updateProjectDescription,
     updateProjectSummary,
     touchProject,
+    importProjects,
     getProjectSetDocId,
     getSyncServer,
     createCollection,

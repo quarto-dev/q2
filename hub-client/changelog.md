@@ -55,6 +55,11 @@ WASM rebuild is needed for a changelog-only edit.
 
 - [`279d7e5e`](https://github.com/quarto-dev/q2/commits/279d7e5e): `.md` files are now first-class source files: they sync into hub projects, get live preview, outline, folding, diagnostics, and qmd highlighting in the editor, and cross-document links into `.md` pages navigate like `.qmd` ones.
 
+### 2026-08-04
+
+- [`2c21233c`](https://github.com/quarto-dev/q2/commits/2c21233c): Importing a project list now shows the projects immediately — previously "Imported 30 project(s)" displayed nothing until the page was reloaded.
+- [`2c21233c`](https://github.com/quarto-dev/q2/commits/2c21233c): The project-list export now includes your collections, and importing it restores them — the file records each collection's synced-document pointer, so an import re-joins the collection and its name and membership sync back automatically.
+
 ### 2026-08-03
 
 - [`bd8f5206`](https://github.com/quarto-dev/q2/commits/bd8f5206): The session-expiry re-check now schedules only from the server-reported expiry; `/auth/me` gained a `credential` field distinguishing sliding sessions from fixed-expiry Bearer tokens, and the obsolete 1-hour fallback lifetime was removed.

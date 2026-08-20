@@ -139,6 +139,15 @@ export interface ExportData {
   exportedAt: string;
   projects: ProjectEntryV2[];
   userSettings?: UserSettings;
+  /** Collection pointers (v5+): docId + syncServer per collection, so a
+   * restoring browser can re-subscribe. See services/projectListExport.ts. */
+  collections?: Array<{
+    projectSetDocId: string;
+    syncServer: string;
+    name?: string;
+    isRoot?: boolean;
+    projectIds?: string[];
+  }>;
 }
 
 /**

@@ -42,6 +42,7 @@ import {
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
 import { sortProjectItems, sortOrderLabel, type SortOrder } from '../utils/projectSort';
+import { buildProjectListExport, parseProjectListImport } from '../services/projectListExport';
 import type { Face } from '../utils/facepile';
 import type { CollectionSnapshot } from '../services/projectSetService';
 import './ProjectsHome.css';
@@ -63,6 +64,12 @@ interface Props {
   onRemoveProjectFromSet?: (indexDocId: string) => void;
   onTouchProject?: (indexDocId: string) => void;
   onAddProjectToSet?: (entry: Omit<ProjectSetEntry, 'addedAt' | 'lastAccessed'>) => void;
+  /** Import a project-list JSON export into the root set (import + reconcile,
+   * so the projects appear without a reload). Absent in legacy mode. */
+  onImportProjects?: (json: string) => Promise<{ imported: number; reconciled: number; connected: boolean }>;
+  /** Subscribe to an existing collection document (used by import to restore
+   * collection subscriptions from a v5 export's pointers). */
+  onSubscribeCollection?: (projectSetDocId: string, syncServer: string) => Promise<void>;
   onRenameProject?: (indexDocId: string, description: string) => void;
   /** Replace a project's cached peek summary (used by Peek's refresh). */
   onUpdateProjectSummary?: (indexDocId: string, summary: ProjectSetEntrySummary) => void;
@@ -230,6 +237,8 @@ export default function ProjectsHome({
   onRemoveProjectFromSet,
   onTouchProject,
   onAddProjectToSet,
+  onImportProjects,
+  onSubscribeCollection,
   onRenameProject,
   onUpdateProjectSummary,
   collections: collectionsProp,
@@ -892,26 +901,17 @@ export default function ProjectsHome({
   }, [onColorChange]);
 
   const handleExportJson = useCallback(() => {
-    const exportData = {
-      schemaVersion: 4,
-      exportedAt: new Date().toISOString(),
-      projects: items.map((e) => ({
-        id: '',
-        indexDocId: e.indexDocId,
-        syncServer: e.syncServer,
-        description: e.description,
-        createdAt: e.addedAt,
-        lastAccessed: e.lastAccessed,
-      })),
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    // Collections are synced docs; the export records their pointers so a
+    // restoring browser can re-subscribe (root included for completeness).
+    const json = buildProjectListExport(items, collectionsProp ?? []);
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'quarto-hub-projects.json';
     a.click();
     URL.revokeObjectURL(url);
-  }, [items]);
+  }, [items, collectionsProp]);
 
   const handleImportJson = useCallback(() => {
     const input = document.createElement('input');
@@ -921,15 +921,53 @@ export default function ProjectsHome({
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       try {
-        const count = await projectStorage.importProjects(await file.text());
-        alert(`Imported ${count} project(s)`);
+        const json = await file.text();
+        if (onImportProjects) {
+          // Set mode: import + reconcile so the projects appear immediately.
+          const parsed = parseProjectListImport(json);
+          const { imported, reconciled, connected } = await onImportProjects(json);
+
+          // Restore collection subscriptions from the export's pointers (v5+).
+          // Never the root (this browser has its own), never ones already
+          // subscribed; membership arrives with sync, so nothing is written.
+          let joined = 0;
+          let failedCollections = 0;
+          if (onSubscribeCollection) {
+            const have = new Set((collectionsProp ?? []).map((c) => c.docId));
+            for (const c of parsed.collections) {
+              if (c.isRoot || have.has(c.projectSetDocId)) continue;
+              try {
+                await onSubscribeCollection(c.projectSetDocId, c.syncServer);
+                joined++;
+              } catch (err) {
+                console.error(`Failed to subscribe to collection ${c.projectSetDocId}:`, err);
+                failedCollections++;
+              }
+            }
+          }
+
+          let msg: string;
+          if (!connected) {
+            msg = `Saved ${imported} project(s) — they'll appear when the sync connection is restored`;
+          } else if (reconciled > 0) {
+            msg = `Imported ${reconciled} project(s)`;
+          } else {
+            msg = 'All projects were already in your list';
+          }
+          if (joined > 0) msg += `, joined ${joined} collection(s)`;
+          if (failedCollections > 0) msg += `; ${failedCollections} collection(s) could not be joined`;
+          alert(msg);
+        } else {
+          const count = await projectStorage.importProjects(json);
+          alert(`Imported ${count} project(s)`);
+        }
       } catch (err) {
         console.error('Failed to import:', err);
         alert('Failed to import projects. Invalid JSON format.');
       }
     };
     input.click();
-  }, []);
+  }, [onImportProjects, onSubscribeCollection, collectionsProp]);
 
   // ---- derived view data ----
 

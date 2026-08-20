@@ -83,3 +83,32 @@ export async function reconcileIntoConnectedProjectSet(): Promise<number> {
 
   return projectSetService.addProjectsBulk(adds);
 }
+
+/** Result of a user-initiated project-list import in project-set mode. */
+export interface ImportReconcileResult {
+  /** New rows written to the legacy IDB `projects` store (dedup by indexDocId). */
+  imported: number;
+  /** Entries pushed into the synced root set — what actually becomes visible. */
+  reconciled: number;
+  /** False when the set was offline: entries are saved in IDB but stay
+   * invisible until the on-load reconciler sweeps them in. Callers use this
+   * to word the result message honestly. */
+  connected: boolean;
+}
+
+/**
+ * Import a project-list JSON export and immediately reconcile it into the
+ * connected project set.
+ *
+ * `importData` alone writes only the legacy IDB `projects` store, which the
+ * set-mode UI never renders — the on-load reconciler would sweep the entries
+ * in on the NEXT page load, so an import appeared to do nothing until a
+ * manual reload ("Imported 30 project(s)" showing zero). Running the
+ * reconcile inline right after the import closes that gap.
+ */
+export async function importProjectsAndReconcile(json: string): Promise<ImportReconcileResult> {
+  const imported = await projectStorage.importData(json);
+  const connected = projectSetService.isConnected();
+  const reconciled = await reconcileIntoConnectedProjectSet();
+  return { imported, reconciled, connected };
+}
