@@ -1,0 +1,60 @@
+---
+title: "Alias Would Overwrite a Rendered Page"
+description: "An `aliases:` entry points at a path where the project already renders a page."
+code: Q-5-23
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-23` — Alias Would Overwrite a Rendered Page
+
+> An `aliases:` entry resolves to a path where the project renders
+> a page. Writing the redirect stub there would replace that page,
+> so the render stops instead.
+
+## What this means
+
+Each entry in a page's `aliases:` list becomes a small redirect
+file in the output directory, so an old URL keeps working after
+the page moves. This error fires when that redirect file would be
+written on top of a real page.
+
+Only one file can exist at a path. If the redirect were written,
+the page would be gone from the built site and every visitor to it
+would be bounced elsewhere.
+
+## Why this happens
+
+Usually the alias was never updated after a reorganization:
+
+```yaml
+---
+title: Deployment
+aliases:
+  - /index.html   # but index.qmd renders here
+---
+```
+
+It also happens when two pages swap places and each keeps the
+other's old URL as an alias.
+
+## How to fix it
+
+Point the alias at a path no page renders to, or delete it if the
+page it named no longer exists. If you genuinely want visitors to
+land on the other page, edit that page instead of redirecting to
+it — a redirect and a page cannot share a URL.
+
+## Difference from Quarto 1
+
+Quarto 1 detects the same situation, prints a warning, and skips
+the redirect. Quarto 2 treats it as an error.
+
+The reason is what the warning leaves behind: a site that builds
+"successfully" while silently missing a redirect the author
+believes exists. Old links keep 404ing, and nothing in the output
+says why. A failed render that names the problem is recoverable in
+a minute; a missing redirect can go unnoticed for months.

@@ -394,6 +394,18 @@ pub struct RenderContext<'a> {
     /// Per-format writer-side options bag. Populated by Render-phase
     /// transforms and read when constructing each writer's `*Config`.
     pub format_options: FormatOptions,
+
+    /// Optional engine registry override for this render.
+    ///
+    /// `None` (the default) means `run_pipeline` will use the registry
+    /// already threaded onto `StageContext` from `project.registry`.
+    /// Set by callers that need to substitute a custom registry for
+    /// testing or replay — e.g. `HtmlRenderConfig.engine_registry`
+    /// (test seam) or `render_qmd_to_preview_ast` (for preview record
+    /// capture).  Applied in `run_pipeline` after `StageContext::new()`
+    /// by writing into `stage_ctx.registry`, mirroring how
+    /// `project_index` and `resource_resolver` are threaded.
+    pub engine_registry_override: Option<Arc<crate::engine::EngineRegistry>>,
 }
 
 /// Options for rendering
@@ -443,6 +455,7 @@ impl<'a> RenderContext<'a> {
             attribution_provider: None,
             attribution_data: None,
             format_options: FormatOptions::default(),
+            engine_registry_override: None,
         }
     }
 
@@ -542,6 +555,8 @@ mod tests {
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/doc.qmd")],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         }
     }
 
@@ -552,6 +567,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path("/project/doc.qmd")],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         }
     }
 

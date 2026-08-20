@@ -401,9 +401,41 @@ shortcode processing pipeline. Includes block-level shortcode support and a new
   template context alongside `css`.
 - **Detail plan**: `claude-notes/plans/2026-03-16-extensions-phase4-templates.md`
 
+### Phase 5a: Format Extensions (resolution & apply)
+
+**Goal**: Extension-contributed output formats — the **common** Quarto 1 case
+(journal templates like ACM/AGU/JSS, presentation themes) — resolve and apply
+end-to-end. `--to acm-pdf` finds the `acm` extension and layers its
+`contributes.formats.pdf` (+ `common`) bundle (metadata, per-format filters,
+shortcodes, `template-partials`, `format-resources`, SCSS/theme) over the `pdf`
+base.
+
+**Distinct from Phase 5 (Custom Writers):** a format extension targets a
+*known* base format and layers config on it; it does **not** define a new
+Pandoc target. A custom writer (Phase 5) is a `.lua` writer that *does*. They
+are orthogonal — a format extension may also carry `writer: x.lua` (→ Phase
+5) — and most real Q1 extensions are format extensions, not custom writers.
+
+- [ ] Wire extension context into format resolution so `<ext>-<base>` loads the
+  extension's `formats[base]` (+ `common`) bundle
+- [ ] Apply the bundle (metadata merge base→ext→user; per-format
+  filters/shortcodes; `template-partials`; `format-resources` copying;
+  SCSS/theme layering)
+- [ ] Validate the extension actually contributes the requested base format
+  (loud error if not)
+- [ ] Tests against a real journal fixture (ACM/AGU)
+
+**Detail plan**: `claude-notes/plans/2026-06-22-format-extensions.md` (STUB — needs research)
+
+**Status**: STUB — ingredients exist (Phases 1–4 + `Contributes.formats` +
+`parse_format_descriptor`); the resolution-and-apply glue is unbuilt.
+
 ### Phase 5: Custom Writers
 
-**Goal**: Format extensions can provide custom Lua writers.
+**Goal**: Extensions can provide custom Pandoc **Lua writers** (`.lua` format
+keys that define a *new* output target) — distinct from Phase 5a format
+extensions, which layer on a *known* base. A format extension may carry a
+custom writer via `writer: x.lua`; this phase handles that `.lua`-writer path.
 
 - [ ] Detect format keys ending in `.lua` → custom writer format
 - [ ] Resolve writer path relative to extension directory
@@ -414,34 +446,117 @@ shortcode processing pipeline. Includes block-level shortcode support and a new
 - Does pampa support custom Lua writers currently?
 - How would this interact with the WASM pipeline?
 
-### Phase 6: RevealJS Plugin Support
+### Phase 6: RevealJS Plugin Support (extension-contributed)
 
-**Goal**: Extensions can contribute RevealJS plugins.
+**Goal**: Extensions can contribute reveal.js plugins via
+`contributes: revealjs-plugins:` (Q1 shape: plugin `name` + `script[]` +
+`stylesheet[]`, with a `plugin.yml` carrying name/scripts/stylesheets/config).
+At render, the listed plugins' assets are registered and their globals injected
+into the `Reveal.initialize({ plugins: [...] })` call, with config merged
+(plugin defaults → user front-matter).
 
-- [ ] Parse `revealjs-plugins` from extensions
-- [ ] Handle three forms: string path, bundle object, inline definition
-- [ ] Wire plugin scripts/stylesheets into RevealJS output
-- [ ] Handle per-format RevealJS plugins
-- [ ] Tests
+**RevealJS output now exists** (this answers the original open questions). The
+`q2 render` path produces **static reveal.js HTML via Rust AST transforms** —
+`RevealSlidesTransform` + `render_revealjs_document`, with `reveal_config_json()`
+in `crates/quarto-core/src/revealjs/assemble.rs` emitting
+`<script>Reveal.initialize({config})</script>`; reveal.js 6 is vendored at
+`resources/revealjs/`. (The render path is **Rust, not React** — only the
+hub-client *preview* renders the same shared slide-split AST via
+`@revealjs/react`, kept in parity by golden tests.) See
+`claude-notes/plans/2026-06-08-revealjs-presentations.md`.
+
+**Hard dependency — there is no plugin plumbing yet.** Today q2 loads **zero**
+reveal.js plugins: `reveal_config_json()` has no `plugins:` key, no asset
+registration for plugin JS/CSS, and not even the core plugins (Notes/Search/
+Zoom/Math). The **revealjs epic's own Phase 6 (Plugins/chrome)** is what vendors
++ wires the *built-in* plugins and adds the `plugins: [...]` init plumbing.
+**Extension-contributed plugins (this phase) depend on that plumbing** — so
+sequence this after (or co-design it with) the revealjs epic's plugin work, and
+reuse its registration + init-emission seam rather than building a parallel one.
+
+- [ ] Add a `revealjs_plugins` field to the `Contributes` struct + parse
+  `contributes: revealjs-plugins:` (Q1 shape: `name`, `script[]`,
+  `stylesheet[]`; read the plugin's `plugin.yml` for name/scripts/stylesheets/config)
+- [ ] Discover plugin contributions via the extension system when a document
+  lists `revealjs-plugins: [...]`
+- [ ] Register plugin JS/CSS as artifacts (reuse the artifact store / theme-CSS
+  keying; copy to `site_libs/revealjs/plugin/<name>/`)
+- [ ] Emit plugin globals + merged config into `Reveal.initialize({ plugins: [...] })`
+  in `assemble.rs`, reusing the built-in-plugin init seam
+- [ ] Render/preview parity: the `@revealjs/react` preview path must load the
+  same plugins (or be documented as not-yet-at-parity)
+- [ ] Per-format reveal plugins; tests with a real plugin extension (menu/chalkboard)
 
 **Open questions**:
-- Does q2 have RevealJS output support yet?
-- What's the plan for RevealJS format?
+- Sequencing/co-design with the revealjs epic's built-in-plugin Phase 6 — share
+  one registration + `plugins: [...]` init seam for built-ins and extensions.
+- Preview path (`@revealjs/react`): how reveal.js plugins (which target the
+  global `Reveal`) load under the React wrapper.
 
 ### Phase 7: Project Extensions
 
-**Goal**: Extensions can contribute project-level configuration.
+**Status: STUB / research.** We've researched what Q1 project extensions *are*
+(below); we have **not** designed the q2 implementation. The items under "To
+research" are open questions, not a vetted checklist.
 
-- [ ] Parse `contributes.project` from extensions
-- [ ] Merge into project config during project context creation
-- [ ] Support `project.type`, `detect`, `render`, `preview` fields
-- [ ] Support `pre-render` and `post-render` scripts
-- [ ] Tests
+**What a project extension is (from Q1).** `contributes: project:` is
+**external-toolchain integration glue** — not config layering, and not a new
+project type. The marquee cases (docusaurus, hugo) make Quarto a *renderer
+inside another tool's project*: Quarto renders `.qmd → markdown` that an
+external static-site generator then consumes. An extension supplies:
+- **detection** — `project.detect` glob-sets that auto-recognize a directory
+  (e.g. `hugo.toml` + `content/` ⇒ a hugo project);
+- a **target format** to render to (`format: hugo-md` / `docusaurus-md`);
+- a **preview command** — `preview.serve` (cmd/env/ready) launching the
+  external dev server (`hugo serve`, `npm run docusaurus start`);
+- **pre-render / post-render scripts** — arbitrary executables run around the
+  render with a defined env-var contract;
+- plus passive config layered onto a **built-in** type (`project.type`,
+  `website.*`, `render` globs, `output-dir`, …).
 
-**Open questions**:
-- Does q2 support project types beyond the default?
-- How do pre/post-render scripts execute?
-- How does project type detection work?
+**It does NOT define new project types.** Q1 has four built-in types
+(default/website/book/manuscript); an extension's "type" (e.g. `docusaurus`) is
+an extension *id* that detects a directory, **remaps to a built-in type** (via
+its own `project.type` field), and layers config. `ProjectType` *behavior* (the
+render hooks) stays built-in. The active parts — detection, the serve command,
+the pre/post-render scripts — are the real work; the config layering is the
+easy part. So the honest framing is "integrate an external SSG," not "add
+metadata."
+
+**What exists in q2 (verified).**
+- `Contributes.project: Option<ConfigValue>` is **parsed** (`extension/read.rs:179`)
+  and then **stored-and-ignored** — nothing consumes it. That is the entire
+  current implementation (ghostware).
+- q2 has built-in project types via the two-pass orchestrator (at least
+  `DefaultProjectType`; the website-project epic added website handling), and
+  `ProjectType` exposes `pre_render` / `post_render` hooks the orchestrator runs
+  between/after passes. Whether those are the right home for *user* scripts is
+  not yet researched.
+
+**To research (open — needed before this is plannable).**
+- **Scope first:** is external-SSG integration even a near-term q2 goal, or is
+  the near-term target just honoring extension-contributed project *config*
+  (sidebar/format/render) layered onto built-in types — deferring serve +
+  scripts? This decides how large Phase 7 is.
+- **Resolution:** how would q2 resolve an extension-as-project-type and merge
+  its config, and where does that sit relative to `ProjectContext` / the
+  orchestrator? (Q1 does this in `resolveProjectExtension` +
+  `mergeProjectMetadata`, project-context.ts:678 — a *reference*, not a q2
+  design.)
+- **Detection:** Q1's "extension-id-as-type + `detect` globs + auto-detect
+  resolver" model, or something simpler? q2 has no project-type detection today.
+- **Scripts:** are the orchestrator's `pre_render`/`post_render` hooks the
+  execution point (via `SystemRuntime::execute`, project cwd, Q1's env-var
+  contract `QUARTO_PROJECT_OUTPUT_DIR` / `_INPUT_FILES` / `_OUTPUT_FILES`)? And
+  the WASM story — scripts can't run in the browser preview.
+- **`preview.serve`:** how would an external dev-server command coexist with
+  `q2 preview` (which serves its own SPA)? Likely the hardest piece.
+
+**References.** Q1: `src/project/project-context.ts` (`resolveProjectExtension`,
+`projectExtensionsConfigResolver`), `src/command/render/project.ts` (script
+execution + env vars), `src/resources/schema/project.yml`. q2:
+`extension/read.rs:179`, the orchestrator's `ProjectType`
+`pre_render`/`post_render` hooks.
 
 ### Phase 8: Engine Extensions
 
@@ -501,22 +616,45 @@ integration that was originally scoped here.
 
 ### Phase 12: Semver Validation for `quarto-required`
 
-**Goal**: Validate the `quarto-required` field in `_extension.yml` against the
-running Quarto version, warning or erroring when an extension requires a version
-the user doesn't have.
+**Goal**: Validate `quarto-required` against the running Quarto version. q2 has **two surfaces that
+share one semver gate**: (1) the **extension-package** field `quarto-required` in `_extension.yml`
+(applies to every extension type; Q1 `extension.ts` `validateExtension`); (2) the
+**engine-discovery** `quarto_required` an engine module declares (carried on `LoadEngineResult` by
+RTQ ENG-1; Q1 `engine.ts` `checkEngineVersionRequirement`). Both check a semver range against
+`cli_version()`.
 
 - [ ] Add `semver` crate dependency (dtolnay's — the de facto Rust standard)
-- [ ] Parse `quarto-required` as `VersionReq` during `read_extension()`
-- [ ] Check against `quarto_util::version::cli_version()` during extension discovery
-- [ ] Emit a diagnostic when version doesn't satisfy the requirement
-- [ ] Optionally parse and store `version` field as `semver::Version`
-- [ ] Tests
+- [ ] **Extension-package gate:** parse `quarto-required` as `VersionReq` during `read_extension()`;
+      check against `quarto_util::version::cli_version()` during extension discovery; emit a
+      diagnostic when unsatisfied.
+- [ ] **Engine-discovery gate:** when `LoadEngineResult.quarto_required` (RTQ ENG-1) is set, check it
+      at engine registration — the q2 analogue of Q1's `checkEngineVersionRequirement` (`engine.ts:62`).
+      Reuse the same `VersionReq` / `cli_version()` helper.
+- [ ] Optionally parse and store the extension's `version` field as `semver::Version`
+- [ ] Tests (both gates)
 
 **Notes**:
 - `cli_version()` returns `"99.9.9-dev"` during development. Under strict semver,
   prereleases don't satisfy range constraints like `>=1.4.0`. Either strip the
   `-dev` suffix before checking or use `99.9.9` as the dev version.
-- TS Quarto warns (not hard error) on version mismatch.
+- **Engine-gate compat version (the 0.x problem).** Released q2 is `0.x`, but Q1 engine modules
+  declare Quarto-**1** ranges (e.g. julia's `quartoRequired: ">=1.9"`). Enforcing the *engine* gate
+  with q2's real version would reject **every** Q1 engine. So the engine gate must check against a
+  **Q1-compatible "engine compat version"** (e.g. `"1.11.0"`), distinct from q2's own
+  `cli_version()` — a deliberate spoof q2 presents to engine `quarto_required` checks. (Surfaced
+  while consolidating plan1c, which originally built this gate in 1c with the spoof; the gate + spoof
+  now live here.) **Compat-version source/value — DECIDED (lifted from plan1c, 2026-06-29):** use a
+  fixed `"1.11.0"`, isolated behind a single `fn engine_compat_version() -> &str { "1.11.0" }` so
+  there is exactly one place to revisit; do **not** scatter the literal. The engine gate compares the
+  engine's `quartoRequired` against `engine_compat_version()` (the spoof), **not** `cli_version()`;
+  `cli_version()` stays the source for the *extension-package* gate. This is a clearly-commented
+  stopgap until q2 settles its real version-compat story with the Q1 engine ecosystem.
+- **Severity — decide deliberately.** Current Q1 source **throws** on *both* surfaces — the
+  extension gate (`extension.ts` `validateExtension`: "… is incompatible with this quarto version")
+  and the engine gate (`engine.ts` `checkEngineVersionRequirement`: hard `throw`). (An earlier note
+  here claimed Q1 *warns*; that is **stale** — the only `…AndWarn` path is for deprecated-now-built-in
+  extensions, not version mismatch.) q2 may keep throw for the engine gate (an unrunnable engine is a
+  hard failure) and choose warn-vs-throw for non-engine contributions.
 - The extension's own `version` field is currently stored as a plain string.
   Could optionally be parsed as `semver::Version` for consistency.
 

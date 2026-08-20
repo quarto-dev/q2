@@ -21,11 +21,30 @@
 //!         path                  (length-prefixed UTF-8)
 //!         bytes                 (length-prefixed)
 //!   | _quarto.yml bytes         (length-prefixed; empty if absent)
-//!   | for each format-extension contribution, sorted by name:
+//!   | for each extension contribution, sorted by name:
 //!         name                  (length-prefixed UTF-8)
-//!         metadata bytes        (length-prefixed)
+//!         bytes                 (length-prefixed)
 //! )
 //! ```
+//!
+//! ## What `extension_contributions` carries (Plan 6 decision 9)
+//!
+//! The `extension_contributions` slot is a generic `(name, bytes)` list.
+//! Since Plan 6 Phase 5 it carries **engine-extension** `_extension.yml`
+//! raw bytes — one entry per registered engine that came from an
+//! `EngineContribution::External` (built-ins contribute nothing): the
+//! stamped `DocumentProfile.engine_resolution` is a function of the
+//! registry (which engine extensions exist and what `claims:` they
+//! declare), so it must be in the key domain, or editing an extension's
+//! `claims:` — exactly the fix the Phase-5 fall-through warning
+//! recommends — would serve a stale cached profile. See
+//! `orchestrator::pass1_engine_extension_contributions` for how the pairs
+//! are gathered (from `EngineRegistry::engine_extension_provenance`,
+//! re-reading each file's bytes at key-build time).
+//!
+//! Proper *format*-extension metadata hashing (the slot's original,
+//! pre-Phase-5 intent) remains the pre-existing follow-up — see
+//! `claude-notes/plans/2026-04-27-websites-phase-8.md` §"Sub-phase 8.4".
 //!
 //! ## Where transitive includes fit in
 //!
@@ -87,7 +106,10 @@ use crate::document_profile::DOCUMENT_PROFILE_VERSION;
 /// Manual key-version constant. Bump when a head-pipeline behavior
 /// change alters what a profile records without changing
 /// `DOCUMENT_PROFILE_VERSION`.
-pub const PROFILE_KEY_VERSION: u32 = 1;
+///
+/// v2: the key domain gained project-profile inputs (active names +
+/// overlay bytes, bd-fu16z22k).
+pub const PROFILE_KEY_VERSION: u32 = 2;
 
 /// Returns the Quarto build identifier baked into every cache key.
 ///
@@ -128,10 +150,29 @@ pub struct Pass1KeyInputs<'a> {
     /// Empty slice when the project has no config file.
     pub quarto_yml_bytes: &'a [u8],
 
-    /// Format-extension contributions, sorted by name. Each entry
-    /// is `(name, raw-metadata-bytes)`. Empty when no extensions
-    /// apply.
+    /// Extension contributions, sorted by name. Each entry is
+    /// `(name, raw-bytes)`. Since Plan 6 Phase 5 this carries
+    /// engine-extension `_extension.yml` bytes (decision 9); proper
+    /// format-extension metadata hashing remains the pre-existing
+    /// follow-up (see the module docs). Empty when no engine
+    /// extensions are registered.
     pub extension_contributions: &'a [(String, Vec<u8>)],
+
+    /// Active **project-profile** names in activation order
+    /// (bd-fu16z22k). ⚠️ Both meanings of "profile" collide right
+    /// here: this field holds *project profiles* (`--profile` /
+    /// `QUARTO_PROFILE`), which are an input to the *DocumentProfile*
+    /// cache key this struct feeds — switching project profiles must
+    /// not serve stale pass-1 DocumentProfiles. Empty when none are
+    /// active.
+    pub active_config_profiles: &'a [String],
+
+    /// `(project-relative-path, raw-bytes)` of every profile overlay
+    /// (`_quarto-<name>.yml`) and `_quarto.yml.local` actually merged
+    /// into the project config, in merge order. Byte-level like
+    /// [`metadata_files`](Self::metadata_files): a comment-only edit
+    /// to an overlay correctly invalidates the key.
+    pub profile_config_files: &'a [(PathBuf, Vec<u8>)],
 }
 
 /// Compute the SHA-256 cache key for a `DocumentProfile`.
@@ -162,6 +203,23 @@ pub fn pass1_key(inputs: &Pass1KeyInputs<'_>) -> [u8; 32] {
 
     // _quarto.yml bytes (empty slice when absent).
     write_lp_bytes(&mut hasher, inputs.quarto_yml_bytes);
+
+    // Project-profile activation + overlay bytes (bd-fu16z22k). The
+    // name list is hashed even when no overlay files exist: two runs
+    // differing only in `--profile` must not share keys (conditional
+    // content will depend on the active set). Each list is
+    // count-prefixed so a name list can never alias a path/bytes
+    // pair from the file list. With both lists empty the stream
+    // gains only two zero counts, keeping profile-less keys cheap.
+    hasher.update((inputs.active_config_profiles.len() as u32).to_be_bytes());
+    for name in inputs.active_config_profiles {
+        write_lp_str(&mut hasher, name);
+    }
+    hasher.update((inputs.profile_config_files.len() as u32).to_be_bytes());
+    for (path, bytes) in inputs.profile_config_files {
+        write_lp_str(&mut hasher, &path.to_string_lossy());
+        write_lp_bytes(&mut hasher, bytes);
+    }
 
     // Format-extension contributions, sorted by name (caller's
     // responsibility). Hashing in any other order would change the
@@ -222,7 +280,70 @@ mod tests {
             metadata_files: &[],
             quarto_yml_bytes: b"",
             extension_contributions: &[],
+            active_config_profiles: &[],
+            profile_config_files: &[],
         }
+    }
+
+    #[test]
+    fn key_changes_on_active_profile_set() {
+        // Even with no overlay files on disk, a different --profile
+        // selection must change the key (bd-fu16z22k): conditional
+        // content depends on the active set.
+        let a = pass1_key(&minimal_inputs());
+        let names = vec!["prod".to_string()];
+        let mut tweaked = minimal_inputs();
+        tweaked.active_config_profiles = &names;
+        assert_ne!(a, pass1_key(&tweaked));
+    }
+
+    #[test]
+    fn key_changes_on_profile_order() {
+        // First-listed-wins makes activation ORDER semantic.
+        let ab = vec!["a".to_string(), "b".to_string()];
+        let ba = vec!["b".to_string(), "a".to_string()];
+        let mut a = minimal_inputs();
+        a.active_config_profiles = &ab;
+        let mut b = minimal_inputs();
+        b.active_config_profiles = &ba;
+        assert_ne!(pass1_key(&a), pass1_key(&b));
+    }
+
+    #[test]
+    fn key_changes_on_overlay_byte_change() {
+        let f_a = vec![(
+            PathBuf::from("_quarto-prod.yml"),
+            b"toc: true
+"
+            .to_vec(),
+        )];
+        let f_b = vec![(
+            PathBuf::from("_quarto-prod.yml"),
+            b"toc: false
+"
+            .to_vec(),
+        )];
+        let names = vec!["prod".to_string()];
+        let mut a = minimal_inputs();
+        a.active_config_profiles = &names;
+        a.profile_config_files = &f_a;
+        let mut b = minimal_inputs();
+        b.active_config_profiles = &names;
+        b.profile_config_files = &f_b;
+        assert_ne!(pass1_key(&a), pass1_key(&b));
+    }
+
+    #[test]
+    fn profile_name_list_cannot_alias_overlay_file_entry() {
+        // Count prefixes keep the two lists domain-separated: names
+        // ["p", "x"] must not hash like files [("p", b"x")].
+        let names = vec!["p".to_string(), "x".to_string()];
+        let files = vec![(PathBuf::from("p"), b"x".to_vec())];
+        let mut a = minimal_inputs();
+        a.active_config_profiles = &names;
+        let mut b = minimal_inputs();
+        b.profile_config_files = &files;
+        assert_ne!(pass1_key(&a), pass1_key(&b));
     }
 
     #[test]
@@ -304,6 +425,12 @@ mod tests {
         assert_ne!(a, b);
     }
 
+    // `extension_contributions` is a generic `(name, bytes)` slot; these
+    // two tests predate Plan 6 and already exercise it structurally.
+    // Since Phase 5 the slot's real-world content is engine-extension
+    // `_extension.yml` bytes (decision 9) — the two Phase-5-named tests
+    // below pin that specific scenario; the generic tests stay as the
+    // shape-level contract.
     #[test]
     fn key_changes_on_extension_contribution() {
         let a = pass1_key(&minimal_inputs());
@@ -335,6 +462,50 @@ mod tests {
         let mut b = minimal_inputs();
         b.extension_contributions = &order_b;
         assert_ne!(pass1_key(&a), pass1_key(&b));
+    }
+
+    /// Plan 6 decision 9: editing an engine extension's `_extension.yml`
+    /// (e.g. adding `claims:`) must change the key — same doc, same
+    /// engine NAME, different `_extension.yml` bytes.
+    #[test]
+    fn key_changes_on_engine_extension_yml_byte_edit() {
+        let before = vec![(
+            "legacy-python".to_string(),
+            b"title: T\nauthor: A\ncontributes:\n  engines:\n    - path: engine.js\n".to_vec(),
+        )];
+        let after = vec![(
+            "legacy-python".to_string(),
+            b"title: T\nauthor: A\ncontributes:\n  engines:\n    - path: engine.js\n      claims: [python]\n".to_vec(),
+        )];
+        let mut a = minimal_inputs();
+        a.extension_contributions = &before;
+        let mut b = minimal_inputs();
+        b.extension_contributions = &after;
+        assert_ne!(
+            pass1_key(&a),
+            pass1_key(&b),
+            "adding `claims:` to an engine extension's _extension.yml must change the key"
+        );
+    }
+
+    /// Plan 6 decision 9: registering (or removing) a claims-less engine
+    /// extension changes the key even though no doc content changed —
+    /// the stamped `engine_resolution` depends on the registry, not just
+    /// the document.
+    #[test]
+    fn key_changes_on_engine_extension_pair_added_or_removed() {
+        let a = pass1_key(&minimal_inputs());
+        let ext = vec![(
+            "legacy-python".to_string(),
+            b"title: T\nauthor: A\ncontributes:\n  engines:\n    - path: engine.js\n".to_vec(),
+        )];
+        let mut with_engine = minimal_inputs();
+        with_engine.extension_contributions = &ext;
+        let b = pass1_key(&with_engine);
+        assert_ne!(
+            a, b,
+            "registering an engine extension (empty -> one pair) must change the key"
+        );
     }
 
     #[test]

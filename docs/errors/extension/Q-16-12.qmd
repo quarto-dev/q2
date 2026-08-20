@@ -1,0 +1,80 @@
+---
+title: "Engine failed to load while answering a claim"
+description: "Quarto had to start an engine extension to ask whether it handles a language or file, and the engine failed to load."
+code: Q-16-12
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-12` — Engine failed to load while answering a claim
+
+> Quarto had to start an engine extension to ask whether it handles a
+> language or file, and the engine failed to load.
+
+## What this means
+
+An engine that decides what it handles at run time (see
+[`Q-16-10`](Q-16-10.qmd)) has to be running before Quarto can ask it
+anything. This warning means starting it failed — a syntax error in the
+bundle, a missing import, a module that throws on load.
+
+Quarto treats the unanswered question as **"not claimed"** and keeps
+going. That choice keeps a broken engine from taking down the whole
+render, but it means the failure shows up somewhere else, disguised:
+
+- **A code cell is not executed.** No engine claimed the language, so
+  the cell is written to the output as a plain code block. The page
+  renders, and the code appears verbatim instead of its results.
+- **A file reports no engine.** If the failed engine was the one that
+  would have claimed a `.ipynb` or similar input, you get
+  `Can't determine execution engine for <file>` — which points at
+  configuration, when the real cause was the load failure.
+
+This warning exists so the real cause is visible. It carries the
+underlying load error.
+
+## How to fix
+
+Start with the error text in the message — it comes from the engine's
+own module and usually names the failing import or statement directly.
+
+Then:
+
+1. **Rebuild the engine bundle.** A stale or partially-written
+   `dist/*.js` is the most common cause. Run the extension's build step
+   (for TypeScript engines, `q2 call build-ts-extension` in the
+   extension directory).
+2. **Check the bundle exists and is complete** at the `path` named in
+   the extension's `_extension.yml`.
+3. **Load it directly** to see the failure without Quarto in the way:
+   `deno run --allow-all <path-to-bundle>`.
+
+If you do not maintain the extension, report the error to its author.
+
+## Why the render still succeeds
+
+Claim answering has to be infallible — it runs while Quarto is deciding
+what to do, before any document is committed to an engine. Making a load
+failure fatal there would mean one broken extension prevents a project
+from rendering at all, even for documents that never touch it.
+
+So the failure is reported and the render continues. Use `--strict` if
+you would rather this stop the build:
+
+```bash
+q2 render --strict
+```
+
+## Related errors
+
+- [`Q-16-10`](Q-16-10.qmd) — why the engine had to be loaded at all.
+- [`Q-16-1`](Q-16-1.qmd) — the extension's manifest itself could not be
+  read.
+
+## Related
+
+- [`Q-16-2`](Q-16-2.qmd) — the equivalent load failure for a Lua
+  shortcode script.

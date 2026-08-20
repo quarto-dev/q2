@@ -1,0 +1,6 @@
+project:
+  type: website
+  resources:
+    - images/
+website:
+  title: "Root-absolute paths"

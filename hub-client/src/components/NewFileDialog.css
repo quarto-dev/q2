@@ -1,83 +1,14 @@
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
+/* NewFileDialog — container sizing plus the upload-UI rules shared with
+   NewAssetDialog (drop zone, file preview rows; lifted into
+   components/fileUpload/ by the separate "Phase C" effort).
+   Shared dialog chrome — backdrop, header/close, content/actions sections,
+   buttons, inputs, error banner — comes from src/ui.css (the .ph-dialog,
+   .ph-btn, .ph-input, .ph-error families and the editor dialog chrome
+   section). */
 
-.new-file-dialog {
-  background: var(--dialog-bg);
-  border: 1px solid var(--dialog-border);
-  border-radius: 12px;
-  width: 90%;
-  max-width: 480px;
-  box-shadow: 0 8px 32px var(--dialog-shadow);
-}
-
-.dialog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--dialog-border);
-}
-
-.dialog-header h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--editor-text);
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: var(--editor-text-muted);
-  font-size: 24px;
-  cursor: pointer;
+.ph-dialog.new-file-dialog {
+  width: 480px;
   padding: 0;
-  line-height: 1;
-  transition: color 0.2s;
-}
-
-.close-btn:hover {
-  color: var(--editor-text);
-}
-
-/* Tabs */
-.dialog-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--dialog-border);
-}
-
-.dialog-tabs .tab {
-  flex: 1;
-  padding: 12px;
-  background: none;
-  border: none;
-  color: var(--editor-text-muted);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border-bottom: 2px solid transparent;
-}
-
-.dialog-tabs .tab:hover {
-  color: var(--editor-text-dim);
-  background: var(--dialog-input-hover-bg);
-}
-
-.dialog-tabs .tab.active {
-  color: var(--dialog-tab-active);
-  border-bottom-color: var(--dialog-tab-active);
-}
-
-/* Content */
-.dialog-content {
-  padding: 20px;
 }
 
 /* Text file form */
@@ -86,22 +17,6 @@
   margin-bottom: 8px;
   color: var(--editor-text-dim);
   font-size: 14px;
-}
-
-.text-file-form input {
-  width: 100%;
-  padding: 12px;
-  background: var(--dialog-input-bg);
-  border: 1px solid var(--dialog-input-border);
-  border-radius: 6px;
-  color: var(--editor-text);
-  font-size: 14px;
-  box-sizing: border-box;
-}
-
-.text-file-form input:focus {
-  outline: none;
-  border-color: var(--dialog-tab-active);
 }
 
 /* Upload form */
@@ -120,7 +35,7 @@
 
 .drop-zone.drag-over {
   border-color: var(--dialog-tab-active);
-  background: rgba(100, 108, 255, 0.1);
+  background: rgba(65, 149, 153, 0.08);
 }
 
 .drop-zone .drop-icon {
@@ -145,20 +60,8 @@
   margin-top: 12px;
 }
 
-.browse-btn {
-  padding: 10px 20px;
-  background: var(--dialog-primary-bg);
-  border: none;
-  border-radius: 6px;
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 0.2s;
+.drop-zone .browse-btn {
   margin-top: 4px;
-}
-
-.browse-btn:hover {
-  background: var(--dialog-primary-hover);
 }
 
 /* File previews */
@@ -269,65 +172,6 @@
   color: var(--editor-text-dim);
 }
 
-/* Error message */
-.error-message {
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: var(--dialog-danger-bg);
-  border-radius: 4px;
-  color: var(--editor-error);
-  font-size: 13px;
-}
-
-/* Actions */
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--dialog-border);
-}
-
-.cancel-btn {
-  padding: 10px 20px;
-  background: none;
-  border: 1px solid var(--dialog-input-border);
-  border-radius: 6px;
-  color: var(--editor-text-muted);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.cancel-btn:hover {
-  border-color: var(--editor-text-muted);
-  color: var(--editor-text-dim);
-}
-
-.create-btn,
-.upload-btn {
-  padding: 10px 20px;
-  background: var(--dialog-primary-bg);
-  border: none;
-  border-radius: 6px;
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.create-btn:hover,
-.upload-btn:hover {
-  background: var(--dialog-primary-hover);
-}
-
-.create-btn:disabled,
-.upload-btn:disabled {
-  background: var(--dialog-disabled-bg);
-  color: var(--editor-text-muted);
-  cursor: not-allowed;
-}
-
 /* Template selector */
 .template-selector {
   margin-bottom: 16px;
@@ -338,27 +182,6 @@
   margin-bottom: 8px;
   color: var(--editor-text-dim);
   font-size: 14px;
-}
-
-.template-selector select {
-  width: 100%;
-  padding: 12px;
-  background: var(--dialog-input-bg);
-  border: 1px solid var(--dialog-input-border);
-  border-radius: 6px;
-  color: var(--editor-text);
-  font-size: 14px;
-  box-sizing: border-box;
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-}
-
-.template-selector select:focus {
-  outline: none;
-  border-color: var(--dialog-tab-active);
 }
 
 .template-selector select:disabled {
@@ -375,20 +198,4 @@
   margin-bottom: 8px;
   color: var(--editor-text-dim);
   font-size: 14px;
-}
-
-.filename-input input {
-  width: 100%;
-  padding: 12px;
-  background: var(--dialog-input-bg);
-  border: 1px solid var(--dialog-input-border);
-  border-radius: 6px;
-  color: var(--editor-text);
-  font-size: 14px;
-  box-sizing: border-box;
-}
-
-.filename-input input:focus {
-  outline: none;
-  border-color: var(--dialog-tab-active);
 }

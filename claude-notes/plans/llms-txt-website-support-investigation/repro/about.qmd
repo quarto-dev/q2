@@ -1,0 +1,5 @@
+---
+title: "About"
+---
+
+A second page, so `llms.txt` has more than one entry.

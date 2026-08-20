@@ -1,0 +1,73 @@
+---
+title: "SimpleTable is not supported"
+description: "A Lua filter used the legacy pre-pandoc-2.10 SimpleTable API, which Quarto does not implement."
+code: Q-11-2
+subsystem: lua
+status: stub
+since: "99.9.9"
+categories:
+  - lua
+---
+
+# `Q-11-2` — SimpleTable is not supported
+
+> A Lua filter used the legacy pre-pandoc-2.10 SimpleTable API, which
+> Quarto does not implement.
+
+## What this means
+
+Pandoc has had two table representations. The original `SimpleTable`
+was replaced in pandoc 2.10 by the richer `pandoc.Table`, which can
+express row and column spans, multiple header rows, table bodies, and
+a caption. `SimpleTable` survives in pandoc only as a compatibility
+shim.
+
+Quarto does not carry that shim. Three names are affected:
+
+- `pandoc.SimpleTable`
+- `pandoc.utils.to_simple_table`
+- `pandoc.utils.from_simple_table`
+
+A filter calling any of them stops with this error.
+
+## Why this happens
+
+- **A filter written against a pandoc 2.9-or-earlier tutorial.** Much
+  of the Lua filter material online predates the 2.10 change.
+- **A filter copied from a long-lived project** that was written before
+  2.10 and kept working in pandoc through the shim.
+- **Round-tripping to simplify table handling** — `to_simple_table`
+  followed by `from_simple_table` was a common way to avoid the full
+  `Table` structure.
+
+## How to fix
+
+Work with `pandoc.Table` directly. A `Table` element has these fields:
+
+| Field       | Holds                                          |
+| ----------- | ---------------------------------------------- |
+| `caption`   | a `Caption`                                    |
+| `colspecs`  | alignment and width per column                 |
+| `head`      | a `TableHead`                                  |
+| `bodies`    | a list of `TableBody`                          |
+| `foot`      | a `TableFoot`                                  |
+
+Reading cell contents means walking `head.rows` and each body's
+`body` rows, rather than the flat `rows` list `SimpleTable` offered:
+
+```lua
+function Table(tbl)
+  for _, body in ipairs(tbl.bodies) do
+    for _, row in ipairs(body.body) do
+      for _, cell in ipairs(row.cells) do
+        -- cell.contents is a list of Blocks
+      end
+    end
+  end
+  return tbl
+end
+```
+
+The structure is more verbose, but it is the only representation that
+can round-trip a table without losing spans or a caption — which is
+why the simple form was retired.

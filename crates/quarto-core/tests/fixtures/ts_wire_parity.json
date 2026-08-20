@@ -1,0 +1,34 @@
+{
+  "EngineProjectContext": {
+    "config": {
+      "output-dir": "_out"
+    },
+    "isSingleFile": false,
+    "outputDir": "/proj/_out",
+    "projectDir": "/proj"
+  },
+  "HostGlobalConfig": {
+    "dataDir": "/data",
+    "isInteractiveSession": false,
+    "pandocPath": "/usr/bin/pandoc",
+    "quartoVersion": "0.7.0",
+    "resourceDir": "/res",
+    "runningInCi": true,
+    "runtimeDir": "/rt"
+  },
+  "TsLanguageClaim": {
+    "kind": "primary",
+    "priority": 5
+  },
+  "TsPandocIncludes": {
+    "afterBody": [
+      "<footer/>"
+    ],
+    "beforeBody": [
+      "<header/>"
+    ],
+    "inHeader": [
+      "<style></style>"
+    ]
+  }
+}

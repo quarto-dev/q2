@@ -2,4 +2,169 @@
 title: HTML Themes
 ---
 
-TBD.
+## Overview
+
+Quarto's HTML output is styled with [Bootstrap](https://getbootstrap.com),
+and the `theme:` option selects how it looks. You can use a built-in
+theme, layer your own SCSS on top of one, or provide light and dark
+variants that readers can switch between.
+
+## Basic themes
+
+Pick any built-in [Bootswatch](https://bootswatch.com) theme by name:
+
+``` yaml
+format:
+  html:
+    theme: cosmo
+```
+
+Layer custom SCSS on top of a built-in theme by listing entries in
+order — later entries override earlier ones:
+
+``` yaml
+format:
+  html:
+    theme:
+      - cosmo
+      - custom.scss
+```
+
+Custom theme files use SCSS with Quarto's layer markers
+(`/*-- scss:defaults --*/` for variables, `/*-- scss:rules --*/` for
+rules), and can use all of Bootstrap's variables, functions, and
+mixins.
+
+To opt out of Bootstrap entirely, use `theme: none`.
+
+## Light and dark mode {#dark-mode}
+
+Provide a theme for each color scheme with the `light:`/`dark:` map
+form:
+
+``` yaml
+format:
+  html:
+    theme:
+      light: [cosmo, theme.scss]
+      dark: [cosmo, theme-dark.scss]
+```
+
+Quarto compiles a full stylesheet for each variant and adds a toggle
+to the page (in the navbar for websites, floating in the top-right
+corner otherwise). A reader's choice is remembered in the browser and
+applied before the page paints, so there is no flash on navigation.
+
+The variant listed **first** in the map is the default. To make dark
+the default, write the `dark:` entry first:
+
+``` yaml
+format:
+  html:
+    theme:
+      dark: [cosmo, theme-dark.scss]
+      light: [cosmo, theme.scss]
+```
+
+To have the initial scheme follow the reader's operating-system
+preference instead of the author default, set:
+
+``` yaml
+format:
+  html:
+    respect-user-color-scheme: true
+```
+
+An explicit choice made with the toggle still wins over the system
+preference on later visits.
+
+### Styling per scheme {#mode-specific-content}
+
+Each compiled variant declares its own
+[`color-scheme`](https://developer.mozilla.org/en-US/docs/Web/CSS/color-scheme),
+so native browser chrome — scrollbars, form controls, picker popups —
+follows the theme automatically. It also means custom CSS can use the
+`light-dark()` function to give one rule both values:
+
+``` css
+.my-callout {
+  border-color: light-dark(#005599, #66aaff);
+}
+```
+
+For larger structural differences, the `body` element carries a
+`quarto-light` or `quarto-dark` class that CSS can key on, and content
+marked with the `.light-content` / `.dark-content` classes is shown
+only in the matching scheme:
+
+``` markdown
+::: {.light-content}
+![](logo-light.png)
+:::
+
+::: {.dark-content}
+![](logo-dark.png)
+:::
+```
+
+### Syntax highlighting
+
+The `highlight-style:` option selects the code-highlighting palette.
+Quarto ships the full Quarto 1 palette catalog. An *adaptive* style
+pairs naturally with a light/dark theme — each variant gets the
+matching palette:
+
+``` yaml
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+highlight-style: a11y
+```
+
+You can also select palettes explicitly, per variant:
+
+``` yaml
+highlight-style:
+  light: github
+  dark: arrow
+```
+
+The adaptive styles are `a11y`, `arrow`, `atom-one`, `ayu`, `breeze`,
+`github`, `gruvbox`, and `monochrome`; each resolves to its light or
+dark variant per theme (with a single dark theme such as
+`theme: darkly`, the dark variant is chosen automatically), and the
+explicit forms (`github-light`, `arrow-dark`, …) are also accepted.
+The single-variant palettes are `ayu-mirage`, `breezedark`,
+`dracula`, `espresso`, `haddock`, `kate`, `monokai`, `nord`,
+`oblivion`, `printing`, `pygments`, `radical`, `solarized`, `tango`,
+`vim-dark`, and `zenburn`, plus Quarto's own `default` and `none`
+(no highlight colors at all).
+
+A palette also sets the code block's background and text colors to
+its designed canvas. To override those while keeping the token
+colors, set the `code-block-bg` / `code-block-color` options:
+
+``` yaml
+highlight-style: github
+code-block-bg: "#f6f8fa"
+```
+
+(`code-block-bg: false` removes the background entirely.)
+
+### Light and dark brands
+
+Projects using [brand.yml](https://posit-dev.github.io/brand-yml/) can
+provide a brand per scheme:
+
+``` yaml
+brand:
+  light: brand-light.yml
+  dark: brand-dark.yml
+```
+
+A dark brand enables dark mode on its own — even with a single
+`theme:` entry, the page gets both variants and the toggle. As with
+themes, the variant listed first in the `brand:` map is the default
+(unless a `theme:` light/dark map decides otherwise).

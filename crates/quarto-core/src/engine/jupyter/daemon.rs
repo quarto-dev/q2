@@ -10,25 +10,38 @@
 //! The `JupyterDaemon` manages kernel lifecycle:
 //! - Starting kernels on demand
 //! - Reusing existing kernels for the same (kernel, working_dir) pair
-//! - Shutting down idle kernels
 //! - Cleaning up on shutdown
+//!
+//! # Kernel scopes (bd-hxhnnlzs)
+//!
+//! The daemon is a process-global static, and Rust never drops statics
+//! — so nothing implicit ever shuts these kernels down. Left alone,
+//! every spawned kernel outlives the process, reparents to PID 1, and
+//! idles forever (2338 of them accumulated on one dev machine).
+//!
+//! Lifetime is therefore managed explicitly with refcounted **kernel
+//! scopes**: every execution path that can spawn a kernel holds a
+//! [`KernelScope`] (the jupyter engine's `execute_qmd` acquires one
+//! around each engine run, so no caller can leak by accident), and
+//! long-lived callers that want kernel reuse across engine runs — a
+//! `q2 render` project invocation, the `q2 preview` server — hold an
+//! outer scope for their own lifetime. When the last scope drops, all
+//! sessions are shut down: `shutdown_request`, kill backstop,
+//! connection-file removal.
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use jupyter_protocol::ConnectionInfo;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use super::error::{JupyterError, Result};
 use super::kernelspec;
 use super::session::{KernelSession, SessionKey};
-
-/// Default timeout before idle kernels are shut down.
-const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(300); // 5 minutes
 
 /// In-process daemon managing Jupyter kernel sessions.
 ///
@@ -38,8 +51,14 @@ const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(300); // 5 minutes
 pub struct JupyterDaemon {
     /// Active kernel sessions.
     sessions: RwLock<HashMap<SessionKey, KernelSession>>,
-    /// Idle timeout before shutting down unused kernels.
-    idle_timeout: Duration,
+    /// Serializes kernel startup. Starting a kernel takes seconds and
+    /// many await points; without this lock two concurrent renders of
+    /// documents sharing a session key would both miss the sessions
+    /// map and both spawn, with the loser's kernel evicted on insert
+    /// (observed as duplicate ipykernel processes under project
+    /// renders, bd-hxhnnlzs). Also keeps concurrent port allocations
+    /// (`peek_ports`) from racing each other.
+    start_lock: Mutex<()>,
 }
 
 impl JupyterDaemon {
@@ -47,26 +66,26 @@ impl JupyterDaemon {
     pub fn new() -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
-            idle_timeout: DEFAULT_IDLE_TIMEOUT,
-        }
-    }
-
-    /// Create a daemon with custom idle timeout.
-    pub fn with_idle_timeout(idle_timeout: Duration) -> Self {
-        Self {
-            sessions: RwLock::new(HashMap::new()),
-            idle_timeout,
+            start_lock: Mutex::new(()),
         }
     }
 
     /// Get or start a kernel session for the given key.
     ///
     /// If a session already exists for this (kernel, working_dir) pair,
-    /// it is reused. Otherwise, a new kernel is started.
+    /// it is reused. Otherwise, a new kernel is started with
+    /// `extra_env` applied on top of the inherited environment —
+    /// project `_environment` pairs pre-filtered so the real
+    /// environment wins. `extra_env` is a **spawn-time** input only:
+    /// the session key deliberately excludes it, so a reused session
+    /// keeps the env it was started with (sessions are keyed per
+    /// working dir, and a render/preview serves one project, so the
+    /// env is stable for a key's lifetime).
     pub async fn get_or_start_session(
         &self,
         kernel_name: &str,
         working_dir: &PathBuf,
+        extra_env: &[(String, String)],
     ) -> Result<SessionKey> {
         let key = SessionKey::new(kernel_name, working_dir.clone());
 
@@ -78,14 +97,35 @@ impl JupyterDaemon {
             }
         }
 
-        // Start a new kernel
-        self.start_kernel(&key).await?;
+        if active_scopes() == 0 {
+            // Not fatal — but this kernel will live until the process
+            // exits (or until some other scope closes), which is
+            // exactly the leak bd-hxhnnlzs is about. Callers should
+            // hold a `kernel_scope()`.
+            tracing::warn!(
+                kernel = %key.kernel_name,
+                "starting a Jupyter kernel outside any kernel scope; \
+                 nothing will shut it down automatically"
+            );
+        }
+
+        // Serialize startup and re-check: a concurrent caller may have
+        // finished starting this very session while we awaited the
+        // lock (the read-check/spawn/insert sequence is not atomic).
+        let _starting = self.start_lock.lock().await;
+        {
+            let sessions = self.sessions.read().await;
+            if sessions.contains_key(&key) {
+                return Ok(key);
+            }
+        }
+        self.start_kernel(&key, extra_env).await?;
 
         Ok(key)
     }
 
     /// Start a new kernel for the given key.
-    async fn start_kernel(&self, key: &SessionKey) -> Result<()> {
+    async fn start_kernel(&self, key: &SessionKey, extra_env: &[(String, String)]) -> Result<()> {
         tracing::info!(kernel = %key.kernel_name, dir = %key.working_dir.display(),
             "Starting Jupyter kernel");
 
@@ -140,6 +180,7 @@ impl JupyterDaemon {
                 message: e.to_string(),
             })?
             .current_dir(&key.working_dir)
+            .envs(extra_env.iter().map(|(k, v)| (k, v)))
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .stdin(std::process::Stdio::piped())
@@ -188,7 +229,6 @@ impl JupyterDaemon {
             iopub_socket,
             session_id,
             execution_count: 0,
-            last_used: Instant::now(),
             working_dir: key.working_dir.clone(),
         };
 
@@ -235,10 +275,7 @@ impl JupyterDaemon {
         F: FnOnce(&mut KernelSession) -> R,
     {
         let mut sessions = self.sessions.write().await;
-        sessions.get_mut(key).map(|session| {
-            session.touch();
-            f(session)
-        })
+        sessions.get_mut(key).map(f)
     }
 
     /// Execute code in a kernel session.
@@ -252,7 +289,6 @@ impl JupyterDaemon {
     ) -> Option<Result<super::execute::ExecuteResult>> {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(key) {
-            session.touch();
             Some(session.execute(code).await)
         } else {
             None
@@ -279,22 +315,25 @@ impl JupyterDaemon {
         Ok(())
     }
 
-    /// Cleanup idle sessions that have exceeded the timeout.
-    pub async fn cleanup_idle_sessions(&self) {
-        let now = Instant::now();
-        let mut sessions = self.sessions.write().await;
-
-        let idle_keys: Vec<SessionKey> = sessions
-            .iter()
-            .filter(|(_, session)| now.duration_since(session.last_used) > self.idle_timeout)
-            .map(|(key, _)| key.clone())
-            .collect();
-
-        for key in idle_keys {
-            if let Some(mut session) = sessions.remove(&key) {
-                tracing::info!(kernel = %key.kernel_name, "Shutting down idle kernel");
-                let _ = session.shutdown().await;
-            }
+    /// Shutdown all kernel sessions without needing an async context.
+    ///
+    /// This is the teardown path of the last [`KernelScope`] (which
+    /// runs in `Drop`, hence sync). `try_write` cannot fail there in
+    /// practice — a held write lock would mean a kernel is mid-execute,
+    /// and scopes outlive the executions they cover — but if it ever
+    /// does, warn rather than block or panic; the per-`Child`
+    /// `kill_on_drop` remains as the final backstop.
+    pub fn shutdown_all_blocking(&self) {
+        let Ok(mut sessions) = self.sessions.try_write() else {
+            tracing::warn!(
+                "kernel sessions locked during scope teardown; \
+                 skipping shutdown (kill-on-drop remains as backstop)"
+            );
+            return;
+        };
+        for (key, mut session) in sessions.drain() {
+            tracing::info!(kernel = %key.kernel_name, "Shutting down kernel");
+            session.shutdown_blocking();
         }
     }
 
@@ -327,26 +366,109 @@ pub fn daemon() -> Arc<JupyterDaemon> {
         .clone()
 }
 
+/// Long-lived runtime that owns every kernel session's resources.
+///
+/// Kernel ZeroMQ sockets and the kernel `Child` are tokio resources
+/// bound to the runtime they were created on. Sessions outlive a
+/// single engine run (that's the point of the daemon), so they must
+/// not be created on a per-call runtime: reusing a session whose
+/// runtime was dropped fails with "A Tokio 1.x context was found, but
+/// it is being shutdown". Before bd-hxhnnlzs this was masked by the
+/// startup race — every "reuse" actually re-spawned a fresh kernel and
+/// evicted (killed) the old one.
+///
+/// One worker thread is plenty: engine executions serialize on the
+/// sessions lock anyway. Being a static, the runtime is never dropped;
+/// kernels are shut down by the [`KernelScope`] machinery, not by
+/// runtime teardown.
+static ENGINE_RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
+
+/// The shared engine runtime. All daemon session operations —
+/// spawning, executing, async shutdown — must run on it.
+pub(crate) fn engine_runtime() -> &'static tokio::runtime::Runtime {
+    ENGINE_RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .thread_name("jupyter-daemon")
+            .enable_all()
+            .build()
+            .expect("building the shared Jupyter engine runtime")
+    })
+}
+
+/// Number of currently-open [`KernelScope`]s.
+static ACTIVE_SCOPES: AtomicUsize = AtomicUsize::new(0);
+
+fn active_scopes() -> usize {
+    ACTIVE_SCOPES.load(Ordering::SeqCst)
+}
+
+/// RAII handle keeping the global kernel pool alive (bd-hxhnnlzs).
+///
+/// When the last open scope drops, every session in the global daemon
+/// is shut down ([`JupyterDaemon::shutdown_all_blocking`]). The
+/// jupyter engine acquires one around each engine run, so kernels
+/// never outlive the work that spawned them; callers that want kernel
+/// reuse *across* engine runs (a project render, a preview server)
+/// hold an additional scope for their own lifetime.
+///
+/// Scope drops must happen on the normal return path — `Drop` does not
+/// run across `std::process::exit`, so hold scopes tightly around the
+/// work rather than around exit-calling code.
+#[must_use = "the kernel pool shuts down when the last scope drops; \
+              bind to a named guard for the intended lifetime"]
+pub struct KernelScope {
+    _not_send_sync_constructible: (),
+}
+
+/// Open a [`KernelScope`].
+pub fn kernel_scope() -> KernelScope {
+    ACTIVE_SCOPES.fetch_add(1, Ordering::SeqCst);
+    KernelScope {
+        _not_send_sync_constructible: (),
+    }
+}
+
+impl Drop for KernelScope {
+    fn drop(&mut self) {
+        let was = ACTIVE_SCOPES.fetch_sub(1, Ordering::SeqCst);
+        debug_assert!(was > 0, "KernelScope refcount underflow");
+        // Last scope out shuts down the pool. A concurrent
+        // `kernel_scope()` call racing this transition could get its
+        // fresh kernel torn down; in practice every spawning path runs
+        // under a scope that is still open here, and the cost of the
+        // race is a kernel restart, not a leak.
+        if was == 1
+            && let Some(daemon) = DAEMON.get()
+        {
+            daemon.shutdown_all_blocking();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_daemon_creation() {
-        let daemon = JupyterDaemon::new();
-        assert_eq!(daemon.idle_timeout, DEFAULT_IDLE_TIMEOUT);
-    }
-
-    #[test]
-    fn test_daemon_custom_timeout() {
-        let timeout = Duration::from_secs(60);
-        let daemon = JupyterDaemon::with_idle_timeout(timeout);
-        assert_eq!(daemon.idle_timeout, timeout);
-    }
 
     #[tokio::test]
     async fn test_daemon_initial_state() {
         let daemon = JupyterDaemon::new();
         assert_eq!(daemon.session_count().await, 0);
+    }
+
+    #[test]
+    fn test_kernel_scope_refcount() {
+        // nextest runs each test in its own process, so the global
+        // counter starts at 0 and nothing else touches it.
+        assert_eq!(active_scopes(), 0);
+        let outer = kernel_scope();
+        {
+            let _inner = kernel_scope();
+            assert_eq!(active_scopes(), 2);
+        }
+        // Inner drop must not tear down while an outer scope is open.
+        assert_eq!(active_scopes(), 1);
+        drop(outer);
+        assert_eq!(active_scopes(), 0);
     }
 }

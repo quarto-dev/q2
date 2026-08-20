@@ -1,0 +1,14 @@
+---
+title: Two deep
+---
+
+A page two directories down, where a correct path must be `../../images/logo.svg`.
+
+Control — the same root-absolute path written in the document body:
+
+![body image, root-absolute](/images/logo.svg)
+
+(Add `![x](images/logo.svg)` here too and q2 raises `Q-5-6 Referenced
+resource not found`, because `deep/deeper/images/logo.svg` does not
+exist. The footer items below point at exactly that missing file and
+say nothing.)

@@ -1,0 +1,7 @@
+---
+title: Home
+---
+
+Body control referencing the same missing file:
+
+![body missing](/images/nope.svg)

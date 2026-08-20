@@ -1,0 +1,43 @@
+catalog codes: 193   pages: 165
+
+missing: 28
+    Q-11-2
+    Q-11-3
+    Q-11-4
+    Q-11-5
+    Q-14-3
+    Q-16-1
+    Q-16-2
+    Q-16-3
+    Q-16-4
+    Q-16-5
+    Q-16-6
+    Q-16-7
+    Q-16-8
+    Q-16-9
+    Q-2-42
+    Q-3-42
+    Q-3-43
+    Q-5-10
+    Q-5-11
+    Q-5-12
+    Q-5-17
+    Q-5-18
+    Q-5-19
+    Q-5-20
+    Q-5-21
+    Q-5-22
+    Q-5-8
+    Q-5-9
+
+orphan: 0
+
+misplaced: 0
+
+drift: 2
+    ('Q-2-43', 'title', 'Callout title given twice', 'Callout Title Given Twice')
+    ('Q-2-44', 'title', 'Callout title is not inline content', 'Callout Title Is Not Inline Content')
+
+url-drift: 2
+    ('Q-3-42', 'https://quarto.org/docs/errors/Q-3-42', 'https://quarto.org/docs/errors/writer/Q-3-42')
+    ('Q-3-43', 'https://quarto.org/docs/errors/Q-3-43', 'https://quarto.org/docs/errors/writer/Q-3-43')

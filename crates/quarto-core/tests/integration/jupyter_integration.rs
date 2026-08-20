@@ -67,12 +67,16 @@ async fn test_kernel_execute_print() {
         return;
     }
 
+    // bd-hxhnnlzs: panic-safety — if an assertion below fails before
+    // the explicit shutdown_session, this scope's drop still tears the
+    // kernel down instead of leaking it to PID 1.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 
     // Start a kernel session
     let key = daemon
-        .get_or_start_session("python3", &working_dir)
+        .get_or_start_session("python3", &working_dir, &[])
         .await
         .expect("Failed to start kernel");
 
@@ -119,11 +123,15 @@ async fn test_kernel_execute_expression() {
         return;
     }
 
+    // bd-hxhnnlzs: panic-safety — if an assertion below fails before
+    // the explicit shutdown_session, this scope's drop still tears the
+    // kernel down instead of leaking it to PID 1.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 
     let key = daemon
-        .get_or_start_session("python3", &working_dir)
+        .get_or_start_session("python3", &working_dir, &[])
         .await
         .expect("Failed to start kernel");
 
@@ -162,11 +170,15 @@ async fn test_kernel_execute_error() {
         return;
     }
 
+    // bd-hxhnnlzs: panic-safety — if an assertion below fails before
+    // the explicit shutdown_session, this scope's drop still tears the
+    // kernel down instead of leaking it to PID 1.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 
     let key = daemon
-        .get_or_start_session("python3", &working_dir)
+        .get_or_start_session("python3", &working_dir, &[])
         .await
         .expect("Failed to start kernel");
 
@@ -223,6 +235,8 @@ fn make_test_project() -> ProjectContext {
             std::env::current_dir().unwrap().join("test.qmd"),
         )],
         output_dir: std::env::current_dir().unwrap(),
+
+        ..Default::default()
     }
 }
 
@@ -235,11 +249,15 @@ async fn test_kernel_execute_matplotlib() {
         return;
     }
 
+    // bd-hxhnnlzs: panic-safety — if an assertion below fails before
+    // the explicit shutdown_session, this scope's drop still tears the
+    // kernel down instead of leaking it to PID 1.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 
     let key = daemon
-        .get_or_start_session("python3", &working_dir)
+        .get_or_start_session("python3", &working_dir, &[])
         .await
         .expect("Failed to start kernel");
 

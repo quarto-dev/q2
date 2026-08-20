@@ -1,0 +1,11 @@
+---
+title: Shortcodes in code blocks
+vendor: LDAP
+---
+
+Body: vendor is {{< meta vendor >}}.
+
+```{.ini filename="example.gcfg"}
+[Section "corporate {{< meta vendor >}}"]
+Enabled = true
+```

@@ -37,9 +37,19 @@ pub struct Listing {
     pub kind: ListingType,
     pub contents: Vec<ListingContents>,
     pub fields: Vec<String>,
+    /// `true` when the author supplied a non-empty `fields:` list.
+    /// Author-explicit fields are used verbatim; defaulted fields are
+    /// presence-filtered against the hydrated items at render time
+    /// (Q1 parity, bd-listing-table-fields-peg1w3b3).
+    pub fields_explicit: bool,
     pub field_display_names: BTreeMap<String, String>,
     pub field_types: BTreeMap<String, ColumnType>,
-    pub field_links: Vec<String>,
+    /// Fields whose cell/entry value links to the item. `None` means
+    /// the author didn't specify; [`apply_type_defaults`] then fills
+    /// the Q1 default (`[title, filename]` for table listings, empty
+    /// otherwise). An author-explicit `field-links: []` stays `Some`
+    /// and disables linking entirely.
+    pub field_links: Option<Vec<String>>,
     pub field_sort: Vec<String>,
     pub field_filter: Vec<String>,
     pub field_required: Vec<String>,
@@ -85,9 +95,10 @@ impl Default for Listing {
             kind: ListingType::Default,
             contents: Vec::new(),
             fields: Vec::new(),
+            fields_explicit: false,
             field_display_names: BTreeMap::new(),
             field_types: BTreeMap::new(),
-            field_links: Vec::new(),
+            field_links: None,
             field_sort: Vec::new(),
             field_filter: Vec::new(),
             field_required: Vec::new(),
@@ -129,12 +140,28 @@ pub enum ListingType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ListingContents {
-    /// Glob pattern resolved against the project file set; see
-    /// L3 D10 (host-relative globs filtered through ProjectIndex).
-    Glob(String),
+    /// Glob pattern, kept as the user wrote it (a leading `!` marks
+    /// a negation). `source` is the provenance of the YAML scalar —
+    /// [`glob_resolve::resolve_content_globs`](super::glob_resolve::resolve_content_globs)
+    /// uses it to recover the declaring file's directory, which is
+    /// the base the pattern resolves against (GH #456,
+    /// bd-v7ixzsp5).
+    Glob { pattern: String, source: SourceInfo },
     /// Inline metadata record. Schema accepts; L3 emits `Q-12-2`
     /// and skips the entry until a follow-up bd issue lands.
     Inline(BTreeMap<String, ConfigValue>),
+}
+
+impl ListingContents {
+    /// Test/construction convenience: a glob entry with programmatic
+    /// (no-file) provenance, which resolves against the host
+    /// directory.
+    pub fn glob_no_source(pattern: impl Into<String>) -> Self {
+        ListingContents::Glob {
+            pattern: pattern.into(),
+            source: SourceInfo::generated(By::programmatic_config()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -449,6 +476,9 @@ fn parse_one_listing(
             }
             "fields" => {
                 l.fields = parse_string_list(&entry.value);
+                // Explicit-but-empty `fields: []` falls through to
+                // the type defaults, same as omitting the key.
+                l.fields_explicit = !l.fields.is_empty();
             }
             "field-display-names" => {
                 l.field_display_names = parse_string_string_map(&entry.value, diagnostics);
@@ -456,7 +486,7 @@ fn parse_one_listing(
             "field-types" => {
                 l.field_types = parse_field_types(&entry.value, diagnostics);
             }
-            "field-links" => l.field_links = parse_string_list(&entry.value),
+            "field-links" => l.field_links = Some(parse_string_list(&entry.value)),
             "field-sort" => l.field_sort = parse_string_list(&entry.value),
             "field-filter" => l.field_filter = parse_string_list(&entry.value),
             "field-required" => l.field_required = parse_string_list(&entry.value),
@@ -478,7 +508,7 @@ fn parse_one_listing(
                 l.image_placeholder = entry.value.as_plain_text();
             }
             "sort" => {
-                l.sort = Some(parse_sort(&entry.value, diagnostics));
+                l.sort = parse_sort(&entry.value, diagnostics);
             }
             "template" => {
                 template_source = Some(&entry.value);
@@ -602,36 +632,52 @@ fn parse_contents(
     value: &ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Vec<ListingContents> {
-    // Quarto YAML routinely parses bare frontmatter strings as
-    // `PandocInlines` (e.g. when a glob like `posts/*.qmd` confuses
-    // the markdown sublexer and lands as a `Span` carrying the
-    // `yaml-markdown-syntax-error` class). Route through
-    // `as_plain_text` first so any string-shaped variant becomes a
-    // glob, mirroring `parse_listings`'s top-level shorthand
-    // handling. The bug that surfaced when L5's snapshot fixture
-    // used `contents: "posts/*.qmd"` and the broader audit of
-    // sibling parser branches is tracked under bd-nwyp.
+    // Since bd-v7ixzsp5, front-matter `contents:` strings arrive as
+    // `ConfigValueKind::Glob` — the key-path annotation table in
+    // pampa (`meta_annotations.rs`) types them at parse time, so
+    // they never take the markdown-parsing path (which used to warn
+    // Q-1-20 and could silently corrupt patterns whose asterisks
+    // parsed as emphasis). The `as_plain_text` route below is kept
+    // as a defensive fallback for string-shaped values from other
+    // sources (programmatic construction, runtime metadata, legacy
+    // `PandocInlines` values — the original bd-nwyp shape).
     if let Some(s) = value.as_plain_text() {
-        return vec![ListingContents::Glob(s)];
+        return vec![ListingContents::Glob {
+            pattern: s,
+            source: value.source_info.clone(),
+        }];
     }
     match &value.value {
         ConfigValueKind::Scalar(Yaml::String(s)) => {
-            vec![ListingContents::Glob(s.clone())]
+            vec![ListingContents::Glob {
+                pattern: s.clone(),
+                source: value.source_info.clone(),
+            }]
         }
         ConfigValueKind::Glob(pattern) => {
-            vec![ListingContents::Glob(pattern.clone())]
+            vec![ListingContents::Glob {
+                pattern: pattern.clone(),
+                source: value.source_info.clone(),
+            }]
         }
         ConfigValueKind::Array(items) => items
             .iter()
             .filter_map(|item| {
                 if let Some(s) = item.as_plain_text() {
-                    return Some(ListingContents::Glob(s));
+                    return Some(ListingContents::Glob {
+                        pattern: s,
+                        source: item.source_info.clone(),
+                    });
                 }
                 match &item.value {
-                    ConfigValueKind::Scalar(Yaml::String(s)) => {
-                        Some(ListingContents::Glob(s.clone()))
-                    }
-                    ConfigValueKind::Glob(pattern) => Some(ListingContents::Glob(pattern.clone())),
+                    ConfigValueKind::Scalar(Yaml::String(s)) => Some(ListingContents::Glob {
+                        pattern: s.clone(),
+                        source: item.source_info.clone(),
+                    }),
+                    ConfigValueKind::Glob(pattern) => Some(ListingContents::Glob {
+                        pattern: pattern.clone(),
+                        source: item.source_info.clone(),
+                    }),
                     ConfigValueKind::Map(entries) => {
                         push_diag(
                             diagnostics,
@@ -718,30 +764,40 @@ fn parse_field_types(
     out
 }
 
-fn parse_sort(value: &ConfigValue, diagnostics: &mut Vec<DiagnosticMessage>) -> Vec<ListingSort> {
-    if let ConfigValueKind::Scalar(Yaml::Boolean(false)) = &value.value {
-        return Vec::new();
+/// Parse the `sort:` value. `None` means "apply the default sort" —
+/// `sort: true` is Q1's explicit spelling of the default, so it
+/// parses the same as an absent key. `Some(vec![])` means sorting is
+/// explicitly disabled (`sort: false`); `Some(keys)` is an author
+/// sort spec.
+fn parse_sort(
+    value: &ConfigValue,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Option<Vec<ListingSort>> {
+    if let ConfigValueKind::Scalar(Yaml::Boolean(b)) = &value.value {
+        return if *b { None } else { Some(Vec::new()) };
     }
     // String-shaped values (including the routine PandocInlines
     // wrapping of front-matter strings) flatten via `as_plain_text`,
     // mirroring `parse_contents` — see bd-2qjnd / bd-nwyp.
     if let Some(s) = value.as_plain_text() {
-        return vec![parse_one_sort_key(&s)];
+        return Some(vec![parse_one_sort_key(&s)]);
     }
     match &value.value {
-        ConfigValueKind::Array(items) => items
-            .iter()
-            .filter_map(|v| v.as_plain_text())
-            .map(|s| parse_one_sort_key(&s))
-            .collect(),
+        ConfigValueKind::Array(items) => Some(
+            items
+                .iter()
+                .filter_map(|v| v.as_plain_text())
+                .map(|s| parse_one_sort_key(&s))
+                .collect(),
+        ),
         _ => {
             push_diag(
                 diagnostics,
                 "Q-12-3",
-                "`sort:` must be a string, array of strings, or `false`.",
+                "`sort:` must be a string, array of strings, or a boolean.",
                 value,
             );
-            Vec::new()
+            Some(Vec::new())
         }
     }
 }
@@ -886,6 +942,16 @@ pub fn apply_type_defaults(l: &mut Listing) {
         .map(String::from)
         .collect();
     }
+    // Q1's `kDefaultFieldLinks`: table listings link title +
+    // filename cells; other types link nothing by default. An
+    // author-explicit `field-links:` (even `[]`) is already `Some`
+    // and wins.
+    if l.field_links.is_none() {
+        l.field_links = Some(match l.kind {
+            ListingType::Table => vec!["title".to_string(), "filename".to_string()],
+            _ => Vec::new(),
+        });
+    }
     // Type-specific knobs (only fill None).
     match l.kind {
         ListingType::Default => {
@@ -911,45 +977,31 @@ pub fn apply_type_defaults(l: &mut Listing) {
     // host page (Q1 default; the host file itself gets excluded
     // during item discovery, not here).
     if l.contents.is_empty() {
-        l.contents.push(ListingContents::Glob("*.qmd".to_string()));
+        l.contents.push(ListingContents::glob_no_source("*.qmd"));
     }
 }
 
-/// Extract just the content-glob strings from a host page's
-/// `meta.listing:` value, ignoring all other listing config.
+/// Flatten every `contents:` glob entry across all listings declared
+/// on a host page's `meta.listing:` value, ignoring all other listing
+/// config. Inline-record entries (`Q-12-2` at render time) contribute
+/// nothing.
 ///
-/// Used by [`crate::project::dependency_graph::ProjectDependencyGraph::build`]
-/// (Phase-8 / L6, `bd-xbnf`) to discover which sibling files this
-/// page's listings reference, so Mode B can re-render the host
-/// when any of those siblings is in the user-named target set.
-///
-/// Globs are flattened across all listings declared on the page —
-/// the dep graph cares about edges, not which listing produced
-/// them. Inline-record `contents:` entries (`Q-12-2` at render
-/// time) contribute nothing to the dep graph.
-///
-/// **Implementation note (`bd-bqf2`):** today this routes through
-/// [`parse_listings`] and discards the resulting diagnostics, so
-/// shape-handling stays in lockstep with the L3 generate transform
-/// without any duplicated walker logic. If profiling ever shows
-/// the redundant work as a hotspot, `bd-bqf2` tracks the refactor
-/// to a shared shape walker. For now: one source of truth, no
-/// drift risk.
-pub fn extract_content_globs(meta: &ConfigValue) -> Vec<String> {
+/// Consumers resolve the returned entries with
+/// [`super::glob_resolve::resolve_content_globs`] — see that module
+/// for the base-directory semantics. Routes through
+/// [`parse_listings`] (diagnostics discarded) so shape-handling
+/// stays in lockstep with the L3 generate transform (`bd-bqf2`).
+pub fn flatten_content_globs(meta: &ConfigValue) -> Vec<ListingContents> {
     let Some(listing_value) = meta.get("listing") else {
         return Vec::new();
     };
     let mut throwaway_diagnostics: Vec<DiagnosticMessage> = Vec::new();
     let listings = parse_listings(listing_value, &mut throwaway_diagnostics);
-    let mut out: Vec<String> = Vec::new();
-    for listing in listings {
-        for content in listing.contents {
-            if let ListingContents::Glob(g) = content {
-                out.push(g);
-            }
-        }
-    }
-    out
+    listings
+        .into_iter()
+        .flat_map(|l| l.contents)
+        .filter(|c| matches!(c, ListingContents::Glob { .. }))
+        .collect()
 }
 
 /// The value of `key` in `value`, if `value` is a map containing it.
@@ -1012,6 +1064,18 @@ mod tests {
         let mut diags = Vec::new();
         let listings = parse_listings(&value, &mut diags);
         (listings, diags)
+    }
+
+    /// The glob pattern strings of a contents list, ignoring the
+    /// per-entry provenance (which tests can't reproduce exactly).
+    fn glob_patterns(contents: &[ListingContents]) -> Vec<String> {
+        contents
+            .iter()
+            .filter_map(|c| match c {
+                ListingContents::Glob { pattern, .. } => Some(pattern.clone()),
+                ListingContents::Inline(_) => None,
+            })
+            .collect()
     }
 
     // ── real-source fixtures (bd-9yh3pzfu) ──────────────────────────
@@ -1189,10 +1253,7 @@ listing:
         assert_eq!(listings[0].id, "listing-1");
         assert_eq!(listings[0].kind, ListingType::Default);
         // Default contents glob filled in.
-        assert_eq!(
-            listings[0].contents,
-            vec![ListingContents::Glob("*.qmd".to_string())]
-        );
+        assert_eq!(glob_patterns(&listings[0].contents), vec!["*.qmd"]);
         // Default fields set.
         assert!(listings[0].fields.contains(&"title".to_string()));
         assert!(listings[0].fields.contains(&"date".to_string()));
@@ -1272,10 +1333,7 @@ listing:
             ("type", s("default")),
             ("contents", arr(vec![s("posts/**/*.qmd")])),
         ]));
-        assert_eq!(
-            listings[0].contents,
-            vec![ListingContents::Glob("posts/**/*.qmd".to_string())]
-        );
+        assert_eq!(glob_patterns(&listings[0].contents), vec!["posts/**/*.qmd"]);
     }
 
     // 6b. Quarto YAML often parses globs like `posts/*.qmd` as
@@ -1300,8 +1358,8 @@ listing:
             ("contents", contents_val),
         ]));
         assert_eq!(
-            listings[0].contents,
-            vec![ListingContents::Glob("posts/*.qmd".to_string())],
+            glob_patterns(&listings[0].contents),
+            vec!["posts/*.qmd"],
             "expected `posts/*.qmd` glob; diags: {:?}",
             diags
         );
@@ -1326,11 +1384,8 @@ listing:
         );
         let (listings, _) = parse(map(vec![("type", s("default")), ("contents", arr_val)]));
         assert_eq!(
-            listings[0].contents,
-            vec![
-                ListingContents::Glob("posts/*.qmd".to_string()),
-                ListingContents::Glob("notes/*.qmd".to_string()),
-            ]
+            glob_patterns(&listings[0].contents),
+            vec!["posts/*.qmd", "notes/*.qmd"]
         );
     }
 
@@ -1363,6 +1418,25 @@ listing:
         assert_eq!(sort.len(), 1);
         assert_eq!(sort[0].field, "date");
         assert_eq!(sort[0].direction, SortDirection::Asc);
+    }
+
+    // 8b. sort: false → Some([]) — sorting explicitly disabled,
+    // declared contents order preserved downstream.
+    #[test]
+    fn sort_false_parses_to_empty_spec() {
+        let (listings, diags) = parse(map(vec![("sort", b(false))]));
+        assert_eq!(listings[0].sort.as_deref(), Some(&[][..]));
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    }
+
+    // 8c. sort: true → None — Q1's explicit spelling of "apply the
+    // default sort"; same as an absent key, and NOT a field named
+    // "true".
+    #[test]
+    fn sort_true_parses_like_absent() {
+        let (listings, diags) = parse(map(vec![("sort", b(true))]));
+        assert_eq!(listings[0].sort, None);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
     }
 
     // 9. sort: ["date desc"] → Desc
@@ -1425,6 +1499,76 @@ listing:
         assert!(listings[0].sort_ui);
         assert!(listings[0].filter_ui);
         assert_eq!(listings[0].page_size, 30);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // bd-listing-table-fields-peg1w3b3: field-links defaults +
+    // explicit-fields tracking (Q1 parity for table listings).
+    // ─────────────────────────────────────────────────────────────
+
+    // Q1 `kDefaultFieldLinks` applies to table listings only.
+    #[test]
+    fn field_links_defaults_to_title_filename_for_table() {
+        let (listings, _) = parse(s("table"));
+        assert_eq!(
+            listings[0].field_links,
+            Some(vec!["title".to_string(), "filename".to_string()])
+        );
+    }
+
+    #[test]
+    fn field_links_defaults_to_empty_for_non_table_types() {
+        let (listings, _) = parse(s("default"));
+        assert_eq!(listings[0].field_links, Some(Vec::new()));
+        let (listings, _) = parse(s("grid"));
+        assert_eq!(listings[0].field_links, Some(Vec::new()));
+    }
+
+    // Author-explicit `field-links: []` disables linking; the table
+    // default must not overwrite it.
+    #[test]
+    fn field_links_explicit_empty_survives_table_defaults() {
+        let (listings, _) = parse(map(vec![
+            ("type", s("table")),
+            ("field-links", arr(vec![])),
+        ]));
+        assert_eq!(listings[0].field_links, Some(Vec::new()));
+    }
+
+    #[test]
+    fn field_links_explicit_list_parses() {
+        let (listings, _) = parse(map(vec![
+            ("type", s("table")),
+            ("field-links", arr(vec![s("author")])),
+        ]));
+        assert_eq!(listings[0].field_links, Some(vec!["author".to_string()]));
+    }
+
+    // `fields_explicit` gates render-time presence filtering: only
+    // *defaulted* field sets are filtered against the items.
+    #[test]
+    fn fields_explicit_true_when_author_supplies_fields() {
+        let (listings, _) = parse(map(vec![
+            ("type", s("table")),
+            ("fields", arr(vec![s("title")])),
+        ]));
+        assert!(listings[0].fields_explicit);
+        assert_eq!(listings[0].fields, vec!["title"]);
+    }
+
+    #[test]
+    fn fields_explicit_false_when_fields_defaulted() {
+        let (listings, _) = parse(s("table"));
+        assert!(!listings[0].fields_explicit);
+    }
+
+    // Explicit-but-empty `fields: []` falls back to the type default
+    // set and is treated as non-explicit (same as today).
+    #[test]
+    fn fields_empty_list_treated_as_defaulted() {
+        let (listings, _) = parse(map(vec![("type", s("table")), ("fields", arr(vec![]))]));
+        assert!(!listings[0].fields_explicit);
+        assert_eq!(listings[0].fields, vec!["date", "title", "author"]);
     }
 
     // template + non-custom type → Q-12-7
@@ -1491,11 +1635,12 @@ listing:
     }
 
     // ─────────────────────────────────────────────────────────────
-    // L6 (bd-xbnf): extract_content_globs
+    // L6 (bd-xbnf): flatten_content_globs
     //
-    // The dep-graph builder calls this to read just the glob strings
-    // out of `meta.listing`, ignoring all the other listing config.
-    // It must agree with `parse_listings` on every accepted shape so
+    // The profile stage calls this to read just the glob entries
+    // out of `meta.listing` (before resolving them via
+    // `glob_resolve`), ignoring all the other listing config. It
+    // must agree with `parse_listings` on every accepted shape so
     // graph edges line up with what the L3 generate transform
     // resolves at render time.
     // ─────────────────────────────────────────────────────────────
@@ -1508,7 +1653,7 @@ listing:
     #[test]
     fn extract_globs_from_single_listing_default_shorthand() {
         let meta = meta_with_listing(b(true));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 
     /// Explicit `contents:` glob list.
@@ -1516,8 +1661,8 @@ listing:
     fn extract_globs_from_single_listing_with_explicit_contents() {
         let meta = meta_with_listing(map(vec![("contents", arr(vec![s("posts/*.qmd")]))]));
         assert_eq!(
-            extract_content_globs(&meta),
-            vec!["posts/*.qmd".to_string()]
+            glob_patterns(&flatten_content_globs(&meta)),
+            vec!["posts/*.qmd"]
         );
     }
 
@@ -1526,7 +1671,7 @@ listing:
     #[test]
     fn extract_globs_from_single_listing_no_contents_shorthand() {
         let meta = meta_with_listing(map(vec![("type", s("grid"))]));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 
     /// Array of listings; globs flatten across listings.
@@ -1537,12 +1682,8 @@ listing:
             map(vec![("contents", arr(vec![s("b/*.qmd"), s("c/*.qmd")]))]),
         ]));
         assert_eq!(
-            extract_content_globs(&meta),
-            vec![
-                "a/*.qmd".to_string(),
-                "b/*.qmd".to_string(),
-                "c/*.qmd".to_string(),
-            ]
+            glob_patterns(&flatten_content_globs(&meta)),
+            vec!["a/*.qmd", "b/*.qmd", "c/*.qmd"]
         );
     }
 
@@ -1554,7 +1695,7 @@ listing:
             "contents",
             arr(vec![map(vec![("title", s("foo"))]), s("*.qmd")]),
         )]));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 
     /// `listing: false` → no globs (parse_listings emits Q-12-6
@@ -1562,21 +1703,21 @@ listing:
     #[test]
     fn extract_globs_listing_false_is_empty() {
         let meta = meta_with_listing(b(false));
-        assert!(extract_content_globs(&meta).is_empty());
+        assert!(flatten_content_globs(&meta).is_empty());
     }
 
     /// Meta with no `listing:` key → empty globs.
     #[test]
     fn extract_globs_no_listing_key_is_empty() {
         let meta = map(vec![("title", s("Hello"))]);
-        assert!(extract_content_globs(&meta).is_empty());
+        assert!(flatten_content_globs(&meta).is_empty());
     }
 
     /// `contents:` as a single string (not an array) — `parse_contents`
-    /// accepts this shape; `extract_content_globs` must agree.
+    /// accepts this shape; `flatten_content_globs` must agree.
     #[test]
     fn extract_globs_handles_string_shorthand_contents() {
         let meta = meta_with_listing(map(vec![("contents", s("*.qmd"))]));
-        assert_eq!(extract_content_globs(&meta), vec!["*.qmd".to_string()]);
+        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
     }
 }

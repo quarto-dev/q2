@@ -1,0 +1,27 @@
+{
+  "blocks": [
+    {
+      "c": [
+        {
+          "c": "Marker:",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "TABLE-RAN",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    1
+  ]
+}

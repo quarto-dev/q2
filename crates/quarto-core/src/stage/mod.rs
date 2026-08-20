@@ -81,7 +81,7 @@
 //! - Format-specific stages (HTML, PDF, etc.)
 //! - Project vs single-document mode
 
-mod cancellation;
+pub mod cancellation;
 mod context;
 mod data;
 mod error;
@@ -93,10 +93,12 @@ pub mod trace;
 mod traits;
 
 // Re-export public types
+pub use cancellation::Cancellation;
 pub use context::StageContext;
 pub use data::{
-    DocumentAst, DocumentAtProfile, DocumentSource, ExecutedDocument, FinalOutput, LoadedSource,
-    PandocIncludes, PipelineData, PipelineDataKind, RenderedOutput, SourceType,
+    ConversionProvenance, DocumentAst, DocumentAtProfile, DocumentSource, ExecutedDocument,
+    FinalOutput, LoadedSource, PandocIncludes, PipelineData, PipelineDataKind, RenderedOutput,
+    SourceType,
 };
 pub use error::{PipelineError, PipelineValidationError};
 pub use observer::{EventLevel, NoopObserver, PipelineObserver, TracingObserver};
@@ -109,12 +111,15 @@ pub use traits::PipelineStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use stages::BootstrapJsStage;
 pub use stages::CodeHighlightStage;
+#[cfg(not(target_arch = "wasm32"))]
+pub use stages::TabsetsJsStage;
 pub use stages::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CaptureSpliceStage,
     CompileThemeCssStage, DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage,
     IncludeResolveStage, LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage,
     MathJsStage, MetadataMergeStage, ParseDocumentStage, PreEngineSugaringStage,
-    RenderHtmlBodyStage, ResourceReportStage, UnwrapProfileStage, UserFiltersStage,
+    RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage, UnwrapProfileStage,
+    UserFiltersStage,
 };
 
 // Re-export the trace_event macro
@@ -361,6 +366,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let document = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();

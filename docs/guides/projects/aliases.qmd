@@ -1,0 +1,140 @@
+---
+title: "Aliases: keeping old URLs working"
+---
+
+## Overview
+
+When a page moves or gets renamed, every link, bookmark and search
+result pointing at its old URL breaks. The `aliases:` key keeps those
+URLs working: list the old paths in the page's front matter, and
+Quarto writes a small redirect at each one.
+
+```yaml
+---
+title: Deploying content
+aliases:
+  - /old-deploy-guide.html
+  - /cookbook/deploying/
+---
+```
+
+Rendering this site produces the page itself plus two extra files —
+`_site/old-deploy-guide.html` and `_site/cookbook/deploying/index.html`
+— each a redirect to the real page.
+
+Aliases only take effect in **website** projects. In any other project
+type Quarto warns that the key has no effect rather than ignoring it.
+
+## Writing an alias
+
+An alias is a URL path, not a source path. It names where the page
+*used to be* in the built site.
+
+**A leading `/` is relative to the site root.** This is almost always
+what you want, and it means the same thing no matter where the page
+declaring it lives:
+
+```yaml
+aliases:
+  - /guides/deploy.html
+```
+
+**Anything else is relative to the page's own location** in the output.
+A page that renders to `_site/current/index.html` writing:
+
+```yaml
+aliases:
+  - ../previous/index.html
+```
+
+gets a redirect at `_site/previous/index.html`.
+
+### Paths that name a directory
+
+An alias that ends in `/`, or that has no file extension, names a
+directory — Quarto adds `index.html`:
+
+| Alias            | Redirect written at        |
+| ---------------- | -------------------------- |
+| `/deploy/`       | `_site/deploy/index.html`   |
+| `/deploy`        | `_site/deploy/index.html`   |
+| `/deploy.html`   | `_site/deploy.html`         |
+
+The first two are equivalent. Use the third form only when the old URL
+really did end in `.html`.
+
+## Fragments
+
+An alias may carry a `#fragment`, which is useful when one old page was
+split into several new ones. Each fragment can lead somewhere different:
+
+```yaml
+# building.qmd
+aliases:
+  - /hub/            # the bare URL lands here
+  - /hub/#image
+
+# deploying.qmd
+aliases:
+  - /hub/#deploy     # a different page
+```
+
+Both pages contribute to a single redirect at `_site/hub/index.html`.
+A visitor arriving at `/hub/#deploy` reaches *Deploying*; one arriving
+at `/hub/#image`, or at plain `/hub/`, reaches *Building*.
+
+When you use fragments this way, **one page must claim the bare URL**
+(the `/hub/` entry above). Without it, a visitor who arrives with no
+fragment has nowhere defined to go, and Quarto reports an error rather
+than guessing.
+
+## Drafts
+
+A page marked `draft: true` writes no redirects. A live URL pointing at
+an unfinished page would reveal its existence, which defeats the point
+of marking it a draft.
+
+## When aliases conflict
+
+Two aliases cannot produce the same file, and an alias cannot land on a
+page your project renders. Quarto treats each of these as an error and
+stops the render, reporting **every** conflict it found rather than one
+at a time:
+
+- [`Q-5-23`](../../errors/project/Q-5-23.qmd) — the redirect would
+  overwrite a real page.
+- [`Q-5-24`](../../errors/project/Q-5-24.qmd) — two pages claim the
+  same alias, or no page claims a shared alias's bare URL.
+- [`Q-5-25`](../../errors/project/Q-5-25.qmd) — two paths differ only
+  in capitalization.
+- [`Q-5-26`](../../errors/project/Q-5-26.qmd) — the alias climbs above
+  the output directory.
+
+Stopping is deliberate. The alternative — a site that builds while a
+redirect is silently missing or silently points at the wrong page — is
+much harder to notice: the build log looks clean and the old links keep
+failing with nothing to explain why.
+
+## Differences from Quarto 1
+
+If you are porting a site, three behaviours changed.
+
+**Conflicts are errors.** Quarto 1 warns and skips when a redirect
+would overwrite a page, and says nothing at all when two pages claim
+the same alias — the last one processed silently wins. Quarto 2 stops
+and names both pages.
+
+**Capitalization counts, on every platform.** Quarto 1 compares paths
+exactly, so `/Deploy/` and `/deploy/` look distinct to it. On macOS and
+Windows they are the same file, and one silently overwrites the other —
+which, when the loser is a real page, replaces that page with a
+redirect pointing at itself. Quarto 2 rejects such a pair even on
+Linux, so a site built in CI cannot break when served elsewhere.
+
+**The redirect works without JavaScript.** Quarto 1's redirect runs a
+script and does nothing else; a reader without JavaScript sees a blank
+page, and a crawler has to infer what happened. Quarto 2 adds a
+`<noscript>` fallback, a `rel="canonical"` link naming the destination,
+and a visible link as a last resort. The generated file therefore
+differs from Quarto 1's byte for byte — expected, and not a sign that
+something went wrong with your port.

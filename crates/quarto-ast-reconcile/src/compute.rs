@@ -677,6 +677,13 @@ fn compute_inline_alignments<'a>(
                 // URL (the `](url)` is part of the verbatim-copied closing
                 // delimiter). The non-child identity is: Link/Image `target`+`attr`,
                 // Span `attr`, Custom `type_name`.
+                //
+                // bd-205v6: Cite's `citations` (id, mode, prefix, suffix) are
+                // likewise non-child identity — only `content` is a recursable
+                // child — so two Cites with different citations must not pair.
+                // The same holds for Quoted's `quote_type` (the quote chars ARE
+                // the delimiters) and the editorial marks' `attr` (serialized
+                // as `]{attr}` inside the closing delimiter).
                 match (*orig_inline, exec_inline) {
                     (Inline::Custom(o), Inline::Custom(e)) => o.type_name == e.type_name,
                     (Inline::Link(o), Inline::Link(e)) => o.target == e.target && o.attr == e.attr,
@@ -684,6 +691,14 @@ fn compute_inline_alignments<'a>(
                         o.target == e.target && o.attr == e.attr
                     }
                     (Inline::Span(o), Inline::Span(e)) => o.attr == e.attr,
+                    (Inline::Cite(o), Inline::Cite(e)) => {
+                        crate::hash::structural_eq_citations(&o.citations, &e.citations)
+                    }
+                    (Inline::Quoted(o), Inline::Quoted(e)) => o.quote_type == e.quote_type,
+                    (Inline::Insert(o), Inline::Insert(e)) => o.attr == e.attr,
+                    (Inline::Delete(o), Inline::Delete(e)) => o.attr == e.attr,
+                    (Inline::Highlight(o), Inline::Highlight(e)) => o.attr == e.attr,
+                    (Inline::EditComment(o), Inline::EditComment(e)) => o.attr == e.attr,
                     _ => true,
                 }
             });

@@ -88,6 +88,7 @@ impl AstTransform for AttributionGenerateTransform {
         let AttributionData {
             runs,
             mut identities,
+            file_id,
         } = provider.build(ctx)?;
 
         // Preserve provider Arc<str> keys on collision (the
@@ -103,7 +104,11 @@ impl AstTransform for AttributionGenerateTransform {
             }
         }
 
-        ctx.attribution_data = Some(Arc::new(AttributionData { runs, identities }));
+        ctx.attribution_data = Some(Arc::new(AttributionData {
+            runs,
+            identities,
+            file_id,
+        }));
         Ok(())
     }
 }

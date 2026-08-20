@@ -1,0 +1,93 @@
+---
+title: "Project render script could not be launched"
+description: "Quarto could not start a `project.pre-render` / `project.post-render` script: the interpreter, shebang, executable bit, or path is missing."
+code: Q-5-10
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-10` — Project render script could not be launched
+
+> Quarto could not start a `project.pre-render` /
+> `project.post-render` script: the interpreter, shebang, executable
+> bit, or path is missing.
+
+## What this means
+
+This is a failure to *start* the script, not a failure *of* the script.
+The distinction matters for diagnosis: the script produced no output,
+because it never ran.
+
+Quarto decides how to launch each entry from its extension. A `.py`
+file goes to Python, an `.R` file to R, a `.js` file to Node. Anything
+else is executed directly, which requires the file to be executable
+and to carry a shebang line. An entry can also be a full command line,
+in which case Quarto runs it as given.
+
+## Why this happens
+
+- **The interpreter is not on `PATH`.** The most common cause,
+  especially under editors and CI, where `PATH` differs from your
+  interactive shell.
+- **A directly-executed script with no shebang.** Without
+  `#!/usr/bin/env bash` on the first line, there is nothing to tell the
+  system what runs the file.
+- **A script without its executable bit.** Files fresh from `git
+  clone` keep their recorded mode; files created by a script or an
+  editor often do not.
+- **A path that does not exist** — a rename or a move that missed
+  `_quarto.yml`. Paths resolve relative to the project root.
+
+## How to fix
+
+Check the path first, from the project root:
+
+```bash
+ls -l tools/prepare.sh
+```
+
+That output answers two of the four causes at once — whether the file
+exists, and whether it is executable. To add the executable bit:
+
+```bash
+chmod +x tools/prepare.sh
+```
+
+and give it a shebang:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+```
+
+For an interpreter Quarto cannot find, either put it on `PATH` or
+point Quarto at it explicitly:
+
+| Variable         | Overrides discovery of |
+| ---------------- | ---------------------- |
+| `QUARTO_PYTHON`  | Python                 |
+| `QUARTO_R`       | R                      |
+| `QUARTO_NODE`    | Node                   |
+
+```bash
+export QUARTO_PYTHON=/opt/venv/bin/python3
+```
+
+This is the reliable way to pin a virtualenv, which is otherwise
+sensitive to how the shell was started.
+
+You can also sidestep discovery entirely by writing the command out:
+
+```yaml
+project:
+  pre-render: python3 tools/gen.py
+```
+
+## Related errors
+
+- [`Q-5-8`](Q-5-8.qmd) — the script started and exited non-zero.
+- [`Q-5-12`](Q-5-12.qmd) — the environment cannot run subprocesses at
+  all.

@@ -677,6 +677,17 @@ Documentation is tracked separately as `bd-tr81`.
 Each phase will get its own `claude-notes/plans/YYYY-MM-DD-*.md` sub-plan
 before implementation begins.
 
+**Post-epic extension: Plan 6 — Pass-1 engine resolution (implemented).**
+Not a phase of this epic, but a later consumer of the profile/cache surfaces
+it owns (`DocumentProfile`, `DOCUMENT_PROFILE_VERSION`, `pass1_key`).
+[Plan 6](2026-06-29-plan6-pass1-engine-resolution.md) adds
+`engine_resolution: Option<ProfileEngineResolution>` to `DocumentProfile`
+(bumping `DOCUMENT_PROFILE_VERSION` 6 → 7, following the same
+self-invalidation pattern Phase 8.0's 1 → 2 bump used) and extends the
+Pass-1 cache key with engine-extension `_extension.yml` bytes, so editing an
+extension's static claims correctly invalidates cached profiles instead of
+serving stale ones.
+
 ## Epic-wide follow-ups surfaced by sub-plans
 
 Issues that transcend a single phase — surfaced while scoping a phase

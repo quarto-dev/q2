@@ -118,12 +118,34 @@ pub type IdentityMap = HashMap<Arc<str>, Identity>;
 /// boundary; both fields use `#[serde(default, skip_serializing_if)]`
 /// so runs-only and identities-only transport payloads serialize
 /// compactly.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AttributionData {
     #[serde(default, skip_serializing_if = "AttributionMap::is_empty")]
     pub runs: AttributionMap,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub identities: IdentityMap,
+    /// The file the runs' byte ranges index into — the file the
+    /// provider blamed. v1 providers blame the primary document,
+    /// which `ParseDocumentStage` registers as the first (dense) slot
+    /// of a fresh `SourceContext`, i.e. `FileId(0)`; the builder
+    /// defaults accordingly. Consumers must compare a node's resolved
+    /// FileId against THIS field, never against a literal `0`
+    /// (bd-vmlhw7nx): carrying the identity here keeps the
+    /// single-doc invariant in one place and makes the gate survive
+    /// any future change to slot assignment or multi-file (v2)
+    /// attribution.
+    #[serde(skip)]
+    pub file_id: quarto_source_map::FileId,
+}
+
+impl Default for AttributionData {
+    fn default() -> Self {
+        Self {
+            runs: AttributionMap::default(),
+            identities: IdentityMap::default(),
+            file_id: quarto_source_map::FileId(0),
+        }
+    }
 }
 
 /// Transport-only mirror of [`AttributionRun`] used at the WASM

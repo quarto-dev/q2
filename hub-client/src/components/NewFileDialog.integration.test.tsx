@@ -317,4 +317,22 @@ describe('NewFileDialog', () => {
       });
     });
   });
+
+  describe('accessibility semantics', () => {
+    it('exposes role="dialog" with aria-modal and the title as accessible name', () => {
+      render(<NewFileDialog {...defaultProps} />);
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveAttribute('aria-modal', 'true');
+      const labelId = dialog.getAttribute('aria-labelledby');
+      expect(labelId).toBeTruthy();
+      expect(document.getElementById(labelId!)).toHaveTextContent('New file');
+    });
+
+    it('gives the close button an accessible name', () => {
+      render(<NewFileDialog {...defaultProps} />);
+
+      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    });
+  });
 });

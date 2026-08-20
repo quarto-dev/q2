@@ -1,0 +1,98 @@
+{
+  "name": "@quarto/api",
+  "version": "0.1.0",
+  "description": "Quarto engine author API",
+  "license": "MIT",
+  "author": {
+    "name": "Posit PBC"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./src/config/index.ts",
+      "source": "./src/config/index.ts",
+      "import": "./dist/config/index.js"
+    },
+    "./platform": {
+      "types": "./src/platform/index.ts",
+      "source": "./src/platform/index.ts",
+      "import": "./dist/platform/index.js"
+    },
+    "./text": {
+      "types": "./src/text/index.ts",
+      "source": "./src/text/index.ts",
+      "import": "./dist/text/index.js"
+    },
+    "./format": {
+      "types": "./src/format/index.ts",
+      "source": "./src/format/index.ts",
+      "import": "./dist/format/index.js"
+    },
+    "./crypto": {
+      "types": "./src/crypto/index.ts",
+      "source": "./src/crypto/index.ts",
+      "import": "./dist/crypto/index.js"
+    },
+    "./mappedString": {
+      "types": "./src/mappedString/index.ts",
+      "source": "./src/mappedString/index.ts",
+      "import": "./dist/mappedString/index.js"
+    },
+    "./markdownRegex": {
+      "types": "./src/markdownRegex/index.ts",
+      "source": "./src/markdownRegex/index.ts",
+      "import": "./dist/markdownRegex/index.js"
+    },
+    "./console": {
+      "types": "./src/console/index.ts",
+      "source": "./src/console/index.ts",
+      "import": "./dist/console/index.js"
+    },
+    "./path": {
+      "types": "./src/path/index.ts",
+      "source": "./src/path/index.ts",
+      "import": "./dist/path/index.js"
+    },
+    "./system": {
+      "types": "./src/system/index.ts",
+      "source": "./src/system/index.ts",
+      "import": "./dist/system/index.js"
+    },
+    "./claims": {
+      "types": "./src/claims/index.ts",
+      "source": "./src/claims/index.ts",
+      "import": "./dist/claims/index.js"
+    },
+    "./jupyter": {
+      "types": "./src/jupyter/index.ts",
+      "source": "./src/jupyter/index.ts",
+      "import": "./dist/jupyter/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "blueimp-md5": "^2.19.0",
+    "yaml": "^2.0.0"
+  },
+  "devDependencies": {
+    "@quarto/types": "*",
+    "@types/blueimp-md5": "^2.18.2",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

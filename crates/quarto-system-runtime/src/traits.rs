@@ -410,6 +410,20 @@ pub trait SystemRuntime: Send + Sync {
         None
     }
 
+    /// True if q2 is attached to an interactive terminal. Default false
+    /// (non-interactive, e.g. WASM); `NativeRuntime` overrides via stdin TTY
+    /// detection.
+    fn is_interactive(&self) -> bool {
+        false
+    }
+
+    /// True if running under CI (the `CI` env var is set to a non-empty value).
+    /// Reads via `env_get`, so the default works for every runtime (WASM
+    /// `env_get` → `None` → false).
+    fn running_in_ci(&self) -> bool {
+        matches!(self.env_get("CI"), Ok(Some(v)) if !v.is_empty())
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // NETWORK
     // ═══════════════════════════════════════════════════════════════════════
@@ -823,5 +837,136 @@ mod tests {
         assert!(validate_cache_namespace("ns/bad").is_err());
         assert!(validate_cache_namespace("..").is_err());
         assert!(validate_cache_namespace("ns.v2").is_err());
+    }
+
+    // ── is_interactive / running_in_ci tests ─────────────────────────────────
+    //
+    // Use a minimal mock that implements only `env_get`; all other required
+    // methods panic via `unimplemented!()`. This avoids touching the real
+    // process environment (no parallel-test races) and stays small.
+
+    /// Minimal mock that controls what `env_get("CI")` returns.
+    struct CiMockRuntime {
+        ci_value: Option<&'static str>,
+    }
+
+    #[async_trait::async_trait]
+    impl SystemRuntime for CiMockRuntime {
+        fn env_get(&self, name: &str) -> RuntimeResult<Option<String>> {
+            if name == "CI" {
+                Ok(self.ci_value.map(str::to_owned))
+            } else {
+                Ok(None)
+            }
+        }
+        fn env_all(&self) -> RuntimeResult<HashMap<String, String>> {
+            unimplemented!()
+        }
+        fn file_read(&self, _: &Path) -> RuntimeResult<Vec<u8>> {
+            unimplemented!()
+        }
+        fn file_write(&self, _: &Path, _: &[u8]) -> RuntimeResult<()> {
+            unimplemented!()
+        }
+        fn path_exists(&self, _: &Path, _: Option<PathKind>) -> RuntimeResult<bool> {
+            unimplemented!()
+        }
+        fn canonicalize(&self, _: &Path) -> RuntimeResult<PathBuf> {
+            unimplemented!()
+        }
+        fn path_metadata(&self, _: &Path) -> RuntimeResult<PathMetadata> {
+            unimplemented!()
+        }
+        fn file_copy(&self, _: &Path, _: &Path) -> RuntimeResult<()> {
+            unimplemented!()
+        }
+        fn path_rename(&self, _: &Path, _: &Path) -> RuntimeResult<()> {
+            unimplemented!()
+        }
+        fn file_remove(&self, _: &Path) -> RuntimeResult<()> {
+            unimplemented!()
+        }
+        fn dir_create(&self, _: &Path, _: bool) -> RuntimeResult<()> {
+            unimplemented!()
+        }
+        fn dir_remove(&self, _: &Path, _: bool) -> RuntimeResult<()> {
+            unimplemented!()
+        }
+        fn dir_list(&self, _: &Path) -> RuntimeResult<Vec<PathBuf>> {
+            unimplemented!()
+        }
+        fn cwd(&self) -> RuntimeResult<PathBuf> {
+            unimplemented!()
+        }
+        fn temp_dir(&self, _: &str) -> RuntimeResult<TempDir> {
+            unimplemented!()
+        }
+        fn exec_pipe(&self, _: &str, _: &[&str], _: &[u8]) -> RuntimeResult<Vec<u8>> {
+            unimplemented!()
+        }
+        fn exec_command(
+            &self,
+            _: &str,
+            _: &[&str],
+            _: Option<&[u8]>,
+        ) -> RuntimeResult<CommandOutput> {
+            unimplemented!()
+        }
+        async fn fetch_url(&self, _: &str) -> RuntimeResult<(Vec<u8>, String)> {
+            unimplemented!()
+        }
+        fn os_name(&self) -> &'static str {
+            "mock"
+        }
+        fn arch(&self) -> &'static str {
+            "mock"
+        }
+        fn cpu_time(&self) -> RuntimeResult<u64> {
+            unimplemented!()
+        }
+        fn xdg_dir(&self, _: XdgDirKind, _: Option<&Path>) -> RuntimeResult<PathBuf> {
+            unimplemented!()
+        }
+        fn stdout_write(&self, _: &[u8]) -> RuntimeResult<()> {
+            unimplemented!()
+        }
+        fn stderr_write(&self, _: &[u8]) -> RuntimeResult<()> {
+            unimplemented!()
+        }
+    }
+
+    #[test]
+    fn running_in_ci_true_for_nonempty_value() {
+        let rt = CiMockRuntime {
+            ci_value: Some("true"),
+        };
+        assert!(rt.running_in_ci(), "CI=true should be truthy");
+    }
+
+    #[test]
+    fn running_in_ci_true_for_one() {
+        let rt = CiMockRuntime {
+            ci_value: Some("1"),
+        };
+        assert!(rt.running_in_ci(), "CI=1 should be truthy");
+    }
+
+    #[test]
+    fn running_in_ci_false_for_empty_string() {
+        let rt = CiMockRuntime { ci_value: Some("") };
+        assert!(!rt.running_in_ci(), "CI='' should be falsy");
+    }
+
+    #[test]
+    fn running_in_ci_false_when_not_set() {
+        let rt = CiMockRuntime { ci_value: None };
+        assert!(!rt.running_in_ci(), "unset CI should be falsy");
+    }
+
+    #[test]
+    fn is_interactive_default_is_false() {
+        // The default impl returns false; CiMockRuntime inherits it (no override).
+        let rt = CiMockRuntime { ci_value: None };
+        assert!(!rt.is_interactive(), "default is_interactive must be false");
     }
 }

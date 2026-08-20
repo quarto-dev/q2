@@ -4,6 +4,7 @@
 //! quarto-core for actual implementation.
 
 pub mod add;
+pub mod build_ts_extension;
 pub mod call;
 pub mod check;
 pub mod common;

@@ -26,7 +26,8 @@ use std::path::{Component, Path, PathBuf};
 
 use async_trait::async_trait;
 
-use crate::document_profile::DocumentProfile;
+use crate::document_profile::{DocumentProfile, ProfileEngineResolution};
+use crate::engine::resolve_engines_pass1;
 use crate::stage::{
     DocumentAtProfile, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
@@ -88,6 +89,63 @@ impl PipelineStage for DocumentProfileStage {
         // construction and `bd-r82e` invalidation can see every
         // (transitive) child file the parent depends on.
         profile.includes = std::mem::take(&mut doc.recorded_includes);
+
+        // Resolve the host's `listing.*.contents:` globs to
+        // project-relative form (bd-v7ixzsp5, GH #456). Needs the
+        // document's `SourceContext` (registered YAML metadata
+        // layers) to recover each glob's declaring file, so it
+        // lives here rather than in the pure `extract`. Escaping
+        // patterns are dropped silently — the render transform owns
+        // the `Q-12-17` diagnostic.
+        let host_dir = to_forward_slash(source_path.parent().unwrap_or(Path::new("")));
+        let contents = crate::project::listing::config::flatten_content_globs(&doc.ast.meta);
+        profile.listing_content_globs =
+            crate::project::listing::glob_resolve::resolve_content_globs(
+                &contents,
+                Some(&doc.ast_context.source_context),
+                &ctx.project.dir,
+                &host_dir,
+            )
+            .globs;
+
+        // Same treatment for `resources:` (bd-mt7a6uc4 defect 1).
+        // Before this, a `resources:` glob written in
+        // `blog/_metadata.yml` resolved against each *host document's*
+        // directory instead of `blog/`, so the wrong files were
+        // published — the same defect #456 fixed for listings, one
+        // metadata key over.
+        let (resource_resolution, rejected_resources) =
+            crate::project_resources::resolve_declared_resource_globs(
+                &profile.resources,
+                Some(&doc.ast_context.source_context),
+                &ctx.project.dir,
+                &host_dir,
+            );
+        profile.resource_globs = resource_resolution.globs;
+        profile.resource_glob_sources = resource_resolution.sources;
+        profile.rejected_resources = rejected_resources;
+
+        // Plan 6 Phase 5: stamp the reduced Pass-1 engine resolution.
+        // `resolve_engines_pass1` is pure and cheap (no I/O, no engine
+        // load) — safe to call unconditionally here, including on the
+        // Pass-2 head-pipeline re-run (`pipeline.rs`), where it just
+        // recomputes the same load-free answer. `None` means the
+        // document fell through to Pass-2's loading resolver; that is
+        // advisory, not an error (see the field doc comment).
+        profile.engine_resolution = resolve_engines_pass1(
+            &doc.ast.meta,
+            &doc.ast,
+            &ctx.registry,
+            ctx.claimed_engine_name.as_deref(),
+        )
+        .map(|res| ProfileEngineResolution {
+            sequence: res.sequence.iter().map(|de| de.name.clone()).collect(),
+            ownership: res
+                .ownership
+                .iter()
+                .map(|(lang, engine)| (lang.clone(), engine.clone()))
+                .collect(),
+        });
 
         Ok(PipelineData::AtProfile(DocumentAtProfile {
             profile,
@@ -314,6 +372,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/sub/page.qmd");
         let format = Format::html();
@@ -358,6 +418,32 @@ mod tests {
         );
         assert_eq!(bundle.profile.format_id, "html");
         assert_eq!(bundle.profile.profile_version, DocumentProfile::VERSION);
+    }
+
+    /// Plan 6 Phase 5: a markdown-only doc (empty language scan, P2's
+    /// early return) stamps `Some` with empty sequence/ownership — the
+    /// default registry (markdown/knitr/jupyter, all load-free) never
+    /// needs to consult the empty-scan short-circuit at all, but the
+    /// stamp must still be present and `Some`.
+    #[tokio::test]
+    async fn stage_stamps_engine_resolution_when_lifted() {
+        let mut ctx = make_ctx();
+        let stage = DocumentProfileStage::new();
+
+        let out = stage
+            .run(PipelineData::DocumentAst(make_doc_ast()), &mut ctx)
+            .await
+            .expect("stage runs");
+        let bundle = out.into_at_profile().expect("variant is AtProfile");
+
+        assert_eq!(
+            bundle.profile.engine_resolution,
+            Some(crate::document_profile::ProfileEngineResolution {
+                sequence: vec![],
+                ownership: vec![],
+            }),
+            "a markdown-only doc must stamp Some with empty sequence/ownership"
+        );
     }
 
     #[tokio::test]

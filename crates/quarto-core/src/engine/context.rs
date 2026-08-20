@@ -7,13 +7,19 @@
 
 //! Execution context and result types for engines.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
+use pampa::lua::HtmlDependency;
 use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::{By, SourceContext, SourceInfo};
 
+use crate::engine::ts_protocol::TsMetadataValue;
+use crate::engine::{DEFAULT_EXECUTE_TIMEOUT, HANDLED_LANGUAGES};
 use crate::stage::PandocIncludes;
+use crate::stage::cancellation::Cancellation;
 
 /// Context provided to execution engines.
 ///
@@ -54,6 +60,21 @@ pub struct ExecutionContext {
     /// this would contain the `{ kernel: python3 }` map.
     pub engine_config: Option<ConfigValue>,
 
+    /// The document's merged `execute:` scope, if it has one.
+    ///
+    /// This is the document-level default every cell option resolves
+    /// against: cell `#|` options merge *over* this map, cell wins
+    /// (Q1's `shouldInclude` in `src/core/jupyter/tags.ts`). It comes
+    /// from the fully merged metadata — `MetadataMergeStage` runs
+    /// before engine execution — so project `_quarto.yml` defaults and
+    /// profile overlays are already folded in.
+    ///
+    /// Engines that need it: jupyter resolves `echo`/`output`/
+    /// `warning`/`include`/`error` against it in Rust; knitr forwards
+    /// it to R as `format$execute`, where `execute.R` builds
+    /// `opts_chunk` from it (bd-nn2fou8h).
+    pub execute_scope: Option<ConfigValue>,
+
     /// Source provenance for the input text.
     ///
     /// Maps byte offsets in the engine's input `&str` back to original source
@@ -71,6 +92,74 @@ pub struct ExecutionContext {
     /// the context is finalized after include expansion and doesn't change
     /// during engine execution.
     pub source_context: Arc<SourceContext>,
+
+    /// Languages that this engine must leave unchanged in its output.
+    ///
+    /// The set is `HANDLED_LANGUAGES ∪ { lang : ownership[lang] != this_engine }`:
+    /// cell-handler languages (ojs/mermaid/dot) plus any language owned by a
+    /// different engine in the sequence. Populated by `EngineExecutionStage`
+    /// via `EngineResolution::handled_languages_for`; defaults to `HANDLED_LANGUAGES`
+    /// so any code that builds an `ExecutionContext` directly (tests, knitr) gets the
+    /// same leave-alone set as before this field existed.
+    pub handled_languages: Vec<String>,
+
+    /// Cancellation token for graceful shutdown.
+    ///
+    /// Engines that support cancellation (TS engines) poll `cancellation.is_cancelled()`
+    /// and abort early when set. Built-in engines (knitr/jupyter) ignore it for now.
+    /// Defaults to a fresh, non-cancelled token.
+    pub cancellation: Cancellation,
+
+    /// Per-request execution timeout.
+    ///
+    /// `Some(d)` — abort if the engine doesn't respond within `d`.
+    /// `None`    — no timeout (equivalent to `execute: {timeout: false}`).
+    ///
+    /// Resolved from `execute.timeout` in document metadata (tri-state):
+    /// - integer `N` → `Some(Duration::from_secs(N))`
+    /// - boolean `false` → `None`
+    /// - absent / boolean `true` → `Some(DEFAULT_EXECUTE_TIMEOUT)` (300 s)
+    ///
+    /// Defaults to `Some(DEFAULT_EXECUTE_TIMEOUT)` so existing call sites
+    /// (tests, knitr, jupyter) are unaffected.
+    pub execute_timeout: Option<Duration>,
+
+    /// Whether this engine is running in a multi-engine sequence
+    /// (`|resolution.sequence| > 1`).
+    ///
+    /// Used by jupyter's `partition_cells` to gate the "owned-but-unrunnable →
+    /// loud error" branch (P2-13): in a multi-engine sequence, a cell jupyter
+    /// owns but cannot execute (e.g. `{sql}`) raises `NoHandlerForLanguage`;
+    /// in a single-engine sequence the cell is passed through unexecuted
+    /// (display-only, Q1's `quartoMdToJupyter` behaviour for non-kernel cells).
+    ///
+    /// Defaults to `false`; set by `EngineExecutionStage` from
+    /// `resolution.sequence.len() > 1`.
+    pub multi_engine: bool,
+
+    /// Merged document metadata, lowered to the wire's flat
+    /// `Record<string, TsMetadataValue>` shape (P1.1b).
+    ///
+    /// Populated by `EngineExecutionStage` from `doc_ast.ast.meta` via
+    /// [`crate::project::document_metadata_to_ts_map`] (the same recursive
+    /// `ConfigValue → TsMetadataValue` lowering P1.1 built for the `engines`
+    /// subtree, called here over the full merged map). `TsEngine::execute`
+    /// carries this into `TsExecuteOptions.format.metadata`, which the Deno
+    /// host's `metadataAsFormat` partitions into Q1's six-bin `Format`
+    /// (`execute`/`render`/`pandoc`/`identifier`/`language`/`metadata`).
+    /// Built-in engines (knitr/jupyter) ignore this field.
+    ///
+    /// Defaults to empty so existing call sites (tests, knitr, jupyter) are
+    /// unaffected.
+    pub metadata: HashMap<String, TsMetadataValue>,
+
+    /// Environment pairs from the project's `_environment` files to
+    /// pass to engine subprocesses, **already filtered** to keys the
+    /// real process environment does not define (see
+    /// [`crate::project::environment::env_for_subprocess`]). q2 never
+    /// mutates its own environment; executed code sees these values
+    /// only because spawn sites apply them with `Command::env`.
+    pub project_env: Vec<(String, String)>,
 }
 
 impl ExecutionContext {
@@ -89,12 +178,32 @@ impl ExecutionContext {
             format: format.into(),
             quiet: false,
             engine_config: None,
+            execute_scope: None,
             // "no source location known yet" sentinel; `with_source_info`
             // overwrites this with the real qmd serialization range before
             // any consumer reads it.
             source_info: SourceInfo::generated(By::unknown()),
             source_context: Arc::new(SourceContext::new()),
+            // Default: leave ojs/mermaid/dot alone. EngineExecutionStage
+            // overrides this via `with_handled_languages` using the resolver.
+            handled_languages: HANDLED_LANGUAGES.iter().map(|s| s.to_string()).collect(),
+            cancellation: Cancellation::new(),
+            execute_timeout: Some(DEFAULT_EXECUTE_TIMEOUT),
+            // Default false; EngineExecutionStage sets true when |sequence| > 1.
+            multi_engine: false,
+            // Default empty; EngineExecutionStage sets this from the merged
+            // document metadata (P1.1b).
+            metadata: HashMap::new(),
+            project_env: Vec::new(),
         }
+    }
+
+    /// Set the project environment pairs passed to engine
+    /// subprocesses (pre-filtered by
+    /// [`crate::project::environment::env_for_subprocess`]).
+    pub fn with_project_env(mut self, project_env: Vec<(String, String)>) -> Self {
+        self.project_env = project_env;
+        self
     }
 
     /// Set the project directory.
@@ -123,6 +232,53 @@ impl ExecutionContext {
     ) -> Self {
         self.source_info = source_info;
         self.source_context = source_context;
+        self
+    }
+
+    /// Set the leave-alone language set for this engine.
+    ///
+    /// Computed by `EngineResolution::handled_languages_for(engine_name)`:
+    /// `HANDLED_LANGUAGES ∪ { lang : ownership[lang] != this_engine }`.
+    pub fn with_handled_languages(mut self, languages: Vec<String>) -> Self {
+        self.handled_languages = languages;
+        self
+    }
+
+    /// Set the cancellation token.
+    pub fn with_cancellation(mut self, cancellation: Cancellation) -> Self {
+        self.cancellation = cancellation;
+        self
+    }
+
+    /// Set the per-request execution timeout.
+    ///
+    /// `Some(d)` — abort after `d`; `None` — no timeout.
+    pub fn with_execute_timeout(mut self, timeout: Option<Duration>) -> Self {
+        self.execute_timeout = timeout;
+        self
+    }
+
+    /// Set whether this engine runs in a multi-engine sequence.
+    ///
+    /// `true` iff `|resolution.sequence| > 1`. Used by jupyter's
+    /// `partition_cells` to gate the "owned-but-unrunnable → loud error"
+    /// branch (P2-13).
+    pub fn with_multi_engine(mut self, multi: bool) -> Self {
+        self.multi_engine = multi;
+        self
+    }
+
+    /// Set the lowered merged document metadata (P1.1b).
+    ///
+    /// See the `metadata` field doc for the wire path this feeds.
+    pub fn with_metadata(mut self, metadata: HashMap<String, TsMetadataValue>) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
+    /// Set the document's merged `execute:` scope (bd-nn2fou8h).
+    pub fn with_execute_scope(mut self, execute_scope: Option<ConfigValue>) -> Self {
+        self.execute_scope = execute_scope;
         self
     }
 }
@@ -167,6 +323,51 @@ pub struct ExecuteResult {
     /// If true, additional processing steps may be needed after
     /// the main rendering is complete.
     pub needs_postprocess: bool,
+
+    /// Structured HTML dependencies registered by the engine.
+    ///
+    /// Each entry is a `{ name, stylesheets, scripts }` manifest that
+    /// `EngineExecutionStage` passes to `store_html_dependencies` after
+    /// each engine runs.  This is a **disjoint** channel from
+    /// `includes`: `includes` carries pre-rendered HTML/text fragments
+    /// from Q1-shaped engines (the harness routes `engine.dependencies()`
+    /// results there), while `html_dependencies` carries structured
+    /// manifests from engines that use the Q2-native
+    /// `quarto.htmlDependency()` API (Plan 1b).
+    ///
+    /// `#[serde(default)]` allows stored engine-capture fixtures that
+    /// pre-date this field to deserialize successfully (missing field
+    /// becomes an empty `Vec`).
+    #[serde(default)]
+    pub html_dependencies: Vec<HtmlDependency>,
+
+    /// Engine-produced document metadata (carried-and-ignored until a consumer lands).
+    ///
+    /// `#[serde(default)]` allows stored engine-capture fixtures that
+    /// pre-date this field to deserialize successfully.
+    #[serde(default)]
+    pub metadata: Option<HashMap<String, TsMetadataValue>>,
+
+    /// Engine-produced pandoc options (carried-and-ignored until a consumer lands).
+    ///
+    /// `#[serde(default)]` allows stored engine-capture fixtures that
+    /// pre-date this field to deserialize successfully.
+    #[serde(default)]
+    pub pandoc: Option<HashMap<String, TsMetadataValue>>,
+
+    /// Resource files produced by the engine (carried-and-ignored until a consumer lands).
+    ///
+    /// `#[serde(default)]` allows stored engine-capture fixtures that
+    /// pre-date this field to deserialize successfully.
+    #[serde(default)]
+    pub resource_files: Vec<String>,
+
+    /// Key→value preserve map from the engine (carried-and-ignored until a consumer lands).
+    ///
+    /// `#[serde(default)]` allows stored engine-capture fixtures that
+    /// pre-date this field to deserialize successfully.
+    #[serde(default)]
+    pub preserve: HashMap<String, String>,
 }
 
 impl ExecuteResult {
@@ -324,6 +525,48 @@ mod tests {
         assert!(result.supporting_files.is_empty());
         assert!(result.filters.is_empty());
         assert!(!result.needs_postprocess);
+        assert!(result.html_dependencies.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // Row 14 — HtmlDependency serde round-trip through ExecuteResult.
+    //
+    // An ExecuteResult carrying a non-empty html_dependencies must survive
+    // serde_json serialization and deserialization with its deps intact.
+    // Vacuity: the input is non-empty and asserted equal post-round-trip
+    // (requires PartialEq on HtmlDependency added in pampa::lua::quarto_doc).
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_execute_result_html_dependencies_serde_round_trip() {
+        let dep = HtmlDependency {
+            name: "jquery".to_string(),
+            version: None,
+            stylesheets: vec![PathBuf::from("libs/jquery/jquery.css")],
+            scripts: vec![PathBuf::from("libs/jquery/jquery.js")],
+        };
+
+        let original = ExecuteResult {
+            markdown: "# Hello".to_string(),
+            html_dependencies: vec![dep],
+            ..Default::default()
+        };
+
+        // The input must be non-empty (vacuity guard).
+        assert!(
+            !original.html_dependencies.is_empty(),
+            "vacuity: html_dependencies must be non-empty for this test to be meaningful"
+        );
+
+        // Round-trip through serde_json (the EngineCapture path).
+        let json = serde_json::to_string(&original).expect("serialize ExecuteResult");
+        let restored: ExecuteResult =
+            serde_json::from_str(&json).expect("deserialize ExecuteResult");
+
+        // The deps must survive intact.
+        assert_eq!(
+            restored.html_dependencies, original.html_dependencies,
+            "html_dependencies must round-trip through serde_json unchanged"
+        );
     }
 
     #[test]

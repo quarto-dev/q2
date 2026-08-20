@@ -658,6 +658,7 @@ mod tests {
             image_lazy_loading: None,
             reading_time_minutes: None,
             word_count: None,
+            order: None,
             source_path: PathBuf::from(format!("posts/{}.qmd", title)),
             output_href: format!("posts/{}.html", title),
             extra: BTreeMap::new(),
@@ -706,6 +707,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path(project_dir.join("posts.qmd"))],
             output_dir: project_dir.join("_site"),
+
+            ..Default::default()
         }
     }
 

@@ -31,6 +31,9 @@ pub fn run() -> Result<()> {
     if !status.success() {
         bail!("q2-preview-spa build failed");
     }
+    // The SPA's own `build` script ends with the gzip precompression
+    // post-pass (scripts/precompress-dist.mjs), so dist/ already carries
+    // its `.gz` siblings here.
     println!("✓ q2-preview-spa/dist/ is up to date");
     Ok(())
 }

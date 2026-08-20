@@ -1,0 +1,43 @@
+---
+title: "Circular Include"
+description: "An include chain leads back to a file that is already being included."
+code: Q-17-1
+subsystem: include
+status: stub
+since: "99.9.9"
+categories:
+  - include
+---
+
+# `Q-17-1` — Circular Include
+
+> An include chain leads back to a file that is already being
+> included.
+
+## What this means
+
+An `{{{< include >}}}` shortcode names a file that is already part of
+the chain of includes being expanded — either the file includes
+itself, or two or more files include each other in a loop. Expanding
+the include would never terminate, so Quarto skips it: the cyclic
+include contributes nothing to the output, and the rest of the
+document renders normally.
+
+## Why this happens
+
+Common causes:
+
+- **A file includes itself**, usually via a copy-paste of an include
+  line into the included file.
+- **Two shared snippets include each other** — for example, two
+  files under an `include/` directory that each pull in the other
+  for common front matter.
+- **A longer loop through intermediate files**: `a.qmd` includes
+  `b.qmd`, which includes `c.qmd`, which includes `a.qmd` again.
+
+## How to fix
+
+Follow the chain of includes named in the message and remove one of
+the links. If two snippets share common content, move that content
+into a third file and include it from both, instead of having them
+include each other.

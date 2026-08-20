@@ -3,11 +3,21 @@ import { createRoot } from 'react-dom/client'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import './theme.css'
 import './index.css'
+import './ui.css'
 import App from './App.tsx'
 import { savePreAuthHash, restorePreAuthHash } from './utils/routing'
 import { AuthProviderRoot, noopAuthProvider } from './auth/AuthProvider'
 import { googleAuthProvider } from './auth/GoogleAuthProvider'
 import { ThemeProvider } from './components/ThemeContext'
+import { isEphemeralStorage } from './services/ephemeralStorage'
+
+// Ephemeral storage mode (bd-91mdd056): keep the WASM bridge's
+// quarto-cache (SASS/theme artifacts) in memory too. The flag is read
+// by ts-packages/wasm-js-bridge/src/cache.js in this realm; it must be
+// set before the WASM first touches the cache, i.e. before any render.
+if (isEphemeralStorage()) {
+  (globalThis as Record<string, unknown>).__Q2_EPHEMERAL_STORAGE__ = true
+}
 
 // Pre-auth hash preservation for the Google OAuth redirect flow.
 // On first visit: save the hash (e.g., #/share/...) before React clears it.

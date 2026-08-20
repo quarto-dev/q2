@@ -1,0 +1,177 @@
+---
+title: "Project Profiles"
+---
+
+Project profiles adapt a project's configuration, environment, and
+content for different scenarios from a single source: render a
+website with `freeze: true` locally but always execute on CI, build
+a basic and an advanced version of the same material, or keep
+production-only options out of your everyday preview.
+
+When a profile named `production` is active:
+
+1. `_quarto-production.yml` is merged over `_quarto.yml`;
+2. variables from `_environment-production` are applied (see
+   [Project Environment Files](environment.qmd));
+3. content marked `when-profile="production"` appears (and
+   `unless-profile="production"` content disappears);
+4. code cells and render scripts see
+   `QUARTO_PROFILE=production`, so Python/R code can branch on it.
+
+## Activating profiles
+
+Activate one or more profiles with the `--profile` option or the
+`QUARTO_PROFILE` environment variable:
+
+``` {.bash}
+quarto render --profile production
+quarto render --profile advanced,production
+
+export QUARTO_PROFILE=advanced,production
+quarto render
+```
+
+`--profile` *replaces* any `QUARTO_PROFILE` from the environment —
+the two never merge. Profile names are comma-separated, must start
+with a letter or digit, and may contain only letters, digits, `.`,
+`_`, and `-` (they name files like `_quarto-<name>.yml`; anything
+else is an error).
+
+::: {.callout-note}
+`quarto preview` currently reads `QUARTO_PROFILE` only:
+`QUARTO_PROFILE=production quarto preview`. Restart the preview to
+change profiles.
+:::
+
+## Profile configuration
+
+A profile's configuration file `_quarto-<name>.yml` sits next to
+`_quarto.yml` and may contain any project configuration. It is
+merged *over* the main configuration:
+
+``` {.yaml filename="_quarto.yml"}
+project:
+  type: website
+
+execute:
+  freeze: true
+```
+
+``` {.yaml filename="_quarto-production.yml"}
+execute:
+  freeze: false
+```
+
+Maps merge key-by-key and scalars from the profile win. Arrays
+*concatenate*; write `key: !prefer [...]` in the profile to replace
+an array instead. When several profiles are active, the
+**first-listed** profile wins conflicts. A local override file
+`_quarto.yml.local` (git-ignore it) is merged over everything,
+profiles included.
+
+Selecting a profile that matches nothing in the project — no
+`_quarto-<name>.yml`, no `_environment-<name>`, not declared under
+`profile:` — is usually a typo and draws a warning.
+
+## Default profiles and groups
+
+The `profile` key in `_quarto.yml` controls what is active when no
+explicit selection is made:
+
+``` {.yaml filename="_quarto.yml"}
+profile:
+  default: advanced
+```
+
+A profile *group* declares mutually exclusive profiles of which
+exactly one should always be active — the first member is the
+group's default:
+
+``` {.yaml filename="_quarto.yml"}
+project:
+  type: book
+
+book:
+  title: "My Book"
+
+profile:
+  group:
+    - [basic, advanced]
+```
+
+With `_quarto-basic.yml` and `_quarto-advanced.yml` each supplying
+their own `book: chapters:` list, `quarto render` builds the basic
+book and `quarto render --profile advanced` the advanced one — and
+rendering with *no* profile still works, because the group activates
+`basic`.
+
+`_quarto.yml.local` may also set `profile: default:` (handy for a
+personal default on one machine); groups are read from `_quarto.yml`
+only. You can also set `QUARTO_PROFILE=...` in `_environment` or
+`_environment.local` to give the project a default.
+
+## Profile content
+
+Divs and spans with the `.content-visible` and `.content-hidden`
+classes condition content on the active profiles:
+
+``` {.markdown}
+::: {.content-visible when-profile="advanced"}
+This content only appears in the advanced version.
+:::
+
+::: {.content-hidden when-profile="advanced"}
+This content is hidden from the advanced version.
+:::
+
+An inline example: [only for advanced readers]{.content-visible
+when-profile="advanced"}.
+```
+
+The same classes accept `when-format` / `unless-format` (for output
+formats, with the usual aliases — `when-format="html"` also matches
+`revealjs` and `epub`) and `when-meta` / `unless-meta` (true when
+the metadata at a dotted path is present and not `false`). Multiple
+conditions on one element must all hold; a comma-separated value
+(`when-profile="basic,advanced"`) matches when *any* listed name is
+active. Because profiles can set metadata in their configuration
+files, `when-meta` combined with a profile overlay is often the most
+flexible way to control content.
+
+::: {.callout-tip}
+A profile used *only* for conditional content matches no files, so
+it draws the unknown-profile warning. Declare it under
+`profile.group` (or `profile.default`) in `_quarto.yml` to tell
+Quarto it is intentional.
+:::
+
+## Profiles in code
+
+The active profile list (comma-separated, in activation order,
+including group defaults) is visible to everything the render runs:
+
+``` {.python}
+import os
+profiles = os.environ.get("QUARTO_PROFILE", "").split(",")
+```
+
+The same value is available in documents via
+`{{{< env QUARTO_PROFILE >}}}`.
+
+## Differences from Quarto 1
+
+Quarto 2 keeps Quarto 1's activation and merging rules, with these
+deliberate changes:
+
+- **Typos are diagnosed.** Unknown active profiles, malformed
+  `profile:` configuration, invalid profile names, misspelled
+  `when-*`/`unless-*` attributes, and `profile:` keys in files where
+  they have no effect all produce warnings or errors; Quarto 1 is
+  silent on all of them.
+- **Array merging concatenates** (use `!prefer` to replace); Quarto
+  1 unioned arrays while removing duplicates.
+- **Comma-separated condition values** (`when-profile="a,b"`) mean
+  *any-of*; Quarto 1 matched the value literally.
+- `--profile` never modifies your environment; code sees
+  `QUARTO_PROFILE` because Quarto passes it to the processes it
+  starts.

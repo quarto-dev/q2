@@ -236,6 +236,7 @@ impl Rule for DefinitionListConverter {
                 }),
                 error_code: None,
                 error_codes: None,
+                ..Default::default()
             });
         }
 

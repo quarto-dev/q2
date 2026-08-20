@@ -90,87 +90,8 @@
   gap: 8px;
 }
 
-/* ---- buttons ---- */
-
-.ph-btn {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 14px;
-  border-radius: 7px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  background: none;
-  white-space: nowrap;
-}
-
-.ph-btn.primary {
-  background: var(--posit-teal);
-  color: #ffffff;
-}
-
-.ph-btn.primary:hover { filter: brightness(1.08); }
-.ph-btn.primary:disabled { opacity: 0.5; cursor: default; }
-
-.ph-btn.outline {
-  border-color: var(--border-color);
-  color: var(--accent-secondary);
-}
-
-.ph-btn.outline:hover { background: var(--input-bg-alpha); }
-.ph-btn.outline:disabled { opacity: 0.5; cursor: default; }
-
-.ph-btn.danger {
-  background: #b3261e;
-  color: #ffffff;
-}
-
-.ph-btn.danger:hover { filter: brightness(1.1); }
-
-.ph-btn.ghost-accent {
-  border: 1px solid var(--posit-teal);
-  color: var(--posit-teal);
-  font-size: 12.5px;
-  padding: 7px 14px;
-}
-
-.ph-btn.ghost-accent:hover { background: rgba(65, 149, 153, 0.08); }
-
-.ph-btn.small {
-  font-size: 12px;
-  font-weight: 400;
-  padding: 5px 11px;
-  border-radius: 6px;
-  color: var(--text-primary);
-}
-
-.ph-caret { font-size: 9px; }
-
-.ph-link {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--accent-secondary);
-  cursor: pointer;
-}
-
-.ph-link:hover { text-decoration: underline; }
-.ph-link.muted { color: var(--text-secondary); font-weight: 400; }
-.ph-link.danger { color: var(--error-text); }
-
-.ph-icon-btn {
-  background: none;
-  border: none;
-  padding: 2px 8px;
-  font-size: 15px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: 5px;
-  line-height: 1;
-}
-
-.ph-icon-btn:hover { background: var(--input-bg-alpha); color: var(--text-primary); }
+/* Buttons, links, icon buttons (.ph-btn/.ph-link/.ph-icon-btn) live in
+   src/ui.css, shared with the editor chrome. */
 
 .ph-avatar {
   width: 30px;
@@ -203,104 +124,8 @@
   object-fit: cover;
 }
 
-/* ---- menus ---- */
-
-.qh-menu-anchor { position: relative; }
-
-.ph-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  min-width: 250px;
-  background: var(--context-menu-bg);
-  border: 1px solid var(--context-menu-border);
-  border-radius: 9px;
-  box-shadow: 0 8px 28px var(--context-menu-shadow);
-  padding: 6px;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-}
-
-.ph-menu-right { left: auto; right: 0; }
-
-.ph-menu-label {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary);
-  padding: 7px 11px 5px;
-}
-
-.ph-menu-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  width: 100%;
-  box-sizing: border-box;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 11px;
-  font-size: 13px;
-  color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-}
-
-.ph-menu-item:hover { background: var(--context-menu-hover); }
-.ph-menu-item.strong { font-weight: 600; }
-.ph-menu-item.accent { color: var(--posit-teal); font-weight: 600; }
-.ph-menu-item.danger { color: var(--error-text); }
-
-.ph-menu-item.two-line .strong { font-weight: 600; }
-
-.ph-menu-item.with-hint {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.ph-menu-hint { font-size: 10.5px; color: var(--text-muted); }
-
-.ph-menu-subtext {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-secondary);
-}
-
-.ph-menu-divider {
-  height: 1px;
-  background: var(--border-color);
-  margin: 5px 8px;
-}
-
-.ph-submenu-parent { position: relative; padding: 0; }
-
-.ph-menu-item-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  box-sizing: border-box;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 11px;
-  font-size: 13px;
-  color: var(--text-primary);
-  cursor: pointer;
-}
-
-.ph-menu-item-inner:hover { background: var(--context-menu-hover); }
-.ph-submenu-arrow { color: var(--text-secondary); }
-
-.ph-submenu {
-  top: -6px;
-  left: calc(100% + 4px);
-  min-width: 180px;
-}
+/* Menu primitives (.ph-menu and friends) live in src/ui.css; only
+   ProjectsHome-specific positioning overrides remain below. */
 
 /* ---- collections ---- */
 
@@ -915,66 +740,8 @@
   outline-offset: 2px;
 }
 
-/* ---- dialogs ---- */
-
-.ph-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(23, 50, 77, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-.ph-dialog {
-  width: 520px;
-  max-width: calc(100vw - 48px);
-  background: var(--dialog-bg);
-  border-radius: 12px;
-  padding: 26px 30px;
-  box-shadow: var(--modal-shadow);
-  box-sizing: border-box;
-}
-
-.ph-dialog.wide { width: 560px; }
-
-.ph-dialog h2 {
-  margin: 0 0 4px;
-  font-size: 19px;
-  color: var(--text-primary);
-}
-
-.ph-dialog-hint {
-  margin: 0 0 6px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.ph-field-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin: 16px 0 6px;
-}
-
-.ph-input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 12px 15px;
-  font-size: 14px;
-  color: var(--text-primary);
-  background: var(--bg-input);
-  border: 1px solid var(--dialog-input-border);
-  border-radius: 8px;
-  outline: none;
-}
-
-.ph-input:focus { border-color: var(--border-focus); }
-.ph-input.focus-accent:focus { border-color: var(--posit-teal); }
-
-select.ph-input { appearance: auto; }
+/* Dialog, form, tab, and error primitives (.ph-dialog, .ph-input, .ph-tabs,
+   .ph-error families) live in src/ui.css, shared with the editor dialogs. */
 
 .ph-server-line {
   font-size: 12px;
@@ -983,13 +750,6 @@ select.ph-input { appearance: auto; }
 }
 
 .ph-server-line .ph-link { font-size: 12px; }
-
-.ph-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 22px;
-}
 
 .ph-checkbox-row {
   display: flex;
@@ -1004,63 +764,7 @@ select.ph-input { appearance: auto; }
 
 .ph-checkbox-row input { accent-color: var(--posit-teal); }
 
-.ph-tabs {
-  display: flex;
-  background: var(--input-bg-alpha);
-  border-radius: 8px;
-  padding: 3px;
-  margin-top: 12px;
-}
-
-.ph-tab {
-  flex: 1;
-  padding: 8px 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  background: none;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.ph-tab.active {
-  background: var(--bg-modal);
-  color: var(--text-primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-
 /* ---- misc ---- */
-
-.ph-error {
-  margin: 14px 30px 0;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: var(--error-bg-subtle);
-  color: var(--error-text);
-  font-size: 13px;
-  white-space: pre-wrap;
-}
-
-.ph-error.inline { margin: 12px 0 0; }
-
-/* Recovery action inside an error banner (e.g. "Sign in again" on an
-   expired-session join failure). */
-.ph-error-action {
-  display: block;
-  margin-top: 8px;
-  padding: 4px 10px;
-  border: 1px solid var(--error-text);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--error-text);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.ph-error-action:hover {
-  background: var(--error-bg-subtle);
-}
 
 .ph-empty-state {
   text-align: center;
@@ -1118,21 +822,6 @@ select.ph-input { appearance: auto; }
   background: var(--input-bg-alpha);
 }
 
-/* ---- dark mode ----
-   The shared dark tokens sit on a saturated navy ramp (--posit-blue-dark-*),
-   which reads poorly on a full-page surface — low-contrast pairs like the
-   Connect/Import outline button (--posit-blue on navy) get hard to read.
-   Scope a darker, desaturated slate ramp to the projects home only; custom
-   properties cascade, so everything inside (cards, dialogs, buttons) follows.
-   Global theme.css tokens — and every other modal in the app — are untouched. */
-
-:root.dark .projects-home {
-  --bg-modal: #191e23;
-  --bg-card: #242b32;
-  --bg-card-hover: #2d3640;
-  --bg-input: #14181c;
-  --border-color: #353e48;
-  --text-secondary: #a9b6c0;
-  --text-muted: #8494a1;
-  --accent-secondary: #93b3d0;
-}
+/* Dark mode: the desaturated slate ramp for full-page surfaces now lives in
+   theme.css (:root.dark .projects-home, :root.dark .editor-container), shared
+   with the editor. */

@@ -100,15 +100,25 @@ pub enum SidebarTitle {
 /// An `auto:` directive expands into concrete sidebar entries at
 /// Generate time, by consulting the project's set of discovered
 /// documents.
+///
+/// Paths are **globs**, matched with q2's shared glob semantics
+/// (`claude-notes/designs/glob-semantics.md`) against project-relative
+/// document paths: `*` covers one directory level, `**` crosses
+/// levels, a bare directory name matches everything beneath it, and a
+/// leading `!` excludes. Before bd-mt7a6uc4 these were not globs at
+/// all — trailing wildcards were stripped and what remained was
+/// prefix-matched — so `docs/*` used to mean what `docs` means here.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AutoSpec {
     /// `auto: true` — every non-draft, non-index document in the
     /// project.
     All,
-    /// `auto: "docs"` or `auto: "docs/*"` — documents under a single
-    /// path / glob.
+    /// A single glob: `auto: docs` (everything beneath `docs/`),
+    /// `auto: "docs/*.qmd"` (documents directly in `docs/`), or
+    /// `auto: "docs/**/*.qmd"` (documents anywhere beneath it).
     Path(String),
-    /// `auto: ["a", "b/*"]` — the union of multiple paths / globs.
+    /// `auto: ["docs", "!docs/internal"]` — the union of several
+    /// globs, minus any the `!` entries exclude.
     Paths(Vec<String>),
 }
 
@@ -223,7 +233,14 @@ impl SidebarEntry {
         // key, or has `contents:`. (Q1 lets sections go text-less when
         // they only have `href:` + `contents:`.)
         if section_text.is_some() || has_contents {
-            let text = section_text.filter(|v| v.as_plain_text().is_some());
+            // Display text: `section:` wins, `text:` is the fallback
+            // spelling. Q1 accepts both for a section-with-contents
+            // entry (its `normalizeSidebarItem` overwrites `text` with
+            // the `section:` value when both are present) —
+            // bd-sidebar-section-text-ignored-sdp5g7ns.
+            let text = section_text
+                .or_else(|| cv.get("text").cloned())
+                .filter(|v| v.as_plain_text().is_some());
             let (href, href_source) = cv
                 .get("href")
                 .and_then(|v| v.as_plain_text().map(|s| (s, v.source_info.clone())))
@@ -519,14 +536,30 @@ fn parse_contents(cv: Option<&ConfigValue>) -> Vec<SidebarEntry> {
     let Some(cv) = cv else {
         return Vec::new();
     };
-    // Shorthand: `contents: auto` is Q1-idiomatic.
+    // A **scalar** `contents:` is an `auto:` spec. Q1's
+    // `normalizeSidebarItems` (website-sidebar-auto.ts) rewrites
+    // `contents: <s>` to `[{auto: true}]` when `<s>` is "auto" and to
+    // `[{auto: <s>}]` for every other string — so `contents: guides`
+    // auto-generates the directory's entries, and `contents: intro.qmd`
+    // expands to that one document. There is no file-vs-directory
+    // branch here on purpose; expansion resolves it (D1/D3 of
+    // bd-sidebar-contents-dir-shorthand-z7arvhx8).
+    //
+    // This is deliberately **scalar-only**. A bare string inside a
+    // `contents:` *array* is not an auto spec — Q1 sends those through
+    // `normalizeSidebarItem` (project-config.ts), which yields a link
+    // or a plain label. Those still take the `from_plain_string` route
+    // in `SidebarEntry::from_config_value`.
     if let Some(s) = cv.as_plain_text() {
         if s == "auto" {
             return vec![SidebarEntry::Auto(AutoSpec::All)];
         }
-        // A single path is a single-entry list. The ConfigValue's own
-        // source_info identifies the YAML scalar (bd-qor9a).
-        return vec![SidebarEntry::from_plain_string(&s, cv.source_info.clone())];
+        // A lone separator is not a path; keep it a separator rather
+        // than an auto spec that could only ever match nothing.
+        if is_separator_string(&s) {
+            return vec![SidebarEntry::Separator];
+        }
+        return vec![SidebarEntry::Auto(AutoSpec::Path(s))];
     }
     // Normal case: array of entries.
     if let Some(arr) = cv.as_array() {
@@ -705,6 +738,97 @@ fn mark_active_in(entries: &mut [SidebarEntry], self_source: &str) -> bool {
 }
 
 // ----------------------------------------------------------------------------
+// Breadcrumb trail (bd-breadcrumbs-missing-1vpuqh34).
+//
+// The trail is the chain of wrapping sections `mark_active_in` proves
+// when it bubbles up from the active leaf, plus the leaf itself —
+// recomputed here as a read-only walk so callers that only have the
+// stored (already-expanded) sidebar can derive it without re-running
+// active-state resolution.
+// ----------------------------------------------------------------------------
+
+/// One entry in a breadcrumb trail. `text` keeps the `ConfigValue`
+/// shape so markdown inlines survive to the renderer; `href` stays in
+/// whatever space the sidebar's hrefs are in when the trail is
+/// computed (source-path space in the render pipeline — the caller
+/// resolves them like any other nav href).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Crumb {
+    pub text: Option<ConfigValue>,
+    pub href: Option<String>,
+}
+
+/// Compute the breadcrumb trail for the page whose project-relative
+/// source path (forward-slash form) is `self_source`, outermost crumb
+/// first, **including the current page as its own final crumb** —
+/// Q1 parity (`website-shared.ts::breadCrumbs`).
+///
+/// A section crumb without an href borrows its **first direct
+/// child's** href (Q1's rule — `contents[0].href`, not a deeper
+/// search); when that's absent too the crumb is unlinked. Returns an
+/// empty vec when the page doesn't appear in the sidebar.
+pub fn breadcrumb_trail(sidebar: &Sidebar, self_source: &str) -> Vec<Crumb> {
+    let mut crumbs = Vec::new();
+    trail_in(&sidebar.contents, self_source, &mut crumbs);
+    // `trail_in` pushes leaf-first on the way back up the recursion;
+    // the trail reads outermost-first (Q1's `crumbs.reverse()`).
+    crumbs.reverse();
+    crumbs
+}
+
+/// Post-order search mirroring [`mark_active_in`]'s matching rule
+/// (`href == self_source`, header checked before contents). Pushes the
+/// matched leaf, then each wrapping section on the way out.
+fn trail_in(entries: &[SidebarEntry], self_source: &str, crumbs: &mut Vec<Crumb>) -> bool {
+    for entry in entries {
+        match entry {
+            SidebarEntry::Link { item } => {
+                if item.href.as_deref() == Some(self_source) {
+                    crumbs.push(Crumb {
+                        text: item.text.clone(),
+                        href: item.href.clone(),
+                    });
+                    return true;
+                }
+            }
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                if href.as_deref() == Some(self_source) {
+                    crumbs.push(Crumb {
+                        text: text.clone(),
+                        href: href.clone(),
+                    });
+                    return true;
+                }
+                if trail_in(contents, self_source, crumbs) {
+                    crumbs.push(Crumb {
+                        text: text.clone(),
+                        href: href.clone().or_else(|| first_entry_href(contents)),
+                    });
+                    return true;
+                }
+            }
+            SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => {}
+        }
+    }
+    false
+}
+
+/// Q1's section-crumb borrow: the first direct child's own href
+/// (`contents[0].href` — deliberately not a deeper search).
+fn first_entry_href(entries: &[SidebarEntry]) -> Option<String> {
+    match entries.first()? {
+        SidebarEntry::Link { item } => item.href.clone(),
+        SidebarEntry::Section { href, .. } => href.clone(),
+        SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => None,
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Page-navigation flatten (Phase 4).
 //
 // Walks the sidebar tree depth-first to produce the linear sequence of
@@ -811,6 +935,70 @@ fn dedupe_items_by_href(list: &mut Vec<FlatEntry>) {
         },
         FlatEntry::Separator => true,
     });
+}
+
+/// A sidebar entry that carries both `section:` and `text:` keys.
+/// The two are alternate spellings for a section's display label;
+/// `section:` wins and the `text:` value is ignored (Q1 parity —
+/// bd-sidebar-section-text-ignored-sdp5g7ns). Reported by
+/// [`section_text_conflicts_per_sidebar`] so quarto-core can warn
+/// (Q-13-10) without this crate taking a diagnostics dependency.
+#[derive(Debug, Clone)]
+pub struct SectionTextConflict {
+    /// Plain text of the winning `section:` value, when extractable.
+    pub section_label: Option<String>,
+    /// Plain text of the ignored `text:` value, when extractable.
+    pub text_label: Option<String>,
+    /// Source location of the ignored `text:` value.
+    pub text_source: SourceInfo,
+}
+
+/// Scan the top-level `website.sidebar:` config value for entries
+/// carrying both `section:` and `text:`. Returns one list per
+/// sidebar, indexed to match [`Sidebar::parse_list_from_config`]
+/// (array form → one element per map item; object form → a single
+/// element; anything else → empty), so callers can attribute each
+/// conflict to the sidebar it appears in.
+pub fn section_text_conflicts_per_sidebar(cv: &ConfigValue) -> Vec<Vec<SectionTextConflict>> {
+    if let Some(arr) = cv.as_array() {
+        return arr
+            .iter()
+            .filter(|v| v.as_map_entries().is_some())
+            .map(section_text_conflicts_in_sidebar)
+            .collect();
+    }
+    if cv.as_map_entries().is_some() {
+        return vec![section_text_conflicts_in_sidebar(cv)];
+    }
+    Vec::new()
+}
+
+fn section_text_conflicts_in_sidebar(cv: &ConfigValue) -> Vec<SectionTextConflict> {
+    let mut out = Vec::new();
+    collect_section_text_conflicts(cv.get("contents"), &mut out);
+    out
+}
+
+fn collect_section_text_conflicts(
+    contents: Option<&ConfigValue>,
+    out: &mut Vec<SectionTextConflict>,
+) {
+    let Some(items) = contents.and_then(|cv| cv.as_array()) else {
+        return;
+    };
+    for item in items {
+        if item.as_map_entries().is_none() {
+            continue;
+        }
+        if let (Some(section_cv), Some(text_cv)) = (item.get("section"), item.get("text")) {
+            out.push(SectionTextConflict {
+                section_label: section_cv.as_plain_text(),
+                text_label: text_cv.as_plain_text(),
+                text_source: text_cv.source_info.clone(),
+            });
+        }
+        collect_section_text_conflicts(item.get("contents"), out);
+    }
 }
 
 /// External-URL classifier. Local copy here so `quarto-navigation`
@@ -1072,20 +1260,85 @@ mod tests {
         }
     }
 
-    /// Bare string at top-level contents is accepted as a single-entry
-    /// shorthand (matches Q1).
+    /// A scalar `contents:` is an `auto:` spec — Q1's
+    /// `normalizeSidebarItems` turns `contents: <s>` into
+    /// `[{auto: <s>}]` for every string but `auto` itself.
+    ///
+    /// bd-sidebar-contents-dir-shorthand-z7arvhx8: this previously
+    /// asserted a `Link`, which is what made `contents: guides` render
+    /// a dead link. A file-shaped scalar goes down the same path — Q1
+    /// makes no file-vs-directory distinction here, because expansion
+    /// resolves it: a spec naming one document expands to one link.
     #[test]
-    fn parse_sidebar_bare_string_contents_is_single_entry() {
+    fn parse_sidebar_bare_string_contents_is_auto_spec() {
         let cv = map(vec![("contents", s("hello.qmd"))]);
         let list = Sidebar::parse_list_from_config(&cv);
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].contents.len(), 1);
         match &list[0].contents[0] {
-            SidebarEntry::Link { item } => {
-                assert_eq!(item.href.as_deref(), Some("hello.qmd"));
-            }
-            other => panic!("expected single Link, got {:?}", other),
+            SidebarEntry::Auto(AutoSpec::Path(p)) => assert_eq!(p, "hello.qmd"),
+            other => panic!("expected Auto(Path), got {:?}", other),
         }
+    }
+
+    /// The reported bug: `contents: guides` must become an auto spec
+    /// so expansion can generate the directory's entries.
+    #[test]
+    fn parse_sidebar_directory_shorthand_is_auto_spec() {
+        let cv = map(vec![("contents", s("guides"))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        match &list[0].contents[0] {
+            SidebarEntry::Auto(AutoSpec::Path(p)) => assert_eq!(p, "guides"),
+            other => panic!("expected Auto(Path), got {:?}", other),
+        }
+    }
+
+    /// The shorthand reaches nested section `contents:` too — Q1's
+    /// `expandAutoSidebarItems` recurses into `item.contents`.
+    #[test]
+    fn parse_sidebar_directory_shorthand_applies_to_nested_section() {
+        let cv = map(vec![(
+            "contents",
+            arr(vec![map(vec![
+                ("section", s("Guides")),
+                ("contents", s("guides")),
+            ])]),
+        )]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        match &list[0].contents[0] {
+            SidebarEntry::Section { contents, .. } => match &contents[0] {
+                SidebarEntry::Auto(AutoSpec::Path(p)) => assert_eq!(p, "guides"),
+                other => panic!("expected nested Auto(Path), got {:?}", other),
+            },
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// Fence: the shorthand is **scalar-only**. A bare string that is
+    /// an *array element* stays a `Link`, matching Q1, where array
+    /// items go through `normalizeSidebarItem` (project-config.ts) and
+    /// never become an `auto`.
+    #[test]
+    fn parse_sidebar_bare_string_in_array_stays_a_link() {
+        let cv = map(vec![("contents", arr(vec![s("guides"), s("about.qmd")]))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        assert_eq!(list[0].contents.len(), 2);
+        for entry in &list[0].contents {
+            assert!(
+                matches!(entry, SidebarEntry::Link { .. }),
+                "array elements must stay Links, got {:?}",
+                entry
+            );
+        }
+    }
+
+    /// Fence: a scalar separator is still a separator, not an auto
+    /// spec that would match nothing and warn.
+    #[test]
+    fn parse_sidebar_scalar_separator_is_not_auto() {
+        let cv = map(vec![("contents", s("---"))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        assert!(matches!(list[0].contents[0], SidebarEntry::Separator));
     }
 
     /// `contents: auto` shorthand expands to a single `Auto(All)` entry.
@@ -1115,6 +1368,184 @@ mod tests {
             }
             other => panic!("expected Heading, got {:?}", other),
         }
+    }
+
+    /// bd-sidebar-section-text-ignored-sdp5g7ns — an entry with
+    /// `text:` + `file:` + `contents:` is a Section whose display text
+    /// comes from `text:`. Q1 accepts both `section:` and `text:` as a
+    /// section's label spelling; without the fallback the Section's
+    /// text is `None` and enrichment replaces it with the linked
+    /// page's title.
+    #[test]
+    fn parse_sidebar_text_with_contents_is_section_with_text() {
+        let entry = map(vec![
+            ("text", s("Short Name")),
+            ("file", s("landing.qmd")),
+            ("contents", arr(vec![s("inner.qmd")])),
+        ]);
+        let cv = map(vec![("contents", arr(vec![entry]))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        match &list[0].contents[0] {
+            SidebarEntry::Section {
+                text,
+                href,
+                contents,
+                ..
+            } => {
+                assert_eq!(
+                    text.as_ref().and_then(|v| v.as_plain_text()).as_deref(),
+                    Some("Short Name"),
+                    "Section display text must fall back to `text:` when `section:` is absent"
+                );
+                assert_eq!(href.as_deref(), Some("landing.qmd"));
+                assert_eq!(contents.len(), 1);
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// When an entry carries both `section:` and `text:`, `section:`
+    /// wins — matching Q1's `normalizeSidebarItem`, which overwrites
+    /// `item.text` with the `section:` value.
+    #[test]
+    fn parse_sidebar_section_key_wins_over_text() {
+        let entry = map(vec![
+            ("section", s("From Section")),
+            ("text", s("From Text")),
+            ("contents", arr(vec![s("inner.qmd")])),
+        ]);
+        let cv = map(vec![("contents", arr(vec![entry]))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        match &list[0].contents[0] {
+            SidebarEntry::Section { text, .. } => {
+                assert_eq!(
+                    text.as_ref().and_then(|v| v.as_plain_text()).as_deref(),
+                    Some("From Section"),
+                    "`section:` must take precedence over `text:`"
+                );
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// The `text:` fallback keeps the full inline structure — a
+    /// formatted label (`text: "*Short* Name"` arrives as
+    /// PandocInlines) must survive to the renderer, not flatten to
+    /// plain text.
+    #[test]
+    fn parse_sidebar_text_fallback_preserves_inlines() {
+        use quarto_pandoc_types::config_value::ConfigValueKind;
+        use quarto_pandoc_types::inline::{Emph, Inline, Str};
+        let str_inline = |text: &str| {
+            Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::for_test(),
+            })
+        };
+        let inlines = vec![
+            Inline::Emph(Emph {
+                content: vec![str_inline("Short")],
+                source_info: SourceInfo::for_test(),
+            }),
+            str_inline("Name"),
+        ];
+        let entry = map(vec![
+            (
+                "text",
+                ConfigValue::new_inlines(inlines, SourceInfo::for_test()),
+            ),
+            ("file", s("landing.qmd")),
+            ("contents", arr(vec![s("inner.qmd")])),
+        ]);
+        let cv = map(vec![("contents", arr(vec![entry]))]);
+        let list = Sidebar::parse_list_from_config(&cv);
+        match &list[0].contents[0] {
+            SidebarEntry::Section { text, .. } => {
+                let text = text.as_ref().expect("Section text from `text:` fallback");
+                match &text.value {
+                    ConfigValueKind::PandocInlines(inls) => {
+                        assert!(
+                            matches!(inls[0], Inline::Emph(_)),
+                            "Emph inline must survive the fallback; got {:?}",
+                            inls
+                        );
+                    }
+                    other => panic!("expected PandocInlines to be preserved, got {:?}", other),
+                }
+            }
+            other => panic!("expected Section, got {:?}", other),
+        }
+    }
+
+    /// Q-13-10 scanner — an entry with both `section:` and `text:` is
+    /// reported with both labels and the ignored `text:` value's
+    /// location; clean entries (either spelling alone) are not.
+    #[test]
+    fn section_text_conflicts_flags_both_keys_entry() {
+        let entry = map(vec![
+            ("section", s("From Section")),
+            ("text", s("From Text")),
+            ("contents", arr(vec![s("inner.qmd")])),
+        ]);
+        let clean_text = map(vec![
+            ("text", s("Clean")),
+            ("file", s("clean.qmd")),
+            ("contents", arr(vec![s("leaf.qmd")])),
+        ]);
+        let clean_section = map(vec![
+            ("section", s("Also Clean")),
+            ("contents", arr(vec![s("other.qmd")])),
+        ]);
+        let cv = map(vec![(
+            "contents",
+            arr(vec![entry, clean_text, clean_section]),
+        )]);
+        let per_sidebar = section_text_conflicts_per_sidebar(&cv);
+        assert_eq!(per_sidebar.len(), 1, "object form is a single sidebar");
+        assert_eq!(
+            per_sidebar[0].len(),
+            1,
+            "exactly the both-keys entry is flagged"
+        );
+        let c = &per_sidebar[0][0];
+        assert_eq!(c.section_label.as_deref(), Some("From Section"));
+        assert_eq!(c.text_label.as_deref(), Some("From Text"));
+    }
+
+    /// The scanner recurses into nested section contents.
+    #[test]
+    fn section_text_conflicts_recurses_into_nested_contents() {
+        let inner_conflict = map(vec![
+            ("section", s("Inner")),
+            ("text", s("Ignored")),
+            ("contents", arr(vec![s("x.qmd")])),
+        ]);
+        let outer = map(vec![
+            ("section", s("Outer")),
+            ("contents", arr(vec![inner_conflict])),
+        ]);
+        let cv = map(vec![("contents", arr(vec![outer]))]);
+        let per_sidebar = section_text_conflicts_per_sidebar(&cv);
+        assert_eq!(per_sidebar[0].len(), 1);
+        assert_eq!(per_sidebar[0][0].section_label.as_deref(), Some("Inner"));
+    }
+
+    /// Array form groups conflicts per sidebar, indexed to match
+    /// `parse_list_from_config`.
+    #[test]
+    fn section_text_conflicts_groups_per_sidebar() {
+        let conflict = map(vec![
+            ("section", s("A")),
+            ("text", s("B")),
+            ("contents", arr(vec![s("x.qmd")])),
+        ]);
+        let sb1 = map(vec![("id", s("one")), ("contents", arr(vec![conflict]))]);
+        let sb2 = map(vec![("id", s("two")), ("contents", arr(vec![s("y.qmd")]))]);
+        let cv = arr(vec![sb1, sb2]);
+        let per_sidebar = section_text_conflicts_per_sidebar(&cv);
+        assert_eq!(per_sidebar.len(), 2);
+        assert_eq!(per_sidebar[0].len(), 1);
+        assert!(per_sidebar[1].is_empty());
     }
 
     /// `collapse-level: 4` overrides the default.
@@ -1752,5 +2183,138 @@ mod tests {
         assert!(item.is_link_with_href("about.qmd"));
         assert!(!item.is_link_with_href("other.qmd"));
         assert!(!FlatEntry::Separator.is_link_with_href("about.qmd"));
+    }
+
+    // ---- breadcrumb_trail (bd-breadcrumbs-missing-1vpuqh34) ----
+
+    fn crumb_link(text: &str, href: &str) -> SidebarEntry {
+        SidebarEntry::Link {
+            item: NavigationItem {
+                href: Some(href.to_string()),
+                text: Some(s(text)),
+                ..NavigationItem::default()
+            },
+        }
+    }
+
+    fn crumb_section(text: &str, href: Option<&str>, contents: Vec<SidebarEntry>) -> SidebarEntry {
+        SidebarEntry::Section {
+            text: Some(s(text)),
+            href: href.map(|h| h.to_string()),
+            href_source: SourceInfo::for_test(),
+            id: None,
+            contents,
+            expanded: false,
+        }
+    }
+
+    fn crumb_sidebar(contents: Vec<SidebarEntry>) -> Sidebar {
+        Sidebar {
+            contents,
+            ..Sidebar::default()
+        }
+    }
+
+    fn crumb_text(c: &Crumb) -> String {
+        c.text.as_ref().unwrap().as_plain_text().unwrap()
+    }
+
+    /// Leaf two sections deep: trail is outermost section, inner
+    /// section, then the page itself as the final crumb (Q1 parity —
+    /// the current page is its own last, linked crumb).
+    #[test]
+    fn trail_nested_leaf_outermost_first_includes_self() {
+        let sidebar = crumb_sidebar(vec![
+            crumb_link("Home", "index.qmd"),
+            crumb_section(
+                "Guide",
+                None,
+                vec![
+                    crumb_link("Intro", "guide/intro.qmd"),
+                    crumb_section(
+                        "Advanced",
+                        None,
+                        vec![crumb_link("Deep", "guide/advanced/deep.qmd")],
+                    ),
+                ],
+            ),
+        ]);
+        let trail = breadcrumb_trail(&sidebar, "guide/advanced/deep.qmd");
+        assert_eq!(trail.len(), 3, "got {:?}", trail);
+        assert_eq!(crumb_text(&trail[0]), "Guide");
+        // Section without href borrows its FIRST DIRECT child's href.
+        assert_eq!(trail[0].href.as_deref(), Some("guide/intro.qmd"));
+        assert_eq!(crumb_text(&trail[1]), "Advanced");
+        assert_eq!(trail[1].href.as_deref(), Some("guide/advanced/deep.qmd"));
+        assert_eq!(crumb_text(&trail[2]), "Deep");
+        assert_eq!(trail[2].href.as_deref(), Some("guide/advanced/deep.qmd"));
+    }
+
+    /// A section with its own href keeps it (no borrowing).
+    #[test]
+    fn trail_section_with_own_href_keeps_it() {
+        let sidebar = crumb_sidebar(vec![crumb_section(
+            "Guide",
+            Some("guide/index.qmd"),
+            vec![crumb_link("Deep", "guide/deep.qmd")],
+        )]);
+        let trail = breadcrumb_trail(&sidebar, "guide/deep.qmd");
+        assert_eq!(trail.len(), 2);
+        assert_eq!(trail[0].href.as_deref(), Some("guide/index.qmd"));
+    }
+
+    /// A section whose own href IS the page: it is the leaf crumb.
+    #[test]
+    fn trail_section_header_match_is_leaf() {
+        let sidebar = crumb_sidebar(vec![crumb_section(
+            "Guide",
+            Some("guide/index.qmd"),
+            vec![crumb_link("Deep", "guide/deep.qmd")],
+        )]);
+        let trail = breadcrumb_trail(&sidebar, "guide/index.qmd");
+        assert_eq!(trail.len(), 1);
+        assert_eq!(trail[0].href.as_deref(), Some("guide/index.qmd"));
+        assert_eq!(crumb_text(&trail[0]), "Guide");
+    }
+
+    /// Page not in the sidebar: empty trail.
+    #[test]
+    fn trail_unmatched_page_is_empty() {
+        let sidebar = crumb_sidebar(vec![crumb_link("Home", "index.qmd")]);
+        assert!(breadcrumb_trail(&sidebar, "elsewhere.qmd").is_empty());
+    }
+
+    /// One-child section: section crumb and page crumb share an href —
+    /// looks odd in a minimal repro but is Q1's actual rule.
+    #[test]
+    fn trail_one_child_section_duplicates_href() {
+        let sidebar = crumb_sidebar(vec![crumb_section(
+            "Section",
+            None,
+            vec![crumb_link("Only", "only.qmd")],
+        )]);
+        let trail = breadcrumb_trail(&sidebar, "only.qmd");
+        assert_eq!(trail.len(), 2);
+        assert_eq!(trail[0].href.as_deref(), Some("only.qmd"));
+        assert_eq!(trail[1].href.as_deref(), Some("only.qmd"));
+    }
+
+    /// Section whose first child is an href-less section: nothing to
+    /// borrow (Q1 takes `contents[0].href` only — no deeper search),
+    /// so the crumb is unlinked.
+    #[test]
+    fn trail_borrow_is_first_child_only_not_deep_search() {
+        let sidebar = crumb_sidebar(vec![crumb_section(
+            "Outer",
+            None,
+            vec![
+                crumb_section("Inner", None, vec![crumb_link("Deep", "deep.qmd")]),
+                crumb_link("Other", "other.qmd"),
+            ],
+        )]);
+        let trail = breadcrumb_trail(&sidebar, "deep.qmd");
+        assert_eq!(trail.len(), 3);
+        assert_eq!(trail[0].href, None, "Outer borrows from href-less Inner");
+        assert_eq!(trail[1].href.as_deref(), Some("deep.qmd"));
     }
 }

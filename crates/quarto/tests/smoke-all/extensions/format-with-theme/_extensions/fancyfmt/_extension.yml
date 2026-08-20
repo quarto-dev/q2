@@ -1,0 +1,8 @@
+title: Format With Theme Extension
+author: Test
+contributes:
+  formats:
+    html:
+      theme: [cosmo, fmt-theme.scss]
+      css:
+        - fmt-style.css

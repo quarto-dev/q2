@@ -1,0 +1,63 @@
+---
+title: "Unknown project key (underscore spelling)"
+description: "`_quarto.yml` uses `project.pre_render` / `project.post_render`; the recognized keys are hyphenated."
+code: Q-5-11
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-11` — Unknown project key (underscore spelling)
+
+> `_quarto.yml` uses `project.pre_render` / `project.post_render`; the
+> recognized keys are hyphenated.
+
+## What this means
+
+Quarto's configuration keys are hyphenated: `pre-render`,
+`post-render`, `output-dir`, `execute-dir`. An underscore spelling is
+not recognized, and an unrecognized key under `project:` is ignored.
+
+Ignored quietly, this would be hard to spot. Your scripts simply never
+run, the render succeeds, and the output is missing whatever the
+scripts were meant to produce. Quarto reports the underscore spelling
+specifically because it is a near-miss worth naming rather than
+leaving to be discovered.
+
+## Why this happens
+
+- **Habit from another tool.** Python, Ruby, and many YAML-configured
+  tools use `snake_case`.
+- **An editor or formatter** that normalizes key names.
+- **Transcription from prose** where the key was written with an
+  underscore.
+
+## How to fix
+
+Replace the underscores with hyphens:
+
+```yaml
+project:
+  pre-render: tools/prepare.py
+  post-render: tools/finish.py
+```
+
+Both keys accept a single entry or a list:
+
+```yaml
+project:
+  pre-render:
+    - tools/fetch-data.py
+    - tools/build-index.py
+```
+
+If you have other `project:` keys that are not taking effect, the same
+rule applies to all of them — Quarto's configuration is hyphenated
+throughout.
+
+## Related errors
+
+- [`Q-5-8`](Q-5-8.qmd) — a script that ran and failed.
+- [`Q-5-10`](Q-5-10.qmd) — a script that could not be started.

@@ -3,7 +3,38 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isQmdFile } from './project';
+import { isQmdFile, isSourceFile } from './project';
+
+// bd-6d2wj4zp Phase 5 (D10/D11): `.md` is a renderable source file
+// alongside `.qmd`. `isSourceFile` is the predicate preview/intelligence
+// surfaces should use; `isQmdFile` stays for genuinely .qmd-only checks.
+describe('isSourceFile', () => {
+  it('accepts .qmd files', () => {
+    expect(isSourceFile('index.qmd')).toBe(true);
+    expect(isSourceFile('docs/intro.qmd')).toBe(true);
+    expect(isSourceFile('README.QMD')).toBe(true);
+  });
+
+  it('accepts .md files', () => {
+    expect(isSourceFile('notes.md')).toBe(true);
+    expect(isSourceFile('admin/index.md')).toBe(true);
+    expect(isSourceFile('README.MD')).toBe(true);
+  });
+
+  it('rejects non-source files', () => {
+    expect(isSourceFile('styles.css')).toBe(false);
+    expect(isSourceFile('_quarto.yml')).toBe(false);
+    expect(isSourceFile('Component.tsx')).toBe(false);
+    expect(isSourceFile('archive.mds')).toBe(false);
+    expect(isSourceFile('Makefile')).toBe(false);
+  });
+
+  it('handles null/undefined/empty', () => {
+    expect(isSourceFile(null)).toBe(false);
+    expect(isSourceFile(undefined)).toBe(false);
+    expect(isSourceFile('')).toBe(false);
+  });
+});
 
 describe('isQmdFile', () => {
   describe('returns true for QMD files', () => {

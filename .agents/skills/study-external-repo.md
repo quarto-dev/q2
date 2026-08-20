@@ -1,0 +1,1 @@
+../../.claude/skills/study-external-repo.md

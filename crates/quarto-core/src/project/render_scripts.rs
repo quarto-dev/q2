@@ -148,6 +148,58 @@ pub fn underscore_typo_diagnostics(config: &ProjectConfig) -> Vec<DiagnosticMess
         .collect()
 }
 
+/// Which application is hosting a WASM render (bd-pq72bplh).
+///
+/// The two hosts have different render-script semantics (D7 in
+/// `claude-notes/plans/2026-07-29-pre-post-render-scripts.md`): the
+/// hub preview runs entirely in the browser and can never execute
+/// scripts, while `q2 preview`'s native server runs
+/// `project.pre-render` scripts once at boot, before any page render
+/// (post-render scripts don't run in the preview loop — a documented
+/// deviation, as nothing consumes a materialized output dir there).
+/// Host-dependent diagnostics dispatch on this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderHost {
+    /// The hub-client web app: browser-only, no subprocesses.
+    HubClient,
+    /// The `q2 preview` SPA embedded in the `q2` binary, backed by a
+    /// native server that ran pre-render scripts at boot.
+    NativePreview,
+}
+
+/// Q-5-12: warn that configured `project.pre-render` /
+/// `project.post-render` scripts will not run — but only for the host
+/// where that is actually true ([`RenderHost::HubClient`]).
+/// [`RenderHost::NativePreview`] returns `None`: its native side
+/// already ran the pre-render scripts at boot, so the warning would
+/// be false (bd-pq72bplh).
+///
+/// Pure decision + message builder: no once-per-session gating here.
+/// The WASM caller (`wasm-quarto-hub-client`) layers an AtomicBool
+/// once-gate on top so the warning shows at most once per session.
+pub fn render_scripts_unsupported_diagnostic(
+    host: RenderHost,
+    config: &ProjectConfig,
+) -> Option<DiagnosticMessage> {
+    if host != RenderHost::HubClient {
+        return None;
+    }
+    if config.pre_render_scripts.is_empty() && config.post_render_scripts.is_empty() {
+        return None;
+    }
+    Some(
+        DiagnosticMessageBuilder::warning("Project render scripts do not run in the hub preview")
+            .with_code("Q-5-12")
+            .problem(
+                "This project configures `project.pre-render` / `project.post-render` \
+                 scripts, which cannot run in the browser. The preview renders without \
+                 them; use `q2 render` on a machine with the interpreters installed to \
+                 run the scripts.",
+            )
+            .build(),
+    )
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 mod exec {
     use std::path::{Path, PathBuf};
@@ -155,7 +207,7 @@ mod exec {
     use std::sync::OnceLock;
 
     use quarto_error_reporting::DiagnosticMessageBuilder;
-    use quarto_source_map::{FileId, SourceContext, SourceInfo};
+    use quarto_source_map::{SourceContext, SourceInfo};
 
     use super::RenderScript;
     use crate::error::ParseError;
@@ -211,6 +263,19 @@ mod exec {
         /// Path of the `_quarto.yml` the scripts came from, used to
         /// attach source snippets to diagnostics.
         pub config_path: Option<&'a Path>,
+        /// Manifest paths of the discovered extensions
+        /// ([`crate::project::ProjectConfig::extension_manifest_paths`]):
+        /// a script entry contributed via
+        /// `contributes.metadata.project` carries a `SourceInfo`
+        /// anchored in its `_extension.yml`, and diagnostics must
+        /// bind that file — not `_quarto.yml` — to the resolved
+        /// FileId (bd-m6wmztln).
+        pub extension_manifest_paths: &'a [PathBuf],
+        /// Project-profile overlay / `_quarto.yml.local` paths
+        /// ([`crate::project::ProjectConfig::profile_config_paths`],
+        /// bd-fu16z22k): a script entry written in an overlay carries
+        /// that file's FileId, same binding discipline as manifests.
+        pub profile_config_paths: &'a [PathBuf],
         /// True iff the whole project is being rendered. Exported as
         /// `QUARTO_PROJECT_RENDER_ALL=1`; the variable is *absent*
         /// otherwise (not `"0"`), matching Q1.
@@ -222,6 +287,18 @@ mod exec {
         /// `QUARTO_PROJECT_SCRIPT_PROGRESS` hint (`"1"` on a
         /// multi-file render when not quiet).
         pub file_count: usize,
+        /// Project `_environment` pairs to set on script children,
+        /// pre-filtered to keys the real environment does not define
+        /// ([`crate::project::environment::env_for_subprocess`]).
+        /// Applied before the `QUARTO_PROJECT_*` variables, so those
+        /// win any collision.
+        pub project_env: &'a [(String, String)],
+        /// Normalized active project-profile list for the child's
+        /// `QUARTO_PROFILE`
+        /// ([`crate::project::project_profile::quarto_profile_env_value`],
+        /// bd-fu16z22k). Applied unconditionally — overrides an
+        /// inherited `QUARTO_PROFILE`, unlike `project_env` pairs.
+        pub quarto_profile: Option<String>,
     }
 
     impl RenderScriptsContext<'_> {
@@ -249,6 +326,9 @@ mod exec {
             ];
             if self.render_all {
                 env.push(("QUARTO_PROJECT_RENDER_ALL", "1".to_string()));
+            }
+            if let Some(quarto_profile) = &self.quarto_profile {
+                env.push(("QUARTO_PROFILE", quarto_profile.clone()));
             }
             env
         }
@@ -328,6 +408,9 @@ mod exec {
 
         let mut cmd = build_script_command(ctx.project_dir, &tokens);
         cmd.current_dir(ctx.project_dir);
+        for (k, v) in ctx.project_env {
+            cmd.env(k, v);
+        }
         for (k, v) in env {
             cmd.env(k, v);
         }
@@ -482,9 +565,13 @@ mod exec {
     }
 
     /// Assemble a [`ParseError`] for a script problem, attaching the
-    /// `_quarto.yml` snippet for the offending entry when the source
-    /// info resolves (same degradation contract as
-    /// [`crate::project_resources::resource_error_to_parse_error`]).
+    /// snippet of the config file the offending entry was *written
+    /// in* — the project's `_quarto.yml` or a contributing
+    /// extension's `_extension.yml` — chosen by FileId match via
+    /// [`crate::config_sources::bind_config_source`] (bd-m6wmztln).
+    /// When the entry comes from an extension manifest, an info line
+    /// says so; when no candidate matches, the diagnostic degrades to
+    /// a span-less render.
     fn script_error(
         ctx: &RenderScriptsContext,
         source_info: Option<&SourceInfo>,
@@ -493,21 +580,30 @@ mod exec {
         problem: String,
     ) -> ParseError {
         let mut source_context = SourceContext::new();
-        let mut builder = DiagnosticMessageBuilder::error(title).with_code(code);
+        let mut builder = DiagnosticMessageBuilder::error(title)
+            .with_code(code)
+            .problem(problem);
         if let Some(info) = source_info {
-            if let (Some((fid_usize, _, _)), Some(config_path)) =
-                (info.resolve_byte_range(), ctx.config_path)
+            let candidates = ctx
+                .config_path
+                .into_iter()
+                .chain(ctx.profile_config_paths.iter().map(PathBuf::as_path))
+                .chain(ctx.extension_manifest_paths.iter().map(PathBuf::as_path));
+            let matched =
+                crate::config_sources::bind_config_source(&mut source_context, info, candidates);
+            if let Some(path) = matched
+                && ctx.config_path != Some(path)
             {
-                let content = std::fs::read_to_string(config_path).ok();
-                source_context.add_file_with_id(
-                    FileId(fid_usize),
-                    config_path.to_string_lossy().into_owned(),
-                    content,
-                );
+                builder = builder.add_info(format!(
+                    "This entry is contributed by the extension manifest `{}` \
+                     (`contributes.metadata.project`), not by your project \
+                     configuration file.",
+                    path.display()
+                ));
             }
             builder = builder.with_location(info.clone());
         }
-        ParseError::new(vec![builder.problem(problem).build()], source_context)
+        ParseError::new(vec![builder.build()], source_context)
     }
 
     /// Q1-compatible mutation guard: a pre-render script may not
@@ -737,9 +833,168 @@ mod tests {
         fn other_changes_are_allowed() {
             let before = config(ProjectKind::Website, Some("_site"));
             let mut after = config(ProjectKind::Website, Some("_site"));
-            after.render_patterns = vec!["*.qmd".to_string()];
+            after.render_patterns = vec![crate::glob::RawGlob::new(
+                "*.qmd",
+                quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::programmatic_config(),
+                ),
+            )];
             assert!(check_forbidden_mutations(&before, &after).is_ok());
         }
+    }
+
+    // ── host-dependent Q-5-12 diagnostic (bd-pq72bplh) ──────────────
+
+    mod unsupported_diagnostic {
+        use super::super::{RenderHost, RenderScript, render_scripts_unsupported_diagnostic};
+        use crate::project::ProjectConfig;
+
+        fn script(cmd: &str) -> RenderScript {
+            RenderScript {
+                command: cmd.to_string(),
+                source_info: quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::programmatic_config(),
+                ),
+            }
+        }
+
+        fn config_with_scripts(pre: &[&str], post: &[&str]) -> ProjectConfig {
+            ProjectConfig {
+                pre_render_scripts: pre.iter().map(|c| script(c)).collect(),
+                post_render_scripts: post.iter().map(|c| script(c)).collect(),
+                ..Default::default()
+            }
+        }
+
+        #[test]
+        fn hub_client_with_pre_render_scripts_warns() {
+            let config = config_with_scripts(&["prepare.py"], &[]);
+            let diag = render_scripts_unsupported_diagnostic(RenderHost::HubClient, &config)
+                .expect("hub preview must warn: the browser cannot run the scripts");
+            let text = diag.to_text(None);
+            assert!(text.contains("[Q-5-12]"), "got: {text}");
+            assert!(text.contains("hub preview"), "got: {text}");
+        }
+
+        #[test]
+        fn hub_client_with_post_render_scripts_only_warns() {
+            let config = config_with_scripts(&[], &["cleanup.R"]);
+            assert!(
+                render_scripts_unsupported_diagnostic(RenderHost::HubClient, &config).is_some(),
+                "post-render-only projects must still warn in the hub preview"
+            );
+        }
+
+        #[test]
+        fn native_preview_with_scripts_is_silent() {
+            // `q2 preview`'s native host runs pre-render scripts at
+            // boot (D7, 2026-07-29 plan) — the warning would be false.
+            for config in [
+                config_with_scripts(&["prepare.py"], &[]),
+                config_with_scripts(&[], &["cleanup.R"]),
+                config_with_scripts(&["prepare.py"], &["cleanup.R"]),
+            ] {
+                assert!(
+                    render_scripts_unsupported_diagnostic(RenderHost::NativePreview, &config)
+                        .is_none(),
+                    "q2 preview must not warn: its native host runs the scripts"
+                );
+            }
+        }
+
+        #[test]
+        fn no_scripts_is_silent_for_both_hosts() {
+            let config = config_with_scripts(&[], &[]);
+            for host in [RenderHost::HubClient, RenderHost::NativePreview] {
+                assert!(render_scripts_unsupported_diagnostic(host, &config).is_none());
+            }
+        }
+    }
+
+    // ── project env propagation (bd-environment-files-372u9qbs) ─────
+
+    /// A pre-render script sees `_environment`-derived pairs passed
+    /// via `RenderScriptsContext::project_env`. Unix-only: the script
+    /// runs through `sh`; Windows coverage is the shared
+    /// `env_for_subprocess` unit tests plus the mechanical
+    /// `cmd.env` application.
+    #[cfg(unix)]
+    #[test]
+    fn scripts_receive_project_env() {
+        use quarto_source_map::By;
+
+        let dir = tempfile::tempdir().unwrap();
+        let project_dir = dir.path();
+        let out_path = project_dir.join("env-out.txt");
+
+        let script = RenderScript {
+            command: format!(
+                "sh -c \"printf %s $Q2_TEST_SCRIPT_ENV_VAR > {}\"",
+                out_path.display()
+            ),
+            source_info: SourceInfo::generated(By::unknown()),
+        };
+        let project_env = vec![(
+            "Q2_TEST_SCRIPT_ENV_VAR".to_string(),
+            "from-env-file".to_string(),
+        )];
+        let ctx = RenderScriptsContext {
+            project_dir,
+            output_dir: project_dir,
+            config_path: None,
+            extension_manifest_paths: &[],
+            profile_config_paths: &[],
+            quarto_profile: None,
+            render_all: true,
+            quiet: true,
+            file_count: 1,
+            project_env: &project_env,
+        };
+        run_render_scripts(ScriptPhase::PreRender, &[script], &ctx, &[])
+            .expect("script should succeed");
+        assert_eq!(
+            std::fs::read_to_string(&out_path).expect("script wrote the file"),
+            "from-env-file"
+        );
+    }
+
+    /// A script sees the normalized `QUARTO_PROFILE` from
+    /// `RenderScriptsContext::quarto_profile` (bd-fu16z22k) — applied
+    /// via `cmd.env`, so it overrides anything inherited.
+    #[cfg(unix)]
+    #[test]
+    fn scripts_receive_quarto_profile() {
+        use quarto_source_map::By;
+
+        let dir = tempfile::tempdir().unwrap();
+        let project_dir = dir.path();
+        let out_path = project_dir.join("profile-out.txt");
+
+        let script = RenderScript {
+            command: format!(
+                "sh -c \"printf %s $QUARTO_PROFILE > {}\"",
+                out_path.display()
+            ),
+            source_info: SourceInfo::generated(By::unknown()),
+        };
+        let ctx = RenderScriptsContext {
+            project_dir,
+            output_dir: project_dir,
+            config_path: None,
+            extension_manifest_paths: &[],
+            profile_config_paths: &[],
+            quarto_profile: Some("advanced,production".to_string()),
+            render_all: true,
+            quiet: true,
+            file_count: 1,
+            project_env: &[],
+        };
+        run_render_scripts(ScriptPhase::PreRender, &[script], &ctx, &[])
+            .expect("script should succeed");
+        assert_eq!(
+            std::fs::read_to_string(&out_path).expect("script wrote the file"),
+            "advanced,production"
+        );
     }
 
     // ── error catalog registration ──────────────────────────────────

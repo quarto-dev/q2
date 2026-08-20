@@ -12,6 +12,7 @@
     "build:sandboxed": "cd quarto-hub-sandboxed-preview && npm install --silent && npm run build",
     "build:all": "npm run build:wasm && npm run build:sandboxed && npm run build",
     "build:local-prod": "../scripts/build-local-prod.sh",
+    "build:preview-embed": "npm run build:wasm && npm run build:sandboxed && tsc -b && VITE_GOOGLE_CLIENT_ID= VITE_DISABLE_PWA=1 VITE_EPHEMERAL_STORAGE=1 VITE_DEFAULT_SYNC_SERVER=/ws NODE_OPTIONS=--max-old-space-size=4096 vite build --outDir dist-preview-embed && node ../scripts/precompress-dist.mjs dist-preview-embed",
     "postinstall": "cd quarto-hub-sandboxed-preview && npm install --silent",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "lint": "eslint .",
@@ -36,7 +37,7 @@
     "bootstrap-test-fixtures": "npx tsx e2e/scripts/regenerate-fixtures.ts"
   },
   "dependencies": {
-    "@automerge/automerge": "^3.2.6",
+    "@automerge/automerge": "^3.4.1",
     "@automerge/automerge-repo": "^2.5.6",
     "@automerge/automerge-repo-network-websocket": "^2.5.6",
     "@automerge/automerge-repo-react-hooks": "2.5.6",

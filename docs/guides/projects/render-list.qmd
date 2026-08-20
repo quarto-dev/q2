@@ -1,0 +1,126 @@
+---
+title: "The render list: choosing which files render"
+---
+
+## Overview
+
+When you run `q2 render` on a project, Quarto builds a **render
+list**: the set of source files that become pages of your site. You
+control it with the `project.render` key in `_quarto.yml`:
+
+```yaml
+project:
+  type: website
+  render:
+    - "**/*.qmd"
+    - "!drafts/**"
+```
+
+Each entry is a glob, matched against paths relative to the project
+root. Entries starting with `!` are exclusions; an exclusion applies
+to the whole list, wherever it appears. A bare directory name means
+everything renderable beneath it.
+
+## The default
+
+Omitting `project.render` is exactly equivalent to writing:
+
+```yaml
+project:
+  render:
+    - "**/*.qmd"
+```
+
+That is: every `.qmd` file in the project, wherever it lives. A render
+list containing only exclusions subtracts from that same default —
+`render: ["!drafts/**"]` means "all `.qmd` files except those under
+`drafts/`".
+
+Quarto renders `.qmd` by default and nothing else. Every other input
+type must be listed:
+
+| Input | Rendered by default? |
+|-------|----------------------|
+| `.qmd` | yes |
+| `.md` | only when a pattern matches it |
+| `.ipynb` | only when a pattern matches it |
+| `.py` / `.R` scripts | only when a pattern matches it |
+| file types added by an extension | only when a pattern matches it |
+
+A positive pattern replaces the default; it does not add to it. Keep
+`"**/*.qmd"` in any list you write, or your `.qmd` files stop
+rendering:
+
+```yaml
+project:
+  render:
+    - "**/*.qmd"      # keep this
+    - "**/*.ipynb"
+```
+
+## Rendering `.md` files
+
+Plain Markdown files can be full members of a Quarto project — they
+support the complete Quarto markdown dialect (shortcodes, divs,
+cross-references, navigation, themes) and render exactly like `.qmd`
+files, with one difference: **`.md` files never execute code**.
+
+`.md` files are opt-in: they render only when a `project.render`
+pattern you wrote matches them. Add them alongside your `.qmd` globs:
+
+```yaml
+project:
+  render:
+    - "**/*.qmd"
+    - "**/*.md"
+    - "!news/NEWS.md"
+```
+
+Any pattern you write can opt them in — `chapters/*`, a literal
+`notes.md`, or an extension glob all work. What never opts them in is
+the default: a project without a `render:` key renders `.qmd` only.
+
+Because `.md` files never execute code, an `engine:` specification in
+a `.md` file's front matter has no effect. Quarto warns about it
+([`Q-2-40`](/errors/markdown/Q-2-40.qmd)) and renders the document
+without execution; rename the file to `.qmd` if you need executable
+code.
+
+### Why other file types are opt-in
+
+Quarto 1 built its render list by walking the whole project and asking
+each execution engine whether it claimed each file. The Markdown engine
+claimed `.md` unconditionally. The Jupyter engine claimed `.ipynb`, and
+opened every `.py` to see whether it held `# %%` cells. The knitr engine
+opened every `.R` looking for a `#'` header.
+
+Quarto 2 does not inspect files to decide what to render. The render
+list comes from patterns alone.
+
+Two consequences. A stray `NEWS.md`, a `conftest.py`, or a scratch
+notebook stays out of the render list until you ask for it. And
+installing an extension never changes which files your project
+renders — only what Quarto can do with them once listed.
+
+## Files that never render
+
+Some files are excluded from the render list even when a pattern
+matches them:
+
+- files and directories whose name starts with `_` (partials,
+  metadata) or `.` (hidden);
+- anything under `node_modules/` or the output directory;
+- `README` files (any extension, any capitalization);
+- agent-instruction Markdown: `CLAUDE.md`, `CLAUDE.local.md`,
+  `AGENTS.md`, `AGENTS.local.md`, and `*.llms.md` companions.
+
+A render entry that names one of these — or that matches nothing at
+all — produces a warning
+([`Q-5-13`](/errors/project/Q-5-13.qmd)) so a silent gap in your site
+doesn't go unnoticed.
+
+## Order
+
+Positive patterns contribute files in the order you list them
+(alphabetically within a single pattern). This is also the order pages
+render in.

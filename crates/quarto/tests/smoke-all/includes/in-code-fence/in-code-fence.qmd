@@ -1,0 +1,28 @@
+---
+title: Include Inside a Fenced Code Block
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["FENCE-INCLUDE-MARKER-XYZ", "data-filename=\"app.py\"", "OPTED-OUT-MARKER-XYZ"]
+        - ["\\?include", "Q-17-4"]
+      ensureHtmlElements:
+        - ["pre.sourceCode.python code.sourceCode.python"]
+---
+
+The Quarto 1 listing idiom: an include standing alone inside a fenced
+code block splices the target's text into the fence
+(bd-include-in-code-block-f8mvtczn).
+
+```{.python filename="app.py"}
+{{< include app.py >}}
+```
+
+`shortcodes="false"` still opts out, so the shortcode shows literally —
+this is how documentation displays the syntax itself.
+
+```{.markdown shortcodes="false"}
+OPTED-OUT-MARKER-XYZ {{< include app.py >}}
+```

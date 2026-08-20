@@ -268,5 +268,121 @@
 # compile, unconditionally like Q1. doc.html hash unchanged: no
 # `.quarto-listing*` selector matches anything in a single-doc body,
 # and `<head>` is unaffected.
-doc.html c85d97d01136c864f9bd54ce0c5a15dd649c029a8f44aa3608819282199e3e57
-doc_files/styles.css 701063255f83fe84581ee7b0a02bdd620bfa4365c276d8b6585396d401926200
+# Re-captured 2026-08-14 (bd-breadcrumbs-missing-1vpuqh34): styles.css
+# hash updated because the website-breadcrumb rules (ported from Q1
+# quarto-nav.scss: .quarto-title-breadcrumbs / .quarto-page-breadcrumbs
+# spacing + last-crumb muting) now compile into every HTML theme.
+# doc.html hash unchanged: the title-block partial's breadcrumb slot is
+# an $if$ that emits nothing when `rendered.navigation.breadcrumbs` is
+# absent, which it always is in a single-doc render (no sidebar).
+# Re-captured 2026-08-14 (bd-ld-a2-dual-compile-ds10l5wa, light/dark
+# epic D1a): styles.css hash updated because the theme-darkness
+# sentinel block in `_bootstrap-rules.scss` now also declares the
+# matching `color-scheme` (`/*! light */` gains
+# `:root{color-scheme:light}`, the dark branch symmetrically), so
+# UA-drawn chrome (scrollbars, form-control internals) follows the
+# theme's darkness. Verified the only delta is that one rule: the
+# pre-existing `[data-bs-theme=dark]{color-scheme:dark;…}` block is
+# Bootstrap 5.3 core, unchanged. doc.html hash unchanged: CSS-only.
+# Re-captured 2026-08-14 (bd-ld-a4-toggle-runtime-0t9i2rvs): styles.css
+# hash updated because `colorToRGBA()` was ported into
+# `_bootstrap-functions.scss` (from Q1's `_quarto-functions.scss`).
+# The color-scheme toggle icons' SVG data URIs previously interpolated
+# the literal text `colorToRGBA(#dee2e6)` as their fill (a silently
+# invalid value — sass does not error on unknown functions inside
+# string interpolation), leaving the toggle icon invisible; they now
+# carry concrete `fill="rgba(…)"` values. Verified the only delta is
+# those six data-URI fills. doc.html hash unchanged: CSS-only.
+# Re-captured 2026-08-17 (bd-26bf3j1y, phase 1 — #quarto-header wrapper):
+# styles.css hash updated because the shared horizontal gutter rule from Q1's
+# `quarto-nav.scss:63-66` — `footer.footer .nav-footer, #quarto-header > nav
+# { padding-left: 1em; padding-right: 1em }` — was ported into
+# `_bootstrap-rules.scss`. Q1 pairs both selectors in one rule; q2 could only
+# use the footer half until this strand introduced the `#quarto-header`
+# wrapper. doc.html hash UNCHANGED, and that is the interesting part: the new
+# `$quarto-header()$` partial is gated on `rendered.navigation.navbar` /
+# `rendered.navigation.secondary-nav`, neither of which a single-doc render
+# sets, so the template change is byte-neutral outside websites. (An earlier
+# draft called the partial from a bare line and DID shift doc.html by one
+# blank line; the gate was moved to the call site precisely to avoid that.)
+# Re-captured 2026-08-17 (bd-26bf3j1y, phases 3+4 — mobile nav):
+# styles.css hash updated because the narrow-viewport navigation SCSS was
+# ported from Q1 `quarto-nav.scss`: the media-breakpoint-down(lg) sidebar
+# rollup (558-590), the `.quarto-secondary-nav` rules (411-450, 470-520,
+# 592-610), the media-breakpoint-up(lg) display overrides (640-656), and the
+# `#quarto-sidebar-glass` rules (665-693), plus two new variables
+# ($sidebar-glass-bg, $sidebar-anim-duration). It also REPLACES the Decision-A
+# rule `body.floating .sidebar.sidebar-navigation { display: none }` added
+# 2026-05-01 — that entry above is now superseded.
+#
+# The lg+ `#quarto-sidebar { display: flex }` override is load-bearing, not
+# cosmetic: nav#quarto-sidebar now carries Bootstrap's `collapse` class, and
+# without the override `.collapse:not(.show){display:none}` would hide the
+# sidebar at every width on every website page. quarto-sass's
+# test_sidebar_stays_visible_at_lg_despite_collapse_class reads the compiled
+# CSS to guard exactly that pairing.
+#
+# doc.html hash unchanged: none of the new selectors match a single-doc body
+# (no sidebar, no secondary nav), and SecondaryNavRenderTransform skips when
+# `navigation.sidebar` is absent, so the header partial emits nothing.
+# Re-captured 2026-08-17 (bd-26bf3j1y, doc-toc scoping fix):
+# styles.css hash updated because the narrow-viewport TOC-hiding rule was
+# scoped from `nav[role="doc-toc"]` to `nav#TOC[role="doc-toc"]`. q2 puts
+# role="doc-toc" on BOTH nav#TOC and nav#quarto-sidebar (the latter a
+# divergence from Q1, tracked in bd-eczdzfqo), so the bare-role selector also
+# hid the navigation sidebar below md. That was invisible while the sidebar
+# was hidden below lg anyway, and a real bug once it became a collapse drawer:
+# the toggle latched .show and the glass pane dimmed, but the drawer stayed
+# display:none, because .show only defeats Bootstrap's own
+# `.collapse:not(.show)` rule, not an unrelated one. Found in a headless
+# browser; guarded now by quarto-sass's
+# test_narrow_viewport_hiding_does_not_catch_the_sidebar.
+# doc.html hash unchanged: CSS-only change.
+# Re-captured 2026-08-17 (bd-26bf3j1y, sidebar background):
+# styles.css hash updated because Q1's `nav.sidebar.sidebar-navigation:not(
+# .rollup) { background-color: $sidebar-bg }` (quarto-nav.scss:543-551) was
+# ported. q2 had never applied it: in its own grid column the sidebar overlaps
+# nothing, so a transparent background was invisible. The mobile drawer
+# overlays the article, where it is not — page text showed straight through the
+# open drawer. Found by looking at a screenshot; computed styles reported the
+# drawer open and correctly sized. Guarded by
+# test_sidebar_has_an_opaque_background.
+#
+# This is a VISIBLE change on desktop too: sidebars now paint $sidebar-bg
+# instead of inheriting the page. That is Q1 parity, not a new look — Q1 emits
+# the same rule, and both projects define `$sidebar-bg: if(variable-exists(
+# light), $light, #fff) !default` identically, so any color difference is a
+# pre-existing theme-variable question rather than something introduced here.
+# doc.html hash unchanged: CSS-only change (the fixture has no sidebar).
+#
+# Re-captured 2026-08-17 (bd-toc-tabset-titles-zq93gjvf): doc.html hash
+# updated because every Bootstrap-themed page now ships the grouped-tabset
+# sync module (`<script src="doc_files/tabsets.js">`, TabsetsJsStage).
+# doc_files/styles.css hash unchanged: template/script-list change only.
+#
+# MERGE NOTE 2026-08-17: bd-26bf3j1y (mobile secondary nav) and
+# bd-toc-tabset-titles-zq93gjvf (panel-tabset support) landed independently and
+# each re-captured this baseline. Both sets of notes are kept below. NEITHER
+# side's hashes survive the merge: the merged tree has both the tabsets.js
+# <script> (which moves doc.html) and the mobile-nav SCSS (which moves
+# styles.css), so both hashes were recomputed from the merged tree rather than
+# taken from either branch.
+#
+# The recomputed values happen to match one branch each -- doc.html equals the
+# tabset branch's, styles.css equals the mobile-nav branch's -- which is a
+# useful cross-check rather than a coincidence: it confirms both notes' claims
+# that the tabset change is script-list-only and the mobile-nav template change
+# is byte-neutral for single-doc renders (no navbar, no secondary nav).
+# Re-captured 2026-08-19 (bd-navbar-logo-unstyled-gbzd8vcu, phase 1):
+# styles.css hash updated because the navbar-brand rules were ported
+# from Q1's quarto-nav.scss into `_bootstrap-rules.scss`:
+# `.navbar-container { width: 100% }` (116-118), the `.navbar-brand`
+# ellipsis pair (120-123), the `.navbar-brand-container` flex layout
+# minus the width clamp (125-134; clamp deferred to bd-y5y10oir),
+# `.navbar-brand.navbar-brand-logo` spacing (136-139), and the
+# `.navbar-logo { max-height: 24px; … }` sizing rule (196) that stops
+# a natural-size logo from swallowing the navbar. doc.html hash
+# unchanged: none of the new selectors match a single-doc body (no
+# navbar), and `<head>` is unaffected.
+doc.html a0540297514ad41734a23e91c9511134b1fa469281ec470339571ffd5d404494
+doc_files/styles.css b14c1db209937ed1779b6460ea494dce4c1e762cf770c71df6ecc159a9dd8c37

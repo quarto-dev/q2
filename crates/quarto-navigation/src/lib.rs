@@ -27,10 +27,12 @@ pub mod render_html;
 pub mod sidebar;
 
 pub use footer::{FooterBorder, FooterRegion, PageFooter, resolve_page_footer};
-pub use item::NavigationItem;
-pub use navbar::{CollapseBelow, Navbar, NavbarTitle, TogglePosition, resolve_navbar};
+pub use item::{BareScalar, NavigationItem};
+pub use navbar::{
+    CollapseBelow, LogoVariant, Navbar, NavbarLogo, NavbarTitle, TogglePosition, resolve_navbar,
+};
 pub use page_nav::PageNavigation;
 pub use sidebar::{
-    AutoSpec, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle, resolve_active_state,
-    sidebar_for_page,
+    AutoSpec, Crumb, SectionTextConflict, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle,
+    breadcrumb_trail, resolve_active_state, section_text_conflicts_per_sidebar, sidebar_for_page,
 };

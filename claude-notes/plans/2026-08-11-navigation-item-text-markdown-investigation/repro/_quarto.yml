@@ -1,0 +1,35 @@
+project:
+  type: website
+
+website:
+  title: "Footer items"
+  page-footer:
+    left:
+      # 1. text: is HTML-escaped instead of rendered
+      - text: <img src="logo.svg" alt="Logo" width="65px" class="footer-logo">
+        href: "https://example.com"
+      # 2. a bare-string item lands in href= with an empty link body
+      - Copyright &copy; 2015-{{< env REPRO_YEAR >}} Example, Inc. All Rights Reserved.
+    # control: the same string in center: renders correctly
+    center: |
+      Copyright &copy; <b>2015</b>-{{< env REPRO_YEAR >}} *Example*, Inc.
+    right:
+      - text: Support
+        href: "https://example.com/support"
+      # 3. an item with no href: is still wrapped in an anchor (href="#"),
+      #    so markup carrying its own <a> nests anchors once unescaped
+      - text: '<a href="#" id="open_preferences_center">Cookie Preferences</a>'
+        aria-label: "Cookie Prefs"
+      # (the `!md`-tagged control lives in md-tag-control/, because Quarto 1
+      #  rejects the q2-only !md tag and would not parse this file at all)
+
+  # Same defect, same field, different consumer: navbar and sidebar item
+  # text: is escaped identically, so this is not page-footer-specific.
+  navbar:
+    left:
+      - text: "Navbar &copy; <b>bold</b> *emph* {{< env REPRO_YEAR >}}"
+        href: "https://example.com"
+  sidebar:
+    contents:
+      - text: "Sidebar &copy; *emph*"
+        href: "https://example.com"

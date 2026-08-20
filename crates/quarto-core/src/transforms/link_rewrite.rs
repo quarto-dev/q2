@@ -3,14 +3,18 @@
  * Copyright (c) 2026 Posit, PBC
  */
 
-//! Body-content link rewriting transform.
+//! Body-content link and image-URL rewriting transform.
 //!
-//! Walks the AST body, finds every [`Inline::Link`], and rewrites
-//! its `target.0` URL to a page-relative URL when it points at
-//! another project document. Phase 6 of the website-projects epic.
+//! Walks the AST body and rewrites two kinds of `target.0` URLs to
+//! page-relative form: [`Inline::Link`]s that point at another
+//! project document, and [`Inline::Image`]s, whose targets are
+//! static resources. Phase 6 of the website-projects epic; images
+//! added by bd-root-relative-paths-design-fc5pvkcv (Case B).
 //!
 //! See `claude-notes/plans/2026-04-24-websites-phase-6.md` for the
-//! design (especially Decisions 1, 2, 6, 7).
+//! original design (especially Decisions 1, 2, 6, 7) and
+//! `claude-notes/plans/2026-08-13-site-root-relative-paths.md` for
+//! the image extension.
 //!
 //! ## What it rewrites
 //!
@@ -18,19 +22,28 @@
 //!   [`ProjectIndex`](crate::project::index::ProjectIndex), with
 //!   `..` / `.` / leading `/` normalization handled by
 //!   [`resolve_doc_relative_href`](super::navigation_href::resolve_doc_relative_href).
-//! - Query strings and fragment anchors are preserved across the
-//!   rewrite (`other.qmd?x=1#sec` → `other.html?x=1#sec`).
+//! - `Image::target.0` via
+//!   [`resolve_static_resource_href`](super::navigation_href::resolve_static_resource_href)
+//!   — no index lookup, no `.qmd` diagnostic. This is what keeps a
+//!   site-root-relative `![](/images/x.svg)` working under a deploy
+//!   subpath: a page two levels deep emits `../../images/x.svg`,
+//!   matching Q1. Relative targets round-trip (modulo `..`/`.`
+//!   normalization, a deliberate side effect).
+//! - Query strings and fragment anchors are preserved across both
+//!   rewrites (`other.qmd?x=1#sec` → `other.html?x=1#sec`).
 //!
 //! ## What it leaves alone
 //!
 //! - External URLs (`http:`, `https:`, `mailto:`, `tel:`, `ftp:`,
-//!   `//host/...`).
+//!   `//host/...`) and `data:` URIs.
 //! - Fragment-only anchors (`#section`).
-//! - `Image::target.0` — images point at static resources, not
-//!   project documents (Q1 doesn't rewrite them either).
-//! - Body links inside a document rendered without a
-//!   `ProjectIndex` (standalone single-doc render). The transform
-//!   short-circuits and the AST is untouched.
+//! - Body *links* in a document rendered without a `ProjectIndex`
+//!   (standalone single-doc render) — doc-link resolution needs the
+//!   index (Decision 7). Images still rewrite whenever a
+//!   [`ResourceResolverContext`] is attached; with neither index nor
+//!   resolver the walk still runs but rewrites nothing — it only
+//!   consumes `link-format` attributes (see [`LINK_FORMAT_ATTR`]),
+//!   which must never reach a writer.
 //!
 //! ## Pipeline placement
 //!
@@ -42,18 +55,34 @@
 //! nodes. The walk recurses through `Inline::Custom` slots
 //! defensively, in case any custom nodes remain.
 
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::Slot;
 use quarto_pandoc_types::block::Block;
-use quarto_pandoc_types::inline::{Inline, Inlines};
+use quarto_pandoc_types::inline::{Inline, Inlines, Link};
 use quarto_pandoc_types::pandoc::Pandoc;
+use quarto_source_map::SourceInfo;
 
 use crate::Result;
 use crate::project::index::ProjectIndex;
 use crate::render::RenderContext;
 use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::{AstTransform, TransformPhase};
+use crate::transforms::llms::{companion_href, profile_has_companion, strip_kv};
 use crate::transforms::navigation_active::page_relative_source;
-use crate::transforms::navigation_href::resolve_doc_relative_href;
+use crate::transforms::navigation_href::{
+    resolve_doc_relative_href, resolve_doc_relative_target, resolve_static_resource_href,
+};
+
+/// Attribute selecting which *output* of the target page a body link
+/// points at (bd-llms-link-target-annotation-0zo2ppgx). Recognized
+/// values today: `"html"` (keep the link on the HTML page, even
+/// inside llms markdown companions) and `"llms"` (point the link at
+/// the target page's markdown companion). The target must be written
+/// as a project *source* path (`guide/index.qmd`-style); the
+/// attribute alone selects the output. Consumed by this transform
+/// and, for the surviving `html` pin, by `LlmsCaptureTransform` — it
+/// must never reach a writer.
+pub const LINK_FORMAT_ATTR: &str = "link-format";
 
 /// Body-content link rewriter (Phase 6).
 pub struct LinkRewriteTransform;
@@ -81,13 +110,15 @@ impl AstTransform for LinkRewriteTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        // Standalone render: no project context, nothing to rewrite.
-        // Body hrefs pass through verbatim. See Decision 7.
-        let Some(index) = ctx.project_index.as_deref() else {
-            return Ok(());
-        };
-
+        let index = ctx.project_index.as_deref();
         let resolver = ctx.resource_resolver.as_ref();
+        let llms_enabled = crate::transforms::llms::llms_companions_enabled(&ast.meta, ctx);
+        let llms_active = crate::transforms::llms::llms_view_active(&ast.meta, ctx);
+
+        // With no index (Decision 7) and no resolver, links and
+        // images pass through — but the walk still runs: it owns
+        // consuming `link-format` attributes, which must not reach
+        // the writer even in a bare standalone render.
         let source = page_relative_source(ctx);
 
         // Move diagnostics into a local buffer so the helper can
@@ -97,6 +128,8 @@ impl AstTransform for LinkRewriteTransform {
             source: &source,
             index,
             resolver,
+            llms_enabled,
+            llms_active,
             diagnostics: &mut local_diags,
         };
         for block in &mut ast.blocks {
@@ -110,8 +143,20 @@ impl AstTransform for LinkRewriteTransform {
 
 struct LinkRewriter<'a> {
     source: &'a str,
-    index: &'a ProjectIndex,
+    /// `None` in standalone renders — link targets then pass through
+    /// (Decision 7) while image targets still rewrite.
+    index: Option<&'a ProjectIndex>,
     resolver: Option<&'a ResourceResolverContext>,
+    /// `llms_companions_enabled`: the project generates markdown
+    /// companions (website + `llms-txt: true`). Gates `llms`-pin
+    /// satisfiability — any page of the site, whatever its own
+    /// format, may target another page's companion.
+    llms_enabled: bool,
+    /// `llms_view_active`: this render's own llms view (companions
+    /// enabled *and* plain html format). Gates whether an `html` pin
+    /// survives to its consumer (`LlmsCaptureTransform` runs only
+    /// then).
+    llms_active: bool,
     diagnostics: &'a mut Vec<quarto_error_reporting::DiagnosticMessage>,
 }
 
@@ -220,21 +265,34 @@ impl<'a> LinkRewriter<'a> {
                 // text could itself contain rewritable inlines
                 // (uncommon, but possible after filter passes).
                 self.visit_inlines(&mut link.content);
-                let new_url = resolve_doc_relative_href(
-                    &link.target.0,
-                    self.source,
-                    self.resolver,
-                    Some(self.index),
-                    link.target_source.url.clone(),
-                    self.diagnostics,
-                );
-                link.target.0 = new_url;
+                if link.attr.2.contains_key(LINK_FORMAT_ATTR) {
+                    self.apply_link_format(link);
+                } else {
+                    self.resolve_undecorated(link);
+                }
             }
             Inline::Image(img) => {
-                // Walk image content (alt-text inlines) but leave
-                // `img.target.0` (the image URL) alone — images
-                // point at static resources, not project docs.
+                // Walk image content (alt-text inlines), then rebase
+                // the image URL itself. Images point at static
+                // resources, so this goes through the static helper:
+                // no index lookup, no `.qmd` diagnostic — just
+                // normalize (leading `/` = site-root, Decision 4 of
+                // bd-root-relative-paths-design-fc5pvkcv) and
+                // relativize to the page.
+                //
+                // EXCEPT in VFS-root mode (hub-client q2-preview):
+                // preview images are not fetched by URL — the
+                // parent-side asset walker reads the VFS and mints
+                // blob URLs keyed by the *user-written* path (the
+                // contract pinned by
+                // `hub-client/src/services/assetManifestProject.wasm.test.ts`),
+                // so a rewrite here would orphan every preview image.
+                // Same mode-gate as `ResourceCollectorTransform`.
                 self.visit_inlines(&mut img.content);
+                if !self.resolver.is_some_and(|r| r.is_vfs_root_mode()) {
+                    img.target.0 =
+                        resolve_static_resource_href(&img.target.0, self.source, self.resolver);
+                }
             }
             Inline::Emph(e) => self.visit_inlines(&mut e.content),
             Inline::Underline(u) => self.visit_inlines(&mut u.content),
@@ -274,6 +332,107 @@ impl<'a> LinkRewriter<'a> {
         }
     }
 
+    /// The undecorated body-link resolution: source path → output
+    /// href through the index (Decision 7: pass-through without one).
+    fn resolve_undecorated(&mut self, link: &mut Link) {
+        if let Some(index) = self.index {
+            let new_url = resolve_doc_relative_href(
+                &link.target.0,
+                self.source,
+                self.resolver,
+                Some(index),
+                link.target_source.url.clone(),
+                self.diagnostics,
+            );
+            link.target.0 = new_url;
+        }
+    }
+
+    /// Handle a `link-format`-decorated link.
+    ///
+    /// The one case that leaves the attribute in place is a
+    /// satisfiable `html` pin: `LlmsCaptureTransform` (tail of
+    /// Finalization) is its consumer — it skips the companion
+    /// retarget and scrubs the attribute from both views. Every
+    /// other path consumes the attribute here; unsatisfiable
+    /// requests warn with Q-13-9 and fall back to the undecorated
+    /// resolution.
+    fn apply_link_format(&mut self, link: &mut Link) {
+        let value = link
+            .attr
+            .2
+            .get(LINK_FORMAT_ATTR)
+            .cloned()
+            .unwrap_or_default();
+        let raw = link.target.0.clone();
+        let location = link.target_source.url.clone();
+
+        // The target page, under the source-paths-only rule: the
+        // href must name a project source (`.qmd` / `.md`) that is
+        // in the index.
+        let target_profile = resolve_doc_relative_target(&raw, self.source)
+            .and_then(|p| self.index.and_then(|idx| idx.lookup_by_source(&p)));
+
+        // Satisfiable `html` pin: resolve normally, keep the attr.
+        if value == "html" && self.llms_active && target_profile.is_some() {
+            self.resolve_undecorated(link);
+            return;
+        }
+
+        // `None` = consume silently; `Some` = warn with this problem.
+        let failure: Option<String> = match value.as_str() {
+            // Inert pin: with the llms view off nothing would ever
+            // retarget the link, so the request is trivially
+            // honored.
+            "html" if !self.llms_active => None,
+            "html" => Some(format!(
+                "`{raw}` is not a project source path in the render set, \
+                 so there is no page output to pin."
+            )),
+            "llms" if !self.llms_enabled => Some(
+                "Markdown companions only exist on a website with \
+                 `llms-txt: true` set under `website:`."
+                    .to_string(),
+            ),
+            "llms" => match target_profile {
+                None => Some(format!(
+                    "`{raw}` is not a project source path in the render set, \
+                     so it has no markdown companion to target."
+                )),
+                Some(profile) if !profile_has_companion(profile) => Some(format!(
+                    "`{raw}` resolves to a page with no markdown companion \
+                     (drafts and the 404 page are excluded)."
+                )),
+                Some(profile) => {
+                    // Satisfied: point the link at the companion,
+                    // page-relative, keeping any ?query/#fragment
+                    // tail as written.
+                    let companion = companion_href(&profile.output_href)
+                        .expect("companion-eligible pages render to .html");
+                    let tail = raw.find(['#', '?']).map_or("", |i| &raw[i..]);
+                    let url = match self.resolver {
+                        Some(r) => r.page_url_for(&companion),
+                        None => companion,
+                    };
+                    link.target.0 = format!("{url}{tail}");
+                    strip_kv(&mut link.attr, &mut link.attr_source, LINK_FORMAT_ATTR);
+                    return;
+                }
+            },
+            other => Some(format!(
+                "`{other}` is not a recognized link-format value \
+                 (expected \"html\" or \"llms\")."
+            )),
+        };
+
+        strip_kv(&mut link.attr, &mut link.attr_source, LINK_FORMAT_ATTR);
+        if let Some(problem) = failure {
+            self.diagnostics
+                .push(link_format_warning(problem, location));
+        }
+        self.resolve_undecorated(link);
+    }
+
     fn visit_slot(&mut self, slot: &mut Slot) {
         match slot {
             Slot::Block(b) => self.visit_block(b),
@@ -286,6 +445,23 @@ impl<'a> LinkRewriter<'a> {
             Slot::Inlines(is) => self.visit_inlines(is),
         }
     }
+}
+
+/// Q-13-9: a `link-format` request that cannot be honored. The
+/// render proceeds with the undecorated resolution.
+fn link_format_warning(problem: String, location: Option<SourceInfo>) -> DiagnosticMessage {
+    let mut builder = DiagnosticMessageBuilder::warning("link-format request cannot be honored")
+        .with_code("Q-13-9")
+        .problem(problem)
+        .add_hint(
+            "Write the target as the page's source path (e.g. `guide/index.qmd`) \
+             and use `link-format=\"html\"` or `link-format=\"llms\"`. The \
+             attribute was ignored.",
+        );
+    if let Some(loc) = location {
+        builder = builder.with_location(loc);
+    }
+    builder.build()
 }
 
 #[cfg(test)]
@@ -323,6 +499,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path("/project/index.qmd")],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         }
     }
 
@@ -699,5 +877,601 @@ mod tests {
             "Q-13-4 must carry the link URL's SourceInfo; got {:?}",
             d.location
         );
+    }
+
+    // ---- Case B (bd-root-relative-paths-design-fc5pvkcv): image targets ----
+    //
+    // Image targets are static resources; they rebase through
+    // `resolve_static_resource_href` so a root-absolute (site-root)
+    // path lands page-relative, matching Q1. The link row of the
+    // strand's repro is the control: both are ordinary AST nodes in
+    // the same paragraph, and both must resolve.
+
+    fn image_urls(blocks: &[Block]) -> Vec<String> {
+        let mut urls = Vec::new();
+        for b in blocks {
+            if let Block::Paragraph(p) = b {
+                for i in &p.content {
+                    if let Inline::Image(img) = i {
+                        urls.push(img.target.0.clone());
+                    }
+                }
+            }
+        }
+        urls
+    }
+
+    /// A root-absolute image target rebases to a page-relative URL on
+    /// a depth-2 page — the exact repro row that q2 got wrong while
+    /// getting the sibling link right.
+    #[tokio::test]
+    async fn image_rewrite_root_absolute_rebases_at_depth() {
+        let blocks = vec![para(vec![image_inline("/images/x.svg", "x")])];
+        let (out, diags) = run(
+            blocks,
+            "deep/deeper/index.qmd",
+            "deep/deeper/index.html",
+            vec![],
+            true,
+        )
+        .await;
+        assert_eq!(image_urls(&out), vec!["../../images/x.svg"]);
+        assert!(diags.is_empty(), "static rebasing must not diagnose");
+    }
+
+    /// Relative image targets stay correct: `..`-laden paths
+    /// normalize, plain relative paths round-trip unchanged
+    /// (decision 2: all targets route through the resolver, and
+    /// normalization is a desired side effect).
+    #[tokio::test]
+    async fn image_rewrite_normalizes_relative_targets() {
+        let blocks = vec![para(vec![
+            image_inline("a/../b.png", "b"),
+            image_inline("../x.png", "x"),
+            image_inline("figs/d.png", "d"),
+        ])];
+        let (out, diags) = run(
+            blocks,
+            "deep/deeper/index.qmd",
+            "deep/deeper/index.html",
+            vec![],
+            true,
+        )
+        .await;
+        assert_eq!(image_urls(&out), vec!["b.png", "../x.png", "figs/d.png"]);
+        assert!(diags.is_empty());
+    }
+
+    /// External URLs, data: URIs, and fragment-only image targets pass
+    /// through untouched.
+    #[tokio::test]
+    async fn image_rewrite_leaves_external_untouched() {
+        let urls_in = [
+            "https://example.com/remote.png",
+            "data:image/png;base64,AAAA",
+            "//cdn.example.com/x.png",
+            "#gradient-stop",
+        ];
+        let blocks = vec![para(
+            urls_in.iter().map(|u| image_inline(u, "alt")).collect(),
+        )];
+        let (out, diags) = run(
+            blocks,
+            "deep/deeper/index.qmd",
+            "deep/deeper/index.html",
+            vec![],
+            true,
+        )
+        .await;
+        assert_eq!(image_urls(&out), urls_in.to_vec());
+        assert!(diags.is_empty());
+    }
+
+    /// Query / fragment tails survive the image rewrite.
+    #[tokio::test]
+    async fn image_rewrite_preserves_tail() {
+        let blocks = vec![para(vec![
+            image_inline("/images/x.svg#frag", "x"),
+            image_inline("/images/x.svg?v=2", "x"),
+        ])];
+        let (out, _) = run(
+            blocks,
+            "deep/deeper/index.qmd",
+            "deep/deeper/index.html",
+            vec![],
+            true,
+        )
+        .await;
+        assert_eq!(
+            image_urls(&out),
+            vec!["../../images/x.svg#frag", "../../images/x.svg?v=2"]
+        );
+    }
+
+    /// VFS-root mode (hub-client q2-preview): image targets pass
+    /// through **untouched**. Preview images are not fetched by URL —
+    /// the parent-side asset walker reads the VFS and mints blob URLs
+    /// keyed by the *user-written* path
+    /// (`hub-client/src/services/assetManifestProject.wasm.test.ts`
+    /// pins that contract), so a rewrite here would orphan every
+    /// preview image. Links are unaffected (they already rewrite in
+    /// VFS mode — bd-kw93.14).
+    #[tokio::test]
+    async fn image_rewrite_skipped_in_vfs_root_mode() {
+        let blocks = vec![para(vec![image_inline("../hero.png", "h")])];
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/sub/page.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.resource_resolver = Some(ResourceResolverContext::vfs_root("/project"));
+        let mut ast = Pandoc {
+            meta: empty_meta(),
+            blocks,
+        };
+        LinkRewriteTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert_eq!(
+            image_urls(&ast.blocks),
+            vec!["../hero.png"],
+            "VFS-root mode must preserve the user-written image path"
+        );
+    }
+
+    // ---- link-format attribute (bd-llms-link-target-annotation-0zo2ppgx) ----
+    //
+    // `link-format="llms"` retargets a source-path link at the target
+    // page's markdown companion; `link-format="html"` survives this
+    // transform (LlmsCaptureTransform consumes it) when the llms view
+    // is active and is silently stripped when it is not. Unsatisfiable
+    // pins warn with Q-13-9 and fall back to the normal resolution.
+
+    use crate::project::ProjectKind;
+
+    fn llms_meta() -> ConfigValue {
+        let entry = |k: &str, v: ConfigValue| ConfigMapEntry {
+            key: k.to_string(),
+            key_source: SourceInfo::for_test(),
+            value: v,
+        };
+        let website = ConfigValue::new_map(
+            vec![entry(
+                "llms-txt",
+                ConfigValue::new_bool(true, SourceInfo::for_test()),
+            )],
+            SourceInfo::for_test(),
+        );
+        ConfigValue::new_map(vec![entry("website", website)], SourceInfo::for_test())
+    }
+
+    fn link_with_kv(url: &str, text: &str, kv: &[(&str, &str)]) -> Inline {
+        let mut map = hashlink::LinkedHashMap::new();
+        for (k, v) in kv {
+            map.insert(k.to_string(), v.to_string());
+        }
+        Inline::Link(Link {
+            attr: (String::new(), vec![], map),
+            content: vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    /// Like [`run`], but with control over the llms view: when
+    /// `llms_enabled` the project is a website with
+    /// `website.llms-txt: true` in the metadata (the
+    /// `llms_view_active` predicate holds).
+    async fn run_cfg(
+        blocks: Vec<Block>,
+        source_doc: &str,
+        output_href: &str,
+        index_profiles: Vec<DocumentProfile>,
+        with_index: bool,
+        llms_enabled: bool,
+    ) -> (Vec<Block>, Vec<quarto_error_reporting::DiagnosticMessage>) {
+        let mut project = make_project();
+        if llms_enabled {
+            project.config.project_kind = ProjectKind::Website;
+        }
+        let input_path = format!("/project/{}", source_doc);
+        let doc = DocumentInfo::from_path(&input_path);
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        if with_index {
+            ctx = ctx.with_project_index(Arc::new(ProjectIndex::new(index_profiles)));
+        }
+        let page_output = format!("/project/_site/{}", output_href);
+        let stem = std::path::Path::new(output_href)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("index");
+        ctx.resource_resolver = Some(ResourceResolverContext::website(
+            "/project/_site",
+            page_output,
+            "site_libs",
+            stem,
+        ));
+        let mut ast = Pandoc {
+            meta: if llms_enabled {
+                llms_meta()
+            } else {
+                empty_meta()
+            },
+            blocks,
+        };
+        LinkRewriteTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        (ast.blocks, ctx.diagnostics)
+    }
+
+    fn first_link(blocks: &[Block]) -> &Link {
+        for b in blocks {
+            if let Block::Paragraph(p) = b {
+                for i in &p.content {
+                    if let Inline::Link(l) = i {
+                        return l;
+                    }
+                }
+            }
+        }
+        panic!("no link found");
+    }
+
+    fn assert_q13_9(diags: &[quarto_error_reporting::DiagnosticMessage], context: &str) {
+        assert_eq!(
+            diags.len(),
+            1,
+            "{context}: expected exactly one diagnostic; got {:?}",
+            diags.iter().map(|d| d.title.clone()).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            diags[0].code.as_deref(),
+            Some("Q-13-9"),
+            "{context}: expected Q-13-9; got {:?}",
+            diags[0].code
+        );
+    }
+
+    /// `link-format="llms"` on a source-path link resolves to the
+    /// target page's markdown companion, consuming the attribute.
+    #[tokio::test]
+    async fn link_format_llms_rewrites_to_companion() {
+        let blocks = vec![para(vec![link_with_kv(
+            "about.qmd",
+            "About",
+            &[("link-format", "llms")],
+        )])];
+        let (out, diags) = run_cfg(
+            blocks,
+            "index.qmd",
+            "index.html",
+            vec![make_profile("about.qmd", "about.html")],
+            true,
+            true,
+        )
+        .await;
+        let link = first_link(&out);
+        assert_eq!(link.target.0, "about.md");
+        assert!(
+            !link.attr.2.contains_key("link-format"),
+            "attribute must be consumed"
+        );
+        assert!(diags.is_empty(), "satisfied pin must not diagnose");
+    }
+
+    /// The companion rewrite is page-relative and keeps the fragment:
+    /// a depth-1 page linking `../about.qmd#sec` gets
+    /// `../about.md#sec`.
+    #[tokio::test]
+    async fn link_format_llms_relativizes_and_keeps_fragment() {
+        let blocks = vec![para(vec![link_with_kv(
+            "../about.qmd#sec",
+            "About",
+            &[("link-format", "llms")],
+        )])];
+        let (out, diags) = run_cfg(
+            blocks,
+            "guide/intro.qmd",
+            "guide/intro.html",
+            vec![
+                make_profile("about.qmd", "about.html"),
+                make_profile("guide/intro.qmd", "guide/intro.html"),
+            ],
+            true,
+            true,
+        )
+        .await;
+        assert_eq!(first_link(&out).target.0, "../about.md#sec");
+        assert!(diags.is_empty());
+    }
+
+    /// `link-format="llms"` when llms-txt is not enabled: Q-13-9
+    /// warning, attribute stripped, normal `.html` resolution.
+    #[tokio::test]
+    async fn link_format_llms_warns_when_llms_disabled() {
+        let blocks = vec![para(vec![link_with_kv(
+            "about.qmd",
+            "About",
+            &[("link-format", "llms")],
+        )])];
+        let (out, diags) = run_cfg(
+            blocks,
+            "index.qmd",
+            "index.html",
+            vec![make_profile("about.qmd", "about.html")],
+            true,
+            false,
+        )
+        .await;
+        let link = first_link(&out);
+        assert_eq!(link.target.0, "about.html", "falls back to html output");
+        assert!(!link.attr.2.contains_key("link-format"));
+        assert_q13_9(&diags, "llms pin with llms-txt disabled");
+    }
+
+    /// `link-format="llms"` targeting a draft (no companion): Q-13-9
+    /// warning, fallback to the `.html` output.
+    #[tokio::test]
+    async fn link_format_llms_draft_target_warns() {
+        let draft = DocumentProfile {
+            draft: true,
+            ..make_profile("about.qmd", "about.html")
+        };
+        let blocks = vec![para(vec![link_with_kv(
+            "about.qmd",
+            "About",
+            &[("link-format", "llms")],
+        )])];
+        let (out, diags) =
+            run_cfg(blocks, "index.qmd", "index.html", vec![draft], true, true).await;
+        let link = first_link(&out);
+        assert_eq!(link.target.0, "about.html", "falls back to html output");
+        assert!(!link.attr.2.contains_key("link-format"));
+        assert_q13_9(&diags, "llms pin on a draft target");
+    }
+
+    /// An unknown `link-format` value warns and is stripped; the link
+    /// resolves exactly as if undecorated.
+    #[tokio::test]
+    async fn link_format_unknown_value_warns() {
+        let blocks = vec![para(vec![link_with_kv(
+            "about.qmd",
+            "About",
+            &[("link-format", "pdf")],
+        )])];
+        let (out, diags) = run_cfg(
+            blocks,
+            "index.qmd",
+            "index.html",
+            vec![make_profile("about.qmd", "about.html")],
+            true,
+            true,
+        )
+        .await;
+        let link = first_link(&out);
+        assert_eq!(link.target.0, "about.html");
+        assert!(!link.attr.2.contains_key("link-format"));
+        assert_q13_9(&diags, "unknown link-format value");
+    }
+
+    /// With the llms view active, `link-format="html"` survives this
+    /// transform — `LlmsCaptureTransform` (which runs later) is its
+    /// consumer. The target resolves normally.
+    #[tokio::test]
+    async fn link_format_html_survives_for_capture_when_llms_active() {
+        let blocks = vec![para(vec![link_with_kv(
+            "about.qmd",
+            "About",
+            &[("link-format", "html")],
+        )])];
+        let (out, diags) = run_cfg(
+            blocks,
+            "index.qmd",
+            "index.html",
+            vec![make_profile("about.qmd", "about.html")],
+            true,
+            true,
+        )
+        .await;
+        let link = first_link(&out);
+        assert_eq!(link.target.0, "about.html");
+        assert_eq!(
+            link.attr.2.get("link-format").map(String::as_str),
+            Some("html"),
+            "html pin must ride through to LlmsCaptureTransform"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// With the llms view inactive, `link-format="html"` is stripped
+    /// silently (nothing downstream consumes it) and behavior is
+    /// exactly the undecorated behavior.
+    #[tokio::test]
+    async fn link_format_html_stripped_silently_when_llms_inactive() {
+        let blocks = vec![para(vec![link_with_kv(
+            "about.qmd",
+            "About",
+            &[("link-format", "html")],
+        )])];
+        let (out, diags) = run_cfg(
+            blocks,
+            "index.qmd",
+            "index.html",
+            vec![make_profile("about.qmd", "about.html")],
+            true,
+            false,
+        )
+        .await;
+        let link = first_link(&out);
+        assert_eq!(link.target.0, "about.html");
+        assert!(
+            !link.attr.2.contains_key("link-format"),
+            "inactive-view html pin must be scrubbed before the writer"
+        );
+        assert!(diags.is_empty(), "inactive-view html pin is silent");
+    }
+
+    /// `link-format` on a target that is not a resolvable project
+    /// source path (an external URL) is inconsistent per the design's
+    /// source-paths-only rule: Q-13-9, attribute stripped, target
+    /// untouched.
+    #[tokio::test]
+    async fn link_format_html_external_target_warns() {
+        let blocks = vec![para(vec![link_with_kv(
+            "https://example.com/x",
+            "X",
+            &[("link-format", "html")],
+        )])];
+        let (out, diags) = run_cfg(
+            blocks,
+            "index.qmd",
+            "index.html",
+            vec![make_profile("about.qmd", "about.html")],
+            true,
+            true,
+        )
+        .await;
+        let link = first_link(&out);
+        assert_eq!(link.target.0, "https://example.com/x");
+        assert!(!link.attr.2.contains_key("link-format"));
+        assert_q13_9(&diags, "link-format on an external target");
+    }
+
+    /// An `llms` pin targeting a revealjs page warns: slide decks
+    /// render to `.html` but never get a markdown companion, so the
+    /// pin cannot be honored.
+    #[tokio::test]
+    async fn link_format_llms_to_revealjs_target_warns() {
+        let slides = DocumentProfile {
+            format_id: "revealjs".to_string(),
+            ..make_profile("slides.qmd", "slides.html")
+        };
+        let blocks = vec![para(vec![link_with_kv(
+            "slides.qmd",
+            "Slides",
+            &[("link-format", "llms")],
+        )])];
+        let (out, diags) =
+            run_cfg(blocks, "index.qmd", "index.html", vec![slides], true, true).await;
+        let link = first_link(&out);
+        assert_eq!(link.target.0, "slides.html", "falls back to html output");
+        assert!(!link.attr.2.contains_key("link-format"));
+        assert_q13_9(&diags, "llms pin on a revealjs target");
+    }
+
+    /// An `llms` pin is satisfiable *from* any page of the site — a
+    /// revealjs deck can link another page's markdown companion. The
+    /// gate is config-level (`llms-txt: true` on a website), not the
+    /// linking page's own format.
+    #[tokio::test]
+    async fn link_format_llms_from_revealjs_page_succeeds() {
+        let mut project = make_project();
+        project.config.project_kind = ProjectKind::Website;
+        let doc = DocumentInfo::from_path("/project/slides.qmd");
+        let mut format = Format::html();
+        format.target_format = "revealjs".to_string();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx = ctx.with_project_index(Arc::new(ProjectIndex::new(vec![make_profile(
+            "about.qmd",
+            "about.html",
+        )])));
+        ctx.resource_resolver = Some(ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/slides.html",
+            "site_libs",
+            "slides",
+        ));
+        let mut ast = Pandoc {
+            meta: llms_meta(),
+            blocks: vec![para(vec![link_with_kv(
+                "about.qmd",
+                "About notes",
+                &[("link-format", "llms")],
+            )])],
+        };
+        LinkRewriteTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let link = first_link(&ast.blocks);
+        assert_eq!(
+            link.target.0, "about.md",
+            "the deck links the html page's companion"
+        );
+        assert!(!link.attr.2.contains_key("link-format"));
+        assert!(
+            ctx.diagnostics.is_empty(),
+            "satisfiable cross-format pin must not diagnose; got {:?}",
+            ctx.diagnostics
+                .iter()
+                .map(|d| d.title.clone())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// Even with neither index nor resolver (bare standalone render),
+    /// the transform must still walk the AST to consume `link-format`
+    /// attributes — an unsatisfiable `llms` pin warns, and nothing
+    /// leaks into the writer.
+    #[tokio::test]
+    async fn link_format_consumed_without_index_and_resolver() {
+        let blocks = vec![para(vec![link_with_kv(
+            "about.qmd",
+            "About",
+            &[("link-format", "llms")],
+        )])];
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/index.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ast = Pandoc {
+            meta: empty_meta(),
+            blocks,
+        };
+        LinkRewriteTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let link = first_link(&ast.blocks);
+        assert_eq!(link.target.0, "about.qmd", "no resolution without index");
+        assert!(
+            !link.attr.2.contains_key("link-format"),
+            "attribute must be consumed even on the no-index path"
+        );
+        assert_q13_9(&ctx.diagnostics, "llms pin in a standalone render");
+    }
+
+    /// Images rewrite even without a `ProjectIndex` — static-resource
+    /// resolution needs only the resolver. Links still require the
+    /// index and pass through (phase-6 Decision 7 unchanged).
+    #[tokio::test]
+    async fn image_rewrite_runs_without_index_links_untouched() {
+        let blocks = vec![
+            para(vec![image_inline("/images/x.svg", "x")]),
+            para(vec![link_inline("about.qmd", "About")]),
+        ];
+        let (out, diags) = run(
+            blocks,
+            "deep/deeper/index.qmd",
+            "deep/deeper/index.html",
+            vec![],
+            false,
+        )
+        .await;
+        assert_eq!(image_urls(&out), vec!["../../images/x.svg"]);
+        assert_eq!(first_link_url(&out), "about.qmd");
+        assert!(diags.is_empty());
     }
 }

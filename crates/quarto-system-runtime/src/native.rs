@@ -258,6 +258,11 @@ impl SystemRuntime for NativeRuntime {
         Ok(std::env::vars().collect())
     }
 
+    fn is_interactive(&self) -> bool {
+        use std::io::IsTerminal;
+        std::io::stdin().is_terminal()
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // NETWORK
     // ═══════════════════════════════════════════════════════════════════════
@@ -1208,5 +1213,18 @@ mod tests {
         // The namespace directory should have been created
         assert!(tmp.path().join("sass").is_dir());
         assert!(tmp.path().join("sass").join("key1").is_file());
+    }
+
+    #[test]
+    fn is_interactive_native_false_under_nextest() {
+        // nextest runs tests without a TTY, so stdin is not a terminal.
+        // This asserts the thin IsTerminal call returns false in the test harness.
+        // The `true` path requires a PTY and is not unit-tested (acceptable — it
+        // is a one-liner delegating to std::io::IsTerminal).
+        let rt = NativeRuntime::new();
+        assert!(
+            !rt.is_interactive(),
+            "NativeRuntime::is_interactive() should be false under nextest (no PTY)"
+        );
     }
 }

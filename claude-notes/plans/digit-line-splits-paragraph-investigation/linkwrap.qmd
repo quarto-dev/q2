@@ -1,0 +1,3 @@
+The set of characters that must be encoded can be found in
+[Section 3.2.1 of RFC
+3986](https://www.rfc-editor.org/rfc/rfc3986#section-3.2.1).

@@ -67,6 +67,28 @@ pub fn website_site_url(meta: &ConfigValue) -> Option<String> {
         .and_then(|v| v.as_plain_text())
 }
 
+/// Read `website.description` from a merged metadata value.
+///
+/// Returns the plain-text form (Pandoc-inline descriptions are
+/// flattened to their text content), or `None` if the key is absent
+/// or the metadata is not a map. Consumed by the `llms.txt` index
+/// header (bd-llms-txt-unimplemented-oih6z6j7).
+pub fn website_description(meta: &ConfigValue) -> Option<String> {
+    meta.get_path(&["website", "description"])
+        .and_then(|v| v.as_plain_text())
+}
+
+/// Read `website.llms-txt` from a merged metadata value.
+///
+/// `true` only for a literal boolean `true`; absent, `false`, and
+/// non-boolean values all read as disabled
+/// (bd-llms-txt-unimplemented-oih6z6j7).
+pub fn website_llms_txt_enabled(meta: &ConfigValue) -> bool {
+    meta.get_path(&["website", "llms-txt"])
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
 /// Read `website.favicon` from a merged metadata value.
 ///
 /// Returns the favicon path as written by the user. **Does not
@@ -249,6 +271,48 @@ mod tests {
         assert_eq!(website_title(&meta), None);
     }
 
+    fn b(value: bool) -> ConfigValue {
+        ConfigValue::new_bool(value, SourceInfo::for_test())
+    }
+
+    /// `website.description` reads strings and inlines as plain text,
+    /// absent as `None` (llms.txt index header,
+    /// bd-llms-txt-unimplemented-oih6z6j7).
+    #[test]
+    fn website_description_reads_string_and_inlines() {
+        let meta = map(vec![("website", map(vec![("description", s("A site"))]))]);
+        assert_eq!(website_description(&meta), Some("A site".to_string()));
+
+        let meta = map(vec![(
+            "website",
+            map(vec![("description", pandoc_inlines("A site"))]),
+        )]);
+        assert_eq!(website_description(&meta), Some("A site".to_string()));
+
+        let meta = map(vec![("website", map(vec![("title", s("Site"))]))]);
+        assert_eq!(website_description(&meta), None);
+    }
+
+    /// `website.llms-txt` is enabled only by a literal `true`:
+    /// absent, `false`, and non-boolean values all read as disabled.
+    #[test]
+    fn website_llms_txt_enabled_only_for_true() {
+        let on = map(vec![("website", map(vec![("llms-txt", b(true))]))]);
+        assert!(website_llms_txt_enabled(&on));
+
+        let off = map(vec![("website", map(vec![("llms-txt", b(false))]))]);
+        assert!(!website_llms_txt_enabled(&off));
+
+        let absent = map(vec![("website", map(vec![("title", s("Site"))]))]);
+        assert!(!website_llms_txt_enabled(&absent));
+
+        let non_bool = map(vec![("website", map(vec![("llms-txt", s("yes"))]))]);
+        assert!(!website_llms_txt_enabled(&non_bool));
+
+        let null_v = map(vec![("website", map(vec![("llms-txt", null())]))]);
+        assert!(!website_llms_txt_enabled(&null_v));
+    }
+
     /// Test 4: `website.site-url` as a string is returned verbatim
     /// (trailing slashes preserved).
     #[test]
@@ -346,6 +410,7 @@ mod tests {
                 is_single_file: false,
                 files: vec![],
                 output_dir: dir.join("_site"),
+                ..Default::default()
             }
         }
 

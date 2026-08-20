@@ -1,0 +1,28 @@
+---
+title: code-block-bg metadata beats the palette canvas
+format:
+  html:
+    theme: cosmo
+highlight-style: github
+code-block-bg: "#101112"
+code-block-color: "#e0e1e2"
+_quarto:
+  tests:
+    html:
+      noErrorsOrWarnings: true
+      ensureCssRegexMatches:
+        # The document metadata wins over github-light's translated
+        # `$code-block-bg: #ffffff !default` (the one-line escape
+        # hatch under the palette-wins policy), and the palette's
+        # token colors still apply.
+        - ["#101112", "#e0e1e2", "\\.hl-keyword", "#d73a49"]
+---
+
+Overriding the palette-derived code-block canvas takes one YAML line
+each for `code-block-bg` and `code-block-color`, matching Quarto 1's
+metadata keys.
+
+```python
+def hello():
+    print("Hello, World!")
+```

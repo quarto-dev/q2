@@ -147,6 +147,8 @@ pub fn run() -> Result<()> {
 
     check_cmake();
     check_pandoc();
+    check_deno();
+    check_wasm_opt();
 
     Ok(())
 }
@@ -207,6 +209,64 @@ fn cmake_install_hints() -> &'static [&'static str] {
     }
 }
 
+/// Check for wasm-opt (required — `npm run build:wasm` runs `wasm-opt -Oz`
+/// on the hub-client WASM after wasm-bindgen; live-share payload plan
+/// Phase 1). Not cargo-installed: the `wasm-opt` crate builds all of
+/// binaryen from C++ source, which is a heavy install when every platform
+/// already packages the binary.
+fn check_wasm_opt() {
+    let Ok(output) = Command::new("wasm-opt").arg("--version").output() else {
+        warn_wasm_opt_missing();
+        return;
+    };
+    if !output.status.success() {
+        warn_wasm_opt_missing();
+        return;
+    }
+
+    let first_line = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .next()
+        .unwrap_or("wasm-opt")
+        .trim()
+        .to_string();
+    println!("\n  {first_line} — detected");
+}
+
+fn warn_wasm_opt_missing() {
+    println!(
+        "\n  Warning: wasm-opt not found. `npm run build:wasm` (hub-client) will fail.\n  \
+         wasm-opt ships with binaryen. Install:"
+    );
+    for line in wasm_opt_install_hints() {
+        println!("    {line}");
+    }
+}
+
+/// Platform-specific binaryen install commands. Order matters: preferred first.
+fn wasm_opt_install_hints() -> &'static [&'static str] {
+    #[cfg(windows)]
+    {
+        &["npm install -g binaryen", "scoop install binaryen"]
+    }
+    #[cfg(target_os = "macos")]
+    {
+        &["brew install binaryen", "npm install -g binaryen"]
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        &[
+            "apt install binaryen          # Debian/Ubuntu",
+            "dnf install binaryen          # Fedora/RHEL",
+            "npm install -g binaryen       # any OS with node",
+        ]
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        &["npm install -g binaryen"]
+    }
+}
+
 /// Check for Pandoc 3.6+ (optional — needed only for pampa comparison tests).
 fn check_pandoc() {
     let output = Command::new("pandoc").arg("--version").output();
@@ -232,6 +292,35 @@ fn check_pandoc() {
              Four tests will fail. Update from https://pandoc.org/installing.html"
         );
     }
+}
+
+/// Check for Deno (optional — needed for `quarto-engine-host-deno` tests and the
+/// Deno engine execution path). Warn-only; does NOT auto-install.
+fn check_deno() {
+    let Ok(output) = Command::new("deno").arg("--version").output() else {
+        println!(
+            "\n  Warning: deno not found. Engine-host-deno tests and the Deno execution\n  \
+             path will be skipped or unavailable.\n  \
+             Install: brew install deno  (macOS) or https://deno.land/"
+        );
+        return;
+    };
+    if !output.status.success() {
+        println!(
+            "\n  Warning: `deno --version` returned non-zero. Engine-host-deno\n  \
+             integration will be unavailable.\n  \
+             Install: brew install deno  (macOS) or https://deno.land/"
+        );
+        return;
+    }
+
+    let first_line = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .next()
+        .unwrap_or("deno")
+        .trim()
+        .to_string();
+    println!("\n  {first_line} — detected");
 }
 
 /// Parse the first line of `pandoc --version` output into `(major, minor)`.

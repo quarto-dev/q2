@@ -12,7 +12,9 @@
 //! The "Parse" in `ParseError` is historical — the type is just a
 //! `Vec<DiagnosticMessage>` + `SourceContext` envelope.
 
+#[cfg(test)]
 use std::path::Path;
+use std::path::PathBuf;
 
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_sass::SassError;
@@ -50,26 +52,21 @@ use crate::error::ParseError;
 /// the source snippet.
 pub fn sass_error_to_parse_error(
     err: &SassError,
-    candidate_sources: &[(FileId, &Path)],
+    candidate_sources: &[(FileId, PathBuf)],
 ) -> ParseError {
     let location = sass_error_location(err);
 
+    // Candidate-matched binding via the shared helper (this function
+    // was the original precedent for it; bd-m6wmztln → bd-r64mj1aa):
+    // registers only the candidate whose id equals the diagnostic's
+    // resolved id, only with readable content. No match ⇒ span-less
+    // render — never a wrong span.
     let mut source_context = SourceContext::new();
-    if let Some(loc) = &location
-        && let Some((fid_usize, _, _)) = loc.resolve_byte_range()
-        && let Some((file_id, source_file)) =
-            candidate_sources.iter().find(|(fid, _)| fid.0 == fid_usize)
-        && let Ok(content) = std::fs::read_to_string(source_file)
-    {
-        // Only register the file when we actually have its content.
-        // A SourceFile with `content = None` triggers ariadne to
-        // re-read from disk at render time and panic on absence —
-        // which would mask the diagnostic with a noisier error.
-        // No content ⇒ span-less render, same as no location.
-        source_context.add_file_with_id(
-            *file_id,
-            source_file.to_string_lossy().into_owned(),
-            Some(content),
+    if let Some(loc) = &location {
+        crate::config_sources::bind_source_candidates(
+            &mut source_context,
+            loc,
+            candidate_sources.iter().map(|(fid, p)| (*fid, p.as_path())),
         );
     }
 
@@ -101,6 +98,23 @@ pub fn sass_error_to_parse_error(
             }
             b.build()
         }
+        SassError::CustomThemeNotFound { path, location } => {
+            let mut b = DiagnosticMessageBuilder::error("Theme file not found")
+                .with_code("Q-14-4")
+                .problem(format!(
+                    "the `theme:` entry resolves to `{}`, which does not exist.",
+                    path.display()
+                ))
+                .add_hint(
+                    "Check the spelling and location of the file. Relative theme paths \
+                     resolve against the document's directory; extension-bundled themes \
+                     must sit next to the extension's `_extension.yml`?",
+                );
+            if let Some(loc) = location {
+                b = b.with_location(loc.clone());
+            }
+            b.build()
+        }
         // Fallback for SassError variants we haven't migrated yet.
         // Returning *something* structured is better than the legacy
         // plain `e.to_string()` form — no code is assigned because
@@ -121,6 +135,7 @@ fn sass_error_location(err: &SassError) -> Option<quarto_source_map::SourceInfo>
     match err {
         SassError::InvalidThemeConfig { location, .. } => location.clone(),
         SassError::UnknownTheme { location, .. } => location.clone(),
+        SassError::CustomThemeNotFound { location, .. } => location.clone(),
         _ => None,
     }
 }
@@ -207,7 +222,8 @@ mod tests {
             location: Some(location.clone()),
         };
 
-        let parse_err = sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), &yaml_path)]);
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-1"));
@@ -260,7 +276,8 @@ mod tests {
             message: "no source info available".to_string(),
             location: None,
         };
-        let parse_err = sass_error_to_parse_error(&err, &[(FileId(0), Path::new("/nonexistent"))]);
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-1"));
@@ -274,7 +291,10 @@ mod tests {
         // catalog, under the 'theme' subsystem.
         // Query the catalog data directly (the codes live in
         // `quarto-error-catalog` now, not in `quarto-error-reporting`).
-        for code in ["Q-14-1", "Q-14-2"] {
+        // (Q-14-3, the interim dark-theme-ignored warning from
+        // bd-o76p01wb, was retired when dual light/dark compilation
+        // landed — bd-0pic6 phase A2.)
+        for code in ["Q-14-1", "Q-14-2", "Q-14-4", "Q-14-5"] {
             let info = quarto_error_catalog::ERROR_CATALOG.get(code);
             assert!(
                 info.is_some(),
@@ -320,7 +340,8 @@ mod tests {
             location: Some(location.clone()),
         };
 
-        let parse_err = sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), &yaml_path)]);
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-2"));
@@ -359,9 +380,84 @@ mod tests {
             name: "whatever".to_string(),
             location: None,
         };
-        let parse_err = sass_error_to_parse_error(&err, &[(FileId(0), Path::new("/nonexistent"))]);
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-2"));
+        assert_eq!(d.location, None);
+    }
+
+    #[test]
+    fn custom_theme_not_found_renders_with_q144_code_and_span() {
+        // Parallel to unknown_theme_renders_with_q142_code_and_span,
+        // but for the CustomThemeNotFound variant (bd-of20unsb): a
+        // `theme:` entry naming a `.scss` file that resolves to no
+        // file must lift into a Q-14-4 ariadne diagnostic pointing at
+        // the offending entry, and its problem text must name the
+        // resolved path.
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let yaml_path = root.join("doc.qmd");
+        let contents = "---\nformat:\n  html:\n    theme: [cosmo, nope.scss]\n---\n";
+        std::fs::write(&yaml_path, contents).unwrap();
+
+        let entry_start = contents.find("nope.scss").unwrap();
+        let entry_end = entry_start + "nope.scss".len();
+        let location = SourceInfo::Original {
+            file_id: file_id_for(&yaml_path),
+            start_offset: entry_start,
+            end_offset: entry_end,
+        };
+
+        let err = SassError::CustomThemeNotFound {
+            path: root.join("nope.scss"),
+            location: Some(location.clone()),
+        };
+
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
+        assert_eq!(parse_err.diagnostics.len(), 1);
+        let d = &parse_err.diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-14-4"));
+        assert!(
+            d.title.contains("Theme file not found"),
+            "title was: {}",
+            d.title,
+        );
+        assert_eq!(d.location.as_ref(), Some(&location));
+
+        let opts = quarto_error_reporting::TextRenderOptions {
+            enable_hyperlinks: false,
+        };
+        let rendered = d.to_text_with_options(Some(&parse_err.source_context), &opts);
+        assert!(
+            rendered.contains("Q-14-4"),
+            "rendered output missing code Q-14-4:\n{}",
+            rendered,
+        );
+        assert!(
+            rendered.contains("nope.scss"),
+            "rendered output missing resolved path:\n{}",
+            rendered,
+        );
+        let stripped = strip_ansi(&rendered);
+        assert!(
+            stripped.contains("4 \u{2502}"),
+            "rendered output missing line marker for the `theme:` line:\n{}",
+            stripped,
+        );
+    }
+
+    #[test]
+    fn custom_theme_not_found_without_location_renders_span_less() {
+        let err = SassError::CustomThemeNotFound {
+            path: std::path::PathBuf::from("/somewhere/nope.scss"),
+            location: None,
+        };
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
+        let d = &parse_err.diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-14-4"));
         assert_eq!(d.location, None);
     }
 }

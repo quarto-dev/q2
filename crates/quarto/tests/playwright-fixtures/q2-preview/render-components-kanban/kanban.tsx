@@ -1,6 +1,15 @@
 const React = window.React;
 const { renderChildren, usePreviewEdit } = window.__Q2_PREVIEW_RENDERER__;
 
+const inlineText = (inlines) => inlines.map(inline => {
+    if (inline.t === 'Str') return inline.c;
+    if (inline.t === 'Space') return ' ';
+    return '';
+}).join('');
+
+const isSection = (block) =>
+    block.t === 'Div' && block.c[0][1].includes('section');
+
 export const Div = (args) => {
     const edit = usePreviewEdit();
     const { node: div } = args;
@@ -11,41 +20,50 @@ export const Div = (args) => {
         return <div id={id} className={classes.join(' ')}>{renderChildren(args)}</div>;
     }
 
-    // Parse kanban structure from the transformed node (for display)
+    // Parse kanban structure from the *transformed* node, for display.
+    //
+    // Each column arrives as a section Div, not a bare Header:
+    // `SectionizeTransform` wraps every heading and the content that
+    // follows it, including headings nested inside a Div like this one.
+    //
+    //   Div(.kanban)
+    //     Div(#backlog .section .level2)[ Header(2) "backlog", BulletList ]
+    //     Div(#doing   .section .level2)[ Header(2) "doing",   BulletList ]
+    //
+    // Reading the transformed AST means reading it as the pipeline
+    // leaves it. The grouping is a convenience here — a column's heading
+    // and its cards arrive together instead of having to be stitched
+    // back up from a flat run of siblings.
     const blocks = div.c[1];
     const columns = [];
-    let currentColumn = null;
 
     for (const block of blocks) {
-        if (block.t === 'Header' && block.c[0] === 2) {
-            const title = block.c[2].map(inline => {
-                if (inline.t === 'Str') return inline.c;
-                if (inline.t === 'Space') return ' ';
-                return '';
-            }).join('');
-            currentColumn = { title, items: [] };
-            columns.push(currentColumn);
-        } else if (block.t === 'BulletList' && currentColumn) {
-            const items = block.c.map(listItem =>
-                listItem.map(b => {
-                    if (b.t === 'Plain' || b.t === 'Para') {
-                        return b.c.map(inline => {
-                            if (inline.t === 'Str') return inline.c;
-                            if (inline.t === 'Space') return ' ';
-                            return '';
-                        }).join('');
-                    }
-                    return '';
-                }).join('')
-            );
-            currentColumn.items.push(...items);
+        if (!isSection(block)) continue;
+        const children = block.c[1];
+        const header = children.find(b => b.t === 'Header' && b.c[0] === 2);
+        if (!header) continue;
+
+        const column = { title: inlineText(header.c[2]), items: [] };
+        for (const child of children) {
+            if (child.t !== 'BulletList') continue;
+            column.items.push(...child.c.map(listItem =>
+                listItem.map(b =>
+                    (b.t === 'Plain' || b.t === 'Para') ? inlineText(b.c) : ''
+                ).join('')
+            ));
         }
+        columns.push(column);
     }
 
     const onMove = (newColumns) => {
         const resolved = edit.resolveSource(div);
         if (!resolved) return;
 
+        // The write path is deliberately *not* symmetric with the read
+        // path above. `resolveSource` hands back the node as it appears
+        // in the source document, which is pre-transform: flat Headers,
+        // no sections. Emitting sections here would write them into the
+        // user's .qmd.
         const newBlocks = [];
         for (const col of newColumns) {
             newBlocks.push({

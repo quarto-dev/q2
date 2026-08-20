@@ -1,18 +1,32 @@
-//! Build script that locates the q2-preview-spa bundle at compile time.
+//! Build script that locates the SPA bundles embedded at compile time.
 //!
-//! Mirrors `crates/quarto-trace-server/build.rs` exactly. The
-//! `include_dir!` macro needs a concrete compile-time path; this script
-//! resolves it:
+//! Mirrors `crates/quarto-trace-server/build.rs` for the viewer SPA.
+//! The `include_dir!` macro needs concrete compile-time paths; this
+//! script resolves two of them:
 //!
-//! 1. If `q2-preview-spa/dist/index.html` exists, embed that directory.
-//! 2. Otherwise, write a placeholder `index.html` into the crate's
-//!    `OUT_DIR` and embed that, so the build still succeeds. The
-//!    placeholder tells the user to run `cargo xtask build-q2-preview-spa`
-//!    (added in A.4 / bd-501n).
+//! 1. **Viewer** (`QUARTO_PREVIEW_EMBED_DIR`): the q2-preview SPA. If
+//!    `q2-preview-spa/dist/index.html` exists, embed that directory;
+//!    otherwise embed a placeholder `index.html` pointing at
+//!    `cargo xtask build-q2-preview-spa` (A.4 / bd-501n).
+//! 2. **Editor** (`QUARTO_HUB_CLIENT_EMBED_DIR`): the full hub-client
+//!    editor served by `q2 preview --ui editor` (live-share plan
+//!    Phase 4, bd-jt1etjbn). If `hub-client/dist-preview-embed/`
+//!    exists, embed a *filtered copy*: files byte-identical to the
+//!    real viewer dist at the same relative path are stripped, because
+//!    the runtime lookup serves those paths from the viewer embed —
+//!    that is how the ~38 MB `wasm_quarto_hub_client_bg-*.wasm` (plus
+//!    the automerge/tree-sitter wasm and shared fonts, all with
+//!    content-hashed names identical across the two Vite builds) is
+//!    embedded once instead of twice. Otherwise embed a placeholder
+//!    pointing at `cargo xtask build-hub-client-embed`. No cargo
+//!    warning for the missing editor dist — unlike the viewer it is
+//!    opt-in (`--ui editor`), and the placeholder page names the fix.
 //!
-//! The chosen path is exposed to the crate as
-//! `QUARTO_PREVIEW_EMBED_DIR` via `cargo:rustc-env`, and `src/lib.rs`
-//! consumes it via `include_dir!("$QUARTO_PREVIEW_EMBED_DIR")`.
+//! Both dirs are then archived as deterministic, identity-only
+//! tar.zst (bd-rem4bpee — `.gz` precompression siblings stay out of
+//! the binary; the runtime regenerates gzip responses lazily) and
+//! exposed via `cargo:rustc-env`, consumed by `src/lib.rs` through
+//! `include_bytes!(env!("$VAR"))`.
 
 use std::path::{Path, PathBuf};
 
@@ -21,16 +35,12 @@ fn main() {
     let workspace_root = manifest_dir.join("..").join("..");
     let real_dist = workspace_root.join("q2-preview-spa").join("dist");
 
-    let embed_dir = if real_dist.join("index.html").is_file() {
+    let viewer_is_real = real_dist.join("index.html").is_file();
+    let embed_dir = if viewer_is_real {
         real_dist.clone()
     } else {
         make_placeholder_dist()
     };
-
-    println!(
-        "cargo:rustc-env=QUARTO_PREVIEW_EMBED_DIR={}",
-        embed_dir.display()
-    );
 
     // Re-run if the real dist/ tree changes. Directory-mtime watches
     // miss in-place file rewrites (vite emits hashed filenames so this
@@ -39,6 +49,104 @@ fn main() {
     println!("cargo:rerun-if-changed={}", real_dist.display());
     if real_dist.is_dir() {
         watch_recursive(&real_dist);
+    }
+
+    // Editor embed (Phase 4). The viewer dist is only a dedupe target
+    // when it is what the viewer embed actually serves — stripping
+    // against a dist that isn't embedded would 404 the shared assets.
+    let editor_dist = workspace_root.join("hub-client").join("dist-preview-embed");
+    let editor_embed_dir = if editor_dist.join("index.html").is_file() {
+        let dedupe_against = viewer_is_real.then_some(real_dist.as_path());
+        let embed = make_editor_embed(&editor_dist, dedupe_against);
+        write_editor_manifest(&embed, &embed_dir);
+        embed
+    } else {
+        make_editor_placeholder()
+    };
+    println!("cargo:rerun-if-changed={}", editor_dist.display());
+    if editor_dist.is_dir() {
+        watch_recursive(&editor_dist);
+    }
+
+    // Archive both embed dirs as deterministic identity-only tar.zst
+    // (bd-rem4bpee) — after the editor manifest write above, so
+    // `spa-manifest.json` rides inside the editor archive.
+    let viewer_archive = archive_embed_dir(&embed_dir, "viewer-embed.tar.zst");
+    println!(
+        "cargo:rustc-env=QUARTO_PREVIEW_EMBED_ARCHIVE={}",
+        viewer_archive.display()
+    );
+    let editor_archive = archive_embed_dir(&editor_embed_dir, "editor-embed.tar.zst");
+    println!(
+        "cargo:rustc-env=QUARTO_HUB_CLIENT_EMBED_ARCHIVE={}",
+        editor_archive.display()
+    );
+}
+
+/// Archive an embed dir as a deterministic tar.zst in `OUT_DIR`
+/// (bd-rem4bpee). Identity files only: the `.gz` precompression
+/// siblings are incompressible and stay out of the binary — the
+/// runtime regenerates gzip responses lazily. Deterministic for
+/// reproducible builds: entries sorted by relative path, forward-slash
+/// normalized, mtime 0, fixed mode.
+fn archive_embed_dir(dir: &Path, archive_name: &str) -> PathBuf {
+    use std::io::Write;
+
+    let mut rels = Vec::new();
+    collect_identity_files(dir, dir, &mut rels);
+    rels.sort();
+
+    let mut builder = tar::Builder::new(Vec::new());
+    for rel in &rels {
+        let bytes = std::fs::read(dir.join(rel)).expect("read embed file");
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_mtime(0);
+        header.set_cksum();
+        let name = rel.to_string_lossy().replace('\\', "/");
+        builder
+            .append_data(&mut header, name, bytes.as_slice())
+            .expect("append tar entry");
+    }
+    let tar_bytes = builder.into_inner().expect("finish tar");
+
+    let mut encoder = zstd::stream::Encoder::new(Vec::new(), 19).expect("zstd encoder");
+    if let Ok(n) = std::thread::available_parallelism() {
+        let _ = encoder.multithread(n.get() as u32);
+    }
+    encoder.write_all(&tar_bytes).expect("zstd compress");
+    let zst = encoder.finish().expect("zstd finish");
+
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let archive = out_dir.join(archive_name);
+    std::fs::write(&archive, zst).expect("write embed archive");
+    archive
+}
+
+/// Every non-`.gz` file under `dir`, as `root`-relative paths. The
+/// `.gz` siblings are the npm precompress pass's output for the
+/// disk-serving path; they are never embedded.
+fn collect_identity_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(it) => it,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            collect_identity_files(root, &path, out);
+            continue;
+        }
+        if path.extension().is_some_and(|e| e == "gz") {
+            continue;
+        }
+        out.push(
+            path.strip_prefix(root)
+                .expect("entry under walk root")
+                .to_path_buf(),
+        );
     }
 }
 
@@ -55,6 +163,82 @@ fn watch_recursive(root: &Path) {
             watch_recursive(&path);
         }
     }
+}
+
+/// Produce the editor embed directory in `OUT_DIR`: a copy of
+/// `editor_dist` minus every file that is byte-identical to
+/// `dedupe_against` at the same relative path (those are served through
+/// the viewer embed at runtime). Rebuilt from scratch on every rerun so
+/// deleted/renamed dist files can never linger in the embed.
+fn make_editor_embed(editor_dist: &Path, dedupe_against: Option<&Path>) -> PathBuf {
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let embed = out_dir.join("editor-embed");
+    if embed.exists() {
+        std::fs::remove_dir_all(&embed).expect("clear stale editor embed");
+    }
+    std::fs::create_dir_all(&embed).expect("create editor embed dir");
+    copy_filtered(editor_dist, editor_dist, &embed, dedupe_against);
+    embed
+}
+
+fn copy_filtered(root: &Path, dir: &Path, embed: &Path, dedupe_against: Option<&Path>) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(it) => it,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let rel = path.strip_prefix(root).expect("entry under walk root");
+        if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            copy_filtered(root, &path, embed, dedupe_against);
+            continue;
+        }
+        if let Some(viewer) = dedupe_against
+            && files_byte_identical(&path, &viewer.join(rel))
+        {
+            continue; // shared with the viewer embed; served from there
+        }
+        let bytes = std::fs::read(&path).expect("read editor dist file");
+        let dest = embed.join(rel);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent).expect("create embed subdir");
+        }
+        std::fs::write(&dest, bytes).expect("write embed file");
+    }
+}
+
+/// Byte-equality check with a metadata cheap-reject: a missing viewer
+/// counterpart or a size mismatch means "not identical" without reading
+/// either file. Only same-size pairs pay for the full read-compare —
+/// previously every editor-dist file slurped its viewer counterpart
+/// (and itself, before the comparison was even possible), including
+/// the ~38 MB WASM, whether or not the bytes could ever match.
+fn files_byte_identical(a: &Path, b: &Path) -> bool {
+    let (Ok(a_meta), Ok(b_meta)) = (std::fs::metadata(a), std::fs::metadata(b)) else {
+        return false;
+    };
+    if a_meta.len() != b_meta.len() {
+        return false;
+    }
+    match (std::fs::read(a), std::fs::read(b)) {
+        (Ok(a_bytes), Ok(b_bytes)) => a_bytes == b_bytes,
+        _ => false,
+    }
+}
+
+/// Write the editor embed's `spa-manifest.json` (live-share plan
+/// Phase 2, design decision 4). Only this script knows the
+/// post-dedupe file set, so only it can record the *post-resolution*
+/// view — what `lookup_embedded(Editor, path)` actually returns:
+/// editor-embed files plus the viewer-embed fallback for stripped
+/// duplicates. Fallback sources are listed first so the editor's own
+/// copy wins on conflicts. The placeholder editor embed ships no
+/// manifest (hash `None` → guests tunnel; self-healing).
+fn write_editor_manifest(editor_embed: &Path, viewer_embed: &Path) {
+    let mut files = spa_manifest::list_dir(viewer_embed).expect("list viewer embed dir");
+    files.extend(spa_manifest::list_dir(editor_embed).expect("list editor embed dir"));
+    let manifest = spa_manifest::generate(files).expect("generate editor asset manifest");
+    spa_manifest::write_manifest(editor_embed, &manifest).expect("write editor asset manifest");
 }
 
 fn make_placeholder_dist() -> PathBuf {
@@ -102,6 +286,49 @@ cargo build -p quarto</pre>
         "q2-preview-spa/dist/index.html not found; embedding placeholder. \
          Run `cargo xtask build-q2-preview-spa` and rebuild to embed the real SPA.",
     );
+
+    dist
+}
+
+fn make_editor_placeholder() -> PathBuf {
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let dist = out_dir.join("editor-placeholder-dist");
+    std::fs::create_dir_all(&dist).expect("create editor placeholder dist dir");
+
+    let index = dist.join("index.html");
+    // Same `<div id="root">` contract as the viewer placeholder: even
+    // on an unbuilt tree, `--ui editor` boots to a page with the React
+    // mount point and instructions.
+    let html = r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <title>q2 preview — editor UI not built</title>
+    <style>
+      body { font-family: -apple-system, Segoe UI, sans-serif; max-width: 640px; margin: 40px auto; color: #222; }
+      code, pre { background: #f4f4f7; padding: 2px 6px; border-radius: 4px; }
+      pre { padding: 10px; overflow: auto; }
+      h1 { font-size: 18px; }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <h1>The q2 preview editor UI is not built</h1>
+      <p>
+        The embedded hub-client editor bundle is a placeholder. Build
+        the editor and rebuild the <code>quarto</code> binary:
+      </p>
+      <pre>cargo xtask build-hub-client-embed
+cargo build -p quarto</pre>
+      <p>
+        Or run without <code>--ui editor</code> to use the default
+        read-only preview UI.
+      </p>
+    </div>
+  </body>
+</html>
+"#;
+    write_if_changed(&index, html);
 
     dist
 }

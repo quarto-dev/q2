@@ -51,6 +51,7 @@ mod include_resolve;
 mod language_resolve;
 mod link_resolution;
 mod listing_item_info;
+mod source_conversion;
 // Math-mode stage: injects a math-rendering JS engine (MathJax / KaTeX)
 // when the document contains Math elements. Included on both native
 // and WASM pipelines (math display is safe under iframe reinit).
@@ -60,6 +61,11 @@ mod parse_document;
 mod pre_engine_sugaring;
 mod render_html;
 mod resource_report;
+// Tabsets-sync JS injection (bd-toc-tabset-titles-zq93gjvf): vendors
+// the grouped-tabset sync module as a Project-scoped artifact whenever
+// Bootstrap is active. Same WASM-exclusion reasoning as `bootstrap_js`.
+#[cfg(not(target_arch = "wasm32"))]
+mod tabsets_js;
 mod unwrap_profile;
 mod user_filters;
 
@@ -81,7 +87,7 @@ pub use code_highlight::CodeHighlightStage;
 pub use compile_theme_css::{CompileThemeCssStage, theme_fingerprint};
 pub use document_profile::DocumentProfileStage;
 pub use engine_execution::{ENGINE_CAPTURE_KIND, EngineExecutionStage};
-pub use include_expansion::{IncludeExpansionStage, extract_include_path};
+pub use include_expansion::{IncludeExpansionStage, collect_include_paths, extract_include_path};
 pub use include_resolve::IncludeResolveStage;
 pub use language_resolve::LanguageResolveStage;
 pub use link_resolution::LinkResolutionStage;
@@ -92,5 +98,8 @@ pub use parse_document::ParseDocumentStage;
 pub use pre_engine_sugaring::PreEngineSugaringStage;
 pub use render_html::RenderHtmlBodyStage;
 pub use resource_report::ResourceReportStage;
+pub use source_conversion::SourceConversionStage;
+#[cfg(not(target_arch = "wasm32"))]
+pub use tabsets_js::TabsetsJsStage;
 pub use unwrap_profile::UnwrapProfileStage;
 pub use user_filters::UserFiltersStage;

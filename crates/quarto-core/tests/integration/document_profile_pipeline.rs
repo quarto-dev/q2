@@ -22,9 +22,7 @@ use std::sync::Arc;
 
 use quarto_core::document_profile::DocumentProfile;
 use quarto_core::format::Format;
-use quarto_core::pipeline::{
-    HtmlRenderConfig, build_html_pipeline_stages, build_wasm_html_pipeline, render_qmd_to_html,
-};
+use quarto_core::pipeline::{HtmlRenderConfig, build_html_pipeline_stages, render_qmd_to_html};
 use quarto_core::project::{DocumentInfo, ProjectConfig, ProjectContext};
 use quarto_core::render::{BinaryDependencies, RenderContext};
 use quarto_core::stage::{
@@ -62,6 +60,8 @@ fn make_project() -> ProjectContext {
         is_single_file: true,
         files: vec![DocumentInfo::from_path(test_project_dir().join("test.qmd"))],
         output_dir: test_project_dir(),
+
+        ..Default::default()
     }
 }
 
@@ -83,39 +83,6 @@ fn position_of(stages: &[Box<dyn PipelineStage>], target: &str) -> Option<usize>
 // ---------------------------------------------------------------------------
 // Test 12: wasm pipeline includes the checkpoint stages.
 // ---------------------------------------------------------------------------
-
-#[test]
-fn wasm_pipeline_includes_profile_stage() {
-    let pipeline = build_wasm_html_pipeline();
-    let names = pipeline.stage_names();
-    assert!(
-        names.contains(&"document-profile"),
-        "WASM HTML pipeline must include DocumentProfileStage; got {names:?}"
-    );
-    assert!(
-        names.contains(&"unwrap-profile"),
-        "WASM HTML pipeline must include UnwrapProfileStage; got {names:?}"
-    );
-
-    // After Phase-8 sub-phase 8.0d, link-resolution sits between
-    // document-profile and unwrap-profile. Both stages take/produce
-    // AtProfile, so downstream stages still receive DocumentAst from
-    // unwrap-profile as before.
-    let p = names
-        .iter()
-        .position(|n| *n == "document-profile")
-        .expect("document-profile present");
-    assert_eq!(
-        names.get(p + 1).copied(),
-        Some("link-resolution"),
-        "link-resolution must follow document-profile"
-    );
-    assert_eq!(
-        names.get(p + 2).copied(),
-        Some("unwrap-profile"),
-        "unwrap-profile must follow link-resolution"
-    );
-}
 
 #[test]
 fn html_pipeline_includes_profile_stage() {
@@ -199,11 +166,14 @@ async fn pipeline_profile_matches_metadata() {
 
     // Outline: two top-level sections, first has one subsection.
     assert_eq!(profile.outline.len(), 2, "two top-level headings");
-    assert_eq!(profile.outline[0].title, "Section one");
+    assert_eq!(title_text(&profile.outline[0].title), "Section one");
     assert_eq!(profile.outline[0].level, 1);
     assert_eq!(profile.outline[0].children.len(), 1);
-    assert_eq!(profile.outline[0].children[0].title, "Subsection");
-    assert_eq!(profile.outline[1].title, "Section two");
+    assert_eq!(
+        title_text(&profile.outline[0].children[0].title),
+        "Subsection"
+    );
+    assert_eq!(title_text(&profile.outline[1].title), "Section two");
 
     // The inner ast is still present and usable.
     assert!(
@@ -347,6 +317,8 @@ async fn run_head_pipeline_in_dir(
         is_single_file: true,
         files: vec![DocumentInfo::from_path(parent_path)],
         output_dir: project_dir.to_path_buf(),
+
+        ..Default::default()
     };
     let doc = DocumentInfo::from_path(parent_path);
     let format = Format::html();
@@ -364,9 +336,13 @@ async fn run_head_pipeline_in_dir(
 /// Walk every entry in an outline (and its nested children) and collect
 /// their titles, so we can check for the presence of a specific heading
 /// without assuming tree shape.
+fn title_text(title: &quarto_pandoc_types::Inlines) -> String {
+    pampa::writers::plaintext::inlines_to_string(title).0
+}
+
 fn collect_outline_titles(outline: &[pampa::toc::TocEntry]) -> Vec<String> {
     fn walk(entry: &pampa::toc::TocEntry, out: &mut Vec<String>) {
-        out.push(entry.title.clone());
+        out.push(pampa::writers::plaintext::inlines_to_string(&entry.title).0);
         for child in &entry.children {
             walk(child, out);
         }
@@ -402,6 +378,53 @@ async fn profile_sees_heading_from_included_file() {
         titles.iter().any(|t| t == "Child Heading"),
         "DocumentProfile.outline must include the heading `## Child Heading` \
          from the included file (bd-xfwx); got outline titles: {titles:?}"
+    );
+}
+
+/// Walk an outline (and nested children) collecting entry ids in
+/// document order.
+fn collect_outline_ids(outline: &[pampa::toc::TocEntry]) -> Vec<String> {
+    fn walk(entry: &pampa::toc::TocEntry, out: &mut Vec<String>) {
+        out.push(entry.id.clone());
+        for child in &entry.children {
+            walk(child, out);
+        }
+    }
+    let mut ids = Vec::new();
+    for entry in outline {
+        walk(entry, &mut ids);
+    }
+    ids
+}
+
+#[tokio::test]
+async fn profile_outline_ids_deduped_across_includes() {
+    // bd-duplicate-heading-ids-mou5z7ux: the scoped uniqueIdent pass
+    // runs at the tail of IncludeExpansionStage, i.e. *before* the
+    // DocumentProfile checkpoint — so the profile outline (consumed by
+    // sidebars, cross-doc links, incremental rebuilds) must already see
+    // the disambiguated ids, not three copies of the same one.
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let project_dir = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf());
+
+    let child_path = project_dir.join("child.qmd");
+    std::fs::write(&child_path, "## Child Heading\n\nChild body.\n").expect("write child");
+
+    let parent_path = project_dir.join("parent.qmd");
+    let parent_content: &[u8] = b"---\ntitle: Parent\n---\n\n\
+        {{< include child.qmd >}}\n\n{{< include child.qmd >}}\n";
+
+    let bundle = run_head_pipeline_in_dir(&project_dir, &parent_path, parent_content).await;
+
+    let ids = collect_outline_ids(&bundle.profile.outline);
+    assert_eq!(
+        ids,
+        vec!["child-heading", "child-heading-1"],
+        "profile outline must carry disambiguated ids \
+         (bd-duplicate-heading-ids-mou5z7ux); got: {ids:?}"
     );
 }
 

@@ -1,0 +1,10 @@
+---
+title: Home
+---
+
+# Welcome
+
+This is a markdown-only page in the Julia website fixture. It has no
+computational cells, so no engine is spawned for this page.
+
+See the [plot page](plot.qmd) for a Julia-rendered figure.

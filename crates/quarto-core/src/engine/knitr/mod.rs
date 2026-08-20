@@ -93,6 +93,7 @@ pub static KNITR_RESOURCES: ResourceBundle = ResourceBundle::new("knitr", &KNITR
 use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
+use crate::engine::LanguageClaim;
 
 /// Knitr engine for R code execution.
 ///
@@ -183,13 +184,16 @@ impl ExecutionEngine for KnitrEngine {
             cwd: working_dir.clone(),
             params: None,
             resource_dir: resource_dir.to_path_buf(),
-            // Languages that Quarto handles (knitr passes them through unchanged)
-            handled_languages: vec!["ojs".to_string(), "mermaid".to_string(), "dot".to_string()],
+            // Languages that Quarto handles (knitr passes them through unchanged).
+            // Populated from ExecutionContext so multi-engine sequences can extend
+            // this set with languages owned by other engines.
+            handled_languages: ctx.handled_languages.clone(),
         };
 
         // Step 7: Build call options
         let call_options = CallROptions {
             quiet: ctx.quiet,
+            project_env: ctx.project_env.clone(),
             ..Default::default()
         };
 
@@ -215,11 +219,42 @@ impl ExecutionEngine for KnitrEngine {
             filters: result.filters,
             includes,
             needs_postprocess: result.post_process,
+            html_dependencies: Vec::new(),
+            ..Default::default()
         })
     }
 
     fn can_freeze(&self) -> bool {
         true
+    }
+
+    /// Deliberate q2 design choice: knitr claims `r` as Primary(1), and additionally
+    /// claims the `Interop` set — languages knitr can execute in-session via
+    /// `knit_engines` (reticulate for python, eng_sql for sql, shell engines for
+    /// bash/sh). `Interop` fires only when knitr is already in the sequence (via its
+    /// `r` Primary claim), so a knitr-only `{r}+{python}` doc routes python to knitr
+    /// via reticulate, while an explicit `[knitr, jupyter]` hands python to jupyter
+    /// (T2 explicit Fallback > T3 Interop). See `claude-notes/designs/engine-resolution.md`
+    /// §3.1 and §4.4.
+    fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        match language {
+            "r" => LanguageClaim::Primary(1),
+            // The Interop set is knitr's `knit_engines` in-session capability
+            // (reticulate/eng_sql/shell), ceded to a dedicated engine when one is
+            // present. Pinned, not guessed: Q1 ships verified knitr support for
+            // each of these (knitr-fixup.lua for sql, reticulate for python, etc.).
+            "python" | "sql" | "bash" | "sh" => LanguageClaim::Interop(0),
+            _ => LanguageClaim::None,
+        }
+    }
+
+    /// Pure Rust, always static. See `test_knitr_try_claims_language_answers_statically`.
+    fn try_claims_language(
+        &self,
+        language: &str,
+        first_class: Option<&str>,
+    ) -> Option<LanguageClaim> {
+        Some(self.claims_language(language, first_class))
     }
 
     fn is_available(&self) -> bool {
@@ -250,9 +285,19 @@ impl ExecutionEngine for KnitrEngine {
 
 /// Build format configuration from execution context.
 ///
-/// Creates a [`KnitrFormatConfig`] with settings appropriate for the target format.
+/// Creates a [`KnitrFormatConfig`] with settings appropriate for the target format,
+/// then overlays the document's merged `execute:` scope on top (bd-nn2fou8h).
+///
+/// Before that overlay this function ignored the document entirely, so
+/// `execute: echo: false` was not merely dropped — the hardcoded
+/// `echo: true` default actively overrode it, and every document-scope
+/// execute option was inert for knitr (GH issue #523).
 fn build_format_config(ctx: &ExecutionContext) -> KnitrFormatConfig {
-    KnitrFormatConfig::with_defaults(&ctx.format)
+    let mut config = KnitrFormatConfig::with_defaults(&ctx.format);
+    if let Some(scope) = ctx.execute_scope.as_ref() {
+        config.execute.overlay_document_scope(scope);
+    }
+    config
 }
 
 /// Post-process knitr markdown output.
@@ -385,6 +430,75 @@ mod tests {
     fn test_knitr_engine_is_send_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<KnitrEngine>();
+    }
+
+    // === Test Seam Row 1: KnitrEngine claim table ===
+
+    #[test]
+    fn test_knitr_claims_language_r_is_primary_1() {
+        let engine = KnitrEngine::new();
+        assert_eq!(engine.claims_language("r", None), LanguageClaim::Primary(1));
+    }
+
+    #[test]
+    fn test_knitr_claims_language_python_is_interop_0() {
+        let engine = KnitrEngine::new();
+        assert_eq!(
+            engine.claims_language("python", None),
+            LanguageClaim::Interop(0)
+        );
+    }
+
+    #[test]
+    fn test_knitr_claims_language_sql_is_interop_0() {
+        let engine = KnitrEngine::new();
+        assert_eq!(
+            engine.claims_language("sql", None),
+            LanguageClaim::Interop(0)
+        );
+    }
+
+    #[test]
+    fn test_knitr_claims_language_bash_is_interop_0() {
+        let engine = KnitrEngine::new();
+        assert_eq!(
+            engine.claims_language("bash", None),
+            LanguageClaim::Interop(0)
+        );
+    }
+
+    #[test]
+    fn test_knitr_claims_language_sh_is_interop_0() {
+        let engine = KnitrEngine::new();
+        assert_eq!(
+            engine.claims_language("sh", None),
+            LanguageClaim::Interop(0)
+        );
+    }
+
+    #[test]
+    fn test_knitr_claims_language_julia_is_none() {
+        let engine = KnitrEngine::new();
+        assert_eq!(engine.claims_language("julia", None), LanguageClaim::None);
+    }
+
+    // === Phase 4: builtins_answer_statically ===
+
+    /// KnitrEngine's `try_claims_language` must answer statically (`Some`),
+    /// equal to `claims_language`, for every representative language —
+    /// pure Rust, always static. Revert binding: without the override, the
+    /// trait default `None` (would-load) would sink every Pass-1 lift for a
+    /// doc that has knitr as a candidate (i.e. every doc).
+    #[test]
+    fn test_knitr_try_claims_language_answers_statically() {
+        let engine = KnitrEngine::new();
+        for lang in ["r", "python", "sql", "bash", "sh", "julia"] {
+            assert_eq!(
+                engine.try_claims_language(lang, None),
+                Some(engine.claims_language(lang, None)),
+                "try_claims_language must equal claims_language for {lang}"
+            );
+        }
     }
 
     // === Resource Tests ===

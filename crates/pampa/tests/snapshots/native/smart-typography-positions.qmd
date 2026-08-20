@@ -1,0 +1,19 @@
+Space-preceded the ... menu, paren-preceded see (...) here.
+
+... starts this block, and **...** and *...* are emphasized.
+
+Remainders: four .... and five ..... and six ...... dots.
+
+Short runs stay literal: two .. dots and one . dot.
+
+Relative path ../foo and link [x](../foo.html) are untouched.
+
+Escaped \.\.\. and a\.\.\.b stay literal.
+
+Code `...` and `x...y` are untouched.
+
+Dash controls: spaced x -- y and x --- y, mid-word en--dash.
+
+| col . one | col ... two |
+|-----------|-------------|
+| a .. b    | c ... d     |

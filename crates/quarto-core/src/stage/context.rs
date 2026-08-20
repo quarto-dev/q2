@@ -30,6 +30,7 @@ use super::error::PipelineError;
 use super::observer::{NoopObserver, PipelineObserver};
 use crate::artifact::ArtifactStore;
 use crate::crossref::{CrossrefIndex, RefTypeRegistry};
+use crate::engine::{EngineRegistry, resolution::EngineResolution};
 use crate::extension::Extension;
 use crate::format::Format;
 use crate::project::index::ProjectIndex;
@@ -86,6 +87,15 @@ pub struct StageContext {
     /// file does not exist.
     pub variables: Option<quarto_pandoc_types::ConfigValue>,
 
+    /// Project environment variables from `_environment` files
+    /// (`_environment` + `_environment.local`; profile variants once
+    /// bd-ev8mk1rp lands). File-defined values only — q2 never mutates
+    /// the process environment, and consumers must check the real
+    /// environment first so it always wins (see
+    /// [`crate::project::environment`]). Empty for single-file renders
+    /// (Q1 parity: env files are project-scoped).
+    pub project_env: hashlink::LinkedHashMap<String, String>,
+
     // === Mutable state ===
     /// Artifact store for dependencies and intermediates
     pub artifacts: ArtifactStore,
@@ -98,6 +108,17 @@ pub struct StageContext {
 
     /// Diagnostics (warnings, errors, info) collected during execution
     pub diagnostics: Vec<DiagnosticMessage>,
+
+    /// Per-code suppression policy declared in `diagnostics:` metadata.
+    ///
+    /// Resolved by `MetadataMergeStage` (the first point at which
+    /// project + directory + document layers have been merged) and applied
+    /// by [`run_pipeline`](crate::pipeline::run_pipeline) to
+    /// [`Self::diagnostics`] just before it returns — the single point every
+    /// per-document diagnostic passes through, for every frontend. Empty by
+    /// default, in which case application is a no-op.
+    /// See [`crate::diagnostic_policy`] (bd-lone-bracket-diagnostic-mxu41qbt).
+    pub diagnostic_policy: crate::diagnostic_policy::DiagnosticPolicy,
 
     /// Ref-type registry: built-in + `crossref.custom` + promised-id prefixes.
     ///
@@ -151,6 +172,35 @@ pub struct StageContext {
     ///
     /// [`DocumentProfile`]: crate::document_profile::DocumentProfile
     pub project_index: Option<Arc<ProjectIndex>>,
+
+    /// Engine resolution artifact for this document, stashed by
+    /// `EngineExecutionStage` at the top of its `run` method.
+    ///
+    /// `None` before `EngineExecutionStage` runs (Pass-1 stages, pure-markdown
+    /// documents, stages that execute before engine execution). Mirrors how
+    /// `project_index` is stashed from outside the stage.
+    ///
+    /// Consumed by future stages that need the per-language ownership map
+    /// (e.g. Pass-1 profile lift, `DocumentProfile` extension) without
+    /// re-running the resolver.
+    pub engine_resolution: Option<EngineResolution>,
+
+    /// Engine registry for this render — carried from `project.registry`.
+    /// Shared via Arc so clones across pipeline stages are cheap.
+    ///
+    /// The engine registry comes from `project.registry` (built once at
+    /// project construction in Task 7b); per-document format/filter extension
+    /// discovery stays separate (handled by `discover_extensions` above).
+    ///
+    /// `run_pipeline` may replace this with an override supplied via
+    /// `RenderContext.engine_registry_override` (e.g. a `ReplayEngine`
+    /// registry for testing, set from `HtmlRenderConfig.engine_registry`).
+    pub registry: Arc<EngineRegistry>,
+
+    /// Set by `SourceConversionStage` (Task 10) when an engine claims a
+    /// non-QMD file; consumed by `resolve_engines` (Task 9) to
+    /// short-circuit to the single claiming engine. `None` for `.qmd`.
+    pub claimed_engine_name: Option<String>,
 
     /// Per-page scope-aware resolver for HTML asset URLs and
     /// cross-document body links.
@@ -242,8 +292,24 @@ impl StageContext {
             runtime.as_ref(),
         );
 
+        // Clone the project registry before moving `project` into the struct.
+        let registry = project.registry.clone();
+
         let variables =
             load_project_variables(runtime.as_ref(), &project, &mut startup_diagnostics);
+
+        let active_profile_names: Vec<String> = project
+            .config
+            .active_config_profiles
+            .iter()
+            .map(|p| p.name.clone())
+            .collect();
+        let project_env = crate::project::environment::load_project_environment(
+            runtime.as_ref(),
+            &project,
+            &active_profile_names,
+            &mut startup_diagnostics,
+        );
 
         Ok(Self {
             runtime,
@@ -253,14 +319,19 @@ impl StageContext {
             temp_dir: std::sync::OnceLock::new(),
             extensions,
             variables,
+            project_env,
             artifacts: ArtifactStore::new(),
             includes: PandocIncludes::default(),
             diagnostics: startup_diagnostics,
+            diagnostic_policy: crate::diagnostic_policy::DiagnosticPolicy::default(),
             ref_type_registry: None,
             crossref_index: None,
             resource_report: crate::project_resources::DocumentResourceReport::new(),
             resource_copies: Vec::new(),
             project_index: None,
+            engine_resolution: None,
+            registry,
+            claimed_engine_name: None,
             resource_resolver: None,
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),
@@ -590,6 +661,8 @@ mod tests {
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/test.qmd")],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         }
     }
 
@@ -746,6 +819,71 @@ mod tests {
         assert!(debug.contains("StageContext"));
         assert!(debug.contains("Html")); // FormatIdentifier::Html in Debug format
     }
+
+    /// Task 8 threading: `project.registry` must flow into `stage_ctx.registry`
+    /// through `StageContext::new`. A project carrying a distinctive engine
+    /// ("sentinel-engine") must produce a context whose registry has that engine.
+    ///
+    /// Named revert: drop `registry: project.registry.clone()` in `new()` and
+    /// replace with `registry: Arc::new(EngineRegistry::new())` — the sentinel
+    /// engine is absent and this test goes RED.
+    #[test]
+    fn test_registry_flows_from_project_to_stage_ctx() {
+        use crate::engine::ExecuteResult;
+        use crate::engine::{EngineRegistry, ExecutionContext, ExecutionEngine, ExecutionError};
+
+        // A no-op sentinel engine whose name we can look up.
+        struct SentinelEngine;
+        impl ExecutionEngine for SentinelEngine {
+            fn name(&self) -> &str {
+                "sentinel-engine"
+            }
+            fn execute(
+                &self,
+                input: &str,
+                _ctx: &ExecutionContext,
+            ) -> Result<ExecuteResult, ExecutionError> {
+                Ok(ExecuteResult::passthrough(input))
+            }
+            fn is_available(&self) -> bool {
+                true
+            }
+        }
+
+        let mut reg = EngineRegistry::new();
+        reg.register(Arc::new(SentinelEngine));
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            registry: Arc::new(reg),
+            is_single_file: true,
+            output_dir: PathBuf::from("/project"),
+            ..Default::default()
+        };
+        let runtime = Arc::new(MockRuntime::new());
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let ctx = StageContext::new(runtime, format, project, doc).unwrap();
+
+        assert!(
+            ctx.registry.has_engine("sentinel-engine"),
+            "stage_ctx.registry must carry the project's sentinel engine"
+        );
+    }
+
+    /// Task 8: `claimed_engine_name` must default to `None` at construction.
+    /// It is set later by `SourceConversionStage` (Task 10) for non-QMD files.
+    #[test]
+    fn test_claimed_engine_name_defaults_to_none() {
+        let runtime = Arc::new(MockRuntime::new());
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+
+        let ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        assert_eq!(ctx.claimed_engine_name, None);
+    }
 }
 
 /// Resolve the path to built-in extensions.
@@ -794,27 +932,4 @@ fn load_project_variables(
     }
 }
 
-fn builtin_extensions_path(
-    _runtime: &dyn quarto_system_runtime::SystemRuntime,
-) -> Option<std::path::PathBuf> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        crate::extension::BUILTIN_EXTENSIONS
-            .path()
-            .ok()
-            .map(|p| p.to_path_buf())
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    {
-        let vfs_path = std::path::PathBuf::from("/__quarto_resources__/extensions");
-        if _runtime
-            .path_exists(&vfs_path, Some(quarto_system_runtime::PathKind::Directory))
-            .unwrap_or(false)
-        {
-            Some(vfs_path)
-        } else {
-            None
-        }
-    }
-}
+use crate::extension::builtin_extensions_path;

@@ -412,6 +412,17 @@ fn escape_quotes(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// The `{#id}` shorthand token is `[#][._A-Za-z0-9-]+` in the grammar; an
+/// identifier with any other character (e.g. a slash) can only be written in
+/// the `id="..."` key-value form, which the reader promotes back into the
+/// identifier slot.
+fn id_expressible_as_shorthand(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+}
+
 fn write_attr<W: std::io::Write + ?Sized>(
     attr: &crate::pandoc::Attr,
     writer: &mut W,
@@ -420,7 +431,7 @@ fn write_attr<W: std::io::Write + ?Sized>(
     let (id, classes, keyvals) = attr;
     let mut wrote_something = false;
     write!(writer, "{{")?;
-    if !id.is_empty() {
+    if id_expressible_as_shorthand(id) {
         write!(writer, "#{}", id)?;
         wrote_something = true;
     }
@@ -429,6 +440,70 @@ fn write_attr<W: std::io::Write + ?Sized>(
             write!(writer, " ")?;
         }
         write!(writer, ".{}", class)?;
+        wrote_something = true;
+    }
+    // The grammar orders attr components id → classes → key-values, so an
+    // id that needs the kv fallback goes here, after the classes.
+    if !id.is_empty() && !id_expressible_as_shorthand(id) {
+        if wrote_something {
+            write!(writer, " ")?;
+        }
+        write!(writer, "id=\"{}\"", escape_quotes(id))?;
+        wrote_something = true;
+    }
+    for (key, value) in keyvals {
+        if wrote_something {
+            write!(writer, " ")?;
+        }
+        write!(writer, "{}=\"{}\"", key, escape_quotes(value))?;
+        wrote_something = true;
+    }
+    write!(writer, "}}")?;
+    Ok(())
+}
+
+/// Like `write_attr`, but for the two attr sites (code fences, inline
+/// code spans) where the parser encodes a space-separated `{lang .cls}`
+/// language token as a literal bracket-wrapped class string
+/// (`"{python}"` — see `test_code_block_attributes.rs` and
+/// `engine_cell_lang` in `quarto-core::engine::capture_splice`, the
+/// reader-side unwrap this mirrors). Such a class is written back as a
+/// bare, unprefixed token instead of being dot-prefixed like a normal
+/// class, so `{python .marimo}` round-trips instead of becoming
+/// `{.{python} .marimo}`.
+///
+/// Divs/spans/links/images/tables never receive bracket-wrapped classes
+/// from the parser, so they keep using plain `write_attr`.
+fn write_code_attr<W: std::io::Write + ?Sized>(
+    attr: &crate::pandoc::Attr,
+    writer: &mut W,
+    _ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
+    let (id, classes, keyvals) = attr;
+    let mut wrote_something = false;
+    write!(writer, "{{")?;
+    if id_expressible_as_shorthand(id) {
+        write!(writer, "#{}", id)?;
+        wrote_something = true;
+    }
+    for class in classes {
+        if wrote_something {
+            write!(writer, " ")?;
+        }
+        if let Some(lang) = class.strip_prefix('{').and_then(|s| s.strip_suffix('}')) {
+            write!(writer, "{}", lang)?;
+        } else {
+            write!(writer, ".{}", class)?;
+        }
+        wrote_something = true;
+    }
+    // The grammar orders attr components id → classes → key-values, so an
+    // id that needs the kv fallback goes here, after the classes.
+    if !id.is_empty() && !id_expressible_as_shorthand(id) {
+        if wrote_something {
+            write!(writer, " ")?;
+        }
+        write!(writer, "id=\"{}\"", escape_quotes(id))?;
         wrote_something = true;
     }
     for (key, value) in keyvals {
@@ -709,8 +784,11 @@ fn write_codeblock(
         // Single class, no other attributes: write as bare word
         write!(buf, "{}", classes[0])?;
     } else if !id.is_empty() || !classes.is_empty() || !keyvals.is_empty() {
-        // Has attributes: write full attribute block (no space before it)
-        write_attr(&codeblock.attr, buf, ctx)?;
+        // Has attributes: write full attribute block (no space before it).
+        // Uses write_code_attr (not write_attr) because a class here may
+        // be the bracket-wrapped language pseudo-class — see its doc
+        // comment.
+        write_code_attr(&codeblock.attr, buf, ctx)?;
     }
 
     writeln!(buf)?;
@@ -1512,6 +1590,11 @@ fn escape_markdown(text: &str, start_prev_is_alnum: bool) -> String {
             '{' => result.push_str("\\{"), // Attribute span open: bare { in
             '}' => result.push_str("\\}"), // a Str body is always a parse
             // error in qmd. Always escape.
+            '"' => result.push_str("\\\""), // A bare " in a Str body would be
+            // re-read as a smart quote (Quoted DoubleQuote); `\"` re-reads as
+            // the literal straight quote. Str bodies only contain " via
+            // character references (&quot;, &#34;) or programmatic ASTs —
+            // parsed quotation marks become Quoted nodes instead.
 
             // Smart typography → ASCII source spelling, emitted UNescaped so the
             // reader re-converts it back to the Unicode character.
@@ -1569,7 +1652,7 @@ fn escape_markdown(text: &str, start_prev_is_alnum: bool) -> String {
             }
 
             // Characters that don't need escaping in most contexts:
-            // , + ! ? = : ; / ( ) % & "
+            // , + ! ? = : ; / ( ) % &
             // These are only special in very specific contexts and escaping them
             // everywhere would make output unnecessarily verbose.
             _ => result.push(ch),
@@ -1687,8 +1770,11 @@ fn write_code(
     }
     write!(buf, "{}", backticks)?;
     // TODO: Handle attributes if non-empty
+    // Uses write_code_attr (not write_attr): inline code shares the
+    // parser's bracket-wrapped language-class encoding with code fences
+    // — see write_code_attr's doc comment.
     if !is_empty_attr(&code.attr) {
-        write_attr(&code.attr, buf, _ctx)?;
+        write_code_attr(&code.attr, buf, _ctx)?;
     }
     Ok(())
 }
@@ -2058,10 +2144,20 @@ fn write_notereference(
 ) -> std::io::Result<()> {
     write!(buf, "[^{}]", noteref.id)
 }
+/// Serialize a shortcode back to its qmd source form (`{{< … >}}`;
+/// escaped: `{{{< … >}}}`), including grammar-accurate arg quoting.
+/// Public so non-writer consumers (e.g. quarto-core's include-slot
+/// handling) can reconstruct literal shortcode text for later
+/// text-level expansion.
+pub fn shortcode_source_text(shortcode: &crate::pandoc::Shortcode) -> String {
+    let mut buf = Vec::new();
+    write_shortcode(shortcode, &mut buf).expect("writing to a Vec cannot fail");
+    String::from_utf8(buf).expect("qmd shortcode serialization is UTF-8")
+}
+
 fn write_shortcode(
     shortcode: &crate::pandoc::Shortcode,
     buf: &mut dyn std::io::Write,
-    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     let (open, close) = if shortcode.is_escaped {
         ("{{{<", ">}}}")
@@ -2071,11 +2167,11 @@ fn write_shortcode(
     write!(buf, "{} {}", open, shortcode.name)?;
     for arg in &shortcode.positional_args {
         write!(buf, " ")?;
-        write_shortcode_arg(arg, buf, ctx)?;
+        write_shortcode_arg(arg, buf)?;
     }
     for (key, value) in &shortcode.keyword_args {
         write!(buf, " {}=", key)?;
-        write_shortcode_arg(value, buf, ctx)?;
+        write_shortcode_arg(value, buf)?;
     }
     write!(buf, " {}", close)
 }
@@ -2083,14 +2179,13 @@ fn write_shortcode(
 fn write_shortcode_arg(
     arg: &crate::pandoc::ShortcodeArg,
     buf: &mut dyn std::io::Write,
-    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     use crate::pandoc::ShortcodeArg;
     match arg {
         ShortcodeArg::String(s) => write_shortcode_string_value(s, buf),
         ShortcodeArg::Number(n) => write!(buf, "{}", n),
         ShortcodeArg::Boolean(b) => write!(buf, "{}", b),
-        ShortcodeArg::Shortcode(inner) => write_shortcode(inner, buf, ctx),
+        ShortcodeArg::Shortcode(inner) => write_shortcode(inner, buf),
         ShortcodeArg::KeyValue(map) => {
             // Positional `key=value` pair(s). The qmd parser doesn't currently
             // produce this variant from source — it's reachable only via Lua
@@ -2103,7 +2198,7 @@ fn write_shortcode_arg(
                 }
                 first = false;
                 write!(buf, "{}=", k)?;
-                write_shortcode_arg(v, buf, ctx)?;
+                write_shortcode_arg(v, buf)?;
             }
             Ok(())
         }
@@ -2430,7 +2525,7 @@ fn write_inline(
         crate::pandoc::Inline::Highlight(node) => write_highlight(node, buf, ctx),
         crate::pandoc::Inline::Delete(node) => write_delete(node, buf, ctx),
         crate::pandoc::Inline::Insert(node) => write_insert(node, buf, ctx),
-        crate::pandoc::Inline::Shortcode(node) => write_shortcode(node, buf, ctx),
+        crate::pandoc::Inline::Shortcode(node) => write_shortcode(node, buf),
         crate::pandoc::Inline::Attr(node) => write_attr(&node.attr, buf, ctx),
         crate::pandoc::Inline::NoteReference(node) => write_notereference(node, buf, ctx),
         crate::pandoc::Inline::Note(node) => write_note(node, buf, ctx),

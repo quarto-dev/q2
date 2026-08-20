@@ -1,0 +1,14 @@
+---
+title: Include inside a fenced code block
+---
+
+Quarto 1 splices the included file's text into the code fence, so the
+listing below shows the contents of `app.py`.
+
+```{.python filename="app.py"}
+{{< include app.py >}}
+```
+
+Control: the same include at top level (works in both engines).
+
+{{< include app.py >}}

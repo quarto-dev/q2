@@ -2,7 +2,7 @@
 
 **Status:** Active (Phase 0 of the website epic, `bd-0tr6` / `bd-f3jc`;
 extended in Phase 8 sub-phase 8.0, `bd-fegm` + `bd-r82e`).
-**Version tag:** `DOCUMENT_PROFILE_VERSION = 2`
+**Version tag:** `DOCUMENT_PROFILE_VERSION = 7`
 **Type:** `quarto_core::document_profile::DocumentProfile`
 **Stage:** `quarto_core::stage::stages::DocumentProfileStage` (name
 `"document-profile"`) + `UnwrapProfileStage` (`"unwrap-profile"`),
@@ -57,7 +57,7 @@ produced.
 | `categories`, `keywords` | Arrays of plain-text strings. A single scalar value is lifted into a one-element list. |
 | `draft` | Boolean. Defaults to `false` when the key is missing or non-boolean. |
 | `order` | `Option<i32>` sort key from `order:` frontmatter. `None` when the key is absent or non-integer. Consumed by Phase-2's auto-sidebar sort (`claude-notes/plans/2026-04-24-websites-phase-2.md`). Added v1-additive (no version bump). |
-| `outline` | `Vec<pampa::toc::TocEntry>` built from the raw block sequence at `OUTLINE_MAX_DEPTH = 6`. **Always un-numbered**: `TocEntry::number == None` for every entry and every descendant. |
+| `outline` | `Vec<pampa::toc::TocEntry>` built from the raw block sequence at `OUTLINE_MAX_DEPTH = 6`. **Always un-numbered**: `TocEntry::number == None` for every entry and every descendant. Since v11, `TocEntry::title` is `Inlines`, not `String` — the outline carries the heading's inline markup verbatim. Consumers that want text project it themselves (`pampa::writers::plaintext::inlines_to_string`). |
 | `includes` | `Vec<IncludeEntry { path, content_hash }>` recording every file whose contents were spliced into the parent AST via `{{< include child.qmd >}}`. Populated by `IncludeExpansionStage` via a side-channel on `DocumentAst.recorded_includes`, drained into the profile by `DocumentProfileStage`. Direct + transitive children appear; cycles are pre-truncated. **Phase-8 cache invalidation depends on this field** (`bd-r82e`). Default empty. |
 | `nav_dependencies` | `Vec<PathBuf>` of project-relative `.qmd` paths the user explicitly declares as cross-doc dependencies via `meta.project.nav-dependencies`. The Phase-8 dependency graph adds an edge to each declared target. The escape hatch for Lua filters that walk siblings without using sidebar / link / prev-next channels. Default empty. |
 | `always_render` | `bool` from `meta.project.always-render`. When `true`, Mode B (subset render) pulls this page into the render set if any of its dependents is among the user-named targets. Mode A re-renders every page anyway, so this flag has no Mode-A effect. Default `false`. |
@@ -66,14 +66,22 @@ produced.
 | `categories_raw` | `Option<ConfigValue>` carrying the originating tagged value of the top-level `categories:` key (`bd-n8a4`). Mirrors `categories` but preserves `!prefer` / `!concat` merge tags so listings consumers can feed it (alongside `listing_item.categories_raw`) into `quarto_config::MergedConfig` for tag-aware merging. Most consumers should keep reading the flattened `categories`; only listings reach for the raw form. Default `None`. |
 | `listing_content_globs` | `Vec<String>` of unresolved glob strings from the host page's `listing.*.contents:` declarations (`bd-xbnf`, listings L6). Flattened across all listings on the page. The dependency-graph builder expands these against `ProjectIndex` at graph-build time (host-relative first, project-relative fallback — matches L3's render-time rule) to add forward edges from each listing host to its content files; hosts with non-empty entries are also added to the graph's `force_render` set so Mode B (`quarto render posts/foo.qmd`) pulls in listing hosts when any of their content files is targeted. Resolution is **not** cached on the profile (the per-doc cache cannot represent dependency on the full project source set safely). Default empty. |
 | `listing_item` | `ListingItemInfo` advertising per-document data for listings consumers (`bd-n8a4`). **Scoped feature surface — listings only**; non-listing consumers must use the corresponding top-level fields (`title`, `description`, `image`, …). Author-supplied values populate during `DocumentProfile::extract`; `ListingItemInfoStage` (`bd-izqh`, L1, landed) auto-fills holes pre-checkpoint for `description` (full first paragraph), `image` (first inline image's URL), `word_count` (Q1-parity tokenization, footnote text excluded), `reading_time_minutes` (`ceil(word_count / 200)`), and `date_modified` (filesystem mtime via `SystemRuntime::path_metadata` formatted as `YYYY-MM-DD` UTC). Author values always win — the stage strictly fills holes. The nested `extra: BTreeMap<String, ConfigValue>` is the **only** open-shape field in the profile and is forbidden to non-listing consumers — see §"Scoped feature surfaces". Default empty (`ListingItemInfo::is_empty()`). |
+| `engine_resolution` | `Option<ProfileEngineResolution>` (`engine-resolution.md` §9.1). `Some` only when the document's engine resolution is provably load-free at Pass-1 — the needs-no-load predicate in `engine-resolution.md` §3.3 (P1–P4) — and is then **complete**: `sequence` is the resolved engine names in run order, `ownership` is the language→engine map in insertion order. `None` means resolution fell through to Pass-2's existing (non-profiled) resolution — **not an error**; most documents may show `None` until every engine a project uses is static or tabled (`engine-resolution.md` §3.3, §12). Names only, no `ConfigValue` blobs. Default `None`. |
 
 ## Non-guarantees (explicit)
 
 What a profile **does not** contain:
 
-- **Engine output.** No values produced by executing code cells
-  (Jupyter, Knitr, Observable). Those require the engine stage,
-  which runs after the checkpoint.
+- **Engine execution output.** No values produced by executing code
+  cells (Jupyter, Knitr, Observable). Those require the engine
+  stage, which runs after the checkpoint. **Engine *resolution* is
+  the exception to this line, not a contradiction of it:** deciding
+  which engine(s) will run and which owns which language is a pure,
+  pre-load computation (`engine-resolution.md` §9) and *is*
+  profile-eligible — see the `engine_resolution` field above. The
+  boundary is between *deciding* an owner (resolution, may be on the
+  profile) and *running* that owner to get a value (execution, never
+  on the profile).
 - **Sugar-synthesized structure.** No callout custom nodes, no
   theorem/float-target/equation-label canonicalization, no
   crossref numbering (`TocEntry::number`), no appendix structure,
@@ -415,22 +423,114 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   changed from `Vec<String>` to `Vec<RawResourcePattern>` so each
   pattern carries its YAML `SourceInfo` for Ariadne-span
   diagnostics.
-- **2026-07-15 — v7 (`bd-ez0hiowa`, title-block parity epic P2).**
-  `DOCUMENT_PROFILE_VERSION` bumped 6 → 7. One new field:
-  - `authors_structured: Vec<ProfileAuthor>` — the structured
-    author model (name literal + given/family components, ORCID,
-    email, url, degrees, attribute flags, denormalized
-    affiliations as `ProfileAffiliation { name, department,
-    url }`). Produced by the shared normalization in
-    `crates/quarto-core/src/metadata/authors.rs`
-    (`parse_authors_model`) — the same pass
-    `AuthorsNormalizeTransform` uses to derive the
-    `by-author`/`by-affiliation` metadata the HTML title block
-    renders. The flat `authors: Vec<String>` field keeps its type
-    and now derives its literals from the same model, so the two
-    fields always agree. Fields the profile does not carry yet
+- **2026-07 — v8 (merge of two concurrent v7 bumps).** Two branches
+  each bumped `DOCUMENT_PROFILE_VERSION` 6 → 7 for a different new
+  field; the ts-engine-extensions rebase merged them, so both fields
+  coexist under **v8** (there is no single-field v7 on the merged
+  line). v6/v7 cache entries on disk are rejected with
+  `DocumentProfileError::VersionMismatch` and silently regenerated,
+  identical to every prior bump. Both new fields:
+  - `authors_structured: Vec<ProfileAuthor>` (`bd-ez0hiowa`,
+    title-block parity epic P2) — the structured author model (name
+    literal + given/family components, ORCID, email, url, degrees,
+    attribute flags, denormalized affiliations as
+    `ProfileAffiliation { name, department, url }`). Produced by the
+    shared normalization in `crates/quarto-core/src/metadata/authors.rs`
+    (`parse_authors_model`) — the same pass `AuthorsNormalizeTransform`
+    uses to derive the `by-author`/`by-affiliation` metadata the HTML
+    title block renders. The flat `authors: Vec<String>` field keeps
+    its type and now derives its literals from the same model, so the
+    two fields always agree. Fields the profile does not carry yet
     (roles, notes, funding) join later with another bump.
   v6 cache entries on disk are rejected with
   `DocumentProfileError::VersionMismatch` and silently
   regenerated, identical to every prior bump.
   Plan: `claude-notes/plans/2026-07-15-html-title-block-parity.md`.
+- **v8 (`bd-v7ixzsp5`, GH #456)** and **v9 (`bd-mt7a6uc4`).**
+  (Entries added retroactively in 2026-08 — like v6, these bumps
+  were documented only in the `DOCUMENT_PROFILE_VERSION`
+  doc-comment at the time. That comment remains the fuller
+  account.) v8 changed `listing_content_globs` from
+  `Vec<String>` to `Vec<GlobPattern>`, resolving patterns to
+  project-relative form at extraction time against the directory
+  of the file each was written in, and carrying a `negated` flag.
+  v9 added `resource_globs: Vec<GlobPattern>` plus the
+  index-aligned `resource_glob_sources` and `rejected_resources`,
+  applying the same host-directory resolution to `resources:`.
+- **2026-08-12 — v10 (`bd-aliases-redirects-missing-sch7cd1g`).**
+  `DOCUMENT_PROFILE_VERSION` bumped 9 → 10. Two new fields, both
+  `#[serde(default, skip_serializing_if = "Vec::is_empty")]`:
+  - `aliases: Vec<String>` — the document's `aliases:`
+    front-matter entries (old URLs that should redirect to this
+    page), kept **raw**.
+  - `alias_sources: Vec<SourceInfo>` — index-aligned provenance,
+    one entry per alias.
+
+  Note the deliberate contrast with v9's `resource_globs`:
+  `resources:` patterns are *resolved* at extraction time because
+  resolution depends on the declaring file's directory, which only
+  the stage knows. An alias instead resolves against the page's own
+  `output_href` — already on the profile — so extraction stays pure
+  and resolution moves to the consumer. Validation has no choice in
+  the matter: whether an alias collides is a property of the whole
+  project, so it can only be decided once every profile is in hand.
+
+  Both therefore happen in `project::website_post_render`, which is
+  also the only place a diagnostic survives profile caching. This is
+  the same lesson `rejected_resources` records: a diagnostic emitted
+  at extraction time appears on the render that populated the cache
+  and never again.
+
+  v9 cache entries on disk are rejected with
+  `DocumentProfileError::VersionMismatch` and silently regenerated,
+  identical to every prior bump.
+  Plan: `claude-notes/plans/2026-08-12-aliases-redirect-stubs.md`.
+
+- **2026-08-13 — v11 (`bd-toc-smart-quotes-6nro57ed`).** Changes
+  `outline`'s entry titles from `String` to `Inlines`
+  (`pampa::toc::TocEntry::title`).
+
+  The flattened title was lossy in a way that produced a visible
+  defect: a heading `## Using a "raw" volume` rendered with curly
+  quotes but its TOC entry rendered `Using a raw volume`, because the
+  flattener recursed into `Inline::Quoted` without emitting the
+  delimiters. Inline code, emphasis, and math spans were dropped the
+  same way — Quarto 1 renders all of them inside TOC entries.
+
+  The fix is to stop flattening at all. `TocEntry::title` now carries
+  the heading's inlines, and each consumer decides what to do with
+  them: the HTML TOC renders them through the inline writer (stripping
+  links and notes, which an `<a>` cannot nest); consumers wanting
+  plain text call `pampa::writers::plaintext::inlines_to_string`.
+
+  This is the profile-side consequence of that decision, and it is
+  deliberate: the outline is meant to be a *faithful semantic
+  outline*, so encoding one renderer's structural constraint (or one
+  consumer's plain-text preference) into the stored shape would be
+  exactly the kind of lossy back-patching the "profiles are read-only"
+  rule exists to prevent.
+
+  **Serialized shape changes**: a title that was `"Top"` is now an
+  array of inline nodes. v10 cache entries on disk are rejected with
+  `DocumentProfileError::VersionMismatch` and silently regenerated,
+  identical to every prior bump — `DOCUMENT_PROFILE_VERSION` is in the
+  cache-key hash domain, so stale entries are never even looked up.
+  Plan: `claude-notes/plans/2026-08-13-toc-smart-quotes.md`.
+
+- **2026-08-16 — v12 (plan6, Pass-1 engine resolution).** Adds
+  `engine_resolution: Option<ProfileEngineResolution>` — the
+  per-document engine resolution, additive at the on-disk layer
+  (`skip_serializing_if` keeps default profiles compact), stamped only
+  when Pass-1 can resolve it without loading an engine
+  (`engine-resolution.md`'s needs-no-load predicate, §3.3/§7/§9.1).
+  `None` means the doc falls through to Pass-2's existing resolution —
+  not an error. Names only, no `ConfigValue` blobs: `sequence` is the
+  resolved engine names in run order, `ownership` is the
+  language→engine map in insertion order. Feeds the LSP today; future
+  freeze and kernel-pooling consumers later (`engine-resolution.md`
+  §12).
+
+  v11 cache entries on disk are rejected with
+  `DocumentProfileError::VersionMismatch` and silently regenerated,
+  identical to every prior bump.
+  Plan: `claude-notes/plans/2026-06-29-plan6-pass1-engine-resolution.md`.

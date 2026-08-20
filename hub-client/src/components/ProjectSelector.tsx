@@ -546,7 +546,7 @@ export default function ProjectSelector({
   }
 
   return (
-    <div className="project-selector">
+    <main className="project-selector">
       <div className="modal">
         <div className="modal-header">
           <div className="header-text">
@@ -966,6 +966,6 @@ export default function ProjectSelector({
           </span>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

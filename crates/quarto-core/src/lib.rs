@@ -40,9 +40,11 @@ pub mod artifact;
 pub mod artifact_flush;
 pub mod attribution;
 pub mod cell_options;
+pub mod config_sources;
 pub mod crossref;
 pub mod dates;
 pub mod dependency;
+pub mod diagnostic_policy;
 pub mod document_profile;
 pub mod engine;
 pub mod error;
@@ -50,6 +52,7 @@ pub mod extension;
 pub mod filter_resolve;
 pub mod format;
 pub mod get_config;
+pub mod glob;
 pub mod language;
 pub mod metadata;
 pub mod output_sink;
@@ -77,7 +80,7 @@ pub use format::{Format, FormatIdentifier};
 pub use pipeline::{
     DEFAULT_CSS_ARTIFACT_PATH, HtmlRenderConfig, PreviewAstOutput, RenderOutput,
     build_html_pipeline, build_html_pipeline_stages, build_html_pipeline_with_stages,
-    build_wasm_html_pipeline, render_qmd_to_html, render_qmd_to_preview_ast,
+    render_qmd_to_html, render_qmd_to_preview_ast,
 };
 pub use project::{DocumentInfo, ProjectConfig, ProjectContext, ProjectKind};
 pub use render::{BinaryDependencies, RenderContext, RenderOptions, RenderResult};
@@ -87,6 +90,14 @@ pub use transforms::{
     CalloutResolveTransform, CalloutTransform, MetadataNormalizeTransform,
     ResourceCollectorTransform, TitleBlockTransform,
 };
+
+/// Return the current `quarto-core` crate version (from `Cargo.toml`).
+///
+/// Used by `build_engine_registry` to populate `HostGlobalConfig.quarto_version`.
+/// `quarto-core`'s version tracks the overall Quarto release version.
+pub fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
 
 // Re-export render-to-file types (native only)
 #[cfg(not(target_arch = "wasm32"))]

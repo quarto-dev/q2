@@ -1,0 +1,13 @@
+
+[1mUsage:[22m [95mCOMMAND close [33m<[95m[95mfile[95m[33m>[95m[39m
+
+[1mDescription:[22m
+
+  Close the worker for a given notebook. If it is currently running, it will not be interrupted.
+
+[1mOptions:[22m
+
+  [94m-h[39m, [94m--help[39m   [31m[1m-[22m[39m Show this help.                                                                  
+  [94m-f[39m, [94m--force[39m  [31m[1m-[22m[39m Force closing. This will terminate the worker if it is running.  ([1mDefault: [22m[33mfalse[39m)
+
+exit=0

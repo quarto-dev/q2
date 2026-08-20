@@ -54,6 +54,16 @@ export interface PreviewServerHandle {
   projectDir: string;
   /** Path to the ephemeral samod data directory. */
   dataDir: string;
+  /**
+   * All server stdout+stderr accumulated since spawn (additive, bd-5jxcio5d /
+   * SC21-NEG). `waitForUrl` only parses the launch banner and then detaches;
+   * some specs need to assert on later server-log lines (e.g. the marimo
+   * limitation canary asserts `recorded engine capture(s)` appears — proof the
+   * engine ran and the recording half works, even though the capture never
+   * splices into the pane). To see INFO-level lines like that one, pass an
+   * `extraEnv.RUST_LOG` that raises the relevant target (default is `warn`).
+   */
+  serverLog: () => string;
   /** Stop the server and remove its temp dirs. */
   stop(): Promise<void>;
 }
@@ -168,6 +178,15 @@ export interface StartOptions {
    * Used by the nesting-cursor e2e (P3.5), which must open an editor.
    */
   allowEdit?: boolean;
+  /**
+   * Extra environment variables to inject into the spawned `q2 preview`
+   * process, merged over `process.env` (and the default `RUST_LOG`). Used by
+   * the julia leg (PC6, bd-h4rhohhy) to point the server at an isolated
+   * `HOME` / julia depot / project so a real-engine render never touches the
+   * developer's shared julia server or transport file. Off by default; no
+   * existing caller passes it, so behaviour is unchanged for every other spec.
+   */
+  extraEnv?: Record<string, string>;
 }
 
 /**
@@ -243,9 +262,22 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
         // Keep the server's log signal-to-noise low; the only thing
         // we parse out of stdout is the launch URL itself.
         RUST_LOG: process.env.RUST_LOG ?? 'warn',
+        // Optional per-spec overrides (e.g. julia isolation env for PC6).
+        ...(opts.extraEnv ?? {}),
       },
     },
   );
+
+  // Persistent log accumulator (additive; see PreviewServerHandle.serverLog).
+  // Attached before `waitForUrl` so nothing is missed, and independent of
+  // `waitForUrl`'s own listeners (which detach after the banner). Both streams
+  // feed one buffer so callers needn't care which stream a line lands on.
+  let serverLog = '';
+  const accumulate = (chunk: Buffer) => {
+    serverLog += chunk.toString();
+  };
+  proc.stdout?.on('data', accumulate);
+  proc.stderr?.on('data', accumulate);
 
   let url: string;
   let port: number;
@@ -270,6 +302,7 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
     port,
     projectDir,
     dataDir,
+    serverLog: () => serverLog,
     async stop() {
       if (!proc.killed) {
         proc.kill('SIGTERM');

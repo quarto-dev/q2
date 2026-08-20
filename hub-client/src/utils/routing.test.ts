@@ -176,6 +176,38 @@ describe('parseHashRoute', () => {
       expect(parseHashRoute('#/share/')).toEqual({ type: 'project-selector' });
       expect(parseHashRoute('#/share')).toEqual({ type: 'project-selector' });
     });
+
+    // `q2 preview --ui editor` boot URLs mark the serving hub as an
+    // ephemeral per-session server so the app can skip project-set
+    // onboarding (bd-zf4ryvuq).
+    it('parses ephemeral=true on share routes', () => {
+      const result = parseHashRoute(
+        '#/share/4XyZabc123?server=%2Fws&file=index.qmd&name=Preview&ephemeral=true'
+      );
+      expect(result).toEqual({
+        type: 'share',
+        indexDocId: '4XyZabc123',
+        syncServer: '/ws',
+        filePath: 'index.qmd',
+        name: 'Preview',
+        ephemeral: true,
+      });
+    });
+
+    it('omits ephemeral when the param is absent or not exactly "true"', () => {
+      const withoutParam = parseHashRoute('#/share/4XyZabc123?server=%2Fws&file=a.qmd&name=P');
+      expect(withoutParam).not.toHaveProperty('ephemeral');
+
+      const falseValue = parseHashRoute(
+        '#/share/4XyZabc123?server=%2Fws&file=a.qmd&name=P&ephemeral=false'
+      );
+      expect(falseValue).not.toHaveProperty('ephemeral');
+
+      const otherValue = parseHashRoute(
+        '#/share/4XyZabc123?server=%2Fws&file=a.qmd&name=P&ephemeral=1'
+      );
+      expect(otherValue).not.toHaveProperty('ephemeral');
+    });
   });
 
   describe('link-project-set routes', () => {

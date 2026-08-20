@@ -19,7 +19,7 @@ categories:
 Every listing on a page gets an `id`: either one the author set
 explicitly, or one Quarto assigned (`listing-1`, `listing-2`,
 ...). The id is used to attach inserts in the rendered HTML
-(`{{< include >}}`-style references, CSS targeting, anchor
+(`{{{< include >}}}`-style references, CSS targeting, anchor
 links). The parser requires the ids on a page to be unique.
 
 When two listings on the same page share an id, the first one

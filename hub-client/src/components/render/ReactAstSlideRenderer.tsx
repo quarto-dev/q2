@@ -372,7 +372,10 @@ export function renderSlide(
             fontSize: '72px',
             margin: '0 0 40px 0',
             color: '#1a1a1a',
-            fontWeight: 'bold'
+            fontWeight: 'bold',
+            // Was inherited from the global h1 rule (index.css) before the
+            // Vite scaffold was removed.
+            lineHeight: 1.1
           }}>
             {slide.title}
           </h1>
@@ -726,8 +729,8 @@ function renderInline(
       const [[id, classes, attrs], inlines, [url, title]] = linkInline.c;
       const props = attributesToProps(id, classes, attrs);
 
-      // Handle .qmd links
-      if (url.endsWith('.qmd') && onNavigateToDocument) {
+      // Handle source-file links (.qmd, and .md since bd-6d2wj4zp Phase 5)
+      if ((url.endsWith('.qmd') || url.endsWith('.md')) && onNavigateToDocument) {
         const [path, anchor] = url.split('#');
         return (
           <a

@@ -276,3 +276,277 @@ baz
     (pandoc_horizontal_rule)
     (pandoc_paragraph
       (pandoc_str))))
+================================================================================
+paragraph.txt 15: bd-w6tod0gh — digit-leading continuation stays in paragraph
+================================================================================
+foo bar
+30 minutes later
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 16: bd-w6tod0gh — digit plus punctuation stays in paragraph
+================================================================================
+foo bar
+1000, the base
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 17: bd-w6tod0gh — digit run longer than any legal marker stays in paragraph
+================================================================================
+foo bar
+12345678901. doors
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 18: bd-w6tod0gh — '14.' cannot interrupt a paragraph (CommonMark 284)
+================================================================================
+foo bar
+14. doors
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 19: bd-w6tod0gh — '1.' still interrupts paragraph (CommonMark 285)
+================================================================================
+foo bar
+1. item
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+paragraph.txt 20: bd-w6tod0gh — '2.' does not interrupt paragraph
+================================================================================
+foo bar
+2. item
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 21: bd-w6tod0gh — '1)' still interrupts paragraph
+================================================================================
+foo bar
+1) item
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_list
+      (list_item
+        (list_marker_parenthesis)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+paragraph.txt 22: bd-w6tod0gh — digit-leading continuation inside link text
+================================================================================
+see [Section 3.2.1 of RFC
+3986](https://example.com) now
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_span
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_soft_break)
+          (pandoc_str))
+        (target
+          (url)))
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 23: bd-w6tod0gh — digit-leading continuation in list item (second gate)
+================================================================================
+- foo bar
+  30 minutes later
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))))
+================================================================================
+paragraph.txt 24: bd-w6tod0gh — digit-leading continuation in block quote (second gate)
+================================================================================
+> foo bar
+> 30 minutes later
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_soft_break
+          (block_continuation))
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)))))
+================================================================================
+paragraph.txt 25: bd-w6tod0gh — '-5' continuation stays in paragraph
+================================================================================
+foo bar
+-5 degrees today
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 26: bd-w6tod0gh — '- item' still interrupts paragraph
+================================================================================
+foo bar
+- item
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+paragraph.txt 27: bd-w6tod0gh — '---' thematic break still interrupts paragraph
+================================================================================
+foo bar
+---
+baz
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_horizontal_rule)
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+paragraph.txt 28: bd-w6tod0gh — '+5' continuation stays in paragraph
+================================================================================
+foo bar
++5 percent gain
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+paragraph.txt 29: bd-w6tod0gh — '+ item' still interrupts paragraph
+================================================================================
+foo bar
++ item
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_list
+      (list_item
+        (list_marker_plus)
+        (pandoc_paragraph
+          (pandoc_str))))))

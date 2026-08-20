@@ -1,0 +1,98 @@
+---
+title: "Project Environment Files"
+---
+
+Projects can define environment variables in files at the project
+root. Use them to keep version strings, dates, and other values out
+of your documents, and to configure the programs your project runs
+(code cells, pre/post render scripts).
+
+## The files
+
+| File | Purpose |
+|------|---------|
+| `_environment` | Variables shared by everyone; check it into version control. |
+| `_environment.local` | Per-machine overrides (tokens, local paths); add it to `.gitignore`. |
+| `_environment-<profile>` | Variables applied when the named [project profile](profiles.qmd) is active. |
+| `_environment.required` | Names that must be defined for the project to render correctly. |
+
+Each file holds `KEY=value` lines:
+
+``` {.default filename="_environment"}
+# Comments and blank lines are fine
+PRODUCT_VERSION=2026.08.0
+COPYRIGHT_YEAR=2026
+GREETING="hello\nworld"        # double quotes expand \n, \t, …
+LITERAL='kept exactly as-is'   # single quotes are literal
+BANNER=v$PRODUCT_VERSION       # unquoted values expand $NAME
+FALLBACK=${UNDEFINED:-default} # with a default when NAME is unset
+```
+
+Values may span multiple lines inside quotes. An unquoted `$NAME`
+reference resolves against the same file first, then the real
+environment and the other environment files, then the `:-` default.
+
+## Precedence
+
+A variable defined in several places resolves in this order:
+
+1. the **real environment** — a variable exported in your shell (or
+   set by CI) always wins; environment files never override it;
+2. `_environment.local`;
+3. `_environment-<profile>` for each active
+   [project profile](profiles.qmd), first-listed profile first;
+4. `_environment`.
+
+## Where the variables are visible
+
+- **The `env` shortcode.** `{{{< env PRODUCT_VERSION >}}}` renders
+  the value; the shortcode checks the real environment first, then
+  the project's environment files, then its optional fallback
+  argument (`{{{< env NAME fallback >}}}`).
+- **Executed code.** Code cells run by the Jupyter and knitr engines
+  see the variables (e.g. `Sys.getenv("PRODUCT_VERSION")` in R,
+  `os.environ` in Python).
+- **Pre and post render scripts.** Scripts receive the variables
+  alongside the `QUARTO_PROJECT_*` variables described in
+  [Pre and Post Render Scripts](scripts.qmd).
+
+Environment files are project-scoped: a single-file render outside
+any project (no `_quarto.yml`) does not load them.
+
+## Profile environments
+
+With [project profiles](profiles.qmd), a profile named `production`
+also reads `_environment-production`. Define only what varies:
+
+``` {.default filename="_environment-production"}
+OMP_NUM_THREADS=16
+```
+
+You can set `QUARTO_PROFILE` itself in `_environment` or
+`_environment.local` to give the project a default profile; the
+`--profile` option and a `QUARTO_PROFILE` exported in your shell
+both override it. (Profile environment files cannot set
+`QUARTO_PROFILE` — that would activate profiles recursively.)
+
+::: {.callout-important}
+Don't put secrets in `_environment-<profile>` files — they are
+typically checked into version control. Use `_environment.local` or
+your CI system's secret store instead.
+:::
+
+## Required variables
+
+List names in `_environment.required` to get a warning when a
+variable is defined neither in the environment nor in the project's
+environment files. The value part is a good place for an example:
+
+``` {.default filename="_environment.required"}
+CONNECT_API_KEY=your-api-key-here
+```
+
+## Changes require a fresh render
+
+Quarto 2 reads environment files when a render starts and never
+mutates the process environment. If you edit `_environment` while
+`quarto preview` is running, restart the preview to pick up the new
+values.

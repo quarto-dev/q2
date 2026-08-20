@@ -10,6 +10,8 @@ import type { IDBPDatabase } from 'idb';
 import { DB_NAME, STORES } from './types';
 import { CURRENT_DB_VERSION, getStructuralMigrations } from './migrations';
 import { runMigrations } from './migrationRunner';
+import { isEphemeralStorage } from '../ephemeralStorage';
+import { createMemoryHubDatabase } from './memoryDb';
 
 /**
  * Cached database promise.
@@ -26,40 +28,50 @@ let dbPromise: Promise<IDBPDatabase> | null = null;
  * 3. Runs data transformation migrations after the database is open
  *
  * The database instance is cached — subsequent calls return the same promise.
+ *
+ * Ephemeral storage mode (bd-sw4xy1vw, q2 preview embed build) never
+ * opens IndexedDB: each preview session is a fresh origin, so persisted
+ * records would never be read again. A fresh in-memory facade stands in
+ * for the database; migrations are pointless against an empty store, so
+ * the facade is pre-seeded at the current schema version instead.
  */
 export async function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
-    dbPromise = (async () => {
-      const db = await openDB(DB_NAME, CURRENT_DB_VERSION, {
-        upgrade(db, oldVersion, _newVersion, transaction) {
-          // Create projects store if this is a fresh database
-          if (!db.objectStoreNames.contains(STORES.PROJECTS)) {
-            const store = db.createObjectStore(STORES.PROJECTS, { keyPath: 'id' });
-            store.createIndex('indexDocId', 'indexDocId', { unique: true });
-            store.createIndex('lastAccessed', 'lastAccessed');
-          }
-
-          // Run structural migrations for version upgrades
-          // oldVersion is 0 for new databases, so we start from 1
-          const fromVersion = oldVersion || 1;
-          const structuralMigrations = getStructuralMigrations(fromVersion);
-
-          for (const migration of structuralMigrations) {
-            if (migration.structural) {
-              console.log(`Running structural migration v${migration.version}: ${migration.description}`);
-              migration.structural(db, transaction);
-            }
-          }
-        },
-      });
-
-      // Run data transformation migrations after the database is open
-      await runMigrations(db);
-
-      return db;
-    })();
+    dbPromise = isEphemeralStorage()
+      ? Promise.resolve(createMemoryHubDatabase())
+      : openRealDb();
   }
   return dbPromise;
+}
+
+async function openRealDb(): Promise<IDBPDatabase> {
+  const db = await openDB(DB_NAME, CURRENT_DB_VERSION, {
+    upgrade(db, oldVersion, _newVersion, transaction) {
+      // Create projects store if this is a fresh database
+      if (!db.objectStoreNames.contains(STORES.PROJECTS)) {
+        const store = db.createObjectStore(STORES.PROJECTS, { keyPath: 'id' });
+        store.createIndex('indexDocId', 'indexDocId', { unique: true });
+        store.createIndex('lastAccessed', 'lastAccessed');
+      }
+
+      // Run structural migrations for version upgrades
+      // oldVersion is 0 for new databases, so we start from 1
+      const fromVersion = oldVersion || 1;
+      const structuralMigrations = getStructuralMigrations(fromVersion);
+
+      for (const migration of structuralMigrations) {
+        if (migration.structural) {
+          console.log(`Running structural migration v${migration.version}: ${migration.description}`);
+          migration.structural(db, transaction);
+        }
+      }
+    },
+  });
+
+  // Run data transformation migrations after the database is open
+  await runMigrations(db);
+
+  return db;
 }
 
 /**

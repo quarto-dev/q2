@@ -1,0 +1,43 @@
+=== parse check: input.qmd ===
+claude-notes/plans/syntax-helper-parse-masking-investigation/input.qmd
+  ✗ File failed to parse (1 error)
+
+
+=== Summary ===
+Total files:         1
+Files with issues:   1 ✗
+Clean files:         0 ✓
+
+Issues by rule:
+  parse: 1 issue(s) in 1 file(s)
+
+Total issues found:  1
+Success rate:        0.0%
+
+=== AST rules: input.qmd (the bug) ===
+
+=== Summary ===
+Total files:         1
+Files with issues:   0 ✓
+Clean files:         1 ✓
+
+Total issues found:  0
+Success rate:        100.0%
+
+=== AST rules: input-parseable.qmd (control) ===
+claude-notes/plans/syntax-helper-parse-masking-investigation/input-parseable.qmd
+  ✗ Brackets in `[1]` will be silently deleted; they need escaping
+  ✗ `[the docs][gcc]` is a reference-style link to `gcc`, which does not render; it can be rewritten to the inline form
+
+
+=== Summary ===
+Total files:         1
+Files with issues:   1 ✗
+Clean files:         0 ✓
+
+Issues by rule:
+  literal-brackets: 1 issue(s) in 1 file(s)
+  reference-links: 1 issue(s) in 1 file(s)
+
+Total issues found:  2
+Success rate:        0.0%

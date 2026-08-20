@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
-import { isQmdFile } from '@quarto/preview-renderer/types/project';
+import { isSourceFile } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import type { ActorIdentity, CaptureRef } from '@quarto/preview-runtime';
 import { parseQmdToAst, isWasmReady, initWasm } from '@quarto/preview-runtime';
@@ -143,8 +143,8 @@ export default function PreviewRouter(props: PreviewRouterProps) {
     );
   }
 
-  // Non-QMD files: show placeholder
-  if (!isQmdFile(props.currentFile?.path)) {
+  // Non-source files (not .qmd/.md): show placeholder
+  if (!isSourceFile(props.currentFile?.path)) {
     return <NonQmdPlaceholderView filename={props.currentFile?.path ?? 'no currentFile path'} />;
   }
 

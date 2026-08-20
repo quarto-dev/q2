@@ -1,0 +1,12 @@
+
+[1mUsage:[22m [95mCOMMAND stop[39m
+
+[1mDescription:[22m
+
+  Send a message to the server that it should close all notebooks and exit. This will fail if any notebooks are not idle.
+
+[1mOptions:[22m
+
+  [94m-h[39m, [94m--help[39m  [31m[1m-[22m[39m Show this help.  
+
+exit=0

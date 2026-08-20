@@ -183,6 +183,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path(&doc_path)],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         };
         let profile = DocumentProfile {
             // Profiles store project-relative source paths (matches

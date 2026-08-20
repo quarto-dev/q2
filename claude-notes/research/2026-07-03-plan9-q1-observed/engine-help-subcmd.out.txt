@@ -1,0 +1,20 @@
+
+Usage:   quarto call engine <engine-name> [args...]
+Version: 99.9.9                                    
+
+Description:
+
+  Access functionality specific to quarto's different rendering engines.
+
+Options:
+
+  -h, --help              - Show this help.                                    
+  --log         <file>    - Path to log file                                   
+  --log-level   <level>   - Log level (debug, info, warning, error, critical)  
+  --log-format  <format>  - Log format (plain, json-stream)                    
+  --quiet                 - Suppress console output.                           
+
+Commands:
+
+  help  [command]  - Show this help or the help of a sub-command.
+

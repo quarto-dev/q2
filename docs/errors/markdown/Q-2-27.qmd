@@ -1,6 +1,6 @@
 ---
 title: "Line Break Before Shortcode Close"
-description: "A `{{< … >}}` shortcode contains a line break immediately before its closing `>}}`."
+description: "A `{{{< … >}}}` shortcode contains a line break immediately before its closing `>}}`."
 code: Q-2-27
 subsystem: markdown
 status: stub
@@ -11,7 +11,7 @@ categories:
 
 # `Q-2-27` — Line Break Before Shortcode Close
 
-> A `{{< … >}}` shortcode contains a line break immediately
+> A `{{{< … >}}}` shortcode contains a line break immediately
 > before its closing `>}}`.
 
 ## What this means
@@ -31,7 +31,7 @@ before the closer.
 
 Collapse the shortcode onto a single line:
 
-```markdown
+```{.markdown shortcodes="false"}
 {{< hello world >}}
 ```
 
@@ -40,7 +40,7 @@ different mechanism — shortcodes are not the right tool.
 
 ## Example
 
-```markdown
+```{.markdown shortcodes="false"}
 {{< hello
 >}}
 ```

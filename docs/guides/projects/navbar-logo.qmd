@@ -1,0 +1,63 @@
+---
+title: Navbar logo
+---
+
+## Overview
+
+A website navbar can show a logo to the left of the title. Point
+`website.navbar.logo` at an image in your project:
+
+```yaml
+website:
+  title: "My Site"
+  navbar:
+    logo: images/logo.png
+    logo-alt: "My Site logo"
+```
+
+The logo renders at a maximum height of 24px beside the site title,
+and both link to the site's home page (override the link target with
+`logo-href:`).
+
+## Light and dark variants
+
+Sites with a [dark theme](../formats/html/themes.qmd#dark-mode) can supply a
+different logo for each color mode:
+
+```yaml
+website:
+  navbar:
+    logo:
+      light: images/logo.png
+      dark: images/logo-dark.png
+```
+
+The logo matching the active color mode is shown; toggling the color
+scheme swaps it. Each variant can also carry its own alt text:
+
+```yaml
+website:
+  navbar:
+    logo:
+      light:
+        path: images/logo.png
+        alt: "Logo on light background"
+      dark:
+        path: images/logo-dark.png
+        alt: "Logo on dark background"
+```
+
+If only one variant is given, it is used in both modes. Use
+`logo: false` to suppress the logo entirely.
+
+## Styling
+
+The default 24px sizing can be overridden with CSS. The logo image
+carries the `navbar-logo` class and sits inside its own
+`navbar-brand-logo` anchor:
+
+```css
+.navbar-brand-logo .navbar-logo {
+  max-height: 32px;
+}
+```

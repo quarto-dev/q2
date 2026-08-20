@@ -1,0 +1,88 @@
+---
+title: "Sidebar entry has both section: and text:"
+description: "A sidebar entry carries both a section: and a text: key; section: takes precedence and the text: value is ignored."
+code: Q-13-10
+subsystem: navigation
+status: complete
+since: "99.9.9"
+categories:
+  - navigation
+  - websites
+---
+
+# `Q-13-10` — Sidebar entry has both `section:` and `text:`
+
+> A sidebar entry carries both a `section:` and a `text:` key. They
+> are alternate spellings for a section's display label, and
+> `section:` takes precedence — the `text:` value is ignored.
+
+## What this means
+
+A sidebar entry that has `contents:` is a *section*, and its display
+label can be spelled two ways:
+
+``` yaml
+website:
+  sidebar:
+    contents:
+      # spelling 1: section:
+      - section: Guides
+        contents:
+          - guides/intro.qmd
+
+      # spelling 2: text: (often with a landing page)
+      - text: Guides
+        file: guides/index.qmd
+        contents:
+          - guides/intro.qmd
+```
+
+Both are accepted. This warning fires when a single entry uses
+*both* keys at once:
+
+``` yaml
+      - section: Guides
+        text: All the Guides    # ignored — this line has no effect
+        contents:
+          - guides/intro.qmd
+```
+
+Only one of the two values can be the label. Quarto uses the
+`section:` value and ignores the `text:` value. The render still
+succeeds.
+
+## Why this happens
+
+Common causes:
+
+- **Leftover key after a refactor.** The entry started as
+  `text:` + `contents:` and a `section:` key was added later (or
+  vice versa), leaving both spellings in place.
+- **Copy-paste between entries.** A leaf link (`text:` + `href:`)
+  was converted into a section by pasting `section:` and
+  `contents:` from a neighboring entry without removing `text:`.
+
+## How to fix
+
+Keep exactly one of the two keys:
+
+``` yaml
+# either
+- section: Guides
+  contents:
+    - guides/intro.qmd
+
+# or
+- text: Guides
+  file: guides/index.qmd
+  contents:
+    - guides/intro.qmd
+```
+
+If the two values differ, the one you keep should be the label you
+actually want in the sidebar.
+
+## Related
+
+- `Q-13-5` — sidebar `auto:` entry dropped (no project index).
+- `Q-13-6` — sidebar `auto:` entry matched no documents.

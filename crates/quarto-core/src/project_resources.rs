@@ -28,8 +28,11 @@
 use std::path::{Path, PathBuf};
 
 use quarto_source_map::{By, SourceInfo};
+use quarto_system_runtime::SystemRuntime;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::glob::{BaseDirContext, GlobOptions, PatternSet, RawGlob, resolve_patterns};
 
 // ─────────────────────────────────────────────────────────────────────
 // Types
@@ -144,19 +147,19 @@ pub enum ResourceError {
         source_info: SourceInfo,
     },
 
-    #[error("invalid glob pattern '{pattern}': {source}")]
+    #[error("invalid glob pattern '{pattern}': {message}")]
     InvalidGlob {
         pattern: String,
-        #[source]
-        source: glob::PatternError,
+        /// Why the glob engine rejected it.
+        message: String,
         source_info: SourceInfo,
     },
 
-    #[error("error walking glob matches for '{pattern}': {source}")]
+    #[error("error walking glob matches for '{pattern}': {message}")]
     GlobWalk {
         pattern: String,
-        #[source]
-        source: glob::GlobError,
+        /// Which directory could not be read, and why.
+        message: String,
         source_info: SourceInfo,
     },
 }
@@ -229,58 +232,241 @@ pub fn extract_resource_patterns(
 // Glob expansion + path validation
 // ─────────────────────────────────────────────────────────────────────
 
-const GLOB_CHARS: &[char] = &['*', '?', '['];
+/// Resolve a document's declared `resources:` patterns to
+/// project-relative form, against the directory of the file each was
+/// written in (bd-mt7a6uc4).
+///
+/// Called from `DocumentProfileStage`, the one place with the
+/// document's [`SourceContext`] in scope. Patterns that escape the
+/// project root or fail to compile are dropped here; the post-render
+/// collector reports what survives, and the escape/compile cases keep
+/// their existing `Q-5-1` / `Q-5-2` treatment at expansion time for
+/// project-level patterns.
+pub fn resolve_declared_resource_globs(
+    patterns: &[RawResourcePattern],
+    source_context: Option<&quarto_source_map::SourceContext>,
+    project_dir: &Path,
+    host_dir: &str,
+) -> (crate::glob::GlobResolution, Vec<RejectedResourcePattern>) {
+    let resolution = resolve_patterns(
+        patterns
+            .iter()
+            .map(|r| RawGlob::new(r.pattern.clone(), r.source_info.clone())),
+        &BaseDirContext {
+            source_context,
+            project_dir,
+            fallback_dir: host_dir,
+        },
+        &GlobOptions::RESOURCES,
+    );
 
-fn looks_like_glob(s: &str) -> bool {
-    s.contains(|c| GLOB_CHARS.contains(&c))
+    // Rejections travel *with* the profile rather than being reported
+    // here. Profiles are cached: a diagnostic emitted at
+    // profile-extraction time would vanish on the next render, when
+    // the cache serves the profile and the stage never runs. The
+    // collector reports these every render instead.
+    let mut rejected = Vec::new();
+    for escaped in &resolution.escaped {
+        rejected.push(RejectedResourcePattern {
+            pattern: escaped.raw.clone(),
+            reason: ResourceRejection::OutsideProject,
+            source_info: escaped.source.clone(),
+        });
+    }
+    for invalid in &resolution.invalid {
+        rejected.push(RejectedResourcePattern {
+            pattern: invalid.raw.clone(),
+            reason: ResourceRejection::InvalidGlob {
+                message: invalid.message.clone(),
+            },
+            source_info: invalid.source.clone(),
+        });
+    }
+
+    (resolution, rejected)
 }
 
-/// Expand a list of patterns into resolved resources.
+/// A declared `resources:` pattern that resolution could not use.
 ///
-/// - `project_root`: canonical project root; every resolved source
-///   must be inside this directory or [`ResourceError::OutOfProject`]
-///   is returned.
-/// - `anchor`: directory the patterns are relative to. For project-
-///   level patterns this equals `project_root`. For doc-level
-///   patterns this is the document's parent directory.
-/// - `patterns`: raw patterns from YAML.
-/// - `make_origin`: builds the `ResourceOrigin` for each entry given
-///   the pattern that produced it. Same origin for every match of
-///   a single pattern.
-/// - `scope`: reused across every entry produced.
+/// Carried on [`DocumentProfile`](crate::document_profile::DocumentProfile)
+/// so the post-render collector can report it on every render, not
+/// just the one that populated the profile cache.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RejectedResourcePattern {
+    /// The pattern as the author wrote it.
+    pub pattern: String,
+    /// Why it was rejected.
+    pub reason: ResourceRejection,
+    /// The YAML scalar it came from.
+    pub source_info: SourceInfo,
+}
+
+/// Why a declared `resources:` pattern could not be used.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum ResourceRejection {
+    /// Normalizing the pattern climbed above the project root.
+    OutsideProject,
+    /// The glob engine rejected the pattern.
+    InvalidGlob {
+        /// The engine's reason.
+        message: String,
+    },
+}
+
+impl RejectedResourcePattern {
+    /// The error this rejection becomes when the collector reports
+    /// it — `Q-5-1` or `Q-5-2`, with the original YAML span.
+    pub fn into_error(self, project_root: &Path) -> ResourceError {
+        match self.reason {
+            ResourceRejection::OutsideProject => ResourceError::OutOfProject {
+                pattern: self.pattern,
+                project_root: project_root.to_path_buf(),
+                source_info: self.source_info,
+            },
+            ResourceRejection::InvalidGlob { message } => ResourceError::InvalidGlob {
+                pattern: self.pattern,
+                message,
+                source_info: self.source_info,
+            },
+        }
+    }
+}
+
+/// Expand already-resolved patterns into resources.
 ///
-/// **Leading-`/` semantics (Quarto YAML convention, TS Quarto parity).**
-/// A pattern beginning with `/` is project-root-relative — e.g.
-/// `"/docs/foo.json"` means `<project_root>/docs/foo.json`, not the
-/// filesystem path `/docs/foo.json`. This applies to YAML
-/// `resources:` declarations in both `_quarto.yml` and document
-/// headers. It does NOT apply to engine/Lua-filter contributions,
-/// which arrive through [`resolve_reported_resources`] and use
-/// real filesystem semantics for absolute paths.
+/// The document-level path uses this directly:
+/// `DocumentProfileStage` resolved those patterns against their
+/// declaring files (where the `SourceContext` was in scope), so
+/// re-resolving here against the host document's directory would
+/// undo exactly the fix bd-mt7a6uc4 makes.
+pub fn expand_resolved(
+    project_root: &Path,
+    globs: &[crate::glob::GlobPattern],
+    sources: &[SourceInfo],
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+    make_origin: impl FnMut() -> ResourceOrigin,
+    scope: ResourceScope,
+) -> Result<Vec<ResolvedResource>, ResourceError> {
+    expand_resolved_reporting(
+        project_root,
+        globs,
+        sources,
+        runtime,
+        &mut Vec::new(),
+        make_origin,
+        scope,
+    )
+}
+
+/// [`expand_resolved`], additionally reporting glob patterns that
+/// matched no files (`Q-5-16`).
 ///
-/// **Directory expansion (TS Quarto parity, bd-47w7o).** A literal
-/// pattern (no glob characters) that resolves to an existing
-/// directory is equivalent to the recursive glob `<dir>/**/*` —
-/// every file under the directory becomes its own resource entry.
-/// Trailing-slash form (`"data/"`) and bare-directory form
-/// (`"data"`) behave identically. Subdirectories themselves are
-/// not emitted; only their files.
+/// A *literal* pattern that matches nothing is not reported here —
+/// it resolves to itself and the copy step names it, which is the
+/// better message ("declared resource does not exist"). Only glob
+/// patterns, where there is no single file to name, need this.
+pub fn expand_resolved_reporting(
+    project_root: &Path,
+    globs: &[crate::glob::GlobPattern],
+    sources: &[SourceInfo],
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+    diagnostics: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+    mut make_origin: impl FnMut() -> ResourceOrigin,
+    scope: ResourceScope,
+) -> Result<Vec<ResolvedResource>, ResourceError> {
+    let excluder = PatternSet::compile(globs, &GlobOptions::RESOURCES).map_err(|e| {
+        ResourceError::InvalidGlob {
+            pattern: e.pattern.clone(),
+            message: e.message.clone(),
+            source_info: SourceInfo::generated(By::programmatic_config()),
+        }
+    })?;
+
+    let mut out = Vec::new();
+    for (index, glob) in globs.iter().enumerate() {
+        if glob.negated {
+            continue;
+        }
+        // Sources are aligned with `globs` (see
+        // `GlobResolution::sources`); fall back only if a caller
+        // passed a short list.
+        let provenance = sources
+            .get(index)
+            .cloned()
+            .unwrap_or_else(|| SourceInfo::generated(By::programmatic_config()));
+        let before = out.len();
+        for source in expand_one(project_root, glob, &provenance, runtime)? {
+            let Ok(relative) = source.strip_prefix(project_root) else {
+                continue;
+            };
+            let rel = crate::glob::path_to_forward_slashes(relative);
+            if excluder.excluded(&rel) {
+                continue;
+            }
+            out.push(ResolvedResource {
+                source,
+                output_relative: rel,
+                origin: make_origin(),
+                scope: scope.clone(),
+            });
+        }
+        if out.len() == before && crate::glob::has_metacharacters(&glob.pattern) {
+            diagnostics.push(
+                crate::glob::diagnostics::matched_nothing(
+                    "Q-5-16",
+                    "`resources:`",
+                    &glob.pattern,
+                    &provenance,
+                )
+                .build(),
+            );
+        }
+    }
+    Ok(out)
+}
+
 pub fn expand_patterns(
     project_root: &Path,
     anchor: &Path,
     patterns: &[RawResourcePattern],
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
     mut make_origin: impl FnMut() -> ResourceOrigin,
     scope: ResourceScope,
 ) -> Result<Vec<ResolvedResource>, ResourceError> {
+    let resolution = resolve_resource_patterns(project_root, anchor, patterns)?;
+
+    // Exclusions apply to everything the positives produced,
+    // regardless of where the `!` entry was written.
+    // Cannot fail — `resolve_resource_patterns` compiled every
+    // pattern it returned — but the error path stays honest rather
+    // than unwrapping.
+    let excluder =
+        PatternSet::compile(&resolution.globs, &GlobOptions::RESOURCES).map_err(|e| {
+            let provenance = resolution
+                .iter()
+                .find(|(g, _)| g.pattern == e.pattern)
+                .map_or_else(
+                    || SourceInfo::generated(By::programmatic_config()),
+                    |(_, s)| s.clone(),
+                );
+            ResourceError::InvalidGlob {
+                pattern: e.pattern.clone(),
+                message: e.message.clone(),
+                source_info: provenance,
+            }
+        })?;
+
     let mut out = Vec::new();
-    for raw in patterns {
-        let matched = expand_one(project_root, anchor, &raw.pattern, &raw.source_info)?;
-        for source in matched {
-            let rel = source
-                .strip_prefix(project_root)
-                .expect("expand_one verified the path is within project_root")
-                .to_string_lossy()
-                .replace('\\', "/");
+    for (glob, provenance) in resolution.positives() {
+        for source in expand_one(project_root, glob, provenance, runtime)? {
+            let Ok(relative) = source.strip_prefix(project_root) else {
+                continue;
+            };
+            let rel = crate::glob::path_to_forward_slashes(relative);
+            if excluder.excluded(&rel) {
+                continue;
+            }
             out.push(ResolvedResource {
                 source,
                 output_relative: rel,
@@ -292,88 +478,112 @@ pub fn expand_patterns(
     Ok(out)
 }
 
-fn expand_one(
+/// Resolve raw `resources:` entries to project-relative patterns.
+///
+/// Base directory is `anchor` (the project root for
+/// `project.resources`, the declaring file's directory for a
+/// document's `resources:`); a leading `/` re-anchors at the project
+/// root. Patterns that escape the root or fail to compile become
+/// [`ResourceError`]s so the existing `Q-5-1` / `Q-5-2` diagnostics
+/// keep firing, with the same YAML spans as before.
+fn resolve_resource_patterns(
     project_root: &Path,
     anchor: &Path,
-    pattern: &str,
-    source_info: &SourceInfo,
-) -> Result<Vec<PathBuf>, ResourceError> {
-    // YAML convention (TS Quarto parity, bd-wlza2): a leading `/`
-    // anchors the pattern at the project root, NOT the filesystem
-    // root. Strip exactly one `/` and rebase from `project_root` so
-    // the `join` below treats the remainder as relative. The
-    // original `pattern` string is preserved for use in any error
-    // message so the user sees what they wrote.
-    //
-    // Engine/Lua-filter channels do NOT go through `expand_one`;
-    // they enter via `resolve_reported_resources` and keep
-    // absolute-path semantics intact (engines really do return
-    // filesystem-absolute paths to on-disk supporting files).
-    let (base, pat) = match pattern.strip_prefix('/') {
-        Some(rest) => (project_root, rest),
-        None => (anchor, pattern),
-    };
-    if looks_like_glob(pat) {
-        let combined = base.join(pat);
-        return expand_glob_files(
-            project_root,
-            &combined.to_string_lossy(),
-            pattern,
-            source_info,
-        );
-    }
+    patterns: &[RawResourcePattern],
+) -> Result<crate::glob::GlobResolution, ResourceError> {
+    let fallback_dir = anchor
+        .strip_prefix(project_root)
+        .map(crate::glob::path_to_forward_slashes)
+        .unwrap_or_default();
 
-    // Literal path. Resolve and project-containment-check first; then
-    // decide whether it's a directory (TS Quarto parity, bd-47w7o:
-    // a literal directory is equivalent to the recursive glob
-    // `<dir>/**/*`) or a single file/missing path.
-    let absolute = base.join(pat);
-    let canonical = canonicalize_within_project(project_root, &absolute, pattern, source_info)?;
-    if canonical.is_dir() {
-        let dir_glob = format!("{}/**/*", canonical.display());
-        expand_glob_files(project_root, &dir_glob, pattern, source_info)
-    } else {
-        Ok(vec![canonical])
+    let resolution = resolve_patterns(
+        patterns
+            .iter()
+            .map(|r| RawGlob::new(r.pattern.clone(), r.source_info.clone())),
+        &BaseDirContext {
+            source_context: None,
+            project_dir: project_root,
+            fallback_dir: &fallback_dir,
+        },
+        &GlobOptions::RESOURCES,
+    );
+
+    if let Some(escaped) = resolution.escaped.first() {
+        return Err(ResourceError::OutOfProject {
+            pattern: escaped.raw.clone(),
+            project_root: project_root.to_path_buf(),
+            source_info: escaped.source.clone(),
+        });
     }
+    if let Some(invalid) = resolution.invalid.first() {
+        return Err(ResourceError::InvalidGlob {
+            pattern: invalid.raw.clone(),
+            message: invalid.message.clone(),
+            source_info: invalid.source.clone(),
+        });
+    }
+    Ok(resolution)
 }
 
-/// Run `glob::glob(glob_pattern)`, drop directory entries, and
-/// project-containment-check every remaining file. Shared by the
-/// glob branch of `expand_one` and the literal-directory branch
-/// (where we synthesize `<dir>/**/*`). `original_pattern` is the
-/// user-supplied YAML string, preserved for any error message;
-/// `source_info` is the YAML scalar's source location, propagated
-/// into any [`ResourceError`] this returns.
-fn expand_glob_files(
+/// Files contributed by one positive pattern.
+///
+/// Two shapes, deliberately kept apart:
+///
+/// - A **literal path that is not an existing directory** resolves to
+///   itself, *even if it does not exist*. Declaring a resource that
+///   is missing is a mistake worth reporting, and the copy step
+///   reports it by name ("Declared resource … does not exist on
+///   disk"). Routing it through the matcher instead would turn that
+///   into a silent no-match.
+/// - Everything else — globs, and literals naming a directory —
+///   expands through [`crate::glob::expand`], which walks via the
+///   runtime and applies the directory rule (`data` means everything
+///   beneath `data/`).
+fn expand_one(
     project_root: &Path,
-    glob_pattern: &str,
-    original_pattern: &str,
-    source_info: &SourceInfo,
+    glob: &crate::glob::GlobPattern,
+    provenance: &SourceInfo,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Result<Vec<PathBuf>, ResourceError> {
-    let entries = glob::glob(glob_pattern).map_err(|e| ResourceError::InvalidGlob {
-        pattern: original_pattern.to_string(),
-        source: e,
-        source_info: source_info.clone(),
-    })?;
-    let mut matched = Vec::new();
-    for entry in entries {
-        let path = entry.map_err(|e| ResourceError::GlobWalk {
-            pattern: original_pattern.to_string(),
-            source: e,
-            source_info: source_info.clone(),
-        })?;
-        // Skip directories — only files become published resources.
-        // The recursive-copy intent is expressed elsewhere: either by
-        // the user writing `dir/**/*`, or by the literal-directory
-        // branch above synthesising that pattern for a bare `dir`.
-        if path.is_dir() {
-            continue;
-        }
-        let canonical =
-            canonicalize_within_project(project_root, &path, original_pattern, source_info)?;
-        matched.push(canonical);
+    let absolute = project_root.join(&glob.pattern);
+    let is_literal = !crate::glob::has_metacharacters(&glob.pattern);
+    let is_dir = runtime.is_dir(&absolute).unwrap_or(false);
+
+    if is_literal && !is_dir {
+        return Ok(vec![canonicalize_within_project(
+            project_root,
+            &absolute,
+            &glob.pattern,
+            provenance,
+            runtime,
+        )?]);
     }
-    Ok(matched)
+
+    let matched = crate::glob::expand(
+        std::slice::from_ref(glob),
+        project_root,
+        runtime,
+        &GlobOptions::RESOURCES,
+    )
+    .map_err(|e| match e {
+        crate::glob::GlobExpandError::Compile(c) => ResourceError::InvalidGlob {
+            pattern: c.pattern,
+            message: c.message,
+            source_info: provenance.clone(),
+        },
+        crate::glob::GlobExpandError::Walk { path, message } => ResourceError::GlobWalk {
+            pattern: glob.pattern.clone(),
+            message: format!("{}: {message}", path.display()),
+            source_info: provenance.clone(),
+        },
+    })?;
+
+    matched
+        .into_iter()
+        .map(|path| {
+            canonicalize_within_project(project_root, &path, &glob.pattern, provenance, runtime)
+        })
+        .collect()
 }
 
 fn canonicalize_within_project(
@@ -381,13 +591,20 @@ fn canonicalize_within_project(
     path: &Path,
     pattern: &str,
     source_info: &SourceInfo,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Result<PathBuf, ResourceError> {
     // Best-effort canonicalization: if the file doesn't exist yet
     // (literal-path case for a file the user just declared but hasn't
     // created), fall back to lexical normalization. Either way the
     // out-of-project check uses the same prefix comparison.
-    let canonical = path
-        .canonicalize()
+    //
+    // Goes through the runtime rather than `Path::canonicalize` so
+    // this works against the hub-client VFS as well as a real
+    // filesystem. On native it still resolves symlinks, which is what
+    // makes the containment check catch a symlink pointing out of the
+    // project.
+    let canonical = runtime
+        .canonicalize(path)
         .unwrap_or_else(|_| lexical_normalize(path));
     if !canonical.starts_with(project_root) {
         return Err(ResourceError::OutOfProject {
@@ -466,20 +683,102 @@ impl DocumentResourceReport {
 
     /// Append every supporting-file path produced by an engine,
     /// tagged with that engine's name.
+    ///
+    /// Some engines (e.g. julia-engine, a faithful Q1 port) report a
+    /// supporting *directory* rather than individual files — Q1's
+    /// `supporting: [<stem>_files]` convention. [`DocumentResourceReport`]
+    /// stays file-only (downstream `resolve_reported_resources` /
+    /// `copy_resources_to_output_dir` never learned to walk directories,
+    /// and `SystemRuntime::file_copy` errors on a directory source), so
+    /// any reported path that resolves to an on-disk directory is
+    /// expanded here into its contained files (recursively), each
+    /// added as its own entry with the same [`ResourceOrigin::Engine`]
+    /// origin. Plain files and non-existent paths are added unchanged
+    /// (existing behavior) — bd-677297ca.
     pub fn add_engine_files(
         &mut self,
         engine_name: &str,
         doc_source: &Path,
+        runtime: &dyn SystemRuntime,
         files: impl IntoIterator<Item = PathBuf>,
     ) {
-        for file in files {
-            self.entries.push(ReportedResource {
-                raw_path: file,
+        let doc_dir = doc_source
+            .parent()
+            .map_or_else(|| PathBuf::from(""), Path::to_path_buf);
+        let push_file = |entries: &mut Vec<ReportedResource>, raw_path: PathBuf| {
+            entries.push(ReportedResource {
+                raw_path,
                 origin: ResourceOrigin::Engine {
                     engine: engine_name.to_string(),
                     source: doc_source.to_path_buf(),
                 },
             });
+        };
+        for file in files {
+            let absolute = if file.is_absolute() {
+                file.clone()
+            } else {
+                doc_dir.join(&file)
+            };
+            match runtime.is_dir(&absolute) {
+                Ok(true) => {
+                    // Expand recursively into contained FILES — the
+                    // report stays file-only. Walk with an explicit
+                    // stack (not recursion) so depth is unbounded by
+                    // the call stack.
+                    //
+                    // `is_dir` follows symlinks, so a cyclic symlink
+                    // inside the reported dir (e.g. one pointing back at
+                    // its own parent) would otherwise make this loop
+                    // pathologically (bounded only by the OS's symlink
+                    // ELOOP limit, but still visiting the same real
+                    // directory dozens of times). Guard by canonicalizing
+                    // each directory before pushing it and skipping
+                    // anything already visited.
+                    let mut visited = std::collections::HashSet::new();
+                    if let Ok(canon) = runtime.canonicalize(&absolute) {
+                        visited.insert(canon);
+                    }
+                    let mut stack = vec![absolute];
+                    while let Some(dir) = stack.pop() {
+                        let Ok(children) = runtime.dir_list(&dir) else {
+                            // Unreadable directory: nothing to expand;
+                            // skip rather than fail the whole report.
+                            tracing::warn!(
+                                dir = %dir.display(),
+                                "add_engine_files: skipping unreadable supporting subdirectory"
+                            );
+                            continue;
+                        };
+                        for child in children {
+                            match runtime.is_dir(&child) {
+                                Ok(true) => {
+                                    let already_visited = match runtime.canonicalize(&child) {
+                                        Ok(canon) => !visited.insert(canon),
+                                        // Can't resolve (e.g. a broken or
+                                        // directly self-referencing
+                                        // symlink) — don't recurse into
+                                        // it, but don't silently drop it
+                                        // as a "file" either.
+                                        Err(_) => true,
+                                    };
+                                    if !already_visited {
+                                        stack.push(child);
+                                    }
+                                }
+                                _ => push_file(&mut self.entries, child),
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    // Not a directory (a plain file, or doesn't exist
+                    // on disk — `resolve_reported_resources` / the
+                    // copy step surface a clear error for that case).
+                    // Preserve the original (possibly relative) path.
+                    push_file(&mut self.entries, file);
+                }
+            }
         }
     }
 
@@ -515,6 +814,7 @@ impl DocumentResourceReport {
 pub fn resolve_reported_resources(
     project_root: &Path,
     report: &DocumentResourceReport,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Result<Vec<ResolvedResource>, ResourceError> {
     let mut out = Vec::with_capacity(report.entries.len());
     for entry in &report.entries {
@@ -543,6 +843,7 @@ pub fn resolve_reported_resources(
             &absolute,
             &raw_str,
             &SourceInfo::generated(By::unknown()),
+            runtime,
         )?;
         let rel = canonical
             .strip_prefix(project_root)
@@ -579,6 +880,7 @@ pub fn resolve_reported_resources(
 pub fn collect_static_resources(
     project: &crate::project::ProjectContext,
     index: &crate::project::index::ProjectIndex,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Result<Vec<ResolvedResource>, ResourceError> {
     let project_root = &project.dir;
     let mut out = Vec::new();
@@ -588,13 +890,16 @@ pub fn collect_static_resources(
         project_root,
         project_root,
         &project.config.resources,
+        runtime,
         || ResourceOrigin::ProjectMetadata,
         ResourceScope::Project,
     )?);
 
-    // Document-level: anchor = doc's parent dir, scope = Page.
+    // Document-level: the profile carries patterns already resolved
+    // against their declaring files (bd-mt7a6uc4), so there is no
+    // anchor to apply here.
     for profile in index.profiles() {
-        if profile.resources.is_empty() {
+        if profile.resource_globs.is_empty() {
             continue;
         }
         let doc_source_abs = if profile.source_path.is_absolute() {
@@ -602,14 +907,11 @@ pub fn collect_static_resources(
         } else {
             project_root.join(&profile.source_path)
         };
-        let doc_dir = doc_source_abs
-            .parent()
-            .map_or_else(|| project_root.clone(), Path::to_path_buf);
-
-        out.extend(expand_patterns(
+        out.extend(expand_resolved(
             project_root,
-            &doc_dir,
-            &profile.resources,
+            &profile.resource_globs,
+            &profile.resource_glob_sources,
+            runtime,
             || ResourceOrigin::DocumentMetadata {
                 source: doc_source_abs.clone(),
             },
@@ -626,40 +928,17 @@ pub fn collect_static_resources(
 // Diagnostic-aware variants (bd-c1et2)
 // ─────────────────────────────────────────────────────────────────────
 
-/// Build a [`crate::error::ParseError`] from a [`ResourceError`],
-/// loading `source_file` so the resulting diagnostic can render an
-/// Ariadne snippet pointing at the offending YAML scalar.
-///
-/// The [`SourceInfo`] inside `err` already carries a [`FileId`] —
-/// the same `hash(filename)` that `quarto_yaml::parse_file` computes
-/// when it produces source-tracked YAML. We register `source_file`
-/// in a fresh [`SourceContext`] under that exact FileId so the
-/// renderer can resolve offsets back to line/column in the file's
-/// content.
-///
-/// If `source_file` cannot be read (rare; the YAML *was* read once
-/// already during parse) or the [`SourceInfo`] has no resolvable
-/// FileId (Concat / FilterProvenance), the diagnostic degrades to a
-/// span-less message — still tidyverse-shaped, still better than
-/// `Error: …` plain text.
-pub fn resource_error_to_parse_error(
-    err: ResourceError,
-    source_file: &Path,
-) -> crate::error::ParseError {
+/// The shared diagnostic body for a [`ResourceError`]: title, code,
+/// location, and problem statement — everything except the
+/// [`SourceContext`] binding, which differs by provenance (see
+/// [`resource_error_to_parse_error`] vs.
+/// [`resource_error_to_config_parse_error`]).
+fn resource_error_diagnostic(
+    err: &ResourceError,
+) -> quarto_error_reporting::DiagnosticMessageBuilder {
     use quarto_error_reporting::DiagnosticMessageBuilder;
-    use quarto_source_map::{FileId, SourceContext};
 
-    let mut source_context = SourceContext::new();
-    if let Some((fid_usize, _, _)) = err.source_info().resolve_byte_range() {
-        let content = std::fs::read_to_string(source_file).ok();
-        source_context.add_file_with_id(
-            FileId(fid_usize),
-            source_file.to_string_lossy().into_owned(),
-            content,
-        );
-    }
-
-    let diagnostic = match &err {
+    match err {
         ResourceError::OutOfProject {
             pattern,
             project_root,
@@ -677,31 +956,128 @@ pub fn resource_error_to_parse_error(
         .add_info(
             "A leading `/` is project-root-relative — e.g. `/docs/foo.json` means `<project>/docs/foo.json`. \
              To reference files outside the project, copy them in or use `copy:` (Q1: not yet supported).",
-        )
-        .build(),
+        ),
 
         ResourceError::InvalidGlob {
             pattern,
-            source,
+            message,
             source_info,
         } => DiagnosticMessageBuilder::error("Invalid glob pattern in `resources:`")
             .with_code("Q-5-2")
             .with_location(source_info.clone())
-            .problem(format!("`{}` is not a valid glob: {}", pattern, source))
-            .build(),
+            .problem(format!("`{}` is not a valid glob: {}", pattern, message)),
 
         ResourceError::GlobWalk {
             pattern,
-            source,
+            message,
             source_info,
         } => DiagnosticMessageBuilder::error("Failed walking glob matches for `resources:`")
             .with_code("Q-5-3")
             .with_location(source_info.clone())
-            .problem(format!("Walking `{}` failed: {}", pattern, source))
-            .build(),
-    };
+            .problem(format!("Walking `{}` failed: {}", pattern, message)),
+    }
+}
 
-    crate::error::ParseError::new(vec![diagnostic], source_context)
+/// Document-level variant of
+/// [`resource_error_to_config_parse_error`] (bd-x113wg9v): a
+/// document's effective `resources:` list is *merged* metadata, so an
+/// entry can be declared in the document's own front matter (spans
+/// rooted at the doc parse context's dense `FileId(0)`), inherited
+/// from a directory `_metadata.yml` layer or `_quarto.yml`, or
+/// contributed by an extension manifest (all three: quarto-yaml
+/// filename-hash FileIds). The candidate list carries both id schemes
+/// via [`crate::config_sources::bind_source_candidates`]; the first
+/// id match is bound, an inherited match gets an info line naming the
+/// declaring file, and no match degrades span-less — never a wrong
+/// span. (The predecessor bound `doc_source` unconditionally,
+/// rendering a `_metadata.yml` entry's offsets against the `.qmd`'s
+/// text.)
+pub fn resource_error_to_doc_parse_error(
+    err: ResourceError,
+    doc_source: &Path,
+    project: &crate::project::ProjectContext,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+) -> crate::error::ParseError {
+    use quarto_source_map::{FileId, SourceContext};
+
+    let config = &project.config;
+    let layer_paths =
+        crate::project::directory_metadata_paths_for_document(project, doc_source, runtime);
+    let hash = |p: &Path| quarto_yaml::file_id_for_filename(&p.to_string_lossy());
+
+    let mut source_context = SourceContext::new();
+    let candidates = std::iter::once((FileId(0), doc_source))
+        .chain(config.config_path.as_deref().map(|p| (hash(p), p)))
+        .chain(
+            config
+                .profile_config_paths
+                .iter()
+                .map(|p| (hash(p), p.as_path())),
+        )
+        .chain(
+            config
+                .extension_manifest_paths
+                .iter()
+                .map(|p| (hash(p), p.as_path())),
+        )
+        .chain(layer_paths.iter().map(|p| (hash(p), p.as_path())));
+    let matched = crate::config_sources::bind_source_candidates(
+        &mut source_context,
+        err.source_info(),
+        candidates,
+    );
+
+    let mut builder = resource_error_diagnostic(&err);
+    if let Some(path) = matched
+        && path != doc_source
+    {
+        builder = builder.add_info(format!(
+            "This `resources` entry is inherited from `{}`, not declared in `{}`.",
+            path.display(),
+            doc_source.display()
+        ));
+    }
+    crate::error::ParseError::new(vec![builder.build()], source_context)
+}
+
+/// Project-level variant of [`resource_error_to_parse_error`]
+/// (bd-p86nlm92): `project.resources` entries can be contributed by
+/// an extension (`contributes.metadata.project.resources`), so the
+/// error's SourceInfo may point into an `_extension.yml` rather than
+/// the project's `_quarto.yml`. The right file is chosen by FileId
+/// match via [`crate::config_sources::bind_config_source`]; when the
+/// pattern comes from an extension manifest, an info line says so.
+/// No match ⇒ span-less degradation, never a wrong span.
+pub fn resource_error_to_config_parse_error(
+    err: ResourceError,
+    config: &crate::project::ProjectConfig,
+) -> crate::error::ParseError {
+    use quarto_source_map::SourceContext;
+
+    let mut source_context = SourceContext::new();
+    let candidates = config
+        .config_path
+        .as_deref()
+        .into_iter()
+        .chain(config.profile_config_paths.iter().map(PathBuf::as_path))
+        .chain(config.extension_manifest_paths.iter().map(PathBuf::as_path));
+    let matched = crate::config_sources::bind_config_source(
+        &mut source_context,
+        err.source_info(),
+        candidates,
+    );
+
+    let mut builder = resource_error_diagnostic(&err);
+    if let Some(path) = matched
+        && config.config_path.as_deref() != Some(path)
+    {
+        builder = builder.add_info(format!(
+            "This `resources` entry is contributed by the extension manifest `{}` \
+             (`contributes.metadata.project`), not by your project configuration file.",
+            path.display()
+        ));
+    }
+    crate::error::ParseError::new(vec![builder.build()], source_context)
 }
 
 /// Diagnostic-aware variant of [`collect_static_resources`]. Same
@@ -714,50 +1090,63 @@ pub fn resource_error_to_parse_error(
 pub fn collect_static_resources_with_diagnostics(
     project: &crate::project::ProjectContext,
     index: &crate::project::index::ProjectIndex,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+    diagnostics: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> Result<Vec<ResolvedResource>, crate::error::ParseError> {
     let project_root = &project.dir;
     let mut out = Vec::new();
 
-    // Project-level. Errors point into `_quarto.yml` (or `.yaml`).
-    let project_yaml = project
-        .config
-        .config_path
-        .clone()
-        .unwrap_or_else(|| project_root.join("_quarto.yml"));
-
+    // Project-level. Errors point into the config file that declared
+    // the pattern — `_quarto.yml` or a contributing extension's
+    // `_extension.yml` (bd-p86nlm92).
     if let Err(e) = (|| -> Result<(), ResourceError> {
-        out.extend(expand_patterns(
+        let resolution =
+            resolve_resource_patterns(project_root, project_root, &project.config.resources)?;
+        out.extend(expand_resolved_reporting(
             project_root,
-            project_root,
-            &project.config.resources,
+            &resolution.globs,
+            &resolution.sources,
+            runtime,
+            diagnostics,
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )?);
         Ok(())
     })() {
-        return Err(resource_error_to_parse_error(e, &project_yaml));
+        return Err(resource_error_to_config_parse_error(e, &project.config));
     }
 
     // Document-level. Errors point into the doc that declared the
     // bad pattern.
     for profile in index.profiles() {
-        if profile.resources.is_empty() {
-            continue;
-        }
         let doc_source_abs = if profile.source_path.is_absolute() {
             profile.source_path.clone()
         } else {
             project_root.join(&profile.source_path)
         };
-        let doc_dir = doc_source_abs
-            .parent()
-            .map_or_else(|| project_root.clone(), Path::to_path_buf);
+
+        // Patterns resolution rejected are reported every render,
+        // from the profile (cached or not), against the document
+        // that declared them.
+        if let Some(rejected) = profile.rejected_resources.first() {
+            return Err(resource_error_to_doc_parse_error(
+                rejected.clone().into_error(project_root),
+                &doc_source_abs,
+                project,
+                runtime,
+            ));
+        }
+        if profile.resource_globs.is_empty() {
+            continue;
+        }
 
         if let Err(e) = (|| -> Result<(), ResourceError> {
-            out.extend(expand_patterns(
+            out.extend(expand_resolved_reporting(
                 project_root,
-                &doc_dir,
-                &profile.resources,
+                &profile.resource_globs,
+                &profile.resource_glob_sources,
+                runtime,
+                diagnostics,
                 || ResourceOrigin::DocumentMetadata {
                     source: doc_source_abs.clone(),
                 },
@@ -767,7 +1156,12 @@ pub fn collect_static_resources_with_diagnostics(
             )?);
             Ok(())
         })() {
-            return Err(resource_error_to_parse_error(e, &doc_source_abs));
+            return Err(resource_error_to_doc_parse_error(
+                e,
+                &doc_source_abs,
+                project,
+                runtime,
+            ));
         }
     }
 
@@ -950,7 +1344,15 @@ pub fn write_render_manifest(
 
 #[cfg(test)]
 mod tests {
+
+    /// Tests exercise the real filesystem (temp dirs), so the native
+    /// runtime is the right stand-in; expansion itself never calls
+    /// `std::fs` directly.
+    fn rt() -> quarto_system_runtime::NativeRuntime {
+        quarto_system_runtime::NativeRuntime::new()
+    }
     use super::*;
+    use quarto_system_runtime::NativeRuntime;
     use tempfile::TempDir;
 
     fn touch(path: &Path) {
@@ -976,11 +1378,14 @@ mod tests {
 
     #[test]
     fn looks_like_glob_basic() {
-        assert!(looks_like_glob("data/*.csv"));
-        assert!(looks_like_glob("img/?.png"));
-        assert!(looks_like_glob("[ab].txt"));
-        assert!(!looks_like_glob("plain.txt"));
-        assert!(!looks_like_glob("data/file.csv"));
+        // Metacharacter detection now lives in the shared glob API;
+        // `resources:` uses it to decide literal-path vs pattern.
+        use crate::glob::has_metacharacters;
+        assert!(has_metacharacters("data/*.csv"));
+        assert!(has_metacharacters("img/?.png"));
+        assert!(has_metacharacters("[ab].txt"));
+        assert!(!has_metacharacters("plain.txt"));
+        assert!(!has_metacharacters("data/file.csv"));
     }
 
     #[test]
@@ -993,6 +1398,7 @@ mod tests {
             &root,
             &root,
             &[raw("a.txt")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1003,6 +1409,152 @@ mod tests {
             resolved[0].source,
             root.join("a.txt").canonicalize().unwrap()
         );
+    }
+
+    /// D3: `!` excludes. Before bd-mt7a6uc4 this entry fell through
+    /// to the literal-path branch and **aborted the render** with
+    /// "Declared resource '<root>/!data/secret.csv' does not exist on
+    /// disk" — while still publishing the file it was meant to
+    /// exclude (Phase 0 fixture f2b).
+    #[test]
+    fn negation_excludes_a_glob_match() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        touch(&root.join("data/public.csv"));
+        touch(&root.join("data/secret.csv"));
+
+        let resolved = expand_patterns(
+            &root,
+            &root,
+            &[raw("data/*.csv"), raw("!data/secret.csv")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap();
+
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
+        assert_eq!(rels, vec!["data/public.csv"]);
+    }
+
+    #[test]
+    fn negation_excludes_from_a_literal_directory() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        touch(&root.join("data/public.csv"));
+        touch(&root.join("data/secret.csv"));
+
+        let resolved = expand_patterns(
+            &root,
+            &root,
+            &[raw("data"), raw("!data/secret.csv")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap();
+
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
+        assert_eq!(rels, vec!["data/public.csv"]);
+    }
+
+    #[test]
+    fn negation_is_order_independent() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        touch(&root.join("data/public.csv"));
+        touch(&root.join("data/secret.csv"));
+
+        let resolved = expand_patterns(
+            &root,
+            &root,
+            &[raw("!data/secret.csv"), raw("data/*.csv")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap();
+
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
+        assert_eq!(rels, vec!["data/public.csv"]);
+    }
+
+    /// A negated pattern can also exclude a whole directory.
+    #[test]
+    fn negated_directory_excludes_everything_beneath() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        touch(&root.join("data/keep.csv"));
+        touch(&root.join("data/drafts/wip.csv"));
+
+        let resolved = expand_patterns(
+            &root,
+            &root,
+            &[raw("data"), raw("!data/drafts")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap();
+
+        let rels: Vec<&str> = resolved
+            .iter()
+            .map(|r| r.output_relative.as_str())
+            .collect();
+        assert_eq!(rels, vec!["data/keep.csv"]);
+    }
+
+    /// A declared literal that does not exist still resolves to
+    /// itself, so the copy step can report it by name. Routing it
+    /// through the matcher would have turned a reported mistake into
+    /// a silent no-match.
+    #[test]
+    fn missing_literal_still_resolves_for_the_copy_step_to_report() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+
+        let resolved = expand_patterns(
+            &root,
+            &root,
+            &[raw("data/absent.csv")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap();
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].output_relative, "data/absent.csv");
+    }
+
+    /// An invalid glob is reported against the YAML span it came
+    /// from, not a synthetic default (Q-5-2).
+    #[test]
+    fn invalid_glob_carries_its_source_span() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+
+        let err = expand_patterns(
+            &root,
+            &root,
+            &[raw("a**b.csv")],
+            &rt(),
+            || ResourceOrigin::ProjectMetadata,
+            ResourceScope::Project,
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ResourceError::InvalidGlob { .. }), "{err:?}");
+        assert_eq!(err.pattern(), "a**b.csv");
     }
 
     #[test]
@@ -1017,6 +1569,7 @@ mod tests {
             &root,
             &root,
             &[raw("data/*.csv")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1038,6 +1591,7 @@ mod tests {
             &root,
             &root,
             &[raw("data/*")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1055,6 +1609,7 @@ mod tests {
             &root,
             &root,
             &[raw("../outside.csv")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1078,6 +1633,7 @@ mod tests {
             &root,
             &root,
             &[raw("/data/a.txt")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1101,6 +1657,7 @@ mod tests {
             &root,
             &root,
             &[raw("/data/*.csv")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1126,6 +1683,7 @@ mod tests {
             &root,
             &doc_dir,
             &[raw("/shared.js")],
+            &rt(),
             || ResourceOrigin::DocumentMetadata {
                 source: doc_source.clone(),
             },
@@ -1157,9 +1715,10 @@ mod tests {
         // `supporting` is filesystem-absolute (e.g. /tmp/.../posts/foo_files/data.png)
         // — the engine channel uses it as-is.
         let mut report = DocumentResourceReport::new();
-        report.add_engine_files("stub", &doc, [supporting.clone()]);
+        let runtime = NativeRuntime::new();
+        report.add_engine_files("stub", &doc, &runtime, [supporting.clone()]);
 
-        let resolved = resolve_reported_resources(&root, &report).unwrap();
+        let resolved = resolve_reported_resources(&root, &report, &rt()).unwrap();
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].source, supporting);
         assert_eq!(resolved[0].output_relative, "posts/foo_files/data.png");
@@ -1195,6 +1754,7 @@ mod tests {
             &root,
             &root,
             &[raw("demo")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1219,6 +1779,7 @@ mod tests {
             &root,
             &root,
             &[raw("demo/")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1247,6 +1808,7 @@ mod tests {
             &root,
             &root,
             &[raw("/demo")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1270,6 +1832,7 @@ mod tests {
             &root,
             &root,
             &[raw("demo")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1294,6 +1857,7 @@ mod tests {
             &root,
             &root,
             &[raw("missing.txt")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1316,6 +1880,7 @@ mod tests {
             &root,
             &root,
             &[raw("a.txt")],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1341,6 +1906,7 @@ mod tests {
             &root,
             &doc_dir,
             &[raw("data/extra.html")],
+            &rt(),
             || ResourceOrigin::DocumentMetadata {
                 source: doc_source.clone(),
             },
@@ -1507,12 +2073,17 @@ mod tests {
             &root,
             &root,
             &[RawResourcePattern::new("../escape.csv", si.clone())],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
         .unwrap_err();
 
-        let parse_err = resource_error_to_parse_error(err, &yaml_path);
+        let config = crate::project::ProjectConfig {
+            config_path: Some(yaml_path.clone()),
+            ..Default::default()
+        };
+        let parse_err = resource_error_to_config_parse_error(err, &config);
         assert_eq!(parse_err.diagnostics.len(), 1);
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-5-1"));
@@ -1561,6 +2132,7 @@ mod tests {
             &root,
             &root,
             &[RawResourcePattern::new("../escape.csv", si.clone())],
+            &rt(),
             || ResourceOrigin::ProjectMetadata,
             ResourceScope::Project,
         )
@@ -1594,9 +2166,10 @@ mod tests {
         touch(&supporting);
 
         let mut report = DocumentResourceReport::new();
-        report.add_engine_files("knitr", &doc, [supporting.clone()]);
+        let runtime = NativeRuntime::new();
+        report.add_engine_files("knitr", &doc, &runtime, [supporting.clone()]);
 
-        let resolved = resolve_reported_resources(&root, &report).unwrap();
+        let resolved = resolve_reported_resources(&root, &report, &rt()).unwrap();
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].source, supporting);
         assert_eq!(
@@ -1619,13 +2192,15 @@ mod tests {
         touch(&supporting);
 
         let mut report = DocumentResourceReport::new();
+        let runtime = NativeRuntime::new();
         report.add_engine_files(
             "stub",
             &doc,
+            &runtime,
             [PathBuf::from("extras/data.csv")], // relative
         );
 
-        let resolved = resolve_reported_resources(&root, &report).unwrap();
+        let resolved = resolve_reported_resources(&root, &report, &rt()).unwrap();
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].output_relative, "posts/extras/data.csv");
     }
@@ -1641,7 +2216,7 @@ mod tests {
         let mut report = DocumentResourceReport::new();
         report.add_lua_filter_files(&doc, [supporting.clone()]);
 
-        let resolved = resolve_reported_resources(&root, &report).unwrap();
+        let resolved = resolve_reported_resources(&root, &report, &rt()).unwrap();
         assert_eq!(resolved.len(), 1);
         assert!(matches!(
             resolved[0].origin,
@@ -1656,9 +2231,163 @@ mod tests {
         let doc = root.join("a.qmd");
 
         let mut report = DocumentResourceReport::new();
-        report.add_engine_files("stub", &doc, [PathBuf::from("../escape.csv")]);
+        let runtime = NativeRuntime::new();
+        report.add_engine_files("stub", &doc, &runtime, [PathBuf::from("../escape.csv")]);
 
-        let err = resolve_reported_resources(&root, &report).unwrap_err();
+        let err = resolve_reported_resources(&root, &report, &rt()).unwrap_err();
         assert!(matches!(err, ResourceError::OutOfProject { .. }));
+    }
+
+    // === Directory supporting entries expand into their contained files ===
+    //
+    // julia-engine (a faithful Q1 port) reports its supporting entry as a
+    // whole `<stem>_files` DIRECTORY (Q1's `supporting: [dir]` convention),
+    // not individual files. `DocumentResourceReport` is file-only —
+    // `resolve_reported_resources` never walks directories, and
+    // `copy_resources_to_output_dir` calls `SystemRuntime::file_copy` on
+    // each resolved entry, which errors on a directory source ("the source
+    // path is neither a regular file nor a symlink"). `add_engine_files`
+    // must expand any reported directory into its contained files
+    // (recursively) at report time so the report — and everything
+    // downstream — stays file-only. bd-677297ca.
+    #[test]
+    fn add_engine_files_expands_supporting_directory_into_contained_files() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let doc = root.join("plot.qmd");
+        // Nested two levels deep, mirroring julia-engine's real layout:
+        // plot_files/figure-html/cell-1.png.
+        let nested_file = root.join("plot_files/figure-html/cell-1.png");
+        touch(&nested_file);
+        // A second file directly inside the reported dir (one level deep)
+        // so the walk is proven to collect files at multiple depths, not
+        // just the deepest one.
+        let shallow_file = root.join("plot_files/direct.txt");
+        touch(&shallow_file);
+
+        let mut report = DocumentResourceReport::new();
+        let runtime = NativeRuntime::new();
+        // The engine reports the DIRECTORY, not the files inside it —
+        // this is julia-engine's actual `supporting_files` shape.
+        report.add_engine_files(
+            "julia",
+            &doc,
+            &runtime,
+            [PathBuf::from("plot_files")], // relative dir, anchored at doc_dir
+        );
+
+        let mut raw_paths: Vec<PathBuf> =
+            report.entries.iter().map(|e| e.raw_path.clone()).collect();
+        raw_paths.sort();
+        assert_eq!(
+            raw_paths,
+            vec![shallow_file.clone(), nested_file.clone()],
+            "the reported directory must be expanded into its contained \
+             FILES, not kept as a single directory entry"
+        );
+        for entry in &report.entries {
+            assert!(
+                matches!(
+                    &entry.origin,
+                    ResourceOrigin::Engine { engine, source } if engine == "julia" && source == &doc
+                ),
+                "expanded entries must keep the originating engine + doc source"
+            );
+        }
+
+        // And resolution must succeed end-to-end (this is exactly what
+        // previously failed downstream in copy_resources_to_output_dir).
+        let resolved = resolve_reported_resources(&root, &report, &rt()).unwrap();
+        let mut resolved_relatives: Vec<String> =
+            resolved.iter().map(|r| r.output_relative.clone()).collect();
+        resolved_relatives.sort();
+        assert_eq!(
+            resolved_relatives,
+            vec![
+                "plot_files/direct.txt".to_string(),
+                "plot_files/figure-html/cell-1.png".to_string(),
+            ]
+        );
+    }
+
+    // === Symlink-cycle guard (Minor finding, 4H review) ===
+    //
+    // `NativeRuntime::is_dir` follows symlinks, and the explicit-stack walk
+    // above has no visited-set: a cyclic symlink inside an engine-reported
+    // supporting dir (e.g. a symlink that points back at its own parent
+    // directory) makes `dir_list` keep re-listing the same directory
+    // forever. Guarded by canonicalizing each directory before pushing it
+    // onto the walk stack and skipping any directory already visited.
+
+    /// Create a self-referencing symlink `dir/cycle -> dir`: walking into
+    /// `dir/cycle` lists `dir`'s own contents again (including `cycle`
+    /// itself), which is exactly the shape that makes a naive explicit-stack
+    /// walk loop forever.
+    #[cfg(unix)]
+    fn make_self_referencing_symlink(dir: &Path) {
+        std::os::unix::fs::symlink(dir, dir.join("cycle")).unwrap();
+    }
+
+    /// No-op on non-unix: creating directory symlinks typically requires
+    /// elevated privileges on Windows, so the cyclic-walk fixture is
+    /// unix-only (`.claude/rules/cross-platform.md`). The test below
+    /// degrades to a plain (non-cyclic) walk there, which still exercises
+    /// `add_engine_files` without proving the guard — the guard itself is
+    /// exercised on unix CI/dev machines.
+    #[cfg(not(unix))]
+    fn make_self_referencing_symlink(_dir: &Path) {}
+
+    #[test]
+    fn add_engine_files_terminates_on_self_referencing_symlink_cycle() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let doc = root.join("plot.qmd");
+        let supporting_dir = root.join("plot_files");
+        std::fs::create_dir_all(&supporting_dir).unwrap();
+        // A real file, so we can prove the walk still finds real content
+        // despite the cycle.
+        let real_file = supporting_dir.join("cell-1.png");
+        touch(&real_file);
+        make_self_referencing_symlink(&supporting_dir);
+
+        // Run the walk on a background thread and bound the wait: an
+        // unguarded walk loops forever on the cycle (proven RED below), so
+        // we must not let a regression hang the whole test process.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let doc_for_thread = doc.clone();
+        std::thread::spawn(move || {
+            let runtime = NativeRuntime::new();
+            let mut report = DocumentResourceReport::new();
+            report.add_engine_files(
+                "julia",
+                &doc_for_thread,
+                &runtime,
+                [PathBuf::from("plot_files")],
+            );
+            // Ignore send errors: if the receiver already timed out and
+            // dropped, there's nothing left to report to.
+            let _ = tx.send(report);
+        });
+
+        let report = rx.recv_timeout(std::time::Duration::from_secs(5)).expect(
+            "add_engine_files must terminate within 5s even with a \
+                 cyclic symlink in the reported supporting directory \
+                 (symlink-cycle guard regression — see bd-677297ca follow-up)",
+        );
+
+        let raw_paths: Vec<PathBuf> = report.entries.iter().map(|e| e.raw_path.clone()).collect();
+        #[cfg(unix)]
+        assert_eq!(
+            raw_paths,
+            vec![real_file],
+            "the walk must collect the real file and must NOT recurse into \
+             the self-referencing symlink"
+        );
+        #[cfg(not(unix))]
+        {
+            // No cycle was created on this platform; just confirm the real
+            // file is still found.
+            assert_eq!(raw_paths, vec![real_file]);
+        }
     }
 }

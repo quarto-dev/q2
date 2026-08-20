@@ -30,14 +30,21 @@
 //!
 //! We compute a map keyed by `(structural_hash(cell), occurrence_index)`:
 //! - Walk `A1` and `B1` block-pointers in parallel.
-//! - Engine cells in `A1` are matched to the next *cell wrapper* Div
-//!   (`class="cell"`) in `B1`. Each cell maps to exactly one B1 block
-//!   (the wrapper Div, which contains the source + output children).
-//! - Prose blocks in `A1` advance both pointers in lockstep.
+//! - Engine cells in `A1` are matched to their *output run* in `B1`: an
+//!   optional leading echoed-source block (a plain, unbraced `CodeBlock` — what
+//!   `echo: true` emits, identified by [`is_echo_of`] against the cell's own
+//!   source) followed by the *engine-output block* — a `::: {.cell}` wrapper Div
+//!   (`class="cell"`, what echo/julia/jupyter emit) OR a `RawBlock` island (the
+//!   unwrapped `{=html}` block marimo emits). A cell usually maps to a
+//!   one-element run; an `echo: true` cell maps to `[echoed source, output]` so
+//!   preview reproduces what `q2 render` shows.
+//! - Prose blocks in `A1` advance both pointers in lockstep — a prose
+//!   block (Paragraph/Header/…) is never engine output, so it can't be
+//!   mis-paired as a cell's captured result.
 //!
 //! Then we walk `A2`:
 //! - For each engine cell with key `(hash, n)`, replace it with the
-//!   mapped B1 block.
+//!   mapped B1 output run.
 //! - Cells whose `(hash, n)` aren't in the map (content changed,
 //!   added, or unmatched in A1) fall through unchanged — same as
 //!   today's no-capture path. The user sees raw source for those
@@ -83,6 +90,35 @@ pub fn engine_cell_lang(block: &Block) -> Option<&str> {
     None
 }
 
+/// True when `candidate` is the *echoed source* of `cell`: the engine
+/// re-emitted the cell's own source as a plain highlighting block (what
+/// `echo: true` does — e.g. marimo emits a ` ```python ` block immediately
+/// before the cell's island). Both must be `CodeBlock`s; `candidate` must be
+/// plain (unbraced — `engine_cell_lang` is `None`, so a *braced* engine cell is
+/// never treated as an echo); and `candidate`'s text must equal `cell`'s source
+/// with leading `#|` (Quarto directive) lines removed, trimmed.
+///
+/// This is a *positive* match: [`derive_cell_outputs_walk`] skips a leading
+/// block only when it is provably this cell's echo. An unrelated block — the
+/// *next* cell's echo, a no-output cell's neighbour, a foreign engine's
+/// un-executed cell — fails the match and is left in place, so the splice never
+/// swallows content it cannot attribute. The worst case stays "raw source",
+/// preserving the module's fail-soft, never-wrong-output guarantee.
+fn is_echo_of(candidate: &Block, cell: &Block) -> bool {
+    let (Block::CodeBlock(cand), Block::CodeBlock(src)) = (candidate, cell) else {
+        return false;
+    };
+    if engine_cell_lang(candidate).is_some() {
+        return false; // a braced engine cell is not an echo
+    }
+    let stripped: Vec<&str> = src
+        .text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("#|"))
+        .collect();
+    stripped.join("\n").trim() == cand.text.trim()
+}
+
 /// Identify a Quarto cell wrapper — a Div whose class list contains
 /// `"cell"`. This is the shape the engine emits to wrap a single
 /// code cell's source + output blocks in its post-engine markdown.
@@ -91,6 +127,31 @@ fn is_cell_wrapper(block: &Block) -> bool {
         return false;
     };
     attr.1.iter().any(|c| c == "cell")
+}
+
+/// A B1 block that is an engine's per-cell OUTPUT (to be spliced onto the
+/// matching A1 engine cell). Two shapes qualify:
+///  - a `::: {.cell}` Div — the wrapper echo/julia/jupyter emit
+///    (`mdFromCodeCell`); and
+///  - a `RawBlock` — the unwrapped raw island marimo emits (a bare
+///    `{=html}` `<marimo-island>` block, zero `.cell` Divs; see the A0
+///    characterization in capture_splice_seam.rs / bd-5jxcio5d).
+/// A prose block (Paragraph/Header/…) is NOT engine output — it lockstep-
+/// matches source prose and is never paired as a cell's output.
+///
+/// Residual edge (bd-5m1ni9if, preview-only + fail-soft): a **source-level**
+/// `RawBlock` (a user-authored `{=html}`/`{=latex}` block) also passes this
+/// predicate. It is only ever *reached* at a cell position when an engine cell
+/// emits NO output block at its lockstep `B1` position (e.g. `include: false`,
+/// an empty/error cell) AND is immediately followed by such a source RawBlock —
+/// in which case the walk mis-consumes the passthrough block as the cell's
+/// output. That window is unreachable on marimo's normal path (every executed
+/// marimo cell emits an island) and for wrapper engines (they hit the `.cell`
+/// arm first); the outcome is a self-correcting preview mis-splice, never a
+/// wrong render. bd-5m1ni9if tracks the tightening (only consume a `RawBlock`
+/// here when it is not structurally-equal to the next `A1` block).
+fn is_engine_output_block(block: &Block) -> bool {
+    is_cell_wrapper(block) || matches!(block, Block::RawBlock(_))
 }
 
 /// A key for matching engine cells across `A1` (capture) and `A2`
@@ -107,14 +168,17 @@ struct CellKey {
 }
 
 /// Per-engine-cell mapping derived from a capture pair `(A1, B1)`.
-/// Each entry pairs a cell's `CellKey` with the single B1 block (a
-/// `Div.cell` wrapper) the engine emitted for it. We store one block
-/// per key — the engine always emits exactly one wrapper Div per
-/// executed cell. Cells with no output (e.g. `output: false`) have
-/// no map entry; the splice falls through to raw source for those.
+/// Each entry pairs a cell's `CellKey` with the **run** of B1 blocks the
+/// engine emitted for it: an optional leading echoed-source `CodeBlock`
+/// (what `echo: true` emits — see [`is_echo_of`]) followed by the output
+/// block (a `Div.cell` wrapper for echo/julia/jupyter, or a `RawBlock`
+/// island for marimo), or the echo run alone for an `echo: true` cell that
+/// produced no output. Most cells map to a one-element run. Cells with no
+/// output *and* no echo (e.g. `output: false`) have no map entry; the splice
+/// falls through to raw source for those.
 #[derive(Debug, Default, Clone)]
 pub struct CellOutputMap {
-    entries: HashMap<CellKey, Block>,
+    entries: HashMap<CellKey, Vec<Block>>,
 }
 
 impl CellOutputMap {
@@ -135,12 +199,22 @@ impl CellOutputMap {
 /// Build the engine-output map from a `(A1, B1)` capture pair.
 ///
 /// Walks `A1.blocks` and `B1.blocks` with two pointers:
-/// - Engine cell at `A1[i]` → consume the next cell wrapper at
-///   `B1[j]` (matched by `is_cell_wrapper`). Record `(key, B1[j])`,
-///   advance both pointers.
-/// - Prose at `A1[i]` → must match `B1[j]` structurally; advance
-///   both pointers. Divergence stops the walk (fail-soft); whatever
-///   pairs were collected before the divergence remain valid.
+/// - Engine cell at `A1[i]` → consume the next engine-output block at
+///   `B1[j]` (matched by `is_engine_output_block` — a `.cell` wrapper
+///   Div or a `RawBlock` island). Record `(key, B1[j])`, advance both
+///   pointers.
+/// - A pair of `Div`s at `A1[i]` / `B1[j]` → recurse into their
+///   contents with the same walk (sharing the occurrence counter),
+///   then advance both pointers. This is what lets a cell *nested*
+///   in a Div — e.g. the `::: {#fig-...}` float that pre-engine
+///   sugaring wraps around a `#| label: fig-*` cell — reach its
+///   captured output. Without the recursion the two Divs compare
+///   structurally unequal (one holds raw source, the other the
+///   executed wrapper) and the whole walk used to stop there.
+/// - Other prose at `A1[i]` → must match `B1[j]` structurally;
+///   advance both pointers. Divergence stops the walk at that
+///   nesting level (fail-soft); whatever pairs were collected
+///   before the divergence remain valid.
 ///
 /// Skipped cell wrappers in `B1` (which can happen if a cell was
 /// emitted at a position A1 didn't expect — e.g. an engine that
@@ -150,10 +224,20 @@ impl CellOutputMap {
 pub fn derive_cell_outputs(a1: &Pandoc, b1: &Pandoc) -> CellOutputMap {
     let mut map = CellOutputMap::default();
     let mut occurrences: HashMap<u64, usize> = HashMap::new();
+    derive_cell_outputs_walk(&a1.blocks, &b1.blocks, &mut map, &mut occurrences);
+    map
+}
 
-    let a_blocks = &a1.blocks;
-    let b_blocks = &b1.blocks;
-
+/// One nesting level of the [`derive_cell_outputs`] walk. `map` and
+/// `occurrences` are shared across all levels so `(hash, occurrence)`
+/// keys are assigned in document order — the same order
+/// [`splice_blocks`] assigns them on the A2 side.
+fn derive_cell_outputs_walk(
+    a_blocks: &[Block],
+    b_blocks: &[Block],
+    map: &mut CellOutputMap,
+    occurrences: &mut HashMap<u64, usize>,
+) {
     let mut i = 0usize;
     let mut j = 0usize;
 
@@ -164,43 +248,71 @@ pub fn derive_cell_outputs(a1: &Pandoc, b1: &Pandoc) -> CellOutputMap {
             let Block::CodeBlock(_) = a_block else {
                 unreachable!()
             };
-            // Look ahead for the next cell wrapper in B1.
-            // Walks forward over non-cell B1 blocks until it lands on
-            // a cell wrapper. Stops if B1 ends.
+
+            // Collect any leading echoed-source blocks that precede this
+            // cell's output block. An engine with `echo: true` (marimo) emits
+            // the cell's source as a plain ```lang CodeBlock *before* the
+            // output island. Skip such a block so the search reaches the real
+            // output block, and fold it into the cell's output run — preview
+            // must match `q2 render`, which shows the echoed code.
             //
-            // The body intentionally breaks on the first non-wrapper block
-            // (see the conservative-divergence note below) rather than
-            // advancing `j`, so this never iterates more than once — but the
-            // loop shape mirrors the intended walk and is kept deliberately.
-            #[allow(clippy::never_loop)]
-            while j < b_blocks.len() && !is_cell_wrapper(&b_blocks[j]) {
-                // A B1 block that isn't a cell wrapper sitting where
-                // we expected one means the walk has diverged
-                // (capture corruption or unexpected engine emission).
-                // Conservative: break the walk for this cell — leave
-                // it without a map entry, and keep the b_blocks
-                // pointer where it is so subsequent cells still have
-                // a chance to match.
-                break;
-            }
-            if j < b_blocks.len() && is_cell_wrapper(&b_blocks[j]) {
-                let hash = compute_block_hash_fresh(a_block);
-                let occurrence = occurrences.entry(hash).or_insert(0);
-                let key = CellKey {
-                    hash,
-                    occurrence: *occurrence,
-                };
-                *occurrence += 1;
-                map.entries.insert(key, b_blocks[j].clone());
+            // `is_echo_of` is a *positive* content match against THIS cell's
+            // source, so it never skips a braced foreign cell (bd-5oyk1xce
+            // Bug B — that falls to the no-output branch below), the *next*
+            // cell's echo, or any other unattributable block. That keeps the
+            // walk fail-soft: an unmatched block is never consumed as output.
+            let run_start = j;
+            while j < b_blocks.len()
+                && !is_engine_output_block(&b_blocks[j])
+                && is_echo_of(&b_blocks[j], a_block)
+            {
                 j += 1;
+            }
+
+            // Increment the occurrence counter once per engine cell (mirrors
+            // the A2 splice walk), regardless of which branch below fires.
+            let hash = compute_block_hash_fresh(a_block);
+            let occurrence = occurrences.entry(hash).or_insert(0);
+            let key = CellKey {
+                hash,
+                occurrence: *occurrence,
+            };
+            *occurrence += 1;
+
+            if j < b_blocks.len() && is_engine_output_block(&b_blocks[j]) {
+                // Output run = leading echo(es) (run_start..j) + output block (j).
+                map.entries.insert(key, b_blocks[run_start..=j].to_vec());
+                j += 1;
+            } else if j > run_start {
+                // Echo-only cell: `echo: true` with no output block (e.g.
+                // `eval: false`). Map the collected echo run so preview still
+                // shows the source, matching render. `j` already sits past it.
+                map.entries.insert(key, b_blocks[run_start..j].to_vec());
             } else {
-                // No matching cell wrapper available — record an
-                // occurrence-index increment anyway so a downstream
-                // identical cell in A1 still gets the right key.
-                let hash = compute_block_hash_fresh(a_block);
-                *occurrences.entry(hash).or_insert(0) += 1;
+                // No echo, no output block: a genuine no-output cell, or a
+                // foreign engine's un-executed cell (bd-5oyk1xce Bug B). Advance
+                // `j` past a `B1` block structurally equal to this `A1` cell (a
+                // passthrough) so the walk stays aligned and reaches this
+                // engine's own *later* cells, instead of stalling here and
+                // diverging at the next prose block — which would drop the later
+                // cell's output. Only advance on a structural match; genuine
+                // capture drift leaves `j` put and falls through to the
+                // conservative divergence handling.
+                if j < b_blocks.len() && structural_eq_block_local(a_block, &b_blocks[j]) {
+                    j += 1;
+                }
             }
             i += 1;
+        } else if let (Block::Div(a_div), Some(Block::Div(b_div))) = (a_block, b_blocks.get(j)) {
+            // A pair of Divs: recurse so cells nested inside (fig
+            // floats, margin/column divs, callouts, tabset panels)
+            // are keyed and mapped. Recursing even when the two Divs
+            // are structurally equal keeps the shared occurrence
+            // counter aligned with the A2-side splice walk, which
+            // visits every nested engine cell in document order.
+            derive_cell_outputs_walk(&a_div.content, &b_div.content, map, occurrences);
+            i += 1;
+            j += 1;
         } else {
             // Prose block. Should match B1[j] structurally — but the
             // engine sometimes inserts a `Div.cell` here if e.g. a
@@ -217,14 +329,12 @@ pub fn derive_cell_outputs(a1: &Pandoc, b1: &Pandoc) -> CellOutputMap {
                 j += 1;
             } else {
                 // Walk diverged. Conservative: stop building the
-                // map — what we've collected so far is still valid
-                // for those earlier cells.
+                // map at this nesting level — what we've collected
+                // so far is still valid for those earlier cells.
                 break;
             }
         }
     }
-
-    map
 }
 
 /// Convenience wrapper: `structural_eq_block` lives in
@@ -256,6 +366,21 @@ pub fn splice_cells(mut a2: Pandoc, map: &CellOutputMap, engine_name: &str) -> P
 
 fn splice_blocks(blocks: Blocks, map: &CellOutputMap, engine_name: &str) -> Blocks {
     let mut occurrences: HashMap<u64, usize> = HashMap::new();
+    splice_blocks_walk(blocks, map, engine_name, &mut occurrences)
+}
+
+/// One nesting level of the A2 splice walk. Recurses into `Div`
+/// content (fig floats, margin/column divs, callouts, tabset panels)
+/// so nested engine cells are reached; `occurrences` is shared across
+/// levels so keys are assigned in document order, mirroring
+/// [`derive_cell_outputs_walk`]. Replacement blocks (the captured
+/// `Div.cell` wrappers) are pushed as-is, never descended into.
+fn splice_blocks_walk(
+    blocks: Blocks,
+    map: &CellOutputMap,
+    engine_name: &str,
+    occurrences: &mut HashMap<u64, usize>,
+) -> Blocks {
     let mut out = Vec::with_capacity(blocks.len());
     for block in blocks {
         match engine_cell_lang(&block) {
@@ -268,12 +393,20 @@ fn splice_blocks(blocks: Blocks, map: &CellOutputMap, engine_name: &str) -> Bloc
                 };
                 *occurrence += 1;
                 if let Some(replacement) = map.entries.get(&key) {
-                    out.push(replacement.clone());
+                    out.extend(replacement.iter().cloned());
                 } else {
                     out.push(block);
                 }
             }
-            _ => out.push(block),
+            _ => {
+                if let Block::Div(mut div) = block {
+                    let content = std::mem::take(&mut div.content);
+                    div.content = splice_blocks_walk(content, map, engine_name, occurrences);
+                    out.push(Block::Div(div));
+                } else {
+                    out.push(block);
+                }
+            }
         }
     }
     out
@@ -318,11 +451,12 @@ pub fn apply_capture_splice(a2: Pandoc, a1: &Pandoc, b1: &Pandoc, engine_name: &
 /// and `capture.engine_name`).
 ///
 /// Like a single splice, this is fail-soft per engine: a capture whose
-/// cells don't match leaves those cells as raw source. **Limitation:**
-/// `splice_cells` walks top-level blocks only, so if engine 1 emits
-/// engine 2's cell *inside* a `Div.cell` wrapper, engine 2's splice
-/// won't reach it (the cell renders as raw source). The common case —
-/// each engine's cells at top level — folds correctly.
+/// cells don't match leaves those cells as raw source. The splice walk
+/// recurses into `Div` content (fig floats, callouts, tabsets — and
+/// previously-spliced `Div.cell` wrappers), so engine 2's cell is
+/// reached even when engine 1's output nests it inside a Div. Cells
+/// nested in non-Div containers (e.g. list items) are still not
+/// reached and render as raw source.
 pub fn apply_capture_splices(mut a2: Pandoc, splices: &[(Pandoc, Pandoc, String)]) -> Pandoc {
     for (a1, b1, engine_name) in splices {
         a2 = apply_capture_splice(a2, a1, b1, engine_name);
@@ -337,7 +471,7 @@ mod tests {
     use hashlink::LinkedHashMap;
     use quarto_pandoc_types::attr::AttrSourceInfo;
     use quarto_pandoc_types::config_value::ConfigValue;
-    use quarto_pandoc_types::{CodeBlock, Div, Inline, Pandoc, Paragraph, Str};
+    use quarto_pandoc_types::{CodeBlock, Div, Inline, Pandoc, Paragraph, RawBlock, Str};
     use quarto_source_map::SourceInfo;
 
     // ── Test-fixture builders ───────────────────────────────────────
@@ -593,12 +727,319 @@ mod tests {
         assert_eq!(first_div_marker(&out.blocks[1]), Some("P1"));
     }
 
+    /// Build a bare `{=html}` `RawBlock` — the shape marimo emits for an
+    /// executed island. `marker` is embedded so we can assert which island
+    /// landed where.
+    fn raw_island(marker: &str) -> Block {
+        Block::RawBlock(RawBlock {
+            format: "html".to_string(),
+            text: format!("<marimo-island>{marker}</marimo-island>"),
+            source_info: SourceInfo::for_test(),
+        })
+    }
+
+    /// A plain highlighted code block (classes = `[lang]`, no `{lang}` braces) —
+    /// the shape an engine emits for an `echo: true` cell's *source*, sitting
+    /// immediately before that cell's output block. `engine_cell_lang` returns
+    /// `None` for it (no braces), which is how the derive walk tells it apart
+    /// from a braced engine cell.
+    fn echo_source(lang: &str, body: &str) -> Block {
+        Block::CodeBlock(CodeBlock {
+            attr: (String::new(), vec![lang.to_string()], LinkedHashMap::new()),
+            text: body.to_string(),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    /// Extract the marker text from a `raw_island(...)` block, else `None`.
+    fn island_marker(block: &Block) -> Option<String> {
+        let Block::RawBlock(rb) = block else {
+            return None;
+        };
+        let inner = rb.text.strip_prefix("<marimo-island>")?;
+        Some(inner.strip_suffix("</marimo-island>")?.to_string())
+    }
+
+    #[test]
+    fn echo_cell_output_run_splices_echo_and_island() {
+        // A1: an `echo: true` marimo cell, then prose.
+        // B1: the engine emitted [echoed-source CodeBlock, island], then prose.
+        // A2 == A1. The cell must map to the RUN [echo, island] — before the fix
+        // the walk breaks on the echo CodeBlock and drops the island.
+        let a1 = pandoc_of(vec![
+            code_cell("python .marimo", "slider = mo.ui.slider()"),
+            prose("after"),
+        ]);
+        let b1 = pandoc_of(vec![
+            echo_source("python", "slider = mo.ui.slider()"),
+            raw_island("ISL1"),
+            prose("after"),
+        ]);
+        let a2 = a1.clone();
+
+        let out = apply_capture_splice(a2, &a1, &b1, "marimo");
+
+        // Expect: [echo CodeBlock, island ISL1, prose] — 3 blocks.
+        assert_eq!(out.blocks.len(), 3, "blocks: {:?}", out.blocks);
+        assert!(
+            matches!(out.blocks[0], Block::CodeBlock(_)),
+            "block0 not echo code"
+        );
+        assert_eq!(island_marker(&out.blocks[1]).as_deref(), Some("ISL1"));
+        assert!(matches!(out.blocks[2], Block::Paragraph(_)));
+    }
+
+    #[test]
+    fn adjacent_cells_echo_second_both_islands_survive() {
+        // cell1 (echo:false) directly followed by cell2 (echo:true), no prose
+        // between — the shape that dropped 5/6 islands on index.qmd. B1 =
+        // [island1, echo2, island2]. A2 == A1. Both cells must map.
+        let a1 = pandoc_of(vec![
+            code_cell("python .marimo", "slider = mo.ui.slider()"),
+            code_cell("python .marimo", "mo.md('x')"),
+        ]);
+        let b1 = pandoc_of(vec![
+            raw_island("ISL1"),
+            echo_source("python", "mo.md('x')"),
+            raw_island("ISL2"),
+        ]);
+        let a2 = a1.clone();
+
+        let out = apply_capture_splice(a2, &a1, &b1, "marimo");
+
+        // [island1, echo2, island2] — 3 blocks.
+        assert_eq!(out.blocks.len(), 3, "blocks: {:?}", out.blocks);
+        assert_eq!(island_marker(&out.blocks[0]).as_deref(), Some("ISL1"));
+        assert!(matches!(out.blocks[1], Block::CodeBlock(_)));
+        assert_eq!(island_marker(&out.blocks[2]).as_deref(), Some("ISL2"));
+    }
+
+    #[test]
+    fn adjacent_cells_edit_second_keeps_first_island() {
+        // Proves the property the three-way-merge design struggled with is
+        // handled by the two-step model: editing cell2 must NOT drop cell1's
+        // island. Derive maps from the (unedited) capture; the splice keys on
+        // the cell hash, so only the edited cell misses and falls through.
+        let a1 = pandoc_of(vec![
+            code_cell("python .marimo", "slider = mo.ui.slider()"),
+            code_cell("python .marimo", "mo.md('x')"),
+        ]);
+        let b1 = pandoc_of(vec![
+            raw_island("ISL1"),
+            echo_source("python", "mo.md('x')"),
+            raw_island("ISL2"),
+        ]);
+        // A2: cell2 edited (body changed) → hash miss → raw source.
+        let a2 = pandoc_of(vec![
+            code_cell("python .marimo", "slider = mo.ui.slider()"),
+            code_cell("python .marimo", "mo.md('EDITED')"),
+        ]);
+
+        let out = apply_capture_splice(a2, &a1, &b1, "marimo");
+
+        // [island1, edited cell2 raw source] — 2 blocks.
+        assert_eq!(out.blocks.len(), 2, "blocks: {:?}", out.blocks);
+        assert_eq!(island_marker(&out.blocks[0]).as_deref(), Some("ISL1"));
+        if let Block::CodeBlock(cb) = &out.blocks[1] {
+            assert!(cb.text.contains("EDITED"), "expected raw edited cell2");
+        } else {
+            panic!("expected raw CodeBlock, got {:?}", &out.blocks[1]);
+        }
+    }
+
+    #[test]
+    fn echo_only_cell_maps_echo_run() {
+        // `echo: true` with no output (e.g. eval:false): B1 has the echoed
+        // source but no island. The cell should map to the echo run so preview
+        // shows the code (matching render), not fall through to the raw `{...}`
+        // source cell.
+        let a1 = pandoc_of(vec![
+            code_cell("python .marimo", "import marimo as mo"),
+            prose("after"),
+        ]);
+        let b1 = pandoc_of(vec![
+            echo_source("python", "import marimo as mo"),
+            prose("after"),
+        ]);
+        let a2 = a1.clone();
+
+        let out = apply_capture_splice(a2, &a1, &b1, "marimo");
+
+        assert_eq!(out.blocks.len(), 2, "blocks: {:?}", out.blocks);
+        // block0 is the plain echo CodeBlock (no `{...}` braces), not the raw cell.
+        if let Block::CodeBlock(cb) = &out.blocks[0] {
+            assert!(
+                cb.attr.1.iter().all(|c| !c.starts_with('{')),
+                "expected plain echo block, got braced cell: {:?}",
+                cb.attr.1
+            );
+        } else {
+            panic!("expected CodeBlock, got {:?}", &out.blocks[0]);
+        }
+    }
+
+    #[test]
+    fn julia_first_fold_preserves_julia_cell_after_foreign_marimo_cells() {
+        // bd-5oyk1xce Bug B (order-dependent julia-cell drop): the document
+        // is [marimo cells, prose, julia cell] and the engines run
+        // `[julia, marimo]` (julia FIRST). Julia's capture B1 therefore
+        // still holds the RAW `{python .marimo}` cells (marimo hasn't run
+        // yet) sitting *before* julia's own cell. The derive walk must not
+        // stall on those foreign, un-executed cells — otherwise it diverges
+        // at the intervening prose header and never reaches (never maps)
+        // julia's own cell, which then renders as raw source with no plot.
+        //
+        // This is the pure-AST reproduction of what the two live previews
+        // showed: 7902 (julia first) dropped the julia `.cell`; 7903 (julia
+        // last) kept it. Reverting the derive-walk fix makes this fail while
+        // `two_engine_fold_splices_both_engines_cells` (foreign cell LAST,
+        // no trailing divergence) keeps passing — so the two tests together
+        // pin the bug precisely.
+        let m1 = code_cell("python .marimo", "s = slider()");
+        let m2 = code_cell("python .marimo", "md(s)");
+        let julia = code_cell("julia", "plot(1:5)");
+
+        let a2 = pandoc_of(vec![
+            prose("marimo section"),
+            m1.clone(),
+            m2.clone(),
+            prose("julia section"),
+            julia.clone(),
+        ]);
+
+        // Capture 1: julia ran FIRST. A1 = base; B1 turned the `{julia}`
+        // cell into the JOUT wrapper but left both `{python .marimo}` cells
+        // as raw code (marimo runs later).
+        let cap1_a1 = a2.clone();
+        let cap1_b1 = pandoc_of(vec![
+            prose("marimo section"),
+            m1.clone(),
+            m2.clone(),
+            prose("julia section"),
+            cell_wrapper("JOUT"),
+        ]);
+
+        // Capture 2: marimo ran SECOND, on julia's output. A1 = julia's
+        // output; B1 turned the two `.marimo` cells into islands and passed
+        // julia's JOUT wrapper through unchanged.
+        let cap2_a1 = cap1_b1.clone();
+        let cap2_b1 = pandoc_of(vec![
+            prose("marimo section"),
+            raw_island("ISL1"),
+            raw_island("ISL2"),
+            prose("julia section"),
+            cell_wrapper("JOUT"),
+        ]);
+
+        let splices = vec![
+            (cap1_a1, cap1_b1, "julia-engine".to_string()),
+            (cap2_a1, cap2_b1, "marimo".to_string()),
+        ];
+        let out = apply_capture_splices(a2, &splices);
+
+        // Julia's cell must be spliced to the JOUT wrapper …
+        let has_jout = out
+            .blocks
+            .iter()
+            .any(|b| first_div_marker(b) == Some("JOUT"));
+        assert!(
+            has_jout,
+            "julia `.cell` was dropped by the [julia, marimo] fold; \
+             block kinds = {:?}",
+            out.blocks
+                .iter()
+                .map(std::mem::discriminant)
+                .collect::<Vec<_>>()
+        );
+        // … and must NOT remain a raw `{julia}` CodeBlock.
+        let julia_raw = out
+            .blocks
+            .iter()
+            .any(|b| matches!(b, Block::CodeBlock(cb) if cb.text.contains("plot(1:5)")));
+        assert!(
+            !julia_raw,
+            "julia cell remained raw source instead of the JOUT wrapper"
+        );
+    }
+
     #[test]
     fn empty_splice_sequence_is_identity() {
         let a2 = pandoc_of(vec![prose("hi"), code_cell("r", "x")]);
         let out = apply_capture_splices(a2.clone(), &[]);
         assert_eq!(out.blocks.len(), 2);
         assert!(matches!(out.blocks[1], Block::CodeBlock(_)));
+    }
+
+    /// Build a figure-float Div (`::: {#fig-...}`) wrapping arbitrary
+    /// blocks — the shape pre-engine sugaring produces for a cell
+    /// carrying `#| label: fig-*`.
+    fn fig_div(id: &str, content: Vec<Block>) -> Block {
+        Block::Div(Div {
+            attr: (id.to_string(), Vec::new(), LinkedHashMap::new()),
+            content,
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    #[test]
+    fn cell_nested_in_figure_div_splices() {
+        // Regression: a cell with `#| label: fig-*` is wrapped in a
+        // `::: {#fig-...}` Div by pre-engine sugaring, so it is NOT a
+        // top-level block. The splice walk must recurse into Div
+        // content on both the derive side (A1/B1) and the splice side
+        // (A2), or the cell silently renders as raw source (the
+        // julia-figure preview bug: server records the capture, pane
+        // never shows the plot).
+        let cell = code_cell("julia", "plot(1:10)");
+        let a1 = pandoc_of(vec![
+            prose("intro"),
+            fig_div("fig-violin", vec![cell.clone()]),
+            prose("outro"),
+        ]);
+        let b1 = pandoc_of(vec![
+            prose("intro"),
+            fig_div("fig-violin", vec![cell_wrapper("X1")]),
+            prose("outro"),
+        ]);
+        let a2 = a1.clone();
+
+        let out = apply_capture_splice(a2, &a1, &b1, "julia-engine");
+
+        assert_eq!(out.blocks.len(), 3);
+        let Block::Div(fig) = &out.blocks[1] else {
+            panic!("expected fig div, got {:?}", &out.blocks[1]);
+        };
+        assert_eq!(
+            first_div_marker(&fig.content[0]),
+            Some("X1"),
+            "nested cell must be replaced by the captured .cell wrapper; got {:?}",
+            &fig.content[0]
+        );
+    }
+
+    #[test]
+    fn nested_and_top_level_cells_share_occurrence_ordering() {
+        // Two byte-identical cells: one nested in a fig div, one at
+        // top level. The (hash, occurrence) keys must be assigned in
+        // the same document order on the derive side and the splice
+        // side, so each cell receives ITS OWN captured output.
+        let cell = code_cell("julia", "plot(1:10)");
+        let a1 = pandoc_of(vec![fig_div("fig-a", vec![cell.clone()]), cell.clone()]);
+        let b1 = pandoc_of(vec![
+            fig_div("fig-a", vec![cell_wrapper("NESTED")]),
+            cell_wrapper("TOP"),
+        ]);
+        let a2 = a1.clone();
+
+        let out = apply_capture_splice(a2, &a1, &b1, "julia-engine");
+
+        let Block::Div(fig) = &out.blocks[0] else {
+            panic!("expected fig div, got {:?}", &out.blocks[0]);
+        };
+        assert_eq!(first_div_marker(&fig.content[0]), Some("NESTED"));
+        assert_eq!(first_div_marker(&out.blocks[1]), Some("TOP"));
     }
 
     #[test]

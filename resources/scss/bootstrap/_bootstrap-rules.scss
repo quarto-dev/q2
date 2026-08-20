@@ -167,20 +167,25 @@ main.page-columns > header > h1.title {
     // bd-f5yi follow-up: the `page-columns-float-mid` grid
     // template merges `[page-start page-start-inset
     // body-start-outset body-start]` into a single zero-width
-    // line. The author's stated intent at
-    // `_bootstrap-mixins.scss:225` ("No sidebar, only margins")
-    // was for the floating sidebar to disappear in the mid
-    // range — but no rule actually hides it, so it collapses
+    // line, so a floating sidebar left in the grid here collapses
     // to a ~26px ghost column with a vertical scrollbar.
     //
-    // Hiding it explicitly matches the intent and the runtime
-    // behavior. See
-    // `claude-notes/plans/2026-05-01-website-sidebar-breakpoints.md`
-    // (Decision A, Resolution 2026-05-01) for why we ship this
-    // small fix instead of porting Q1's full hamburger rollup.
-    .sidebar.sidebar-navigation {
-      display: none;
-    }
+    // This used to be `display: none` (Decision A of
+    // `claude-notes/plans/2026-05-01-website-sidebar-breakpoints.md`),
+    // an honest-but-lossy fix: below `lg` there was simply no way to
+    // reach a sibling page. bd-26bf3j1y **replaces** it with Decision
+    // B, Q1's rollup — the sidebar leaves the grid (`position:
+    // static`, below) and becomes a Bootstrap collapse drawer opened
+    // by `nav.quarto-secondary-nav`'s toggle. The rollup rules live
+    // in the dedicated block further down, next to the
+    // `.quarto-secondary-nav` rules they pair with, so nothing is
+    // needed here any more.
+    //
+    // Still floating-only: `docked` and `toc-left` have the same
+    // mid-range defect and remain recorded deferrals in that plan.
+    // Confirmed sufficient for the Posit Connect docs port — a
+    // body-class census of its Q1 site is 342 `floating`, 0 `docked`,
+    // 0 `toc-left`.
   }
 
   body.docked {
@@ -253,7 +258,20 @@ main.page-columns > header > h1.title {
     }
   }
 
-  nav[role="doc-toc"] {
+  // Hide the table of contents on narrow screens.
+  //
+  // Scoped to `#TOC` deliberately. `role="doc-toc"` alone is NOT a
+  // safe hook: q2 also puts that role on `nav#quarto-sidebar` (a
+  // divergence from Q1, tracked in bd-eczdzfqo). While the sidebar was
+  // simply hidden below `lg` that overlap was invisible; once
+  // bd-26bf3j1y made it a collapse drawer it became a real bug — the
+  // toggle latched `.show` and the glass pane dimmed, but the drawer
+  // stayed `display: none`, because `.show` only defeats Bootstrap's
+  // own `.collapse:not(.show)` rule, not an unrelated one.
+  // `test_narrow_viewport_hiding_does_not_catch_the_sidebar` guards
+  // this. If bd-eczdzfqo removes the role from the sidebar, the
+  // `#TOC` qualifier can stay — it is correct either way.
+  nav#TOC[role="doc-toc"] {
     display: none;
   }
 }
@@ -333,6 +351,23 @@ body.docked {
 // follows `$table-border-color` so any Bootswatch / user theme that
 // retints table borders retints the separator automatically. Ported
 // from quarto-cli `quarto-nav.scss:552-556`.
+// Opaque background for the navigation sidebar. Ported from
+// quarto-cli `quarto-nav.scss:543-551` (the `div.sidebar…rollup` half
+// of Q1's selector list is omitted — q2 emits no `.rollup` sidebar).
+//
+// This looks cosmetic and is not. In its own grid column the sidebar
+// overlaps nothing, so a transparent background is invisible; but the
+// bd-26bf3j1y mobile drawer overlays the article, and without this the
+// page text shows straight through the open drawer. Guarded by
+// `test_sidebar_has_an_opaque_background`.
+nav.sidebar.sidebar-navigation:not(.rollup) {
+  @if $sidebar-bg {
+    background-color: $sidebar-bg;
+  } @else {
+    background-color: $body-bg;
+  }
+}
+
 @if $sidebar-border {
   .sidebar.sidebar-navigation:not(.rollup) {
     border-right: 1px solid $table-border-color !important;
@@ -344,10 +379,13 @@ body.docked {
 // controls from the `$sidebar-border` separator. Ported from
 // `quarto-cli/.../quarto-nav.scss:623-628`.
 #quarto-sidebar {
+  transition: width $sidebar-anim-duration ease-in;
+
   > * {
     padding-right: 1em;
   }
 }
+
 
 .sidebar.toc-left {
   grid-column: page-start / body-start;
@@ -527,6 +565,231 @@ $sidebar-hover-color: rgba($sidebar-hl, 0.8) !default;
 $sidebar-active-color: $sidebar-hl !default;
 $sidebar-disabled-color: rgba($sidebar-fg, 0.75) !default;
 
+// ============================================================================
+// Mobile navigation: secondary-nav bar + sidebar rollup (bd-26bf3j1y)
+// ============================================================================
+//
+// Ported from quarto-cli `projects/website/navigation/quarto-nav.scss`
+// (the `media-breakpoint-down(lg)` rollup at 558-590, the
+// `.quarto-secondary-nav` rules at 411-450 and 470-520, the `lg`+
+// display overrides at 640-656, and the glass-pane rules at 665-693).
+//
+// Below `lg` the sidebar leaves the grid and becomes a Bootstrap
+// collapse drawer; `nav.quarto-secondary-nav` — hidden at `lg`+ — is
+// the bar holding the toggle that opens it. This replaces Decision A
+// of `claude-notes/plans/2026-05-01-website-sidebar-breakpoints.md`
+// (which just hid the sidebar below `lg`) with its Decision B.
+//
+// Floating-only, deliberately: see the note in the
+// `media-breakpoint-down(lg)` block above.
+
+// --- The cliff guard. Read before touching anything below. -----------------
+//
+// `nav#quarto-sidebar` carries Bootstrap's `collapse` class so the
+// toggle can open it. Bootstrap ships `.collapse:not(.show) { display:
+// none }`, which would hide the sidebar at EVERY width on EVERY
+// website page. These two rules are the only thing preventing that on
+// desktop: `#quarto-sidebar` wins on id specificity (1,0,0) over the
+// class pair (0,2,0), and `.sidebar.sidebar-navigation` ties at (0,2,0)
+// and wins on source order.
+//
+// Deleting or narrowing them breaks every website silently — the
+// element and all its classes are still emitted, so no markup
+// assertion notices. `test_sidebar_stays_visible_at_lg_despite_
+// collapse_class` (quarto-sass) reads the COMPILED CSS to guard this.
+@include media-breakpoint-up(lg) {
+  #quarto-sidebar {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar.sidebar-navigation {
+    display: block;
+    position: sticky;
+  }
+
+  // The bar is narrow-viewport-only chrome.
+  .quarto-secondary-nav {
+    display: none;
+  }
+
+  #quarto-sidebar-glass {
+    display: none;
+  }
+}
+
+@include media-breakpoint-down(lg) {
+  // Larger touch targets in the drawer.
+  .sidebar-navigation .sidebar-item a,
+  .nav-page .nav-page-text,
+  .sidebar-navigation {
+    font-size: $sidebar-font-size-collapse;
+  }
+
+  .sidebar-navigation ul.sidebar-section.depth1 .sidebar-section-item {
+    font-size: $sidebar-font-size-section-collapse;
+  }
+
+  .sidebar-logo {
+    display: none;
+  }
+
+  // Out of the page grid: the drawer overlays content rather than
+  // occupying a column. `static` while closed, `fixed` while animating
+  // and while open.
+  .sidebar.sidebar-navigation {
+    position: static;
+    border-bottom: 1px solid $table-border-color;
+    min-height: 100%;
+  }
+
+  .sidebar.sidebar-navigation.collapsing,
+  .sidebar.sidebar-navigation.show {
+    position: fixed;
+    z-index: 1000;
+  }
+
+  #quarto-sidebar.show {
+    transition: width $sidebar-anim-duration ease-out;
+  }
+
+  #quarto-sidebar .sidebar-menu-container {
+    white-space: nowrap;
+    min-width: 225px;
+  }
+
+  .sidebar .sidebar-footer {
+    visibility: visible;
+    padding-top: 1rem;
+    position: inherit;
+  }
+
+  nav.quarto-secondary-nav {
+    @if $sidebar-bg {
+      background-color: $sidebar-bg;
+    } @else {
+      background-color: $body-bg;
+    }
+    border-bottom: 1px solid $table-border-color;
+  }
+
+  // In banner mode the bar sits under the banner and picks up navbar
+  // colors instead. `.quarto-banner` on `#quarto-header` is the only
+  // consumer of that class (bd-xva3f8uy, folded into bd-26bf3j1y).
+  .quarto-banner nav.quarto-secondary-nav {
+    @if variable-exists(navbar-bg) {
+      background-color: $navbar-bg;
+    }
+    @if variable-exists(navbar-fg) {
+      color: $navbar-fg;
+    }
+    border-top: 1px solid $table-border-color;
+  }
+
+  .quarto-secondary-nav {
+    display: block;
+
+    button.quarto-btn-toggle {
+      margin-left: -0.75rem;
+      margin-right: 0.15rem;
+    }
+
+    // The title-block trail is desktop-only; the bar has its own
+    // instance, laid out inline.
+    nav.quarto-title-breadcrumbs {
+      display: none;
+    }
+
+    nav.quarto-page-breadcrumbs {
+      display: flex;
+      align-items: center;
+      padding-right: 1em;
+      margin-left: -0.25em;
+
+      a {
+        text-decoration: none;
+      }
+
+      ol.breadcrumb {
+        margin-bottom: 0;
+      }
+    }
+  }
+}
+
+.quarto-secondary-nav {
+  cursor: pointer;
+
+  .quarto-btn-toggle {
+    color: $sidebar-color;
+  }
+
+  nav.quarto-page-breadcrumbs {
+    color: $sidebar-color;
+
+    a {
+      color: $sidebar-color;
+    }
+
+    a:hover {
+      color: $sidebar-hover-color;
+    }
+
+    .breadcrumb-item::before {
+      color: theme-dim($sidebar-color, 20%);
+    }
+  }
+}
+
+// Q1 emits `.no-decor` on the collapsed-title link (the
+// `bread-crumbs: false` branch of the bar).
+.no-decor {
+  text-decoration: none;
+}
+
+.quarto-secondary-nav-title {
+  margin-top: 0.3em;
+  color: $sidebar-color;
+  padding-top: 4px;
+}
+
+.breadcrumb-item {
+  line-height: 1.2rem;
+}
+
+// Dimmed click-catcher behind an open drawer. `z-index: -1` parks it
+// behind everything while closed (it is always in the DOM); the
+// `.collapsing`/`.show` states lift it above page content. At `lg`+ it
+// is `display: none` (see the cliff-guard block above).
+@include media-breakpoint-down(lg) {
+  #quarto-sidebar-glass {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: #ffffff00;
+    transition: background-color $sidebar-anim-duration ease-in;
+    z-index: -1;
+  }
+
+  #quarto-sidebar-glass.collapsing {
+    z-index: $zindex-dropdown;
+  }
+
+  #quarto-sidebar-glass.show {
+    transition: background-color $sidebar-anim-duration ease-out;
+    background-color: $sidebar-glass-bg;
+    z-index: $zindex-dropdown;
+  }
+}
+
+// The glass pane is a grid child of `#quarto-content`, which gives
+// every child top padding; it must not contribute any.
+#quarto-content > #quarto-sidebar-glass {
+  padding-top: 0px;
+}
+
 div.sidebar-item-container {
   color: $sidebar-color;
 
@@ -632,6 +895,13 @@ div.sidebar-item-container {
     z-index: 1;
   }
 
+  // Ported from Q1 `_bootstrap-rules.scss:410-415`. This was dormant
+  // until bd-26bf3j1y — nothing in q2 emitted `.collapse` on a sidebar
+  // — and is now live: it lifts the open drawer above page content.
+  // It out-specifies the `z-index: 1000` in the rollup block
+  // (`#quarto-sidebar.collapse` is (1,1,0) vs (0,3,0)) and wins while
+  // the drawer is open, since Bootstrap keeps `.collapse` alongside
+  // `.show`. Q1 carries both rules for the same reason.
   @include media-breakpoint-down(lg) {
     #quarto-margin-sidebar.collapse,
     #quarto-sidebar.collapse,
@@ -2109,6 +2379,56 @@ div.callout.callout-style-default > .callout-header {
   color: $navbar-fg;
 }
 
+// Navbar brand: container + logo styling (bd-navbar-logo-unstyled-gbzd8vcu).
+// Ported from quarto-cli `projects/website/navigation/quarto-nav.scss`
+// against the Q1 `navbrand.ejs` markup shape, which Q2's
+// `render_brand` (quarto-navigation/src/render_html.rs) now emits:
+// `.navbar-brand-container` wrapping a `.navbar-brand.navbar-brand-logo`
+// anchor (the logo img) and a separate `.navbar-brand` title anchor.
+//
+// Deliberately NOT ported (both bd-y5y10oir): the
+// `.navbar-brand-container { max-width: calc(100% - 115px) }` clamp
+// (reserves toggler+search space on narrow viewports) and the
+// `$navbar-title-order`/`$navbar-toggler-order` `order:` system with
+// its `margin !important` pair — Q2 parses `toggle-position` but does
+// not yet wire it into SCSS.
+
+// quarto-nav.scss:116-118.
+.navbar-container {
+  width: 100%;
+}
+
+// quarto-nav.scss:120-123 — long titles truncate instead of overflowing.
+.navbar-brand {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// quarto-nav.scss:125-134 (minus the width clamp — bd-y5y10oir).
+.navbar-brand-container {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+
+  @include media-breakpoint-up(lg) {
+    margin-right: 1em;
+  }
+}
+
+// quarto-nav.scss:136-139 — spacing between logo anchor and title anchor.
+.navbar-brand.navbar-brand-logo {
+  margin-right: 4px;
+  display: inline-flex;
+}
+
+// quarto-nav.scss:196 — the default logo sizing. Without this a
+// 512px SVG renders at natural size and swallows the navbar.
+.navbar-logo {
+  max-height: 24px;
+  width: auto;
+  padding-right: 4px;
+}
+
 .navbar .quarto-color-scheme-toggle:not(.alternate) .bi::before {
   background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#{colorToRGBA($navbar-light-color)}" class="bi bi-toggle-off" viewBox="0 0 16 16"><path d="M11 4a4 4 0 0 1 0 8H8a4.992 4.992 0 0 0 2-4 4.992 4.992 0 0 0-2-4h3zm-6 8a4 4 0 1 1 0-8 4 4 0 0 1 0 8zM0 8a5 5 0 0 0 5 5h6a5 5 0 0 0 0-10H5a5 5 0 0 0-5 5z"/></svg>');
 }
@@ -2126,6 +2446,14 @@ div.callout.callout-style-default > .callout-header {
 }
 
 // sidebar handling
+//
+// STILL UNREFERENCED as of bd-26bf3j1y. These `.quarto-sidebar-toggle*`
+// rules style Q1's *rollup* affordance — the accordion strip Q1 shows
+// under the navbar (`div.sidebar.rollup.quarto-sidebar-toggle-contents`)
+// — which is a different mechanism from the collapse drawer this strand
+// ported. q2 emits none of these classes. Kept rather than deleted
+// because a future sidebar-rollup feature would want them verbatim;
+// deleting Q1-ported CSS on a guess is the more expensive mistake.
 .quarto-sidebar-toggle {
   border-color: $border-color;
   border-bottom-left-radius: $border-radius;
@@ -2321,6 +2649,38 @@ nav.quarto-secondary-nav.color-navbar .quarto-btn-toggle {
   }
 }
 
+// Website breadcrumbs (bd-breadcrumbs-missing-1vpuqh34): title-block
+// instance only. Ported from Q1 quarto-nav.scss; the narrow-viewport
+// `.quarto-secondary-nav` instance (with the sidebar toggle) is a
+// separate strand. Bootstrap's _breadcrumb.scss supplies the base
+// component; these are Q1's spacing/color refinements.
+.quarto-title-breadcrumbs .breadcrumb {
+  margin-bottom: 0.5em;
+  font-size: 0.9rem;
+
+  li:last-of-type {
+    a {
+      @if variable-exists(text-muted) {
+        color: $text-muted;
+      }
+    }
+  }
+}
+
+.breadcrumb-item {
+  line-height: 1.2rem;
+}
+
+.quarto-page-breadcrumbs .breadcrumb-item + .breadcrumb-item,
+.quarto-page-breadcrumbs .breadcrumb-item {
+  padding-right: 0.33em;
+  padding-left: 0;
+}
+
+.quarto-page-breadcrumbs .breadcrumb-item::before {
+  padding-right: 0.33em;
+}
+
 body.nav-sidebar {
   @include media-breakpoint-down(lg) {
     .quarto-title-banner {
@@ -2352,11 +2712,22 @@ code a:hover {
 }
 
 // This is a sentinel value that renderers can use to determine
-// whether the theme is dark or light
+// whether the theme is dark or light. Alongside the sentinel we
+// declare the matching `color-scheme` so UA-drawn chrome (scrollbars,
+// form-control internals, picker popups) follows the theme's darkness
+// — an improvement over Quarto 1, which never sets it (light/dark
+// epic bd-0pic6, design D1a). `light-dark()` in user CSS resolves
+// against this declaration.
 @if (quarto-color.blackness($body-bg) > $code-block-theme-dark-threshhold) {
   /*! dark */
+  :root {
+    color-scheme: dark;
+  }
 } @else {
   /*! light */
+  :root {
+    color-scheme: light;
+  }
 }
 
 // observable UI element tweaks to support light-mode vs dark-mode
@@ -2687,6 +3058,16 @@ a {
   @if variable-exists(footer-bg) {
     background-color: $footer-bg;
   }
+}
+
+// Horizontal gutter shared by the site footer and the site header's
+// navs. Ported from `quarto-nav.scss:63-66`, which pairs the two
+// selectors in one rule — q2 gained the `#quarto-header` wrapper with
+// bd-26bf3j1y, so the header half applies now.
+footer.footer .nav-footer,
+#quarto-header > nav {
+  padding-left: 1em;
+  padding-right: 1em;
 }
 
 body .nav-footer {

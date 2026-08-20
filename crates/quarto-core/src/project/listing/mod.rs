@@ -57,11 +57,14 @@ pub mod post_render_upgrade;
 // §"Module gate granularity".
 pub mod feed;
 
+pub mod glob_resolve;
+
 pub use config::{
     ColumnType, FeedType, GridItemAlign, ImageAlign, Listing, ListingCategoriesMode,
     ListingContents, ListingFeedOptions, ListingFilter, ListingSort, ListingType, SortDirection,
     parse_listings,
 };
+pub use glob_resolve::resolve_content_globs;
 pub use item::{ListingItem, hydrate_item};
 
 /// One fully-resolved listing — its config plus the hydrated item

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Redirect</title>
+<link rel="canonical" href="current/index.html">
+<noscript><meta http-equiv="refresh" content="0; url=current/index.html"></noscript>
+<script type="text/javascript">
+  var redirects = {"":"current/index.html"};
+  var hash = window.location.hash.replace(/^#/, '');
+  var target = redirects[hash];
+  if (!target) {
+    target = redirects[""] + window.location.hash;
+  }
+  target = target + window.location.search;
+  document.title = 'Redirect to ' + target;
+  window.location.replace(target);
+</script>
+</head>
+<body>
+<p>This page has moved to <a href="current/index.html">current/index.html</a>.</p>
+</body>
+</html>

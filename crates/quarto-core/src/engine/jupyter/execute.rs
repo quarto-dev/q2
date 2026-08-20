@@ -19,9 +19,7 @@ use tokio::time::timeout;
 
 use super::error::{JupyterError, Result};
 use super::session::KernelSession;
-
-/// Default timeout for execution (5 minutes).
-const DEFAULT_EXECUTE_TIMEOUT: Duration = Duration::from_secs(300);
+use crate::engine::DEFAULT_EXECUTE_TIMEOUT;
 
 /// Result of executing code in a kernel.
 #[derive(Debug, Clone)]
@@ -92,7 +90,6 @@ impl KernelSession {
         code: &str,
         exec_timeout: Duration,
     ) -> Result<ExecuteResult> {
-        self.touch();
         let _execution_count = self.next_execution_count();
 
         // Build execute request
@@ -209,8 +206,6 @@ impl KernelSession {
         if expressions.is_empty() {
             return Ok(Vec::new());
         }
-
-        self.touch();
 
         // Build user_expressions map
         let user_expressions: std::collections::HashMap<String, String> = expressions

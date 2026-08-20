@@ -1,0 +1,6 @@
+title: Echo Legacy Engine
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/echo-legacy.js

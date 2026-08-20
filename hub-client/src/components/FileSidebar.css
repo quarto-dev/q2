@@ -21,45 +21,30 @@
   border-bottom: 1px solid var(--sidebar-border);
 }
 
+/* Sidebar-header buttons are icon-only .ph-btn.small.outline (ui.css).
+   They grow to equal widths so together they fill the header row, whether
+   two or three (conditional Print) are present; inline-flex centers the
+   SVG glyph. */
 .sidebar-header .new-file-btn,
 .sidebar-header .upload-asset-btn,
 .sidebar-header .print-file-btn {
-  padding: 4px 10px;
-  background: var(--editor-accent-bg);
-  border: 1px solid var(--editor-accent-border);
-  border-radius: 4px;
-  color: var(--editor-text-muted);
-  font-size: 12px;
-  /* Fixed line-height so an emoji glyph's taller line box (e.g. ⬆)
-     doesn't make one button taller than the others. */
+  flex: 1 1 0;
+  /* Never shrink below the glyph: if the header is ever too narrow, the
+     buttons wrap whole rather than clip. */
+  min-width: min-content;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1.5;
-  cursor: pointer;
   transition: all 0.2s;
-  /* Keep every button a single line so all three are the same height;
-     when the header is too narrow for all of them, they wrap as whole
-     buttons to a second row rather than one squeezing to two lines. */
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.sidebar-header .new-file-btn:hover,
-.sidebar-header .upload-asset-btn:hover,
-.sidebar-header .print-file-btn:hover:not(:disabled) {
-  background: var(--editor-accent-border);
-  color: var(--editor-text);
-}
-
-.sidebar-header .print-file-btn:disabled {
-  cursor: default;
-  opacity: 0.6;
 }
 
 .sidebar-printable-error {
   position: relative;
   margin: 6px 12px;
   padding: 8px 26px 8px 10px;
-  background: #b3261e;
-  color: #fff;
+  background: var(--error-bg-subtle);
+  color: var(--error-text);
   font-size: 12px;
   line-height: 1.35;
   border-radius: 4px;
@@ -71,7 +56,7 @@
   right: 4px;
   background: transparent;
   border: none;
-  color: #fff;
+  color: var(--error-text);
   font-size: 12px;
   cursor: pointer;
   padding: 2px 4px;
@@ -198,15 +183,19 @@
   min-width: 0;
 }
 
+/* WCAG 2.4.7: keep a visible focus indicator — the base style already
+   has an accent border, so focus adds an offset outline in the same
+   accent to stay distinguishable. */
 .rename-input:focus {
-  outline: none;
+  outline: 2px solid var(--sidebar-active-accent);
+  outline-offset: 1px;
 }
 
 /* Drop overlay */
 .drop-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(100, 108, 255, 0.15);
+  background: rgba(65, 149, 153, 0.08);
   border: 2px dashed var(--sidebar-drop-accent);
   display: flex;
   align-items: center;
@@ -245,6 +234,7 @@
   padding: 8px 16px;
   background: none;
   border: none;
+  border-radius: 6px;
   text-align: left;
   color: var(--editor-text-dim);
   font-size: 13px;

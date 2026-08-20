@@ -105,7 +105,12 @@ impl AstTransform for ResourceCollectorTransform {
         }
         let page_dir = resolver.page_dir().to_path_buf();
 
-        let mut collector = ResourceVisitor::new(input_dir, &page_dir);
+        let mut collector = ResourceVisitor::new(
+            input_dir,
+            &page_dir,
+            &ctx.project.dir,
+            &ctx.project.output_dir,
+        );
         for block in &ast.blocks {
             collector.visit_block(block);
         }
@@ -128,6 +133,13 @@ impl AstTransform for ResourceCollectorTransform {
 struct ResourceVisitor<'a> {
     input_dir: &'a Path,
     output_dir: &'a Path,
+    /// Source-side anchor for site-root-relative (`/...`) URLs — the
+    /// project root (decision 4 of
+    /// bd-root-relative-paths-design-fc5pvkcv).
+    root_input_dir: &'a Path,
+    /// Destination-side anchor for site-root-relative URLs — the
+    /// project output root.
+    root_output_dir: &'a Path,
     /// Copy intents in discovery order, each carrying the source span
     /// of the reference that produced it. The producer dedupes by URL
     /// — see [`Self::collect_resource`].
@@ -137,10 +149,17 @@ struct ResourceVisitor<'a> {
 }
 
 impl<'a> ResourceVisitor<'a> {
-    fn new(input_dir: &'a Path, output_dir: &'a Path) -> Self {
+    fn new(
+        input_dir: &'a Path,
+        output_dir: &'a Path,
+        root_input_dir: &'a Path,
+        root_output_dir: &'a Path,
+    ) -> Self {
         Self {
             input_dir,
             output_dir,
+            root_input_dir,
+            root_output_dir,
             copies: Vec::new(),
             seen_urls: std::collections::HashSet::new(),
         }
@@ -416,21 +435,32 @@ impl<'a> ResourceVisitor<'a> {
         {
             return;
         }
-        // Filesystem-root-anchored URLs (rare in qmd, but historically
-        // tolerated) name a source path directly. Treat them as
-        // out-of-scope for resource copy: we don't know where they
-        // should land in the output and we definitely shouldn't
-        // copy `/etc/passwd` etc.
-        if url.starts_with('/') {
-            return;
-        }
-
         if !self.seen_urls.insert(url.to_string()) {
             return;
         }
 
-        let src = self.input_dir.join(url);
-        let dest = self.output_dir.join(url);
+        // A leading `/` means site-root-relative (decision 4 of
+        // bd-root-relative-paths-design-fc5pvkcv): anchor at the
+        // project root / output root instead of the page's dirs.
+        // Anchoring at the root also keeps this safe — `..` popping in
+        // URL space cannot climb above the join base, so `/etc/passwd`
+        // probes `<project>/etc/passwd`, never the filesystem root.
+        // (In the pipeline, `LinkRewriteTransform` has usually already
+        // rebased such URLs to page-relative by the time this runs;
+        // this arm keeps the collector correct on its own, and gives
+        // `collect_referenced_asset_urls` — whose anchors are empty —
+        // the doc-dir-relative form the preview asset sync needs.)
+        let (src, dest) = if let Some(stripped) = url.strip_prefix('/') {
+            if stripped.is_empty() {
+                return;
+            }
+            (
+                self.root_input_dir.join(stripped),
+                self.root_output_dir.join(stripped),
+            )
+        } else {
+            (self.input_dir.join(url), self.output_dir.join(url))
+        };
         self.copies
             .push(crate::render::ResourceCopyIntent { src, dest, origin });
     }
@@ -439,9 +469,12 @@ impl<'a> ResourceVisitor<'a> {
 /// Collect the relative URLs of on-disk assets a document references
 /// (currently `Image` targets), in document order and deduplicated.
 ///
-/// External (`http://`, `https://`, `//`, `data:`) and filesystem-root
-/// (`/...`) URLs are skipped — only document-relative paths the caller can
-/// resolve against the source directory are returned. This reuses the same
+/// External (`http://`, `https://`, `//`, `data:`) URLs are skipped — the
+/// returned paths are all resolvable against the source directory.
+/// Site-root-relative (`/...`) URLs come back stripped of the leading slash:
+/// in single-file mode the site root *is* the document's directory
+/// (decision 4 of bd-root-relative-paths-design-fc5pvkcv), so the caller's
+/// source-dir join lands at the right file. This reuses the same
 /// AST traversal as [`ResourceCollectorTransform`] (so nested images — in
 /// lists, `Div`s, figures, tables — are found) but without the copy-intent /
 /// resolver machinery.
@@ -450,11 +483,12 @@ impl<'a> ResourceVisitor<'a> {
 /// references into the VFS, without walking the deck's directory (which the
 /// `bd-tnm3k` safety property forbids). See bd-kpuweafo.
 pub fn collect_referenced_asset_urls(blocks: &[Block]) -> Vec<String> {
-    // Empty source/dest anchors: `collect_resource` does the external/absolute
-    // filtering and dedup we want, and stores `Path::new("").join(url)` (== the
-    // relative URL) as the copy source. We read those back as the raw URLs.
+    // Empty anchors (page-relative and site-root-relative alike):
+    // `collect_resource` does the external filtering and dedup we want, and
+    // stores `Path::new("").join(url)` (== the relative URL) as the copy
+    // source. We read those back as the raw URLs.
     let anchor = Path::new("");
-    let mut visitor = ResourceVisitor::new(anchor, anchor);
+    let mut visitor = ResourceVisitor::new(anchor, anchor, anchor, anchor);
     for block in blocks {
         visitor.visit_block(block);
     }
@@ -504,6 +538,8 @@ mod tests {
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/doc.qmd")],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         }
     }
 
@@ -540,9 +576,16 @@ mod tests {
     }
 
     /// bd-kpuweafo: `collect_referenced_asset_urls` returns document-relative
-    /// image URLs (including nested ones), in order, deduped; external and
-    /// absolute URLs are dropped. The single-file preview uses this to sync
-    /// exactly the assets a deck references into the VFS.
+    /// image URLs (including nested ones), in order, deduped; external URLs
+    /// are dropped. The single-file preview uses this to sync exactly the
+    /// assets a deck references into the VFS.
+    ///
+    /// Leading-`/` URLs are site-root-relative (decision 4 of
+    /// bd-root-relative-paths-design-fc5pvkcv); in single-file mode the
+    /// site root is the document's own directory, so they come back
+    /// stripped of the slash and the caller's source-dir join lands at
+    /// the right file. (Before that decision they were dropped as
+    /// "filesystem-absolute".)
     #[test]
     fn collect_referenced_asset_urls_returns_relative_images_only() {
         let blocks = vec![
@@ -552,10 +595,10 @@ mod tests {
                 content: vec![vec![para(vec![image("sub/diagram.svg")])]],
                 source_info: dummy_source_info(),
             }),
-            // External / absolute / duplicate — all dropped or deduped.
+            // External / root-relative / duplicate.
             para(vec![
                 image("https://example.com/remote.png"),
-                image("/etc/passwd"),
+                image("/hero.png"),
                 image("data:image/png;base64,AAAA"),
                 image("./sibling-image.png"),
             ]),
@@ -566,9 +609,11 @@ mod tests {
             urls,
             vec![
                 "./sibling-image.png".to_string(),
-                "sub/diagram.svg".to_string()
+                "sub/diagram.svg".to_string(),
+                "hero.png".to_string(),
             ],
-            "only relative image URLs, in order, deduped; external/absolute dropped"
+            "relative image URLs in order, deduped; external dropped; \
+             leading-/ mapped to doc-dir-relative"
         );
     }
 
@@ -659,6 +704,54 @@ mod tests {
         transform.transform(&mut ast, &mut ctx).await.unwrap();
 
         assert_eq!(ctx.resource_copies.len(), 1);
+    }
+
+    /// Decision 4 (bd-root-relative-paths-design-fc5pvkcv): a leading
+    /// `/` in a resource URL means site-root-relative. The collector
+    /// anchors such URLs at the project root (source side) and the
+    /// output root (destination side) instead of skipping them — a
+    /// page two levels deep referencing `/images/x.svg` copies
+    /// `<project>/images/x.svg` → `<output>/images/x.svg`.
+    #[tokio::test]
+    async fn test_collects_root_absolute_anchored_at_project_root() {
+        let mut ast = Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![para(vec![image("/images/x.svg")])],
+        };
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: false,
+            files: vec![DocumentInfo::from_path("/project/deep/deeper/doc.qmd")],
+            output_dir: PathBuf::from("/project/_site"),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/deep/deeper/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.resource_resolver = Some(crate::resource_resolver::ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/deep/deeper/doc.html",
+            "site_libs",
+            "doc",
+        ));
+
+        let transform = ResourceCollectorTransform::new();
+        transform.transform(&mut ast, &mut ctx).await.unwrap();
+
+        assert_eq!(ctx.resource_copies.len(), 1);
+        assert_eq!(
+            ctx.resource_copies[0].src,
+            PathBuf::from("/project/images/x.svg"),
+            "src anchored at the project root, not the doc dir",
+        );
+        assert_eq!(
+            ctx.resource_copies[0].dest,
+            PathBuf::from("/project/_site/images/x.svg"),
+            "dest anchored at the output root, not the page dir",
+        );
     }
 
     #[tokio::test]

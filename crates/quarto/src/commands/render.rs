@@ -101,6 +101,11 @@ pub struct RenderArgs {
     /// Skip the project's `pre-render` / `post-render` scripts
     /// (bd-w348iu63). The render itself is unaffected.
     pub no_render_scripts: bool,
+    /// `--profile` values (comma-separated or repeated). Non-empty
+    /// replaces `QUARTO_PROFILE` entirely; empty means "not given"
+    /// (bd-fu16z22k). See
+    /// [`quarto_core::project::project_profile::cli_selection`].
+    pub profile: Vec<String>,
 }
 
 /// What to render after argument classification.
@@ -151,9 +156,29 @@ pub enum DispatchError {
     /// A directory or glob argument expanded to zero renderable files
     /// after the project's render list is applied.
     NoRenderableMatches { path: PathBuf },
-    /// Project discovery failed for unrelated reasons (parse error in
-    /// `_quarto.yml`, I/O error, etc.).
+    /// Project discovery failed with a structured parse diagnostic
+    /// (e.g. an invalid `_quarto.yml`, or Q-5-17 unknown
+    /// `project.type`). Kept structured (bd-y56u1gl7) so the text
+    /// path can print the rendered diagnostic bare and the
+    /// `--json-errors` path can emit the real per-diagnostic codes
+    /// and locations instead of a stringified Q-7-8 envelope.
+    DiscoverParse(quarto_core::ParseError),
+    /// Project discovery failed for unrelated, unstructured reasons
+    /// (I/O error, etc.).
     Discover(String),
+}
+
+/// Convert a discovery-stage [`QuartoError`] into a
+/// [`DispatchError`], preserving structured diagnostics
+/// (bd-y56u1gl7). Used at the `ProjectContext::discover` call
+/// sites; runtime-level errors (`path_exists`, `canonicalize`,
+/// `is_dir`) are not `QuartoError`s and keep the plain
+/// `Discover(String)` mapping.
+fn discover_error(e: QuartoError) -> DispatchError {
+    match e {
+        QuartoError::Parse(pe) => DispatchError::DiscoverParse(pe),
+        other => DispatchError::Discover(other.to_string()),
+    }
 }
 
 impl std::fmt::Display for DispatchError {
@@ -181,21 +206,39 @@ impl std::fmt::Display for DispatchError {
             ),
             DispatchError::NotInRenderList { path, project_dir } => write!(
                 f,
-                "{} is excluded from the render list of project {} \
-                 (check `project.render` in `_quarto.yml` and the \
-                 underscore/hidden file conventions).",
+                "{} is excluded from the render list of project {} ({}).",
                 path.display(),
-                project_dir.display()
+                project_dir.display(),
+                render_list_exclusion_hint(path),
             ),
             DispatchError::NoRenderableMatches { path } => {
-                write!(f, "No renderable `.qmd` files matched: {}", path.display())
+                write!(f, "No renderable source files matched: {}", path.display())
             }
+            // The rendered ParseError is self-describing (it opens
+            // with its own `Error: [Q-N-M]` header) — no prefix.
+            DispatchError::DiscoverParse(pe) => write!(f, "{pe}"),
             DispatchError::Discover(msg) => write!(f, "Project discovery failed: {msg}"),
         }
     }
 }
 
 impl std::error::Error for DispatchError {}
+
+/// Why is this input outside the render list, and what should the
+/// user do about it? For `.md` inputs the overwhelmingly likely
+/// cause is the opt-in policy (bd-6d2wj4zp) — `.md` renders only
+/// when a `project.render` pattern matches it — so the generic
+/// underscore/hidden advice would mislead. Shared by the
+/// [`DispatchError`] `Display` impl and the `Q-7-6` diagnostic.
+fn render_list_exclusion_hint(path: &std::path::Path) -> &'static str {
+    if path.extension().and_then(|e| e.to_str()) == Some("md") {
+        "`.md` files render only when matched by a `project.render` pattern \
+         such as `\"**/*.md\"` in `_quarto.yml`"
+    } else {
+        "check `project.render` in `_quarto.yml` and the underscore/hidden \
+         file conventions"
+    }
+}
 
 /// Classify CLI input strings into a [`RenderTarget`].
 ///
@@ -210,9 +253,10 @@ pub fn classify_inputs(
     inputs: &[String],
     cwd: &Path,
     runtime: &dyn SystemRuntime,
+    profile_selection: Option<&[String]>,
 ) -> std::result::Result<RenderTarget, DispatchError> {
     if inputs.is_empty() {
-        return classify_no_inputs(cwd, runtime);
+        return classify_no_inputs(cwd, runtime, profile_selection);
     }
 
     // Step 1: canonicalize each input and verify it exists.
@@ -239,8 +283,8 @@ pub fn classify_inputs(
     let mut shared_project: Option<PathBuf> = None;
     let mut any_outside_project = false;
     for r in &resolved {
-        let ctx = ProjectContext::discover(r, runtime)
-            .map_err(|e| DispatchError::Discover(e.to_string()))?;
+        let ctx = ProjectContext::discover_with_profile(r, runtime, profile_selection)
+            .map_err(discover_error)?;
         // `is_single_file` only fires for *file* inputs with no
         // surrounding `_quarto.yml`. A *directory* input never trips
         // it, even when no config exists — so we re-check the
@@ -276,9 +320,12 @@ pub fn classify_inputs(
         if resolved.len() > 1 {
             return Err(DispatchError::MultiArgNonProject);
         }
-        // Single arg outside any project: must be a `.qmd` file
-        // (single-doc fallthrough). Directories outside any project
-        // are not a meaningful render target — we error.
+        // Single arg outside any project: a renderable source file
+        // (`.qmd` or `.md` — bd-6d2wj4zp) as the single-doc
+        // fallthrough. Directories outside any project are not a
+        // meaningful render target — we error. Note the extension is
+        // not checked here: any file becomes a SingleDoc, and
+        // non-source files fail downstream at parse.
         let only = &resolved[0];
         let is_dir = runtime
             .is_dir(only)
@@ -295,8 +342,8 @@ pub fn classify_inputs(
     // Re-discover from the project root to get the full
     // render-list-filtered file list. (Per-input `discover` only fills
     // `files` with that one input.)
-    let project = ProjectContext::discover(&project_dir, runtime)
-        .map_err(|e| DispatchError::Discover(e.to_string()))?;
+    let project = ProjectContext::discover_with_profile(&project_dir, runtime, profile_selection)
+        .map_err(discover_error)?;
     let project_files: Vec<PathBuf> = project.files.iter().map(|f| f.input.clone()).collect();
 
     // Step 3: expand each input into the set of project files it
@@ -364,6 +411,7 @@ pub fn classify_inputs(
 fn classify_no_inputs(
     cwd: &Path,
     runtime: &dyn SystemRuntime,
+    profile_selection: Option<&[String]>,
 ) -> std::result::Result<RenderTarget, DispatchError> {
     let cwd_canon = runtime
         .canonicalize(cwd)
@@ -381,8 +429,8 @@ fn classify_no_inputs(
         return Err(DispatchError::NoInputAndNoProject(cwd_canon));
     };
 
-    let project = ProjectContext::discover(&project_root, runtime)
-        .map_err(|e| DispatchError::Discover(e.to_string()))?;
+    let project = ProjectContext::discover_with_profile(&project_root, runtime, profile_selection)
+        .map_err(discover_error)?;
     Ok(RenderTarget::FullProject {
         project_dir: project.dir,
     })
@@ -640,11 +688,25 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     // surface the structured DispatchError as a JsonDiagnostic on
     // stderr before exiting so machine consumers can discriminate
     // by code (Q-7-2..8).
-    let target = match classify_inputs(&args.inputs, &cwd, &runtime) {
+    let target = match classify_inputs(
+        &args.inputs,
+        &cwd,
+        &runtime,
+        quarto_core::project::project_profile::cli_selection(&args.profile),
+    ) {
         Ok(t) => t,
         Err(e) => {
             if args.json_errors {
                 emit_dispatch_error_json(&e);
+                std::process::exit(1);
+            }
+            // A structured parse diagnostic prints bare — it carries
+            // its own `Error: [Q-N-M]` header and source snippet.
+            // Routing it through anyhow would stack a second
+            // `Error:` prefix on top (bd-y56u1gl7). Mirrors the
+            // `QuartoError::Parse` arm in `execute_single_doc`.
+            if let DispatchError::DiscoverParse(pe) = &e {
+                eprintln!("{pe}");
                 std::process::exit(1);
             }
             return Err(anyhow::anyhow!("{}", e));
@@ -689,6 +751,22 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 }
 
+/// `-v` echo of the resolved project-profile activation set with
+/// per-profile provenance (bd-fu16z22k). Deliberately absent from
+/// normal output (Q1 parity: profiles are never announced); shows at
+/// `-v` because `verbose_to_filter(1)` enables `quarto=info`.
+fn echo_active_profiles(project: &ProjectContext) {
+    let active = &project.config.active_config_profiles;
+    if active.is_empty() {
+        return;
+    }
+    let described: Vec<String> = active
+        .iter()
+        .map(|p| format!("{} (from {})", p.name, p.source.describe()))
+        .collect();
+    tracing::info!("active project profiles: {}", described.join(", "));
+}
+
 fn execute_single_doc(
     input: PathBuf,
     args: &RenderArgs,
@@ -696,11 +774,24 @@ fn execute_single_doc(
     format: Format,
 ) -> Result<()> {
     let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
-    let mut project = ProjectContext::discover(&input, runtime_arc.as_ref())
-        .context("Failed to discover project context")?;
+    let mut project = ProjectContext::discover_with_profile(
+        &input,
+        runtime_arc.as_ref(),
+        quarto_core::project::project_profile::cli_selection(&args.profile),
+    )
+    .context("Failed to discover project context")?;
+    echo_active_profiles(&project);
     // Captured before the pipeline mutably borrows `project`; used to
-    // restore config-anchored source snippets at print time.
+    // restore config-anchored source snippets at print time. Manifests
+    // included: merged values can anchor in an extension's
+    // `_extension.yml` (bd-r64mj1aa).
     let config_path = project.config.config_path.clone();
+    let config_sources: Vec<PathBuf> = config_path
+        .iter()
+        .cloned()
+        .chain(project.config.profile_config_paths.iter().cloned())
+        .chain(project.config.extension_manifest_paths.iter().cloned())
+        .collect();
 
     quarto_util::user_status!(args.quiet, "Rendering single file: {}", input.display());
 
@@ -717,7 +808,15 @@ fn execute_single_doc(
     .with_format_override(args.to.clone())
     .with_fail_fast(args.fail_fast);
 
-    let mut summary = match pollster::block_on(pipeline.run()) {
+    // bd-hxhnnlzs: keep Jupyter kernels warm across the whole pipeline
+    // run. Scoped to the `block_on` (not the surrounding function)
+    // because the error paths below call `std::process::exit`, which
+    // skips destructors — the scope must close before any exit.
+    let run_result = {
+        let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
+        pollster::block_on(pipeline.run())
+    };
+    let mut summary = match run_result {
         Ok(s) => s,
         Err(QuartoError::Parse(parse_error)) => {
             if args.json_errors {
@@ -734,7 +833,7 @@ fn execute_single_doc(
         summary.promote_warnings_to_errors();
     }
 
-    print_render_diagnostics(&summary, args, config_path.as_deref());
+    print_render_diagnostics(&summary, args, &config_sources);
 
     // bd-ooleh: a single-file render has no "Rendered N of M" line to
     // augment, so the error/warning counts get their own line — printed
@@ -770,16 +869,38 @@ fn execute_project(
         run_clean_cache(runtime_arc.as_ref(), &project_dir).map_err(|e| anyhow::anyhow!("{e}"))?;
     }
 
-    let mut project = ProjectContext::discover(&project_dir, runtime_arc.as_ref())
-        .context("Failed to discover project context")?;
+    let mut project = ProjectContext::discover_with_profile(
+        &project_dir,
+        runtime_arc.as_ref(),
+        quarto_core::project::project_profile::cli_selection(&args.profile),
+    )
+    .context("Failed to discover project context")?;
+    echo_active_profiles(&project);
     // Captured before the pipeline mutably borrows `project`; used to
-    // restore config-anchored source snippets at print time.
+    // restore config-anchored source snippets at print time. Manifests
+    // included: merged values can anchor in an extension's
+    // `_extension.yml` (bd-r64mj1aa).
     let config_path = project.config.config_path.clone();
+    let config_sources: Vec<PathBuf> = config_path
+        .iter()
+        .cloned()
+        .chain(project.config.profile_config_paths.iter().cloned())
+        .chain(project.config.extension_manifest_paths.iter().cloned())
+        .collect();
 
     // bd-w348iu63: warn about the likely `pre_render` / `post_render`
     // misspellings (Q2 has no schema layer; unknown keys are
-    // otherwise silently ignored).
-    for diagnostic in render_scripts::underscore_typo_diagnostics(&project.config) {
+    // otherwise silently ignored). bd-ad7i1pc6: also warn when the
+    // project kind (book/manuscript) renders with default behavior,
+    // and surface config-parse diagnostics (ambiguous / incomplete
+    // project-type extensions) once per run.
+    for diagnostic in render_scripts::underscore_typo_diagnostics(&project.config)
+        .into_iter()
+        .chain(quarto_core::project::project_kind_diagnostics(
+            &project.config,
+        ))
+        .chain(project.config.config_diagnostics.iter().cloned())
+    {
         eprintln!("{}", diagnostic.to_text(None));
     }
 
@@ -794,13 +915,23 @@ fn execute_project(
             Some(t) => paths_relative_to(t.iter(), &project.dir),
             None => paths_relative_to(project.files.iter().map(|f| &f.input), &project.dir),
         };
+        let script_env = quarto_core::project::environment::subprocess_env_for_project(
+            runtime_arc.as_ref(),
+            &project,
+        );
         let ctx = render_scripts::RenderScriptsContext {
             project_dir: &project.dir,
             output_dir: &project.output_dir,
             config_path: project.config.config_path.as_deref(),
+            extension_manifest_paths: &project.config.extension_manifest_paths,
+            profile_config_paths: &project.config.profile_config_paths,
+            quarto_profile: quarto_core::project::project_profile::quarto_profile_env_value(
+                &project.config.active_config_profiles,
+            ),
             render_all,
             quiet: args.quiet,
             file_count: input_files.len(),
+            project_env: &script_env,
         };
         if let Err(parse_error) = render_scripts::run_render_scripts(
             render_scripts::ScriptPhase::PreRender,
@@ -811,8 +942,12 @@ fn execute_project(
             exit_with_parse_error(parse_error, args);
         }
 
-        let re_project = ProjectContext::discover(&project_dir, runtime_arc.as_ref())
-            .context("Failed to re-discover project context after pre-render scripts")?;
+        let re_project = ProjectContext::discover_with_profile(
+            &project_dir,
+            runtime_arc.as_ref(),
+            quarto_core::project::project_profile::cli_selection(&args.profile),
+        )
+        .context("Failed to re-discover project context after pre-render scripts")?;
         if let Err(parse_error) =
             render_scripts::check_forbidden_mutations(&project.config, &re_project.config)
         {
@@ -825,7 +960,7 @@ fn execute_project(
         args.quiet,
         "Rendering project: {} (type: {})",
         project.dir.display(),
-        project.project_kind().as_str()
+        project.project_type_label()
     );
 
     let project_type = project_type_for(&project);
@@ -847,7 +982,15 @@ fn execute_project(
         pipeline = pipeline.with_mode(RenderMode::Subset(set));
     }
 
-    let mut summary = match pollster::block_on(pipeline.run()) {
+    // bd-hxhnnlzs: one kernel scope for the whole project render, so
+    // documents sharing a (kernel, dir) session key reuse one warm
+    // kernel. Scoped to the `block_on` because the error paths below
+    // call `std::process::exit`, which skips destructors.
+    let run_result = {
+        let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
+        pollster::block_on(pipeline.run())
+    };
+    let mut summary = match run_result {
         Ok(s) => s,
         Err(QuartoError::Parse(parse_error)) => {
             if args.json_errors {
@@ -864,7 +1007,7 @@ fn execute_project(
         summary.promote_warnings_to_errors();
     }
 
-    print_render_diagnostics(&summary, args, config_path.as_deref());
+    print_render_diagnostics(&summary, args, &config_sources);
 
     let rendered = summary.outputs.len();
     if let Some(mut line) = render_summary_line(false, total_files, rendered, &project.output_dir) {
@@ -893,13 +1036,23 @@ fn execute_project(
     if run_scripts && !project.config.post_render_scripts.is_empty() {
         let output_files =
             paths_relative_to(summary.outputs.iter().map(|o| &o.output_path), &project.dir);
+        let script_env = quarto_core::project::environment::subprocess_env_for_project(
+            runtime_arc.as_ref(),
+            &project,
+        );
         let ctx = render_scripts::RenderScriptsContext {
             project_dir: &project.dir,
             output_dir: &project.output_dir,
             config_path: project.config.config_path.as_deref(),
+            extension_manifest_paths: &project.config.extension_manifest_paths,
+            profile_config_paths: &project.config.profile_config_paths,
+            quarto_profile: quarto_core::project::project_profile::quarto_profile_env_value(
+                &project.config.active_config_profiles,
+            ),
             render_all,
             quiet: args.quiet,
             file_count: total_files,
+            project_env: &script_env,
         };
         if let Err(parse_error) = render_scripts::run_render_scripts(
             render_scripts::ScriptPhase::PostRender,
@@ -974,12 +1127,12 @@ fn should_exit_nonzero<O: quarto_core::project::orchestrator::OutputDiagnostics>
 fn print_render_diagnostics(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
     args: &RenderArgs,
-    config_path: Option<&Path>,
+    config_sources: &[PathBuf],
 ) {
     if args.json_errors {
-        print_render_diagnostics_json(summary);
+        print_render_diagnostics_json(summary, config_sources);
     } else {
-        print_render_diagnostics_text(summary, args.quiet, config_path);
+        print_render_diagnostics_text(summary, args.quiet, config_sources);
     }
 
     // bd-c5u2g: emit per-process engine-discovery counters when
@@ -990,6 +1143,8 @@ fn print_render_diagnostics(
     quarto_core::project::orchestrator::print_pass1_stats_if_enabled();
     // bd-3gj56: pass-2 docs / threads_used / wall_ms gauge.
     quarto_core::project::orchestrator::print_pass2_stats_if_enabled();
+    // Plan 6 Phase 5: pass-1 engine-resolution lifted/fell_through gauge.
+    quarto_core::project::orchestrator::print_pass1_engine_resolution_stats_if_enabled();
 }
 
 /// Text path: the existing ariadne-formatted output. Kept verbatim
@@ -1005,44 +1160,48 @@ fn print_render_diagnostics(
 /// the config's content under that id so the snippet renders. Any
 /// failure (no config, hash mismatch, unreadable file) leaves the
 /// group unchanged — span-less render, exactly as before.
-fn attach_config_source(group: &mut CoalescedDiagnostic, config_path: Option<&Path>) {
-    use quarto_source_map::FileId;
+/// A [`SourceContext`] holding the project's `_quarto.yml`, so
+/// project-level diagnostics anchored in it (a `project.render`
+/// pattern that matched nothing, say) render an Ariadne snippet
+/// instead of a bare byte offset.
+///
+/// The FileId is the one `quarto_yaml::parse_file` derived by hashing
+/// the config path, which is what the diagnostics' `SourceInfo`
+/// carries — the same trick [`attach_config_source`] plays for
+/// coalesced per-page diagnostics.
+fn config_source_context(candidates: &[PathBuf]) -> Option<SourceContext> {
+    if candidates.is_empty() {
+        return None;
+    }
+    let mut ctx = SourceContext::new();
+    let mut registered = false;
+    for path in candidates {
+        registered |= quarto_core::config_sources::register_config_source(&mut ctx, path);
+    }
+    registered.then_some(ctx)
+}
 
-    let Some(config_path) = config_path else {
-        return;
-    };
+fn attach_config_source(group: &mut CoalescedDiagnostic, candidates: &[PathBuf]) {
     let Some(loc) = group.representative.location.as_ref() else {
         return;
     };
-    let Some((fid, _, _)) = loc.resolve_byte_range() else {
-        return;
-    };
-    if group
-        .source_context
-        .as_ref()
-        .is_some_and(|c| c.get_file(FileId(fid)).is_some())
-    {
-        return;
-    }
-    // `parse_config` hashed `config_path.to_string_lossy()`; only a
-    // diagnostic actually anchored in this config file matches.
-    let config_str = config_path.to_string_lossy();
-    if quarto_yaml::file_id_for_filename(&config_str) != FileId(fid) {
-        return;
-    }
-    let Ok(content) = std::fs::read_to_string(config_path) else {
-        return;
-    };
-    group
-        .source_context
-        .get_or_insert_with(SourceContext::new)
-        .add_file_with_id(FileId(fid), config_str.into_owned(), Some(content));
+    // Candidate-matched: only the file whose re-derived FileId equals
+    // the diagnostic's resolved id gets registered (bind_config_source
+    // no-ops when the group's own context already resolves the id, and
+    // never binds a non-match). Candidates cover `_quarto.yml` plus
+    // every discovered extension manifest (bd-r64mj1aa).
+    let ctx = group.source_context.get_or_insert_with(SourceContext::new);
+    quarto_core::config_sources::bind_config_source(
+        ctx,
+        loc,
+        candidates.iter().map(PathBuf::as_path),
+    );
 }
 
 fn print_render_diagnostics_text(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
     quiet: bool,
-    config_path: Option<&Path>,
+    config_sources: &[PathBuf],
 ) {
     for failure in &summary.pass1_failures {
         eprintln!(
@@ -1083,8 +1242,9 @@ fn print_render_diagnostics_text(
             eprintln!("error: {}: {}", failure.input.display(), failure.error);
         }
     }
+    let project_ctx = config_source_context(config_sources);
     for diagnostic in &summary.project_diagnostics {
-        eprintln!("{}", diagnostic.to_text(None));
+        eprintln!("{}", diagnostic.to_text(project_ctx.as_ref()));
     }
 
     // bd-mg3ckvp7: per-page diagnostics from *successful* renders go
@@ -1107,7 +1267,7 @@ fn print_render_diagnostics_text(
             })
         });
         for mut group in coalesce_by_source(entries) {
-            attach_config_source(&mut group, config_path);
+            attach_config_source(&mut group, config_sources);
             eprintln!("{}", group.to_text());
         }
 
@@ -1144,7 +1304,15 @@ fn detect_single_input_format(inputs: &[String]) -> Option<String> {
         return None;
     }
     let path = std::path::Path::new(&inputs[0]);
-    if path.extension().and_then(|e| e.to_str()) != Some("qmd") || !path.is_file() {
+    // `.md` inputs read front matter exactly like `.qmd`
+    // (bd-6d2wj4zp S3/S4) — without this, a `.md` declaring a
+    // non-native format slips past the early "not yet supported"
+    // refusal below and renders HTML into a mismatched output file.
+    if !matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("qmd" | "md")
+    ) || !path.is_file()
+    {
         return None;
     }
     let content = std::fs::read_to_string(path).ok()?;
@@ -1172,6 +1340,7 @@ fn detect_single_input_format(inputs: &[String]) -> Option<String> {
 /// emits NDJSON instead.
 fn print_render_diagnostics_json(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
+    config_sources: &[PathBuf],
 ) {
     // Pass-1 failures: emit one JsonPass1Failure per failure. If the
     // failure has structured diagnostics + a source context, attach
@@ -1227,11 +1396,13 @@ fn print_render_diagnostics_json(
         }
     }
 
-    // Project-level diagnostics (e.g. Q-PROJECT-EMPTY): no source
-    // context, no source-file attribution — pure project-scope.
-    let empty_ctx = SourceContext::new();
+    // Project-level diagnostics. Most (e.g. Q-PROJECT-EMPTY) are pure
+    // project-scope with no span; those anchored in `_quarto.yml`
+    // (the `project.render` glob diagnostics, Q-5-13/14/15) resolve
+    // through the config's source context.
+    let project_ctx = config_source_context(config_sources).unwrap_or_default();
     for diagnostic in &summary.project_diagnostics {
-        emit_json_line(&diagnostic_to_json(diagnostic, &empty_ctx));
+        emit_json_line(&diagnostic_to_json(diagnostic, &project_ctx));
     }
 
     // Per-page render diagnostics on successful outputs. The
@@ -1285,6 +1456,13 @@ fn emit_parse_error_json(parse_error: &quarto_core::ParseError, input: Option<&P
 /// `crates/quarto-error-catalog/error_catalog.json` — keep them
 /// in sync.
 fn emit_dispatch_error_json(e: &DispatchError) {
+    // Structured parse diagnostics emit their real per-diagnostic
+    // codes and source locations (bd-y56u1gl7); everything else gets
+    // its Q-7-N classification.
+    if let DispatchError::DiscoverParse(pe) = e {
+        emit_parse_error_json(pe, None);
+        return;
+    }
     emit_json_line(&diagnostic_to_json(
         &dispatch_error_to_diagnostic(e),
         &SourceContext::new(),
@@ -1329,28 +1507,37 @@ fn dispatch_error_to_diagnostic(e: &DispatchError) -> DiagnosticMessage {
                 ))
                 .build()
         }
-        DispatchError::NotInRenderList { path, project_dir } => DiagnosticMessageBuilder::error(
-            "Input Excluded From Render List",
-        )
-        .with_code("Q-7-6")
-        .problem(format!(
-            "{} is excluded from the render list of project {}.",
-            path.display(),
-            project_dir.display()
-        ))
-        .add_hint(
-            "Check `project.render` in `_quarto.yml` and the underscore/hidden file conventions.",
-        )
-        .build(),
+        DispatchError::NotInRenderList { path, project_dir } => {
+            DiagnosticMessageBuilder::error("Input Excluded From Render List")
+                .with_code("Q-7-6")
+                .problem(format!(
+                    "{} is excluded from the render list of project {}.",
+                    path.display(),
+                    project_dir.display()
+                ))
+                .add_hint(format!("{}.", render_list_exclusion_hint(path)))
+                .build()
+        }
         DispatchError::NoRenderableMatches { path } => {
             DiagnosticMessageBuilder::error("No Renderable Files Matched")
                 .with_code("Q-7-7")
                 .problem(format!(
-                    "No renderable `.qmd` files matched: {}",
+                    "No renderable source files matched: {}",
                     path.display()
                 ))
                 .build()
         }
+        // Normally unreachable through `emit_dispatch_error_json`
+        // (which routes DiscoverParse to `emit_parse_error_json` for
+        // multi-diagnostic + source-context fidelity); kept total so
+        // direct callers still get the leading real diagnostic
+        // rather than a stringified wrapper.
+        DispatchError::DiscoverParse(pe) => pe.diagnostics.first().cloned().unwrap_or_else(|| {
+            DiagnosticMessageBuilder::error("Project Discovery Failed")
+                .with_code("Q-7-8")
+                .problem(format!("Project discovery failed: {pe}"))
+                .build()
+        }),
         DispatchError::Discover(msg) => DiagnosticMessageBuilder::error("Project Discovery Failed")
             .with_code("Q-7-8")
             .problem(format!("Project discovery failed: {msg}"))
@@ -1608,7 +1795,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_project(&temp, &["index.qmd", "about.qmd"], None);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&[], &project, &runtime).unwrap();
+        let target = classify_inputs(&[], &project, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {
@@ -1617,12 +1804,31 @@ mod tests {
         );
     }
 
+    /// bd-y56u1gl7: a structured parse error from project discovery
+    /// (here: Q-5-17 unknown `project.type`) must survive
+    /// classification as a `ParseError`, not be flattened into the
+    /// `Discover(String)` variant.
+    #[test]
+    fn classify_project_with_unknown_type_yields_structured_parse_error() {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("_quarto.yml"), "project:\n  type: posit-docs\n");
+        write_file(&dir.join("index.qmd"), "---\ntitle: x\n---\n");
+        let runtime = NativeRuntime::new();
+        let err = classify_inputs(&[], &dir, &runtime, None).unwrap_err();
+        let DispatchError::DiscoverParse(pe) = err else {
+            panic!("expected DiscoverParse, got {err:?}");
+        };
+        assert_eq!(pe.diagnostics.len(), 1);
+        assert_eq!(pe.diagnostics[0].code.as_deref(), Some("Q-5-17"));
+    }
+
     #[test]
     fn classify_no_args_outside_project_errors() {
         let temp = TempDir::new().unwrap();
         let dir = make_loose_dir(&temp, &["foo.qmd"]);
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&[], &dir, &runtime).unwrap_err();
+        let err = classify_inputs(&[], &dir, &runtime, None).unwrap_err();
         assert!(
             matches!(err, DispatchError::NoInputAndNoProject(_)),
             "expected NoInputAndNoProject, got {err:?}"
@@ -1649,7 +1855,7 @@ mod tests {
         write_file(&dir.join("sub/decoy.qmd"), "---\ntitle: decoy\n---\n");
 
         let runtime = RecordingRuntime::new();
-        let err = classify_inputs(&[], &dir, &runtime).unwrap_err();
+        let err = classify_inputs(&[], &dir, &runtime, None).unwrap_err();
         assert!(
             matches!(err, DispatchError::NoInputAndNoProject(_)),
             "expected NoInputAndNoProject, got {err:?}"
@@ -1673,7 +1879,7 @@ mod tests {
         let project = make_project(&temp, &["index.qmd", "sub/a.qmd", "sub/sub2/b.qmd"], None);
         let nested = project.join("sub").join("sub2");
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&[], &nested, &runtime).unwrap();
+        let target = classify_inputs(&[], &nested, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {
@@ -1687,7 +1893,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_project(&temp, &["index.qmd", "about.qmd"], None);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&["about.qmd".into()], &project, &runtime).unwrap();
+        let target = classify_inputs(&["about.qmd".into()], &project, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::Subset {
@@ -1702,7 +1908,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let dir = make_loose_dir(&temp, &["foo.qmd"]);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&["foo.qmd".into()], &dir, &runtime).unwrap();
+        let target = classify_inputs(&["foo.qmd".into()], &dir, &runtime, None).unwrap();
         assert_eq!(target, RenderTarget::SingleDoc(dir.join("foo.qmd")));
     }
 
@@ -1712,8 +1918,13 @@ mod tests {
         let project = make_project(&temp, &["index.qmd", "about.qmd"], None);
         let cwd = canonical(temp.path()); // any cwd
         let runtime = NativeRuntime::new();
-        let target =
-            classify_inputs(&[project.to_string_lossy().into_owned()], &cwd, &runtime).unwrap();
+        let target = classify_inputs(
+            &[project.to_string_lossy().into_owned()],
+            &cwd,
+            &runtime,
+            None,
+        )
+        .unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {
@@ -1727,7 +1938,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_project(&temp, &["top.qmd", "sub/a.qmd", "sub/b.qmd"], None);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&["sub".into()], &project, &runtime).unwrap();
+        let target = classify_inputs(&["sub".into()], &project, &runtime, None).unwrap();
         match target {
             RenderTarget::Subset {
                 project_dir,
@@ -1756,7 +1967,7 @@ mod tests {
         let project = make_project(&temp, &["a.qmd", "b.qmd", "c.qmd"], None);
         let runtime = NativeRuntime::new();
         let target =
-            classify_inputs(&["a.qmd".into(), "b.qmd".into()], &project, &runtime).unwrap();
+            classify_inputs(&["a.qmd".into(), "b.qmd".into()], &project, &runtime, None).unwrap();
         match target {
             RenderTarget::Subset {
                 project_dir,
@@ -1779,7 +1990,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_project(&temp, &["a.qmd", "b.qmd"], Some(&["a.qmd"]));
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&["b.qmd".into()], &project, &runtime).unwrap_err();
+        let err = classify_inputs(&["b.qmd".into()], &project, &runtime, None).unwrap_err();
         match err {
             DispatchError::NotInRenderList { path, project_dir } => {
                 assert_eq!(path, project.join("b.qmd"));
@@ -1787,6 +1998,111 @@ mod tests {
             }
             other => panic!("expected NotInRenderList, got {other:?}"),
         }
+    }
+
+    /// Recursively copy `src` into `dst` (dst is created). Used by T8b to
+    /// install the committed echo-engine extension fixture
+    /// (`crates/quarto-core/tests/fixtures/extensions/echo-engine`) into a
+    /// temp project's `_extensions/`.
+    fn copy_dir(src: &Path, dst: &Path) {
+        std::fs::create_dir_all(dst).unwrap();
+        for entry in std::fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let from = entry.path();
+            let to = dst.join(entry.file_name());
+            if from.is_dir() {
+                copy_dir(&from, &to);
+            } else {
+                std::fs::copy(&from, &to).unwrap();
+            }
+        }
+    }
+
+    /// An engine-claimed extension passes gate 1 and is admitted by
+    /// `classify_inputs` **when a `render:` pattern selects it**.
+    ///
+    /// Preserves the original T8b intent (engine extensions are not rejected
+    /// out of hand) under the discovery rule that supersedes runbook D1:
+    /// auto-discovery is `**/*.qmd` only, so the pattern is what puts `a.echo`
+    /// into `project.files`.
+    ///
+    /// Named revert: drop the `.echo` extension from the discovery-set union
+    /// (`RenderableExtensions::fixed()` in `project/mod.rs`'s `discover`) and
+    /// `a.echo` fails gate 1 even with the pattern -> `NotInRenderList` -> RED.
+    #[test]
+    fn classify_echo_file_admitted_when_listed_in_render() {
+        let (dir, _temp) = echo_project_with_render(Some(
+            "project:\n  type: default\n  render:\n    - \"**/*.qmd\"\n    - \"**/*.echo\"\n",
+        ));
+        let runtime = NativeRuntime::new();
+        let target = classify_inputs(&["a.echo".into()], &dir, &runtime, None)
+            .unwrap_or_else(|e| panic!("a listed a.echo must be admitted: {e:?}"));
+        match target {
+            RenderTarget::Subset {
+                project_dir,
+                targets,
+            } => {
+                assert_eq!(project_dir, dir);
+                assert_eq!(targets, vec![dir.join("a.echo")]);
+            }
+            other => panic!("expected Subset admitting a.echo, got {other:?}"),
+        }
+    }
+
+    /// Without a `render:` pattern, an explicitly-named engine-claimed file is
+    /// refused — exactly as `.md` and `_partial.qmd` already are.
+    ///
+    /// This is a BEHAVIOR CHANGE introduced by superseding D1, not a
+    /// pre-existing wart: under D1 `.echo` was auto-discovered, so
+    /// `q2 render a.echo` worked. It documents the consequence rather than
+    /// endorsing it — whether q2 should render an explicitly-named file that
+    /// no pattern selects is an open question (Quarto 1 does, silently, with
+    /// output written beside the source). If that question is answered
+    /// "render it", this test changes with that work.
+    #[test]
+    fn classify_unlisted_echo_file_is_refused() {
+        let (dir, _temp) = echo_project_with_render(None);
+        let runtime = NativeRuntime::new();
+        let err = classify_inputs(&["a.echo".into()], &dir, &runtime, None)
+            .expect_err("an unlisted a.echo must be refused, like an unlisted .md");
+        assert!(
+            matches!(err, DispatchError::NotInRenderList { .. }),
+            "expected NotInRenderList, got {err:?}"
+        );
+    }
+
+    /// Shared fixture for the two tests above: a project with the committed
+    /// echo-engine extension installed and one `a.echo` file. `render` is the
+    /// full `_quarto.yml` body, or `None` for the bare default.
+    fn echo_project_with_render(render: Option<&str>) -> (PathBuf, TempDir) {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(
+            &dir.join("_quarto.yml"),
+            render.unwrap_or("project:\n  type: default\n"),
+        );
+        write_file(
+            &dir.join("index.qmd"),
+            "---\ntitle: Index\n---\n\nContent.\n",
+        );
+        let fixture_ext = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../quarto-core/tests/fixtures/extensions/echo-engine");
+        assert!(
+            fixture_ext.exists(),
+            "echo-engine fixture missing: {}",
+            fixture_ext.display()
+        );
+        copy_dir(&fixture_ext, &dir.join("_extensions/echo-engine"));
+        // The committed bundle is deleted (plan1c3: hermetic fixtures are
+        // regenerated at test time). These classify-only paths never execute
+        // the engine — they only need the bundle to EXIST for
+        // `build_engine_registry`'s bundle-exists guard.
+        write_file(
+            &dir.join("_extensions/echo-engine/dist/echo-engine.js"),
+            "// stub for registry existence check\n",
+        );
+        write_file(&dir.join("a.echo"), "Whole-file echo body.\n");
+        (dir, temp)
     }
 
     #[test]
@@ -1797,7 +2113,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_project(&temp, &["main.qmd", "_partial.qmd"], None);
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&["_partial.qmd".into()], &project, &runtime).unwrap_err();
+        let err = classify_inputs(&["_partial.qmd".into()], &project, &runtime, None).unwrap_err();
         assert!(
             matches!(err, DispatchError::NotInRenderList { .. }),
             "expected NotInRenderList, got {err:?}"
@@ -1811,7 +2127,7 @@ mod tests {
         // Empty subdirectory.
         std::fs::create_dir_all(project.join("empty")).unwrap();
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&["empty".into()], &project, &runtime).unwrap_err();
+        let err = classify_inputs(&["empty".into()], &project, &runtime, None).unwrap_err();
         match err {
             DispatchError::NoRenderableMatches { path } => {
                 assert_eq!(path, project.join("empty"));
@@ -1835,6 +2151,7 @@ mod tests {
             ],
             &cwd,
             &runtime,
+            None,
         )
         .unwrap_err();
         assert!(
@@ -1848,7 +2165,8 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let dir = make_loose_dir(&temp, &["a.qmd", "b.qmd"]);
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&["a.qmd".into(), "b.qmd".into()], &dir, &runtime).unwrap_err();
+        let err =
+            classify_inputs(&["a.qmd".into(), "b.qmd".into()], &dir, &runtime, None).unwrap_err();
         assert!(
             matches!(err, DispatchError::MultiArgNonProject),
             "expected MultiArgNonProject, got {err:?}"
@@ -1860,7 +2178,8 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let dir = canonical(temp.path());
         let runtime = NativeRuntime::new();
-        let err = classify_inputs(&["does-not-exist.qmd".into()], &dir, &runtime).unwrap_err();
+        let err =
+            classify_inputs(&["does-not-exist.qmd".into()], &dir, &runtime, None).unwrap_err();
         assert!(
             matches!(err, DispatchError::PathNotFound(_)),
             "expected PathNotFound, got {err:?}"
@@ -1881,7 +2200,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_default_project(&temp, &["index.qmd"]);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&["index.qmd".into()], &project, &runtime).unwrap();
+        let target = classify_inputs(&["index.qmd".into()], &project, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {
@@ -1902,7 +2221,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let project = make_default_project(&temp, &["index.qmd", "about.qmd"]);
         let runtime = NativeRuntime::new();
-        let target = classify_inputs(&[], &project, &runtime).unwrap();
+        let target = classify_inputs(&[], &project, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {
@@ -1920,7 +2239,7 @@ mod tests {
         let project = make_project(&temp, &["a.qmd", "b.qmd"], None);
         let runtime = NativeRuntime::new();
         let target =
-            classify_inputs(&["a.qmd".into(), "b.qmd".into()], &project, &runtime).unwrap();
+            classify_inputs(&["a.qmd".into(), "b.qmd".into()], &project, &runtime, None).unwrap();
         assert_eq!(
             target,
             RenderTarget::FullProject {

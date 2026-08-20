@@ -502,6 +502,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path("/project/posts/index.qmd")],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         }
     }
 
@@ -520,6 +522,7 @@ mod tests {
             image_lazy_loading: None,
             reading_time_minutes: Some(5),
             word_count: None,
+            order: None,
             source_path: PathBuf::from(format!("posts/{}.qmd", title)),
             output_href: format!("posts/{}.html", title),
             extra: BTreeMap::new(),
@@ -552,6 +555,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path(host_input)],
             output_dir: project_dir.join("_site"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(host_input);
         let format = Format::html();
@@ -638,6 +643,44 @@ mod tests {
                 _ => {}
             }
         }
+    }
+
+    // bd-listing-table-fields-peg1w3b3: a table listing with an
+    // author-explicit `fields:` subset must render only those
+    // columns and must not emit per-item "Undefined variable"
+    // doctemplate diagnostics (previously surfaced as Q-12-10) for
+    // curated fields the items lack.
+    #[tokio::test]
+    async fn table_fields_subset_renders_single_column_without_diagnostics() {
+        let mut listing = make_listing(ListingType::Table);
+        listing.fields = vec!["title".to_string()];
+        listing.fields_explicit = true;
+        listing
+            .field_display_names
+            .insert("title".to_string(), "How To".to_string());
+        // Neither item has a date; both have author "Jane" (which
+        // must not leak into the single-column table).
+        let items = vec![make_item("alpha", None), make_item("beta", None)];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, diags) = run_transform(empty_pandoc(), resolved).await;
+        assert!(
+            diags.is_empty(),
+            "fields subset must not produce Q-12-10 diagnostics; got: {:?}",
+            diags
+        );
+        let rendered = format!("{:?}", ast);
+        assert!(
+            rendered.contains("How"),
+            "expected `How To` header in rendered table; got: {rendered}"
+        );
+        assert!(
+            !rendered.contains("Jane"),
+            "author column leaked into a fields: [title] table; got: {rendered}"
+        );
+        assert!(
+            !rendered.contains("Author"),
+            "Author header leaked into a fields: [title] table; got: {rendered}"
+        );
     }
 
     // 33. render_emits_div_at_listing_id_slot

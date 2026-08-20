@@ -3,7 +3,7 @@
 //! Copyright (c) 2025 Posit, PBC
 //!
 //! This crate provides:
-//! - Core types (SassLayer, SassBundleLayers, SassBundle)
+//! - Core types (SassLayer)
 //! - Layer parsing from SCSS content with boundary markers
 //! - Layer merging with correct precedence handling
 //! - Embedded Bootstrap 5.3.1 SCSS resources
@@ -16,6 +16,7 @@ pub mod bundle;
 pub mod compile;
 pub mod config;
 mod error;
+pub mod highlight_theme;
 mod layer;
 pub mod resources;
 pub mod themes;
@@ -60,11 +61,15 @@ pub use bundle::{
     load_quarto_layer, load_quarto_reveal_layer, load_reveal_framework, load_reveal_theme_layer,
     load_theme, load_title_block_layer, resolve_reveal_theme_name,
 };
+pub use bundle::{is_known_highlight_palette, known_highlight_palettes};
 pub use compile::{
     assemble_theme_scss, compile_css_from_config, compile_default_css, compile_reveal_theme_css,
     compile_theme_css, compile_with_doc_vars,
 };
-pub use config::{ResolvedThemeConfig, ThemeConfig, resolve_brand, resolve_brand_layers};
+pub use config::{
+    DarkThemeConfig, HighlightStyle, ResolvedThemeConfig, ThemeConfig, resolve_brand,
+    resolve_brand_layers,
+};
 pub use error::SassError;
 pub use layer::{merge_layers, parse_layer, parse_layer_from_parts};
 pub use resources::{
@@ -77,4 +82,4 @@ pub use themes::{
     load_quarto_customization_layer, load_theme_layer, process_theme_specs, resolve_theme,
     resolve_theme_spec,
 };
-pub use types::{SassBundle, SassBundleDark, SassBundleLayers, SassLayer};
+pub use types::SassLayer;

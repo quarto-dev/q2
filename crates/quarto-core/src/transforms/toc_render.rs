@@ -43,6 +43,10 @@
 
 use pampa::toc::{NavigationToc, TocEntry};
 use quarto_pandoc_types::config_value::ConfigValue;
+use quarto_pandoc_types::inline::{
+    Cite, Delete, EditComment, Emph, Highlight, Inline, Inlines, Insert, Quoted, SmallCaps, Span,
+    Strikeout, Strong, Subscript, Superscript, Underline,
+};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::{By, SourceInfo};
 
@@ -116,7 +120,151 @@ impl AstTransform for TocRenderTransform {
             ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
         );
 
+        // The TOC's own heading carries markup too, so it gets the same
+        // treatment as the entries: rendered here and published under
+        // `rendered.*`, rather than left as metadata for each consumer to
+        // stringify. That matters because there are *two* consumers — the
+        // doctemplate (`$rendered.navigation.toc-title$`) and the preview
+        // renderer's `TocSlot` — and the preview reads metadata through
+        // `extractMetaString`, which cannot see `PandocInlines`. One
+        // rendered value keeps `q2 preview` and `q2 render` in agreement
+        // (bd-toc-smart-quotes-6nro57ed).
+        if let Some(ref title) = toc.title {
+            let title_html = render_toc_label(title);
+            ast.meta.insert_path(
+                &["rendered", "navigation", "toc-title"],
+                ConfigValue::new_string(
+                    &title_html,
+                    SourceInfo::generated(By::programmatic_config()),
+                ),
+            );
+        }
+
         Ok(())
+    }
+}
+
+/// Strip the inlines a TOC entry label cannot carry, mirroring Pandoc's
+/// `deLink` / `deNote`.
+///
+/// Two kinds have to go:
+///
+/// - **`Link`** — the entry *is* an `<a>`, and anchors may not nest.
+///   Pandoc unwraps the link to its content, so the link's text still
+///   reads in the TOC; Quarto 1 does the same (`## … and a [link](…)`
+///   yields `… and a link`).
+/// - **`Note` / `NoteReference`** — a footnote marker in a TOC entry is
+///   noise, and rendering the note body there would duplicate it.
+///
+/// Everything else renders. This filtering deliberately lives at *render*
+/// time rather than in `generate_toc`: `TocEntry` is also
+/// `DocumentProfile::outline`, a faithful semantic outline, and "an
+/// anchor may not nest" is a constraint of this HTML output, not a fact
+/// about the document's headings.
+///
+/// The match is exhaustive on purpose — a new `Inline` variant should
+/// force a decision here rather than silently fall through a `_` arm,
+/// which is how the flattener this replaced accumulated its bugs.
+fn strip_links_and_notes(inlines: &[Inline]) -> Inlines {
+    let mut out = Inlines::new();
+    for inline in inlines {
+        match inline {
+            // Unwrap: keep the text, drop the anchor.
+            Inline::Link(l) => out.extend(strip_links_and_notes(&l.content)),
+
+            // Drop entirely.
+            Inline::Note(_) | Inline::NoteReference(_) => {}
+
+            // Recurse into containers, preserving the wrapper.
+            Inline::Emph(e) => out.push(Inline::Emph(Emph {
+                content: strip_links_and_notes(&e.content),
+                ..e.clone()
+            })),
+            Inline::Underline(u) => out.push(Inline::Underline(Underline {
+                content: strip_links_and_notes(&u.content),
+                ..u.clone()
+            })),
+            Inline::Strong(s) => out.push(Inline::Strong(Strong {
+                content: strip_links_and_notes(&s.content),
+                ..s.clone()
+            })),
+            Inline::Strikeout(s) => out.push(Inline::Strikeout(Strikeout {
+                content: strip_links_and_notes(&s.content),
+                ..s.clone()
+            })),
+            Inline::Superscript(s) => out.push(Inline::Superscript(Superscript {
+                content: strip_links_and_notes(&s.content),
+                ..s.clone()
+            })),
+            Inline::Subscript(s) => out.push(Inline::Subscript(Subscript {
+                content: strip_links_and_notes(&s.content),
+                ..s.clone()
+            })),
+            Inline::SmallCaps(s) => out.push(Inline::SmallCaps(SmallCaps {
+                content: strip_links_and_notes(&s.content),
+                ..s.clone()
+            })),
+            Inline::Quoted(q) => out.push(Inline::Quoted(Quoted {
+                content: strip_links_and_notes(&q.content),
+                ..q.clone()
+            })),
+            Inline::Cite(c) => out.push(Inline::Cite(Cite {
+                content: strip_links_and_notes(&c.content),
+                ..c.clone()
+            })),
+            Inline::Span(s) => out.push(Inline::Span(Span {
+                content: strip_links_and_notes(&s.content),
+                ..s.clone()
+            })),
+            Inline::Insert(i) => out.push(Inline::Insert(Insert {
+                content: strip_links_and_notes(&i.content),
+                ..i.clone()
+            })),
+            Inline::Delete(d) => out.push(Inline::Delete(Delete {
+                content: strip_links_and_notes(&d.content),
+                ..d.clone()
+            })),
+            Inline::Highlight(h) => out.push(Inline::Highlight(Highlight {
+                content: strip_links_and_notes(&h.content),
+                ..h.clone()
+            })),
+            Inline::EditComment(e) => out.push(Inline::EditComment(EditComment {
+                content: strip_links_and_notes(&e.content),
+                ..e.clone()
+            })),
+            // An Image's `content` is alt text, not rendered children —
+            // leave the node intact so the writer emits the `<img>`.
+            Inline::Image(_)
+            // Leaves.
+            | Inline::Str(_)
+            | Inline::Space(_)
+            | Inline::SoftBreak(_)
+            | Inline::LineBreak(_)
+            | Inline::Code(_)
+            | Inline::Math(_)
+            | Inline::RawInline(_)
+            | Inline::Shortcode(_)
+            | Inline::Attr(_)
+            | Inline::Custom(_) => out.push(inline.clone()),
+        }
+    }
+    out
+}
+
+/// Render a TOC entry label to HTML through the real inline writer, so a
+/// label matches the heading it points at (bd-toc-smart-quotes-6nro57ed).
+///
+/// This is the same `write_inlines_to` quarto-core already uses to render
+/// inline metadata (`template.rs`, `revealjs/footer_logo.rs`); it handles
+/// escaping, so the label no longer goes through `html_escape`.
+fn render_toc_label(title: &[Inline]) -> String {
+    let stripped = strip_links_and_notes(title);
+    let mut out: Vec<u8> = Vec::new();
+    match pampa::writers::html::write_inlines_to(&stripped, &mut out) {
+        // Writing to a Vec cannot fail; the lossy conversion is for the
+        // impossible case rather than an expected one.
+        Ok(()) => String::from_utf8_lossy(&out).into_owned(),
+        Err(_) => String::new(),
     }
 }
 
@@ -140,7 +288,7 @@ fn render_toc_entries_to_html(entries: &[TocEntry]) -> String {
                 html_escape(number)
             ));
         }
-        html.push_str(&html_escape(&entry.title));
+        html.push_str(&render_toc_label(&entry.title));
         html.push_str("\n</a>\n");
 
         if !entry.children.is_empty() {
@@ -182,13 +330,24 @@ mod tests {
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/doc.qmd")],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         }
+    }
+
+    /// A title made of one literal `Str`. Tests that care about markup
+    /// build their own inlines.
+    fn plain_title(text: &str) -> Inlines {
+        vec![Inline::Str(quarto_pandoc_types::inline::Str {
+            text: text.to_string(),
+            source_info: dummy_source_info(),
+        })]
     }
 
     fn make_toc_entry(id: &str, title: &str, level: i32) -> TocEntry {
         TocEntry {
             id: id.to_string(),
-            title: title.to_string(),
+            title: plain_title(title),
             level,
             number: None,
             children: vec![],
@@ -267,7 +426,7 @@ mod tests {
         };
 
         let toc = NavigationToc {
-            title: Some("Contents".to_string()),
+            title: Some(plain_title("Contents")),
             entries: vec![
                 make_toc_entry("intro", "Introduction", 1),
                 make_toc_entry("methods", "Methods", 1),
@@ -318,7 +477,7 @@ mod tests {
             title: None,
             entries: vec![TocEntry {
                 id: "chapter".to_string(),
-                title: "Chapter 1".to_string(),
+                title: plain_title("Chapter 1"),
                 level: 1,
                 number: None,
                 children: vec![
@@ -367,12 +526,12 @@ mod tests {
             title: None,
             entries: vec![TocEntry {
                 id: "intro".to_string(),
-                title: "Introduction".to_string(),
+                title: plain_title("Introduction"),
                 level: 1,
                 number: Some("1".to_string()),
                 children: vec![TocEntry {
                     id: "background".to_string(),
-                    title: "Background".to_string(),
+                    title: plain_title("Background"),
                     level: 2,
                     number: Some("1.1".to_string()),
                     children: vec![],
@@ -413,6 +572,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_renders_toc_escapes_special_chars() {
+        // The label no longer goes through `html_escape` — escaping now
+        // happens inside the inline writer. The distinction that matters
+        // after that change: characters *typed* in a heading arrive as
+        // `Str` content and must still be escaped, so a literal `<b>`
+        // renders as text rather than opening a tag. (A `RawInline`
+        // would legitimately pass through; that is a different node and
+        // is not what a plain heading produces.)
+        //
+        // The entry `id` still goes through `html_escape` — it is an
+        // attribute value, not inline content.
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![],
@@ -422,7 +591,7 @@ mod tests {
             title: None,
             entries: vec![TocEntry {
                 id: "intro-with-<script>".to_string(),
-                title: "Title with <b>HTML</b> & \"quotes\"".to_string(),
+                title: plain_title("Title with <b>HTML</b> & \"quotes\""),
                 level: 1,
                 number: None,
                 children: vec![],
@@ -446,11 +615,91 @@ mod tests {
             .unwrap();
         let html = rendered.as_str().unwrap();
 
-        // Check that HTML is escaped
-        assert!(html.contains("&lt;b&gt;HTML&lt;/b&gt;"));
-        assert!(html.contains("&amp;"));
-        assert!(html.contains("&quot;quotes&quot;"));
-        assert!(html.contains("intro-with-&lt;script&gt;"));
+        assert!(
+            html.contains("&lt;b&gt;HTML&lt;/b&gt;"),
+            "literal angle brackets in heading text must be escaped; got: {html}"
+        );
+        assert!(html.contains("&amp;"), "literal ampersand must be escaped");
+        assert!(
+            html.contains("intro-with-&lt;script&gt;"),
+            "the entry id is an attribute value and stays html_escape'd"
+        );
+    }
+
+    /// bd-toc-smart-quotes-6nro57ed: the label carries the heading's
+    /// markup rather than a flattened projection.
+    #[tokio::test]
+    async fn test_renders_toc_label_with_markup() {
+        use quarto_pandoc_types::inline::{Code, QuoteType, Quoted, Str};
+
+        let title = vec![
+            Inline::Str(Str {
+                text: "Using a ".to_string(),
+                source_info: dummy_source_info(),
+            }),
+            Inline::Quoted(Quoted {
+                quote_type: QuoteType::DoubleQuote,
+                content: vec![Inline::Str(Str {
+                    text: "raw".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            }),
+            Inline::Str(Str {
+                text: " ".to_string(),
+                source_info: dummy_source_info(),
+            }),
+            Inline::Code(Code {
+                text: "volume".to_string(),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                source_info: dummy_source_info(),
+                attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+            }),
+        ];
+
+        let html = render_toc_label(&title);
+
+        assert_eq!(
+            html, "Using a \u{201C}raw\u{201D} <code>volume</code>",
+            "quote delimiters and the code span must both render"
+        );
+    }
+
+    /// Links are unwrapped (anchors may not nest) and notes dropped,
+    /// mirroring pandoc's `deLink` / `deNote`.
+    #[tokio::test]
+    async fn test_toc_label_strips_links_and_notes() {
+        use quarto_pandoc_types::inline::{Link, Note, Str};
+
+        let title = vec![
+            Inline::Str(Str {
+                text: "See ".to_string(),
+                source_info: dummy_source_info(),
+            }),
+            Inline::Link(Link {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Inline::Str(Str {
+                    text: "the docs".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                target: ("https://example.com".to_string(), String::new()),
+                source_info: dummy_source_info(),
+                attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+                target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
+            }),
+            Inline::Note(Note {
+                content: vec![],
+                source_info: dummy_source_info(),
+            }),
+        ];
+
+        let html = render_toc_label(&title);
+
+        assert_eq!(html, "See the docs", "link text kept, anchor and note gone");
+        assert!(
+            !html.contains("<a"),
+            "a nested anchor would be invalid inside the TOC entry's own <a>"
+        );
     }
 
     #[tokio::test]
@@ -503,7 +752,7 @@ mod tests {
         };
 
         let toc = NavigationToc {
-            title: Some("Contents".to_string()),
+            title: Some(plain_title("Contents")),
             entries: vec![], // Empty entries
         };
         ast.meta
@@ -914,10 +1163,33 @@ mod tests {
         // Should have rendered TOC
         assert!(ast.meta.contains_path(&["rendered", "navigation", "toc"]));
 
-        // The title is stored in navigation.toc.title for the template to use
-        // (the render transform doesn't include it in the HTML output)
+        // The title stays in `navigation.toc.title` as inlines, and is
+        // *also* published pre-rendered at `rendered.navigation.toc-title`
+        // — that rendered value is what both the doctemplate and the
+        // preview's TocSlot read (bd-toc-smart-quotes-6nro57ed). It is
+        // kept out of `rendered.navigation.toc` proper, which is only the
+        // inner `<ul>`.
         let toc = ast.meta.get_path(&["navigation", "toc"]).unwrap();
         let title = toc.get("title").unwrap().as_plain_text().unwrap();
         assert_eq!(title, "Quick Links");
+
+        let rendered_title = ast
+            .meta
+            .get_path(&["rendered", "navigation", "toc-title"])
+            .expect("rendered toc-title")
+            .as_str()
+            .expect("rendered toc-title is a string");
+        assert_eq!(rendered_title, "Quick Links");
+
+        let entries_html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "toc"])
+            .unwrap()
+            .as_str()
+            .unwrap();
+        assert!(
+            !entries_html.contains("Quick Links"),
+            "the title must not be duplicated into the entries markup"
+        );
     }
 }

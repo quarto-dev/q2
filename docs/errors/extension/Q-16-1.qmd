@@ -1,0 +1,74 @@
+---
+title: "Extension not loaded"
+description: "An `_extension.yml` manifest could not be read or parsed, so the extension it describes is not active for this render."
+code: Q-16-1
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-1` — Extension not loaded
+
+> An `_extension.yml` manifest could not be read or parsed, so the
+> extension it describes is not active for this render.
+
+## What this means
+
+Every extension is described by an `_extension.yml` manifest under
+`_extensions/`. Quarto reads each manifest to learn what the extension
+contributes — shortcodes, filters, formats, project types. If a
+manifest cannot be read or parsed, Quarto skips that extension
+entirely and renders without it.
+
+The render continues. What you notice is the absence: a shortcode the
+extension provided now reports
+[`Q-16-3`](Q-16-3.qmd) at its use site, a custom format is unknown, a
+filter never runs. Those downstream symptoms are often what sends you
+looking, which is why this warning names both the manifest file and
+the underlying cause.
+
+## Why this happens
+
+- **A YAML syntax error in the manifest** — usually inconsistent
+  indentation, or an unquoted value containing a colon.
+- **A manifest at the wrong path.** The file must be at
+  `_extensions/<name>/_extension.yml` or
+  `_extensions/<organization>/<name>/_extension.yml`.
+- **An incomplete install.** An extension copied by hand, or a partial
+  `git clone` of an extension repository.
+- **Permissions.** The file exists but is not readable by the process
+  running Quarto.
+
+## How to fix
+
+Open the manifest named in the message and check it parses as YAML.
+A minimal, valid manifest looks like this:
+
+```yaml
+title: My Extension
+author: Your Name
+version: 1.0.0
+contributes:
+  shortcodes:
+    - shortcode.lua
+```
+
+If the extension came from a repository, reinstalling is usually
+faster than repairing by hand:
+
+```bash
+quarto add <owner>/<repo>
+```
+
+If the manifest is one you are writing, note that `contributes:` must
+be a mapping — a list under `contributes:` is a common and easily
+missed mistake.
+
+## Related errors
+
+- [`Q-16-3`](Q-16-3.qmd) — where a failed extension load usually
+  surfaces: a shortcode from the extension is now unknown.
+- [`Q-16-7`](Q-16-7.qmd) — a manifest that parses but whose
+  `contributes.project` fragment is unusable.

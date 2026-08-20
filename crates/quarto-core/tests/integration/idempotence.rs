@@ -202,7 +202,7 @@ fn run_single_file(
         }
 
         let content = std::fs::read(active).unwrap();
-        let stages = build_q2_preview_pipeline_stages(None, Vec::new());
+        let stages = build_q2_preview_pipeline_stages(Vec::new());
         let (output, _diagnostics) = run_pipeline(
             &content,
             &active.to_string_lossy(),

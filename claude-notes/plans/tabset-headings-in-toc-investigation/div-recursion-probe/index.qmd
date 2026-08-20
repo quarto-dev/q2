@@ -1,0 +1,37 @@
+---
+title: What would sectionize recursion change?
+---
+
+## Conditional content
+
+::: {.content-visible when-format="html"}
+### Section inside content-visible
+
+Body.
+:::
+
+## Callout body headings
+
+::: {.callout-note title="Callout with a body heading"}
+### Heading in a callout body
+
+Body.
+:::
+
+## Column margin
+
+::: {.column-margin}
+### Heading in the margin
+
+Body.
+:::
+
+## Grid layout
+
+::: {layout-ncol=2}
+### Heading in a layout div
+
+Body.
+:::
+
+## Done

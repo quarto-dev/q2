@@ -1899,6 +1899,7 @@ where
 {
     let addr = format!("{}:{}", config.host, config.port);
     let sync_interval = config.sync_interval_secs;
+    let shutdown_message = config.shutdown_message.clone();
     let watch_enabled = config.watch_enabled;
     let watch_debounce_ms = config.watch_debounce_ms;
     let watch_filter = config.watch_filter;
@@ -1940,9 +1941,18 @@ where
     // Create shutdown signal channel
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
-    // Spawn task to listen for OS signals and trigger shutdown
+    // Spawn task to listen for OS signals and trigger shutdown. The
+    // caller's shutdown message prints here — before the signal is
+    // forwarded, on the shutdown critical path — so teardown can
+    // never exit the process before the line appears (bd-wj9smyxg:
+    // a detached listener task races exactly that and lost in CI).
     tokio::spawn(async move {
-        wait_for_shutdown_signal().await;
+        if wait_for_shutdown_signal().await == ShutdownSignal::CtrlC
+            && let Some(message) = shutdown_message
+        {
+            println!();
+            println!("  {message}");
+        }
         let _ = shutdown_tx.send(true);
     });
 
@@ -2158,8 +2168,18 @@ async fn run_file_watcher(
     }
 }
 
+/// Which OS signal initiated shutdown. The distinction matters to
+/// callers printing a user-facing acknowledgment: the message reads
+/// "Received Ctrl-C", so it must not appear on a SIGTERM-driven
+/// shutdown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShutdownSignal {
+    CtrlC,
+    Sigterm,
+}
+
 /// Wait for shutdown signals (Ctrl-C, SIGTERM, SIGINT).
-async fn wait_for_shutdown_signal() {
+async fn wait_for_shutdown_signal() -> ShutdownSignal {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
             .await
@@ -2180,9 +2200,11 @@ async fn wait_for_shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => {
             info!("Received Ctrl-C, initiating graceful shutdown...");
+            ShutdownSignal::CtrlC
         }
         _ = terminate => {
             info!("Received SIGTERM, initiating graceful shutdown...");
+            ShutdownSignal::Sigterm
         }
     }
 }

@@ -1,0 +1,4 @@
+# Render output from the probe fixtures — regenerate with `q2 render`.
+_site/
+_site-q1/
+.quarto/

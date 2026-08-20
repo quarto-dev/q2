@@ -1,0 +1,188 @@
+[36m[1m[ [22m[39m[36m[1mInfo: [22m[39mLog started at 2026-07-03T07:58:59.228
+[36m[1m[ [22m[39m[36m[1mInfo: [22m[39mStarting server at 2026-07-03T07:59:00.414
+[91m[1m┌ [22m[39m[91m[1mError: [22m[39mFailed to run notebook: /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpLCfyfe/error.qmd
+[91m[1m│ [22m[39m  exception =
+[91m[1m│ [22m[39m   EvaluationError: Encountered 1 error during evaluation
+[91m[1m│ [22m[39m   
+[91m[1m│ [22m[39m   Error 1 of 1
+[91m[1m│ [22m[39m   @ /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpLCfyfe/error.qmd:7
+[91m[1m│ [22m[39m   this should fail gracefully
+[91m[1m│ [22m[39m   Stacktrace:
+[91m[1m│ [22m[39m    [1] [0m[1merror[22m[0m[1m([22m[90ms[39m::[0mString[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m   @[39m [90mBase[39m [90m./[39m[90m[4merror.jl:35[24m[39m
+[91m[1m│ [22m[39m    [2] top-level scope
+[91m[1m│ [22m[39m   [90m   @[39m [90m/var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpLCfyfe/[39m[90m[4merror.qmd:8[24m[39m
+[91m[1m│ [22m[39m   
+[91m[1m│ [22m[39m   Stacktrace:
+[91m[1m│ [22m[39m     [1] [0m[1mevaluate_raw_cells![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.File, [90mchunks[39m::[0mVector[90m{Any}[39m, [90moptions[39m::[0mDict[90m{String, Any}[39m; [90mshowprogress[39m::[0mBool, [90mchunk_callback[39m::[0mQuartoNotebookRunner.var"#chunk_callback#101"[90m{TCPSocket}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:233[24m[39m
+[91m[1m│ [22m[39m     [2] [0m[1mevaluate![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.File, [90moutput[39m::[0mNothing; [90mshowprogress[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m, [90mchunk_callback[39m::[0mFunction, [90mmarkdown[39m::[0mString, [90msource_ranges[39m::[0mVector[90m{QuartoNotebookRunner.SourceRange}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:126[24m[39m
+[91m[1m│ [22m[39m     [3] [0m[1mevaluate![22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:63[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m     [4] [0m[1m(::QuartoNotebookRunner.var"#51#55"{Nothing, String, Bool, Dict{String, Any}, QuartoNotebookRunner.var"#chunk_callback#101"{TCPSocket}, Vector{QuartoNotebookRunner.SourceRange}, Server})[22m[0m[1m([22m[90mfile[39m::[0mQuartoNotebookRunner.File[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:40[24m[39m
+[91m[1m│ [22m[39m     [5] [0m[1mborrow_file![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.var"#51#55"[90m{Nothing, String, Bool, Dict{String, Any}, QuartoNotebookRunner.var"#chunk_callback#101"{TCPSocket}, Vector{QuartoNotebookRunner.SourceRange}, Server}[39m, [90mserver[39m::[0mServer, [90mpath[39m::[0mString; [90mwait[39m::[0mBool, [90moptionally_create[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:134[24m[39m
+[91m[1m│ [22m[39m     [6] [0m[1mrun![22m[0m[1m([22m[90mserver[39m::[0mServer, [90mpath[39m::[0mString; [90moutput[39m::[0mNothing, [90mmarkdown[39m::[0mString, [90mshowprogress[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m, [90mchunk_callback[39m::[0mFunction, [90msource_ranges[39m::[0mVector[90m{QuartoNotebookRunner.SourceRange}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:29[24m[39m
+[91m[1m│ [22m[39m     [7] [0m[1m_handle_response_internal[22m[0m[1m([22m[90msocket[39m::[0mTCPSocket, [90msocketserver[39m::[0mQuartoNotebookRunner.SocketServer, [90mrequest[39m::[0m@NamedTuple[90m{type::String, content::Union{Dict{String, Any}, String}}[39m, [90mshowprogress[39m::[0mBool[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:393[24m[39m
+[91m[1m│ [22m[39m     [8] [0m[1m_handle_response[22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:309[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m     [9] [0m[1m(::QuartoNotebookRunner.var"#90#100"{Bool, Base.RefValue{Bool}, Server, Base.RefValue{Union{Nothing, QuartoNotebookRunner.SocketServer}}, Base.UUID})[22m[0m[1m([22m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:240[24m[39m
+[91m[1m│ [22m[39m    [10] [0m[1m_with_logger[22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:3[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m    [11] [0m[1m(::QuartoNotebookRunner.var"#89#99"{Bool, Nothing, Base.RefValue{Bool}, Server, Base.RefValue{Union{Nothing, QuartoNotebookRunner.SocketServer}}, Base.UUID})[22m[0m[1m([22m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:202[24m[39m
+[91m[1m└ [22m[39m[90m@ QuartoNotebookRunner ~/.julia/packages/QuartoNotebookRunner/6dLRn/src/socket.jl:431[39m
+[91m[1m┌ [22m[39m[91m[1mError: [22m[39mFailed to run notebook: /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpEL5UEk/error.qmd
+[91m[1m│ [22m[39m  exception =
+[91m[1m│ [22m[39m   EvaluationError: Encountered 1 error during evaluation
+[91m[1m│ [22m[39m   
+[91m[1m│ [22m[39m   Error 1 of 1
+[91m[1m│ [22m[39m   @ /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpEL5UEk/error.qmd:7
+[91m[1m│ [22m[39m   this should fail gracefully
+[91m[1m│ [22m[39m   Stacktrace:
+[91m[1m│ [22m[39m    [1] [0m[1merror[22m[0m[1m([22m[90ms[39m::[0mString[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m   @[39m [90mBase[39m [90m./[39m[90m[4merror.jl:35[24m[39m
+[91m[1m│ [22m[39m    [2] top-level scope
+[91m[1m│ [22m[39m   [90m   @[39m [90m/var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpEL5UEk/[39m[90m[4merror.qmd:8[24m[39m
+[91m[1m│ [22m[39m   
+[91m[1m│ [22m[39m   Stacktrace:
+[91m[1m│ [22m[39m     [1] [0m[1mevaluate_raw_cells![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.File, [90mchunks[39m::[0mVector[90m{Any}[39m, [90moptions[39m::[0mDict[90m{String, Any}[39m; [90mshowprogress[39m::[0mBool, [90mchunk_callback[39m::[0mQuartoNotebookRunner.var"#chunk_callback#101"[90m{TCPSocket}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:233[24m[39m
+[91m[1m│ [22m[39m     [2] [0m[1mevaluate![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.File, [90moutput[39m::[0mNothing; [90mshowprogress[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m, [90mchunk_callback[39m::[0mFunction, [90mmarkdown[39m::[0mString, [90msource_ranges[39m::[0mVector[90m{QuartoNotebookRunner.SourceRange}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:126[24m[39m
+[91m[1m│ [22m[39m     [3] [0m[1mevaluate![22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:63[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m     [4] [0m[1m(::QuartoNotebookRunner.var"#51#55"{Nothing, String, Bool, Dict{String, Any}, QuartoNotebookRunner.var"#chunk_callback#101"{TCPSocket}, Vector{QuartoNotebookRunner.SourceRange}, Server})[22m[0m[1m([22m[90mfile[39m::[0mQuartoNotebookRunner.File[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:40[24m[39m
+[91m[1m│ [22m[39m     [5] [0m[1mborrow_file![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.var"#51#55"[90m{Nothing, String, Bool, Dict{String, Any}, QuartoNotebookRunner.var"#chunk_callback#101"{TCPSocket}, Vector{QuartoNotebookRunner.SourceRange}, Server}[39m, [90mserver[39m::[0mServer, [90mpath[39m::[0mString; [90mwait[39m::[0mBool, [90moptionally_create[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:134[24m[39m
+[91m[1m│ [22m[39m     [6] [0m[1mrun![22m[0m[1m([22m[90mserver[39m::[0mServer, [90mpath[39m::[0mString; [90moutput[39m::[0mNothing, [90mmarkdown[39m::[0mString, [90mshowprogress[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m, [90mchunk_callback[39m::[0mFunction, [90msource_ranges[39m::[0mVector[90m{QuartoNotebookRunner.SourceRange}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:29[24m[39m
+[91m[1m│ [22m[39m     [7] [0m[1m_handle_response_internal[22m[0m[1m([22m[90msocket[39m::[0mTCPSocket, [90msocketserver[39m::[0mQuartoNotebookRunner.SocketServer, [90mrequest[39m::[0m@NamedTuple[90m{type::String, content::Union{Dict{String, Any}, String}}[39m, [90mshowprogress[39m::[0mBool[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:393[24m[39m
+[91m[1m│ [22m[39m     [8] [0m[1m_handle_response[22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:309[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m     [9] [0m[1m(::QuartoNotebookRunner.var"#90#100"{Bool, Base.RefValue{Bool}, Server, Base.RefValue{Union{Nothing, QuartoNotebookRunner.SocketServer}}, Base.UUID})[22m[0m[1m([22m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:240[24m[39m
+[91m[1m│ [22m[39m    [10] [0m[1m_with_logger[22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:3[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m    [11] [0m[1m(::QuartoNotebookRunner.var"#89#99"{Bool, Nothing, Base.RefValue{Bool}, Server, Base.RefValue{Union{Nothing, QuartoNotebookRunner.SocketServer}}, Base.UUID})[22m[0m[1m([22m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:202[24m[39m
+[91m[1m└ [22m[39m[90m@ QuartoNotebookRunner ~/.julia/packages/QuartoNotebookRunner/6dLRn/src/socket.jl:431[39m
+[91m[1m┌ [22m[39m[91m[1mError: [22m[39mFailed to run notebook: /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpB0SyW9/error.qmd
+[91m[1m│ [22m[39m  exception =
+[91m[1m│ [22m[39m   EvaluationError: Encountered 1 error during evaluation
+[91m[1m│ [22m[39m   
+[91m[1m│ [22m[39m   Error 1 of 1
+[91m[1m│ [22m[39m   @ /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpB0SyW9/error.qmd:7
+[91m[1m│ [22m[39m   this should fail gracefully
+[91m[1m│ [22m[39m   Stacktrace:
+[91m[1m│ [22m[39m    [1] [0m[1merror[22m[0m[1m([22m[90ms[39m::[0mString[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m   @[39m [90mBase[39m [90m./[39m[90m[4merror.jl:35[24m[39m
+[91m[1m│ [22m[39m    [2] top-level scope
+[91m[1m│ [22m[39m   [90m   @[39m [90m/var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpB0SyW9/[39m[90m[4merror.qmd:8[24m[39m
+[91m[1m│ [22m[39m   
+[91m[1m│ [22m[39m   Stacktrace:
+[91m[1m│ [22m[39m     [1] [0m[1mevaluate_raw_cells![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.File, [90mchunks[39m::[0mVector[90m{Any}[39m, [90moptions[39m::[0mDict[90m{String, Any}[39m; [90mshowprogress[39m::[0mBool, [90mchunk_callback[39m::[0mQuartoNotebookRunner.var"#chunk_callback#101"[90m{TCPSocket}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:233[24m[39m
+[91m[1m│ [22m[39m     [2] [0m[1mevaluate![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.File, [90moutput[39m::[0mNothing; [90mshowprogress[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m, [90mchunk_callback[39m::[0mFunction, [90mmarkdown[39m::[0mString, [90msource_ranges[39m::[0mVector[90m{QuartoNotebookRunner.SourceRange}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:126[24m[39m
+[91m[1m│ [22m[39m     [3] [0m[1mevaluate![22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:63[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m     [4] [0m[1m(::QuartoNotebookRunner.var"#51#55"{Nothing, String, Bool, Dict{String, Any}, QuartoNotebookRunner.var"#chunk_callback#101"{TCPSocket}, Vector{QuartoNotebookRunner.SourceRange}, Server})[22m[0m[1m([22m[90mfile[39m::[0mQuartoNotebookRunner.File[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:40[24m[39m
+[91m[1m│ [22m[39m     [5] [0m[1mborrow_file![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.var"#51#55"[90m{Nothing, String, Bool, Dict{String, Any}, QuartoNotebookRunner.var"#chunk_callback#101"{TCPSocket}, Vector{QuartoNotebookRunner.SourceRange}, Server}[39m, [90mserver[39m::[0mServer, [90mpath[39m::[0mString; [90mwait[39m::[0mBool, [90moptionally_create[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:134[24m[39m
+[91m[1m│ [22m[39m     [6] [0m[1mrun![22m[0m[1m([22m[90mserver[39m::[0mServer, [90mpath[39m::[0mString; [90moutput[39m::[0mNothing, [90mmarkdown[39m::[0mString, [90mshowprogress[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m, [90mchunk_callback[39m::[0mFunction, [90msource_ranges[39m::[0mVector[90m{QuartoNotebookRunner.SourceRange}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:29[24m[39m
+[91m[1m│ [22m[39m     [7] [0m[1m_handle_response_internal[22m[0m[1m([22m[90msocket[39m::[0mTCPSocket, [90msocketserver[39m::[0mQuartoNotebookRunner.SocketServer, [90mrequest[39m::[0m@NamedTuple[90m{type::String, content::Union{Dict{String, Any}, String}}[39m, [90mshowprogress[39m::[0mBool[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:393[24m[39m
+[91m[1m│ [22m[39m     [8] [0m[1m_handle_response[22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:309[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m     [9] [0m[1m(::QuartoNotebookRunner.var"#90#100"{Bool, Base.RefValue{Bool}, Server, Base.RefValue{Union{Nothing, QuartoNotebookRunner.SocketServer}}, Base.UUID})[22m[0m[1m([22m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:240[24m[39m
+[91m[1m│ [22m[39m    [10] [0m[1m_with_logger[22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:3[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m    [11] [0m[1m(::QuartoNotebookRunner.var"#89#99"{Bool, Nothing, Base.RefValue{Bool}, Server, Base.RefValue{Union{Nothing, QuartoNotebookRunner.SocketServer}}, Base.UUID})[22m[0m[1m([22m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:202[24m[39m
+[91m[1m└ [22m[39m[90m@ QuartoNotebookRunner ~/.julia/packages/QuartoNotebookRunner/6dLRn/src/socket.jl:431[39m
+[91m[1m┌ [22m[39m[91m[1mError: [22m[39mFailed to run notebook: /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmp6v8NYx/error.qmd
+[91m[1m│ [22m[39m  exception =
+[91m[1m│ [22m[39m   EvaluationError: Encountered 1 error during evaluation
+[91m[1m│ [22m[39m   
+[91m[1m│ [22m[39m   Error 1 of 1
+[91m[1m│ [22m[39m   @ /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmp6v8NYx/error.qmd:7
+[91m[1m│ [22m[39m   this should fail gracefully
+[91m[1m│ [22m[39m   Stacktrace:
+[91m[1m│ [22m[39m    [1] [0m[1merror[22m[0m[1m([22m[90ms[39m::[0mString[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m   @[39m [90mBase[39m [90m./[39m[90m[4merror.jl:35[24m[39m
+[91m[1m│ [22m[39m    [2] top-level scope
+[91m[1m│ [22m[39m   [90m   @[39m [90m/var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmp6v8NYx/[39m[90m[4merror.qmd:8[24m[39m
+[91m[1m│ [22m[39m   
+[91m[1m│ [22m[39m   Stacktrace:
+[91m[1m│ [22m[39m     [1] [0m[1mevaluate_raw_cells![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.File, [90mchunks[39m::[0mVector[90m{Any}[39m, [90moptions[39m::[0mDict[90m{String, Any}[39m; [90mshowprogress[39m::[0mBool, [90mchunk_callback[39m::[0mQuartoNotebookRunner.var"#chunk_callback#101"[90m{TCPSocket}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:233[24m[39m
+[91m[1m│ [22m[39m     [2] [0m[1mevaluate![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.File, [90moutput[39m::[0mNothing; [90mshowprogress[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m, [90mchunk_callback[39m::[0mFunction, [90mmarkdown[39m::[0mString, [90msource_ranges[39m::[0mVector[90m{QuartoNotebookRunner.SourceRange}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:126[24m[39m
+[91m[1m│ [22m[39m     [3] [0m[1mevaluate![22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:63[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m     [4] [0m[1m(::QuartoNotebookRunner.var"#51#55"{Nothing, String, Bool, Dict{String, Any}, QuartoNotebookRunner.var"#chunk_callback#101"{TCPSocket}, Vector{QuartoNotebookRunner.SourceRange}, Server})[22m[0m[1m([22m[90mfile[39m::[0mQuartoNotebookRunner.File[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:40[24m[39m
+[91m[1m│ [22m[39m     [5] [0m[1mborrow_file![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.var"#51#55"[90m{Nothing, String, Bool, Dict{String, Any}, QuartoNotebookRunner.var"#chunk_callback#101"{TCPSocket}, Vector{QuartoNotebookRunner.SourceRange}, Server}[39m, [90mserver[39m::[0mServer, [90mpath[39m::[0mString; [90mwait[39m::[0mBool, [90moptionally_create[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:134[24m[39m
+[91m[1m│ [22m[39m     [6] [0m[1mrun![22m[0m[1m([22m[90mserver[39m::[0mServer, [90mpath[39m::[0mString; [90moutput[39m::[0mNothing, [90mmarkdown[39m::[0mString, [90mshowprogress[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m, [90mchunk_callback[39m::[0mFunction, [90msource_ranges[39m::[0mVector[90m{QuartoNotebookRunner.SourceRange}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:29[24m[39m
+[91m[1m│ [22m[39m     [7] [0m[1m_handle_response_internal[22m[0m[1m([22m[90msocket[39m::[0mTCPSocket, [90msocketserver[39m::[0mQuartoNotebookRunner.SocketServer, [90mrequest[39m::[0m@NamedTuple[90m{type::String, content::Union{Dict{String, Any}, String}}[39m, [90mshowprogress[39m::[0mBool[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:393[24m[39m
+[91m[1m│ [22m[39m     [8] [0m[1m_handle_response[22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:309[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m     [9] [0m[1m(::QuartoNotebookRunner.var"#90#100"{Bool, Base.RefValue{Bool}, Server, Base.RefValue{Union{Nothing, QuartoNotebookRunner.SocketServer}}, Base.UUID})[22m[0m[1m([22m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:240[24m[39m
+[91m[1m│ [22m[39m    [10] [0m[1m_with_logger[22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:3[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m    [11] [0m[1m(::QuartoNotebookRunner.var"#89#99"{Bool, Nothing, Base.RefValue{Bool}, Server, Base.RefValue{Union{Nothing, QuartoNotebookRunner.SocketServer}}, Base.UUID})[22m[0m[1m([22m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:202[24m[39m
+[91m[1m└ [22m[39m[90m@ QuartoNotebookRunner ~/.julia/packages/QuartoNotebookRunner/6dLRn/src/socket.jl:431[39m
+[91m[1m┌ [22m[39m[91m[1mError: [22m[39mFailed to run notebook: /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpJ3Wq1e/error.qmd
+[91m[1m│ [22m[39m  exception =
+[91m[1m│ [22m[39m   EvaluationError: Encountered 1 error during evaluation
+[91m[1m│ [22m[39m   
+[91m[1m│ [22m[39m   Error 1 of 1
+[91m[1m│ [22m[39m   @ /var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpJ3Wq1e/error.qmd:7
+[91m[1m│ [22m[39m   this should fail gracefully
+[91m[1m│ [22m[39m   Stacktrace:
+[91m[1m│ [22m[39m    [1] [0m[1merror[22m[0m[1m([22m[90ms[39m::[0mString[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m   @[39m [90mBase[39m [90m./[39m[90m[4merror.jl:35[24m[39m
+[91m[1m│ [22m[39m    [2] top-level scope
+[91m[1m│ [22m[39m   [90m   @[39m [90m/var/folders/_5/l_f9_2dj4n5dpm0ztth7n97c0000gp/T/.tmpJ3Wq1e/[39m[90m[4merror.qmd:8[24m[39m
+[91m[1m│ [22m[39m   
+[91m[1m│ [22m[39m   Stacktrace:
+[91m[1m│ [22m[39m     [1] [0m[1mevaluate_raw_cells![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.File, [90mchunks[39m::[0mVector[90m{Any}[39m, [90moptions[39m::[0mDict[90m{String, Any}[39m; [90mshowprogress[39m::[0mBool, [90mchunk_callback[39m::[0mQuartoNotebookRunner.var"#chunk_callback#101"[90m{TCPSocket}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:233[24m[39m
+[91m[1m│ [22m[39m     [2] [0m[1mevaluate![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.File, [90moutput[39m::[0mNothing; [90mshowprogress[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m, [90mchunk_callback[39m::[0mFunction, [90mmarkdown[39m::[0mString, [90msource_ranges[39m::[0mVector[90m{QuartoNotebookRunner.SourceRange}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:126[24m[39m
+[91m[1m│ [22m[39m     [3] [0m[1mevaluate![22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mevaluation.jl:63[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m     [4] [0m[1m(::QuartoNotebookRunner.var"#51#55"{Nothing, String, Bool, Dict{String, Any}, QuartoNotebookRunner.var"#chunk_callback#101"{TCPSocket}, Vector{QuartoNotebookRunner.SourceRange}, Server})[22m[0m[1m([22m[90mfile[39m::[0mQuartoNotebookRunner.File[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:40[24m[39m
+[91m[1m│ [22m[39m     [5] [0m[1mborrow_file![22m[0m[1m([22m[90mf[39m::[0mQuartoNotebookRunner.var"#51#55"[90m{Nothing, String, Bool, Dict{String, Any}, QuartoNotebookRunner.var"#chunk_callback#101"{TCPSocket}, Vector{QuartoNotebookRunner.SourceRange}, Server}[39m, [90mserver[39m::[0mServer, [90mpath[39m::[0mString; [90mwait[39m::[0mBool, [90moptionally_create[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:134[24m[39m
+[91m[1m│ [22m[39m     [6] [0m[1mrun![22m[0m[1m([22m[90mserver[39m::[0mServer, [90mpath[39m::[0mString; [90moutput[39m::[0mNothing, [90mmarkdown[39m::[0mString, [90mshowprogress[39m::[0mBool, [90moptions[39m::[0mDict[90m{String, Any}[39m, [90mchunk_callback[39m::[0mFunction, [90msource_ranges[39m::[0mVector[90m{QuartoNotebookRunner.SourceRange}[39m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4mserver.jl:29[24m[39m
+[91m[1m│ [22m[39m     [7] [0m[1m_handle_response_internal[22m[0m[1m([22m[90msocket[39m::[0mTCPSocket, [90msocketserver[39m::[0mQuartoNotebookRunner.SocketServer, [90mrequest[39m::[0m@NamedTuple[90m{type::String, content::Union{Dict{String, Any}, String}}[39m, [90mshowprogress[39m::[0mBool[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:393[24m[39m
+[91m[1m│ [22m[39m     [8] [0m[1m_handle_response[22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:309[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m     [9] [0m[1m(::QuartoNotebookRunner.var"#90#100"{Bool, Base.RefValue{Bool}, Server, Base.RefValue{Union{Nothing, QuartoNotebookRunner.SocketServer}}, Base.UUID})[22m[0m[1m([22m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:240[24m[39m
+[91m[1m│ [22m[39m    [10] [0m[1m_with_logger[22m
+[91m[1m│ [22m[39m   [90m    @[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:3[24m[39m[90m [inlined][39m
+[91m[1m│ [22m[39m    [11] [0m[1m(::QuartoNotebookRunner.var"#89#99"{Bool, Nothing, Base.RefValue{Bool}, Server, Base.RefValue{Union{Nothing, QuartoNotebookRunner.SocketServer}}, Base.UUID})[22m[0m[1m([22m[0m[1m)[22m
+[91m[1m│ [22m[39m   [90m    @[39m [35mQuartoNotebookRunner[39m [90m~/.julia/packages/QuartoNotebookRunner/6dLRn/src/[39m[90m[4msocket.jl:202[24m[39m
+[91m[1m└ [22m[39m[90m@ QuartoNotebookRunner ~/.julia/packages/QuartoNotebookRunner/6dLRn/src/socket.jl:431[39m
+exit=0

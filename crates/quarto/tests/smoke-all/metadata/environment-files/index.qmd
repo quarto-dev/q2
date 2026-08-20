@@ -1,0 +1,14 @@
+---
+title: Environment files
+format: html
+_quarto:
+  tests:
+    html:
+      ensureFileRegexMatches:
+        - ["value-from-environment-file", "local-override-wins"]
+        - ["\\?env:", "base-value-should-lose"]
+---
+
+Base: {{< env Q2_TEST_ENVFILE_VAR >}}
+
+Local: {{< env Q2_TEST_ENVFILE_LOCAL >}}

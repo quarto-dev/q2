@@ -110,7 +110,7 @@ pub struct RenderToFileOptions {
     /// trace can be fabricated against the real pipeline rather
     /// than a synthetic context). Production callers should prefer
     /// `replay_captures`.
-    pub engine_registry_override: Option<crate::engine::EngineRegistry>,
+    pub engine_registry_override: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
 
     /// Resolved attribution mode (CLI override merged with YAML).
     /// `Some(AttributionMode::Git)` installs a [`GitBlameProvider`]
@@ -215,6 +215,21 @@ pub fn render_document_to_file(
     format_override: Option<&str>,
 ) -> Result<RenderToFileResult> {
     debug!("Rendering: {}", input_path.display());
+
+    // Canonicalize the input defensively. `ProjectContext::discover`
+    // canonicalizes internally, so a symlinked input path (macOS
+    // `/var/folders` → `/private/var/folders` tempdirs) would
+    // otherwise put the derived `output_path` and the project's roots
+    // on different spellings of the same directory — and
+    // `page_url_for`'s pathdiff then emits `../..`-laden URLs that
+    // escape the site (surfaced by Case B of
+    // bd-root-relative-paths-design-fc5pvkcv, which routed image
+    // targets through pathdiff for the first time). Idempotent for
+    // already-canonical callers like the CLI; on error (runtime
+    // without canonicalization, nonexistent path) keep the caller's
+    // spelling — `file_read` below reports the real problem.
+    let canonical_input = runtime.canonicalize(input_path).ok();
+    let input_path = canonical_input.as_deref().unwrap_or(input_path);
 
     // Read input file
     let input_bytes = runtime.file_read(input_path).map_err(|e| {
@@ -334,8 +349,8 @@ pub fn render_document_to_file(
     if let Some(reg) = options.engine_registry_override.clone() {
         config.engine_registry = Some(reg);
     } else if !options.replay_captures.is_empty() {
-        config.engine_registry = Some(crate::engine::EngineRegistry::with_replay_many(
-            options.replay_captures.clone(),
+        config.engine_registry = Some(std::sync::Arc::new(
+            crate::engine::EngineRegistry::with_replay_many(options.replay_captures.clone()),
         ));
     }
 
@@ -496,6 +511,25 @@ fn determine_output_paths(
         base_dir.join(format!("{}.{}", stem, extension))
     };
 
+    // Refuse an output that lands on the input itself — rendering
+    // would silently replace the source with its own output
+    // (bd-6d2wj4zp D7). Reachable via `--output <input>` today, and
+    // the guard also covers any future md-output format whose
+    // default `foo.md` → `foo.md` collides. Lexical comparison is
+    // the right level here: both paths are derived from the same
+    // (already-canonicalized) input in the default branch, and an
+    // explicit output aiming at the input through a different
+    // spelling still gets caught the moment the spellings agree —
+    // this is a safety net, not an ACL.
+    if output_path == input_path {
+        return Err(QuartoError::other(format!(
+            "Refusing to render {}: the output path would overwrite the input \
+             file itself. Pass a different `--output` / `output-file`, or let \
+             the output extension differ from the source's.",
+            input_path.display()
+        )));
+    }
+
     // Determine output directory
     let output_dir = output_path
         .parent()
@@ -533,6 +567,26 @@ mod tests {
         assert_eq!(output, PathBuf::from("/project/doc.html"));
         assert_eq!(dir, PathBuf::from("/project"));
         assert_eq!(stem, "doc");
+    }
+
+    /// bd-6d2wj4zp D7: a computed output that lands on the input
+    /// itself must refuse, not silently destroy the source. Reachable
+    /// today via `--output <input>`; will also guard the future
+    /// `foo.md` + `format: gfm` default (`foo.md` → `foo.md`).
+    #[test]
+    fn output_equal_to_input_is_refused() {
+        let input = Path::new("/project/notes.md");
+        let options = RenderToFileOptions {
+            output_path: Some(PathBuf::from("/project/notes.md")),
+            ..Default::default()
+        };
+        let err = determine_output_paths(input, "html", &options)
+            .expect_err("output == input must be an error");
+        let text = format!("{err}");
+        assert!(
+            text.contains("overwrite"),
+            "error should say it would overwrite the input: {text}"
+        );
     }
 
     #[test]

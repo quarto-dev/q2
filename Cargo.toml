@@ -23,7 +23,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "0.11.0"
+version = "0.25.0"
 authors = ["Posit Software, PBC"]
 homepage = "https://github.com/posit-dev/quarto-markdown-syntax"
 keywords = ["parser"]
@@ -63,6 +63,10 @@ scraper = "0.26"
 grass = "0.13.4"
 include_dir = "0.7"
 flate2 = "1.1"
+tar = "0.4"
+# zstdmt: multithreaded compression for the build-time embed archiving
+# (quarto-preview build.rs); runtime decode is single-threaded either way.
+zstd = { version = "0.13", features = ["zstdmt"] }
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 walkdir = "2"
@@ -111,8 +115,11 @@ path = "./crates/quarto-core"
 [workspace.dependencies.quarto-util]
 path = "./crates/quarto-util"
 
+[workspace.dependencies.spa-manifest]
+path = "./crates/spa-manifest"
+
 [workspace.dependencies.quarto-yaml]
-version = "0.1.0"
+version = "0.1.2"
 
 [workspace.dependencies.quarto-error-reporting]
 version = "0.2.1"
@@ -173,6 +180,9 @@ path = "./crates/quarto-hub"
 
 [workspace.dependencies.quarto-navigation]
 path = "./crates/quarto-navigation"
+
+[workspace.dependencies.quarto-p2p]
+path = "./crates/quarto-p2p"
 
 [workspace.dependencies.quarto-publish]
 path = "./crates/quarto-publish"
@@ -298,6 +308,14 @@ runtimelib = { git = "https://github.com/cscheid/runtimed", rev = "fc58eb48139a3
 jupyter-protocol = { git = "https://github.com/cscheid/runtimed", rev = "fc58eb48139a30cc559ac5973cb6debb00375b88" }
 
 # Profiles must be set at the workspace level
+[profile.release]
+# Strip the symbol table from shipped binaries (bd-p0p4r9b2): ~21.6 MiB
+# of 172k mangled Rust symbols that are never used at runtime. Panic
+# file:line messages are unaffected (Location lives in rodata, not the
+# symtab). Profiling uses [profile.release-perf], which overrides this
+# with strip = false.
+strip = "symbols"
+
 [profile.dev]
 # Tell `rustc` to optimize for small code size to
 # work around "too many locals" error from wasm-pack

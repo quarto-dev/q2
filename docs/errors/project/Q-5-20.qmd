@@ -1,0 +1,89 @@
+---
+title: "Invalid profile configuration"
+description: "The `profile:` key must be a mapping with `default` and `group`; Quarto 2 reports malformed configuration rather than ignoring it."
+code: Q-5-20
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-20` — Invalid profile configuration
+
+> The `profile:` key must be a mapping with `default` and `group`;
+> Quarto 2 reports malformed configuration rather than ignoring it.
+
+## What this means
+
+The `profile:` key takes exactly two sub-keys:
+
+| Key       | Accepts                                              |
+| --------- | ---------------------------------------------------- |
+| `default` | a profile name, or a list of profile names           |
+| `group`   | a list of profile names, or a list of such lists      |
+
+A `group` is a set of mutually exclusive profiles: at most one member
+of a group is active at a time, and activating one deactivates its
+siblings.
+
+Anything else under `profile:` is malformed. Quarto 1 ignores malformed
+profile configuration silently; Quarto 2 reports it, because the
+consequence of ignoring it is selecting the wrong profiles — and a
+project rendered under the wrong profile produces plausible output
+built from the wrong configuration.
+
+## Why this happens
+
+- **A bare list under `profile:`**, meaning "these are my profiles".
+  The list must go under `group` or `default`.
+- **A string where a mapping is expected** — `profile: staging`
+  instead of `profile: {default: staging}`.
+- **Extra keys** under `profile:`, such as `active` or `profiles`,
+  borrowed from a different tool.
+- **A single string under `group`.** `group` is a list, even with one
+  member.
+
+## How to fix
+
+Set a default profile:
+
+```yaml
+profile:
+  default: production
+```
+
+Declare a group of mutually exclusive profiles:
+
+```yaml
+profile:
+  group:
+    - [production, staging, development]
+```
+
+Both together, which is the usual shape:
+
+```yaml
+profile:
+  default: development
+  group:
+    - [production, staging, development]
+```
+
+Multiple independent groups are lists of lists — each inner list is one
+mutually-exclusive set, and one profile from each can be active at
+once:
+
+```yaml
+profile:
+  group:
+    - [production, staging]
+    - [fast, thorough]
+```
+
+## Related errors
+
+- [`Q-5-19`](Q-5-19.qmd) — a profile name that matches nothing.
+- [`Q-5-21`](Q-5-21.qmd) — a profile name with disallowed characters.
+- [`Q-5-22`](Q-5-22.qmd) — a `profile:` key in a file where it has no
+  effect.

@@ -36,6 +36,9 @@ pub struct AttributionDataBuilder {
     runs: Vec<AttributionRun>,
     identities: IdentityMap,
     intern: HashMap<String, Arc<str>>,
+    /// See [`AttributionData::file_id`]. `None` ⇒ the v1 default
+    /// (the primary document's dense slot, `FileId(0)`).
+    document_file_id: Option<quarto_source_map::FileId>,
 }
 
 impl AttributionDataBuilder {
@@ -85,10 +88,21 @@ impl AttributionDataBuilder {
         true
     }
 
+    /// Declare which file the runs' byte ranges index into. Providers
+    /// that blame something other than the primary document must call
+    /// this; the default is `FileId(0)` (the primary document's dense
+    /// slot — see [`AttributionData::file_id`]).
+    pub fn set_document_file_id(&mut self, file_id: quarto_source_map::FileId) {
+        self.document_file_id = Some(file_id);
+    }
+
     pub fn build(self) -> AttributionData {
         AttributionData {
             runs: AttributionMap(self.runs),
             identities: self.identities,
+            file_id: self
+                .document_file_id
+                .unwrap_or(quarto_source_map::FileId(0)),
         }
     }
 }

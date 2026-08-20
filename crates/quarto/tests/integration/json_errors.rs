@@ -329,3 +329,60 @@ fn text_mode_unchanged_regression() {
         "text mode must not emit JsonPass1Failure; stderr:\n{stderr}"
     );
 }
+
+/// bd-y56u1gl7: a structured parse error from *project discovery*
+/// (here: Q-5-17 unknown `project.type`) must surface its real code
+/// and location under `--json-errors` — not the generic Q-7-8
+/// "Project Discovery Failed" envelope with the ANSI-rendered text
+/// buried in `problem`.
+#[test]
+fn discovery_parse_error_json_carries_real_code() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(&dir.join("_quarto.yml"), "project:\n  type: posit-docs\n");
+    write_file(&dir.join("index.qmd"), "---\ntitle: x\n---\n\nhi\n");
+
+    let output = run_q2_render(&dir, &["--json-errors"]);
+    assert!(
+        !output.status.success(),
+        "expected non-zero exit on unknown project.type"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let lines = parse_ndjson_lines(&stderr);
+    assert!(
+        !lines.is_empty(),
+        "expected at least one JSON diagnostic on stderr; stderr was:\n{stderr}"
+    );
+
+    let codes: Vec<&str> = lines
+        .iter()
+        .filter_map(|l| l.get("code").and_then(|c| c.as_str()))
+        .collect();
+    assert!(
+        codes.contains(&"Q-5-17"),
+        "expected the real Q-5-17 code in the stream, got {codes:?}; stderr:\n{stderr}"
+    );
+    assert!(
+        !codes.contains(&"Q-7-8"),
+        "the generic Q-7-8 envelope must not wrap a structured parse error; got {codes:?}"
+    );
+
+    let diag = lines
+        .iter()
+        .find(|l| l.get("code").and_then(|c| c.as_str()) == Some("Q-5-17"))
+        .unwrap();
+    assert!(
+        is_diagnostic_shape(diag),
+        "Q-5-17 line must claim the JsonDiagnostic schema; got:\n{diag:#?}"
+    );
+    assert_eq!(diag.get("kind").and_then(|k| k.as_str()), Some("error"));
+    assert!(
+        diag.get("start_line").is_some(),
+        "the diagnostic must carry its source location; got:\n{diag:#?}"
+    );
+    assert!(
+        !stderr.contains('\u{1b}'),
+        "no ANSI escapes may leak into --json-errors output; got:\n{stderr}"
+    );
+}

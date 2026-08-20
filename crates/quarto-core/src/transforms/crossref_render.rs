@@ -1288,6 +1288,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/p"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/p/t.qmd");
         let format = Format::html();

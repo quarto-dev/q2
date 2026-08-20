@@ -1,0 +1,18 @@
+[package]
+name = "spa-manifest"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "SPA asset manifest generation and parsing for the q2 preview embedded bundles (live-share local asset serving)."
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2 = "0.11"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

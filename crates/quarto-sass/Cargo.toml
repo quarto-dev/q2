@@ -9,6 +9,8 @@ description = "SASS compilation infrastructure for Quarto"
 
 [dependencies]
 serde.workspace = true
+# Parsing vendored `.theme` highlight-palette JSON (highlight_theme.rs)
+serde_json.workspace = true
 serde_yaml.workspace = true
 yaml-rust2.workspace = true
 thiserror.workspace = true

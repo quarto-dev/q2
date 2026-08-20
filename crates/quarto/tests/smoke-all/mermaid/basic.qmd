@@ -2,9 +2,13 @@
 title: "Mermaid Basic"
 # bd-5m4ga0s1: a plain ```mermaid fenced block renders as
 # <pre class="mermaid"> with the escaped diagram source, plus a single
-# after-body <script type="module"> loading the exact-pinned CDN build
-# and calling mermaid.run(). The `-->` arrow doubles as the
-# HTML-escaping probe (must appear as --&gt;).
+# after-body <script src> + init pair calling mermaid.run(). The `-->`
+# arrow doubles as the HTML-escaping probe (must appear as --&gt;).
+#
+# bd-mermaid-runtime-not-bundled-vxejw159: the runtime is BUNDLED, so
+# the script src must be a relative path and jsDelivr must appear
+# nowhere in the output. The negative pattern is the load-bearing one —
+# it is what keeps a rendered site working offline.
 _quarto:
   tests:
     html:
@@ -17,11 +21,11 @@ _quarto:
             "<pre class=\"mermaid\">",
             "flowchart LR",
             "a --&gt; b",
-            "cdn\\.jsdelivr\\.net/npm/mermaid@11\\.12\\.0/dist/mermaid\\.esm\\.min\\.mjs",
+            "<script src=\"[^\"]*mermaid\\.min\\.js\"></script>",
             "mermaid\\.initialize\\(\\{ startOnLoad: false \\}\\)",
             "mermaid\\.run\\(\\{ querySelector: 'pre\\.mermaid' \\}\\)",
           ]
-        - ["a --> b"]
+        - ["a --> b", "cdn\\.jsdelivr\\.net", "https?://"]
 ---
 
 Before the diagram.

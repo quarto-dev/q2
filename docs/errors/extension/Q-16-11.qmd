@@ -1,0 +1,86 @@
+---
+title: "Engine resolution deferred to render time"
+description: "An engine extension declares no static language claims, so Quarto could not decide which engine owns each document before rendering it."
+code: Q-16-11
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-11` — Engine resolution deferred to render time
+
+> An engine extension declares no static language claims, so Quarto
+> could not decide which engine owns each document before rendering it.
+
+## What this means
+
+Before rendering, Quarto scans the project to work out which execution
+engine owns each document. When every engine has declared its language
+claims up front, that scan is a lookup — fast, and it answers for the
+whole project at once.
+
+When an engine answers only at run time, the scan cannot complete. The
+documents it might own stay unresolved until the render reaches them,
+and Quarto has to start the engine to find out.
+
+The message tells you how many documents were affected:
+
+```
+Warning: engine extension `my-engine` declares no static language claims
+  so engine resolution must wait for render time. Execution-language
+  indexing is unavailable for 3 of 12 documents.
+```
+
+Your documents still render correctly. What is lost is the ahead-of-time
+picture: features that want to know a document's execution language
+without rendering it — indexing, listings, and incremental rebuild
+decisions — have nothing to read for the affected documents.
+
+## How to fix
+
+There are two places to supply the missing information.
+
+**In the extension** — the real fix, if you maintain it. Declare
+`claims:` in its `_extension.yml`:
+
+```yaml
+contributes:
+  engines:
+    - path: dist/my-engine.js
+      name: my-engine
+      claims:
+        python: true
+```
+
+See [`Q-16-10`](Q-16-10.qmd) for the full set of declarations.
+
+**In your project** — if you do not maintain the extension, you can
+answer on its behalf with a claim table under `engines:` in
+`_quarto.yml`:
+
+```yaml
+engines:
+  - my-engine:
+      claims: [python]
+```
+
+This tells Quarto "`my-engine` handles `python`" without asking the
+engine, which is enough to resolve the documents ahead of time. It is
+your assertion rather than the engine's, so keep it in step with what
+the engine actually does.
+
+## When this warning does not appear
+
+It is reported only when at least one document was actually affected. An
+engine that claims at run time but that no document in your project
+needs will not trigger this warning — though it will still trigger
+[`Q-16-10`](Q-16-10.qmd), which is about the engine's declarations
+rather than this render's outcome.
+
+## Related errors
+
+- [`Q-16-10`](Q-16-10.qmd) — the underlying cause, reported against the
+  extension itself.
+- [`Q-16-12`](Q-16-12.qmd) — when the deferred load then fails.

@@ -500,3 +500,56 @@ fn pipeline_renders_explicit_sidebar_title_literally() {
         "website.title must not appear when sidebar.title is explicit"
     );
 }
+
+// === bd-sidebar-section-text-ignored-sdp5g7ns =============================
+
+/// A sidebar entry with `text:` + `file:` + `contents:` (a section
+/// with an explicit landing page) must display its configured `text:`
+/// — not the landing page's title. Before the fix, the parser dropped
+/// `text:` in the Section branch and `enrich_text_from_index` filled
+/// the gap with the page title.
+#[test]
+fn pipeline_section_with_text_key_shows_configured_text() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  sidebar:\n    contents:\n\
+             \x20     - text: \"Short Name\"\n\
+             \x20       file: landing.qmd\n\
+             \x20       contents:\n\
+             \x20         - inner.qmd\n\
+             \x20     - index.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        write(
+            &project_dir.join("landing.qmd"),
+            "---\ntitle: The Much Longer Landing Page Title\n---\n\nLanding.\n",
+        );
+        write(
+            &project_dir.join("inner.qmd"),
+            "---\ntitle: Inner\n---\n\nInner.\n",
+        );
+    });
+
+    // Inspect a page other than landing.html so the landing page's
+    // title can only appear via the sidebar (not the page's own
+    // <title>/<h1>).
+    let index_html = find_html(&outputs, "index");
+    assert!(
+        index_html.contains("class=\"sidebar-item-text sidebar-link\">Short Name</a>"),
+        "sidebar section header must show the configured `text:`; \
+         got sidebar region: {}",
+        index_html
+            .find("<nav id=\"quarto-sidebar\"")
+            .map_or("<no sidebar nav>", |i| &index_html
+                [i..(i + 2000).min(index_html.len())])
+    );
+    assert!(
+        !index_html.contains("The Much Longer Landing Page Title"),
+        "the landing page's title must not leak into another page's sidebar"
+    );
+}

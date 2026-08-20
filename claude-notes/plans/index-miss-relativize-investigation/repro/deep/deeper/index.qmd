@@ -1,0 +1,14 @@
+---
+title: Deep page
+---
+
+The four rows from bd-root-absolute-dir-link-58eh8834 (top two were the
+bug; bottom two are controls):
+
+- [dir slash](/section/)
+- [dir bare](/section)
+- [source file](/section/index.md)
+- [root](/index.qmd)
+
+And the nav-surface twin (bd-tef2lm9j) is the navbar's
+`assets/report.pdf` entry, visible in this page's header.

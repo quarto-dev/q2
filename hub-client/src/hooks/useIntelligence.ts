@@ -14,7 +14,7 @@ import {
   type FoldingRange,
   type DocumentAnalysis,
 } from '../services/intelligenceService';
-import { isQmdFile } from '@quarto/preview-renderer/types/project';
+import { isSourceFile } from '@quarto/preview-renderer/types/project';
 
 /**
  * Options for the useIntelligence hook.
@@ -106,8 +106,8 @@ export function useIntelligence(
       return;
     }
 
-    // Only analyze QMD files - other file types don't have symbols/diagnostics/folding
-    if (!isQmdFile(path)) {
+    // Only analyze source files (.qmd, .md) - other file types don't have symbols/diagnostics/folding
+    if (!isSourceFile(path)) {
       setSymbols([]);
       setDiagnostics([]);
       setFoldingRanges([]);

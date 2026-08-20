@@ -23,22 +23,29 @@ use super::quarto_api::current_script_dir;
 // =========================================================================
 
 /// An HTML dependency registered by an extension via `quarto.doc.add_html_dependency`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HtmlDependency {
     pub name: String,
+    /// Optional version, as declared by `quarto.doc.add_html_dependency`.
+    ///
+    /// Carried into the artifact path and key so two renders that produce
+    /// different versions of one dependency do not collapse onto the same
+    /// asset — the requirement `freeze` will depend on. See
+    /// `claude-notes/plans/2026-08-14-add-html-dependency-version.md`.
+    pub version: Option<String>,
     pub stylesheets: Vec<PathBuf>,
     pub scripts: Vec<PathBuf>,
 }
 
 /// A text include registered by an extension via `quarto.doc.include_text`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TextInclude {
     pub location: IncludeLocation,
     pub content: String,
 }
 
 /// Where to inject text in the output document.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum IncludeLocation {
     InHeader,
     BeforeBody,
@@ -50,17 +57,10 @@ pub enum IncludeLocation {
 // =========================================================================
 
 /// Fields we support.
-const SUPPORTED_FIELDS: &[&str] = &["name", "scripts", "stylesheets"];
+const SUPPORTED_FIELDS: &[&str] = &["name", "version", "scripts", "stylesheets"];
 
 /// Fields that TS Quarto supports but we don't yet.
-const UNSUPPORTED_FIELDS: &[&str] = &[
-    "version",
-    "meta",
-    "links",
-    "resources",
-    "serviceworkers",
-    "head",
-];
+const UNSUPPORTED_FIELDS: &[&str] = &["meta", "links", "resources", "serviceworkers", "head"];
 
 // =========================================================================
 // Format alias matching (matching TS Quarto's _format.lua)
@@ -68,7 +68,10 @@ const UNSUPPORTED_FIELDS: &[&str] = &[
 
 /// Check if FORMAT matches a query using TS Quarto's alias-based matching.
 /// `format` is the current FORMAT global value, `query` is what the extension asked for.
-fn is_format_match(format: &str, query: &str) -> bool {
+/// Public: quarto-core's conditional-content transform reuses this for
+/// `when-format` / `unless-format` (bd-fu16z22k) so Lua's
+/// `quarto.doc.is_format` and the attribute syntax can never disagree.
+pub fn is_format_match(format: &str, query: &str) -> bool {
     // Exact match
     if format == query {
         return true;
@@ -224,21 +227,19 @@ pub fn register_quarto_doc(lua: &Lua) -> Result<()> {
                 )),
             })?;
 
-            // Check for unsupported and unknown fields
+            let version: Option<String> = dep.get("version")?;
+
+            // Reject unknown fields. This runs on EVERY call, including one
+            // whose name is already registered: a misspelled field is a bug in
+            // the extension regardless of whether this particular call would
+            // have registered anything. Only the *warning* below may be
+            // deferred past the dedup early-return
+            // (bd-add-html-dependency-version-5tnub5ds).
             for pair in dep.pairs::<String, Value>() {
                 let (key, _) = pair?;
-                if SUPPORTED_FIELDS.contains(&key.as_str()) {
-                    continue;
-                }
-                if UNSUPPORTED_FIELDS.contains(&key.as_str()) {
-                    // Emit warning via quarto.warn
-                    let quarto: Table = lua.globals().get("quarto")?;
-                    let warn_fn: mlua::Function = quarto.get("warn")?;
-                    warn_fn.call::<()>(format!(
-                        "add_html_dependency: field '{}' is not yet supported and will be ignored",
-                        key
-                    ))?;
-                } else {
+                if !SUPPORTED_FIELDS.contains(&key.as_str())
+                    && !UNSUPPORTED_FIELDS.contains(&key.as_str())
+                {
                     return Err(mlua::Error::runtime(format!(
                         "add_html_dependency: unknown field '{}'",
                         key
@@ -246,15 +247,52 @@ pub fn register_quarto_doc(lua: &Lua) -> Result<()> {
                 }
             }
 
-            // Check for deduplication by name
             let quarto: Table = lua.globals().get("quarto")?;
+            let warn_fn: mlua::Function = quarto.get("warn")?;
             let doc_table: Table = quarto.get("doc")?;
             let deps: Table = doc_table.get("_dependencies")?;
+
+            // Deduplicate by name — deliberately NOT by (name, version).
+            // Extensions are written to call this once per matching element,
+            // so the repeat call is the normal case and must stay silent.
+            // Registering the same name at a *different* version within one
+            // document would inject two copies of one library into a single
+            // page, which is a mistake worth reporting; cross-render
+            // coexistence (what `freeze` needs) is handled downstream by the
+            // versioned artifact key, not here.
             for i in 1..=deps.raw_len() {
                 let existing: Table = deps.get(i)?;
                 let existing_name: String = existing.get("name")?;
                 if existing_name == name {
+                    let existing_version: Option<String> = existing.get("version")?;
+                    if existing_version != version {
+                        let describe = |v: &Option<String>| match v {
+                            Some(v) => format!("version '{}'", v),
+                            None => "no version".to_string(),
+                        };
+                        warn_fn.call::<()>(format!(
+                            "add_html_dependency: dependency '{}' is already registered with {}; \
+                             ignoring this registration with {}. Only the first registration in a \
+                             document is used.",
+                            name,
+                            describe(&existing_version),
+                            describe(&version)
+                        ))?;
+                    }
                     return Ok(()); // Already registered
+                }
+            }
+
+            // Warn about fields we don't implement yet. After the dedup
+            // early-return, so this fires once per distinct dependency rather
+            // than once per call.
+            for pair in dep.pairs::<String, Value>() {
+                let (key, _) = pair?;
+                if UNSUPPORTED_FIELDS.contains(&key.as_str()) {
+                    warn_fn.call::<()>(format!(
+                        "add_html_dependency: field '{}' is not yet supported and will be ignored",
+                        key
+                    ))?;
                 }
             }
 
@@ -265,6 +303,7 @@ pub fn register_quarto_doc(lua: &Lua) -> Result<()> {
             // Store as a Lua table
             let entry = lua.create_table()?;
             entry.set("name", name)?;
+            entry.set("version", version)?;
 
             let ss_table = lua.create_table()?;
             for (i, path) in stylesheets.iter().enumerate() {
@@ -367,6 +406,7 @@ pub fn extract_html_dependencies(lua: &Lua) -> Result<Vec<HtmlDependency>> {
     for i in 1..=deps.raw_len() {
         let entry: Table = deps.get(i)?;
         let name: String = entry.get("name")?;
+        let version: Option<String> = entry.get("version")?;
 
         let ss_table: Table = entry.get("stylesheets")?;
         let mut stylesheets = Vec::new();
@@ -384,6 +424,7 @@ pub fn extract_html_dependencies(lua: &Lua) -> Result<Vec<HtmlDependency>> {
 
         result.push(HtmlDependency {
             name,
+            version,
             stylesheets,
             scripts,
         });
@@ -467,6 +508,21 @@ mod tests {
         let lua = create_test_lua();
         lua.globals().set("FORMAT", format).unwrap();
         lua
+    }
+
+    /// Messages accumulated in `quarto._diagnostics` by `quarto.warn` /
+    /// `quarto.error`. Used to assert *how many times* a diagnostic fired,
+    /// which is the whole point of
+    /// `bd-add-html-dependency-version-5tnub5ds`.
+    fn diagnostic_messages(lua: &Lua) -> Vec<String> {
+        let quarto: Table = lua.globals().get("quarto").unwrap();
+        let diagnostics: Table = quarto.get("_diagnostics").unwrap();
+        (1..=diagnostics.raw_len())
+            .map(|i| {
+                let entry: Table = diagnostics.get(i).unwrap();
+                entry.get::<String>("message").unwrap()
+            })
+            .collect()
     }
 
     // =====================================================================
@@ -710,6 +766,166 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("unknown field"), "Error was: {}", err);
+    }
+
+    // ---------------------------------------------------------------------
+    // bd-add-html-dependency-version-5tnub5ds
+    //
+    // Extensions are written to call add_html_dependency unconditionally for
+    // every matching element — that is the documented idiom, and the dedup
+    // by name is what makes it safe. The unsupported-field warning must
+    // therefore fire once per *distinct dependency*, not once per *call*.
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn test_add_html_dependency_warns_unsupported_field_once_per_dependency() {
+        let lua = create_test_lua_with_format("html");
+        lua.load(
+            r#"
+            for _ = 1, 3 do
+                quarto.doc.add_html_dependency({
+                    name = "dep",
+                    stylesheets = {"style.css"},
+                    meta = {viewport = "width=device-width"},
+                })
+            end
+            "#,
+        )
+        .exec()
+        .unwrap();
+
+        // Three calls, one distinct dependency, one warning.
+        let warnings = diagnostic_messages(&lua);
+        assert_eq!(
+            warnings.len(),
+            1,
+            "expected exactly one warning for one distinct dependency, got: {warnings:?}"
+        );
+        assert!(warnings[0].contains("'meta'"), "was: {}", warnings[0]);
+        assert_eq!(extract_html_dependencies(&lua).unwrap().len(), 1);
+    }
+
+    /// The field loop does double duty: it warns on unsupported fields *and*
+    /// hard-errors on unknown ones. Only the warning may move after the dedup
+    /// early-return — a typo must keep erroring on every call, including one
+    /// whose name is already registered.
+    #[test]
+    fn test_add_html_dependency_errors_unknown_field_on_repeat_call() {
+        let lua = create_test_lua_with_format("html");
+        lua.load(r#"quarto.doc.add_html_dependency({name = "dep", scripts = {"a.js"}})"#)
+            .exec()
+            .unwrap();
+
+        let result = lua
+            .load(
+                r#"
+                quarto.doc.add_html_dependency({
+                    name = "dep",
+                    scripts = {"a.js"},
+                    totally_bogus = true,
+                })
+                "#,
+            )
+            .exec();
+
+        assert!(
+            result.is_err(),
+            "an unknown field must error even when the dependency name is already registered"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("unknown field"), "Error was: {}", err);
+    }
+
+    #[test]
+    fn test_add_html_dependency_version_does_not_warn() {
+        let lua = create_test_lua_with_format("html");
+        lua.load(
+            r#"
+            quarto.doc.add_html_dependency({
+                name = "dep",
+                version = "1.0.0",
+                scripts = {"dep.js"},
+            })
+            "#,
+        )
+        .exec()
+        .unwrap();
+
+        assert_eq!(
+            diagnostic_messages(&lua),
+            Vec::<String>::new(),
+            "'version' is supported; it must not warn"
+        );
+    }
+
+    #[test]
+    fn test_add_html_dependency_version_is_extracted() {
+        let lua = create_test_lua_with_format("html");
+        lua.load(
+            r#"
+            quarto.doc.add_html_dependency({name = "versioned", version = "1.0.0", scripts = {"a.js"}})
+            quarto.doc.add_html_dependency({name = "plain", scripts = {"b.js"}})
+            "#,
+        )
+        .exec()
+        .unwrap();
+
+        let deps = extract_html_dependencies(&lua).unwrap();
+        assert_eq!(deps.len(), 2);
+        assert_eq!(deps[0].version.as_deref(), Some("1.0.0"));
+        assert_eq!(deps[1].version, None);
+    }
+
+    /// Within one document, registering the same name at a different version
+    /// is first-wins (as in Quarto 1) *and* warns — injecting two versions of
+    /// one library into a single page is a bug, not a feature. Cross-*render*
+    /// coexistence, which is what `freeze` needs, is handled downstream by the
+    /// versioned artifact key, not here.
+    #[test]
+    fn test_add_html_dependency_same_name_different_version_warns_and_keeps_first() {
+        let lua = create_test_lua_with_format("html");
+        lua.load(
+            r#"
+            quarto.doc.add_html_dependency({name = "dep", version = "1.0.0", scripts = {"a.js"}})
+            quarto.doc.add_html_dependency({name = "dep", version = "2.0.0", scripts = {"b.js"}})
+            "#,
+        )
+        .exec()
+        .unwrap();
+
+        let deps = extract_html_dependencies(&lua).unwrap();
+        assert_eq!(deps.len(), 1, "first registration wins");
+        assert_eq!(deps[0].version.as_deref(), Some("1.0.0"));
+
+        let warnings = diagnostic_messages(&lua);
+        assert_eq!(
+            warnings.len(),
+            1,
+            "a version conflict within one document should warn, got: {warnings:?}"
+        );
+        assert!(
+            warnings[0].contains("dep") && warnings[0].contains("2.0.0"),
+            "warning should name the dependency and the rejected version, was: {}",
+            warnings[0]
+        );
+    }
+
+    /// The same name at the *same* version is the ordinary
+    /// call-once-per-element idiom, and must stay silent.
+    #[test]
+    fn test_add_html_dependency_same_name_same_version_is_silent() {
+        let lua = create_test_lua_with_format("html");
+        lua.load(
+            r#"
+            quarto.doc.add_html_dependency({name = "dep", version = "1.0.0", scripts = {"a.js"}})
+            quarto.doc.add_html_dependency({name = "dep", version = "1.0.0", scripts = {"a.js"}})
+            "#,
+        )
+        .exec()
+        .unwrap();
+
+        assert_eq!(extract_html_dependencies(&lua).unwrap().len(), 1);
+        assert_eq!(diagnostic_messages(&lua), Vec::<String>::new());
     }
 
     #[test]

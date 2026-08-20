@@ -16,6 +16,7 @@ import {
   validateProjectPath,
   type AssetFilePreview,
 } from './fileUpload';
+import ModalDialog from './ModalDialog';
 import './NewAssetDialog.css';
 
 export interface NewAssetDialogProps {
@@ -216,46 +217,34 @@ export default function NewAssetDialog({
     }
   }, [canUpload, previews, entryErrors, composePath, onUploadAsset, onClose]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    },
-    [onClose]
-  );
-
   if (!isOpen) return null;
 
   const maxMB = FILE_SIZE_LIMITS.MAX_FILE_SIZE / (1024 * 1024);
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div
-        className="new-asset-dialog"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <div className="dialog-header">
-          <h2>Add asset to project</h2>
-          <button className="close-btn" onClick={onClose} aria-label="Close">
-            &times;
-          </button>
-        </div>
-
+    <ModalDialog
+      title="Add asset to project"
+      className="new-asset-dialog"
+      onClose={onClose}
+      dialogProps={{
+        onDragOver: handleDragOver,
+        onDragLeave: handleDragLeave,
+        onDrop: handleDrop,
+      }}
+    >
         <div className="dialog-content">
           <div className="destination-input">
             <label htmlFor="asset-destination">Destination folder:</label>
             <input
               id="asset-destination"
               type="text"
+              className="ph-input focus-accent"
               value={destination}
               placeholder="(project root)"
               onChange={(e) => setDestination(e.target.value)}
             />
             {destinationError && (
-              <div className="error-message">{destinationError}</div>
+              <div className="ph-error inline">{destinationError}</div>
             )}
           </div>
 
@@ -266,7 +255,7 @@ export default function NewAssetDialog({
                 <p>Drag &amp; drop files here</p>
                 <p className="hint">or</p>
                 <button
-                  className="browse-btn"
+                  className="ph-btn primary browse-btn"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   Browse Files
@@ -345,22 +334,21 @@ export default function NewAssetDialog({
             onChange={handleFileSelect}
             style={{ display: 'none' }}
           />
-          {submitError && <div className="error-message">{submitError}</div>}
+          {submitError && <div className="ph-error inline">{submitError}</div>}
         </div>
 
         <div className="dialog-actions">
-          <button className="cancel-btn" onClick={onClose}>
+          <button className="ph-btn outline" onClick={onClose}>
             Cancel
           </button>
           <button
-            className="upload-btn"
+            className="ph-btn primary"
             onClick={handleUpload}
             disabled={!canUpload}
           >
             {isUploading ? 'Uploading...' : 'Upload'}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }

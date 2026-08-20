@@ -1,0 +1,26 @@
+---
+title: Página en borrador
+lang: es
+draft: true
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      # The banner label comes from the `draft` language term, not an
+      # English literal (bd-draft-banner-missing-hgx1gkqm). Quarto 1 uses
+      # `format.language.draft || "Draft"`; q2 already ships the term
+      # translated in resources/language/_language-es.yml.
+      ensureFileRegexMatches:
+        - ["</i>Borrador</div>"]
+        # Case-sensitive: this must not match the lowercase `content="draft"`
+        # of the `quarto:status` meta tag, which stays English by design.
+        - ["</i>Draft</div>"]
+      ensureHtmlElements:
+        - [
+            "div#quarto-draft-alert.alert.alert-warning",
+            'head meta[name="quarto:status"][content="draft"]',
+          ]
+---
+
+Una página en borrador.

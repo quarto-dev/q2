@@ -1,0 +1,40 @@
+---
+title: Mermaid cell-option probe
+---
+
+## B1: fig-cap + fig-alt, no label
+
+```mermaid
+%%| fig-cap: "A tiny flowchart."
+%%| fig-alt: "Two nodes connected by an arrow."
+flowchart LR
+  E --> F
+```
+
+## B2: label + fig-cap (crossref shape, mermaid comment prefix)
+
+```mermaid
+%%| label: fig-diagram
+%%| fig-cap: "A labelled flowchart."
+flowchart LR
+  G --> H
+```
+
+See @fig-diagram.
+
+## B3: hash-prefix cell options in a mermaid fence
+
+```mermaid
+#| label: fig-hash
+#| fig-cap: "Hash-prefixed."
+flowchart LR
+  I --> J
+```
+
+## B4: non-leading %%| comment stays a comment
+
+```mermaid
+flowchart LR
+  K --> L
+%%| this is just a comment
+```

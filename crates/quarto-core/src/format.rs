@@ -37,8 +37,6 @@ pub enum FormatIdentifier {
     Gfm,
     /// CommonMark
     CommonMark,
-    /// Custom/unknown format
-    Custom(u32), // Using u32 to keep Copy
 }
 
 impl FormatIdentifier {
@@ -53,7 +51,6 @@ impl FormatIdentifier {
             FormatIdentifier::Revealjs => "revealjs",
             FormatIdentifier::Gfm => "gfm",
             FormatIdentifier::CommonMark => "commonmark",
-            FormatIdentifier::Custom(_) => "custom",
         }
     }
 
@@ -286,7 +283,6 @@ fn output_extension_for(id: FormatIdentifier) -> String {
         FormatIdentifier::Revealjs => "html",
         FormatIdentifier::Gfm => "md",
         FormatIdentifier::CommonMark => "md",
-        FormatIdentifier::Custom(_) => "html",
     }
     .to_string()
 }
@@ -612,7 +608,6 @@ mod tests {
         assert_eq!(FormatIdentifier::Revealjs.as_str(), "revealjs");
         assert_eq!(FormatIdentifier::Gfm.as_str(), "gfm");
         assert_eq!(FormatIdentifier::CommonMark.as_str(), "commonmark");
-        assert_eq!(FormatIdentifier::Custom(42).as_str(), "custom");
     }
 
     #[test]
@@ -638,7 +633,6 @@ mod tests {
         assert!(!FormatIdentifier::Typst.is_native());
         assert!(!FormatIdentifier::Gfm.is_native());
         assert!(!FormatIdentifier::CommonMark.is_native());
-        assert!(!FormatIdentifier::Custom(0).is_native());
     }
 
     #[test]
@@ -654,7 +648,6 @@ mod tests {
         assert!(!FormatIdentifier::Typst.is_html_based());
         assert!(!FormatIdentifier::Gfm.is_html_based());
         assert!(!FormatIdentifier::CommonMark.is_html_based());
-        assert!(!FormatIdentifier::Custom(0).is_html_based());
     }
 
     #[test]
@@ -670,25 +663,12 @@ mod tests {
         assert!(!FormatIdentifier::Typst.is_multi_file());
         assert!(!FormatIdentifier::Gfm.is_multi_file());
         assert!(!FormatIdentifier::CommonMark.is_multi_file());
-        assert!(!FormatIdentifier::Custom(0).is_multi_file());
     }
 
     #[test]
     fn test_format_identifier_display() {
         assert_eq!(format!("{}", FormatIdentifier::Html), "html");
         assert_eq!(format!("{}", FormatIdentifier::Pdf), "pdf");
-        assert_eq!(format!("{}", FormatIdentifier::Custom(123)), "custom");
-    }
-
-    #[test]
-    fn test_format_identifier_custom() {
-        let custom1 = FormatIdentifier::Custom(1);
-        let custom2 = FormatIdentifier::Custom(2);
-        let custom1_copy = FormatIdentifier::Custom(1);
-
-        assert_ne!(custom1, custom2);
-        assert_eq!(custom1, custom1_copy);
-        assert_eq!(custom1.as_str(), "custom");
     }
 
     #[test]

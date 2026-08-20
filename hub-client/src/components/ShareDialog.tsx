@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import ModalDialog from './ModalDialog';
 import './ShareDialog.css';
 
 export interface ShareDialogProps {
@@ -70,33 +71,25 @@ export default function ShareDialog({
     }
   }, [shareableUrl, onCopied, onClose]);
 
+  // Enter copies the link; Escape and Tab containment are owned by ModalDialog.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      } else if (e.key === 'Enter') {
+      if (e.key === 'Enter') {
         handleCopyLink();
       }
     },
-    [onClose, handleCopyLink]
+    [handleCopyLink]
   );
 
   if (!isOpen || !shareableUrl) return null;
 
   return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div
-        className="share-dialog"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
-      >
-        <div className="dialog-header">
-          <h2>Share Project</h2>
-          <button className="close-btn" onClick={onClose}>
-            &times;
-          </button>
-        </div>
-
+    <ModalDialog
+      title="Share Project"
+      className="share-dialog"
+      onClose={onClose}
+      onKeyDown={handleKeyDown}
+    >
         <div className="dialog-content">
           <div className="warning-box">
             <span className="warning-icon">&#9888;</span>
@@ -114,6 +107,7 @@ export default function ShareDialog({
               ref={urlInputRef}
               id="shareable-url"
               type="text"
+              className="ph-input focus-accent"
               value={shareableUrl}
               readOnly
               onClick={(e) => (e.target as HTMLInputElement).select()}
@@ -122,17 +116,16 @@ export default function ShareDialog({
         </div>
 
         <div className="dialog-actions">
-          <button className="cancel-btn" onClick={onClose}>
+          <button className="ph-btn outline" onClick={onClose}>
             Cancel
           </button>
           <button
-            className={`copy-btn ${copied ? 'copied' : ''}`}
+            className={`ph-btn primary copy-btn ${copied ? 'copied' : ''}`}
             onClick={handleCopyLink}
           >
             {copied ? 'Copied!' : 'Copy Link'}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }

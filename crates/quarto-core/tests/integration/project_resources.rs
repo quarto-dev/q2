@@ -425,6 +425,7 @@ mod orchestrator_engine_channel {
             report.add_engine_files(
                 "mock-engine",
                 &doc_info.input,
+                runtime.as_ref(),
                 self.engine_files_per_doc
                     .iter()
                     .map(|(rel, _)| project.dir.join(rel)),
@@ -567,7 +568,7 @@ mod orchestrator_engine_channel {
         let qmd_path = project_dir.join("doc.qmd");
         write(
             &qmd_path,
-            "---\nengine: replay-real-pipeline-engine\ntitle: Doc\n---\n\n# Hello\n\nReplay-driven body.\n",
+            "---\nengine: replay-real-pipeline-engine\ntitle: Doc\n---\n\n# Hello\n\nReplay-driven body.\n\n```{replay-real-pipeline-engine}\ncode\n```\n",
         );
 
         // Compute the QMD that EngineExecutionStage will hand to
@@ -599,6 +600,17 @@ mod orchestrator_engine_channel {
                 fn is_available(&self) -> bool {
                     true
                 }
+                fn claims_language(
+                    &self,
+                    language: &str,
+                    _first_class: Option<&str>,
+                ) -> quarto_core::engine::LanguageClaim {
+                    if language == "replay-real-pipeline-engine" {
+                        quarto_core::engine::LanguageClaim::Primary(1)
+                    } else {
+                        quarto_core::engine::LanguageClaim::None
+                    }
+                }
             }
 
             let captured = Arc::new(Mutex::new(None::<String>));
@@ -614,7 +626,7 @@ mod orchestrator_engine_channel {
                     .unwrap();
 
             let probe_options = RenderToFileOptions {
-                engine_registry_override: Some(probe_registry),
+                engine_registry_override: Some(std::sync::Arc::new(probe_registry)),
                 ..Default::default()
             };
 
@@ -891,5 +903,103 @@ project:
         sources.iter().any(|s| s == "robots.txt"),
         "manifest.resources should include robots.txt, got: {:?}",
         sources
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Provenance: a pattern resolves against the file it was written in
+// (bd-mt7a6uc4)
+// ─────────────────────────────────────────────────────────────────────
+
+/// A `resources:` glob declared in `blog/_metadata.yml` resolves
+/// against `blog/`, not against each host document's directory.
+///
+/// Before bd-mt7a6uc4 the anchor was the *host document*, so a deeply
+/// nested page published `blog/deep/data/*.csv` while the files the
+/// author meant — `blog/data/*.csv` — were never copied. This is the
+/// same defect GH #456 fixed for listing `contents:`, one metadata key
+/// over.
+#[test]
+fn dirmeta_resources_resolve_against_the_declaring_file() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    write(
+        &project_dir.join("blog/_metadata.yml"),
+        "resources:\n  - \"data/*.csv\"\n",
+    );
+    write(&project_dir.join("blog/data/from-blog.csv"), "declaring\n");
+    write(
+        &project_dir.join("blog/deep/data/from-deep.csv"),
+        "host-relative\n",
+    );
+    write(
+        &project_dir.join("blog/deep/index.qmd"),
+        "---\ntitle: Deep\n---\n\nBody.\n",
+    );
+
+    let output_dir = render_project(&project_dir);
+
+    assert!(
+        output_dir.join("blog/data/from-blog.csv").is_file(),
+        "the declaring file's directory is the base"
+    );
+    assert!(
+        !output_dir.join("blog/deep/data/from-deep.csv").exists(),
+        "the host document's directory is not"
+    );
+}
+
+/// Front-matter patterns keep resolving against the host document —
+/// the provenance rule reduces to the old behavior for the common
+/// case, which is why this migration is invisible to most projects.
+#[test]
+fn frontmatter_resources_still_resolve_against_the_document() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    write(&project_dir.join("posts/data/local.csv"), "local\n");
+    write(
+        &project_dir.join("posts/index.qmd"),
+        "---\ntitle: P\nresources:\n  - \"data/*.csv\"\n---\n\nBody.\n",
+    );
+
+    let output_dir = render_project(&project_dir);
+    assert!(output_dir.join("posts/data/local.csv").is_file());
+}
+
+/// A document `resources:` negation excludes. Before bd-mt7a6uc4 the
+/// `!` entry took the literal-path branch and aborted the render with
+/// "Declared resource '<root>/!…' does not exist on disk" — while the
+/// file it named was published anyway.
+#[test]
+fn document_resources_honor_negation() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\n",
+    );
+    write(&project_dir.join("data/public.csv"), "public\n");
+    write(&project_dir.join("data/secret.csv"), "secret\n");
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: H\nresources:\n  - \"data/*.csv\"\n  - \"!data/secret.csv\"\n---\n\nBody.\n",
+    );
+
+    let output_dir = render_project(&project_dir);
+    assert!(output_dir.join("data/public.csv").is_file());
+    assert!(
+        !output_dir.join("data/secret.csv").exists(),
+        "the negated pattern must exclude it"
     );
 }

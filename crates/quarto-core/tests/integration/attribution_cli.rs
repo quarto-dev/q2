@@ -97,6 +97,8 @@ fn render_context_default_has_no_attribution_provider() {
         is_single_file: true,
         files: vec![DocumentInfo::from_path(dir.join("test.qmd"))],
         output_dir: dir.clone(),
+
+        ..Default::default()
     };
     let doc = DocumentInfo::from_path(dir.join("test.qmd"));
     let format = Format::html();

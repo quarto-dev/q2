@@ -34,6 +34,7 @@ import { useReplayMode } from '../hooks/useReplayMode';
 import { useAutomergeSync } from '../hooks/useAutomergeSync';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
+import EphemeralSessionBanner from './EphemeralSessionBanner';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import NewAssetDialog from './NewAssetDialog';
@@ -77,6 +78,12 @@ interface Props {
   onRequestExecution?: (path: string) => string | null;
   /** Whether the project is connected to the sync server */
   isOnline: boolean;
+  /**
+   * `q2 preview --ui editor` without `--allow-edit` (bd-ov4gqk3m): edits
+   * sync live to everyone connected but are never written to disk.
+   * Drives the ephemeral-session banner. Absent/false on a real hub.
+   */
+  sessionEphemeral?: boolean;
 }
 
 // Map file extension to Monaco language ID
@@ -101,9 +108,12 @@ function getLanguageForFile(filePath: string): string {
     case 'yml':
       return 'yaml';
     case 'qmd':
-      return 'qmd';
     case 'md':
-      return 'markdown';
+      // .md is a renderable source file parsed with the qmd grammar
+      // (bd-6d2wj4zp Phase 5, D11) — giving it the qmd language wires
+      // up the same Monarch highlighting and the qmd-registered
+      // symbol/folding/semantic-token providers as .qmd.
+      return 'qmd';
     default:
       return 'markdown';
   }
@@ -137,7 +147,10 @@ const editorOptions = {
   'semanticHighlighting.enabled': true as const,
 };
 
-// Select the best default file: prefer index.qmd, then first .qmd, then first file
+// Select the best default file: prefer index.qmd, then first .qmd, then
+// index.md / first .md (bd-6d2wj4zp Phase 5 — .md is a source file, but
+// only a fallback: a synced .md may be a never-rendered README while a
+// .qmd is always deliberate content), then first file.
 function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   if (files.length === 0) return null;
 
@@ -149,11 +162,17 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   const anyQmd = files.find(f => f.path.endsWith('.qmd'));
   if (anyQmd) return anyQmd;
 
+  // Then index.md at root, then any .md
+  const indexMd = files.find(f => f.path === 'index.md');
+  if (indexMd) return indexMd;
+  const anyMd = files.find(f => f.path.endsWith('.md'));
+  if (anyMd) return anyMd;
+
   // Fall back to first file
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline }: Props) {
+export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
   const { effectiveTheme } = useTheme();
@@ -981,6 +1000,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         </div>
       )}
 
+      {!isFullscreenPreview && sessionEphemeral && <EphemeralSessionBanner />}
+
       {!isFullscreenPreview && unlocatedErrors.length > 0 && (
         <div className="diagnostics-banner">
           {unlocatedErrors.map((diag, i) => (
@@ -993,7 +1014,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         </div>
       )}
 
-      <main className={`editor-main view-mode-${viewMode}`}>
+      <main id="main-content" tabIndex={-1} className={`editor-main view-mode-${viewMode}`}>
         {!isFullscreenPreview && (
           <SidebarTabs disabled={replayState.isActive}>
             {(activeTab) => {
@@ -1029,7 +1050,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                   return (
                     <ProjectTab
                       project={project}
-                      onChooseNewProject={onDisconnect}
                       onExportZip={exportProjectAsZip}
                     />
                   );

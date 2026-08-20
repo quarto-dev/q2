@@ -223,7 +223,7 @@ async fn run_admin(cmd: AdminCommand) -> anyhow::Result<()> {
                 );
             }
             let storage = samod::storage::TokioFilesystemStorage::new(&automerge_dir);
-            let doc_ids = scan_mod::list_doc_ids_filesystem(&automerge_dir);
+            let doc_ids = scan_mod::list_doc_ids_filesystem(&automerge_dir)?;
             let manifest = scan_mod::scan(
                 &storage,
                 &doc_ids,
@@ -457,6 +457,9 @@ async fn main() -> anyhow::Result<()> {
         register_root_ws: true,
         // The collaborative hub always persists document changes to disk.
         disk_write_policy: quarto_hub::sync::DiskWritePolicy::WriteBack,
+        // Long-running server: shutdown acknowledgment stays in the
+        // tracing log, nothing user-facing on stdout.
+        shutdown_message: None,
     };
 
     server::run_server(storage, config).await?;

@@ -1,0 +1,7 @@
+title: Legacy Python Engine
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/legacy-python.js
+      name: legacy-python

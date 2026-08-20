@@ -23,10 +23,22 @@
 //! format-agnostic `Sidebar` is committed to HTML output. See
 //! `claude-notes/plans/2026-04-24-websites-phase-2.md` §Decision 7/8.
 //!
+//! ## `toc-location: left` (bd-e2kpwy7n)
+//!
+//! When `TocLocationTransform` set the `rendered.navigation.toc-in-sidebar`
+//! directive (website regime), the rendered TOC block is appended
+//! inside `nav#quarto-sidebar` after the nav items; with no configured
+//! sidebar, a TOC-only floating sidebar is synthesized (and
+//! body-classes set to `nav-sidebar floating`) — Q1's `sidebar.ejs`
+//! with `sidebar === undefined`.
+//!
 //! ## Skip conditions
 //!
-//! - `sidebar: false` at the document level → neither output is set.
-//! - `navigation.sidebar` absent → neither output is set.
+//! - `sidebar: false` at the document level → the navigation sidebar
+//!   is not rendered (but a `toc-in-sidebar` TOC still synthesizes
+//!   its container, matching Q1's `nav.sidebar || navbarTocLeft`).
+//! - `navigation.sidebar` absent → neither output is set (unless
+//!   `toc-in-sidebar` synthesizes, as above).
 //! - `rendered.navigation.sidebar` already populated → the HTML
 //!   output is left alone (user override). The body-classes output
 //!   is computed independently with its own user-override check, so
@@ -35,7 +47,7 @@
 //!   body-classes output is left alone (user override).
 
 use quarto_error_reporting::DiagnosticMessage;
-use quarto_navigation::{Sidebar, SidebarEntry, render_html::sidebar_to_html};
+use quarto_navigation::{Sidebar, SidebarEntry, render_html::sidebar_to_html_with_appended};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::{By, SourceInfo};
@@ -73,11 +85,37 @@ impl AstTransform for SidebarRenderTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        if is_feature_disabled(&ast.meta, "sidebar") {
-            return Ok(());
-        }
+        // bd-e2kpwy7n: the `toc-in-sidebar` directive written by
+        // `TocLocationTransform` (website regime, `toc-location:
+        // left`). When set, the rendered TOC block is appended inside
+        // `nav#quarto-sidebar` — after the nav items when a sidebar is
+        // configured (Q1's `sidebar.ejs` merge order), or as the sole
+        // content of a synthesized floating sidebar when none is.
+        let toc_block = if ast
+            .meta
+            .get_path(&["rendered", "navigation", "toc-in-sidebar"])
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            toc_block_html(&ast.meta)
+        } else {
+            None
+        };
 
-        let Some(sidebar_cv) = ast.meta.get_path(&["navigation", "sidebar"]) else {
+        // `sidebar: false` disables the *navigation* sidebar, not the
+        // left TOC: Q1's `nav-before-body.ejs` emits the sidebar
+        // partial for `nav.sidebar || navbarTocLeft`, so a disabled
+        // sidebar still synthesizes the TOC-only container.
+        let sidebar_cv = if is_feature_disabled(&ast.meta, "sidebar") {
+            None
+        } else {
+            ast.meta.get_path(&["navigation", "sidebar"])
+        };
+
+        let Some(sidebar_cv) = sidebar_cv else {
+            if let Some(toc_block) = toc_block {
+                synthesize_toc_sidebar(ast, ctx, &toc_block);
+            }
             return Ok(());
         };
 
@@ -137,7 +175,7 @@ impl AstTransform for SidebarRenderTransform {
             .resource_resolver
             .as_ref()
             .map_or_else(|| "./".to_string(), |r| r.page_url_for_site_root_dir());
-        let html = sidebar_to_html(&sidebar, &home_url);
+        let html = sidebar_to_html_with_appended(&sidebar, &home_url, toc_block.as_deref());
 
         ast.meta.insert_path(
             &["rendered", "navigation", "sidebar"],
@@ -146,6 +184,70 @@ impl AstTransform for SidebarRenderTransform {
 
         Ok(())
     }
+}
+
+/// The Rust twin of the template's `toc-block` partial
+/// ([`crate::template::TOC_BLOCK_PARTIAL`] — keep the markup in sync):
+/// the full `nav#TOC` element composed from the rendered TOC metadata.
+/// Needed here because the website-left TOC lives inside the
+/// `rendered.navigation.sidebar` fragment, which the template emits
+/// opaquely.
+fn toc_block_html(meta: &ConfigValue) -> Option<String> {
+    let toc = meta
+        .get_path(&["rendered", "navigation", "toc"])?
+        .as_plain_text()?;
+    if toc.is_empty() {
+        return None;
+    }
+    let mut html = String::from("<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\">\n");
+    if let Some(title) = meta
+        .get_path(&["rendered", "navigation", "toc-title"])
+        .and_then(|v| v.as_plain_text())
+    {
+        html.push_str(&format!("<h2 id=\"toc-title\">{title}</h2>\n"));
+    }
+    html.push_str(&toc);
+    html.push_str("</nav>\n");
+    Some(html)
+}
+
+/// Synthesize the TOC-only floating sidebar for a website page with
+/// `toc-location: left` and no configured navigation sidebar — Q1's
+/// `sidebar.ejs` rendered with `sidebar === undefined`, where the
+/// style ternary falls back to `floating` and the wrapper holds only
+/// the TOC target.
+fn synthesize_toc_sidebar(ast: &mut Pandoc, ctx: &mut RenderContext, toc_block: &str) {
+    if !ast
+        .meta
+        .contains_path(&["rendered", "navigation", "body-classes"])
+    {
+        ast.meta.insert_path(
+            &["rendered", "navigation", "body-classes"],
+            ConfigValue::new_string(
+                "nav-sidebar floating",
+                SourceInfo::generated(By::programmatic_config()),
+            ),
+        );
+    }
+
+    if ast
+        .meta
+        .contains_path(&["rendered", "navigation", "sidebar"])
+    {
+        return;
+    }
+
+    let mut sidebar = Sidebar::with_defaults();
+    sidebar.style = quarto_navigation::SidebarStyle::Floating;
+    let home_url = ctx
+        .resource_resolver
+        .as_ref()
+        .map_or_else(|| "./".to_string(), |r| r.page_url_for_site_root_dir());
+    let html = sidebar_to_html_with_appended(&sidebar, &home_url, Some(toc_block));
+    ast.meta.insert_path(
+        &["rendered", "navigation", "sidebar"],
+        ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
+    );
 }
 
 /// Walk the sidebar, rewriting each entry's href from source-path to
@@ -159,6 +261,7 @@ fn rewrite_hrefs(
     surface: NavSurface<'_>,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
+    use crate::transforms::navigation_href::{rewrite_config_text, rewrite_item_text};
     for entry in entries.iter_mut() {
         match entry {
             SidebarEntry::Link { item } => {
@@ -177,8 +280,12 @@ fn rewrite_hrefs(
                         diagnostics,
                     );
                 }
+                // Parsed-markdown `text:` carries Link/Image targets
+                // (bd-page-footer-image-items-stmpikgo, defect 2).
+                rewrite_item_text(item, resolver, index, &surface, diagnostics);
             }
             SidebarEntry::Section {
+                text,
                 href,
                 href_source,
                 contents,
@@ -195,9 +302,15 @@ fn rewrite_hrefs(
                         diagnostics,
                     );
                 }
+                if let Some(text) = text.as_mut() {
+                    rewrite_config_text(text, resolver, index, &surface, diagnostics);
+                }
                 rewrite_hrefs(contents, resolver, index, surface.clone(), diagnostics);
             }
-            SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => {}
+            SidebarEntry::Heading(text) => {
+                rewrite_config_text(text, resolver, index, &surface, diagnostics);
+            }
+            SidebarEntry::Separator | SidebarEntry::Auto(_) => {}
         }
     }
 }
@@ -253,6 +366,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path("/project/about.qmd")],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         }
     }
 
@@ -287,6 +402,144 @@ mod tests {
             .await
             .unwrap();
         (ast.meta, ctx.diagnostics)
+    }
+
+    /// A `ConfigValue` holding parsed markdown inlines — the shape
+    /// entry `text:` takes after `ConfigMarkdownTransform`.
+    fn inlines_cv(inlines: Vec<quarto_pandoc_types::inline::Inline>) -> ConfigValue {
+        ConfigValue {
+            value: quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines),
+            source_info: SourceInfo::for_test(),
+            merge_op: Default::default(),
+        }
+    }
+
+    fn nav_image(url: &str, alt: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Image, Inline, Str};
+        Inline::Image(Image {
+            attr: Default::default(),
+            content: vec![Inline::Str(Str {
+                text: alt.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    fn nav_link(url: &str, text: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Inline, Link, Str};
+        Inline::Link(Link {
+            attr: Default::default(),
+            content: vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    /// Defect 2 of bd-page-footer-image-items-stmpikgo, sidebar
+    /// edition: parsed-markdown `text:` resolves across every
+    /// text-bearing entry shape — a Link item's label, a Section
+    /// title, a Heading — Image targets relativize per page and
+    /// `.qmd` links resolve through the index.
+    #[tokio::test]
+    async fn render_entry_text_inlines_resolve_at_depth() {
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let sb = Sidebar {
+            contents: vec![
+                SidebarEntry::Link {
+                    item: NavigationItem {
+                        text: Some(inlines_cv(vec![nav_image("/images/x.svg", "logo")])),
+                        ..NavigationItem::default()
+                    },
+                },
+                SidebarEntry::Section {
+                    text: Some(inlines_cv(vec![nav_image("images/y.svg", "sect")])),
+                    href: None,
+                    href_source: SourceInfo::for_test(),
+                    id: Some("sec".to_string()),
+                    contents: vec![SidebarEntry::Link {
+                        item: NavigationItem {
+                            text: Some(inlines_cv(vec![nav_link("docs.qmd", "docs")])),
+                            ..NavigationItem::default()
+                        },
+                    }],
+                    expanded: true,
+                },
+                SidebarEntry::Heading(inlines_cv(vec![nav_image("images/z.svg", "head")])),
+            ],
+            ..Sidebar::with_defaults()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "sidebar"], sb.to_config_value());
+        let index = Arc::new(ProjectIndex::new(vec![make_profile(
+            "docs.qmd",
+            "docs.html",
+            "Docs",
+        )]));
+
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/guide/installation.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let resolver = ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/guide/installation.html",
+            "site_libs",
+            "installation",
+        );
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries)
+            .with_project_index(index)
+            .with_resource_resolver(resolver);
+        SidebarRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "sidebar"])
+            .unwrap()
+            .as_plain_text()
+            .unwrap();
+        assert!(
+            html.contains("src=\"../images/x.svg\""),
+            "link-item text image must relativize; got: {}",
+            html
+        );
+        assert!(
+            html.contains("src=\"../images/y.svg\""),
+            "section-title image must relativize; got: {}",
+            html
+        );
+        assert!(
+            html.contains("href=\"../docs.html\""),
+            "nested link-item text .qmd link must resolve; got: {}",
+            html
+        );
+        assert!(
+            html.contains("src=\"../images/z.svg\""),
+            "heading image must relativize; got: {}",
+            html
+        );
+        assert!(
+            ctx.diagnostics.is_empty(),
+            "got diagnostics: {:?}",
+            ctx.diagnostics
+        );
     }
 
     /// Test 28 — .qmd leaf href gets rewritten to the profile's

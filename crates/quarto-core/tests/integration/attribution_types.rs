@@ -166,6 +166,8 @@ fn transport_round_trip_restores_arc_interning_via_prebuilt_provider() {
         is_single_file: true,
         files: vec![DocumentInfo::from_path(project_dir.join("input.qmd"))],
         output_dir: project_dir.clone(),
+
+        ..Default::default()
     };
     let doc = DocumentInfo::from_path(project_dir.join("input.qmd"));
     let format = Format::html();

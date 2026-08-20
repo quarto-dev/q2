@@ -602,6 +602,67 @@ describe('PreviewApp boot path', () => {
     expect(firstCall![2]).toBeUndefined();
   });
 
+  it('PC7 (bd-h4rhohhy): a capture arriving AFTER the initial render re-fires renderPageForPreview with the binary-doc bytes', async () => {
+    // PC7 (jsdom tier). Binds the browser half of the capture→pane delivery
+    // chain: after the SPA's initial (capture-less) render, a sync-client
+    // `onCapturesChange` event carrying a CaptureRef must drive the render
+    // effect to fire AGAIN, resolve the binary doc, and forward its bytes to
+    // `renderPageForPreview`. This is the seam the e2e PC5 exercises through
+    // the real binary; here it is isolated at the jsdom tier.
+    //
+    // Fail-on-revert (recorded in .superpowers/sdd/task-p2-report.md): removing
+    // the `captures` field written by the onCapturesChange handler
+    // (PreviewApp.tsx ~:731-733) makes this RED — the re-fired render then sees
+    // no CaptureRef and passes `undefined` bytes. NOTE: the sibling
+    // `contentTick` bump (~:737) is REDUNDANT with the render effect's
+    // `state.captures` dependency (PreviewApp.tsx :1128) — reverting the bump
+    // alone leaves this GREEN, because a new `captures` reference already
+    // re-fires the effect. See the report for the revert transcripts.
+    const runtime = await import('@quarto/preview-runtime');
+    const setSyncHandlersMock = runtime.setSyncHandlers as ReturnType<typeof vi.fn>;
+    const getBinaryDocByIdMock = runtime.getBinaryDocById as ReturnType<typeof vi.fn>;
+    const renderMock = runtime.renderPageForPreview as ReturnType<typeof vi.fn>;
+
+    const captureBytes = new Uint8Array([9, 8, 7, 6]);
+    getBinaryDocByIdMock.mockImplementation(async (docId: string) =>
+      docId === 'pc7-capture-doc'
+        ? { content: captureBytes, mimeType: 'application/x-engine-capture+gzip' }
+        : null,
+    );
+
+    render(<PreviewApp />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
+    });
+    // The initial render fired WITHOUT a capture.
+    await waitFor(() => expect(renderMock.mock.calls.length).toBeGreaterThan(0));
+    const initialCount = renderMock.mock.calls.length;
+    expect(getBinaryDocByIdMock).not.toHaveBeenCalled();
+
+    // A capture arrives AFTER the initial render (a sync-client event).
+    const handlers = setSyncHandlersMock.mock.calls.at(-1)?.[0] as
+      | { onCapturesChange?: (c: Record<string, unknown>) => void }
+      | undefined;
+    expect(handlers?.onCapturesChange).toBeTypeOf('function');
+    act(() => {
+      handlers!.onCapturesChange!({
+        'index.qmd': { captureDocId: 'pc7-capture-doc' },
+      });
+    });
+
+    // The render effect must re-fire (a SECOND render) and forward the bytes.
+    await waitFor(() => {
+      expect(renderMock.mock.calls.length).toBeGreaterThan(initialCount);
+    });
+    await waitFor(() => {
+      expect(getBinaryDocByIdMock).toHaveBeenCalledWith('pc7-capture-doc');
+    });
+    const lastCall = renderMock.mock.calls.at(-1);
+    expect(lastCall).toBeDefined();
+    // arg 0: path, arg 1: grammars, arg 2: capture bytes.
+    expect(lastCall![2]).toBe(captureBytes);
+  });
+
   it('surfaces a /health failure with an actionable message', async () => {
     // Replace the default mock with one that 500s on /health. This is
     // the failure mode if the hub crashes before the SPA boots —

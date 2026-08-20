@@ -46,6 +46,21 @@ describe('FileSidebar asset-upload integration', () => {
     cleanup();
   });
 
+  describe('header action buttons', () => {
+    it('New and Upload are icon-only buttons with exact accessible names', () => {
+      render(<FileSidebar {...baseProps} />);
+
+      const newBtn = screen.getByRole('button', { name: 'New file' });
+      const uploadBtn = screen.getByRole('button', { name: 'Upload asset' });
+
+      // Icon-only: no visible text, just an aria-hidden SVG glyph.
+      for (const btn of [newBtn, uploadBtn]) {
+        expect(btn.textContent).toBe('');
+        expect(btn.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+      }
+    });
+  });
+
   describe('Upload button', () => {
     it('calls onUploadFiles with empty files and root destination when nothing is selected', () => {
       const onUploadFiles = vi.fn();

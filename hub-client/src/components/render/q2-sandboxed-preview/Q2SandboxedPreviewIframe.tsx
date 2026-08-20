@@ -89,6 +89,11 @@ export function Q2SandboxedPreviewIframe({ astJson }: Q2SandboxedPreviewIframePr
         height: '100%',
         border: 'none',
         display: 'block',
+        // The sandboxed document paints no background of its own, so the
+        // pane behind it shows through. Pin a light canvas: the document
+        // content assumes one (default dark text), independent of the
+        // editor chrome theme (.preview-pane follows the theme).
+        background: '#fff',
       }}
     />
   );

@@ -79,6 +79,15 @@ impl AstTransform for NavbarGenerateTransform {
             return Ok(());
         };
 
+        // Dark-mode toggle: emitted whenever the format has a dark
+        // theme variant (bd-0pic6 A4). Derived from the THEME config,
+        // not `navbar:` YAML — same trigger as Q1's
+        // `formatDarkMode(format) !== undefined` navbar/sidebar
+        // darkToggle. Parse errors mean the theme stage will fail the
+        // render anyway; treat as "no toggle" here.
+        navbar.dark_mode_toggle =
+            quarto_sass::ThemeConfig::from_config_value(&ast.meta).is_ok_and(|c| c.dark.is_some());
+
         // bd-qor9a — resolve each href against the YAML file it was
         // authored in. Frontmatter-rooted hrefs become project-root-
         // relative; `_quarto.yml`-rooted ones (the common case for
@@ -93,6 +102,23 @@ impl AstTransform for NavbarGenerateTransform {
                     source_context,
                     &ctx.project.dir,
                 );
+            }
+            // Same treatment for the logo paths themselves (Case A of
+            // bd-root-relative-paths-design-fc5pvkcv): a logo authored
+            // in a doc's frontmatter or a directory `_metadata.yml`
+            // resolves against the authoring file's directory;
+            // `_quarto.yml`-rooted values degrade to project-root-
+            // relative unchanged. Each light/dark variant resolves
+            // against its own authoring scalar's source.
+            if let Some(logo) = navbar.logo.as_mut() {
+                for variant in [&mut logo.light, &mut logo.dark] {
+                    variant.path = resolve_metadata_path(
+                        &variant.path,
+                        &variant.source,
+                        source_context,
+                        &ctx.project.dir,
+                    );
+                }
             }
         }
 
@@ -156,6 +182,8 @@ mod tests {
             is_single_file: true,
             files: vec![DocumentInfo::from_path("/project/doc.qmd")],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         }
     }
 
@@ -212,6 +240,8 @@ mod tests {
             is_single_file: index.is_none(),
             files: vec![DocumentInfo::from_path(format!("/project/{}", page))],
             output_dir: PathBuf::from("/project/_site"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path(format!("/project/{}", page));
         let format = Format::html();

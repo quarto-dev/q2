@@ -1,0 +1,19 @@
+project:
+  type: website
+
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+
+website:
+  title: "Navbar Logo Repro"
+  navbar:
+    logo:
+      light: logo.svg
+      dark: logo-dark.svg
+    logo-alt: "Repro logo"
+    left:
+      - href: index.qmd
+        text: Home

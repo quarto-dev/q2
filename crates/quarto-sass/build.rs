@@ -39,6 +39,7 @@ fn main() {
     write_hash(&out_dir, "css_build_id.txt", &build_id);
 
     println!("cargo:rerun-if-changed=../../resources/scss");
+    println!("cargo:rerun-if-changed=../../resources/pandoc/highlight-styles");
     println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-changed=build.rs");
 }
@@ -63,12 +64,20 @@ fn hex_prefix(bytes: &[u8], n: usize) -> String {
     s
 }
 
-/// Compute a SHA-256 hash of all SCSS files in resources/scss/.
+/// Compute a SHA-256 hash of all SCSS files in resources/scss/, plus
+/// the vendored highlight-palette `.theme` JSON files in
+/// resources/pandoc/highlight-styles/ (they are translated into SCSS
+/// at render time, so a palette edit must bust the CSS cache exactly
+/// like an `.scss` edit).
 ///
 /// Files are sorted by path to ensure deterministic hashing.
 fn compute_scss_resources_hash() -> String {
     let scss_dir = Path::new("../../resources/scss");
     let mut files: Vec<_> = collect_files_with_ext(scss_dir, "scss");
+    files.extend(collect_files_with_ext(
+        Path::new("../../resources/pandoc/highlight-styles"),
+        "theme",
+    ));
     files.sort();
 
     let mut hasher = Sha256::new();

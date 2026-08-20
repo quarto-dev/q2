@@ -26,9 +26,16 @@
 //! - or an array of any of the above.
 //!
 //! Engine-contributed [`PandocIncludes`](super::super::PandocIncludes)
-//! (from `StageContext.includes`) are folded in too. The stage
-//! drains that channel — engines write through it, Quarto resolves
-//! once, downstream code reads `rendered.includes.*`.
+//! (from `StageContext.includes`) are folded in too, inserted
+//! VERBATIM — this stage never file-reads them. That's safe because
+//! `PandocIncludes` values are always CONTENT by the time they reach
+//! this fold: the TS-engine wire boundary
+//! (`TsEngine::translate_includes` in `engine/ts_engine.rs`) reads
+//! each engine-reported temp-file path into content, and the native
+//! knitr engine (`engine/knitr/mod.rs::convert_includes`) does the
+//! same before either populates the struct. The stage drains that
+//! channel — engines write through it, Quarto resolves once,
+//! downstream code reads `rendered.includes.*`.
 //!
 //! Ordering follows Q1 (`pandoc.ts:874-929`): for the header and
 //! before-body slots, contributed entries (engine output) come
@@ -52,9 +59,10 @@
 //!
 //! Engine-contributed `PandocIncludes` (`StageContext.includes`) are
 //! folded into `rendered.includes.*` later, by
-//! [`ApplyTemplateStage::run`](super::ApplyTemplateStage). That late
-//! drain also covers shortcode resolution and user-filter
-//! contributions made via `quarto.doc.include_text()`.
+//! [`ApplyTemplateStage::run`](super::ApplyTemplateStage) — verbatim,
+//! as CONTENT (see the module-level note above on where that content
+//! comes from). That late drain also covers shortcode resolution and
+//! user-filter contributions made via `quarto.doc.include_text()`.
 
 use std::path::{Path, PathBuf};
 
@@ -383,6 +391,14 @@ fn inlines_to_html_literal(inlines: &[quarto_pandoc_types::inline::Inline]) -> S
             Inline::Image(i) => out.push_str(&inlines_to_html_literal(&i.content)),
             Inline::Span(s) => out.push_str(&inlines_to_html_literal(&s.content)),
             Inline::Cite(c) => out.push_str(&inlines_to_html_literal(&c.content)),
+            // Reconstruct shortcode source text (escaped ones keep
+            // their triple braces) so ShortcodeResolveTransform's
+            // text-level pass over `rendered.includes.*` can expand
+            // them later. Previously dropped silently
+            // (bd-shortcodes-in-metadata-bp06aub8).
+            Inline::Shortcode(sc) => {
+                out.push_str(&pampa::writers::qmd::shortcode_source_text(sc));
+            }
             _ => {}
         }
     }

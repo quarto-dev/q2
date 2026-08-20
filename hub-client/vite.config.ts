@@ -57,6 +57,14 @@ const hubTarget = process.env.VITE_HUB_SERVER || 'http://localhost:3000';
 /** Disable service worker in E2E tests to avoid caching interference */
 const isE2E = process.env.VITE_E2E === '1';
 
+/**
+ * Disable the PWA service worker entirely (`build:preview-embed`).
+ * The q2-preview embed serves this app from an ephemeral localhost
+ * origin per `q2 preview` session; a service worker would precache
+ * ~67 MB (WASM included) into Cache Storage for every random port.
+ */
+const disablePwa = process.env.VITE_DISABLE_PWA === '1';
+
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
@@ -95,7 +103,7 @@ export default defineConfig({
       },
     },
     // Disable PWA service worker in E2E tests to avoid caching interference
-    ...(!isE2E ? [VitePWA({
+    ...(!isE2E && !disablePwa ? [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['quarto-icon.svg'],
       manifest: {
@@ -119,6 +127,8 @@ export default defineConfig({
         // workbox emits a warning that vite-plugin-pwa throws as a fatal
         // build error, so a too-tight ceiling breaks CI the moment the WASM
         // creeps past it (see the 35MB ceiling that broke main after #379).
+        // (Supersedes an earlier ts-engine 40MB stopgap; 64MB gives headroom
+        // for the unstripped WASM name section until build-wasm.js strips it.)
         maximumFileSizeToCacheInBytes: 64 * 1024 * 1024,
         // Don't warn about large files - we know they're big
         dontCacheBustURLsMatching: /\.[0-9a-f]{8}\./,

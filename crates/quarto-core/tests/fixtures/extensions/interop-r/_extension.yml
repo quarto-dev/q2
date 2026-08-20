@@ -1,0 +1,15 @@
+title: Interop R Engine
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/interop-r.js
+      name: interop-r
+      claims:
+        rsynth:
+          kind: primary
+          priority: 1
+        pysynth:
+          kind: interop
+      file-extensions: []
+      claims-files: []

@@ -121,6 +121,7 @@ impl PipelineStage for AttributionGenerateStage {
         let AttributionData {
             runs,
             mut identities,
+            file_id,
         } = provider
             .build(&render_ctx)
             .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
@@ -138,7 +139,11 @@ impl PipelineStage for AttributionGenerateStage {
             }
         }
 
-        ctx.attribution_data = Some(Arc::new(AttributionData { runs, identities }));
+        ctx.attribution_data = Some(Arc::new(AttributionData {
+            runs,
+            identities,
+            file_id,
+        }));
 
         trace_event!(
             ctx,
@@ -174,6 +179,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();

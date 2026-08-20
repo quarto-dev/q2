@@ -5,6 +5,11 @@ execute:
   eval: false
 _quarto:
   tests:
+    run:
+      # The included `_cell.qmd` carries a `{python}` cell, so jupyter
+      # resolves as the owning engine. Without a jupyter runtime the
+      # render is a loud P2-12 error; gate the fixture on it.
+      requires: jupyter
     html:
       noErrors: true
       ensureFileRegexMatches:

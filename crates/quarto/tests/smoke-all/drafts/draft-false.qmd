@@ -1,0 +1,18 @@
+---
+title: Explicitly not a draft
+draft: false
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      # `draft: false` must behave exactly like an absent key. This is a
+      # distinct case from not-a-draft.qmd: a truthiness bug that keyed
+      # off the *presence* of `draft` rather than its value would pass
+      # that fixture and fail this one.
+      ensureHtmlElements:
+        - ["body"]
+        - ["div#quarto-draft-alert", 'meta[name="quarto:status"]']
+---
+
+Not a draft.

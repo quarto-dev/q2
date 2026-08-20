@@ -90,6 +90,32 @@ fn front_matter_format_revealjs_yields_reveal_deck() {
     );
 }
 
+/// bd-6d2wj4zp S3: a standalone `.md` input honors front-matter
+/// `format:` exactly like a `.qmd` — before, the detection was
+/// `.qmd`-gated and `.md` decks silently fell back to plain HTML.
+#[test]
+fn md_front_matter_format_revealjs_yields_reveal_deck() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path();
+    write_file(&dir.join("talk.md"), DECK);
+
+    let out = run_q2_render(dir, &["talk.md"]);
+    assert!(
+        out.status.success(),
+        "q2 render talk.md failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let html = read(&dir.join("talk.html"));
+    assert!(
+        html.contains("class=\"reveal\""),
+        "front-matter `format: revealjs` in a .md (no --to) must render a \
+         reveal deck, not plain HTML; got {} bytes",
+        html.len()
+    );
+}
+
 /// Explicit `--to revealjs` also works.
 #[test]
 fn explicit_to_revealjs_yields_reveal_deck() {

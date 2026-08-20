@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-99.9.9">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>ts-engine-extensions-subprocess</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="2026-04-16-ts-engine-extensions-subprocess_files/libs/clipboard/clipboard.min.js"></script>
+<script src="2026-04-16-ts-engine-extensions-subprocess_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="2026-04-16-ts-engine-extensions-subprocess_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="2026-04-16-ts-engine-extensions-subprocess_files/libs/quarto-html/popper.min.js"></script>
+<script src="2026-04-16-ts-engine-extensions-subprocess_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="2026-04-16-ts-engine-extensions-subprocess_files/libs/quarto-html/anchor.min.js"></script>
+<link href="2026-04-16-ts-engine-extensions-subprocess_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="2026-04-16-ts-engine-extensions-subprocess_files/libs/quarto-html/quarto-syntax-highlighting-3aa970819e70fbc78806154e5a1fcd28.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="2026-04-16-ts-engine-extensions-subprocess_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="2026-04-16-ts-engine-extensions-subprocess_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="2026-04-16-ts-engine-extensions-subprocess_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+
+
+
+<section id="grand-plan-typescript-engine-extensions-for-q2-v2-subprocess" class="level1">
+<h1>Grand Plan: TypeScript Engine Extensions for q2 (v2 — Subprocess)</h1>
+<section id="overview" class="level2">
+<h2 class="anchored" data-anchor-id="overview">Overview</h2>
+<p>Implement TypeScript engine extensions in q2 using a <strong>Deno subprocess</strong> architecture. Engine extensions are TypeScript modules (following Quarto 1’s API) that q2 discovers, loads via a long-lived Deno subprocess, and communicates with via a <strong>multiplexed JSON message protocol over the subprocess’s stdin/stdout</strong> (each frame carries an <code>id</code>; cross-engine requests run concurrently on the Deno event loop, serialized per engine instance). The shared subprocess is reached concurrently because <strong>Pass-2 render is parallel</strong> — see <code>claude-notes/designs/engine-host-concurrency.md</code>. (Moving the protocol off stdout onto loopback TCP, to delete the <code>console.log</code> footgun, is the deferred <strong>Phase 1.6</strong> cleanup.)</p>
+<p><strong>Goal:</strong> A user places a TypeScript engine extension in <code>_extensions/my-engine/</code> with an <code>_extension.yml</code>, and q2 discovers it, spawns a Deno engine-host process, queries the engine for file/language claims, and delegates code cell execution to it.</p>
+<p><strong>Validation target:</strong> The Julia engine extension from Quarto 1 (<code>julia-engine.ts</code>).</p>
+<p><strong>Key design choice:</strong> Subprocess over embedded Deno. This eliminates the need to add deno ext crates (deno_fs, deno_process, deno_net, deno_crypto, etc.) to q2’s binary. The engine extension runs in a full Deno environment — all standard APIs available, all Deno standard library modules importable, TypeScript transpilation handled by Deno natively. The QuartoAPI is implemented in TypeScript in a platform-agnostic <code>@quarto/api</code> package; platform I/O goes through a <code>PlatformHost</code> interface, with the Deno-specific host (<code>@quarto/engine-host-deno</code>) providing the <code>denoHost</code> that calls <code>Deno.readTextFileSync</code>, <code>Deno.Command</code>, etc. A future <code>@quarto/engine-host-wasm</code> can provide a VFS-backed host for in-browser hosting without changes to <code>@quarto/api</code>.</p>
+</section>
+<section id="architecture" class="level2">
+<h2 class="anchored" data-anchor-id="architecture">Architecture</h2>
+<section id="project-render-integration-post-merge-with-main" class="level3">
+<h3 class="anchored" data-anchor-id="project-render-integration-post-merge-with-main">Project-render integration (post-merge with <code>main</code>)</h3>
+<p>Since these plans were drafted, the <strong>website-project epic</strong> has landed on <code>main</code>. q2 now drives multi-document projects through a two-pass orchestrator (<code>crates/quarto-core/src/project/orchestrator.rs</code>):</p>
+<ul>
+<li><strong>Pass 1</strong> advances every file to a fixed <code>DocumentProfile</code> checkpoint (post-<code>MetadataMergeStage</code>, post-<code>IncludeExpansionStage</code>, pre-mutation). Pass 1 collects <code>Vec&lt;DocumentProfile&gt;</code> into a <code>ProjectIndex</code> shared across the rest of the render.</li>
+<li><strong>Pass 2</strong> runs the full per-file render with <code>ProjectIndex</code> available via <code>StageContext.project_index: Option&lt;Arc&lt;ProjectIndex&gt;&gt;</code>.</li>
+</ul>
+<p>Single-document renders go through the same orchestrator with <code>DefaultProjectType</code> — there is one code path.</p>
+<p>The TS-engine extension lifecycle integrates as follows:</p>
+<ul>
+<li><strong><code>Arc&lt;EngineRegistry&gt;</code></strong> is built once at <code>ProjectContext</code> construction time (the natural pairing for “extensions discovery → registry”), threaded into <code>RenderContext</code> and onto each per-file <code>StageContext</code>. <code>EngineExecutionStage</code> becomes stateless and reads <code>ctx.registry</code>. Plan 1c specifies the migration; placement is <code>ProjectContext</code>, not per-file <code>StageContext::new()</code>.</li>
+<li><strong><code>Arc&lt;TsEngineHost&gt;</code></strong> is similarly project-scoped: one host spans Pass 1 + Pass 2 + every per-file render. Spawned lazily on first need. <code>EngineClaimsFileStage</code> (Plan 1c) may trigger spawn during Pass 1 if a TS engine claims a non-QMD file via <code>claims_file</code>. For the common case where Pass 1 only reads QMD frontmatter, the subprocess does not start until Pass 2’s first execute.</li>
+<li><strong><code>DocumentProfile</code> subsumes Q1’s <code>partitionedMarkdown</code> use cases.</strong> Project indexing, listings, sidebar generation, link rewriting, format-resolution YAML harvest — all read <code>DocumentProfile</code>, not engine-side partition output. This is why <code>partitionedMarkdown</code> is not in the protocol.</li>
+<li><strong>HTML dependencies emitted by engines flow through <code>store_html_dependencies</code></strong>, which on <code>main</code> already tags engine deps with <code>ArtifactScope::Project</code>. Website renders dedupe to <code>_site/site_libs/...</code> automatically; single-doc renders treat the scope as a per-page directory with byte-identical pre-Phase-5 behavior.</li>
+</ul>
+<p>References: <code>crates/quarto-core/src/document_profile.rs</code>, <code>crates/quarto-core/src/project/index.rs</code>, <code>crates/quarto-core/src/project/orchestrator.rs</code>, <code>crates/quarto-core/src/dependency.rs</code>, <code>claude-notes/designs/document-profile-contract.md</code>, <code>claude-notes/plans/2026-04-23-website-project-epic.md</code>.</p>
+</section>
+<section id="multi-engine-resolution-post-merge-with-main" class="level3">
+<h3 class="anchored" data-anchor-id="multi-engine-resolution-post-merge-with-main">Multi-engine resolution (post-merge with <code>main</code>)</h3>
+<p>Since these plans were drafted, <strong>sequential multi-engine execution</strong> (bd-5yff4) and <strong>engine capture/replay</strong> (bd-45yw, bd-5qnj) have also landed on <code>main</code>. A document may declare an ordered list of engines (<code>engine: [knitr, jupyter]</code>); <code>EngineExecutionStage</code> threads the AST through them in turn (each engine consumes the previous engine’s output), and every engine invocation is recorded as an <code>EngineCapture</code> (replayed by playing the recorded captures back in order, <strong>not</strong> by re-resolving).</p>
+<p>This epic supplies the missing <em>coordination</em> layer on top of that mechanism: how q2 decides which engine(s) run and which engine runs which cell. The full model — the <code>LanguageClaim</code> kinds (<code>Primary</code>/<code>Interop</code>/<code>Fallback</code>), the resolution tiers, per-language ownership, <code>handled_languages</code> enforcement, and the failure model — is the design contract <a href="../designs/engine-resolution.md"><code>claude-notes/designs/engine-resolution.md</code></a>; the “Engine Discovery and Language Claiming” section below summarizes the parts the protocol and trait surfaces depend on. Engine <strong>resolution runs in Pass 2</strong> (engine <code>claims_*</code> must not load expensive TS engines merely to index a doc in Pass 1); only the pre-parse <strong>file-claim</strong> half runs in Pass 1. A future <strong>per-doc lift</strong> of resolution into Pass 1 (for docs whose engines all resolve load-free) is researched in <a href="2026-06-29-plan6-pass1-engine-resolution.md">Plan 6</a> — additive, post-1c.</p>
+</section>
+<section id="shared-subprocess-lifecycle-one-deno-process-per-project-render" class="level3">
+<h3 class="anchored" data-anchor-id="shared-subprocess-lifecycle-one-deno-process-per-project-render">Shared subprocess lifecycle (one Deno process per project render)</h3>
+<p>All TS engine extensions share one Deno subprocess. Engine lifecycle in the subprocess is <strong>two-step</strong>: <code>LoadEngine</code> runs the engine module’s <code>import()</code> and exposes the discovery surface (~10–50 ms); <code>LaunchEngine</code> calls <code>engine.launch(project)</code>, which <strong>constructs the <code>ExecutionEngineInstance</code> object — cheap (~0)</strong>, matching Quarto 1, where <code>launch()</code> is a synchronous object-literal construction that starts no daemon. The expensive engine startup (Julia control server / Jupyter kernel: 5+ s) happens <strong>lazily inside the engine’s <code>execute()</code> on the first call</strong>, and is amortized across renders by the external daemon, which is keyed by a transport file in the runtime directory and survives even a Deno-subprocess respawn (reconnect, not relaunch). The two-step split exists so project scans that only run discovery never pay launch or daemon cost — <strong>not</strong> because launch itself is expensive. Discovery messages need only <code>LoadEngine</code>; instance methods need <code>LaunchEngine</code>. All non-lifecycle messages carry <code>engine: "&lt;name&gt;"</code> for routing.</p>
+<pre><code>q2 (Rust)                              engine-host (shared Deno subprocess)
+─────────                              ────────────────────────────────────
+spawn deno engine-host-deno.js ─────→  start, wait for messages
+send: { type: "init",        ──────→  store process-stable global config
+        global: { ... } }              (resource/runtime/data dirs, pandoc, …)
+
+send: { type: "loadEngine",  ──────→  await import("julia-engine.js")
+        enginePath: "julia..." }       call engine.init(quartoAPI) if present
+recv: { type: "loaded",      ←──────  return discovery surface (static)
+        discovery: { name: "julia", validExtensions: [...],
+                     generatesFigures, canFreeze, quartoRequired } }
+
+send: { type: "claimsLanguage", ───→  route to julia discovery (no launch)
+        engine: "julia",               call julia.claimsLanguage("julia")
+        language: "julia" }
+recv: { type: "claimsLanguageResult", ←── return result
+        result: 1 }
+
+send: { type: "launchEngine", ─────→  call julia.launch(project)
+        engine: "julia",               (cheap object construction, ~0;
+        project: { ... } }             no daemon starts here)
+recv: { type: "launched",    ←──────  return instance metadata
+        instance: { canFreeze: true } }
+
+send: { type: "execute",       ────→  route to julia instance — Julia daemon
+        engine: "julia",               starts lazily on first execute (~5s),
+        options: { ..., dependencies } } reused after
+recv: { type: "executeResult", ←────  htmlDependencies resolved inline when
+        result: { markdown, ...,        dependencies:true; else a deferred
+                  htmlDependencies,      engineDependencies map the orchestrator
+                  engineDependencies } }  resolves via a "dependencies" message
+
+(deferred-deps path, book/project only — orchestrator-driven:)
+send: { type: "dependencies", ─────→  call julia.dependencies(opts) at the
+        engine: "julia",               merged output
+        options: { ... } }
+recv: { type: "dependenciesResult", ←─ return { includes }
+        result: { includes } }
+
+send: { type: "shutdown" }   ──────→  clean up all engines, exit</code></pre>
+</section>
+<section id="where-things-live" class="level3">
+<h3 class="anchored" data-anchor-id="where-things-live">Where things live</h3>
+<pre><code>q2 repo
+├── crates/
+│   └── quarto-core/src/engine/
+│       ├── ts_engine.rs          ← TsEngine struct (implements ExecutionEngine)
+│       ├── ts_protocol.rs        ← JSON message types + serialization
+│       └── ts_process.rs         ← Deno process management
+│
+├── ts-packages/                  ← npm workspace (already exists)
+│   ├── quarto-engine-host-deno/  ← NEW: Deno subprocess harness (q2 native binary)
+│   │   ├── src/
+│   │   │   ├── host.ts           ← control-socket protocol handler (non-blocking, multiplexed)
+│   │   │   ├── framing.ts        ← readFrames / writeFrame over stdin/stdout (Phase 1.5; +connectControl/TCP in 1.6)
+│   │   │   ├── deno-host.ts      ← PlatformHost impl (Deno.* APIs)
+│   │   │   ├── quarto-api.ts     ← QuartoAPI assembly from @quarto/api + denoHost
+│   │   │   ├── mapped-source.ts  ← MappedString rehydration from source_map
+│   │   │   └── engine-loader.ts  ← dynamic import + validation
+│   │   └── package.json
+│   │
+│   ├── (quarto-engine-host-wasm/ ← FUTURE, out of scope: browser harness for hub-client)
+│   │
+│   ├── quarto-api/               ← NEW: shared QuartoAPI implementations
+│   │   ├── package.json          ← single package, subpath exports
+│   │   └── src/
+│   │       ├── config/           ← metadata-partition key lists (Plan 2A foundation)
+│   │       ├── platform/         ← PlatformHost interface (Plan 2A §2aa)
+│   │       ├── text/             ← text utilities (Plan 2A §2aa)
+│   │       ├── markdownRegex/    ← extractYaml, partition, getLanguages, breakQuartoMd (Plan 2A §2aa)
+│   │       ├── mappedString/     ← MappedString + .map() provenance (Plan 2A §2aa)
+│   │       ├── jupyter/          ← notebook → markdown + helpers (Plan 3)
+│   │       ├── format/           ← isHtmlCompatible, isLatexOutput, … (Plan 2A §2aa)
+│   │       ├── path/             ← dirAndStem, isQmdFile, … (Plan 2A §2aa; runtime/resource/dataDir bodies = Plan 2)
+│   │       ├── system/           ← execProcess, tempContext, … (Plan 2A §2aa; pandoc/checkRender bodies = Plan 2)
+│   │       ├── console/          ← info, warning, error, withSpinner (Plan 2A §2aa)
+│   │       └── crypto/           ← md5Hash (Plan 2A §2aa)
+│   │
+│   └── quarto-types/             ← NEW: engine-author types, vendored from Q1 (Plan 2A; refined in 2E)
+│
+└── quarto-cli (reference only, at external-sources/quarto-cli)
+    └── packages/quarto-types/    ← Q1 source we vendor from (read-only reference)</code></pre>
+</section>
+</section>
+<section id="protocol-design" class="level2">
+<h2 class="anchored" data-anchor-id="protocol-design">Protocol Design</h2>
+<p>The full per-surface map (every Q1 engine field/method and its q2 disposition) is <code>claude-notes/designs/engine-api-surface.md</code>; the actionable protocol items live in RTQ (<code>2026-06-25-plan1a-return-to-q1.md</code>: Item A, ENG-1, FC-1, FC-2).</p>
+<section id="message-format" class="level3">
+<h3 class="anchored" data-anchor-id="message-format">Message format</h3>
+<p>All messages are JSON objects exchanged as <strong>newline-framed <code>Request</code>/<code>Response</code> envelopes over the subprocess’s stdin/stdout</strong> (Phase 1.5; Phase 1.6 moves them to loopback TCP). Each frame is <code>{ id: number, msg: {...} }</code> where <code>msg</code> has a <code>type</code> field; the <code>id</code> correlates a response to its request so many requests can be in flight at once. The shapes below show the inner <code>msg</code>.</p>
+<p><strong>Rust → Deno (<code>Request.msg</code>):</strong></p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode typescript code-with-copy"><code class="sourceCode typescript"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// One-time process init (sent once at spawn, before any loadEngine)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"init"</span><span class="op">,</span> global<span class="op">:</span> HostGlobalConfig }   <span class="co">// process-stable: resource/runtime/data dirs, pandoc, version, interactive/CI</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Two-step lifecycle</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"loadEngine"</span><span class="op">,</span> enginePath<span class="op">:</span> <span class="dt">string</span> }                                <span class="co">// cheap: import()</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"launchEngine"</span><span class="op">,</span> engine<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> project<span class="op">:</span> EngineProjectContext }   <span class="co">// cheap: launch() builds the instance (~0); daemon starts later, in execute()</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="co">// Discovery (only requires loadEngine)</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"claimsLanguage"</span><span class="op">,</span> engine<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> language<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> firstClass<span class="op">?:</span> <span class="dt">string</span> }</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"claimsFile"</span><span class="op">,</span> engine<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> file<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> ext<span class="op">:</span> <span class="dt">string</span> }</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="co">// Instance methods (require launchEngine)</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"markdownForFile"</span><span class="op">,</span> engine<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> file<span class="op">:</span> <span class="dt">string</span> }</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"execute"</span><span class="op">,</span> engine<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> options<span class="op">:</span> TsExecuteOptions }            <span class="co">// options.dependencies selects inline vs deferred</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"dependencies"</span><span class="op">,</span> engine<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> options<span class="op">:</span> TsDependenciesOptions }  <span class="co">// deferred-deps round-trip, orchestrator-driven at the merged output</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"intermediateFiles"</span><span class="op">,</span> engine<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> input<span class="op">:</span> <span class="dt">string</span> }</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="co">// Lifecycle + cancellation</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"shutdown"</span> }</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"cancel"</span><span class="op">,</span> target<span class="op">:</span> <span class="dt">number</span> }   <span class="co">// Phase 1.5: cooperatively abort the in-flight request whose id == target</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Deno → Rust (<code>Response.msg</code>):</strong></p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode typescript code-with-copy"><code class="sourceCode typescript"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Lifecycle responses</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"loaded"</span><span class="op">,</span>   discovery<span class="op">:</span> { name<span class="op">,</span> validExtensions<span class="op">,</span> generatesFigures<span class="op">,</span> canFreeze<span class="op">,</span> quartoRequired } }  <span class="co">// static, discovery-tier (ENG-1/DQ-4)</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"launched"</span><span class="op">,</span> instance<span class="op">:</span>  { canFreeze } }                                                           <span class="co">// canFreeze also rides the instance (Q1 has both tiers)</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="co">// Discovery responses</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"claimsLanguageResult"</span><span class="op">,</span> result<span class="op">:</span> { kind<span class="op">:</span> <span class="st">"primary"</span> <span class="op">|</span> <span class="st">"interop"</span> <span class="op">|</span> <span class="st">"fallback"</span><span class="op">,</span> priority<span class="op">?:</span> <span class="dt">number</span> } <span class="op">|</span> <span class="dt">null</span> }  <span class="co">// null=no claim. Harness normalizes the boolean|number shorthand: false→null, true→Primary(1), number n→Primary(n) (negative = low-priority primary, NEVER interop). Interop/Fallback only via the object. See engine-resolution.md §3.</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"claimsFileResult"</span><span class="op">,</span> result<span class="op">:</span> <span class="dt">boolean</span> }</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Instance method responses</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"markdownForFileResult"</span><span class="op">,</span> result<span class="op">:</span> { value<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> fileName<span class="op">?:</span> <span class="dt">string</span><span class="op">,</span> sourceMap<span class="op">:</span> TsSourceMapEntry[] } }</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"executeResult"</span><span class="op">,</span> result<span class="op">:</span> TsExecuteResult }       <span class="co">// htmlDependencies inline, or a deferred engineDependencies map</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"dependenciesResult"</span><span class="op">,</span> result<span class="op">:</span> { includes<span class="op">:</span> TsPandocIncludes } }</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"intermediateFilesResult"</span><span class="op">,</span> result<span class="op">:</span> <span class="dt">string</span>[] <span class="op">|</span> <span class="dt">undefined</span> }</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="co">// Cancellation + errors</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"cancelled"</span> }                                     <span class="co">// Phase 1.5: delivered under the cancelled request's id</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>{ type<span class="op">:</span> <span class="st">"error"</span><span class="op">,</span> message<span class="op">:</span> <span class="dt">string</span><span class="op">,</span> stack<span class="op">?:</span> <span class="dt">string</span> }</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Harness-internal</strong> (not protocol messages, never reach the Rust side): - <code>target()</code> — the harness checks if the TS engine implements it, calls it if so, uses the result (including opaque <code>data</code> cookie like kernelspec) to build <code>ExecutionTarget</code> for <code>execute()</code>. All Deno-side. Falls back to constructing from <code>TsExecuteOptions</code> fields.</p>
+<p><code>dependencies()</code> is <strong>not</strong> harness-internal: it is a first-class wire verb (<code>dependencies</code> above), driven by q2’s render orchestrator at the merged output — mirroring Q1 <code>render.ts:90-109</code>. The harness is a thin pass-through to <code>instance.dependencies(opts)</code>; it does <strong>not</strong> fold the call into <code>execute</code> (that earlier design was un-Q1 and could not resolve at a merged output — see RTQ FC-2).</p>
+<p><strong>Deferred until q2 grows callers</strong> (no q2 caller exists yet, so neither a trait method nor a protocol message is added now): - <code>filterFormat</code>, <code>executeTargetSkipped</code>, <code>postprocess</code>, <code>canKeepSource</code>, <code>postRender</code>. When added, they’ll appear at both layers (trait method + protocol message) using q2-native types. - <code>partitionedMarkdown</code>. Q1 used this to expose filter-aware notebook metadata to project-indexing and format-resolution callers. q2 has no caller for it: <code>DocumentProfile</code> (post-merge, pre-mutation pipeline checkpoint) carries the title / heading / draft data Q1 read via <code>partitionedMarkdown</code>, and Q1’s pre-execute filter-YAML harvest is collapsed into the natural <code>MetadataMergeStage</code> cascade once filters run inside <code>markdown_for_file</code>. See <code>claude-notes/plans/2026-04-23-ipynb-filters-and-engine-partitioning.md</code> for the q2 ipynb-filter design.</p>
+<p><strong>Not in protocol:</strong> - <code>run()</code> — interactive mode, deferred to future plan</p>
+<p>See plan1a-protocol for the full protocol type definitions and rationale.</p>
+</section>
+<section id="tsexecuteresult" class="level3">
+<h3 class="anchored" data-anchor-id="tsexecuteresult">TsExecuteResult</h3>
+<p>The execution response forwards Q1’s full <code>ExecuteResult</code> shape. q2 honors the fields it has a consumer for; the rest ride as <code>#[serde(default)]</code> <strong>carriers</strong> (FC-1/FC-2), inert until a feature reads them — “defer the feature, not the infrastructure.”</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode typescript code-with-copy"><code class="sourceCode typescript"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">interface</span> TsExecuteResult {</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  markdown<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  supporting<span class="op">:</span> <span class="dt">string</span>[]<span class="op">;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  filters<span class="op">:</span> <span class="dt">string</span>[]<span class="op">;</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  includes<span class="op">?:</span> { inHeader<span class="op">:</span> <span class="dt">string</span>[]<span class="op">;</span> beforeBody<span class="op">:</span> <span class="dt">string</span>[]<span class="op">;</span> afterBody<span class="op">:</span> <span class="dt">string</span>[] }<span class="op">;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  htmlDependencies<span class="op">:</span> <span class="bu">Array</span><span class="op">&lt;</span>{ name<span class="op">:</span> <span class="dt">string</span><span class="op">;</span> stylesheets<span class="op">:</span> <span class="dt">string</span>[]<span class="op">;</span> scripts<span class="op">:</span> <span class="dt">string</span>[] }<span class="op">&gt;;</span>  <span class="co">// q2-native structured deps</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="co">// Carried per FC-1/FC-2, inert until a consumer reads them:</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  engineDependencies<span class="op">?:</span> <span class="bu">Record</span><span class="op">&lt;</span><span class="dt">string</span><span class="op">,</span> <span class="dt">unknown</span>[]<span class="op">&gt;;</span>  <span class="co">// deferred-deps map (FC-2)</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  metadata<span class="op">?:</span> <span class="bu">Record</span><span class="op">&lt;</span><span class="dt">string</span><span class="op">,</span> <span class="dt">unknown</span><span class="op">&gt;;</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  pandoc<span class="op">?:</span> <span class="bu">Record</span><span class="op">&lt;</span><span class="dt">string</span><span class="op">,</span> <span class="dt">unknown</span><span class="op">&gt;;</span>                <span class="co">// loose map — NOT a typed FormatPandoc</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>  resourceFiles<span class="op">?:</span> <span class="dt">string</span>[]<span class="op">;</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>  preserve<span class="op">?:</span> <span class="bu">Record</span><span class="op">&lt;</span><span class="dt">string</span><span class="op">,</span> <span class="dt">string</span><span class="op">&gt;;</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>  postProcess<span class="op">?:</span> <span class="dt">boolean</span><span class="op">;</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Deferred-deps are orchestrator-driven, not folded.</strong> With <code>dependencies:true</code> (the v1 default) the engine resolves deps inline into <code>includes</code> and <code>engineDependencies</code> stays empty. With <code>dependencies:false</code> the engine <strong>returns</strong> the deferred <code>engineDependencies</code> map, and q2’s render orchestrator later sends a <code>dependencies</code> message per engine <strong>at the merged output</strong> and merges each <code>DependenciesResult.includes</code> — mirroring Q1 <code>render.ts:90-109</code>. The harness does not call <code>dependencies()</code> itself (RTQ FC-2). No v1/Julia caller sends <code>false</code>; the deferred path is present-but-unexercised until book/project rendering and Plan 3E’s <code>quarto.jupyter.widgetDependencyIncludes</code> land.</p>
+<p><strong><code>html_dependencies</code> on q2’s <code>ExecuteResult</code> struct</strong> is the q2-native landing site (plan1a-engine Phase 3). It reuses the existing <code>quarto-core::dependency::HtmlDependency</code> type — same producer-side shape that Lua filters already emit, same <code>store_html_dependencies</code> consumer path in <code>EngineExecutionStage</code>. <code>metadata</code>/<code>pandoc</code>/<code>resourceFiles</code>/<code>preserve</code>/ <code>postProcess</code> are <strong>carried but inert</strong> (FC-1) — Julia populates none of them; their consumers (e.g.&nbsp;a <code>preserve</code>-reading AST transform for <code>postprocess</code> recovery) land with the features that need them. See <code>claude-notes/plans/2026-04-18-html-js-deps-design.md</code> for the broader JS-deps story.</p>
+<p><strong>Note on TsExecuteOptions:</strong> q2 provides pre-extracted <code>metadata</code> (from the AST) and a <code>source_map</code> (byte-range entries from Plan 0’s SourceInfo) in the execute options. The engine-host harness uses these to construct the <code>ExecutionTarget</code> and <code>MappedString</code> the engine expects. The engine never calls <code>target()</code> (harness-internal). <code>partitionedMarkdown()</code> is not invoked either — q2’s <code>DocumentProfile</code> checkpoint covers Q1’s project-indexing and format-resolution use cases for that method. The harness also receives <code>handled_languages</code> — the per-engine <em>leave-alone</em> set the resolver derives from ownership (<code>HANDLED_LANGUAGES ∪ the languages the other engines in this sequence own</code>), not a static constant; the engine executes only the cells it owns and passes the rest through unchanged (engine-resolution.md §5). See plan1a-protocol for details.</p>
+<p><strong>Logs (v1: stderr is diagnostic; stdout is the protocol):</strong> in v1 the protocol runs on stdout, so <strong>stderr</strong> is the diagnostic stream, forwarded to q2’s logging. <code>quarto.console.*</code> emits level prefixes (<code>[INFO]</code>/<code>[WARN]</code>/<code>[ERROR]</code>) to stderr that q2 routes accordingly. Engines must <strong>not</strong> write to stdout — <code>console.log</code>/<code>console.info</code> corrupt the protocol and the Rust side SIGKILLs on a non-<code>Response</code> line (naming <code>console.log</code> as the likely cause) — and must <strong>not</strong> read stdin (the protocol <em>input</em> channel; reading it steals frames). The harness captures <code>Deno.stdout</code> for protocol writes and does not override <code>console.*</code>; protection is by contract. <strong>Phase 1.6</strong> moves the protocol to loopback TCP, after which stdout is diagnostic-only and <code>console.log</code> is harmless. See Plans 1a and 1b for the full contract.</p>
+</section>
+<section id="init-and-launchengine-payloads-item-a" class="level3">
+<h3 class="anchored" data-anchor-id="init-and-launchengine-payloads-item-a">Init and LaunchEngine payloads (Item A)</h3>
+<p>Serialized context is a q2 invention — Quarto 1 engines run in-process. q2 splits the bootstrap info Q1 keeps as process globals + project context into <strong>two frames, each on the lifetime it matches</strong> (RTQ Item A / DQ-7):</p>
+<ul>
+<li><p><strong><code>Init { global: HostGlobalConfig }</code></strong> — sent <strong>once at spawn</strong>, before any <code>loadEngine</code>. Process-stable config q2 owns and Deno can’t derive. The <code>@quarto/api</code> <code>path</code>/<code>system</code> factories close over it, so <code>path.runtime</code>/<code>resource</code>/<code>dataDir</code>/<code>system.pandoc</code> resolve <strong>immediately</strong> (ambient, like Q1’s <code>resourcePath()</code>/<code>quartoRuntimeDir()</code> — never gated).</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode typescript code-with-copy"><code class="sourceCode typescript"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">interface</span> HostGlobalConfig {</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  resourceDir<span class="op">:</span> <span class="dt">string</span><span class="op">;</span>          <span class="co">// q2's bundled resources</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  runtimeDir<span class="op">:</span> <span class="dt">string</span><span class="op">;</span>           <span class="co">// q2's runtime directory</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  dataDir<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  pandocPath<span class="op">:</span> <span class="dt">string</span><span class="op">;</span>           <span class="co">// absolute path to pandoc binary</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  isInteractiveSession<span class="op">:</span> <span class="dt">boolean</span><span class="op">;</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  runningInCI<span class="op">:</span> <span class="dt">boolean</span><span class="op">;</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  quartoVersion<span class="op">:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div></li>
+<li><p><strong><code>LaunchEngine { engine, project: EngineProjectContext }</code></strong> — sent <strong>per render</strong>, captured in the launched instance’s closure (pure Q1 — <code>engine.launch(EngineProjectContext)</code>).</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode typescript code-with-copy"><code class="sourceCode typescript"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">interface</span> EngineProjectContext {</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  projectDir<span class="op">?:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  isSingleFile<span class="op">:</span> <span class="dt">boolean</span><span class="op">;</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  config<span class="op">?:</span> { engines<span class="op">?:</span> <span class="dt">string</span>[]<span class="op">;</span> project<span class="op">?:</span> { <span class="st">"output-dir"</span><span class="op">?:</span> <span class="dt">string</span> } }<span class="op">;</span>  <span class="co">// values, not callbacks (DQ-5)</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  outputDir<span class="op">?:</span> <span class="dt">string</span><span class="op">;</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div></li>
+</ul>
+<p><code>Init</code> = process-stable global config; <code>LaunchEngine</code> = render-scoped project context. The engine-facing API stays exactly Q1; only the wire is split. This is the enabler for reusing one subprocess across renders (<code>Init</code> once, project per <code>launchEngine</code>). The earlier single combined <code>EngineHostContext</code> — one shared mutable <code>HostState.context</code> slot gated until first launch — is removed: it conflated process-global with project-scoped state and had no Q1 basis (RTQ Item A).</p>
+<p>Most QuartoAPI methods are implemented in TypeScript using the <code>Init</code> global + the launch <code>project</code> + the platform host. No callbacks to Rust needed.</p>
+</section>
+</section>
+<section id="quartoapi-implementation-strategy" class="level2">
+<h2 class="anchored" data-anchor-id="quartoapi-implementation-strategy">QuartoAPI Implementation Strategy</h2>
+<section id="implemented-in-typescript-no-rust-callbacks" class="level3">
+<h3 class="anchored" data-anchor-id="implemented-in-typescript-no-rust-callbacks">Implemented in TypeScript (no Rust callbacks)</h3>
+<p>Implementations live in <code>@quarto/api</code> subpaths. Platform I/O is factored through <code>PlatformHost</code> (see Plan 2) so the same package works under <code>@quarto/engine-host-deno</code> today and <code>@quarto/engine-host-wasm</code> later.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 37%">
+<col style="width: 27%">
+<col style="width: 34%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Namespace</th>
+<th>Source</th>
+<th>Host use</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>quarto.path</code></td>
+<td><code>@quarto/api/path</code> — pure string helpers + <code>createPath(host)</code></td>
+<td><code>host.realPath</code> for <code>absolute()</code>; otherwise none. The <code>runtime(subdir)</code> / <code>resource(...parts)</code> closures close over the <code>Init</code> global config’s <code>runtimeDir</code> / <code>resourceDir</code>.</td>
+</tr>
+<tr class="even">
+<td><code>quarto.format</code></td>
+<td><code>@quarto/api/format</code> — pure computation from <code>format.pandoc.to</code></td>
+<td>None. Format info arrives per-call in <code>TsExecuteOptions.format</code>, not at init time. Matches Quarto 1 (stateless).</td>
+</tr>
+<tr class="odd">
+<td><code>quarto.system</code></td>
+<td><code>@quarto/api/system</code> — <code>createSystem(host)</code></td>
+<td><code>host.process.exec</code> for <code>execProcess</code>; <code>host.fs</code> for <code>tempContext</code>. Throws “not available” in environments where <code>host.process</code> is undefined. Engine-host-deno wraps <code>execProcess</code> with a <code>pandoc(args, stdin?)</code> convenience that uses <code>context.pandocPath</code>.</td>
+</tr>
+<tr class="even">
+<td><code>quarto.console</code></td>
+<td><code>@quarto/api/console</code> — pure, writes to stderr with level prefixes</td>
+<td>None.</td>
+</tr>
+<tr class="odd">
+<td><code>quarto.crypto</code></td>
+<td><code>@quarto/api/crypto</code> — <code>md5Hash</code> via Web Crypto (<code>crypto.subtle.digest</code>) or small pure-JS dep</td>
+<td>None. Works in Deno, browser, Node.</td>
+</tr>
+<tr class="even">
+<td><code>quarto.mappedString</code></td>
+<td><code>@quarto/api/text</code> (same module as <code>quarto.text</code>). <code>fromFile</code> routed through <code>createMappedStringFromFile(host)</code>.</td>
+<td><code>host.fs.readTextFileSync</code> for <code>fromFile</code>. For <code>options.target.markdown</code>, engine-host-deno’s <code>mapped-source.ts</code> rehydrates a <code>MappedString</code> with <code>.map()</code> provenance from the <code>source_map</code> byte-range entries in <code>TsExecuteOptions</code>.</td>
+</tr>
+<tr class="odd">
+<td><code>quarto.markdownRegex</code></td>
+<td><code>@quarto/api/markdown</code> — clean reimplementations</td>
+<td>None. Pure parsing.</td>
+</tr>
+<tr class="even">
+<td><code>quarto.jupyter</code></td>
+<td><code>@quarto/api/jupyter</code> — <code>createJupyter(host)</code> (Plan 3)</td>
+<td><code>host.fs.writeFileSync</code> for figure image writes; <code>host.fs.readTextFileSync</code> for <code>isPercentScript</code> / <code>percentScriptToMarkdown</code>. The rest of the jupyter conversion logic is pure.</td>
+</tr>
+<tr class="odd">
+<td><code>quarto.text</code></td>
+<td><code>@quarto/api/text</code> — pure string utilities</td>
+<td>None.</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="whats-not-needed-from-rust" class="level3">
+<h3 class="anchored" data-anchor-id="whats-not-needed-from-rust">What’s NOT needed from Rust</h3>
+<p>None of the QuartoAPI methods call back to Rust. All context flows one way (Rust → Deno at init time, per-call options on each execute). This keeps the protocol simple and unidirectional during execution.</p>
+</section>
+<section id="whats-not-in-quartoapi-itself" class="level3">
+<h3 class="anchored" data-anchor-id="whats-not-in-quartoapi-itself">What’s NOT in <code>@quarto/api</code> itself</h3>
+<p>No references to <code>Deno.*</code> or <code>node:*</code>. Those live in the platform-specific host implementations (<code>@quarto/engine-host-deno/src/deno-host.ts</code> today, <code>@quarto/engine-host-wasm/src/wasm-host.ts</code> in the future).</p>
+</section>
+</section>
+<section id="quarto-1-api-compatibility" class="level2">
+<h2 class="anchored" data-anchor-id="quarto-1-api-compatibility">Quarto 1 API Compatibility</h2>
+<p>We are NOT targeting 100% Quarto 1 API compatibility. The <code>@quarto/types</code> package provides the interface definitions. Our implementations may differ from Quarto 1’s in: - Simplified type signatures (flattened options objects) - Missing methods that no current engine uses (stubbed with helpful errors) - Different behavior in edge cases (especially around YAML validation)</p>
+<p>Engine extensions may need minor adaptation to work with q2. The Julia engine is our compatibility benchmark.</p>
+</section>
+<section id="new-typescript-packages" class="level2">
+<h2 class="anchored" data-anchor-id="new-typescript-packages">New TypeScript Packages</h2>
+<section id="quartoapi" class="level3">
+<h3 class="anchored" data-anchor-id="quartoapi"><span class="citation" data-cites="quarto/api">@quarto/api</span></h3>
+<p>A single shared package holding clean reimplementations of every QuartoAPI namespace’s underlying logic. Organized as subpaths rather than sibling packages — one <code>package.json</code>, one version, one dep list, <code>exports</code> map for targeted imports. Designed to be portable: consumable today by <code>@quarto/engine-host-deno</code>, and in the future by Quarto 1 itself.</p>
+<p>Subpaths:</p>
+<ul>
+<li><code>@quarto/api/text</code> — <code>MappedString</code> (type + impl), <code>asMappedString</code>, <code>mappedSubstring</code>, <code>mappedConcat</code>, <code>mappedLines</code>, <code>mappedNormalizeNewlines</code>, <code>mappedIndexToLineCol</code>, <code>mappedStringFromFile</code>, plus plain-text utilities (<code>lines</code>, <code>trimEmptyLines</code>, <code>asYamlText</code>, <code>postProcessRestorePreservedHtml</code>). Powers both <code>quarto.text</code> and <code>quarto.mappedString</code> on the runtime API surface.</li>
+<li><code>@quarto/api/markdown</code> — <code>extractYaml</code>, <code>partition</code>, <code>pandocAttrParseText</code>, <code>getLanguages</code>, <code>breakQuartoMd</code>. Powers <code>quarto.markdownRegex</code>.</li>
+<li><code>@quarto/api/jupyter</code> — <code>jupyterToMarkdown</code>, <code>isPercentScript</code>, <code>percentScriptToMarkdown</code>, <code>assets</code>, <code>resultIncludes</code>, <code>resultEngineDependencies</code>, plus supporting modules (display-data, tags, labels, preserve, widgets, pandoc-id, cell-options). Powers <code>quarto.jupyter</code>. Subject of Plan 3.</li>
+<li><code>@quarto/api/format</code> — <code>isHtmlCompatible</code>, <code>isLatexOutput</code>, <code>isMarkdownOutput</code>, <code>isIpynbOutput</code>, etc. Pure computation from <code>pandoc.to</code> strings.</li>
+<li><code>@quarto/api/path</code> — <code>dirAndStem</code>, <code>isQmdFile</code>, <code>toForwardSlashes</code>, <code>inputFilesDir</code> as pure exports; <code>createPath(host)</code> for host-dependent <code>absolute()</code>.</li>
+<li><code>@quarto/api/system</code> — <code>createSystem(host)</code> returning <code>execProcess</code>, <code>tempContext</code>, <code>onCleanup</code>, <code>isInteractiveSession</code>, <code>runningInCI</code>. All I/O goes through the platform host — in Deno, <code>host.process.exec</code> wraps <code>Deno.Command</code>; in a future WASM host, <code>execProcess</code> throws “not available”.</li>
+<li><code>@quarto/api/console</code> — <code>info</code>, <code>warning</code>, <code>error</code>, <code>withSpinner</code> (stderr writers).</li>
+<li><code>@quarto/api/crypto</code> — <code>md5Hash</code>.</li>
+</ul>
+<p><strong>Runtime-platform expectations:</strong> <code>@quarto/api</code> itself contains <strong>no</strong> references to <code>Deno.*</code>, <code>node:*</code>, or other platform-specific APIs. All I/O (file read/write, subprocess execution, path canonicalization) goes through a small <code>PlatformHost</code> interface that the consumer plugs in. This lets the same <code>@quarto/api</code> package serve two environments:</p>
+<ul>
+<li><code>@quarto/engine-host-deno</code> — the Deno subprocess harness delivered by Plan 1b. Provides a <code>denoHost</code> that calls <code>Deno.readTextFileSync</code>, <code>Deno.Command</code>, etc.</li>
+<li><code>@quarto/engine-host-wasm</code> — <strong>future work</strong>, not part of these plans — the in-browser harness for hub-client. Would provide a <code>wasmHost</code> backed by q2’s VFS (<code>vfsReadFile</code>, <code>vfsAddFile</code>, …). Subprocess-dependent QuartoAPI methods (<code>quarto.system.execProcess</code>, <code>quarto.system.pandoc</code>) would throw “not available in this environment”.</li>
+</ul>
+<p>See Plan 2 for the <code>PlatformHost</code> interface definition and which submodules are pure vs.&nbsp;host-dependent.</p>
+<p><strong>Bootstrap:</strong> No registry pattern. <code>@quarto/engine-host-deno</code> imports the submodules directly and builds the <code>QuartoAPI</code> object as plain nested record — the QuartoAPI registry/singleton infrastructure from Quarto 1 (<code>src/core/api/registry.ts</code>, <code>register.ts</code>) is <strong>not</strong> being ported. Implementations only.</p>
+<p>Dependencies: <code>yaml</code> (used by <code>markdown</code> and <code>jupyter</code> for YAML parsing).</p>
+</section>
+<section id="quartoengine-host-deno" class="level3">
+<h3 class="anchored" data-anchor-id="quartoengine-host-deno"><span class="citation" data-cites="quarto/engine-host-deno">@quarto/engine-host-deno</span></h3>
+<p>The Deno-side subprocess harness — q2-specific glue for the native binary, never shared with Q1. Reads JSON messages from stdin, dispatches to the loaded engine module, writes responses to stdout. Named <code>-deno</code> explicitly to make room for a future <code>@quarto/engine-host-wasm</code> sibling.</p>
+<ul>
+<li><code>host.ts</code> — main loop: read messages, dispatch, write responses</li>
+<li><code>deno-host.ts</code> — the <code>PlatformHost</code> implementation backed by Deno APIs (<code>Deno.readTextFileSync</code>, <code>Deno.Command</code>, <code>Deno.realPathSync</code>, etc.)</li>
+<li><code>quarto-api.ts</code> — imports <code>@quarto/api/*</code> submodules, threads <code>denoHost</code> through the host-taking factories, assembles the <code>QuartoAPI</code> object from the <code>Init</code> global config (and the launch <code>project</code>). Wires both <code>quarto.text</code> and <code>quarto.mappedString</code> from the same <code>@quarto/api/text</code> module.</li>
+<li><code>mapped-source.ts</code> — rehydrates a <code>MappedString</code> from the <code>source_map</code> byte-range entries in <code>TsExecuteOptions</code>. Uses a base-per-file cache so multiple pieces sharing a source file share one base <code>MappedString</code> object. q2-specific (needed because <code>source_map</code> crossed the protocol boundary as data, not in-memory references).</li>
+<li><code>engine-loader.ts</code> — dynamically imports the engine TS module, validates it exports <code>ExecutionEngineDiscovery</code>.</li>
+</ul>
+<p>Dependencies: <code>@quarto/api</code>, <code>@quarto/types</code>.</p>
+</section>
+<section id="quartoengine-host-wasm-future-out-of-scope" class="level3">
+<h3 class="anchored" data-anchor-id="quartoengine-host-wasm-future-out-of-scope"><span class="citation" data-cites="quarto/engine-host-wasm">@quarto/engine-host-wasm</span> (future, out of scope)</h3>
+<p>The in-browser equivalent for hub-client. Would provide a <code>wasmHost</code> backed by q2’s VFS JS bindings and run inside a Web Worker (or equivalent sandbox — the mechanism is an open design question). Not part of Plans 1-4. Called out here to fix the naming and to document that the <code>PlatformHost</code> abstraction in Plan 2 is what enables it without rework to <code>@quarto/api</code>.</p>
+</section>
+</section>
+<section id="sub-plans" class="level2">
+<h2 class="anchored" data-anchor-id="sub-plans">Sub-Plans</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Plan</th>
+<th>Sessions</th>
+<th>Dependencies</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="2026-04-18-plan0-include-expansion-and-source-info.md">Plan 0: Include Expansion &amp; SourceInfo</a></td>
+<td>2-3</td>
+<td>Nothing</td>
+<td>✓ <strong>Complete</strong> (28/28)</td>
+</tr>
+<tr class="even">
+<td><a href="2026-04-16-plan2a-quarto-api-foundation.md">Plan 2A: TS package foundations (<span class="citation" data-cites="quarto/api">@quarto/api</span> skeleton+config, <span class="citation" data-cites="quarto/types">@quarto/types</span> vendor)</a></td>
+<td>~1 + §2aa</td>
+<td>Nothing (npm workspace only) — <strong>independent root, peer of plan1a-protocol; blocks Plan 1b, 1b.1, 2, 3</strong></td>
+<td>✓ <strong>Complete</strong> (24/24; foundation + §2aa runtime surface landed long ago)</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-04-16-plan1a-protocol.md">Plan 1a-protocol: JSON message types</a></td>
+<td>1</td>
+<td>Plan 0</td>
+<td>✓ <strong>Complete</strong> (13/14; lone open box is a cross-ref note)</td>
+</tr>
+<tr class="even">
+<td><a href="2026-04-16-plan1a-host.md">Plan 1a-host: Subprocess + transport</a></td>
+<td>1</td>
+<td>plan1a-protocol</td>
+<td>✓ <strong>Complete</strong> (46/46; LANDED host-side 2026-06-24)</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-04-16-plan1a-engine.md">Plan 1a-engine: TsEngine + trait extensions</a></td>
+<td>1</td>
+<td>plan1a-protocol, plan1a-host</td>
+<td>✓ <strong>Complete</strong> (49/51; open boxes are a 1c-exercised E2E gate + a cross-ref note)</td>
+</tr>
+<tr class="even">
+<td><a href="2026-06-25-plan1a-return-to-q1.md"><strong>RTQ: plan1a Return-to-Q1 (course correction over the 1a series)</strong></a></td>
+<td>done</td>
+<td>amends plan1a-protocol/host/engine</td>
+<td>✓ <strong>Complete</strong> (18/19; all 6 items landed + reviewed READY TO MERGE, 2026-06-29; lone open box = deferred book-feature consumer)</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-06-26-plan1a-host-bugs.md"><strong>Plan 1a-host bugs (q2-introduced defects, HOST-1/2)</strong></a></td>
+<td>&lt;1</td>
+<td><strong>none</strong> (independent)</td>
+<td>✓ <strong>Complete</strong> (5/5; 2026-06-30)</td>
+</tr>
+<tr class="even">
+<td><a href="2026-04-16-plan1b-engine-host-deno.md">Plan 1b: <span class="citation" data-cites="quarto/engine-host-deno">@quarto/engine-host-deno</span> (Deno harness)</a></td>
+<td>2-3</td>
+<td>plan1a-protocol, <strong>RTQ (Item A + ENG-1 + FC-1 + FC-2, incl.&nbsp;B3 code half)</strong>, Plan 2A</td>
+<td>✓ <strong>Complete</strong> (74/74; 2026-06-30, whole-branch review READY TO MERGE)</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-06-30-mapped-string-segments.md"><strong>Plan 1b.1: MappedString <code>segments()</code> accessor (foundation fix)</strong></a></td>
+<td>&lt;1</td>
+<td>Plan 2A §2aa (mappedString) + Plan 1b</td>
+<td>✓ <strong>Complete</strong> (7/7; landed 2026-06-30, independent of Plan 1c)</td>
+</tr>
+<tr class="even">
+<td><a href="2026-04-16-plan1c-extension-integration.md">Plan 1c: Extension Integration &amp; E2E</a></td>
+<td>1-2</td>
+<td>plan1a-engine, plan1a-host, Plan 1b</td>
+<td>✓ <strong>Complete</strong> (89/91; review-clean READY TO MERGE; disclosed deferrals tracked in Plan 1c.2)</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-07-01-plan1c2-engine-extensions-loose-ends.md"><strong>Plan 1c.2: TS engine-extensions loose ends (deferred follow-ups from 1c)</strong></a></td>
+<td>TBD</td>
+<td>Plan 1c (parent)</td>
+<td>✓ <strong>Complete</strong> (4/4; P1 landed 2026-07-02, P2+P4 landed 2026-07-07, <code>cargo xtask verify</code> green)</td>
+</tr>
+<tr class="even">
+<td><a href="2026-04-16-quarto-markdown-and-api.md">Plan 2: <span class="citation" data-cites="quarto/api">@quarto/api</span> deferred launch-context bodies + <span class="citation" data-cites="quarto/types">@quarto/types</span> refinements</a></td>
+<td>2-3</td>
+<td>Plan 2A §2aa + Plan 1b</td>
+<td>✓ <strong>Complete</strong> (30/31; the one open box is a deliberate forward gate verified at Plan 3, not Plan 2 work)</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-04-16-quarto-jupyter.md">Plan 3: <span class="citation" data-cites="quarto/api/jupyter">@quarto/api/jupyter</span></a></td>
+<td>2-3</td>
+<td>Plan 2A</td>
+<td>✓ <strong>Complete</strong> (41/41; Phase 3E wiring + Plan 2 Phase A both landed)</td>
+</tr>
+<tr class="even">
+<td><a href="2026-04-16-julia-validation.md">Plan 4: Julia Validation</a></td>
+<td>1-2</td>
+<td>Plans 1a, 1b, 1c, 2, 3</td>
+<td>✓ <strong>Complete</strong> (76/80; all 13 success criteria met 2026-07-02; 4 open boxes are machine-specific/example placeholders)</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-07-02-preview-capture-delivery.md"><strong>Plan 4a: Preview engine-capture delivery (julia close/busy + browser splice e2e)</strong></a></td>
+<td>1-2</td>
+<td>Plan 4 (fills 4J’s browser-tier gap)</td>
+<td>✓ <strong>Complete</strong> (15/15; strand bd-h4rhohhy in_review, review-clean). Debug-and-fix of <code>q2 preview</code>’s engine-capture path + the browser-tier e2e Plan 4’s 4J deferred (PC1–PC8, PC-C).</td>
+</tr>
+<tr class="even">
+<td><a href="2026-07-01-plan4b-shadow-engine-features.md"><strong>Plan 4b: Shadow-engine feature validation</strong></a></td>
+<td>2-3</td>
+<td>Plan 4</td>
+<td>◐ <strong>In progress</strong> (3/52; only prerequisite checks ticked). Validates tier model + inert surfaces a single-Primary Julia can’t reach; implements the <code>_quarto.yml engines:</code> splice (Task 9). Excludes Plan 5/6/7/Phase 12/1.6 work.</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-07-02-plan4c-marimo-validation.md"><strong>Plan 4c: Marimo engine validation</strong></a></td>
+<td>1-2</td>
+<td>Plans 1a–c, 1b, 2A, 2 (<strong>not</strong> Plan 3); reuses Plan 4’s build scaffolding</td>
+<td>✓ <strong>Complete</strong> (50/50; render tier validated 2026-07-03). Adds <code>first_class</code> + shared-language (<code>{python .marimo}</code> vs <code>{python}</code>) coverage Julia can’t reach; canonical non-fully-static engine (Plan 6).</td>
+</tr>
+<tr class="even">
+<td><a href="2026-07-07-plan4c2-marimo-preview-e2e.md"><strong>Plan 4c.2: Marimo through <code>q2 preview</code> (capture-splice fix + browser e2e)</strong></a></td>
+<td>1-2</td>
+<td>Plan 4c + Plan 4a (preview capture→splice chain)</td>
+<td>✓ <strong>Complete</strong> (15/15; strand bd-5jxcio5d <strong>closed</strong> 2026-07-07). Fixes the unwrapped-engine-output splice (marimo islands) so marimo reaches the preview pane (Plan 4c FINDING #5) + adds SC21/23/24 preview e2e. Follow-up bd-5m1ni9if filed.</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-07-06-plan4d-owned-languages.md"><strong>Plan 4d: <code>owned_languages</code> positive ownership wire field</strong></a></td>
+<td>1</td>
+<td>TS-engine wire (1a–c, 2, 3, 4)</td>
+<td>○ <strong>Not started</strong> (0/39). <strong>Additive, anytime post-wire; blocks nothing.</strong> Carries the <strong>positive</strong> projection of the ownership map (<code>ownedLanguages</code>) beside the existing <code>handledLanguages</code> <strong>leave-alone</strong> set, completing the wire: an engine can select the cells q2 resolved it to own (honoring user <code>engine:</code>/<code>engines:</code> overrides) instead of inferring the complement — ambiguous, since “not handled” = owned-by-me <strong>or</strong> owned-by-nobody. Informational, not enforcement; backward-compatible (<code>#[serde(default)]</code>); q2 core does not consume it; native knitr/jupyter untouched. Also updates <code>engine-resolution.md</code> §5/§9 + <code>engine-api-surface.md</code>.</td>
+</tr>
+<tr class="even">
+<td><a href="2026-06-26-plan5-engine-host-pooling.md"><strong>Plan 5: engine-host pooling (preview re-compute warmth)</strong></a></td>
+<td>research stub</td>
+<td>full stack (1a–c, 2, 4) + preview-wiring (plan1c R5) + DQ-7</td>
+<td>◔ <strong>Research stub</strong> (no impl checklist yet). <strong>Last</strong> (post-4; orthogonal to Plan 3).</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-06-29-plan6-pass1-engine-resolution.md"><strong>Plan 6: Pass-1 engine resolution (per-doc lift)</strong></a></td>
+<td>research stub</td>
+<td>plan1a-engine + plan1c (resolution machinery)</td>
+<td>○ <strong>Not started</strong> (0/93; design ratified). <strong>Additive</strong>, post-1c; sequenced after Plan 4b; orthogonal to Plans 3/4/5.</td>
+</tr>
+<tr class="even">
+<td><a href="2026-07-07-plan7a-static-content-pattern-claims.md"><strong>Plan 7a: Static content-pattern file claims (research)</strong></a></td>
+<td>TBD</td>
+<td>plan1c (claims machinery); coordinates with Plan 1c.2 (P4 schema / P2 discovery)</td>
+<td>◔ <strong>Research</strong> (2/23; design being finalized). <strong>Precedes Plan 7</strong> (Plan 7 consumes 7a’s claim mechanism). Extends <code>_extension.yml</code> static file-claims to content patterns; amends <code>engine-resolution.md §3.3</code> + <code>engine-api-surface.md</code>.</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-06-27-plan7-native-percent-spin-sourceinfo.md"><strong>Plan 7: native percent/spin conversion + precise SourceInfo</strong></a></td>
+<td>2-3</td>
+<td>plan1c (<code>claims_file</code>/<code>markdown_for_file</code>) + Plan 0 (SourceInfo) + Plan 3 (jupyter percent helpers) + Plan 7a (claim mechanism); <strong>not</strong> Plan 5/6</td>
+<td>○ <strong>Not started</strong> (0/13). Post-1c (default after 4); pullable earlier; orthogonal to Plans 5/6.</td>
+</tr>
+<tr class="even">
+<td><a href="2026-07-02-plan8-mermaid-absorption-graphviz-ts-extension.md"><strong>Plan 8: HANDLED_LANGUAGES → claiming engines (absorb #241 mermaid + graphviz TS extension)</strong></a></td>
+<td>2-3</td>
+<td>Part A: #241 + plan1a-engine; Part B: full TS-engine stack (1a–c, 1b, 2A) + <code>build-ts-extension</code></td>
+<td>○ <strong>Not started</strong> (0/15). Part A independent/now; Part B post-1c; enables Plan 6 Q4.</td>
+</tr>
+<tr class="odd">
+<td><a href="2026-07-03-plan9-call-engine.md"><strong>Plan 9: <code>q2 call engine</code> — Q1-parity engine CLI surface (bd-m1jeqhhz)</strong></a></td>
+<td>2-3</td>
+<td>full TS-engine stack (1a–c, 1b, 2A) + <code>build-ts-extension</code>; uses Plan 4’s julia fixture</td>
+<td>○ <strong>Not started</strong> (0/46). Post-1c; <strong>resolves the Plan-4E daemon-management gap</strong> (<code>quarto call engine julia status/kill/log/close/stop</code>). One-shot <code>call-engine</code> host mode (vendored cliffy) + additive <code>call_engine_command</code> trait hook (default <code>NotSupported</code> ⇒ non-breaking for every other engine). <strong>Overturns RTQ’s <code>populateCommand</code> = “impossible/redundant” classification</strong> — see the note below and §“populateCommand” in <code>claude-notes/designs/engine-api-surface.md</code>.</td>
+</tr>
+<tr class="even">
+<td><a href="2026-07-04-plan10-check-installation.md"><strong>Plan 10: engine <code>checkInstallation</code> → real <code>q2 check</code></strong></a></td>
+<td>2-3</td>
+<td>plan1a stack (1a–c, 1b) + fixture engines (4c marimo, julia); native part reuses knitr/jupyter probes</td>
+<td>○ <strong>Not started</strong> (0/53). <strong>Design approved 2026-07-03</strong> (strand bd-4qflzhwh; research + ratified decision points: <a href="../research/2026-07-03-plan10-check-installation-research.md"><code>../research/2026-07-03-plan10-check-installation-research.md</code></a>); plan authored. Adds <code>CheckInstallation</code>/<code>CheckProgress</code> wire verbs (streamed progress), <code>has_check_installation</code> on <code>LoadEngineResult</code>, optional <code>check_installation</code> trait method (naming/default-impl pattern follows Plan 9’s <code>call_engine_command</code> precedent), full Q1-fidelity native knitr/jupyter checks incl.&nbsp;test renders. <strong>Adjacent to Plan 9 only at the trait + CLI surface</strong> — Plan 9 adds no wire verb (one-shot deno mode), so no protocol collision.</td>
+</tr>
+<tr class="odd">
+<td><strong>Total</strong></td>
+<td>—</td>
+<td></td>
+<td><strong>✓ Complete:</strong> Plans 0, 2A, 1a-protocol/host/engine, RTQ, 1a-host-bugs, 1b, 1b.1, 1c, 1c.2, 2, 3, 4, 4a, 4c, 4c.2. <strong>◐ In progress:</strong> Plan 4b (3/52). <strong>○ Not started / ◔ stub:</strong> Plans 4d, 5, 6, 7, 7a, 8, 9, 10.</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="blockquote">
+<p><strong>Status key:</strong> ✓ complete · ◐ in progress · ○ not started (design may be ratified) · ◔ research stub. Checklist tallies (x/total) audited 2026-07-08 against each plan’s own checkboxes.</p>
+</blockquote>
+<blockquote class="blockquote">
+<p><strong>Plan 9 cross-plan impact (added 2026-07-03).</strong> Plan 9 adds an optional <code>call_engine_command</code> method to the <code>ExecutionEngine</code> trait with a default <code>Err(NotSupported)</code> impl, and a <strong>separate one-shot <code>deno</code> process</strong> (the <code>call-engine</code> bundle mode) — it does <strong>not</strong> route through the shared render host. Consequences for still-unrun plans: - <strong>RTQ / <code>engine-api-surface.md</code>:</strong> the audit filed <code>populateCommand</code> under “impossible or redundant (cliffy subcommands into a Rust CLI)”. Plan 9 shows it is achievable by running the <em>same</em> cliffy the engine uses in a short-lived Deno process with inherited stdio (byte parity). That classification is now <strong>corrected</strong> (design-doc note updated); no protocol surgery was needed — Plan 9 adds <strong>no</strong> wire verb. - <strong>Plan 5 (engine-host pooling):</strong> <code>call-engine</code> is a deliberately <strong>non-pooled</strong> spawn. Pooling the render host must not try to serve <code>call engine</code> from the pool (the managed daemon is the detached julia control server, orthogonal to the Deno host; and a one-shot invocation must never disturb a warm render host). Design constraint for Plan 5, not a blocker. - <strong>Plan 6 (Pass-1 resolution):</strong> Plan 9’s <code>Available engines:</code> message hardcodes Q1’s builtin order (<code>knitr, jupyter, markdown</code>) for byte parity (deviation D-6). Reworking <code>engines_in_order()</code> must preserve that message. - <strong>Plan 4 (Julia Validation):</strong> Plan 9 resolves the “no management surface” gap Plan 4E documents; Plan 4’s out-of-band transport-file→PID→SIGTERM teardown still works and need not change (Plan 9 <em>could</em> later simplify it to <code>call engine julia   stop/kill</code>). - <strong>Plans 3, 4b, 4c, 7, 8:</strong> unaffected — native engines and command-less TS engines (marimo, echo, mermaid/graphviz) inherit the default and correctly emit Q1’s <code>Engine &lt;name&gt; does not support subcommands</code>.</p>
+</blockquote>
+<blockquote class="blockquote">
+<p><strong>Course correction — RTQ (<code>plan1a-return-to-q1</code>).</strong> A <strong>now-complete</strong> (all 6 code items landed + reviewed READY TO MERGE, 2026-06-29), originally plan-only correction layer over the whole 1a series, added after the first 1a implementations landed. Its thesis: <em>the q2 wire is the framework between q2 and <strong>all</strong> engine features, not the Julia render subset the original 1a scoped to — defer features, never the infrastructure they need.</em> It carries Q1-divergence corrections (Item A: ambient <code>Init</code> global vs per-launch gating; ENG-1: discovery-tier statics), the framework Surface-coverage audit (provided <strong>and</strong> consumed halves), and the <code>#[serde(default)]</code> carrier seams (FC-1/FC-2). It <strong>amends</strong> the three 1a sub-plans; an implementing agent applies it on topic branches off this integration line. (The q2-introduced host bugs HOST-1/2 were carved out to <code>plan1a-host-bugs.md</code> — a separate, independent plan with its own row above.)</p>
+</blockquote>
+<section id="dependency-graph" class="level3">
+<h3 class="anchored" data-anchor-id="dependency-graph">Dependency graph</h3>
+<p>There are <strong>two independent roots</strong>: <code>plan1a-protocol</code> (its sole dependency, Plan 0, is complete — so it is unblocked) and <strong>Plan 2A</strong> (<code>@quarto/api</code> foundation — gated on nothing in the epic but the npm workspace). There is <strong>no edge between them</strong>. Plan 1b is the first node that needs both — it depends on the frozen protocol schema <em>and</em> on Plan 2A’s <code>@quarto/api/config</code> constants. Plan 2A is a shared foundation that Plan 1b, Plan 2, and Plan 3 all build on, so <strong>the epic does not linearize cleanly past the roots</strong>.</p>
+<pre><code>Plan 0 ✓ complete (Include Expansion &amp; SourceInfo)
+  │
+  ├─ plan1a-protocol ─┬─ plan1a-host ─ plan1a-engine ─┐  (Rust side, parallel with 1b)
+  │                   │                               │
+  │                   └─ RTQ (Item A/ENG-1/FC-1/FC-2) ┤  (post-RTQ wire — GATES 1b's
+  │                                               │   │   Rust-facing surface + E2E)
+  │                                               │   │
+Plan 2A ──┬─ §2aa (namespaces) ─┬─ Plan 1b ───────────┴───┴─ Plan 1c ─┐
+(@quarto/api                    │                                     │
+ foundation)                    ├─ Plan 2 (deferred bodies + types) ──── ┤
+                                │                                     ├─→ Plan 4 ─→ Plan 9
+                                └─ Plan 3 (@quarto/api/jupyter) ───────── ┘   (call engine;
+                                                                               uses Plan 4's
+                                                                               julia fixture)</code></pre>
+<p>Plan 9 is a <strong>leaf</strong> off the completed TS-engine stack (needs 1c’s registry + <code>build-ts-extension</code> and Plan 4’s julia fixture). It adds no wire verb and an additive trait default, so it neither gates nor is gated by Plans 5/6/7/8 — only the soft cross-plan constraints noted in the Plan 9 impact callout above.</p>
+<ul>
+<li><code>plan1a-host</code> and <code>plan1a-engine</code> run <strong>in parallel with Plan 1b</strong> (Rust side).</li>
+<li><strong>RTQ gates Plan 1b.</strong> 1b’s pure-TS layer (<code>framing.ts</code>, <code>mapped-source.ts</code>, the dispatch loop + T1/T3/T4/T5/T6/T7) can start against a 1b-authored <code>src/types.ts</code>, but the Rust-facing surface (ambient-API tests, execute step-6 field routing, the deferred-deps wire seam) and any Plan-1c E2E need RTQ’s protocol edits (<code>Dependencies</code> verb, <code>engineDependencies</code>, <code>Init</code>/<code>EngineProjectContext</code>, ENG-1 statics, FC-1 carriers, B3 stub relabel) landed first. RTQ ENG-2 is <em>not</em> a gate (already landed).</li>
+<li><code>Plan 1c</code> depends on <code>plan1a-host</code>, <code>plan1a-engine</code>, and Plan 1b.</li>
+<li><strong>Plan 1b.1</strong> (<code>mapped-string-segments</code>, ✓ complete) hangs off the <code>Plan 2A §2aa (mappedString) → Plan 1b</code> edge — a foundation fix to the <code>MappedString</code> surface, landed <strong>independently of Plan 1c</strong> (not on the path to Plan 3/4; it also corrects Plan 1b’s <code>mapped-source.ts</code> serializer).</li>
+<li><strong>Plan 1c.2</strong> (<code>loose ends</code>, not started) hangs off <strong>Plan 1c</strong> as a post-1c continuation collecting 1c’s disclosed deferrals; it does <strong>not</strong> gate Plan 4.</li>
+<li>Plan 2A blocks Plan 1b (imports <code>@quarto/api/config</code> <strong>and</strong> typechecks against the vendored <code>@quarto/types</code>, both provided at the foundation; its contract tests also need §2aa’s namespaces + <code>platform</code>), and Plan 3 (<code>@quarto/api/jupyter</code> needs the skeleton). Plan 2 (the deferred launch-context bodies + <code>@quarto/types</code> refinements) depends on §2aa; it does <strong>not</strong> depend on Plan 1b (the bodies plug into §2aa’s namespaces, and the QuartoAPI assembly/gating lives in Plan 1b, not Plan 2).</li>
+<li><code>Plan 4</code> depends on Plan 1c, Plan 2, and Plan 3.</li>
+</ul>
+<p><strong>Plan 0</strong> was the prerequisite for the TS engine protocol design and is now <strong>complete</strong>. It delivered pre-engine include shortcode expansion (correctness fix for all engines) and SourceInfo on the engine interface (parity with Quarto 1’s MappedString). Plans 2 and 3 (TypeScript packages) can proceed in parallel since they don’t touch the Rust engine interface. plan1a-protocol depends on Plan 0 because the protocol types must account for source mapping decisions made in Plan 0.</p>
+<p><strong>Plan 1a</strong> delivers the Rust-side infrastructure, split into three sub-plans: - <strong>plan1a-protocol</strong> — JSON message types, the <code>Init</code>/<code>LaunchEngine</code> payloads (<code>HostGlobalConfig</code> + <code>EngineProjectContext</code>), <code>TsExecuteOptions</code>, format mapping, source-map flattening, path conventions, <code>ConfigValue → TsMetadataValue</code> rules. Pure data, no behavior. Foundation for everything else. - <strong>plan1a-host</strong> — <code>EngineTransport</code> trait, <code>StdioTransport</code>, the <code>TsEngineHost</code> demux + lifecycle, error categories, per-request timeouts, cooperative cancellation (<code>Cancel</code>/poison), diagnostic-stream forwarding, bundle embedding. The q2-side subprocess plumbing (multiplexed control socket — Phase 1.5). - <strong>plan1a-engine</strong> — <code>ExecutionEngine</code> trait extensions (<code>claims_*</code>, <code>markdown_for_file</code>, <code>NotSupported</code>), <code>HtmlDependency</code> relocation, <code>HANDLED_LANGUAGES</code>, dedup; <code>TsEngine</code> struct, two-step lazy lifecycle, hint pre-filter, alias map, race-free init, <code>MockTransport</code> tests.</p>
+<p><strong>Plan 1b</strong> is the Deno-side harness (<code>@quarto/engine-host-deno</code> package): esbuild bundle, <code>host.ts</code> main loop, <code>deno-host.ts</code> PlatformHost impl, <code>mapped-source.ts</code> MappedString rehydration, <code>quarto-api.ts</code> stub, <code>engine-loader.ts</code>. Gated on plan1a-protocol (the frozen JSON schema) <strong>and Plan 2A</strong> (it imports the metadata-partition key lists from <code>@quarto/api/config</code> and typechecks against the vendored <code>@quarto/types</code>); otherwise runs in parallel with plan1a-host and plan1a-engine. <strong>plan1a-host ships a placeholder <code>dist/engine-host-deno.js</code> so its <code>include_str!</code> compiles independently of Plan 1b — see plan1a-host’s “Bundle embedding” section.</strong> plan1a-engine’s tests use a <code>MockTransport</code> that bypasses the subprocess, not the embedded placeholder. Plan 1b replaces the placeholder file’s contents with the real esbuild output at the end of its work.</p>
+<p><strong>Plan 1c</strong> wires 1a + 1b into the extension system: <code>_extension.yml</code> engine parsing, <code>deno bundle</code> build step, registry migration to <code>StageContext</code>, 4-phase detection rewrite, and the echo engine end-to-end test (which exercises the full stack).</p>
+<p>The plans of the engine-extension stack each have a <strong>standalone core</strong>: - plan1a-protocol: data types - plan1a-host: subprocess plumbing - plan1a-engine: trait extensions + TsEngine - Plan 1b: Deno harness package - Plan 2A: TS package foundations — <code>@quarto/api</code> skeleton (package.json, exports map, tsconfig) + <code>config/</code> subpath (metadata-partition key lists), plus the vendored <code>@quarto/types</code> package - Plan 2: rest of <code>@quarto/api</code> — <code>text/</code> and <code>markdown/</code> subpaths + types (Phases 2B, 2C, 2D) - Plan 3: <code>@quarto/api/jupyter</code> subpath (Phases 3A-3D, 3F)</p>
+<p>Plan 2A’s <strong>foundation</strong> creates the <code>@quarto/api</code> package (package.json, exports map, tsconfig) plus the <code>config/</code> constants, and vendors the <code>@quarto/types</code> package from Q1; Plan 2A <strong>§2aa</strong> then implements the runtime namespaces (<code>text/</code>, <code>markdownRegex/</code>, <code>mappedString/</code>, <code>format/</code>, <code>path/</code>, <code>system/</code>, <code>console/</code>, <code>crypto/</code>) + the <code>platform/</code> seam. Plan 3 adds <code>jupyter/</code>. Plan 2 is reduced to the launch-context method bodies §2aa left stubbed plus the <code>@quarto/types</code> refinements (formerly Phase 2E).</p>
+<p><strong>Integration phases</strong> that depend on Plan 1b’s engine-host package: - Plan 1c Phase 3 (echo engine E2E test) needs Plan 1b fully working plus minimal types from Plan 2 Phase B - Plan 1b assembles the QuartoAPI from §2aa’s real namespaces and gates the context-dependent methods (no “Plan 2 replaces 1b’s stubs” — §2aa ships real bodies; Plan 2 only fills the deferred launch-context bodies) - Plan 3E (wire jupyter into engine-host) replaces Plan 1b’s jupyter stub</p>
+<p>Plan 4 integrates everything and depends on all plans being complete.</p>
+<p><strong>Plans 5, 6, and 7 are post-Plan-4 additive layers</strong> — none is on the critical path; all are explored after the core stack is validated (5 and 6 are research stubs; 7 has a finalized design backing): - <strong>Plan 5</strong> (engine-host pooling) keeps the Deno host <strong>warm across preview re-computes</strong> so a TS-engine re-execute doesn’t respawn the subprocess + re-<code>import()</code> the module. Single-project, session-scoped behind <code>EngineTransport</code>; gated by a <strong>measure-first</strong> check (the kernel already survives a respawn via its transport file, so pooling only saves the Deno-spawn + import, ~hundreds of ms). Depends on the full stack plus the preview↔︎TS-engine wiring (plan1c R5 in RTQ) and DQ-7. - <strong>Plan 6</strong> (Pass-1 engine resolution) lifts <code>resolve_engines</code> from Pass 2 into Pass 1 <strong>per-doc</strong>, for docs whose engines all resolve load-free (static <code>_extension.yml</code> claims, hint exclusion, or tier dominance), with clean fall-through to Pass 2 otherwise — preserving back-compat for legacy Q1 engines that need a load. Relaxes the design’s all-or-nothing “every engine static” gate (engine-resolution.md §7/§3.3/§12) to a per-doc partial lift; stamps <code>EngineResolution</code> on <code>DocumentProfile</code> (version bump) for engine-aware indexing, kernel pooling, and freeze. Additive on top of plan1a-engine + plan1c; orthogonal to Plans 3/4/5. - <strong>Plan 7</strong> (native percent/spin + precise SourceInfo) implements the one thing the epic has only <strong>deferred in pieces</strong>: <strong>percent scripts</strong> (<code>.py</code>/<code>.jl</code>/<code>.r</code> <code># %%</code>) and <strong>R spin</strong> (<code>.R</code>) converted to qmd <strong>natively in Rust</strong>, wired into built-in jupyter/knitr via <code>claims_file</code>/<code>markdown_for_file</code>, with <strong>column-precise <code>SourceInfo</code></strong> for every supported language (per the finalized <code>2025-12-15-source-info-for-structured-formats.md</code>: per-line <code>Original</code> <code>Concat</code> for plain-text scripts; first-class <code>NotebookCell</code> for ipynb; sidecar storage). It <strong>supersedes Plan 0’s “percent conversion loses provenance” framing</strong>, consolidates the scattered deferrals (1c Future Work, the knitr-plan spin deferral, Plan 0), and delivers the TS-engine <strong>A′</strong> faithful remap so Julia/marimo percent errors point at the original file with columns — adding the <code>.jl</code> percent-script case Plan 4 currently excludes. The validation target (<code>.qmd</code>) masks this whole surface, so it is the clearest instance of the “carry the whole engine surface, not the validation target” mandate (<code>designs/engine-api-surface.md</code> § Governing principle). Depends on plan1c + Plan 0 + Plan 3; <strong>independent of Plans 5/6</strong> (pullable earlier). The <em>intra-line</em> column problem (re-serialization through the qmd writer) is the complementary, deferred concern of <code>2026-06-18-qmd-per-line-provenance.md</code> — Plan 7 owns the input/converter half, that plan the output/writer half.</p>
+</section>
+<section id="critical-path" class="level3">
+<h3 class="anchored" data-anchor-id="critical-path">Critical path</h3>
+<p>With parallel execution: Plan 0 is <strong>complete</strong> (so plan1a-protocol is unblocked) and Plan 2A (~1 session) is the remaining independent root that can run from the start; once plan1a-protocol freezes the schema, plan1a-host, plan1a-engine, Plan 1b, Plan 2, and Plan 3 run in parallel (Plan 1b also needs Plan 2A, which is finished long before) → Plan 1c (1-2 sessions) → Plan 4 (1-2 sessions) = <strong>6-10 sessions elapsed</strong>.</p>
+</section>
+</section>
+<section id="key-file-paths-q2" class="level2">
+<h2 class="anchored" data-anchor-id="key-file-paths-q2">Key File Paths (q2)</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 64%">
+<col style="width: 35%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Component</th>
+<th>Path</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Engine trait</td>
+<td><code>crates/quarto-core/src/engine/traits.rs</code></td>
+</tr>
+<tr class="even">
+<td>Engine registry</td>
+<td><code>crates/quarto-core/src/engine/registry.rs</code></td>
+</tr>
+<tr class="odd">
+<td>Engine detection</td>
+<td><code>crates/quarto-core/src/engine/detection.rs</code></td>
+</tr>
+<tr class="even">
+<td>Engine execution stage</td>
+<td><code>crates/quarto-core/src/stage/stages/engine_execution.rs</code></td>
+</tr>
+<tr class="odd">
+<td>Existing TS packages</td>
+<td><code>ts-packages/</code></td>
+</tr>
+<tr class="even">
+<td>npm workspace config</td>
+<td><code>package.json</code> (workspaces: <code>ts-packages/*</code>)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="key-file-paths-quarto-cli-for-reference" class="level2">
+<h2 class="anchored" data-anchor-id="key-file-paths-quarto-cli-for-reference">Key File Paths (quarto-cli, for reference)</h2>
+<p><strong>Note:</strong> quarto-cli is a separate repository, referenced via the <code>external-sources/quarto-cli</code> symlink. It is the TypeScript/Deno implementation of Quarto 1. We reference it for API definitions and implementation patterns but do not import from it.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 64%">
+<col style="width: 35%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Component</th>
+<th>Path</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Julia engine</td>
+<td><code>src/resources/extension-subtrees/julia-engine/src/julia-engine.ts</code></td>
+</tr>
+<tr class="even">
+<td>Julia _extension.yml</td>
+<td><code>src/resources/extension-subtrees/julia-engine/_extensions/julia-engine/_extension.yml</code></td>
+</tr>
+<tr class="odd">
+<td><span class="citation" data-cites="quarto/types">@quarto/types</span></td>
+<td><code>packages/quarto-types/</code></td>
+</tr>
+<tr class="even">
+<td>QuartoAPI types</td>
+<td><code>packages/quarto-types/src/quarto-api.ts</code></td>
+</tr>
+<tr class="odd">
+<td>ExecutionEngineDiscovery</td>
+<td><code>src/execute/types.ts</code></td>
+</tr>
+<tr class="even">
+<td>fileExecutionEngine</td>
+<td><code>src/execute/engine.ts</code> (4-phase algorithm)</td>
+</tr>
+<tr class="odd">
+<td>markdownExecutionEngine</td>
+<td><code>src/execute/engine.ts</code> (language scanning + claiming)</td>
+</tr>
+<tr class="even">
+<td>resolveEngines</td>
+<td><code>src/execute/engine.ts</code> (engine registration + ordering)</td>
+</tr>
+<tr class="odd">
+<td>resolveEngineExtensions</td>
+<td><code>src/project/project-context.ts</code> (extension → project config)</td>
+</tr>
+<tr class="even">
+<td>languagesWithClasses</td>
+<td><code>src/core/pandoc/pandoc-partition.ts</code> (code block language extraction)</td>
+</tr>
+<tr class="odd">
+<td>Extension schema</td>
+<td><code>src/resources/schema/extension.yml</code> (contributes.engines schema)</td>
+</tr>
+<tr class="even">
+<td>jupyterToMarkdown</td>
+<td><code>src/core/jupyter/jupyter.ts</code></td>
+</tr>
+<tr class="odd">
+<td>JupyterToMarkdownResult</td>
+<td><code>src/core/jupyter/types.ts</code> (includes htmlPreserve, dependencies, pandoc)</td>
+</tr>
+<tr class="even">
+<td>Markdown regex</td>
+<td><code>src/core/api/markdown-regex.ts</code> → <code>src/core/pandoc/pandoc-partition.ts</code>, <code>src/core/lib/break-quarto-md.ts</code></td>
+</tr>
+<tr class="odd">
+<td>Engine template</td>
+<td><code>src/resources/create/extensions/engine/src/qstart-filesafename-qend.ejs.ts</code></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="extension-build-model" class="level2">
+<h2 class="anchored" data-anchor-id="extension-build-model">Extension Build Model</h2>
+<p>Following Quarto 1’s approach, engine extensions go through a <strong>build step</strong> before execution:</p>
+<ol type="1">
+<li><strong>Build time:</strong> Engine extension TS source is bundled into a single <code>.js</code> file using <code>deno bundle</code>. The author’s <code>deno.json</code> resolves imports from the registry:
+<ul>
+<li><code>@quarto/api</code> → <code>jsr:@quarto/api</code> (real code, inlined into the bundle)</li>
+<li><code>@quarto/types</code> → <code>jsr:@quarto/types</code> (type-only, erased during bundling)</li>
+<li><code>@std/*</code> (path, fs, encoding, …) → <code>jsr:@std/*</code> All dependencies are inlined into the bundle.</li>
+</ul></li>
+<li><strong>Runtime:</strong> The Deno subprocess loads the bundled <code>.js</code> file via dynamic <code>import()</code>. No import map or TS transpilation needed at execution time.</li>
+</ol>
+<p>The <code>@quarto/engine-host-deno</code> harness is also bundled into a single <code>.js</code> file that includes <code>@quarto/api</code> (all subpaths) and the harness glue. This bundle is built using <strong>esbuild</strong> (matching the existing <code>quarto-system-runtime</code> pattern), checked into git at <code>ts-packages/quarto-engine-host-deno/dist/engine-host-deno.js</code>, and embedded in the q2 binary via <code>include_str!()</code>. At runtime, the embedded JS is written to a temp file and executed with <code>deno run --allow-all</code>.</p>
+<p><strong>Distribution of the engine-author SDK.</strong> <code>@quarto/api</code> and <code>@quarto/types</code> are <strong>published to a registry</strong> — jsr.io or npmjs.com, as appropriate per package. Engine authors depend on them from the registry (their extension’s <code>deno.json</code> references e.g.&nbsp;<code>jsr:@quarto/api</code> / <code>jsr:@quarto/types</code>), and <code>q2 build-ts-extension</code> bundles against the published packages, so building an extension needs <strong>no q2 source clone and no build assets embedded in the q2 binary</strong>. <code>@quarto/types</code> is type-only (erased during bundling); <code>@quarto/api</code> is real code, inlined into the author’s <code>.js</code> bundle by <code>deno bundle</code> (each bundle freezes the <code>@quarto/api</code> version it built against — an API-stability surface managed by semver on the published package). Within the q2 repo the workspace package satisfies the same specifier for dev builds. This is a deliberate departure from Quarto 1 (which ships these inside the quarto-cli tree), chosen so the author SDK distributes independently of the q2 binary.</p>
+<p>q2 provides a <code>q2 build-ts-extension</code> command and a template <code>deno.json</code> that references the published <code>@quarto/api</code> / <code>@quarto/types</code>; it does not embed or extract the SDK sources.</p>
+</section>
+<section id="runtime-dependency" class="level2">
+<h2 class="anchored" data-anchor-id="runtime-dependency">Runtime Dependency</h2>
+<p><strong>Deno must be on PATH</strong> to use TS engine extensions (same model as pandoc — assumed present, not bundled). q2 should: - Check for <code>deno</code> in PATH when a TS engine is needed - Provide a clear error message if Deno is not found - Document the Deno requirement for engine extension users - The core q2 binary (markdown, knitr, jupyter engines) does NOT require Deno</p>
+<p><strong>Distribution (mechanism now exists).</strong> A signed installer (<code>install.sh</code>/<code>install.ps1</code>) + GitHub-releases pipeline landed 2026-06-12, so “q2 has no installer” is no longer true. The stance for Deno: - <strong>Assume-on-PATH (v1)</strong> — discover via <code>find_binary("deno", "QUARTO_DENO")</code> and fail loud if missing/too-old, exactly the pandoc and <code>q2 mcp</code>-Node model. - <strong>Fetch-on-first-use (upgrade path)</strong> — download a pinned Deno into <code>~/.cache/quarto-deno/</code> on the first TS-engine use, reusing the hub-MCP bundle’s existing cache/lock/GC machinery. No binary bloat; Deno is pinned in code, never embedded. - <strong>Embedding Deno in the binary is explicitly off the table</strong> — bd-3e3sam51 deliberately removed <code>deno_core</code>/<code>rusty_v8</code> (it blocked musl static builds and added ~100 MB of v8), and the release archive is binary-only. Do not reintroduce it.</p>
+<p>Tests that require Deno are skipped if it’s absent, following the pandoc-dependent-test pattern.</p>
+</section>
+<section id="engine-discovery-and-language-claiming" class="level2">
+<h2 class="anchored" data-anchor-id="engine-discovery-and-language-claiming">Engine Discovery and Language Claiming</h2>
+<p>q2 generalizes Quarto 1’s single-engine selection into <strong>per-language ownership</strong> across a possibly-multi-engine sequence (<code>engine: [a, b]</code>). The authoritative model — claim kinds, the resolution tiers, presence-gating, fallback, ownership enforcement, and the failure model — is the design contract <a href="../designs/engine-resolution.md"><code>claude-notes/designs/engine-resolution.md</code></a>. This section records Quarto 1’s algorithm for reference and the trait + registration surface the rest of the epic builds on.</p>
+<section id="quarto-1s-algorithm-reference" class="level3">
+<h3 class="anchored" data-anchor-id="quarto-1s-algorithm-reference">Quarto 1’s algorithm (reference)</h3>
+<p>In Quarto 1, <code>fileExecutionEngine()</code> uses this 4-phase algorithm: 1. <strong>Extension claims (<code>claimsFile</code>)</strong>: Each engine’s <code>claimsFile(file, ext)</code> is checked — <code>.ipynb</code> → jupyter, <code>.rmd</code> → knitr 2. <strong>YAML declaration</strong>: Check for explicit <code>engine:</code> key or engine-name top-level key in frontmatter 3. <strong>Language scanning (<code>claimsLanguage</code>)</strong>: Extract languages from code blocks via <code>languagesWithClasses()</code>, call each engine’s <code>claimsLanguage(language, firstClass?)</code>. Returns <code>false</code> (no claim), <code>true</code> (priority 1), or a number (custom priority). Highest score wins. 4. <strong>Fallback</strong>: If no engine claims any language but there are non-handler languages (not <code>ojs</code>, etc.), default to Jupyter. Otherwise, use markdown engine.</p>
+<p><code>claimsLanguage</code> receives both the language identifier and an optional <code>firstClass</code> extracted from code block attributes (e.g., <code>{python .marimo}</code> → language=“python”, firstClass=“marimo”). This allows engines to make class-specific claims.</p>
+<p>Engine ordering affects ties: <code>_quarto.yml</code> <code>engines:</code> list controls priority order. User-specified engines come first; standard engines follow. First engine to achieve the highest score wins.</p>
+</section>
+<section id="q2s-algorithm-per-language-ownership" class="level3">
+<h3 class="anchored" data-anchor-id="q2s-algorithm-per-language-ownership">q2’s algorithm (per-language ownership)</h3>
+<p>q2 separates <strong>selection</strong> (which engines run) from <strong>division</strong> (which engine runs which cell) — the two questions Quarto 1 fused because it had one engine. <code>claims_language</code> answers both: a tiered resolver (<code>Primary → explicit-Fallback → Interop → implicit-Fallback</code>) assigns each computational language to exactly one owner, and the distinct owners, in registry/<code>engines:</code> order, form the execution sequence. See the design doc for the tiers, presence-gating, and worked cases.</p>
+<p><strong>Jupyter is the universal fallback, expressed as <code>Fallback(0)</code>.</strong> It positively claims nothing, so it never out-ranks a dedicated engine: a Julia extension’s <code>Primary(1)</code> for <code>julia</code> beats jupyter’s <code>Fallback(0)</code>, so the extension wins cleanly. This preserves the original modernization intent — jupyter must not conflict with the Julia extension — but without the registration-order tie Quarto 1 had (where both returned priority 1). When no engine claims a computational language, jupyter is the implicit fallback; a document with no executable cells falls through to the markdown engine.</p>
+<p><strong><code>first_class</code> drives selection, not per-cell routing.</strong> It sharpens a claim (a marimo engine returns <code>Primary</code> for <code>{python .marimo}</code>, <code>None</code> for plain <code>{python}</code>), so it influences <em>which</em> engine wins a language — but ownership is per-language, and a language has exactly one owner (enforcement is per-language; see engine-resolution.md §4.2).</p>
+</section>
+<section id="implementation-on-the-executionengine-trait" class="level3">
+<h3 class="anchored" data-anchor-id="implementation-on-the-executionengine-trait">Implementation on the <code>ExecutionEngine</code> trait</h3>
+<p>Discovery methods are added to the <code>ExecutionEngine</code> trait with defaults (Option A from design discussion):</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode rust code-with-copy"><code class="sourceCode rust"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">pub</span> <span class="kw">trait</span> ExecutionEngine<span class="op">:</span> <span class="bu">Send</span> <span class="op">+</span> <span class="bu">Sync</span> <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ... existing methods ...</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">/// File extensions this engine can handle (e.g., [".ipynb", ".py"]).</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">/// Used as a pre-filter before any claiming logic.</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">fn</span> valid_extensions(<span class="op">&amp;</span><span class="kw">self</span>) <span class="op">-&gt;</span> <span class="dt">Vec</span><span class="op">&lt;</span><span class="dt">String</span><span class="op">&gt;</span> <span class="op">{</span> <span class="dt">Vec</span><span class="pp">::</span>new() <span class="op">}</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">/// This engine's claim on a language: `Primary` (I execute it),</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">/// `Interop` (extend my ownership to it iff I'm already present),</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">/// `Fallback` (universal kernel), or `None`. `first_class` is the first</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">/// CSS class from code-block attributes (e.g. "marimo" from</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">/// `{python .marimo}`). See engine-resolution.md §3-4 for how the kinds</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">/// and priorities resolve.</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">fn</span> claims_language(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> _language<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span><span class="op">,</span> _first_class<span class="op">:</span> <span class="dt">Option</span><span class="op">&lt;&amp;</span><span class="dt">str</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> LanguageClaim <span class="op">{</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>        <span class="pp">LanguageClaim::</span><span class="cn">None</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">/// Whether this engine claims a file by extension.</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">fn</span> claims_file(<span class="op">&amp;</span><span class="kw">self</span><span class="op">,</span> _file<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span><span class="op">,</span> _ext<span class="op">:</span> <span class="op">&amp;</span><span class="dt">str</span>) <span class="op">-&gt;</span> <span class="dt">bool</span> <span class="op">{</span> <span class="cn">false</span> <span class="op">}</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Built-in engines implement these directly: - <strong>Jupyter</strong>: <code>claims_file(".ipynb") → true</code>. <code>claims_language(...) → Fallback(0)</code> — the universal kernel executor, claiming every computational language it is asked about at the fallback floor. It makes no <code>Primary</code>/<code>Interop</code> claim, so a dedicated engine (e.g.&nbsp;the Julia extension’s <code>Primary(1)</code> for <code>julia</code>) always wins; jupyter handles a language only when nothing else claims it (engine-resolution.md §4.3). This is the q2 form of “Jupyter no longer claims julia explicitly” — the conflict Quarto 1 had is gone because <code>Fallback(0) &lt; Primary(1)</code>. - <strong>Knitr</strong>: <code>claims_language("r") → Primary(1)</code>, <code>claims_language("python"/"sql"/…) → Interop</code> (reticulate — taken only when knitr is already running for <code>r</code>), <code>claims_file(".rmd") → true</code> - <strong>Markdown</strong>: returns defaults (<code>None</code>) - <strong>TsEngine</strong>: forwards queries to the Deno subprocess, or answers from the static claims declared in <code>_extension.yml</code> without loading (engine-resolution.md §3.3)</p>
+<p>Language + class information is extracted from the <strong>parsed AST</strong> (not regex), since q2 already has pampa for parsing.</p>
+</section>
+<section id="engine-ordering-and-registration" class="level3">
+<h3 class="anchored" data-anchor-id="engine-ordering-and-registration">Engine ordering and registration</h3>
+<p>Following Quarto 1’s <code>resolveEngineExtensions()</code> + <code>resolveEngines()</code> pipeline:</p>
+<ol type="1">
+<li>Extension discovery scans <code>_extensions/</code> for <code>contributes: engines:</code> entries</li>
+<li>Extension engines are merged into <code>projectConfig.engines</code></li>
+<li><code>_quarto.yml</code> <code>engines:</code> list controls ordering (user-specified engines first)</li>
+<li>Standard engines (knitr, jupyter, markdown) are appended after user-specified engines</li>
+<li>When two engines have the same priority score for a language, iteration order wins</li>
+</ol>
+</section>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

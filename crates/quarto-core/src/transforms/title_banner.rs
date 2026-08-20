@@ -35,12 +35,18 @@
 //!   output tree at the URL the generated style references (the
 //!   `ResourceCollectorTransform` pattern).
 //!
-//! Deliberately not ported (deviations documented in the epic plan):
-//! `#quarto-header.quarto-banner` (Q2's navbar has no `#quarto-header`
-//! wrapper, and the class's only Q1 consumer styles the website
-//! secondary nav, which Q2 doesn't have) and the `toc-left`
-//! `banner-header-class` producer (Q2 has no `toc-location` option
-//! yet; the template hook is in place for when it lands).
+//! `#quarto-header.quarto-banner` **is** ported as of bd-26bf3j1y
+//! (which folded in bd-xva3f8uy): that strand introduced the
+//! `#quarto-header` wrapper and the website secondary nav, so the
+//! class's one Q1 consumer — `.quarto-banner nav.quarto-secondary-nav`
+//! — finally has something to style. The class is emitted by
+//! [`QUARTO_HEADER_PARTIAL`](crate::template::QUARTO_HEADER_PARTIAL),
+//! gated on the `rendered.title-block-banner` flag this transform sets;
+//! there is nothing for this module to do. The `toc-left`
+//! `banner-header-class` producer lives in
+//! [`TocLocationTransform`](super::TocLocationTransform), not here —
+//! it needs the normalized `toc-location`, which is a
+//! Navigation-phase concern (bd-e2kpwy7n).
 //!
 //! Plan: `claude-notes/plans/2026-07-15-html-title-block-parity.md`
 //! (Phase 5).

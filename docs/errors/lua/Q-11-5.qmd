@@ -1,0 +1,86 @@
+---
+title: "Invalid Lua property assignment"
+description: "An assignment to an AST element property was rejected: the field is read-only, unknown for this element type, or wrongly typed."
+code: Q-11-5
+subsystem: lua
+status: stub
+since: "99.9.9"
+categories:
+  - lua
+---
+
+# `Q-11-5` — Invalid Lua property assignment
+
+> An assignment to an AST element property was rejected: the field is
+> read-only, unknown for this element type, or wrongly typed.
+
+## What this means
+
+AST elements expose their contents as Lua fields, and most of those
+fields are writable — `elem.text`, `elem.content`, `elem.attributes`.
+Three kinds of assignment are refused:
+
+**Read-only fields.** `elem.tag` and `elem.t` name the element's type.
+Assigning to them looks like it would convert one element into another,
+but it would only relabel the element while leaving its actual
+structure untouched, producing something that claims to be a `Div` and
+is shaped like a `Para`.
+
+**Unknown fields.** Assigning to a field that does not exist on this
+element type is almost always a typo or a wrong assumption about the
+element's shape. Lua would accept it silently and the value would go
+nowhere; Quarto reports it instead.
+
+**Fields the element variant does not have.** `attributes` and
+`classes` exist only on elements that carry an `Attr` — `Span`, `Div`,
+`Code`, `CodeBlock`, `Header`, `Image`, `Link`, `Table`, `Figure`. A
+`Str` or an `Emph` has no attributes to set.
+
+## Why this happens
+
+- **Trying to change an element's type by assigning to `tag`.**
+- **A misspelled field name** — `elem.contents` for `elem.content`,
+  `elem.attr` for `elem.attributes`.
+- **Assuming every element carries attributes.** A filter that sets
+  `elem.classes` from a generic `Inline` handler hits every inline
+  type, including the ones with no `Attr`.
+- **Assigning a plain Lua value where a list is expected** —
+  `elem.content = "text"` where `content` holds a list of inlines.
+
+## How to fix
+
+To change an element's type, construct the new element and return it:
+
+```lua
+function Para(elem)
+  -- wrong: elem.tag = "Div"
+  return pandoc.Div(elem.content)
+end
+```
+
+To set attributes, first confirm the element has them:
+
+```lua
+function Inline(elem)
+  if elem.attributes then
+    elem.attributes["data-checked"] = "1"
+    return elem
+  end
+end
+```
+
+Narrowing the handler is usually cleaner than the guard — `function Span(elem)`
+only ever receives elements that carry an `Attr`.
+
+To assign content, pass a list of the right element kind:
+
+```lua
+elem.content = { pandoc.Str("replacement") }
+```
+
+## Related errors
+
+- [`Q-11-3`](Q-11-3.qmd) — a wrong-typed argument to a `pandoc.*`
+  constructor.
+- [`Q-11-4`](Q-11-4.qmd) — a filter function returned an unusable
+  value.

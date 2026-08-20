@@ -9,8 +9,8 @@
 //!
 //! Unlike the rest of the `feed/` submodule, this file is **not**
 //! native-only: it does no I/O, has no native-only dependencies,
-//! and runs on both `build_html_pipeline_stages_with_apply_config`
-//! and `build_wasm_html_pipeline`. The hub-client preview ends up
+//! and runs on the shared `build_html_pipeline_stages_with_apply_config`,
+//! which serves native and WASM alike. The hub-client preview ends up
 //! with a live `<link rel="alternate">` element pointing at a feed
 //! file the WASM environment never produces; clicking it 404s.
 //! That's acceptable v1 behavior — keeping the rendered HTML
@@ -224,6 +224,7 @@ mod tests {
             image_lazy_loading: None,
             reading_time_minutes: None,
             word_count: None,
+            order: None,
             source_path: PathBuf::from(format!("posts/{}.qmd", title)),
             output_href: format!("posts/{}.html", title),
             extra: BTreeMap::new(),
@@ -275,6 +276,8 @@ mod tests {
             is_single_file: false,
             files: vec![DocumentInfo::from_path(project_dir.join("posts.qmd"))],
             output_dir: project_dir.join("_site"),
+
+            ..Default::default()
         }
     }
 

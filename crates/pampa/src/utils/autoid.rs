@@ -3,30 +3,101 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::{Inline, Inlines};
-use std::fmt::Write;
+use std::collections::HashSet;
 
+use crate::filter_context::FilterContext;
+use crate::filters::{Filter, FilterReturn::Unchanged, topdown_traverse};
+use crate::pandoc::{Header, Inline, Inlines, Pandoc};
+
+/// Identifier Pandoc falls back to when a heading's text yields nothing.
+///
+/// Without it a heading such as `## ![](img.png)` derives the empty string,
+/// which the caller then emits as a section with no `id` attribute at all —
+/// an unlinkable heading — while the dedup counter hands `-1`, `-2` to the
+/// ones that follow.
+const EMPTY_ID_FALLBACK: &str = "section";
+
+/// Flatten inlines to the plain text an identifier is derived from.
+///
+/// This mirrors Pandoc's `stringify` as it is used by
+/// `inlineListToIdentifier`: every container inline is walked into, because
+/// the markup is what the slug filter drops — not the words inside it.
+///
+/// The match is deliberately **exhaustive**: a `_` arm is how the next new
+/// inline kind would silently start vanishing from anchor ids, which is the
+/// bug this function had (bd-heading-id-drops-inline-content-fl84n3ql).
+/// Adding an `Inline` variant should fail to compile here.
+///
+/// This is an *identifier* helper, not a display-text one. It wants math
+/// source text, no quote delimiters and no line-break semantics, so it does
+/// not share an implementation with `pampa::toc::inlines_to_text` or the
+/// other `inlines_to_text` copies (bd-zzke tracks consolidating those).
 fn collect_text(inlines: &Inlines, result: &mut String) {
     for inline in inlines {
         match inline {
-            Inline::Str(s) => {
-                write!(result, "{}", s.text).unwrap();
+            // Leaf kinds that carry text of their own.
+            Inline::Str(s) => result.push_str(&s.text),
+            Inline::Code(c) => result.push_str(&c.text),
+            Inline::Math(m) => result.push_str(&m.text),
+
+            // All whitespace collapses to a separator.
+            Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_) => result.push(' '),
+
+            // Container kinds: recurse.
+            Inline::Emph(e) => collect_text(&e.content, result),
+            Inline::Underline(u) => collect_text(&u.content, result),
+            Inline::Strong(s) => collect_text(&s.content, result),
+            Inline::Strikeout(s) => collect_text(&s.content, result),
+            Inline::Superscript(s) => collect_text(&s.content, result),
+            Inline::Subscript(s) => collect_text(&s.content, result),
+            Inline::SmallCaps(s) => collect_text(&s.content, result),
+            // Pandoc keeps a citation's *source* inlines as the `Cite`
+            // content, so `[see @key, p. 33]` stringifies to that literal
+            // text. pampa only populates `content` for author-in-text
+            // citations; for the bracketed form it leaves `content` empty and
+            // keeps everything in `citations`, so reconstruct from those.
+            // Prefix and suffix already carry their own spacing (including
+            // the separator before a second citation in `[@a; @b]`).
+            Inline::Cite(c) if c.content.is_empty() => {
+                for citation in &c.citations {
+                    collect_text(&citation.prefix, result);
+                    result.push_str(&citation.id);
+                    collect_text(&citation.suffix, result);
+                }
             }
-            Inline::Space(_) => {
-                write!(result, " ").unwrap();
-            }
-            Inline::Emph(e) => {
-                collect_text(&e.content, result);
-            }
-            Inline::Strong(s) => {
-                collect_text(&s.content, result);
-            }
-            Inline::Code(c) => {
-                write!(result, "{}", c.text).unwrap();
-            }
-            _ => {
-                // Skip other inline types for ID generation
-            }
+            Inline::Cite(c) => collect_text(&c.content, result),
+            Inline::Link(l) => collect_text(&l.content, result),
+            Inline::Image(i) => collect_text(&i.content, result),
+            Inline::Span(s) => collect_text(&s.content, result),
+            Inline::Insert(i) => collect_text(&i.content, result),
+            Inline::Highlight(h) => collect_text(&h.content, result),
+
+            // `Quoted` recurses *without* emitting delimiters. Pandoc's
+            // `deQuote` does emit U+2018/U+2019 or U+201C/U+201D, but the
+            // slug filter below then strips them, so the resulting id is
+            // identical either way. Any future shared inlines-to-text helper
+            // must not assume the two agree: the TOC wants the glyphs
+            // (bd-toc-smart-quotes-6nro57ed), an identifier does not care.
+            Inline::Quoted(q) => collect_text(&q.content, result),
+
+            // Kinds with no textual form in an identifier. Pandoc drops
+            // footnote bodies (`deNote`) and raw inlines of every format.
+            Inline::Note(_) | Inline::NoteReference(_) => {}
+            Inline::RawInline(_) => {}
+            // Deleted text is not part of the rendered heading.
+            Inline::Delete(_) => {}
+            // Markers with no rendered text at all.
+            Inline::Attr(_) => {}
+            Inline::EditComment(_) => {}
+            Inline::Custom(_) => {}
+
+            // The id is derived in the reader's postprocess pass, before
+            // shortcodes are expanded, so an unexpanded shortcode has no
+            // text to contribute. Quarto 1 expands shortcodes in a pre-Pandoc
+            // text pass and folds the expansion into the id; matching that
+            // would mean deriving ids after expansion. Tracked as
+            // bd-2wv8431v.
+            Inline::Shortcode(_) => {}
         }
     }
 }
@@ -35,11 +106,12 @@ pub fn auto_generated_id(inlines: &Inlines) -> String {
     let mut text = String::new();
     collect_text(inlines, &mut text);
 
-    // Match Pandoc's behavior:
+    // Match Pandoc's `inlineListToIdentifier`:
     // - Keep alphanumeric (lowercased), periods, underscores, hyphens
     // - Convert spaces to hyphens
     // - Remove other characters
-    text.to_lowercase()
+    let ident = text
+        .to_lowercase()
         .chars()
         .filter_map(|c| {
             if c.is_alphanumeric() || c == '.' || c == '_' || c == '-' {
@@ -54,5 +126,91 @@ pub fn auto_generated_id(inlines: &Inlines) -> String {
         .split('-')
         .filter(|s| !s.is_empty())
         .collect::<Vec<&str>>()
-        .join("-")
+        .join("-");
+
+    // Pandoc's `dropNonLetter`: an identifier starts at its first letter, so
+    // `## 1 leading digit` becomes `leading-digit`, not `1-leading-digit`.
+    let ident = ident.trim_start_matches(|c: char| !c.is_alphabetic());
+
+    if ident.is_empty() {
+        EMPTY_ID_FALLBACK.to_string()
+    } else {
+        ident.to_string()
+    }
+}
+
+/// Re-derive and disambiguate the auto-generated ids of a *subset* of a
+/// document's headers, using Pandoc's `uniqueIdent` probe.
+///
+/// `in_scope` selects which headers are **renameable**; a header is
+/// only ever renamed when it is in scope *and* its id was
+/// auto-generated (`attr_source.id.is_none()` — author-written `{#id}`
+/// attributes are never touched, in or out of scope). The collision
+/// seen-set, by contrast, is **document-wide**: it is seeded with every
+/// non-renameable header id (explicit ids anywhere, plus all ids of
+/// out-of-scope headers), so a renameable header collides with — and
+/// probes past — ids it must coexist with, wherever they live.
+///
+/// The probe matches Pandoc's `uniqueIdent`: recompute the base with
+/// [`auto_generated_id`], take it if free, otherwise the first free
+/// `base-1`, `base-2`, …. Set membership, not a per-base counter — an
+/// explicit `{#base-1}` elsewhere pushes the probe to `base-2`.
+///
+/// Scoping is the caller's policy. `IncludeExpansionStage` passes
+/// "headers spliced in from an included file" so that a fragment
+/// included twice stops emitting the same id twice while everything
+/// outside the includes keeps the ids the reader assigned
+/// (bd-duplicate-heading-ids-mou5z7ux); a future post-engine pass can
+/// re-run the same routine scoped to engine-inserted headers
+/// (bd-4qjl87ax). Because assigned ids join the seen-set and
+/// out-of-scope ids are never rewritten, repeated applications over
+/// disjoint scopes compose: once assigned, an id is stable.
+pub fn dedup_scoped_heading_ids<F>(doc: Pandoc, mut in_scope: F) -> Pandoc
+where
+    F: FnMut(&Header) -> bool,
+{
+    // Lookup-only set (never iterated): probing order is document
+    // order, so the output is deterministic regardless of hash order.
+    let mut seen: HashSet<String> = HashSet::new();
+
+    // Pass 1: seed the seen-set with every id this pass must not
+    // rename — explicit ids anywhere, and all out-of-scope header ids.
+    let doc = {
+        let mut filter = Filter::new().with_header(|header, _ctx| {
+            let renameable = header.attr_source.id.is_none() && in_scope(&header);
+            if !renameable && !header.attr.0.is_empty() {
+                seen.insert(header.attr.0.clone());
+            }
+            Unchanged(header)
+        });
+        topdown_traverse(doc, &mut filter, &mut FilterContext::new())
+    };
+
+    // Pass 2: walk renameable headers in document order, probing each
+    // recomputed base against the set. Mutating and returning
+    // `Unchanged` (the postprocess `with_cite` precedent) keeps normal
+    // recursion into the header's content without re-applying the
+    // filter to the header itself — a `FilterResult(_, true)` re-visit
+    // would find its own id in the set and rename it again.
+    let mut filter = Filter::new().with_header(|mut header, _ctx| {
+        if header.attr_source.id.is_none() && in_scope(&header) {
+            let base = auto_generated_id(&header.content);
+            let unique = if seen.contains(&base) {
+                let mut n = 1usize;
+                loop {
+                    let candidate = format!("{base}-{n}");
+                    if !seen.contains(&candidate) {
+                        break candidate;
+                    }
+                    n += 1;
+                }
+            } else {
+                base
+            };
+            seen.insert(unique.clone());
+            header.attr.0 = unique;
+        }
+        Unchanged(header)
+    });
+    topdown_traverse(doc, &mut filter, &mut FilterContext::new())
 }

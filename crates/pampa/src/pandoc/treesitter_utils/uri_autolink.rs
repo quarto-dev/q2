@@ -1,22 +1,41 @@
 /*
  * uri_autolink.rs
  *
- * Functions for processing URI autolink nodes in the tree-sitter AST.
+ * Functions for processing autolink nodes in the tree-sitter AST: URI
+ * autolinks (`<http://example.com>`), CommonMark email autolinks
+ * (`<user@example.com>`), and the raw-HTML fallback for content the scanner
+ * over-approximated as an autolink (bd-email-autolink-dropped-2jj38iiv).
  *
  * Copyright (c) 2025 Posit, PBC
  */
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::inline::{Inline, Link, Space, Str};
+use crate::pandoc::inline::{Inline, Link, RawInline, Space, Str};
 use crate::pandoc::location::node_location;
+use crate::utils::diagnostic_collector::DiagnosticCollector;
 use hashlink::LinkedHashMap;
+use quarto_error_reporting::DiagnosticMessageBuilder;
+use regex::Regex;
+use std::sync::OnceLock;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
+
+/// The CommonMark email autolink production (spec §Autolinks), anchored.
+fn email_autolink_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(
+            r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$",
+        )
+        .expect("email autolink regex must compile")
+    })
+}
 
 pub fn process_uri_autolink(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
     context: &ASTContext,
+    error_collector: &mut DiagnosticCollector,
 ) -> PandocNativeIntermediate {
     // The tree-sitter scanner may include leading/trailing whitespace in the autolink token
     // because it consumes whitespace for indentation calculation before lexing inline tokens.
@@ -106,6 +125,26 @@ pub fn process_uri_autolink(
         None
     };
 
+    // Classify the token (bd-email-autolink-dropped-2jj38iiv). Order
+    // matters: a valid email whose local part contains '%' (legal there)
+    // must classify as email, not URI.
+    let is_email = email_autolink_regex().is_match(url);
+    let is_uri_like = url.contains(':') || url.contains('%');
+    if !is_email && !is_uri_like {
+        // The scanner over-approximated (it lexes any whitespace-free
+        // '<...@...>' as an autolink candidate). Before the email-autolink
+        // change this content lexed as HTML_ELEMENT; reproduce that arm's
+        // treatment exactly: Q-2-9 warning + RawInline html.
+        return raw_html_fallback(
+            autolink_text,
+            context,
+            leading_space_range,
+            autolink_range,
+            trailing_space_range,
+            error_collector,
+        );
+    }
+
     // Build the result with separate nodes for spaces and autolink
     let mut result = Vec::new();
 
@@ -119,20 +158,40 @@ pub fn process_uri_autolink(
         }));
     }
 
-    // Add the autolink as a Link node
+    // Email autolinks link to mailto: with the bare address as text and
+    // class "email"; URI autolinks link to the literal content with class
+    // "uri". Both match pandoc's markdown reader (and Quarto 1) — except
+    // that an explicit <mailto:addr> with a valid address also displays the
+    // bare address with class "email" (deliberate qmd divergence: pandoc
+    // and Quarto 1 keep the awkward "mailto:" prefix in the visible text).
+    // The scheme match is case-insensitive; the target keeps the source
+    // spelling.
+    let mailto_address = url
+        .get(..7)
+        .filter(|prefix| prefix.eq_ignore_ascii_case("mailto:"))
+        .map(|_| &url[7..])
+        .filter(|addr| email_autolink_regex().is_match(addr));
+    let (target, class, display_text) = if is_email {
+        (format!("mailto:{}", url), "email", url)
+    } else if let Some(addr) = mailto_address {
+        (url.to_string(), "email", addr)
+    } else {
+        (url.to_string(), "uri", url)
+    };
+
     let mut attr = (String::new(), vec![], LinkedHashMap::new());
-    attr.1.push("uri".to_string()); // Pandoc adds the "uri" class to autolinks
+    attr.1.push(class.to_string());
 
     result.push(Inline::Link(Link {
         content: vec![Inline::Str(Str {
-            text: url.to_string(),
+            text: display_text.to_string(),
             source_info: quarto_source_map::SourceInfo::from_range(
                 context.current_file_id(),
                 autolink_range.clone(),
             ),
         })],
         attr,
-        target: (url.to_string(), String::new()),
+        target: (target, String::new()),
         source_info: quarto_source_map::SourceInfo::from_range(
             context.current_file_id(),
             autolink_range,
@@ -152,5 +211,57 @@ pub fn process_uri_autolink(
     }
 
     // Return as IntermediateInlines (multiple nodes) instead of single IntermediateInline
+    PandocNativeIntermediate::IntermediateInlines(result)
+}
+
+/// Emit the treatment `<...>` content received when it lexed as an HTML
+/// element (the `html_element` arm in treesitter.rs): a Q-2-9 warning and a
+/// RawInline with format "html", with any scanner-captured whitespace split
+/// out as adjacent Space inlines.
+fn raw_html_fallback(
+    autolink_text: &str,
+    context: &ASTContext,
+    leading_space_range: Option<quarto_source_map::Range>,
+    autolink_range: quarto_source_map::Range,
+    trailing_space_range: Option<quarto_source_map::Range>,
+    error_collector: &mut DiagnosticCollector,
+) -> PandocNativeIntermediate {
+    let trimmed_source_info =
+        quarto_source_map::SourceInfo::from_range(context.current_file_id(), autolink_range);
+
+    let msg = DiagnosticMessageBuilder::warning("HTML element converted to raw HTML")
+        .with_code("Q-2-9")
+        .with_location(trimmed_source_info.clone())
+        .add_info("HTML elements are automatically converted to RawInline nodes with format 'html'")
+        .add_hint("To be explicit, use: `<element>`{=html}")
+        .build();
+    error_collector.add(msg);
+
+    let mut result = Vec::new();
+
+    if let Some(space_range) = leading_space_range {
+        result.push(Inline::Space(Space {
+            source_info: quarto_source_map::SourceInfo::from_range(
+                context.current_file_id(),
+                space_range,
+            ),
+        }));
+    }
+
+    result.push(Inline::RawInline(RawInline {
+        format: "html".to_string(),
+        text: autolink_text.to_string(),
+        source_info: trimmed_source_info,
+    }));
+
+    if let Some(space_range) = trailing_space_range {
+        result.push(Inline::Space(Space {
+            source_info: quarto_source_map::SourceInfo::from_range(
+                context.current_file_id(),
+                space_range,
+            ),
+        }));
+    }
+
     PandocNativeIntermediate::IntermediateInlines(result)
 }

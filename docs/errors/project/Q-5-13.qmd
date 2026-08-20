@@ -1,0 +1,67 @@
+---
+title: "`project.render` Pattern Matched No Files"
+description: "A pattern in `project.render` matched no renderable `.qmd` files."
+code: Q-5-13
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-13` — `project.render` Pattern Matched No Files
+
+> A `project.render` pattern matched no renderable `.qmd` files,
+> so it contributed nothing to the render list.
+
+## What this means
+
+`project.render` in `_quarto.yml` lists the files a project
+renders. Each entry is a path or glob, resolved against the
+project root. This warning fires when one entry produced no
+files at all — the rest of the render list is unaffected, so the
+project still renders, just without whatever that pattern was
+meant to add.
+
+## Why this happens
+
+The most common cause is a pattern written for Quarto 1. In
+Quarto 2, `*` matches within **one** directory level:
+
+```yaml
+project:
+  render:
+    - "*.qmd"        # only .qmd files at the project root
+    - "posts/**/*.qmd"  # .qmd files anywhere under posts/
+```
+
+Quarto 1 silently rewrote an unanchored pattern like `*.qmd`
+to mean "anywhere in the project". Quarto 2 does not: write
+`**/` when you mean it.
+
+Other causes:
+
+- **A typo** in a directory or file name.
+- **The files exist but are not renderable.** Files and
+  directories whose names start with `_` or `.`, and `README`
+  files, are never rendered — a pattern that matches only those
+  reports as matching nothing, because nothing rendered.
+- **The files live in the output directory** (`_site/` and the
+  like), which is always excluded.
+
+## How to fix
+
+Check the pattern against the project's layout, and add `**/` if
+you meant to search subdirectories. To render everything in a
+directory, name the directory:
+
+```yaml
+project:
+  render:
+    - posts        # everything beneath posts/
+```
+
+## Related
+
+- `Q-5-14` — pattern resolves outside the project root.
+- `Q-5-15` — pattern is not a valid glob.

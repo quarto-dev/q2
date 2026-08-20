@@ -1,0 +1,5 @@
+project:
+  type: website
+website:
+  title: "toc-title probe"
+toc-title: "On **this** page"

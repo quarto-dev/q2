@@ -1,0 +1,38 @@
+---
+title: Callout title attribute
+format: html
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - ["div.callout-note.callout-titled", "div.callout-title-container span.screen-reader-only"]
+      ensureFileRegexMatches:
+        # The `[^>]*` slots absorb data-sid/data-loc: the hub preview renders
+        # with `source-location: full`, so every tag here carries them, while
+        # the native runner renders without. These patterns must hold on both.
+        # `!str` stops the values being parsed as markdown. Two things would
+        # warn here: the `*` quantifier reads as an unclosed emphasis marker,
+        # and the literal `<span>`/`<code>` read as raw HTML — both surface as
+        # [Q-1-20]. (Brackets alone are harmless; swapping `*` for `+` clears
+        # the first warning but not the second.)
+        - [!str '<span class="screen-reader-only"[^>]*>Note</span>Off-Host Execution', !str "<code[^>]*>renv</code>"]
+        # Negative guard: the pre-fix behavior dropped title= and left the
+        # bare callout type as the heading. `[^>]*` matters here too — without
+        # it the guard is vacuous under `source-location: full`, where the div
+        # always carries attributes, so it could never catch that regression.
+        - [!str "callout-title-container flex-fill\"[^>]*>\\s*Note\\s*</div>"]
+      noErrors: true
+---
+
+The author-supplied `title=` must appear in the header, with the callout
+type kept for screen readers only (Q1 parity).
+
+::: {.callout-note title="Off-Host Execution"}
+Body text.
+:::
+
+Markdown inside the attribute is parsed, so this renders a code span.
+
+::: {.callout-tip title="Use `renv` today"}
+Body text.
+:::

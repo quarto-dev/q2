@@ -1,0 +1,25 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["nav#TOC a[data-scroll-target=\"#outer\"]",
+           "nav#TOC a[data-scroll-target=\"#inside-the-margin\"]"]
+---
+
+A heading inside `.column-margin` reaches the TOC, in Quarto 1 and in q2.
+
+Regression net for the TOC-walk restriction.
+
+## Outer
+
+::: {.column-margin}
+#### Inside the margin
+
+Body.
+:::

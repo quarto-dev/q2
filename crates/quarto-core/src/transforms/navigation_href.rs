@@ -134,6 +134,12 @@ fn missing_document_warning(
 ///   and the missing target (catalog code per [`NavSurface::code`]).
 ///   The raw href is preserved in the output so the dangling link is
 ///   at least visible to the reader.
+/// - Non-`.qmd` misses (with an index present) are static-resource
+///   references — a pre-rendered `.html`, a PDF, a directory landing
+///   page — and route through
+///   [`resolve_root_relative_resource_href`] so they page-relativize
+///   instead of surviving verbatim (bd-tef2lm9j /
+///   bd-root-absolute-dir-link-58eh8834).
 ///
 /// `surface` identifies the navigation surface for diagnostics (sidebar,
 /// navbar, page-footer, page-nav). `location` carries the YAML
@@ -166,6 +172,13 @@ pub fn resolve_href_for_html(
         Some(i) => (&raw[..i], &raw[i..]),
         None => (raw, ""),
     };
+    // Decision 4 (bd-root-relative-paths-design-fc5pvkcv): a leading
+    // `/` in config space means site-root-relative — identical to the
+    // bare project-root-relative form. Strip it for the index lookup
+    // (and for the miss diagnostic, which reports project-relative
+    // paths). Protocol-relative `//host/…` was already classified
+    // external above.
+    let path_part = path_part.strip_prefix('/').unwrap_or(path_part);
 
     if let Some(idx) = index {
         if let Some(profile) = idx.lookup_by_source(Path::new(path_part)) {
@@ -182,10 +195,22 @@ pub fn resolve_href_for_html(
         }
         // An index is present but the path didn't resolve — the user
         // has a project context and this looks like an intended
-        // internal link, so surface it.
+        // internal link, so surface it. Deliberately `.qmd`-only
+        // (bd-6d2wj4zp D6): a `.md` miss may legitimately be a
+        // static resource (`.md` renders only when opted into the
+        // render list), so it passes through silently.
         if path_part.ends_with(".qmd") {
             diagnostics.push(missing_document_warning(&surface, path_part, location));
+            // Keep the raw href so the dangling link stays visible
+            // alongside the Q-13 warning.
+            return raw.to_string();
         }
+        // Non-`.qmd` miss: the target is a static resource (a file
+        // the index doesn't track, or a directory landing page), not
+        // a broken document link — relativize it like any other
+        // static asset so root-absolute forms survive a deploy
+        // subpath (bd-tef2lm9j / bd-root-absolute-dir-link-58eh8834).
+        return resolve_root_relative_resource_href(raw, resolver);
     }
     // Without an index (standalone single-doc render) we can't tell
     // whether a `.qmd` href is broken or intended-as-literal. Skip the
@@ -207,15 +232,20 @@ pub fn is_external(href: &str) -> bool {
         || href.starts_with("tel:")
         || href.starts_with("ftp://")
         || href.starts_with("//")
+        // data: URIs are URL-shaped, not path-shaped — running one
+        // through path normalization would mangle it into a relative
+        // URL (bd-root-relative-paths-design-fc5pvkcv).
+        || href.starts_with("data:")
 }
 
 /// Pass-1 / static counterpart to [`resolve_doc_relative_href`].
 ///
 /// Returns the project-relative source path that an internal
-/// `.qmd` reference resolves to (after `..` / `.` / leading-`/`
-/// normalization), regardless of whether the target actually
-/// exists in the project. Returns `None` for external URLs,
-/// fragment-only anchors, and non-`.qmd` targets.
+/// renderable-source reference (`.qmd` or `.md` — bd-6d2wj4zp)
+/// resolves to (after `..` / `.` / leading-`/` normalization),
+/// regardless of whether the target actually exists in the project.
+/// Returns `None` for external URLs, fragment-only anchors, and
+/// non-source targets.
 ///
 /// **Why no index parameter?** Pass-1 (Phase 8 sub-phase 8.0d's
 /// `LinkResolutionStage`) runs *before* the project's
@@ -240,9 +270,10 @@ pub fn resolve_doc_relative_target(raw: &str, source_relative: &str) -> Option<P
         Some(i) => &raw[..i],
         None => raw,
     };
-    if !path_part.ends_with(".qmd") {
-        // Non-.qmd hrefs are static resources, not project documents.
-        // Match the diagnostic gating in resolve_doc_relative_href.
+    if !(path_part.ends_with(".qmd") || path_part.ends_with(".md")) {
+        // Other hrefs are static resources, not project documents.
+        // (`.md` targets that turn out not to be in the render list
+        // are dropped by the graph builder's index lookup.)
         return None;
     }
     let project_relative = resolve_to_project_root(source_relative, path_part);
@@ -279,6 +310,11 @@ pub fn resolve_doc_relative_target(raw: &str, source_relative: &str) -> Option<P
 ///    diagnostic (Q-13-4 / [`NavSurface::BodyLink`]) naming the
 ///    missing path; return the raw href verbatim so the dangling link
 ///    is visible.
+/// 5b. Miss + non-`.qmd` shape + index present → the target is a
+///    static resource; route through
+///    [`resolve_static_resource_href`] so it page-relativizes
+///    (root-absolute directory links included —
+///    bd-root-absolute-dir-link-58eh8834).
 /// 6. No index → return the raw href verbatim (standalone render).
 /// 7. No resolver → fall back to the bare `output_href` from the
 ///    profile (no relative-depth math). Defensive — production
@@ -328,17 +364,23 @@ pub fn resolve_doc_relative_href(
 
     // Miss. Surface a warning iff the target *looks like* a
     // renderable document (matches the `.qmd`-only convention from
-    // `resolve_href_for_html`). Non-qmd misses pass through silent
-    // since they may legitimately be static resources.
+    // `resolve_href_for_html`); the raw href is kept so the dangling
+    // link stays visible alongside the warning. Non-qmd misses —
+    // including `.md`, deliberately (bd-6d2wj4zp D6) — stay silent
+    // since they may legitimately be static resources, and *as*
+    // static resources they relativize like any other asset so
+    // root-absolute forms (e.g. a `/section/` directory link)
+    // survive a deploy subpath (bd-root-absolute-dir-link-58eh8834).
     if path_part.ends_with(".qmd") {
         diagnostics.push(missing_document_warning(
             &NavSurface::BodyLink,
             &project_relative,
             location,
         ));
+        return raw.to_string();
     }
 
-    raw.to_string()
+    resolve_static_resource_href(raw, source_relative, resolver)
 }
 
 /// Resolve a **static-resource** href to a page-relative URL.
@@ -385,12 +427,319 @@ pub fn resolve_static_resource_href(
         Some(i) => (&raw[..i], &raw[i..]),
         None => (raw, ""),
     };
+    // Empty href, or query-only (`?v=2`): no path to normalize.
+    // Inventing one would rewrite degenerate input into a live URL.
+    if path_part.is_empty() {
+        return raw.to_string();
+    }
     match resolver {
         Some(r) => {
             let project_relative = resolve_to_project_root(source_relative, path_part);
-            format!("{}{}", r.page_url_for(&project_relative), tail)
+            let mut url = r.page_url_for(&project_relative);
+            // `resolve_to_project_root` drops a trailing `/` (empty
+            // final segment); put it back so a directory href keeps
+            // its canonical no-redirect form (`[x](/section/)` →
+            // `../../section/`, matching Q1).
+            if path_part.ends_with('/') && !url.ends_with('/') {
+                url.push('/');
+            }
+            format!("{}{}", url, tail)
         }
         None => raw.to_string(),
+    }
+}
+
+/// Resolve a **project-root-relative** static-resource path to a
+/// page-relative URL.
+///
+/// Sibling of [`resolve_static_resource_href`] for *config-declared*
+/// assets (the navbar logo, footer imagery): nav-surface paths are
+/// project-root-relative by convention (Phase 2 Decision 7/8), and a
+/// leading `/` means the same thing (decision 4 of
+/// bd-root-relative-paths-design-fc5pvkcv), so there is no source
+/// document to normalize against — delegating with an empty
+/// `source_relative` anchors relative paths at the project root.
+///
+/// This is what lets one config value serve pages at every depth: the
+/// value `images/logo.svg` emits as `images/logo.svg` on the root
+/// page and `../../images/logo.svg` two levels down, instead of one
+/// literal that can only be correct at a single depth.
+pub fn resolve_root_relative_resource_href(
+    raw: &str,
+    resolver: Option<&ResourceResolverContext>,
+) -> String {
+    resolve_static_resource_href(raw, "", resolver)
+}
+
+/// Resolve `Link` and `Image` targets inside a config-declared
+/// `PandocInlines` region — footer text regions, the navbar title.
+///
+/// Config space is project-root-relative (a leading `/` means the
+/// same thing, decision 4): links resolve like nav-item hrefs via
+/// [`resolve_href_for_html`] (`.qmd` → output href, page-relative,
+/// Q-13 miss diagnostics on the given `surface`), images via
+/// [`resolve_root_relative_resource_href`]. Recurses through the
+/// formatting inlines the nav/footer emitter renders.
+///
+/// bd-root-relative-paths-design-fc5pvkcv (Case C): this walk is what
+/// makes plain markdown the natural form for config-declared imagery
+/// and links — the pure emitter in `quarto-navigation` receives
+/// fully-resolved targets and stays resolver-free.
+/// Rewrite Link/Image targets inside a text-bearing config value — a
+/// nav item's parsed-markdown `text:`, a sidebar section title, a
+/// sidebar heading (bd-page-footer-image-items-stmpikgo, defect 2).
+///
+/// Only `PandocInlines` values carry resolvable targets today;
+/// scalar values are literal text and pass through untouched.
+/// (`PandocBlocks` — multi-block `!md` text — is the Phase 3 blocks
+/// walker's territory.)
+pub fn rewrite_config_text(
+    cv: &mut quarto_pandoc_types::ConfigValue,
+    resolver: Option<&ResourceResolverContext>,
+    index: Option<&ProjectIndex>,
+    surface: &NavSurface<'_>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    match &mut cv.value {
+        quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(inlines) => {
+            rewrite_config_inlines(inlines, resolver, index, surface, diagnostics);
+        }
+        quarto_pandoc_types::config_value::ConfigValueKind::PandocBlocks(blocks) => {
+            rewrite_config_blocks(blocks, resolver, index, surface, diagnostics);
+        }
+        _ => {}
+    }
+}
+
+/// Block-level companion to [`rewrite_config_inlines`] for
+/// `PandocBlocks`-shaped config text (multi-block `!md` values).
+///
+/// Walks block containers and delegates every inline position to
+/// [`rewrite_config_inlines`]. `Figure` nodes **persist** — the walk
+/// descends into their content and caption and rewrites targets
+/// there, it never unwraps them (decision 3 of
+/// bd-page-footer-image-items-stmpikgo: figures keep their semantics
+/// in block settings; only the config-string *parse* unwraps a lone
+/// figure). Container coverage mirrors the body's
+/// `ResourceCollectorTransform` visitor; leaf blocks with no
+/// resolvable targets (code, raw, rules, note-definition scaffolding)
+/// pass through.
+pub fn rewrite_config_blocks(
+    blocks: &mut [quarto_pandoc_types::block::Block],
+    resolver: Option<&ResourceResolverContext>,
+    index: Option<&ProjectIndex>,
+    surface: &NavSurface<'_>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    use quarto_pandoc_types::Slot;
+    use quarto_pandoc_types::block::Block;
+    for block in blocks.iter_mut() {
+        match block {
+            Block::Plain(p) => {
+                rewrite_config_inlines(&mut p.content, resolver, index, surface, diagnostics);
+            }
+            Block::Paragraph(p) => {
+                rewrite_config_inlines(&mut p.content, resolver, index, surface, diagnostics);
+            }
+            Block::Header(h) => {
+                rewrite_config_inlines(&mut h.content, resolver, index, surface, diagnostics);
+            }
+            Block::LineBlock(lb) => {
+                for line in &mut lb.content {
+                    rewrite_config_inlines(line, resolver, index, surface, diagnostics);
+                }
+            }
+            Block::BlockQuote(bq) => {
+                rewrite_config_blocks(&mut bq.content, resolver, index, surface, diagnostics);
+            }
+            Block::OrderedList(ol) => {
+                for item in &mut ol.content {
+                    rewrite_config_blocks(item, resolver, index, surface, diagnostics);
+                }
+            }
+            Block::BulletList(bl) => {
+                for item in &mut bl.content {
+                    rewrite_config_blocks(item, resolver, index, surface, diagnostics);
+                }
+            }
+            Block::DefinitionList(dl) => {
+                for (term, defs) in &mut dl.content {
+                    rewrite_config_inlines(term, resolver, index, surface, diagnostics);
+                    for def in defs {
+                        rewrite_config_blocks(def, resolver, index, surface, diagnostics);
+                    }
+                }
+            }
+            Block::Div(d) => {
+                rewrite_config_blocks(&mut d.content, resolver, index, surface, diagnostics);
+            }
+            Block::Figure(f) => {
+                // The figure persists; only the targets inside it
+                // (its image content and any caption links) rewrite.
+                if let Some(short) = &mut f.caption.short {
+                    rewrite_config_inlines(short, resolver, index, surface, diagnostics);
+                }
+                if let Some(long) = &mut f.caption.long {
+                    rewrite_config_blocks(long, resolver, index, surface, diagnostics);
+                }
+                rewrite_config_blocks(&mut f.content, resolver, index, surface, diagnostics);
+            }
+            Block::Table(t) => {
+                if let Some(short) = &mut t.caption.short {
+                    rewrite_config_inlines(short, resolver, index, surface, diagnostics);
+                }
+                if let Some(long) = &mut t.caption.long {
+                    rewrite_config_blocks(long, resolver, index, surface, diagnostics);
+                }
+                for row in t.head.rows.iter_mut().chain(t.foot.rows.iter_mut()) {
+                    for cell in &mut row.cells {
+                        rewrite_config_blocks(
+                            &mut cell.content,
+                            resolver,
+                            index,
+                            surface,
+                            diagnostics,
+                        );
+                    }
+                }
+                for body in &mut t.bodies {
+                    for row in &mut body.body {
+                        for cell in &mut row.cells {
+                            rewrite_config_blocks(
+                                &mut cell.content,
+                                resolver,
+                                index,
+                                surface,
+                                diagnostics,
+                            );
+                        }
+                    }
+                }
+            }
+            Block::Custom(c) => {
+                for (_name, slot) in &mut c.slots {
+                    match slot {
+                        Slot::Block(block) => rewrite_config_blocks(
+                            std::slice::from_mut(block),
+                            resolver,
+                            index,
+                            surface,
+                            diagnostics,
+                        ),
+                        Slot::Blocks(blocks) => {
+                            rewrite_config_blocks(blocks, resolver, index, surface, diagnostics)
+                        }
+                        Slot::Inline(inline) => rewrite_config_inlines(
+                            std::slice::from_mut(inline),
+                            resolver,
+                            index,
+                            surface,
+                            diagnostics,
+                        ),
+                        Slot::Inlines(inlines) => {
+                            rewrite_config_inlines(inlines, resolver, index, surface, diagnostics)
+                        }
+                    }
+                }
+            }
+            // Leaves with no resolvable targets — same set the body's
+            // `ResourceCollectorTransform` treats as terminal.
+            Block::CodeBlock(_)
+            | Block::RawBlock(_)
+            | Block::HorizontalRule(_)
+            | Block::BlockMetadata(_)
+            | Block::NoteDefinitionPara(_)
+            | Block::NoteDefinitionFencedBlock(_)
+            | Block::CaptionBlock(_) => {}
+        }
+    }
+}
+
+/// Rewrite the text-bearing field of one navigation item through
+/// [`rewrite_config_text`]. `menu` recursion stays with the callers'
+/// item walkers, which already descend. (`bare_text` needs no
+/// treatment here: the Generate transforms either demote it into
+/// `text` or drop it before Render runs, and the emitter never reads
+/// it.)
+pub fn rewrite_item_text(
+    item: &mut quarto_navigation::NavigationItem,
+    resolver: Option<&ResourceResolverContext>,
+    index: Option<&ProjectIndex>,
+    surface: &NavSurface<'_>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    if let Some(cv) = item.text.as_mut() {
+        rewrite_config_text(cv, resolver, index, surface, diagnostics);
+    }
+}
+
+pub fn rewrite_config_inlines(
+    inlines: &mut [quarto_pandoc_types::inline::Inline],
+    resolver: Option<&ResourceResolverContext>,
+    index: Option<&ProjectIndex>,
+    surface: &NavSurface<'_>,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
+    use quarto_pandoc_types::inline::Inline;
+    for inline in inlines.iter_mut() {
+        match inline {
+            Inline::Link(link) => {
+                rewrite_config_inlines(&mut link.content, resolver, index, surface, diagnostics);
+                let location = link.target_source.url.clone();
+                link.target.0 = resolve_href_for_html(
+                    &link.target.0,
+                    resolver,
+                    index,
+                    surface.clone(),
+                    location,
+                    diagnostics,
+                );
+            }
+            Inline::Image(img) => {
+                rewrite_config_inlines(&mut img.content, resolver, index, surface, diagnostics);
+                img.target.0 = resolve_root_relative_resource_href(&img.target.0, resolver);
+            }
+            Inline::Emph(e) => {
+                rewrite_config_inlines(&mut e.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Strong(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Underline(u) => {
+                rewrite_config_inlines(&mut u.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Strikeout(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Superscript(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Subscript(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::SmallCaps(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Quoted(q) => {
+                rewrite_config_inlines(&mut q.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Span(s) => {
+                rewrite_config_inlines(&mut s.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Insert(i) => {
+                rewrite_config_inlines(&mut i.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Delete(d) => {
+                rewrite_config_inlines(&mut d.content, resolver, index, surface, diagnostics)
+            }
+            Inline::Highlight(h) => {
+                rewrite_config_inlines(&mut h.content, resolver, index, surface, diagnostics)
+            }
+            // Leaves and variants the nav/footer emitter doesn't
+            // render as containers (Str, Space, Code, RawInline,
+            // Math, Note, Cite, Custom, …).
+            _ => {}
+        }
     }
 }
 
@@ -568,6 +917,129 @@ mod tests {
         ctx.add_file("<anonymous>".to_string(), None);
         let id = ctx.add_file(abs, None);
         (ctx, SourceInfo::original(id, 0, 0))
+    }
+
+    // ---- Phase 3 of bd-page-footer-image-items-stmpikgo:
+    // ---- rewrite_config_blocks ------------------------------------
+
+    fn test_image(url: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Image, Inline};
+        Inline::Image(Image {
+            attr: Default::default(),
+            content: vec![],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    fn test_link(url: &str) -> quarto_pandoc_types::inline::Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::{Inline, Link};
+        Inline::Link(Link {
+            attr: Default::default(),
+            content: vec![],
+            target: (url.to_string(), String::new()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    fn plain(
+        inlines: Vec<quarto_pandoc_types::inline::Inline>,
+    ) -> quarto_pandoc_types::block::Block {
+        use quarto_pandoc_types::block::{Block, Plain};
+        Block::Plain(Plain {
+            content: inlines,
+            source_info: SourceInfo::for_test(),
+        })
+    }
+
+    /// The blocks walker rewrites Link/Image targets inside block
+    /// containers — and *persists* Figure nodes, rewriting the image
+    /// inside and the caption's links rather than unwrapping
+    /// (decision 3: figures keep their semantics in block settings;
+    /// only the config-string *parse* unwraps lone figures).
+    #[test]
+    fn config_blocks_walk_rewrites_targets_and_persists_figures() {
+        use quarto_pandoc_types::Caption;
+        use quarto_pandoc_types::block::{Block, Figure, Paragraph};
+
+        let mut blocks = vec![
+            Block::Figure(Figure {
+                attr: Default::default(),
+                caption: Caption {
+                    short: None,
+                    long: Some(vec![plain(vec![test_link("docs.qmd")])]),
+                    source_info: SourceInfo::for_test(),
+                },
+                content: vec![plain(vec![test_image("/images/x.svg")])],
+                source_info: SourceInfo::for_test(),
+                attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+            }),
+            Block::Paragraph(Paragraph {
+                content: vec![test_image("images/y.svg")],
+                source_info: SourceInfo::for_test(),
+            }),
+        ];
+
+        let resolver = crate::resource_resolver::ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/docs/api.html",
+            "site_libs",
+            "api",
+        );
+        let index =
+            crate::project::index::ProjectIndex::new(vec![profile("docs.qmd", "docs.html")]);
+        let mut diags = Vec::new();
+        rewrite_config_blocks(
+            &mut blocks,
+            Some(&resolver),
+            Some(&index),
+            &surf(),
+            &mut diags,
+        );
+
+        let Block::Figure(figure) = &blocks[0] else {
+            panic!("figure must persist, got {:?}", blocks[0]);
+        };
+        let Block::Plain(fig_plain) = &figure.content[0] else {
+            panic!("figure content shape changed");
+        };
+        let quarto_pandoc_types::inline::Inline::Image(img) = &fig_plain.content[0] else {
+            panic!("figure image shape changed");
+        };
+        assert_eq!(
+            img.target.0, "../images/x.svg",
+            "image inside a figure must relativize"
+        );
+        let Some(long) = &figure.caption.long else {
+            panic!("caption dropped");
+        };
+        let Block::Plain(cap_plain) = &long[0] else {
+            panic!("caption shape changed");
+        };
+        let quarto_pandoc_types::inline::Inline::Link(link) = &cap_plain.content[0] else {
+            panic!("caption link shape changed");
+        };
+        assert_eq!(
+            link.target.0, "../docs.html",
+            "caption link must resolve through the index"
+        );
+        let Block::Paragraph(para) = &blocks[1] else {
+            panic!("paragraph shape changed");
+        };
+        let quarto_pandoc_types::inline::Inline::Image(img2) = &para.content[0] else {
+            panic!("paragraph image shape changed");
+        };
+        assert_eq!(
+            img2.target.0, "../images/y.svg",
+            "sibling paragraph image must relativize"
+        );
+        assert!(diags.is_empty(), "got: {:?}", diags);
     }
 
     /// Frontmatter sibling-relative case. The reproducer from
@@ -877,6 +1349,10 @@ mod tests {
         assert!(is_external("tel:1234"));
         assert!(is_external("ftp://x"));
         assert!(is_external("//x"));
+        // A data: URI is URL-shaped, not path-shaped — without this,
+        // path normalization would mangle it into a live relative URL
+        // (bd-root-relative-paths-design-fc5pvkcv).
+        assert!(is_external("data:image/png;base64,AAAA"));
         assert!(!is_external("about.qmd"));
         assert!(!is_external("docs/api.qmd"));
         assert!(!is_external("#fragment"));
@@ -1276,6 +1752,28 @@ mod tests {
         );
     }
 
+    /// bd-6d2wj4zp S7: `.md` targets are renderable sources too —
+    /// they must produce dependency-graph edges like `.qmd`. The
+    /// graph builder filters against the actual index, so a `.md`
+    /// that isn't in the render list becomes a no-op edge.
+    #[test]
+    fn target_md_resolves_like_qmd() {
+        assert_eq!(
+            resolve_doc_relative_target("notes.md", "index.qmd"),
+            Some(PathBuf::from("notes.md"))
+        );
+        assert_eq!(
+            resolve_doc_relative_target("../guide.md", "docs/api.qmd"),
+            Some(PathBuf::from("guide.md"))
+        );
+        // A `.md` source document linking to a `.qmd` (and vice
+        // versa) both extract.
+        assert_eq!(
+            resolve_doc_relative_target("about.qmd", "notes.md"),
+            Some(PathBuf::from("about.qmd"))
+        );
+    }
+
     #[test]
     fn target_doc_relative_dotdot_resolves() {
         assert_eq!(
@@ -1565,6 +2063,260 @@ mod tests {
         assert_eq!(
             resolve_static_resource_href("/assets/app.html#top", "docs/api.qmd", Some(&r)),
             "../assets/app.html#top"
+        );
+    }
+
+    /// Decision 4 (bd-root-relative-paths-design-fc5pvkcv): a leading
+    /// `/` on a nav href means site-root-relative — `/about.qmd` is
+    /// the same as `about.qmd`. The index lookup must strip it, and
+    /// the result relativizes per page like any other nav href.
+    #[test]
+    fn href_leading_slash_resolves_project_root_relative() {
+        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
+        let r = website_resolver("docs/api.html");
+        let mut diags = Vec::new();
+        let out =
+            resolve_href_for_html("/about.qmd", Some(&r), Some(&idx), surf(), None, &mut diags);
+        assert_eq!(out, "../about.html");
+        assert!(
+            diags.is_empty(),
+            "no miss diagnostic for the stripped form; got {:?}",
+            diags
+        );
+    }
+
+    /// Empty and query-only hrefs pass through unchanged — there is no
+    /// path to normalize, and inventing one would rewrite degenerate
+    /// input into a live URL (bd-root-relative-paths-design-fc5pvkcv).
+    #[test]
+    fn static_href_empty_and_query_only_pass_through() {
+        let r = website_resolver("docs/api.html");
+        assert_eq!(
+            resolve_static_resource_href("", "docs/api.qmd", Some(&r)),
+            ""
+        );
+        assert_eq!(
+            resolve_static_resource_href("?v=2", "docs/api.qmd", Some(&r)),
+            "?v=2"
+        );
+    }
+
+    // ---- Index-miss relativization (bd-tef2lm9j + ----
+    // ---- bd-root-absolute-dir-link-58eh8834)      ----
+    //
+    // The one question at two call sites: what should a resolver do
+    // when the ProjectIndex does not know the target? Answer: a
+    // non-`.qmd` miss is a static-resource reference, so it routes
+    // through the static-resource helpers (project-root-anchored,
+    // page-relativized) instead of surviving verbatim. `.qmd` misses
+    // keep the Q-13 diagnostic + verbatim return (the dangling link
+    // stays visible); no-index branches stay verbatim (standalone
+    // render, pinned elsewhere).
+
+    /// bd-tef2lm9j: a nav href to a static file (navbar
+    /// `href: assets/report.pdf`) misses the index and must
+    /// page-relativize instead of being emitted verbatim (which 404s
+    /// from any page in a subdirectory).
+    #[test]
+    fn nav_static_miss_relativizes_at_depth() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("docs/internals/page.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html(
+                "assets/report.pdf",
+                Some(&r),
+                Some(&idx),
+                surf(),
+                None,
+                &mut diags
+            ),
+            "../../assets/report.pdf"
+        );
+        assert!(
+            diags.is_empty(),
+            "static miss stays silent; got {:?}",
+            diags
+        );
+    }
+
+    /// bd-tef2lm9j: the root-absolute form of the same miss. A
+    /// leading-`/` href surviving verbatim breaks under a deploy
+    /// subpath; decision 4 says `/x` ≡ `x` in config space.
+    #[test]
+    fn nav_static_miss_root_absolute_relativizes() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("docs/internals/page.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html(
+                "/assets/report.pdf",
+                Some(&r),
+                Some(&idx),
+                surf(),
+                None,
+                &mut diags
+            ),
+            "../../assets/report.pdf"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// bd-root-absolute-dir-link: a directory href keeps its trailing
+    /// slash across relativization (Q1 emits `../../target/`, the
+    /// canonical no-redirect form).
+    #[test]
+    fn nav_dir_miss_preserves_trailing_slash() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("deep/deeper/index.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html("/target/", Some(&r), Some(&idx), surf(), None, &mut diags),
+            "../../target/"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// Tail (`?query` / `#fragment`) survives the miss-routing.
+    #[test]
+    fn nav_static_miss_preserves_tail() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("docs/api.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html(
+                "/assets/app.html#top",
+                Some(&r),
+                Some(&idx),
+                surf(),
+                None,
+                &mut diags
+            ),
+            "../assets/app.html#top"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// Without a resolver there is no page to relativize against —
+    /// the miss keeps the raw href (same degrade as every other
+    /// no-resolver branch in this module).
+    #[test]
+    fn nav_static_miss_without_resolver_stays_verbatim() {
+        let idx = ProjectIndex::new(vec![]);
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_href_for_html(
+                "assets/report.pdf",
+                None,
+                Some(&idx),
+                surf(),
+                None,
+                &mut diags
+            ),
+            "assets/report.pdf"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// bd-root-absolute-dir-link: the four-row repro from the strand,
+    /// body-link side, page two directories down. The two directory
+    /// forms must rebase like the two source-file controls already do.
+    #[test]
+    fn body_dir_link_root_absolute_relativizes() {
+        let idx = ProjectIndex::new(vec![
+            profile("target/index.md", "target/index.html"),
+            profile("index.qmd", "index.html"),
+        ]);
+        let r = website_resolver("deep/deeper/index.html");
+        let src = "deep/deeper/index.qmd";
+        let mut diags = Vec::new();
+        // The fix: directory links (index misses) rebase.
+        assert_eq!(
+            resolve_doc_relative_href("/target/", src, Some(&r), Some(&idx), None, &mut diags),
+            "../../target/"
+        );
+        assert_eq!(
+            resolve_doc_relative_href("/target", src, Some(&r), Some(&idx), None, &mut diags),
+            "../../target"
+        );
+        // Controls: index hits keep rebasing exactly as before.
+        assert_eq!(
+            resolve_doc_relative_href(
+                "/target/index.md",
+                src,
+                Some(&r),
+                Some(&idx),
+                None,
+                &mut diags
+            ),
+            "../../target/index.html"
+        );
+        assert_eq!(
+            resolve_doc_relative_href("/index.qmd", src, Some(&r), Some(&idx), None, &mut diags),
+            "../../index.html"
+        );
+        assert!(diags.is_empty(), "no diagnostics expected; got {:?}", diags);
+    }
+
+    /// A doc-relative static href round-trips unchanged through the
+    /// miss-routing (output dir mirrors source dir, so normalize +
+    /// relativize is the identity for in-place relative paths).
+    #[test]
+    fn body_relative_static_miss_round_trips() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("docs/api.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_doc_relative_href(
+                "assets/logo.png",
+                "docs/api.qmd",
+                Some(&r),
+                Some(&idx),
+                None,
+                &mut diags
+            ),
+            "assets/logo.png"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// A root-absolute `.md` miss relativizes silently (bd-6d2wj4zp
+    /// D6 keeps `.md` misses diagnostic-free — they may be static
+    /// resources — but static resources are exactly what the routing
+    /// now handles).
+    #[test]
+    fn body_md_miss_root_absolute_relativizes_silently() {
+        let idx = ProjectIndex::new(vec![]);
+        let r = website_resolver("deep/deeper/index.html");
+        let mut diags = Vec::new();
+        assert_eq!(
+            resolve_doc_relative_href(
+                "/notes.md",
+                "deep/deeper/index.qmd",
+                Some(&r),
+                Some(&idx),
+                None,
+                &mut diags
+            ),
+            "../../notes.md"
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// The static helper itself preserves a trailing slash across
+    /// normalization (`resolve_to_project_root` eats the empty final
+    /// segment; the helper must put it back).
+    #[test]
+    fn static_href_preserves_trailing_slash() {
+        let r = website_resolver("deep/deeper/index.html");
+        assert_eq!(
+            resolve_static_resource_href("/target/", "deep/deeper/index.qmd", Some(&r)),
+            "../../target/"
+        );
+        // Relative directory form, with tail (page is two deep).
+        assert_eq!(
+            resolve_static_resource_href("sub/?v=1", "docs/api.qmd", Some(&r)),
+            "../../docs/sub/?v=1"
         );
     }
 }

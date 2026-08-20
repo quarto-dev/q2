@@ -57,7 +57,7 @@ pub struct HubConfig {
     pub watch_debounce_ms: u64,
 
     /// Which files surface as watch events. See [`WatchFilter`].
-    /// Default: `WatchFilter::QmdOnly` (legacy hub behaviour).
+    /// Default: `WatchFilter::SourcesOnly` (hub behaviour: `.qmd` + `.md`).
     /// `quarto-preview` overrides this to `WatchFilter::PreviewBroad`
     /// so config + asset edits trigger re-render.
     pub watch_filter: WatchFilter,
@@ -133,6 +133,22 @@ pub struct HubConfig {
     /// sets `ReadOnly` unless `--allow-edit` is given, so browser-originated
     /// document changes can never modify the user's files.
     pub disk_write_policy: DiskWritePolicy,
+
+    /// User-facing line printed to stdout when Ctrl-C initiates
+    /// shutdown (bd-wj9smyxg).
+    ///
+    /// The hub's own "initiating graceful shutdown" line is
+    /// `tracing::info`, hidden at the CLI's default filter — so
+    /// without this the process just vanished. The signal-listener
+    /// task prints it (after a blank line) *before* forwarding the
+    /// shutdown signal: the print is on the shutdown critical path,
+    /// so teardown can never exit the process before the line
+    /// appears. (A detached listener task races exactly that and
+    /// lost in CI.) SIGTERM only logs.
+    ///
+    /// Default: `None` — nothing printed, library-embedding callers
+    /// keep stdout clean.
+    pub shutdown_message: Option<String>,
 }
 
 impl Default for HubConfig {
@@ -153,6 +169,7 @@ impl Default for HubConfig {
             allow_insecure_auth: false,
             register_root_ws: true,
             disk_write_policy: DiskWritePolicy::default(),
+            shutdown_message: None,
         }
     }
 }

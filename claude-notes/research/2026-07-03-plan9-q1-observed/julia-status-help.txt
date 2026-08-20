@@ -1,0 +1,12 @@
+
+[1mUsage:[22m [95mCOMMAND status[39m
+
+[1mDescription:[22m
+
+  Get status information on the currently running Julia server process.
+
+[1mOptions:[22m
+
+  [94m-h[39m, [94m--help[39m  [31m[1m-[22m[39m Show this help.  
+
+exit=0

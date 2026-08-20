@@ -1,0 +1,2 @@
+This is a whole-file .echo fixture claimed by the echo engine.
+It will be wrapped in an {echo} code block by markdownForFile.

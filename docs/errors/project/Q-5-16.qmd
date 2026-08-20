@@ -1,0 +1,66 @@
+---
+title: "`resources:` Pattern Matched No Files"
+description: "A glob in `resources:` matched no files, so nothing was published for it."
+code: Q-5-16
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-16` — `resources:` Pattern Matched No Files
+
+> A `resources:` glob matched no files, so nothing was published
+> for it.
+
+## What this means
+
+Each `resources:` entry names files to copy into the output
+directory alongside the rendered site. This warning fires when a
+glob entry matched nothing at all — the rest of the resource list
+is unaffected, so the render continues without whatever that
+pattern was meant to publish.
+
+Only *glob* entries produce this warning. A literal path that does
+not exist is reported by name instead (see `Q-5-6`), which is the
+more useful message when there is a single file to point at.
+
+## Why this happens
+
+The most common cause is a pattern written for Quarto 1. In
+Quarto 2, `*` matches within **one** directory level:
+
+```yaml
+resources:
+  - "data/*.csv"        # CSVs directly in data/
+  - "data/**/*.csv"     # CSVs anywhere under data/
+  - data                # everything under data/
+```
+
+Other causes:
+
+- **A typo** in a directory or file name.
+- **The pattern resolves against a different directory than you
+  expect.** A `resources:` entry resolves relative to the file it
+  is written in: document front matter → that document's
+  directory, `_metadata.yml` → that file's directory,
+  `_quarto.yml` → the project root. A leading `/` always anchors
+  at the project root.
+
+## How to fix
+
+Check the pattern against the project layout, and add `**/` if you
+meant to search subdirectories. To publish a whole directory, name
+it:
+
+```yaml
+resources:
+  - data
+```
+
+## Related
+
+- `Q-5-1` — pattern resolves outside the project root.
+- `Q-5-2` — pattern is not a valid glob.
+- `Q-5-6` — a declared literal file does not exist.

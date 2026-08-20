@@ -1,0 +1,8 @@
+Temperature dropped to
+-5 degrees overnight.
+
+Gain was
++5 percent.
+
+Defined at
+:host scope.

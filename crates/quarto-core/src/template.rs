@@ -79,6 +79,61 @@ impl PartialResolver for RuntimeResolver<'_> {
 ///   document contains math; rendered immediately before
 ///   `$for(scripts)$` so the inline config block lands BEFORE the
 ///   loader (what MathJax expects).
+/// A stylesheet or script reference destined for the template's
+/// `$css$` / `$scripts$` list: a URL plus optional extra tag
+/// attributes (bd-0pic6 A3 — the light/dark theme sheets carry
+/// `class` / `id` / `data-mode`).
+///
+/// An attribute-free resource renders as a plain
+/// `TemplateValue::String`, preserving byte-identical output and
+/// compatibility with custom templates that write `$css$` directly.
+/// An attributed resource renders as a `TemplateValue::Map` with the
+/// URL under the given key (`href` / `src`) and the pre-rendered
+/// attribute string under `attribs`; the built-in templates branch on
+/// `$if(css.href)$` / `$if(scripts.src)$`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkedResource {
+    pub url: String,
+    pub attribs: Vec<(String, String)>,
+}
+
+impl LinkedResource {
+    /// An attribute-free resource (today's plain `<link>`/`<script>`).
+    pub fn plain(url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            attribs: Vec::new(),
+        }
+    }
+
+    fn template_value(&self, url_key: &str) -> TemplateValue {
+        if self.attribs.is_empty() {
+            return TemplateValue::String(self.url.clone());
+        }
+        let mut rendered = String::new();
+        for (k, v) in &self.attribs {
+            rendered.push(' ');
+            rendered.push_str(k);
+            rendered.push_str("=\"");
+            rendered.push_str(&escape_html_attr(v));
+            rendered.push('"');
+        }
+        let mut map = std::collections::HashMap::new();
+        map.insert(url_key.to_string(), TemplateValue::String(self.url.clone()));
+        map.insert("attribs".to_string(), TemplateValue::String(rendered));
+        TemplateValue::Map(map)
+    }
+}
+
+/// Minimal HTML-attribute-value escaping for [`LinkedResource`]
+/// attributes (which are producer-controlled, but escaped anyway).
+fn escape_html_attr(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+}
+
 const MINIMAL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <html$if(lang)$ lang="$lang$"$endif$>
 <head>
@@ -88,13 +143,13 @@ $if(pagetitle)$
 <title>$pagetitle$</title>
 $endif$
 $for(css)$
-<link rel="stylesheet" href="$css$">
+$if(css.href)$<link rel="stylesheet" href="$css.href$"$css.attribs$>$else$<link rel="stylesheet" href="$css$">$endif$
 $endfor$
 $if(math)$
 $math$
 $endif$
 $for(scripts)$
-<script src="$scripts$"></script>
+$if(scripts.src)$<script src="$scripts.src$"$scripts.attribs$></script>$else$<script src="$scripts$"></script>$endif$
 $endfor$
 $for(header-includes)$
 $header-includes$
@@ -149,9 +204,24 @@ $endfor$
 /// - `$page-layout$` - page layout type (article, full, etc.)
 /// - `$version$` - Quarto version for generator meta tag
 /// - `$rendered.navigation.toc$` - Rendered TOC HTML (if toc: true)
-/// - `$navigation.toc.title$` - TOC title (if set)
+/// - `$rendered.navigation.toc-title$` - TOC title, rendered to HTML
+///   (if set). Pre-rendered rather than read from `navigation.toc.title`
+///   because the title carries inline markup — see `toc_render`.
+/// - `$rendered.navigation.toc-relocated$` / `toc-left` / `toc-body` -
+///   TOC placement flags written by `TocLocationTransform`
+///   (bd-e2kpwy7n). `toc-relocated` (any non-`right` placement)
+///   suppresses the right-margin TOC while keeping the
+///   categories-only margin shell; `toc-left` (standalone regime)
+///   emits `div#quarto-sidebar-toc-left` and puts the `toc-left`
+///   grid class on `#quarto-content`; `toc-body` emits the TOC
+///   inside `<main>` between the title block and the body. The
+///   website-left placement sets none of the template flags — there
+///   the TOC arrives merged inside `$rendered.navigation.sidebar$`.
 /// - `$rendered.navigation.navbar$` - Rendered navbar HTML (if navbar: set)
 /// - `$rendered.navigation.sidebar$` - Rendered sidebar HTML (if website.sidebar: set)
+/// - `$rendered.navigation.breadcrumbs$` - Rendered breadcrumb trail (consumed
+///   by the title-block partial, not the page template — set only when a
+///   sidebar trail with >1 crumbs exists and `bread-crumbs` isn't false)
 /// - `$rendered.navigation.page_navigation$` - Rendered prev/next page-nav strip
 /// - `$rendered.navigation.footer$` - Rendered page-footer HTML (if page-footer: set)
 const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
@@ -159,6 +229,9 @@ const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+$if(color-scheme-meta)$
+<meta name="color-scheme" content="$color-scheme-meta$">
+$endif$
 <meta name="generator" content="quarto-rust-$version$">
 $for(author-meta)$
 <meta name="author" content="$author-meta$">
@@ -179,21 +252,29 @@ $if(pagetitle)$
 <title>$pagetitle$</title>
 $endif$
 $for(css)$
-<link rel="stylesheet" href="$css$">
+$if(css.href)$<link rel="stylesheet" href="$css.href$"$css.attribs$>$else$<link rel="stylesheet" href="$css$">$endif$
 $endfor$
 $if(math)$
 $math$
 $endif$
 $for(scripts)$
-<script src="$scripts$"></script>
+$if(scripts.src)$<script src="$scripts.src$"$scripts.attribs$></script>$else$<script src="$scripts$"></script>$endif$
 $endfor$
 $for(header-includes)$
 $header-includes$
 $endfor$
 </head>
 <body class="$body-classes$">
+$if(color-mode-script)$
+$color-mode-script$
+$endif$
+$if(rendered.draft-alert-text)$
+<div id="quarto-draft-alert" class="alert alert-warning"><i class="bi bi-pencil-square"></i>$rendered.draft-alert-text$</div>
+$endif$
 $if(rendered.navigation.navbar)$
-$rendered.navigation.navbar$
+$quarto-header()$
+$elseif(rendered.navigation.secondary-nav)$
+$quarto-header()$
 $endif$
 $for(include-before)$
 $include-before$
@@ -202,18 +283,25 @@ $if(rendered.title-block-banner)$
 $title-block()$
 $endif$
 
-<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-$page-layout$">
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-$page-layout$$if(rendered.navigation.toc-left)$ toc-left$endif$">
 $if(rendered.navigation.sidebar)$
 $rendered.navigation.sidebar$
 $endif$
+$if(rendered.navigation.toc-relocated)$
+$if(rendered.navigation.toc-left)$
+<div id="quarto-sidebar-toc-left" class="sidebar toc-left">
+$toc-block()$
+</div>
+$endif$
+$if(rendered.navigation.margin_categories)$
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+$rendered.navigation.margin_categories$
+</div>
+$endif$
+$else$
 $if(rendered.navigation.toc)$
 <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-<nav id="TOC" role="doc-toc" class="toc-active">
-$if(navigation.toc.title)$
-<h2 id="toc-title">$navigation.toc.title$</h2>
-$endif$
-$rendered.navigation.toc$
-</nav>
+$toc-block()$
 $if(rendered.navigation.margin_categories)$
 $rendered.navigation.margin_categories$
 $endif$
@@ -223,6 +311,7 @@ $if(rendered.navigation.margin_categories)$
 <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
 $rendered.navigation.margin_categories$
 </div>
+$endif$
 $endif$
 $endif$
 
@@ -233,6 +322,9 @@ $else$
 $title-block()$
 $endif$
 
+$if(rendered.navigation.toc-body)$
+$toc-block()$
+$endif$
 $body$
 
 $if(rendered.navigation.page_navigation)$
@@ -286,8 +378,9 @@ $endif$
 /// header and banner div are baked into the markup — Q1 gets them
 /// from its generic bootstrap grid DOM postprocessor, which Q2
 /// doesn't have. `quarto-template-params.banner-header-class` is
-/// ported verbatim but currently has no producer (Q1 sets `toc-left`
-/// from `toc-location`, which Q2 doesn't support yet).
+/// ported verbatim; its producer is `TocLocationTransform`, which
+/// sets `toc-left` when `toc-location: left` meets a banner
+/// (bd-e2kpwy7n).
 ///
 /// P6 (bd-vkiwhcny): `title-block-style: none` renders Q1's fallback
 /// — Pandoc's own plain title block
@@ -307,7 +400,7 @@ $endif$
 pub const TITLE_BLOCK_PARTIAL: &str = r#"$if(rendered.has-title-block)$
 $if(rendered.title-block-none)$
 <header id="title-block-header">
-$if(title)$<h1 class="title">$title$</h1>
+$if(title)$<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
 $endif$
 $if(subtitle)$
 <p class="subtitle">$subtitle$</p>
@@ -329,8 +422,11 @@ $elseif(rendered.title-block-banner)$
 <header id="title-block-header" class="quarto-title-block default page-columns page-full$if(quarto-template-params.banner-header-class)$ $quarto-template-params.banner-header-class$$endif$">
 <div class="quarto-title-banner page-columns page-full">
 <div class="quarto-title column-body">
+$if(rendered.navigation.breadcrumbs)$
+$rendered.navigation.breadcrumbs$
+$endif$
 $if(title)$
-<h1 class="title">$title$</h1>
+<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
 $endif$
 $if(subtitle)$
 <p class="subtitle lead">$subtitle$</p>
@@ -357,9 +453,12 @@ $title-metadata()$
 </header>
 $else$
 <header id="title-block-header" class="quarto-title-block default">
+$if(rendered.navigation.breadcrumbs)$
+$rendered.navigation.breadcrumbs$
+$endif$
 <div class="quarto-title">
 $if(title)$
-<h1 class="title">$title$</h1>
+<h1 class="title$if(rendered.navigation.secondary-nav-collapsed-title)$ d-none d-lg-block$endif$">$title$</h1>
 $endif$
 $if(subtitle)$
 <p class="subtitle lead">$subtitle$</p>
@@ -496,6 +595,64 @@ $endif$"#;
 /// by-author entry.
 pub const TITLE_META_AUTHOR_PARTIAL: &str = r##"$if(it.url)$<a href="$it.url$">$endif$$it.name.literal$$if(it.degrees)$, $for(it.degrees)$$it$$sep$, $endfor$$endif$$if(it.url)$</a>$endif$$if(it.email)$ <a href="mailto:$it.email$" class="quarto-title-author-email"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-envelope" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z"/></svg></a>$endif$$if(it.orcid)$ <a href="https://orcid.org/$it.orcid$" class="quarto-title-author-orcid" aria-label="ORCID profile for $it.name.literal$"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#A6CE39" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zM7.369 4.378c.525 0 .947.431.947.947s-.422.947-.947.947a.95.95 0 0 1-.947-.947c0-.525.422-.947.947-.947zm-.722 3.038h1.444v10.041H6.647V7.416zm3.562 0h3.9c3.712 0 5.344 2.653 5.344 5.025 0 2.578-2.016 5.025-5.325 5.025h-3.919V7.416zm1.444 1.303v7.444h2.297c3.272 0 4.022-2.484 4.022-3.722 0-2.016-1.284-3.722-4.097-3.722h-2.222z"/></svg></a>$endif$"##;
 
+/// Built-in `toc-block` partial — the `nav#TOC` element (title +
+/// entries), shared by the three template-emitted TOC placements
+/// (right margin, standalone-left container, body — bd-e2kpwy7n) so
+/// they cannot drift apart.
+///
+/// The website-left placement does NOT go through this partial: there
+/// the TOC is merged into the `rendered.navigation.sidebar` fragment
+/// by `SidebarRenderTransform`, whose Rust-side twin of this markup is
+/// `toc_block_html` in `transforms/sidebar_render.rs` — keep the two
+/// in sync.
+pub const TOC_BLOCK_PARTIAL: &str = r#"<nav id="TOC" role="doc-toc" class="toc-active">
+$if(rendered.navigation.toc-title)$
+<h2 id="toc-title">$rendered.navigation.toc-title$</h2>
+$endif$
+$rendered.navigation.toc$
+</nav>
+"#;
+
+/// The site header: `<header id="quarto-header">` wrapping the navbar
+/// and the narrow-viewport secondary nav (bd-26bf3j1y).
+///
+/// Q1's equivalent (`nav-before-body.ejs:13`) gates on
+/// `nav.navbar || nav.sidebar || nav.announcement` and emits
+/// `class="headroom fixed-top"`. Two deliberate differences:
+///
+/// - **Static, not fixed.** No `headroom` / `fixed-top`, and
+///   correspondingly no `body.nav-fixed` (whose only Q1 consumer is a
+///   `padding-top` compensating for the fixed header). Those three go
+///   together; adding one without the others overlaps content. Deferred
+///   as a unit to bd-ersobfbt.
+/// - **Gated on content, not on config.** q2 emits the wrapper when
+///   there is a navbar or a secondary nav to put in it. Q1's extra
+///   `nav.sidebar` term covers the case of a sidebar whose secondary
+///   nav is suppressed, which for q2 would produce an empty header with
+///   no styling consumer.
+///
+/// `.quarto-banner` in banner mode is Q1's
+/// `format-html-title.ts:278-281`; its only styling consumer is
+/// `.quarto-banner nav.quarto-secondary-nav` (bd-xva3f8uy, folded in
+/// here).
+///
+/// The partial holds only the markup; the "is there a header at all?"
+/// gate lives at the **call site** in [`FULL_HTML_TEMPLATE`]. That split
+/// is deliberate: the template language has no boolean `or`, so the
+/// two-way gate has to be an `$if$`/`$elseif$` pair somewhere, and
+/// putting it around the call keeps the `<header>` markup
+/// single-sourced. It also keeps the no-header case emitting *nothing* —
+/// a bare `$quarto-header()$` line would leave a stray blank line in
+/// every document that has no navbar.
+pub const QUARTO_HEADER_PARTIAL: &str = r#"<header id="quarto-header"$if(rendered.title-block-banner)$ class="quarto-banner"$endif$>
+$if(rendered.navigation.navbar)$
+$rendered.navigation.navbar$
+$endif$
+$if(rendered.navigation.secondary-nav)$
+$rendered.navigation.secondary-nav$
+$endif$
+</header>"#;
+
 /// Resolver holding the built-in HTML template partials.
 ///
 /// Each partial is registered under both its bare name
@@ -508,6 +665,8 @@ pub fn builtin_html_partials() -> MemoryResolver {
         ("title-block", TITLE_BLOCK_PARTIAL),
         ("title-metadata", TITLE_METADATA_PARTIAL),
         ("_title-meta-author", TITLE_META_AUTHOR_PARTIAL),
+        ("toc-block", TOC_BLOCK_PARTIAL),
+        ("quarto-header", QUARTO_HEADER_PARTIAL),
     ] {
         resolver.add(name, content);
         resolver.add(format!("{name}.html"), content);
@@ -615,8 +774,8 @@ pub fn render_with_compiled_template(
     template: &Template,
     body: &str,
     meta: &ConfigValue,
-    css_paths: &[String],
-    script_paths: &[String],
+    css_paths: &[LinkedResource],
+    script_paths: &[LinkedResource],
 ) -> Result<(String, Vec<DiagnosticMessage>)> {
     let mut ctx = TemplateContext::new();
     ctx.insert("body", TemplateValue::String(body.to_string()));
@@ -641,10 +800,8 @@ pub fn render_with_compiled_template(
     );
 
     // Build combined CSS list: default resources first, then user-specified
-    let mut css_list: Vec<TemplateValue> = css_paths
-        .iter()
-        .map(|p| TemplateValue::String(p.clone()))
-        .collect();
+    let mut css_list: Vec<TemplateValue> =
+        css_paths.iter().map(|r| r.template_value("href")).collect();
 
     // Add any user-specified CSS from metadata
     if let Some(user_css) = extract_css_from_meta(meta) {
@@ -657,10 +814,55 @@ pub fn render_with_compiled_template(
     if !script_paths.is_empty() {
         let scripts_list: Vec<TemplateValue> = script_paths
             .iter()
-            .map(|p| TemplateValue::String(p.clone()))
+            .map(|r| r.template_value("src"))
             .collect();
         ctx.insert("scripts", TemplateValue::List(scripts_list));
     }
+
+    // Light/dark theme pair wiring (bd-0pic6 D1a + A4). When a dark
+    // variant exists:
+    //
+    // - `color-scheme-meta` → `<meta name="color-scheme">` pre-CSS
+    //   paint hint: the author-default scheme first;
+    //   `respect-user-color-scheme: true` offers both so the UA picks
+    //   per `prefers-color-scheme`.
+    // - `color-mode-script` → the inline color-mode runtime, injected
+    //   as the FIRST child of `<body>` so the initial variant
+    //   selection happens synchronously before first paint (the FOUC
+    //   hard constraint). Configured via data attributes.
+    //
+    // Only the full template references these variables; setting them
+    // elsewhere is inert.
+    let dark_theme_default = if let Ok(theme_config) =
+        quarto_sass::ThemeConfig::from_config_value(meta)
+        && let Some(dark) = &theme_config.dark
+    {
+        let author_prefers_dark = dark.is_default;
+        let respect = meta
+            .get("respect-user-color-scheme")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let content = match (respect, author_prefers_dark) {
+            (true, false) => "light dark",
+            (true, true) => "dark light",
+            (false, false) => "light",
+            (false, true) => "dark",
+        };
+        ctx.insert(
+            "color-scheme-meta",
+            TemplateValue::String(content.to_string()),
+        );
+        ctx.insert(
+            "color-mode-script",
+            TemplateValue::String(format!(
+                "<script id=\"quarto-color-mode\" data-author-prefers-dark=\"{author_prefers_dark}\" data-respect-user-color-scheme=\"{respect}\">{}</script>",
+                COLOR_MODE_JS
+            )),
+        );
+        Some(author_prefers_dark)
+    } else {
+        None
+    };
 
     // Wire `rendered.includes.{header, before-body, after-body}` into the
     // Pandoc-native template variable names (kept stable per
@@ -712,9 +914,12 @@ pub fn render_with_compiled_template(
             (None, false) => "fullcontent".to_string(),
         };
         // bd-mtzry: append the color-mode class so theme-conditional CSS
-        // can key off `body.quarto-light` (matches Q1 default). Dark-mode
-        // theme support lands separately; for now we always emit `quarto-light`.
-        let body_classes = append_color_mode_class(&structural);
+        // can key off `body.quarto-light` / `body.quarto-dark`. The
+        // baked class matches the AUTHOR default (Q1 bakes the same
+        // way); under `respect-user-color-scheme` the inline runtime
+        // may flip it before first paint.
+        let body_classes =
+            append_color_mode_class(&structural, dark_theme_default.unwrap_or(false));
         ctx.insert("body-classes", TemplateValue::String(body_classes));
     }
 
@@ -742,27 +947,37 @@ pub fn render_with_compiled_template(
 /// objects, and engine-contributed `PandocIncludes`. If the array is empty
 /// or absent (resolve stage didn't run), the template variable is not set
 /// — `$for(template_var)$` then produces no output.
-/// Append the active color-mode class (today always `quarto-light`)
-/// to a structural body-class string. Empty input → `"quarto-light"`;
-/// non-empty input → `"<structural> quarto-light"`. Idempotent: a
-/// structural that already contains `quarto-light` is returned as-is.
+/// The inline color-mode runtime (bd-0pic6 A4), embedded at build
+/// time and injected into `<body>` via the `color-mode-script`
+/// template variable when a dark theme variant exists.
+const COLOR_MODE_JS: &str = include_str!("../resources/js/quarto-color-mode.js");
+
+/// Append the active color-mode class (`quarto-light`, or
+/// `quarto-dark` when the author-default variant is dark — Q1's
+/// key-order rule) to a structural body-class string. Empty input →
+/// the bare class; non-empty input → `"<structural> <class>"`.
+/// Idempotent: a structural that already contains either color-mode
+/// class is returned as-is.
 ///
-/// bd-mtzry. Light/dark theme detection is not yet wired into the
-/// pipeline (the `theme:` key today is a single Bootswatch name); when
-/// it lands, this helper grows a `mode` argument and the call site
-/// decides which class to emit. Until then `quarto-light` matches
-/// Quarto 1's default body class for documents with no dark theme set.
-fn append_color_mode_class(structural: &str) -> String {
-    const LIGHT: &str = "quarto-light";
+/// bd-mtzry. The baked class reflects the AUTHOR default; the inline
+/// color-mode runtime (A4) re-syncs it from the active stylesheet's
+/// `data-mode` before first paint when a stored preference or
+/// `respect-user-color-scheme` overrides the default.
+fn append_color_mode_class(structural: &str, default_dark: bool) -> String {
+    let class = if default_dark {
+        "quarto-dark"
+    } else {
+        "quarto-light"
+    };
     let already = structural
         .split_whitespace()
-        .any(|tok| tok == LIGHT || tok == "quarto-dark");
+        .any(|tok| tok == "quarto-light" || tok == "quarto-dark");
     if already {
         structural.to_string()
     } else if structural.is_empty() {
-        LIGHT.to_string()
+        class.to_string()
     } else {
-        format!("{structural} {LIGHT}")
+        format!("{structural} {class}")
     }
 }
 
@@ -799,7 +1014,8 @@ pub fn render_with_resources(
     css_paths: &[String],
 ) -> Result<(String, Vec<DiagnosticMessage>)> {
     let template = default_html_template()?;
-    render_with_compiled_template(&template, body, meta, css_paths, &[])
+    let css: Vec<LinkedResource> = css_paths.iter().map(LinkedResource::plain).collect();
+    render_with_compiled_template(&template, body, meta, &css, &[])
 }
 
 /// Render a document with format-based template selection.
@@ -822,7 +1038,8 @@ pub fn render_with_format(
     // `author-meta`).
     let mut meta = meta.clone();
     crate::transforms::normalize_authors_meta(&mut meta);
-    render_with_compiled_template(&template, body, &meta, css_paths, &[])
+    let css: Vec<LinkedResource> = css_paths.iter().map(LinkedResource::plain).collect();
+    render_with_compiled_template(&template, body, &meta, &css, &[])
 }
 
 /// Compile the appropriate built-in template (minimal or full) with a custom
@@ -2264,6 +2481,168 @@ mod tests {
         );
     }
 
+    // === #quarto-header wrapper (bd-26bf3j1y, phase 1) ===
+
+    /// Build a context with the given `rendered.navigation.*` string
+    /// entries, plus the keys every full-template render needs.
+    fn ctx_with_navigation(entries: &[(&str, &str)]) -> TemplateContext {
+        use std::collections::HashMap;
+
+        let mut nav_map = HashMap::new();
+        for (k, v) in entries {
+            nav_map.insert(k.to_string(), TemplateValue::String(v.to_string()));
+        }
+        let mut rendered_map = HashMap::new();
+        rendered_map.insert("navigation".to_string(), TemplateValue::Map(nav_map));
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+        ctx.insert("rendered", TemplateValue::Map(rendered_map));
+        ctx
+    }
+
+    /// Q1 nests the navbar and the narrow-viewport secondary nav inside
+    /// a single `<header id="quarto-header">`, and its SCSS selects
+    /// through that wrapper (`#quarto-header > nav` padding,
+    /// `.quarto-banner nav.quarto-secondary-nav`). Both must land
+    /// inside it, navbar first.
+    #[test]
+    fn test_quarto_header_wraps_navbar_and_secondary_nav() {
+        let template = full_html_template().unwrap();
+        let ctx = ctx_with_navigation(&[
+            ("navbar", "<nav class=\"navbar\">NAVBAR_BODY</nav>"),
+            (
+                "secondary-nav",
+                "<nav class=\"quarto-secondary-nav\">SECONDARY_BODY</nav>",
+            ),
+        ]);
+
+        let html = template.render(&ctx).unwrap();
+
+        let header_open = html
+            .find("<header id=\"quarto-header\"")
+            .expect("#quarto-header present");
+        let header_close = html[header_open..]
+            .find("</header>")
+            .map(|i| i + header_open)
+            .expect("#quarto-header closes");
+        let navbar = html.find("NAVBAR_BODY").expect("navbar rendered");
+        let secondary = html.find("SECONDARY_BODY").expect("secondary nav rendered");
+
+        assert!(
+            header_open < navbar && navbar < secondary && secondary < header_close,
+            "navbar then secondary nav must both sit inside #quarto-header; \
+             open={header_open} navbar={navbar} secondary={secondary} close={header_close}"
+        );
+        assert!(
+            header_close < html.find("id=\"quarto-content\"").unwrap(),
+            "#quarto-header must close before #quarto-content opens"
+        );
+    }
+
+    /// Decision 2: the wrapper is STATIC. `headroom` and `fixed-top`
+    /// (and the `body.nav-fixed` padding compensation that pairs with
+    /// them) are deferred to bd-ersobfbt and must land together there —
+    /// `fixed-top` without the padding overlaps content.
+    #[test]
+    fn test_quarto_header_is_static_not_fixed() {
+        let template = full_html_template().unwrap();
+        let ctx = ctx_with_navigation(&[("navbar", "<nav class=\"navbar\">NAVBAR_BODY</nav>")]);
+
+        let html = template.render(&ctx).unwrap();
+
+        assert!(
+            !html.contains("headroom"),
+            "headroom is deferred to bd-ersobfbt; got: {html}"
+        );
+        assert!(
+            !html.contains("fixed-top"),
+            "fixed-top is deferred to bd-ersobfbt; got: {html}"
+        );
+        assert!(
+            !html.contains("nav-fixed"),
+            "body.nav-fixed only makes sense with a fixed header; got: {html}"
+        );
+    }
+
+    /// A page with neither navbar nor secondary nav gets no empty
+    /// wrapper — Q1 gates the whole header on there being something to
+    /// put in it.
+    #[test]
+    fn test_quarto_header_absent_without_nav() {
+        let template = full_html_template().unwrap();
+        let ctx = ctx_with_navigation(&[]);
+
+        let html = template.render(&ctx).unwrap();
+
+        assert!(
+            !html.contains("quarto-header"),
+            "no navbar and no secondary nav means no header wrapper; got: {html}"
+        );
+    }
+
+    /// bd-xva3f8uy, folded in: Q1 adds `.quarto-banner` to
+    /// `#quarto-header` in banner mode
+    /// (`format-html-title.ts:278-281`). Its only styling consumer is
+    /// the `.quarto-banner nav.quarto-secondary-nav` rule.
+    #[test]
+    fn test_quarto_header_banner_class_in_banner_mode() {
+        let template = full_html_template().unwrap();
+
+        let mut ctx = ctx_with_navigation(&[("navbar", "<nav class=\"navbar\">NAVBAR_BODY</nav>")]);
+        let html_plain = template.render(&ctx).unwrap();
+        assert!(
+            !html_plain.contains("quarto-banner"),
+            "no banner class outside banner mode; got: {html_plain}"
+        );
+
+        // Re-render with banner mode on.
+        let TemplateValue::Map(mut rendered_map) = ctx.get("rendered").unwrap().clone() else {
+            panic!("rendered must be a map");
+        };
+        rendered_map.insert("title-block-banner".to_string(), TemplateValue::Bool(true));
+        ctx.insert("rendered", TemplateValue::Map(rendered_map));
+
+        let html_banner = template.render(&ctx).unwrap();
+        assert!(
+            html_banner.contains("<header id=\"quarto-header\" class=\"quarto-banner\">"),
+            "banner mode must decorate the header; got: {html_banner}"
+        );
+    }
+
+    /// Finding F1: Q1's `header > .quarto-title-block` selector never
+    /// matches — the class always sits ON the `<header>`, so its
+    /// parent is never a `header`. Across the Connect site, 0 of 350
+    /// pages have `d-none` on the title block, including pages that DO
+    /// render the secondary nav. Parity therefore means NOT hiding it.
+    /// This pin exists so a future parity pass doesn't "fix" the
+    /// absence by porting the dead branch.
+    #[test]
+    fn test_title_block_not_hidden_when_secondary_nav_present() {
+        let template = full_html_template().unwrap();
+        let mut ctx = ctx_with_navigation(&[(
+            "secondary-nav",
+            "<nav class=\"quarto-secondary-nav\">SECONDARY_BODY</nav>",
+        )]);
+        ctx.insert("title", TemplateValue::String("A Page".to_string()));
+        ctx.insert("rendered.has-title-block", TemplateValue::Bool(true));
+
+        let html = template.render(&ctx).unwrap();
+
+        let Some(idx) = html.find("quarto-title-block") else {
+            return; // no title block rendered in this context; nothing to pin
+        };
+        let tag_start = html[..idx].rfind('<').unwrap();
+        let tag_end = idx + html[idx..].find('>').unwrap();
+        let tag = &html[tag_start..=tag_end];
+        assert!(
+            !tag.contains("d-none"),
+            "Q1 does not hide the title block (see plan finding F1); got: {tag}"
+        );
+    }
+
     // === render_with_format tests ===
 
     #[test]
@@ -2461,7 +2840,7 @@ mod tests {
             "<p>body</p>",
             &meta,
             &[],
-            &["libs/kbd/kbd.js".to_string()],
+            &[LinkedResource::plain("libs/kbd/kbd.js")],
         )
         .unwrap();
 
@@ -2772,6 +3151,34 @@ mod tests {
         assert!(
             toc_pos < cats_pos,
             "TOC must precede categories; got order: {sidebar_html}"
+        );
+    }
+
+    /// bd-e2kpwy7n: a relocated TOC (`toc-location` left/body) must
+    /// not render in the right margin, but margin categories keep
+    /// their margin shell — the categories-only `$else$` shape.
+    #[test]
+    fn full_template_relocated_toc_keeps_categories_only_margin() {
+        let cat_html = r#"<h5 class="quarto-listing-category-title">Categories</h5>"#;
+        let mut meta = meta_with_navigation(Some("<ul><li>toc-entry</li></ul>"), Some(cat_html));
+        meta.insert_path(
+            &["rendered", "navigation", "toc-relocated"],
+            ConfigValue::new_bool(true, dummy_source_info()),
+        );
+        let html = render_full("<p>body</p>", &meta);
+        assert!(
+            html.contains(r#"<div id="quarto-margin-sidebar""#),
+            "categories keep their margin shell; got: {html}"
+        );
+        assert!(
+            html.contains(r#"class="quarto-listing-category-title""#),
+            "categories render in the margin; got: {html}"
+        );
+        assert!(
+            !html.contains("<nav id=\"TOC\""),
+            "a relocated TOC must not render in the margin (this test sets no \
+             placement flag, mirroring the website-left case where the TOC \
+             lives in the sidebar fragment); got: {html}"
         );
     }
 

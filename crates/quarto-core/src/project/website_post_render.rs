@@ -112,11 +112,327 @@ pub(super) fn copy_favicon(
         return Ok(());
     }
 
-    let dst = project.output_dir.join(&normalized);
+    copy_asset_file(project, runtime, &normalized, "favicon")
+}
+
+/// Copy the navbar logo (`website.navbar.logo` / `navbar.logo`) from
+/// the project root to the output directory.
+///
+/// Decision 5 of bd-root-relative-paths-design-fc5pvkcv: favicon is
+/// not special — config-declared assets q2 knows about get the same
+/// warn-and-continue copy treatment. Same no-op cases as
+/// [`copy_favicon`]: no metadata, no navbar/logo, external URL.
+/// A leading `/` is site-root-relative (decision 4) and strips to the
+/// same project-relative path.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn copy_navbar_logo(
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Result<()> {
+    let Some(meta) = project.config.metadata.as_ref() else {
+        return Ok(());
+    };
+    let Some(navbar) = quarto_navigation::resolve_navbar(meta) else {
+        return Ok(());
+    };
+    let Some(logo) = navbar.logo else {
+        return Ok(());
+    };
+    // Copy each distinct variant file (a single logo has identical
+    // halves; copying the same path twice would be harmless but noisy).
+    let mut paths: Vec<&str> = vec![&logo.light.path];
+    if logo.dark.path != logo.light.path {
+        paths.push(&logo.dark.path);
+    }
+    for raw in paths {
+        // External logo URLs are served by whoever hosts them (mirrors
+        // the favicon rule, and checks before slash-stripping so
+        // protocol-relative `//host/x` is never misread as site-rooted).
+        if quarto_util::is_external_url(raw) {
+            continue;
+        }
+        let normalized = raw.strip_prefix('/').unwrap_or(raw);
+        if normalized.is_empty() {
+            continue;
+        }
+
+        let src = project.dir.join(normalized);
+        let exists = runtime.path_exists(&src, None).map_err(|e| {
+            QuartoError::other(format!(
+                "Failed to probe navbar logo source {}: {}",
+                src.display(),
+                e
+            ))
+        })?;
+        if !exists {
+            diagnostics.push(DiagnosticMessage::warning(format!(
+                "website.navbar.logo refers to missing file '{}'",
+                normalized
+            )));
+            continue;
+        }
+
+        copy_asset_file(project, runtime, normalized, "navbar logo")?;
+    }
+    Ok(())
+}
+
+/// Copy images referenced from `page-footer` regions — Text regions
+/// *and* item `text:` (bd-page-footer-image-items-stmpikgo, Phase 4)
+/// — into the output tree.
+///
+/// Decision 5 of bd-root-relative-paths-design-fc5pvkcv, footer
+/// edition: a footer-region markdown image (`![](/images/x.svg)`) is
+/// a config-declared asset like the favicon and navbar logo. External
+/// URLs and `data:` URIs are skipped; a leading `/` is
+/// site-root-relative and strips to the project-relative path;
+/// `?query`/`#fragment` tails are dropped for the file probe.
+///
+/// A missing file raises the same **`Q-5-6`** warning the identical
+/// reference would raise in a document body, located at the reference
+/// inside the config file (the CLI's project-diagnostic printer binds
+/// `_quarto.yml` into the source context, so the span renders as an
+/// Ariadne snippet). Running here — once per project, post-render —
+/// rather than in the per-doc pipeline is what keeps a broken footer
+/// reference from warning once per rendered page.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn copy_footer_images(
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Result<()> {
+    use quarto_navigation::FooterRegion;
+
+    let Some(meta) = project.config.metadata.as_ref() else {
+        return Ok(());
+    };
+    let Some(footer) = quarto_navigation::resolve_page_footer(meta) else {
+        return Ok(());
+    };
+
+    let mut refs: Vec<ImageRef> = Vec::new();
+    for region in [&footer.left, &footer.center, &footer.right] {
+        match region {
+            FooterRegion::Text(cv) => collect_config_text_images(cv, &mut refs),
+            FooterRegion::Items(items) => collect_items_images(items, &mut refs),
+            FooterRegion::Empty => {}
+        }
+    }
+
+    for ImageRef { url: raw, origin } in refs {
+        if quarto_util::is_external_url(&raw) {
+            continue;
+        }
+        let path = raw.split(['#', '?']).next().unwrap_or(raw.as_str());
+        let normalized = path.strip_prefix('/').unwrap_or(path);
+        if normalized.is_empty() {
+            continue;
+        }
+        let src = project.dir.join(normalized);
+        let exists = runtime.path_exists(&src, None).map_err(|e| {
+            QuartoError::other(format!(
+                "Failed to probe page-footer image source {}: {}",
+                src.display(),
+                e
+            ))
+        })?;
+        if !exists {
+            // Uniform missing-resource shape (Q-5-6): the same
+            // intent-based diagnostic the body's resource-copy drain
+            // emits, anchored at the reference in the YAML.
+            let intent = crate::render::ResourceCopyIntent {
+                src,
+                dest: project.output_dir.join(normalized),
+                origin,
+            };
+            diagnostics
+                .push(crate::resource_copy_diagnostics::missing_resource_diagnostic(&intent));
+            continue;
+        }
+        copy_asset_file(project, runtime, normalized, "page-footer image")?;
+    }
+    Ok(())
+}
+
+/// One collected image reference: the raw authored URL plus the span
+/// to anchor a `Q-5-6` at — the URL's own span when the parse tracked
+/// it, else the whole image's.
+#[cfg(not(target_arch = "wasm32"))]
+struct ImageRef {
+    url: String,
+    origin: quarto_source_map::SourceInfo,
+}
+
+/// Collect image references from a text-bearing config value in any
+/// of its shapes: parsed inlines, parsed blocks, or a raw scalar.
+///
+/// At post-render time the project config still holds raw scalars —
+/// markdown-izing config strings (`ConfigMarkdownTransform`) happens
+/// in the per-doc pipeline — so scalars are re-parsed the same way
+/// here; parse warnings are dropped, the per-doc pipeline already
+/// reported them. The parse threads the scalar's `SourceInfo`
+/// through, so collected spans remap into the config file.
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_config_text_images(
+    cv: &quarto_pandoc_types::config_value::ConfigValue,
+    out: &mut Vec<ImageRef>,
+) {
+    use quarto_pandoc_types::config_value::ConfigValueKind;
+    match &cv.value {
+        ConfigValueKind::PandocInlines(inlines) => collect_inline_image_refs(inlines, out),
+        ConfigValueKind::PandocBlocks(blocks) => collect_block_image_refs(blocks, out),
+        ConfigValueKind::Scalar(_) => {
+            let Some(text) = cv.as_plain_text() else {
+                return;
+            };
+            let mut parse_diags = Vec::new();
+            let kind = pampa::pandoc::meta::parse_config_string_as_markdown(
+                &text,
+                &cv.source_info,
+                &mut parse_diags,
+            );
+            match &kind {
+                ConfigValueKind::PandocInlines(inlines) => collect_inline_image_refs(inlines, out),
+                ConfigValueKind::PandocBlocks(blocks) => collect_block_image_refs(blocks, out),
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Collect image references from footer items: each item's `text:`
+/// and (bare-scalar) `bare_text`, recursing into `menu` symmetrically
+/// with the render-time walkers.
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_items_images(items: &[quarto_navigation::NavigationItem], out: &mut Vec<ImageRef>) {
+    for item in items {
+        if let Some(cv) = &item.text {
+            collect_config_text_images(cv, out);
+        }
+        if let Some(cv) = &item.bare_text {
+            collect_config_text_images(cv, out);
+        }
+        collect_items_images(&item.menu, out);
+    }
+}
+
+/// Collect image references from block containers. Coverage mirrors
+/// `transforms::navigation_href::rewrite_config_blocks` for the
+/// container shapes that plausibly occur in config text; figures
+/// contribute the image in their content (and any images in their
+/// caption).
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_block_image_refs(blocks: &[quarto_pandoc_types::block::Block], out: &mut Vec<ImageRef>) {
+    use quarto_pandoc_types::block::Block;
+    for block in blocks {
+        match block {
+            Block::Plain(p) => collect_inline_image_refs(&p.content, out),
+            Block::Paragraph(p) => collect_inline_image_refs(&p.content, out),
+            Block::Header(h) => collect_inline_image_refs(&h.content, out),
+            Block::LineBlock(lb) => {
+                for line in &lb.content {
+                    collect_inline_image_refs(line, out);
+                }
+            }
+            Block::BlockQuote(bq) => collect_block_image_refs(&bq.content, out),
+            Block::OrderedList(ol) => {
+                for item in &ol.content {
+                    collect_block_image_refs(item, out);
+                }
+            }
+            Block::BulletList(bl) => {
+                for item in &bl.content {
+                    collect_block_image_refs(item, out);
+                }
+            }
+            Block::DefinitionList(dl) => {
+                for (term, defs) in &dl.content {
+                    collect_inline_image_refs(term, out);
+                    for def in defs {
+                        collect_block_image_refs(def, out);
+                    }
+                }
+            }
+            Block::Div(d) => collect_block_image_refs(&d.content, out),
+            Block::Figure(f) => {
+                if let Some(short) = &f.caption.short {
+                    collect_inline_image_refs(short, out);
+                }
+                if let Some(long) = &f.caption.long {
+                    collect_block_image_refs(long, out);
+                }
+                collect_block_image_refs(&f.content, out);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Collect `Image` target references from config-region inlines, in
+/// order, deduplicated by URL (the first occurrence keeps its span),
+/// recursing through formatting containers. The span follows the body
+/// collector's rule (`ResourceCollectorTransform`): the URL's own
+/// span when the parse tracked it, else the whole image's.
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_inline_image_refs(
+    inlines: &[quarto_pandoc_types::inline::Inline],
+    out: &mut Vec<ImageRef>,
+) {
+    use quarto_pandoc_types::inline::Inline;
+    for inline in inlines {
+        match inline {
+            Inline::Image(img) => {
+                if !out.iter().any(|r| r.url == img.target.0) {
+                    out.push(ImageRef {
+                        url: img.target.0.clone(),
+                        origin: img
+                            .target_source
+                            .url
+                            .clone()
+                            .unwrap_or_else(|| img.source_info.clone()),
+                    });
+                }
+                collect_inline_image_refs(&img.content, out);
+            }
+            Inline::Link(l) => collect_inline_image_refs(&l.content, out),
+            Inline::Emph(e) => collect_inline_image_refs(&e.content, out),
+            Inline::Strong(s) => collect_inline_image_refs(&s.content, out),
+            Inline::Underline(u) => collect_inline_image_refs(&u.content, out),
+            Inline::Strikeout(s) => collect_inline_image_refs(&s.content, out),
+            Inline::Superscript(s) => collect_inline_image_refs(&s.content, out),
+            Inline::Subscript(s) => collect_inline_image_refs(&s.content, out),
+            Inline::SmallCaps(s) => collect_inline_image_refs(&s.content, out),
+            Inline::Quoted(q) => collect_inline_image_refs(&q.content, out),
+            Inline::Span(s) => collect_inline_image_refs(&s.content, out),
+            Inline::Insert(i) => collect_inline_image_refs(&i.content, out),
+            Inline::Delete(d) => collect_inline_image_refs(&d.content, out),
+            Inline::Highlight(h) => collect_inline_image_refs(&h.content, out),
+            _ => {}
+        }
+    }
+}
+
+/// Copy `<project>/<normalized>` → `<output>/<normalized>`, creating
+/// parent directories. Shared tail of the config-asset copy hooks
+/// ([`copy_favicon`], [`copy_navbar_logo`], [`copy_footer_images`]);
+/// callers have already resolved, normalized, and existence-checked
+/// the path.
+#[cfg(not(target_arch = "wasm32"))]
+fn copy_asset_file(
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    normalized: &str,
+    what: &str,
+) -> Result<()> {
+    let src = project.dir.join(normalized);
+    let dst = project.output_dir.join(normalized);
     if let Some(parent) = dst.parent() {
         runtime.dir_create(parent, true).map_err(|e| {
             QuartoError::other(format!(
-                "Failed to create favicon directory {}: {}",
+                "Failed to create {} directory {}: {}",
+                what,
                 parent.display(),
                 e
             ))
@@ -124,7 +440,8 @@ pub(super) fn copy_favicon(
     }
     runtime.file_copy(&src, &dst).map_err(|e| {
         QuartoError::other(format!(
-            "Failed to copy favicon {} → {}: {}",
+            "Failed to copy {} {} → {}: {}",
+            what,
             src.display(),
             dst.display(),
             e
@@ -479,6 +796,327 @@ pub(super) fn write_robots_txt(
         ))
     })?;
     Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Alias redirect stubs — native-only
+// ═══════════════════════════════════════════════════════════════════
+
+/// Write a redirect stub for every `aliases:` entry in the project.
+///
+/// Planning is pure and lives in [`crate::project::aliases`]; this
+/// function is the part that touches disk. It writes nothing at all
+/// when the plan reports a conflict — a half-written set of redirects
+/// is worse than none, and by Phase 1's contract a hook failure aborts
+/// the render.
+///
+/// Unlike the other hooks here this one is not gated on a config key:
+/// `aliases:` is per-document, so the plan is simply empty when no
+/// page declares any.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn write_alias_redirects(
+    project: &ProjectContext,
+    index: &ProjectIndex,
+    runtime: &dyn SystemRuntime,
+) -> Result<()> {
+    use crate::project::aliases::{plan_alias_stubs, render_stub};
+
+    let plan = plan_alias_stubs(index.profiles());
+
+    if !plan.conflicts.is_empty() {
+        return Err(QuartoError::Parse(alias_conflicts_to_parse_error(
+            &plan.conflicts,
+            project,
+            runtime,
+        )));
+    }
+
+    for stub in &plan.stubs {
+        let dst = project.output_dir.join(&stub.stub_href);
+        if let Some(parent) = dst.parent() {
+            runtime.dir_create(parent, true).map_err(|e| {
+                QuartoError::other(format!(
+                    "Failed to create alias directory {}: {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
+        }
+        runtime
+            .file_write(&dst, render_stub(stub).as_bytes())
+            .map_err(|e| {
+                QuartoError::other(format!(
+                    "Failed to write alias redirect {}: {}",
+                    dst.display(),
+                    e
+                ))
+            })?;
+    }
+
+    Ok(())
+}
+
+/// Turn every conflict into a diagnostic, sharing one `SourceContext`.
+///
+/// All of them, not the first: a site with dozens of aliasing files
+/// should learn about its mistakes in one render rather than one per
+/// render.
+#[cfg(not(target_arch = "wasm32"))]
+fn alias_conflicts_to_parse_error(
+    conflicts: &[crate::project::aliases::AliasConflict],
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+) -> crate::error::ParseError {
+    use quarto_source_map::SourceContext;
+
+    let mut source_context = SourceContext::new();
+    let diagnostics = conflicts
+        .iter()
+        .map(|conflict| alias_conflict_diagnostic(conflict, project, runtime, &mut source_context))
+        .collect();
+    crate::error::ParseError::new(diagnostics, source_context)
+}
+
+/// Register the file an alias was written in and return its span,
+/// re-keyed so several documents can share one `SourceContext`.
+///
+/// An alias can be declared in the page's own front matter (spans
+/// rooted at the document parse context's dense `FileId(0)`) or
+/// inherited from a directory `_metadata.yml` or `_quarto.yml`
+/// (quarto-yaml filename-hash ids). Both id schemes go into the
+/// candidate list, and
+/// [`rebase_source_candidates`](crate::config_sources::rebase_source_candidates)
+/// picks the one whose id actually matches — never binding a
+/// non-match, so a span is either right or absent.
+///
+/// The *rebasing* matters here specifically because a collision
+/// diagnostic names two pages: without it, the second document's
+/// `FileId(0)` offsets would be rendered against the first
+/// document's text.
+#[cfg(not(target_arch = "wasm32"))]
+fn locate_alias(
+    who: &crate::project::aliases::AliasRef,
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    source_context: &mut quarto_source_map::SourceContext,
+) -> Option<quarto_source_map::SourceInfo> {
+    use quarto_source_map::FileId;
+
+    let doc_source = project.dir.join(&who.source_path);
+    let config = &project.config;
+    let layer_paths =
+        crate::project::directory_metadata_paths_for_document(project, &doc_source, runtime);
+    let hash = |p: &Path| quarto_yaml::file_id_for_filename(&p.to_string_lossy());
+
+    let candidates = std::iter::once((FileId(0), doc_source.as_path()))
+        .chain(config.config_path.as_deref().map(|p| (hash(p), p)))
+        .chain(
+            config
+                .profile_config_paths
+                .iter()
+                .map(|p| (hash(p), p.as_path())),
+        )
+        .chain(layer_paths.iter().map(|p| (hash(p), p.as_path())));
+
+    crate::config_sources::rebase_source_candidates(source_context, &who.source_info, candidates)
+        .map(|(_, span)| span)
+}
+
+/// Render one conflict as a diagnostic.
+#[cfg(not(target_arch = "wasm32"))]
+fn alias_conflict_diagnostic(
+    conflict: &crate::project::aliases::AliasConflict,
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    source_context: &mut quarto_source_map::SourceContext,
+) -> DiagnosticMessage {
+    use crate::project::aliases::AliasConflict;
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+
+    // `with_location` takes an owned SourceInfo and there is no
+    // `with_optional_location`, so each arm threads the Option.
+    let at = |builder: DiagnosticMessageBuilder,
+              span: Option<quarto_source_map::SourceInfo>|
+     -> DiagnosticMessageBuilder {
+        match span {
+            Some(info) => builder.with_location(info),
+            None => builder,
+        }
+    };
+
+    match conflict {
+        AliasConflict::OverwritesPage {
+            alias,
+            stub_href,
+            page_source,
+        } => {
+            let span = locate_alias(alias, project, runtime, source_context);
+            at(
+                DiagnosticMessageBuilder::error("Alias would overwrite a rendered page")
+                    .with_code("Q-5-23"),
+                span,
+            )
+            .problem(format!(
+                "`{}` in `{}` resolves to `{}`, which is where `{}` renders. \
+                 Only one file can exist there.",
+                alias.alias,
+                alias.source_path.display(),
+                stub_href,
+                page_source.display()
+            ))
+            .add_info(
+                "Quarto 1 skips the redirect with a warning. Quarto 2 stops instead: a site \
+                 that builds while silently missing a redirect keeps 404ing old links with \
+                 nothing in the output to say why.",
+            )
+            .add_hint("Point the alias at a path no page renders to?")
+            .build()
+        }
+
+        AliasConflict::DuplicateClaim {
+            first,
+            second,
+            stub_href,
+            fragment,
+        } => {
+            let first_span = locate_alias(first, project, runtime, source_context);
+            let second_span = locate_alias(second, project, runtime, source_context);
+            let route = if fragment.is_empty() {
+                format!("`{stub_href}`")
+            } else {
+                format!("`{stub_href}#{fragment}`")
+            };
+            let builder = at(
+                DiagnosticMessageBuilder::error("Two pages claim the same alias")
+                    .with_code("Q-5-24"),
+                first_span,
+            )
+            .problem(format!(
+                "`{}` and `{}` both redirect {route} to themselves. A redirect can only \
+                 send visitors to one page.",
+                first.source_path.display(),
+                second.source_path.display()
+            ));
+            let builder = match second_span {
+                Some(info) => builder.add_info_at(
+                    format!("Also claimed by `{}` here.", second.source_path.display()),
+                    info,
+                ),
+                None => builder.add_info(format!(
+                    "Also claimed by `{}` (`{}`).",
+                    second.source_path.display(),
+                    second.alias
+                )),
+            };
+            builder
+                .add_hint("Remove the alias from one of the two pages?")
+                .build()
+        }
+
+        AliasConflict::NoDefaultOwner {
+            stub_href,
+            contributors,
+        } => {
+            let span = contributors
+                .first()
+                .and_then(|who| locate_alias(who, project, runtime, source_context));
+            let names = contributors
+                .iter()
+                .map(|c| format!("`{}`", c.source_path.display()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            at(
+                DiagnosticMessageBuilder::error("No page owns the alias's fragment-less URL")
+                    .with_code("Q-5-24"),
+                span,
+            )
+            .problem(format!(
+                "{names} route fragments through `{stub_href}`, but no page claims it \
+                 without a fragment, so a visitor arriving at the bare URL has no \
+                 destination."
+            ))
+            .add_info(
+                "Quarto 1 sends that visitor to the site root. Picking one of these pages \
+                 instead would be a guess about which one you meant.",
+            )
+            .add_hint("Add the fragment-less alias to whichever page should own the old URL?")
+            .build()
+        }
+
+        AliasConflict::CaseOnlyAliasCollision { first, second } => {
+            let first_span = locate_alias(first, project, runtime, source_context);
+            let second_span = locate_alias(second, project, runtime, source_context);
+            let builder = at(
+                DiagnosticMessageBuilder::error("Aliases differ only by case").with_code("Q-5-25"),
+                first_span,
+            )
+            .problem(format!(
+                "`{}` in `{}` and `{}` in `{}` resolve to paths that differ only in \
+                 capitalization. macOS and Windows treat those as one file.",
+                first.alias,
+                first.source_path.display(),
+                second.alias,
+                second.source_path.display()
+            ))
+            .add_info(
+                "Checked on every platform, including case-sensitive ones, so a Linux build \
+                 cannot ship a site that loses a redirect when served from macOS or Windows.",
+            );
+            let builder = match second_span {
+                Some(info) => builder.add_info_at("The other spelling is here.", info),
+                None => builder,
+            };
+            builder
+                .add_hint("Rename one so the two differ by more than capitalization?")
+                .build()
+        }
+
+        AliasConflict::CaseOnlyPageCollision {
+            alias,
+            stub_href,
+            page_href,
+            page_source,
+        } => {
+            let span = locate_alias(alias, project, runtime, source_context);
+            at(
+                DiagnosticMessageBuilder::error("Alias differs only by case from a rendered page")
+                    .with_code("Q-5-25"),
+                span,
+            )
+            .problem(format!(
+                "`{}` in `{}` resolves to `{}`, which differs only in capitalization from \
+                 `{}` rendered by `{}`. macOS and Windows treat those as one file.",
+                alias.alias,
+                alias.source_path.display(),
+                stub_href,
+                page_href,
+                page_source.display()
+            ))
+            .add_hint("Rename the alias so it cannot collide with the page?")
+            .build()
+        }
+
+        AliasConflict::EscapesOutputDir { alias } => {
+            let span = locate_alias(alias, project, runtime, source_context);
+            at(
+                DiagnosticMessageBuilder::error("Alias resolves outside the output directory")
+                    .with_code("Q-5-26"),
+                span,
+            )
+            .problem(format!(
+                "`{}` in `{}` climbs above the site's output directory. Redirect stubs must \
+                 be written inside the site.",
+                alias.alias,
+                alias.source_path.display()
+            ))
+            .add_info(
+                "A relative alias resolves against the page's own output location, not the \
+                 project root, so a page deep in the tree can climb further than expected.",
+            )
+            .add_hint("Use a site-root-relative alias such as `/old.html`?")
+            .build()
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════

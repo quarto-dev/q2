@@ -1,0 +1,6 @@
+---
+title: "Home"
+---
+
+The navbar logo above should render at 24px height beside the title,
+not at the SVG's natural 512px size.

@@ -1,0 +1,12 @@
+
+[1mUsage:[22m [95mCOMMAND kill[39m
+
+[1mDescription:[22m
+
+  Kill the control server if it is currently running. This will also kill all notebook worker processes.
+
+[1mOptions:[22m
+
+  [94m-h[39m, [94m--help[39m  [31m[1m-[22m[39m Show this help.  
+
+exit=0

@@ -1,0 +1,70 @@
+# Throwaway spike for direction (B) -- NOT a proposed patch.
+# Recurse into non-section Divs, apply pandoc's absorb rule, restrict the
+# TOC walk to the section tree. Measured, then reverted. See README.md.
+diff --git a/crates/pampa/src/toc.rs b/crates/pampa/src/toc.rs
+index bab30f4a..1216684f 100644
+--- a/crates/pampa/src/toc.rs
++++ b/crates/pampa/src/toc.rs
+@@ -352,8 +352,8 @@ fn collect_toc_entries(blocks: &[Block], max_depth: i32) -> Vec<FlatTocEntry> {
+                     // Recurse into section content for nested sections
+                     entries.extend(collect_toc_entries(&div.content, max_depth));
+                 } else {
+-                    // Non-section Div - recurse into content
+-                    entries.extend(collect_toc_entries(&div.content, max_depth));
++                    // SPIKE(B) part 3: a non-section Div terminates the walk,
++                    // matching pandoc's sectionToListItem.
+                 }
+             }
+             Block::Header(header) => {
+@@ -363,9 +363,7 @@ fn collect_toc_entries(blocks: &[Block], max_depth: i32) -> Vec<FlatTocEntry> {
+                 }
+             }
+             // Other block types: recurse if they contain blocks
+-            Block::BlockQuote(bq) => {
+-                entries.extend(collect_toc_entries(&bq.content, max_depth));
+-            }
++            // SPIKE(B): BlockQuote arm removed (pandoc does not sectionize into it)
+             _ => {
+                 // Other blocks don't contain headers
+             }
+diff --git a/crates/pampa/src/transforms/sectionize.rs b/crates/pampa/src/transforms/sectionize.rs
+index f0357013..bb3d818d 100644
+--- a/crates/pampa/src/transforms/sectionize.rs
++++ b/crates/pampa/src/transforms/sectionize.rs
+@@ -83,6 +83,36 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
+     let mut output: Vec<Block> = vec![];
+ 
+     for block in blocks {
++        // SPIKE(B) part 1+2: recurse into non-section Divs, then apply
++        // pandoc's makeSections absorb rule -- a Div with an empty id whose
++        // content is exactly one section is replaced by that section, with
++        // the Div's classes/kvs merged in.
++        let block = match block {
++            Block::Div(d) if !d.attr.1.iter().any(|c| c == "section") => {
++                let content = sectionize_blocks(d.content);
++                let absorbable = d.attr.0.is_empty()
++                    && content.len() == 1
++                    && matches!(&content[0],
++                        Block::Div(inner) if inner.attr.1.iter().any(|c| c == "section"));
++                if absorbable {
++                    let Block::Div(mut inner) = content.into_iter().next().unwrap() else {
++                        unreachable!()
++                    };
++                    for c in &d.attr.1 {
++                        if !inner.attr.1.contains(c) {
++                            inner.attr.1.push(c.clone());
++                        }
++                    }
++                    for (k, v) in &d.attr.2 {
++                        inner.attr.2.entry(k.clone()).or_insert_with(|| v.clone());
++                    }
++                    Block::Div(inner)
++                } else {
++                    Block::Div(Div { content, ..d })
++                }
++            }
++            other => other,
++        };
+         if let Block::Header(ref header) = block {
+             let level = header.level;
+             let (id, classes, attrs) = &header.attr;

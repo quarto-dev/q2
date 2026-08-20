@@ -18,6 +18,10 @@
 5. **v1 scope.** Recording-capable v1 is fine, even if it means more phases. Hand-authored fixtures alone don't help users reporting actual bugs; recording does.
 6. **Source-info handling.** Ignore in fixtures for v1; document explicitly that this breaks diagnostic-location tests against replayed runs. A future phase can add it back if a use case appears.
 
+## Future extension — capture the deferred `dependencies` round-trip (RTQ FC-2)
+
+This plan's capture/replay is **execute-centric**: `RecordingEngine`/`ReplayEngine` record and replay the `execute()` call only (`replay.rs`). RTQ FC-2 adds a Q1-faithful deferred-deps path where, under `dependencies: false`, q2's render orchestrator makes a **separate** `engine.dependencies()` call after `execute` (a new `dependencies` wire verb; mirrors Q1 `render.ts:90-109`). When that consumer lands (with the book/project renderer), **the `dependencies` round-trip must also be captured and replayed** so a frozen render reproduces resolved deps deterministically — otherwise a replayed deferred-deps render would lose its `DependenciesResult.includes`. Not needed in v1 (no caller sends `dependencies: false`); flagged here so it isn't forgotten when the book feature arrives.
+
 ## Issue context
 
 > "From the bd-o8pr Phase 2 work session: writing E2E tests for engine-emitted resources (and other engine-channel features) requires either real R/Python/jupyter installs or a custom test injection point. Both are heavy. Idea: build a 'replay engine' that can reproduce the behavior of any existing engine but runs entirely in Rust. Records a real engine's transcript (markdown output, supporting_files, includes, …) into a fixture; replays deterministically without the engine runtime."

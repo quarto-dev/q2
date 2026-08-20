@@ -15,11 +15,15 @@
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 //! - `build-all`: Fresh-clone build orchestration (npm install + hub-client + Rust workspace)
 //! - `build-trace-viewer`: Build just the trace-viewer SPA
+//! - `build-hub-client-embed`: Build the hub-client editor bundle for `q2 preview --ui editor`
 //! - `build-hub-mcp-bundle`: Build the self-contained hub MCP server bundle
+//! - `build-engine-host-bundle`: Build the committed engine-host-deno.js bundle
 //! - `stage-doc-examples`: Render `examples/manifest.yml` projects into `docs/examples/`
 
 mod braid_snapshot;
 mod build_all;
+mod build_engine_host_bundle;
+mod build_hub_client_embed;
 mod build_hub_mcp_bundle;
 mod build_q2_preview_spa;
 mod build_trace_viewer;
@@ -240,6 +244,14 @@ enum Command {
     /// build -p quarto-preview` (via `include_dir!`).
     BuildQ2PreviewSpa {},
 
+    /// Build the hub-client editor bundle for `q2 preview --ui editor`.
+    ///
+    /// Produces `hub-client/dist-preview-embed/` (auth off, sync server
+    /// pinned to the relative `/ws`, PWA disabled) — picked up on the
+    /// next `cargo build -p quarto-preview` (via `include_dir!`, with
+    /// viewer-dist-identical files stripped at embed time).
+    BuildHubClientEmbed {},
+
     /// Build the self-contained hub MCP server bundle.
     ///
     /// Produces `ts-packages/quarto-hub-mcp/dist-bundle/` (esbuild) —
@@ -247,6 +259,15 @@ enum Command {
     /// build` does NOT refresh it; run this after changing
     /// quarto-hub-mcp / quarto-sync-client / quarto-automerge-schema.
     BuildHubMcpBundle {},
+
+    /// Build the committed engine-host-deno.js bundle (Plan 1b).
+    ///
+    /// Produces `ts-packages/quarto-engine-host-deno/dist/engine-host-deno.js`
+    /// (esbuild, ESM, Deno-ready) — the artifact `quarto-core` embeds via
+    /// `include_str!` in `engine/ts_process.rs`. A plain `cargo build`
+    /// does NOT refresh it; run this after changing `quarto-engine-host-deno`,
+    /// `@quarto/api`, or `@quarto/types` sources.
+    BuildEngineHostBundle {},
 
     /// Fresh-clone build orchestration.
     ///
@@ -259,7 +280,8 @@ enum Command {
     /// 4. trace-viewer build (if present; Phase 4.3+)
     /// 5. q2-preview-spa build (if present; q2-preview Phase A.4)
     /// 6. hub MCP bundle (q2-mcp embed artifact; bd-81cfshmw)
-    /// 7. cargo build --workspace
+    /// 7. engine-host-deno bundle (quarto-core embed artifact; Plan 1b)
+    /// 8. cargo build --workspace
     BuildAll {
         /// Skip `npm install`.
         #[arg(long)]
@@ -284,6 +306,10 @@ enum Command {
         /// Skip the hub MCP bundle build.
         #[arg(long)]
         skip_hub_mcp_bundle: bool,
+
+        /// Skip the engine-host-deno bundle build.
+        #[arg(long)]
+        skip_engine_host_bundle: bool,
 
         /// Skip the Rust workspace build.
         #[arg(long)]
@@ -366,7 +392,9 @@ fn main() -> Result<()> {
         Command::StageDocExamples {} => stage_doc_examples::run(),
         Command::BuildTraceViewer {} => build_trace_viewer::run(),
         Command::BuildQ2PreviewSpa {} => build_q2_preview_spa::run(),
+        Command::BuildHubClientEmbed {} => build_hub_client_embed::run(),
         Command::BuildHubMcpBundle {} => build_hub_mcp_bundle::run(),
+        Command::BuildEngineHostBundle {} => build_engine_host_bundle::run(),
         Command::BuildAll {
             skip_npm_install,
             skip_ts_packages_build,
@@ -374,6 +402,7 @@ fn main() -> Result<()> {
             skip_trace_viewer_build,
             skip_q2_preview_spa_build,
             skip_hub_mcp_bundle,
+            skip_engine_host_bundle,
             skip_rust_build,
             release,
         } => {
@@ -384,6 +413,7 @@ fn main() -> Result<()> {
                 skip_trace_viewer_build,
                 skip_q2_preview_spa_build,
                 skip_hub_mcp_bundle,
+                skip_engine_host_bundle,
                 skip_rust_build,
                 release,
             };

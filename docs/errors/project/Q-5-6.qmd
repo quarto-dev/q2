@@ -23,10 +23,18 @@ file into the rendered output so the link resolves in the
 published site. This warning fires when the referenced source
 file does not exist on disk: there is nothing to copy.
 
+The same check applies to markdown images in website
+configuration — a `page-footer` region or item `text:` in
+`_quarto.yml`. Those references are project-wide, so a missing
+file there warns once per render (not once per page), with the
+diagnostic pointing at the reference inside the configuration
+file.
+
 This is a **warning**, not an error. The render continues and
 produces output; the missing file is simply left out. The
-diagnostic points at the reference in your source document so
-you can see exactly which link is affected.
+diagnostic points at the reference in your source document (or
+configuration file) so you can see exactly which link is
+affected.
 
 ## Why this happens
 

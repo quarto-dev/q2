@@ -1,0 +1,20 @@
+{
+  "code": "Q-2-41",
+  "title": "Curly braces are reserved for attribute syntax",
+  "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+  "notes": [],
+  "cases": [
+    {
+      "name": "prose",
+      "description": "Bare brace run in prose (the strand's verbatim example; REST API docs write path parameters like {guid} constantly).",
+      "content": "the request returns the task {guid} immediately.\n",
+      "captures": []
+    },
+    {
+      "name": "link-text",
+      "description": "Brace run inside link text; fails at a different LR state (2589) than the bare-paragraph form (2613).",
+      "content": "see [the {guid} link](https://example.com) here.\n",
+      "captures": []
+    }
+  ]
+}

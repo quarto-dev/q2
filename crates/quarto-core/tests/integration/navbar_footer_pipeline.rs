@@ -21,6 +21,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use regex::Regex;
 use tempfile::TempDir;
 
 use quarto_core::format::Format;
@@ -396,5 +397,327 @@ fn pipeline_single_doc_navbar_works_with_top_level_config() {
     assert!(
         !about_html.contains("<nav class=\"navbar"),
         "about.html should not inherit index.html's doc-level navbar"
+    );
+}
+
+// === Case A (bd-root-relative-paths-design-fc5pvkcv): navbar logo =========
+
+/// The navbar logo is a config-declared static asset shared by pages
+/// at every depth, so it must be emitted page-relative per page —
+/// `images/logo.svg` on the root page, `../../images/logo.svg` two
+/// levels down — and the file must be copied into the output tree
+/// (decision 5) without any `project.resources` declaration.
+#[test]
+fn pipeline_navbar_logo_rebased_per_page_and_copied() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  navbar:\n    title: Site\n    logo: images/logo.svg\n    left:\n      - index.qmd\n",
+        );
+        write(
+            &project_dir.join("images/logo.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+        write(
+            &project_dir.join("deep/deeper/page.qmd"),
+            "---\ntitle: Deep\n---\n\nD.\n",
+        );
+    });
+
+    let root_html = read(&project_dir.join("_site/index.html"));
+    assert!(
+        root_html.contains("<img src=\"images/logo.svg\""),
+        "root page logo should be depth-0 relative; got: {}",
+        root_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+
+    let deep_html = read(&project_dir.join("_site/deep/deeper/page.html"));
+    assert!(
+        deep_html.contains("<img src=\"../../images/logo.svg\""),
+        "depth-2 page logo must climb to the site root; got: {}",
+        deep_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+
+    assert!(
+        project_dir.join("_site/images/logo.svg").exists(),
+        "logo file must be copied to the output tree (decision 5)"
+    );
+}
+
+/// A leading `/` on the logo path means site-root-relative
+/// (decision 4) and produces identical output to the bare form.
+#[test]
+fn pipeline_navbar_root_slash_logo_rebased_per_page() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  navbar:\n    title: Site\n    logo: /images/logo.svg\n    left:\n      - index.qmd\n",
+        );
+        write(
+            &project_dir.join("images/logo.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+        write(
+            &project_dir.join("deep/deeper/page.qmd"),
+            "---\ntitle: Deep\n---\n\nD.\n",
+        );
+    });
+
+    let deep_html = read(&project_dir.join("_site/deep/deeper/page.html"));
+    assert!(
+        deep_html.contains("<img src=\"../../images/logo.svg\""),
+        "leading-/ logo must rebase identically to the bare form; got: {}",
+        deep_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+    assert!(
+        project_dir.join("_site/images/logo.svg").exists(),
+        "leading-/ logo file must be copied to the output tree"
+    );
+}
+
+// === Case C (bd-root-relative-paths-design-fc5pvkcv): footer markdown ====
+
+/// The incentive-removal e2e: a `page-footer` region written in plain
+/// markdown — an image with a site-root path and a `.qmd` link — is
+/// emitted page-relative on every page, and the image is copied into
+/// the output tree. This is the markdown-native replacement for the
+/// raw `<img …>`{=html} pattern that q2 cannot (and will not) rewrite.
+#[test]
+fn pipeline_footer_text_image_and_link_resolve_per_page_and_copy() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  page-footer:\n    left: \"![Logo](/images/x.svg) and [root](/index.qmd)\"\n",
+        );
+        write(
+            &project_dir.join("images/x.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+        write(
+            &project_dir.join("deep/deeper/page.qmd"),
+            "---\ntitle: Deep\n---\n\nD.\n",
+        );
+    });
+
+    let root_html = read(&project_dir.join("_site/index.html"));
+    assert!(
+        root_html.contains("<img src=\"images/x.svg\" alt=\"Logo\">"),
+        "root page footer image should be depth-0 relative; got: {}",
+        root_html
+            .lines()
+            .find(|l| l.contains("footer"))
+            .unwrap_or("<no footer line>")
+    );
+    assert!(
+        root_html.contains("href=\"index.html\""),
+        "root page footer link should resolve to index.html"
+    );
+
+    let deep_html = read(&project_dir.join("_site/deep/deeper/page.html"));
+    assert!(
+        deep_html.contains("<img src=\"../../images/x.svg\" alt=\"Logo\">"),
+        "depth-2 footer image must climb to the site root; got: {}",
+        deep_html
+            .lines()
+            .find(|l| l.contains("footer-left"))
+            .unwrap_or("<no footer-left line>")
+    );
+    assert!(
+        deep_html.contains("href=\"../../index.html\""),
+        "depth-2 footer link must climb to the site root; got: {}",
+        deep_html
+            .lines()
+            .find(|l| l.contains("footer-left"))
+            .unwrap_or("<no footer-left line>")
+    );
+
+    assert!(
+        project_dir.join("_site/images/x.svg").exists(),
+        "footer image must be copied to the output tree (decision 5)"
+    );
+}
+
+// === bd-navbar-logo-unstyled-gbzd8vcu: theme ships navbar brand CSS ======
+
+/// The compiled theme bundle must ship default styling for the navbar
+/// brand: `.navbar-logo` sizing (Q1 quarto-nav.scss:196) plus the
+/// `.navbar-brand-container` / `.navbar-brand-logo` layout rules the
+/// restructured brand markup relies on. Before the fix, the generated
+/// `quarto-theme-*.css` contained no `navbar-logo` occurrence at all,
+/// so a 512px SVG rendered at natural size and swallowed the navbar.
+#[test]
+fn pipeline_theme_css_ships_navbar_brand_rules() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  navbar:\n    title: Site\n    logo: logo.svg\n    left:\n      - index.qmd\n",
+        );
+        write(
+            &project_dir.join("logo.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+    });
+
+    let libs_dir = project_dir.join("_site/site_libs/quarto");
+    let theme_css_path = std::fs::read_dir(&libs_dir)
+        .unwrap_or_else(|e| panic!("read {}: {}", libs_dir.display(), e))
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s.starts_with("quarto-theme-") && s.ends_with(".css"))
+        })
+        .expect("a quarto-theme-*.css under site_libs/quarto/");
+    let css = read(&theme_css_path);
+
+    // Q1 quarto-nav.scss:196 — the default logo sizing. Assert the
+    // full declaration set so a partial port can't pass.
+    let logo_rule = Regex::new(
+        r"\.navbar-logo\s*\{[^}]*max-height:\s*24px;[^}]*width:\s*auto;[^}]*padding-right:\s*4px",
+    )
+    .unwrap();
+    assert!(
+        logo_rule.is_match(&css),
+        "theme CSS must ship the .navbar-logo sizing rule; searched {}",
+        theme_css_path.display()
+    );
+
+    // Q1 quarto-nav.scss:125-134 — brand container flex layout
+    // (width clamp deliberately omitted: bd-y5y10oir).
+    let container_rule = Regex::new(
+        r"\.navbar-brand-container\s*\{[^}]*min-width:\s*0;[^}]*display:\s*flex;[^}]*align-items:\s*center",
+    )
+    .unwrap();
+    assert!(
+        container_rule.is_match(&css),
+        "theme CSS must ship the .navbar-brand-container layout rule"
+    );
+
+    // Q1 quarto-nav.scss:136-139 — logo anchor spacing.
+    let brand_logo_rule = Regex::new(
+        r"\.navbar-brand\.navbar-brand-logo\s*\{[^}]*margin-right:\s*4px;[^}]*display:\s*inline-flex",
+    )
+    .unwrap();
+    assert!(
+        brand_logo_rule.is_match(&css),
+        "theme CSS must ship the .navbar-brand.navbar-brand-logo rule"
+    );
+
+    // Q1 quarto-nav.scss:120-123 — long titles truncate with ellipsis.
+    let brand_rule =
+        Regex::new(r"\.navbar-brand\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis")
+            .unwrap();
+    assert!(
+        brand_rule.is_match(&css),
+        "theme CSS must ship the .navbar-brand ellipsis rule"
+    );
+
+    // Q1 quarto-nav.scss:116-118.
+    let navbar_container_rule = Regex::new(r"\.navbar-container\s*\{[^}]*width:\s*100%").unwrap();
+    assert!(
+        navbar_container_rule.is_match(&css),
+        "theme CSS must ship the .navbar-container width rule"
+    );
+}
+
+/// Distinct light/dark logo variants flow through the whole pipeline
+/// (bd-navbar-logo-unstyled-gbzd8vcu): both paths are rebased
+/// per-page, both imgs carry their variant content class, and both
+/// files are copied into the output tree.
+#[test]
+fn pipeline_navbar_logo_variants_rebased_and_copied() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  navbar:\n    title: Site\n    logo:\n      light: images/l.svg\n      dark:\n        path: images/d.svg\n        alt: Dark logo\n    left:\n      - index.qmd\n",
+        );
+        write(
+            &project_dir.join("images/l.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("images/d.svg"),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nH.\n",
+        );
+        write(
+            &project_dir.join("deep/deeper/page.qmd"),
+            "---\ntitle: Deep\n---\n\nD.\n",
+        );
+    });
+
+    let root_html = read(&project_dir.join("_site/index.html"));
+    assert!(
+        root_html
+            .contains("<img src=\"images/l.svg\" alt=\"\" class=\"navbar-logo light-content\">"),
+        "root page light img depth-0 relative with light-content class; got: {}",
+        root_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+    assert!(
+        root_html.contains(
+            "<img src=\"images/d.svg\" alt=\"Dark logo\" class=\"navbar-logo dark-content\">"
+        ),
+        "root page dark img with its own alt and dark-content class; got: {}",
+        root_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+
+    let deep_html = read(&project_dir.join("_site/deep/deeper/page.html"));
+    assert!(
+        deep_html.contains("<img src=\"../../images/l.svg\"")
+            && deep_html.contains("<img src=\"../../images/d.svg\""),
+        "depth-2 page must rebase both variant srcs; got: {}",
+        deep_html
+            .lines()
+            .find(|l| l.contains("navbar-logo"))
+            .unwrap_or("<no navbar-logo line>")
+    );
+
+    assert!(
+        project_dir.join("_site/images/l.svg").exists(),
+        "light variant file must be copied to the output tree"
+    );
+    assert!(
+        project_dir.join("_site/images/d.svg").exists(),
+        "dark variant file must be copied to the output tree"
     );
 }

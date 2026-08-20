@@ -34,6 +34,10 @@ pub struct PreviewArgs {
     pub host: Option<String>,
     /// Skip the browser-open step.
     pub no_browser: bool,
+    /// Open the preview in this browser instead of the system
+    /// default (`--browser <name>`). clap makes it conflict with
+    /// `--no-browser`, so the two never both reach here.
+    pub browser: Option<String>,
     /// Override the ephemeral samod storage dir. Default: a fresh
     /// `tempfile::TempDir` that's deleted on shutdown.
     pub data_dir: Option<PathBuf>,
@@ -46,13 +50,67 @@ pub struct PreviewArgs {
     /// files on disk (bd-ov4gqk3m). Off by default: without it the
     /// preview is read-only end to end.
     pub allow_edit: bool,
+    /// Share this preview session over an end-to-end encrypted iroh
+    /// tunnel (bd-jhvkwosw). The server prints a `q2preview…` join
+    /// string; the HTTP port itself stays loopback-bound.
+    pub share: bool,
+    /// Which embedded frontend the server serves (`--ui`, live-share
+    /// plan Phase 4, bd-jt1etjbn): the read-only preview SPA (default)
+    /// or the full hub-client editor. Never changes the write policy.
+    pub ui: quarto_preview::PreviewUi,
 }
 
 pub fn execute(args: PreviewArgs) -> Result<()> {
     // Multi-threaded runtime for the same reasons quarto hub uses
     // one: samod, websockets, file watching, periodic sync.
     let runtime = tokio::runtime::Runtime::new()?;
+    // bd-hxhnnlzs: hold a kernel scope for the server's lifetime so
+    // re-renders reuse warm kernels. It drops after `block_on` returns
+    // (the hub server resolves SIGINT/SIGTERM/Ctrl-C into a graceful
+    // return), outside the runtime — so kernels get the polite
+    // `shutdown_request` path before the kill backstop.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     runtime.block_on(run(args))
+}
+
+/// Guest-mode argument shape for `q2 preview --join <TICKET>` (live-share
+/// plan Phase 3, bd-6y0p1bne). Deliberately tiny: the guest has no local
+/// project, hub, or disk surface — clap rejects every host-mode flag.
+pub struct JoinArgs {
+    /// The `q2preview…` join string printed by `q2 preview --share`.
+    pub ticket: String,
+    /// Local proxy port. Default: OS-assigned.
+    pub port: Option<u16>,
+    /// Local proxy bind host. Default: 127.0.0.1.
+    pub host: Option<String>,
+    /// Skip the browser-open step.
+    pub no_browser: bool,
+    /// Open the session in this browser instead of the system
+    /// default (`--browser <name>`).
+    pub browser: Option<String>,
+}
+
+pub fn execute_join(args: JoinArgs) -> Result<()> {
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(run_join(args))
+}
+
+/// `q2 preview --print-asset-manifest-hashes` (hidden): print the
+/// top-level hash of each embedded SPA asset manifest, one per line.
+/// Release CI runs this on every per-platform build and fails the
+/// release on drift — a cross-platform hash mismatch is safe at
+/// runtime (guests tunnel) but silently disables local asset serving
+/// for cross-platform share pairs (live-share plan Phase 2,
+/// bd-ee2fqm95). `none` means the embed is a placeholder carrying no
+/// manifest.
+pub fn print_asset_manifest_hashes() -> Result<()> {
+    fn fmt(hash: &Option<String>) -> &str {
+        hash.as_deref().unwrap_or("none")
+    }
+    let manifests = quarto_preview::embedded_manifests();
+    println!("viewer: {}", fmt(&manifests.viewer));
+    println!("editor: {}", fmt(&manifests.editor));
+    Ok(())
 }
 
 async fn run(args: PreviewArgs) -> Result<()> {
@@ -133,50 +191,39 @@ async fn run(args: PreviewArgs) -> Result<()> {
 
     // Phase D.2: encode the initial page (if any) as `?page=<rel>`
     // so the SPA's `pickInitialPage` helper can seed `activeFile`.
-    let url = build_boot_url(&host, port, initial_page.as_deref());
-    info!(%url, "starting q2 preview server");
-    println!();
-    println!("  q2 preview");
-    println!("  → {url}");
-    println!();
-
-    // Phase D.1 (bd-kw93.8): actually open a browser tab. Failure to
-    // open is logged + non-fatal (the URL is already printed for
-    // copy-paste). Suppressed by --no-browser.
     //
-    // bd-a6dvrdg1: open only once the server is actually accepting
-    // connections. The server doesn't start until `quarto_preview::run`
-    // below (which then blocks until shutdown), so the open has to run
-    // on a spawned task that waits for readiness while the main task
-    // goes on to start the server. Opening eagerly here — as we used to
-    // — raced the server's startup: on larger projects the browser
-    // connected before `axum::serve` was live and showed "Unable to
-    // connect" until a manual reload. The probe (`wait_until_accepting`)
-    // closes that race by gating on the real accept condition. The port
-    // is the one we pre-probed; nothing is listening on it until the
-    // server binds, so the probe naturally retries across the gap.
-    if !args.no_browser {
-        let url_for_open = url.clone();
-        let host_for_open = host.clone();
-        tokio::spawn(async move {
-            const READY_TIMEOUT: Duration = Duration::from_secs(10);
-            if wait_until_accepting(&host_for_open, port, READY_TIMEOUT).await {
-                info!(host = %host_for_open, port, "preview server accepting connections; opening browser");
-            } else {
-                // We still consider a >10s startup a bug; opening anyway
-                // (rather than never) preserves the old behavior as a
-                // floor, and the warning gives the slow start visibility
-                // instead of leaving it silent.
-                tracing::warn!(
-                    host = %host_for_open,
-                    port,
-                    timeout_secs = READY_TIMEOUT.as_secs(),
-                    "preview server has not accepted a connection within the timeout; \
-                     opening the browser anyway (it may need a manual reload)"
-                );
+    // Phase 4 (bd-jt1etjbn): only viewer mode can print its boot URL
+    // here. The editor boot URL is the hub-client share route, which
+    // needs the index document id — that only exists once the hub is
+    // up, so editor mode defers the print + browser-open into the
+    // server's `on_ready` callback below (which fires before the
+    // listener binds, the same print-before-accept contract as here).
+    match args.ui {
+        quarto_preview::PreviewUi::Viewer => {
+            let url = build_boot_url(&host, port, initial_page.as_deref());
+            info!(%url, "starting q2 preview server");
+            println!();
+            println!("  q2 preview");
+            println!("  → {url}");
+            println!();
+
+            // Phase D.1 (bd-kw93.8): actually open a browser tab, gated on
+            // the server accepting connections (bd-a6dvrdg1 — see
+            // `spawn_browser_open_when_ready`). Failure to open is logged +
+            // non-fatal (the URL is already printed for copy-paste).
+            // Suppressed by --no-browser.
+            if !args.no_browser {
+                spawn_browser_open_when_ready(host.clone(), port, url, args.browser.clone());
             }
-            open_browser_or_log(&url_for_open, false);
-        });
+        }
+        quarto_preview::PreviewUi::Editor => {
+            info!("starting q2 preview server (editor UI)");
+            println!();
+            println!("  q2 preview — editor UI");
+            if let Some(note) = quarto_preview::editor_ephemeral_note(args.allow_edit) {
+                println!("  {note}");
+            }
+        }
     }
 
     // Phase C.6: read `preview.engine` from `_quarto.yml` so the
@@ -220,8 +267,418 @@ async fn run(args: PreviewArgs) -> Result<()> {
         // (per-session; tracked as a follow-up for per-project reuse).
         cache_dir: None,
         allow_edit: args.allow_edit,
+        share: args.share,
+        ui: args.ui,
     };
-    quarto_preview::run(config).await
+
+    // Host-side Ctrl-C acknowledgment, symmetric with the guest's line
+    // in run_join: printed by the hub's own signal task via
+    // `HubConfig::shutdown_message` (set in quarto-preview's
+    // build_hub_config from `args.share`). Printing there — on the
+    // shutdown critical path — keeps a fast teardown from exiting the
+    // process before the line appears (bd-wj9smyxg).
+    match args.ui {
+        quarto_preview::PreviewUi::Viewer => quarto_preview::run(config).await,
+        quarto_preview::PreviewUi::Editor => {
+            // Phase 4 (bd-jt1etjbn): the share-route boot URL needs the
+            // index doc id, which exists only server-side. `on_ready`
+            // channels it back: build the URL there, print it, and gate
+            // the browser-open on the same accept probe viewer mode uses.
+            let host_for_ready = config.host.clone();
+            let project_name = config
+                .project_root
+                .as_deref()
+                .and_then(|r| r.file_name())
+                .map_or_else(
+                    || "q2 preview".to_string(),
+                    |n| n.to_string_lossy().into_owned(),
+                );
+            let no_browser = args.no_browser;
+            let browser = args.browser.clone();
+            quarto_preview::run_with_on_ready(config, move |ctx| {
+                let paths: Vec<String> = ctx.index().get_all_files().into_keys().collect();
+                let url = match pick_editor_file(initial_page.as_deref(), &paths) {
+                    Some(file) => {
+                        // bd-7htq16rx: hand `--join` guests the same
+                        // boot params via /api/preview/config so they
+                        // boot the share route (skipping the project-set
+                        // setup screen) instead of the editor's root
+                        // route, which can never join the document.
+                        quarto_preview::set_editor_boot(quarto_preview::EditorBootInfo {
+                            index_doc_id: ctx.index().document_id(),
+                            file: file.clone(),
+                            name: project_name.clone(),
+                        });
+                        build_editor_boot_url(
+                            &host_for_ready,
+                            port,
+                            &ctx.index().document_id(),
+                            &file,
+                            &project_name,
+                        )
+                    }
+                    None => {
+                        // No `.qmd` to seed the share route with (e.g.
+                        // --no-project): boot to the editor's project
+                        // selector instead of a broken share link.
+                        tracing::warn!(
+                            "no .qmd file found to open in the editor; \
+                             booting to the project selector"
+                        );
+                        format!("http://{host_for_ready}:{port}/")
+                    }
+                };
+                info!(%url, "editor UI ready");
+                println!("  → {url}");
+                println!();
+                if !no_browser {
+                    spawn_browser_open_when_ready(
+                        host_for_ready.clone(),
+                        port,
+                        url,
+                        browser.clone(),
+                    );
+                }
+            })
+            .await
+        }
+    }
+}
+
+/// Guest path (live-share plan Phase 3, bd-6y0p1bne): parse the join
+/// string, dial the host over iroh, serve the session on a local
+/// loopback proxy, and report connection status until Ctrl-C. Bypasses
+/// project resolution, the TempDir, and the hub entirely — the *host's*
+/// preview server serves everything through the tunnel.
+async fn run_join(args: JoinArgs) -> Result<()> {
+    let ticket: quarto_p2p::PreviewShareTicket = args.ticket.trim().parse().map_err(|e| {
+        anyhow::anyhow!(
+            "invalid join string ({e})\n\
+             Expected the `q2preview…` string printed by `q2 preview --share` on the \
+             host machine. Copy the whole string — it is long and may wrap across \
+             several terminal lines."
+        )
+    })?;
+
+    let host = args.host.unwrap_or_else(|| "127.0.0.1".to_string());
+    // An explicit --port gets the friendly availability check. Port 0 /
+    // absent means the OS assigns one; unlike host mode there is no
+    // pre-probe — `TunnelClient::bind` reports the port it bound.
+    if let Some(p) = args.port
+        && p != 0
+    {
+        validate_explicit_port(&host, p)?;
+    }
+    let requested_port = args.port.unwrap_or(0);
+    let local = tokio::net::lookup_host((host.as_str(), requested_port))
+        .await
+        .ok()
+        .and_then(|mut addrs| addrs.next())
+        .ok_or_else(|| anyhow::anyhow!("could not resolve --host {host}"))?;
+
+    println!();
+    println!("  q2 preview — joining a shared session (end-to-end encrypted via iroh)");
+
+    // The initial dial happens inside `connect`: an unreachable host is a
+    // clear error right here, not a silent background retry.
+    let conn = quarto_p2p::TunnelClient::connect(quarto_p2p::TunnelClientConfig::default(), ticket)
+        .await
+        .map_err(join_bind_error)?;
+
+    // Preflight over raw bi-streams *before* binding the local port
+    // (live-share payload plan Phase 3, design decision 6 — no browser
+    // connection can arrive before the serving mode is fixed).
+    // Readiness = the first successful GET /health *through the
+    // tunnel*: a bare TCP accept (host mode's readiness signal) would
+    // lie here — the local proxy accepts even when the host is
+    // unreachable — so only an end-to-end HTTP roundtrip proves the
+    // session is usable. The config fetch then carries both the
+    // editor-mode boot params (bd-7htq16rx) and the asset manifest
+    // hashes (bd-ee2fqm95).
+    const READY_TIMEOUT: Duration = Duration::from_secs(15);
+    let config = if wait_until_healthy(&conn, READY_TIMEOUT).await {
+        info!("shared session healthy through the tunnel");
+        fetch_preview_config(&conn).await
+    } else {
+        // We still consider a >15s startup a bug; printing the root
+        // URL anyway (rather than never) preserves the old behavior as
+        // a floor, and the warning gives the slow start visibility
+        // instead of leaving it silent. The mode decision below maps a
+        // missing config to full tunneling.
+        tracing::warn!(
+            timeout_secs = READY_TIMEOUT.as_secs(),
+            "shared session did not answer /health within the timeout; \
+             the URL below may need a manual reload"
+        );
+        None
+    };
+    // Editor-UI hosts carry their share-route boot params in
+    // /api/preview/config: boot the guest to the same share URL the
+    // host printed, ephemeral flag included, so hub-client skips
+    // project-set onboarding and joins the document. Viewer-mode and
+    // older hosts answer without `editorBoot` and keep the root URL.
+    let boot = config.as_ref().and_then(|c| c.valid_editor_boot());
+    // Live-share plan Phases 2–3 (bd-ee2fqm95, bd-tl2j8js8): decide
+    // whether this guest's embedded SPA bundle is byte-identical to
+    // the host's (manifest hash match) and assets can be served
+    // locally. The session UI is the editor iff the host advertised
+    // editorBoot (design decision 5).
+    let ui = if boot.is_some() {
+        quarto_preview::PreviewUi::Editor
+    } else {
+        quarto_preview::PreviewUi::Viewer
+    };
+    let mode = quarto_preview::decide_asset_mode(
+        config.as_ref().and_then(|c| c.assets.as_ref()),
+        ui,
+        &quarto_preview::embedded_manifests(),
+        quarto_preview::spa_dir_override_active(),
+    );
+    info!("{}", mode.log_line());
+
+    // Bind the local end only now that the mode is fixed: the L7 join
+    // frontend on a hash match (assets served from this binary, only
+    // the dynamic traffic tunneled), the plain splice otherwise.
+    // `Local` implies this binary has a manifest (the decision compared
+    // its hash), but a missing one falls back to the splice regardless.
+    let local_serving = match mode {
+        quarto_preview::AssetMode::Local => quarto_preview::embedded_manifest(ui)
+            .map(|manifest| quarto_preview::join_frontend::LocalServing::Embedded { ui, manifest }),
+        quarto_preview::AssetMode::Tunnel(_) => None,
+    };
+    let (bound, session) = match local_serving {
+        Some(serving) => {
+            let (addr, handle) = quarto_preview::join_frontend::bind(conn, local, serving)
+                .await
+                .map_err(join_bind_error)?;
+            println!("  ● serving UI assets locally (host manifest hash match)");
+            (addr, JoinSession::Frontend(handle))
+        }
+        None => {
+            let (addr, handle) = conn.bind(local).await.map_err(join_bind_error)?;
+            (addr, JoinSession::Tunnel(handle))
+        }
+    };
+
+    let url = match boot {
+        Some(boot) => build_guest_editor_url(&bound, boot),
+        None => format!("http://{bound}/"),
+    };
+
+    println!("  → {url}");
+    println!();
+    println!("  Press Ctrl-C to leave the session.");
+    println!();
+
+    if !args.no_browser {
+        open_browser_or_log(&url, args.browser.as_deref());
+    }
+
+    // Report status transitions ("connected via relay", "reconnecting…")
+    // until Ctrl-C — or fail fast when the host rejects the token.
+    let mut status = session.status();
+    let status_reporter = async move {
+        loop {
+            match *status.borrow_and_update() {
+                quarto_p2p::TunnelStatus::Connected(kind) => {
+                    println!("  ● connected via {kind}");
+                }
+                quarto_p2p::TunnelStatus::Reconnecting => {
+                    println!("  ○ connection lost — reconnecting…");
+                }
+                quarto_p2p::TunnelStatus::Rejected => {
+                    return Err(anyhow::anyhow!(
+                        "the host rejected this join string — the share session has \
+                         ended or was restarted with a new string.\n\
+                         Ask the host for a fresh `q2 preview --share` join string."
+                    ));
+                }
+            }
+            if status.changed().await.is_err() {
+                // Sender gone = tunnel client shut down; stop reporting.
+                return Ok(());
+            }
+        }
+    };
+
+    let outcome = tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            println!();
+            println!("  Received Ctrl-C, leaving the shared session…");
+            Ok(())
+        }
+        reported = status_reporter => reported,
+    };
+
+    if let Err(e) = session.shutdown().await {
+        tracing::warn!(error = %e, "tunnel client shutdown failed");
+    }
+    outcome
+}
+
+/// The join session's local serving end (live-share payload plan Phase
+/// 3): either the L7 join frontend (manifest hash match — assets served
+/// from this binary, dynamic traffic tunneled) or the plain splice
+/// (full tunnel). Same status/shutdown surface.
+enum JoinSession {
+    Frontend(quarto_preview::join_frontend::JoinFrontendHandle),
+    Tunnel(quarto_p2p::TunnelClientHandle),
+}
+
+impl JoinSession {
+    fn status(&self) -> tokio::sync::watch::Receiver<quarto_p2p::TunnelStatus> {
+        match self {
+            JoinSession::Frontend(handle) => handle.status(),
+            JoinSession::Tunnel(handle) => handle.status(),
+        }
+    }
+
+    async fn shutdown(self) -> Result<(), quarto_p2p::TunnelError> {
+        match self {
+            JoinSession::Frontend(handle) => handle.shutdown().await,
+            JoinSession::Tunnel(handle) => handle.shutdown().await,
+        }
+    }
+}
+
+/// Map a tunnel bind failure to actionable CLI guidance.
+fn join_bind_error(e: quarto_p2p::TunnelError) -> anyhow::Error {
+    use quarto_p2p::TunnelError;
+    match e {
+        TunnelError::Connect(src) => anyhow::anyhow!(
+            "could not reach the share host ({src})\n\
+             Check that `q2 preview --share` is still running on the host machine \
+             and that both machines are online, then retry with the same join string."
+        ),
+        TunnelError::Proxy(src) => anyhow::anyhow!(
+            "could not bind the local proxy port: {src}\n\
+             Pass --port 0 to let the OS pick a free port."
+        ),
+        other => anyhow::Error::new(other).context("starting the tunnel client"),
+    }
+}
+
+/// Poll `GET /health` through the tunnel until it answers 200 — i.e.
+/// the host's preview hub answered end to end — or `total_timeout`
+/// elapses. Join mode's readiness gate; same backoff shape and
+/// open-anyway-on-timeout contract as [`wait_until_accepting`].
+async fn wait_until_healthy(conn: &quarto_p2p::TunnelConnection, total_timeout: Duration) -> bool {
+    const INITIAL_BACKOFF: Duration = Duration::from_millis(50);
+    const MAX_BACKOFF: Duration = Duration::from_secs(1);
+    // A tunnel roundtrip can legitimately take a relay RTT, but one
+    // wedged attempt must not eat the whole budget.
+    const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
+
+    let deadline = tokio::time::Instant::now() + total_timeout;
+    let mut backoff = INITIAL_BACKOFF;
+
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return false;
+        }
+        if health_get_ok(conn, remaining.min(ATTEMPT_TIMEOUT)).await {
+            return true;
+        }
+
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return false;
+        }
+        tokio::time::sleep(backoff.min(remaining)).await;
+        backoff = (backoff * 8 / 5).min(MAX_BACKOFF);
+    }
+}
+
+/// One raw HTTP/1.1 `GET /health` through the tunnel; `true` iff the
+/// status line comes back 200.
+async fn health_get_ok(conn: &quarto_p2p::TunnelConnection, budget: Duration) -> bool {
+    tunnel_get(conn, "/health", budget)
+        .await
+        .is_some_and(|response| response.starts_with(b"HTTP/1.1 200"))
+}
+
+/// One raw HTTP/1.1 GET through the tunnel (a fresh token-prefixed
+/// stream); the full response bytes. Hand-rolled so the CLI doesn't
+/// grow an HTTP client dependency for these one-line probes. Any
+/// failure — open, write, read, timeout — is `None`.
+///
+/// `open_stream_with_budget` runs to completion (never cancelled
+/// mid-open: a stream reset before its token lands is treated by the
+/// host as an auth failure and closes the whole connection); the
+/// timeout races only the HTTP exchange, where a cancel is an ordinary
+/// stream reset.
+async fn tunnel_get(
+    conn: &quarto_p2p::TunnelConnection,
+    path: &str,
+    budget: Duration,
+) -> Option<Vec<u8>> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let (send, recv) = conn.open_stream_with_budget(budget).await?;
+    let mut stream = tokio::io::join(recv, send);
+    let exchange = async move {
+        stream
+            .write_all(
+                format!(
+                    "GET {path} HTTP/1.1\r\nHost: q2-preview-join\r\nConnection: close\r\n\r\n"
+                )
+                .as_bytes(),
+            )
+            .await
+            .ok()?;
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).await.ok()?;
+        Some(response)
+    };
+    tokio::time::timeout(budget, exchange).await.ok()?
+}
+
+/// The `/api/preview/config` wire shape as the join path consumes it:
+/// the editor-mode boot params (bd-7htq16rx) and the Phase 2 `assets`
+/// manifest-hash block (bd-ee2fqm95). Unknown fields are ignored, so
+/// older/newer hosts inter-operate.
+#[derive(serde::Deserialize)]
+struct PreviewConfigWire {
+    #[serde(rename = "editorBoot")]
+    editor_boot: Option<quarto_preview::EditorBootInfo>,
+    assets: Option<quarto_preview::AssetsBlock>,
+}
+
+impl PreviewConfigWire {
+    /// The editor-mode boot params, when present and usable: a boot
+    /// URL built from an empty doc id or file could never join the
+    /// document.
+    fn valid_editor_boot(&self) -> Option<&quarto_preview::EditorBootInfo> {
+        let boot = self.editor_boot.as_ref()?;
+        (!boot.index_doc_id.is_empty() && !boot.file.is_empty()).then_some(boot)
+    }
+}
+
+/// One raw HTTP/1.1 `GET /api/preview/config` through the tunnel; the
+/// parsed body. Hand-rolled for the same reason as [`health_get_ok`].
+/// Any failure — open, non-200, malformed body — is `None`, and the
+/// caller falls back to the root URL with all assets tunneled.
+async fn fetch_preview_config(conn: &quarto_p2p::TunnelConnection) -> Option<PreviewConfigWire> {
+    let response = tunnel_get(conn, "/api/preview/config", Duration::from_secs(15)).await?;
+    if !response.starts_with(b"HTTP/1.1 200") {
+        return None;
+    }
+    let body_start = response.windows(4).position(|w| w == b"\r\n\r\n")? + 4;
+    parse_preview_config(&response[body_start..])
+}
+
+/// Parse a `/api/preview/config` body. `None` for malformed JSON.
+fn parse_preview_config(body: &[u8]) -> Option<PreviewConfigWire> {
+    serde_json::from_slice::<PreviewConfigWire>(body).ok()
+}
+
+/// The `editorBoot` field of a `/api/preview/config` body. `None` for
+/// viewer-mode and older hosts (no field), for malformed JSON, and for
+/// a field whose doc id or file is empty — a boot URL built from those
+/// could never join the document.
+#[cfg(test)]
+fn parse_editor_boot(body: &[u8]) -> Option<quarto_preview::EditorBootInfo> {
+    parse_preview_config(body)?.valid_editor_boot().cloned()
 }
 
 /// Bind `host:0`, read the OS-assigned port, drop the listener.
@@ -255,19 +712,64 @@ fn validate_explicit_port(host: &str, port: u16) -> Result<()> {
     }
 }
 
-/// Phase D.1: open the boot URL in the user's default browser unless
-/// `--no-browser` was passed. Failure is logged + non-fatal — the
-/// URL was already printed for copy-paste before this fires.
-fn open_browser_or_log(url: &str, suppress: bool) {
-    if suppress {
-        return;
+/// Phase D.1: open the boot URL in the user's browser. `browser` is
+/// the `--browser <name>` value: `Some` opens that specific application
+/// (via `open::with`, i.e. `open -a` on macOS), `None` the system
+/// default. Failure is logged + non-fatal — the URL was already
+/// printed for copy-paste before this fires. Callers gate on
+/// `--no-browser` before calling.
+fn open_browser_or_log(url: &str, browser: Option<&str>) {
+    let result = match browser {
+        Some(app) => open::with(url, app),
+        None => open::that(url),
+    };
+    if let Err(e) = result {
+        if let Some(app) = browser {
+            tracing::warn!(
+                error = %e,
+                browser = app,
+                "could not open the preview in the requested browser; the URL is printed above"
+            );
+        } else {
+            tracing::warn!(
+                error = %e,
+                "could not auto-open browser; the URL is printed above"
+            );
+        }
     }
-    if let Err(e) = open::that(url) {
-        tracing::warn!(
-            error = %e,
-            "could not auto-open browser; the URL is printed above"
-        );
-    }
+}
+
+/// bd-a6dvrdg1: spawn the "open the browser once the server accepts
+/// connections" task both UI modes share. The server doesn't start
+/// until `quarto_preview::run` below (which then blocks until
+/// shutdown), so the open has to run on a spawned task that waits for
+/// readiness while the main task goes on to start the server. Opening
+/// eagerly — as we used to — raced the server's startup: on larger
+/// projects the browser connected before `axum::serve` was live and
+/// showed "Unable to connect" until a manual reload. The probe
+/// (`wait_until_accepting`) closes that race by gating on the real
+/// accept condition. The port is the pre-probed one; nothing is
+/// listening on it until the server binds, so the probe naturally
+/// retries across the gap. A >10 s startup is still considered a bug,
+/// but opening anyway (rather than never) preserves the old behavior
+/// as a floor, and the warning gives the slow start visibility instead
+/// of leaving it silent.
+fn spawn_browser_open_when_ready(host: String, port: u16, url: String, browser: Option<String>) {
+    tokio::spawn(async move {
+        const READY_TIMEOUT: Duration = Duration::from_secs(10);
+        if wait_until_accepting(&host, port, READY_TIMEOUT).await {
+            info!(host = %host, port, "preview server accepting connections; opening browser");
+        } else {
+            tracing::warn!(
+                host = %host,
+                port,
+                timeout_secs = READY_TIMEOUT.as_secs(),
+                "preview server has not accepted a connection within the timeout; \
+                 opening the browser anyway (it may need a manual reload)"
+            );
+        }
+        open_browser_or_log(&url, browser.as_deref());
+    });
 }
 
 /// bd-a6dvrdg1: poll `host:port` with `TcpStream::connect` until the
@@ -366,12 +868,13 @@ pub(crate) fn resolve_project_and_initial_page(canonical: &Path) -> Result<Resol
         .with_context(|| format!("reading metadata of {}", canonical.display()))?;
 
     if metadata.is_dir() {
-        let index = canonical.join("index.qmd");
-        let initial = if index.is_file() {
-            Some("index.qmd".to_string())
-        } else {
-            None
-        };
+        // Prefer `index.qmd`; fall back to `index.md` (bd-6d2wj4zp Phase 5 —
+        // a render-list `.md` can be the landing page). No index file →
+        // None, and the SPA falls through to its own selection.
+        let initial = ["index.qmd", "index.md"]
+            .into_iter()
+            .find(|name| canonical.join(name).is_file())
+            .map(str::to_string);
         return Ok(ResolvedProject {
             root: canonical.to_path_buf(),
             initial_page: initial,
@@ -458,9 +961,21 @@ pub(crate) fn build_boot_url(host: &str, port: u16, initial_page: Option<&str>) 
 /// with literal slashes); percent-encodes everything else. Avoids
 /// pulling in a full URL crate just for one helper.
 fn percent_encode_path(s: &str) -> String {
+    percent_encode(s, true)
+}
+
+/// Strict variant of [`percent_encode_path`] for query-param *values*:
+/// also encodes `/`, matching what `URLSearchParams.toString()` emits
+/// on the hub-client side (its parser is what decodes these).
+fn percent_encode_component(s: &str) -> String {
+    percent_encode(s, false)
+}
+
+fn percent_encode(s: &str, keep_slash: bool) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
-        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~' | b'/') {
+        let unreserved = b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~');
+        if unreserved || (keep_slash && b == b'/') {
             out.push(b as char);
         } else {
             use std::fmt::Write;
@@ -468,6 +983,90 @@ fn percent_encode_path(s: &str) -> String {
         }
     }
     out
+}
+
+/// Phase 4 (bd-jt1etjbn): build the `--ui editor` boot URL — the
+/// hub-client share route against this host's own origin. See
+/// [`editor_share_route`] for the route shape and param contract.
+pub(crate) fn build_editor_boot_url(
+    host: &str,
+    port: u16,
+    index_doc_id: &str,
+    file: &str,
+    project_name: &str,
+) -> String {
+    format!(
+        "http://{host}:{port}{}",
+        editor_share_route(index_doc_id, file, project_name)
+    )
+}
+
+/// The hub-client share route both editor boot-URL builders emit (host
+/// above, guest below). Single source for the route shape: the params
+/// ride the *hash fragment* (the SPA router parses `location.hash`, not
+/// the URL query; `hub-client/src/utils/routing.ts`), the client's
+/// validation requires `server` / `file` / `name`, and `server=%2Fws`
+/// is the relative sync endpoint hub-client resolves against the page
+/// origin — the preview server for the host, the local tunnel proxy
+/// for a `--join` guest. The doc id travels bare: the client re-adds
+/// the `automerge:` prefix, and `buildShareableUrl` on the TS side
+/// strips it symmetrically.
+///
+/// `ephemeral=true` (bd-zf4ryvuq) marks the serving hub as a throwaway
+/// per-session preview server: the client captures the flag before the
+/// share handler clears the URL, silently establishes a project-set
+/// root against `/ws`, and skips the setup/migration gate so the user
+/// lands straight in the preview. Only preview boot URLs carry it —
+/// `buildShareableUrl` never emits it.
+fn editor_share_route(index_doc_id: &str, file: &str, project_name: &str) -> String {
+    let doc_id = index_doc_id
+        .strip_prefix("automerge:")
+        .unwrap_or(index_doc_id);
+    format!(
+        "/#/share/{}?server=%2Fws&file={}&name={}&ephemeral=true",
+        percent_encode_component(doc_id),
+        percent_encode_component(file),
+        percent_encode_component(project_name),
+    )
+}
+
+/// bd-7htq16rx: build the `--join` guest's boot URL — the same share
+/// route the host prints, but against the guest's local proxy origin.
+/// The params arrive from the host's `/api/preview/config` through the
+/// tunnel ([`fetch_editor_boot`]); `server=%2Fws` resolves against the
+/// page origin, i.e. the proxy, so the guest's hub-client syncs with
+/// the host through the tunnel.
+fn build_guest_editor_url(
+    addr: &std::net::SocketAddr,
+    boot: &quarto_preview::EditorBootInfo,
+) -> String {
+    format!(
+        "http://{addr}{}",
+        editor_share_route(&boot.index_doc_id, &boot.file, &boot.name)
+    )
+}
+
+/// Choose the share route's `file` param: the CLI-resolved initial
+/// page when there is one, else a root `index.qmd` when the project
+/// has one (the front door of a website project), else the
+/// lexicographically first `.qmd` known to the index (its files map is
+/// unordered; taking the minimum keeps the boot deterministic). `None`
+/// when the project has no `.qmd` at all.
+pub(crate) fn pick_editor_file(
+    initial_page: Option<&str>,
+    index_paths: &[String],
+) -> Option<String> {
+    if let Some(page) = initial_page {
+        return Some(page.to_string());
+    }
+    if index_paths.iter().any(|p| p == "index.qmd") {
+        return Some("index.qmd".to_string());
+    }
+    index_paths
+        .iter()
+        .filter(|p| p.ends_with(".qmd"))
+        .min()
+        .cloned()
 }
 
 #[cfg(test)]
@@ -502,14 +1101,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn open_browser_or_log_is_noop_when_suppressed() {
-        // The `suppress` branch must return without touching the
-        // OS — we never want a test run to fork a browser. Asserting
-        // "doesn't panic, returns" is the contract.
-        open_browser_or_log("https://invalid.example.invalid/", true);
-    }
-
     // ──────────────────────────────────────────────────────────────
     // Phase D.2 (bd-kw93.13): resolve_project_and_initial_page +
     //                        build_boot_url + percent_encode_path
@@ -535,6 +1126,31 @@ mod tests {
         assert_eq!(resolved.root, canonical);
         assert_eq!(resolved.initial_page.as_deref(), Some("index.qmd"));
         assert!(resolved.single_file.is_none());
+    }
+
+    /// bd-6d2wj4zp Phase 5: a project whose landing page is a
+    /// render-list `.md` (e.g. the Connect docs port) should boot the
+    /// preview on `index.md` when there is no `index.qmd`.
+    #[test]
+    fn resolve_dir_with_only_index_md_returns_index_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("index.md"), "# index").unwrap();
+        std::fs::write(tmp.path().join("about.qmd"), "# about").unwrap();
+        let canonical = tmp.path().canonicalize().unwrap();
+        let resolved = resolve_project_and_initial_page(&canonical).unwrap();
+        assert_eq!(resolved.initial_page.as_deref(), Some("index.md"));
+    }
+
+    /// `index.qmd` wins over `index.md` when both exist — `.qmd` is
+    /// the canonical source; also keeps the pre-`.md` behavior stable.
+    #[test]
+    fn resolve_dir_prefers_index_qmd_over_index_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("index.qmd"), "# q").unwrap();
+        std::fs::write(tmp.path().join("index.md"), "# m").unwrap();
+        let canonical = tmp.path().canonicalize().unwrap();
+        let resolved = resolve_project_and_initial_page(&canonical).unwrap();
+        assert_eq!(resolved.initial_page.as_deref(), Some("index.qmd"));
     }
 
     #[test]
@@ -667,6 +1283,212 @@ mod tests {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // Phase 4 (bd-jt1etjbn): editor boot URL — the hub-client share
+    // route. Params ride the *hash fragment* (the SPA router parses
+    // location.hash, hub-client/src/utils/routing.ts), the doc id is
+    // bare (the client re-adds the `automerge:` prefix), and `server`
+    // is the relative `/ws` the client resolves against the page
+    // origin — which the preview server itself serves.
+    // ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn build_editor_boot_url_emits_share_route_in_hash() {
+        assert_eq!(
+            build_editor_boot_url(
+                "127.0.0.1",
+                8080,
+                "4XyZabc123",
+                "posts/intro.qmd",
+                "My Project"
+            ),
+            "http://127.0.0.1:8080/#/share/4XyZabc123?server=%2Fws&file=posts%2Fintro.qmd&name=My%20Project&ephemeral=true",
+        );
+    }
+
+    #[test]
+    fn build_editor_boot_url_marks_hub_ephemeral() {
+        // The preview hub is a throwaway per-session server; the client
+        // reads `ephemeral=true` to skip project-set onboarding and go
+        // straight to the preview (bd-zf4ryvuq).
+        let url = build_editor_boot_url("127.0.0.1", 8080, "4XyZ", "a.qmd", "p");
+        assert!(
+            url.ends_with("&ephemeral=true"),
+            "preview boot URLs must carry the ephemeral flag; got {url}"
+        );
+    }
+
+    #[test]
+    fn build_editor_boot_url_strips_automerge_prefix() {
+        // `ctx.index().document_id()` is already bare, but the share
+        // route must never carry the prefix even if a caller passes it
+        // (mirrors routing.ts's buildShareableUrl, which strips it).
+        let url = build_editor_boot_url("127.0.0.1", 8080, "automerge:4XyZ", "a.qmd", "p");
+        assert!(
+            url.contains("#/share/4XyZ?"),
+            "the route wants the bare doc id; got {url}"
+        );
+        assert!(
+            !url.contains("automerge"),
+            "the automerge: prefix must not leak into the URL; got {url}"
+        );
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // bd-7htq16rx: `--join` guests of an editor-UI host boot the same
+    // share route (ephemeral flag included) so hub-client skips
+    // project-set onboarding and joins the document. The boot params
+    // arrive from the host's `/api/preview/config` through the tunnel.
+    // ──────────────────────────────────────────────────────────────
+
+    fn guest_addr() -> std::net::SocketAddr {
+        "127.0.0.1:8080".parse().unwrap()
+    }
+
+    #[test]
+    fn guest_editor_url_is_share_route_with_ephemeral_flag() {
+        let boot = quarto_preview::EditorBootInfo {
+            index_doc_id: "4XyZabc123".to_string(),
+            file: "posts/intro.qmd".to_string(),
+            name: "My Project".to_string(),
+        };
+        assert_eq!(
+            build_guest_editor_url(&guest_addr(), &boot),
+            "http://127.0.0.1:8080/#/share/4XyZabc123?server=%2Fws&file=posts%2Fintro.qmd&name=My%20Project&ephemeral=true",
+        );
+    }
+
+    #[test]
+    fn guest_editor_url_strips_automerge_prefix() {
+        let boot = quarto_preview::EditorBootInfo {
+            index_doc_id: "automerge:4XyZ".to_string(),
+            file: "a.qmd".to_string(),
+            name: "p".to_string(),
+        };
+        let url = build_guest_editor_url(&guest_addr(), &boot);
+        assert!(
+            url.contains("#/share/4XyZ?"),
+            "the route wants the bare doc id; got {url}"
+        );
+        assert!(
+            !url.contains("automerge"),
+            "the automerge: prefix must not leak into the URL; got {url}"
+        );
+    }
+
+    #[test]
+    fn parse_editor_boot_reads_config_body() {
+        let body = br#"{"allowEdit":false,"editorBoot":{"indexDocId":"4XyZ","file":"index.qmd","name":"proj"}}"#;
+        let boot = parse_editor_boot(body).expect("editorBoot parses");
+        assert_eq!(boot.index_doc_id, "4XyZ");
+        assert_eq!(boot.file, "index.qmd");
+        assert_eq!(boot.name, "proj");
+    }
+
+    #[test]
+    fn parse_editor_boot_absent_without_the_field() {
+        // Viewer-mode (and older) hosts answer config without
+        // editorBoot — the guest falls back to the root URL.
+        assert_eq!(parse_editor_boot(br#"{"allowEdit":false}"#), None);
+    }
+
+    #[test]
+    fn parse_editor_boot_rejects_malformed_or_empty() {
+        assert_eq!(parse_editor_boot(b"not json"), None);
+        assert_eq!(parse_editor_boot(b""), None);
+        // A boot URL with an empty doc id or file can never join.
+        assert_eq!(
+            parse_editor_boot(br#"{"editorBoot":{"indexDocId":"","file":"index.qmd","name":"p"}}"#),
+            None
+        );
+        assert_eq!(
+            parse_editor_boot(br#"{"editorBoot":{"indexDocId":"4XyZ","file":"","name":"p"}}"#),
+            None
+        );
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // bd-ee2fqm95 (live-share plan Phase 2): the `assets` manifest
+    // handshake rides the same preflight config fetch as editorBoot.
+    // ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_preview_config_reads_assets_block() {
+        let body = br#"{"allowEdit":false,"assets":{"viewer":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","editor":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}"#;
+        let config = parse_preview_config(body).expect("config parses");
+        let assets = config.assets.expect("assets block present");
+        assert_eq!(
+            assets.viewer.as_deref(),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+        assert_eq!(
+            assets.editor.as_deref(),
+            Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        );
+    }
+
+    #[test]
+    fn parse_preview_config_tolerates_missing_and_partial_assets() {
+        // Older hosts (and placeholder embeds) answer without the
+        // block; hosts with only a real viewer embed advertise just
+        // the viewer hash. Both parse; the mode decision maps the
+        // absences to Tunnel.
+        let config = parse_preview_config(br#"{"allowEdit":false}"#).expect("config parses");
+        assert_eq!(config.assets, None);
+        let config =
+            parse_preview_config(br#"{"assets":{"viewer":"aaaa"}}"#).expect("config parses");
+        let assets = config.assets.expect("assets block present");
+        assert_eq!(assets.viewer.as_deref(), Some("aaaa"));
+        assert_eq!(assets.editor, None);
+    }
+
+    #[test]
+    fn parse_preview_config_rejects_malformed() {
+        assert!(parse_preview_config(b"not json").is_none());
+        assert!(parse_preview_config(b"").is_none());
+    }
+
+    #[test]
+    fn pick_editor_file_prefers_initial_page() {
+        let files = vec!["about.qmd".to_string(), "index.qmd".to_string()];
+        assert_eq!(
+            pick_editor_file(Some("posts/intro.qmd"), &files).as_deref(),
+            Some("posts/intro.qmd"),
+            "an initial page resolved by the CLI wins over the index scan"
+        );
+    }
+
+    #[test]
+    fn pick_editor_file_prefers_root_index_qmd_over_sorted_first() {
+        // A website project's front door wins over the deterministic
+        // sorted-first fallback even when it isn't alphabetically first.
+        let files = vec!["about.qmd".to_string(), "index.qmd".to_string()];
+        assert_eq!(pick_editor_file(None, &files).as_deref(), Some("index.qmd"));
+        // Only a *root* index.qmd gets the preference — a nested one is
+        // just another page.
+        let files = vec!["about.qmd".to_string(), "posts/index.qmd".to_string()];
+        assert_eq!(pick_editor_file(None, &files).as_deref(), Some("about.qmd"));
+    }
+
+    #[test]
+    fn pick_editor_file_falls_back_to_first_qmd_sorted() {
+        // The index files map is unordered (HashMap); the fallback must
+        // sort so the chosen page is deterministic across boots.
+        let files = vec![
+            "zeta.qmd".to_string(),
+            "styles.css".to_string(),
+            "about.qmd".to_string(),
+        ];
+        assert_eq!(pick_editor_file(None, &files).as_deref(), Some("about.qmd"));
+    }
+
+    #[test]
+    fn pick_editor_file_none_without_any_qmd() {
+        let files = vec!["styles.css".to_string()];
+        assert_eq!(pick_editor_file(None, &files), None);
+        assert_eq!(pick_editor_file(None, &[]), None);
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // bd-a6dvrdg1: wait_until_accepting — gate the browser-open on the
     // preview server actually accepting connections (not on the
     // throwaway port probe, which is dropped before the server binds).
@@ -753,5 +1575,113 @@ mod tests {
             "should return well before the timeout once the listener is up; elapsed={elapsed:?}"
         );
         late.abort();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Phase 3 (bd-6y0p1bne): wait_until_healthy — join mode's
+    // browser-open gate is an HTTP /health roundtrip through the
+    // tunnel, not a bare TCP accept (which the proxy always grants,
+    // even when the tunnel's far side is gone). Since the payload
+    // plan's Phase 3 (bd-tl2j8js8) the preflight runs over raw
+    // `open_stream` bi-streams before the local port exists, so these
+    // tests put a hermetic tunnel pair in front of the canned server.
+    // ──────────────────────────────────────────────────────────────
+
+    /// Serve a fixed HTTP/1.1 response to every connection on a fresh
+    /// loopback port; returns the bound address. Task dies with the test.
+    async fn spawn_canned_http(response: &'static str) -> std::net::SocketAddr {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind canned server");
+        let addr = listener.local_addr().expect("local_addr");
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = listener.accept().await else {
+                    break;
+                };
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 1024];
+                    let _ = sock.read(&mut buf).await;
+                    let _ = sock.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+        addr
+    }
+
+    /// A hermetic tunnel pair in front of `target` (no n0
+    /// infrastructure). The host handle is returned so the test keeps
+    /// it alive.
+    async fn hermetic_conn(
+        target: std::net::SocketAddr,
+    ) -> (quarto_p2p::TunnelConnection, quarto_p2p::TunnelHostHandle) {
+        let (ticket, host) = quarto_p2p::TunnelHost::spawn(
+            quarto_p2p::TunnelHostConfig {
+                preset: quarto_p2p::EndpointPreset::HermeticLoopback,
+                ..Default::default()
+            },
+            target,
+        )
+        .await
+        .expect("spawn tunnel host");
+        let conn = quarto_p2p::TunnelClient::connect(
+            quarto_p2p::TunnelClientConfig {
+                preset: quarto_p2p::EndpointPreset::HermeticLoopback,
+            },
+            ticket,
+        )
+        .await
+        .expect("connect");
+        (conn, host)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn wait_until_healthy_true_on_200() {
+        let addr = spawn_canned_http(
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+        )
+        .await;
+        let (conn, host) = hermetic_conn(addr).await;
+        assert!(
+            wait_until_healthy(&conn, std::time::Duration::from_secs(5)).await,
+            "a 200 /health must count as ready"
+        );
+        conn.shutdown().await.expect("connection shutdown");
+        host.shutdown().await.expect("host shutdown");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn wait_until_healthy_false_on_non_200() {
+        // A reachable server that answers 503 (e.g. the tunnel is up
+        // but the host hub is not) must NOT count as ready.
+        let addr = spawn_canned_http(
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        )
+        .await;
+        let (conn, host) = hermetic_conn(addr).await;
+        let timeout = std::time::Duration::from_millis(300);
+        let start = std::time::Instant::now();
+        let ready = wait_until_healthy(&conn, timeout).await;
+        assert!(!ready, "non-200 answers must not count as healthy");
+        assert!(
+            start.elapsed() >= timeout,
+            "must keep polling until the deadline in case health recovers"
+        );
+        conn.shutdown().await.expect("connection shutdown");
+        host.shutdown().await.expect("host shutdown");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn wait_until_healthy_false_when_nothing_listening() {
+        // The tunnel host is up but its target port is closed: the
+        // stream opens, then the host resets it (target unavailable).
+        let port = reserve_free_port();
+        let addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+        let (conn, host) = hermetic_conn(addr).await;
+        let ready = wait_until_healthy(&conn, std::time::Duration::from_millis(200)).await;
+        assert!(!ready, "no listener behind the tunnel → not healthy");
+        conn.shutdown().await.expect("connection shutdown");
+        host.shutdown().await.expect("host shutdown");
     }
 }

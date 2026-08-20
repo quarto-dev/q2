@@ -1,0 +1,50 @@
+---
+title: "`project.render` Pattern Outside the Project Root"
+description: "A `project.render` pattern climbs above the project root, so it matches nothing."
+code: Q-5-14
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-14` — `project.render` Pattern Outside the Project Root
+
+> A `project.render` pattern's `..` segments climb above the
+> project root, so it matches nothing.
+
+## What this means
+
+`project.render` patterns resolve against the project root — the
+directory holding `_quarto.yml`. A pattern may contain `..`
+segments, but the result must stay inside the project. A pattern
+like `../shared/*.qmd` refers to files the project does not
+contain, so it matches nothing and this warning fires.
+
+## Why this happens
+
+Usually a pattern copied from a sibling project, or written when
+`_quarto.yml` lived one directory deeper.
+
+## How to fix
+
+Adjust the pattern so it stays within the project directory. A
+project renders only its own files; to render documents that live
+outside the project tree, either move them into the project or
+give them a project of their own.
+
+Note that a leading `/` is not a filesystem path — it anchors the
+pattern at the project root, which is where patterns resolve
+anyway:
+
+```yaml
+project:
+  render:
+    - "/index.qmd"   # the project's own index.qmd
+```
+
+## Related
+
+- `Q-5-13` — pattern matched no renderable files.
+- `Q-5-15` — pattern is not a valid glob.

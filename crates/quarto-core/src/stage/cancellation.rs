@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// On native targets, this wraps `tokio_util::sync::CancellationToken`.
 /// On WASM, this uses a simple `AtomicBool` since WASM is single-threaded
 /// and doesn't have signal handlers for Ctrl+C.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Cancellation {
     #[cfg(not(target_arch = "wasm32"))]
     inner: tokio_util::sync::CancellationToken,

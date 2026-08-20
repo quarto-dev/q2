@@ -1,0 +1,2 @@
+Engine knitr does not support subcommands
+exit=1

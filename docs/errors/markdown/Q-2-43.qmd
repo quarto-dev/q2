@@ -1,0 +1,79 @@
+---
+title: "Callout title given twice"
+description: "A callout carries both a `title=` attribute and a leading heading; the attribute wins and the heading is dropped."
+code: Q-2-43
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-43` — Callout title given twice
+
+> This callout carries both a `title=` attribute and a leading heading.
+> The `title=` attribute is used and the heading is dropped.
+
+## What this means
+
+A callout can take its title from either of two places:
+
+```markdown
+::: {.callout-note title="From the attribute"}
+Body.
+:::
+
+::: {.callout-note}
+## From a heading
+
+Body.
+:::
+```
+
+Writing both in one callout is ambiguous. Quarto uses the `title=`
+attribute — matching Quarto 1's precedence — and drops the heading.
+
+## Why this happens
+
+- **Adding a title to a callout that already had one.** A `title=`
+  attribute gets added to a callout whose heading was already serving as
+  its title, and the heading is left behind.
+- **Copying a callout** and editing only one of the two titles.
+- **A heading that was meant to be body content.** If the first block of
+  a callout is a heading, it is treated as the title, not as a section
+  inside the callout.
+
+## How to fix
+
+Delete whichever title you did not intend. To keep the attribute:
+
+```markdown
+::: {.callout-note title="Off-Host Execution"}
+Body.
+:::
+```
+
+To keep the heading, remove the attribute:
+
+```markdown
+::: {.callout-note}
+## Off-Host Execution
+
+Body.
+:::
+```
+
+If the heading really was meant as body content, move it below another
+block so it is no longer the callout's first child, or demote it to
+emphasized text.
+
+## Note for Quarto 1 users
+
+Quarto 1 accepts this silently: it also prefers the `title=` attribute,
+but leaves the heading in the callout body, where it renders directly
+beneath the title and reads as a duplicate. Quarto 2 reports the
+ambiguity instead, because carrying both is nearly always a mistake.
+
+## Related errors
+
+- [`Q-2-44`](Q-2-44.qmd) — a callout `title=` that is not inline content.

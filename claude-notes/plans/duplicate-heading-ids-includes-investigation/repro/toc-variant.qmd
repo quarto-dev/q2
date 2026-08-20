@@ -1,0 +1,17 @@
+---
+title: Repeated heading text
+toc: true
+toc-depth: 4
+---
+
+## Provider A
+
+{{< include _shared.qmd >}}
+
+## Provider B
+
+{{< include _shared.qmd >}}
+
+## Provider C
+
+{{< include _shared.qmd >}}

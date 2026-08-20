@@ -126,6 +126,7 @@ impl Rule for Q25Converter {
                 location: v.error_location,
                 error_code: Some("Q-2-5".to_string()),
                 error_codes: None,
+                ..Default::default()
             })
             .collect();
 

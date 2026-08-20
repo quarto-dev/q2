@@ -1,0 +1,72 @@
+---
+title: "Project type not yet implemented"
+description: "`project.type: book` or `manuscript` is accepted for forward compatibility but renders with default-project behavior."
+code: Q-5-18
+subsystem: project
+status: stub
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-18` — Project type not yet implemented
+
+> `project.type: book` or `manuscript` is accepted for forward
+> compatibility but renders with default-project behavior.
+
+## What this means
+
+Quarto 1 supports `book` and `manuscript` project types. Quarto 2 does
+not implement them yet.
+
+The type name is still accepted, so a Quarto 1 project does not fail
+outright on it. But nothing implements the behavior: your documents
+render individually, with no book structure, no chapter navigation, no
+combined single-file output, and no manuscript layout.
+
+The render succeeds. The output is a set of standalone HTML documents
+rather than a book.
+
+## Why this happens
+
+- **A Quarto 1 book or manuscript project** rendered with Quarto 2.
+- **A project started from a Quarto 1 template.**
+
+Nothing is wrong with the configuration — the warning reports a gap in
+this Quarto version.
+
+## How to fix
+
+There is no configuration that makes book or manuscript behavior work
+in this version. Your options are:
+
+**Keep using Quarto 1 for this project.** For a book that depends on
+chapter navigation and combined output, this is the practical answer
+today.
+
+**Switch to `website`** if what you need is mainly navigation between
+documents. A website project gives you a sidebar, search, and
+cross-document links, which covers a good deal of what a book provides:
+
+```yaml
+project:
+  type: website
+
+website:
+  sidebar:
+    contents:
+      - index.qmd
+      - chapter-01.qmd
+      - chapter-02.qmd
+```
+
+You lose combined single-file output and automatic chapter numbering.
+
+**Leave it as is.** The configuration stays valid, and the warning
+disappears when the type is implemented.
+
+## Related errors
+
+- [`Q-5-17`](Q-5-17.qmd) — a type name that matches nothing at all.
+- [`Q-16-9`](../extension/Q-16-9.qmd) — the same "falls back to default
+  behavior" outcome, for an extension that omits its base type.

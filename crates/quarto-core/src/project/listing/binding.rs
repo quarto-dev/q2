@@ -53,7 +53,6 @@ pub fn build_listing_context(
 ) -> TemplateContext {
     let mut ctx = TemplateContext::new();
 
-    ctx.insert("listing", build_listing_map(listing));
     // Effective date style for date-typed item fields (bd-13f821l5):
     // listing-level `date-format` > document `date-format` > `medium`
     // — Q1's precedence in website-listing-template.ts, with items
@@ -68,16 +67,57 @@ pub fn build_listing_context(
                 .and_then(|v| v.as_plain_text())
         })
         .map_or(DateStyle::Medium, |s| DateStyle::parse(&s));
+    // Effective field set: author-explicit `fields:` verbatim;
+    // defaulted sets presence-filtered against the items (Q1
+    // parity, bd-listing-table-fields-peg1w3b3). Everything below
+    // (the `listing.fields` binding, `show.*`, the table
+    // header/rows) reads this list, not `listing.fields`.
+    let fields = effective_fields(listing, items, &date_style);
+    ctx.insert("listing", build_listing_map(listing, &fields));
     ctx.insert(
         "items",
-        build_items_list(listing, items, host_dir, &date_style),
+        build_items_list(listing, items, host_dir, &date_style, &fields),
     );
     ctx.insert("project", build_project_map(project_meta));
 
     ctx
 }
 
-fn build_listing_map(listing: &Listing) -> TemplateValue {
+/// Q1 parity (`website-listing-read.ts` suggested-fields filter):
+/// a *defaulted* field set keeps only fields at least one item
+/// carries — `image` always survives (a listing-level
+/// `image-placeholder` can fill it at render time). If the filter
+/// empties the list, keep the unfiltered defaults (defensive;
+/// `title` is non-optional on [`ListingItem`], so built-in default
+/// sets can never fully empty). Author-explicit `fields:` is used
+/// verbatim.
+fn effective_fields(
+    listing: &Listing,
+    items: &[ListingItem],
+    date_style: &DateStyle,
+) -> Vec<String> {
+    if listing.fields_explicit {
+        return listing.fields.clone();
+    }
+    let filtered: Vec<String> = listing
+        .fields
+        .iter()
+        .filter(|f| {
+            f.as_str() == "image"
+                || items
+                    .iter()
+                    .any(|it| item_field_display_value(it, f, date_style).is_some())
+        })
+        .cloned()
+        .collect();
+    if filtered.is_empty() {
+        listing.fields.clone()
+    } else {
+        filtered
+    }
+}
+
+fn build_listing_map(listing: &Listing, fields: &[String]) -> TemplateValue {
     let mut m = HashMap::new();
     m.insert("id".to_string(), TemplateValue::String(listing.id.clone()));
     m.insert(
@@ -87,12 +127,30 @@ fn build_listing_map(listing: &Listing) -> TemplateValue {
     m.insert(
         "fields".to_string(),
         TemplateValue::List(
-            listing
-                .fields
+            fields
                 .iter()
                 .map(|s| TemplateValue::String(s.clone()))
                 .collect(),
         ),
+    );
+    m.insert(
+        "field-links".to_string(),
+        TemplateValue::List(
+            listing
+                .field_links
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .map(|s| TemplateValue::String(s.clone()))
+                .collect(),
+        ),
+    );
+    // Pre-rendered markdown header for the table built-in: the
+    // header row (display names) + the separator row
+    // (bd-listing-table-fields-peg1w3b3).
+    m.insert(
+        "table-header".to_string(),
+        TemplateValue::String(table_header(fields, &listing.field_display_names)),
     );
     m.insert(
         "page-size".to_string(),
@@ -175,12 +233,13 @@ fn build_items_list(
     items: &[ListingItem],
     host_dir: &str,
     date_style: &DateStyle,
+    fields: &[String],
 ) -> TemplateValue {
     TemplateValue::List(
         items
             .iter()
             .enumerate()
-            .map(|(i, item)| build_item_map(listing, item, i, host_dir, date_style))
+            .map(|(i, item)| build_item_map(listing, item, i, host_dir, date_style, fields))
             .collect(),
     )
 }
@@ -200,6 +259,7 @@ fn build_item_map(
     index: usize,
     host_dir: &str,
     date_style: &DateStyle,
+    fields: &[String],
 ) -> TemplateValue {
     let mut m = HashMap::new();
 
@@ -281,6 +341,9 @@ fn build_item_map(
             TemplateValue::String(n.to_string()),
         );
     }
+    if let Some(n) = item.order {
+        m.insert("order".to_string(), TemplateValue::String(n.to_string()));
+    }
 
     // Path bookkeeping.
     //
@@ -302,10 +365,8 @@ fn build_item_map(
     // `outputHref` retains the rendered .html path for templates
     // (e.g. L7's placeholder href, RSS feed item URLs) that need
     // the post-render output href specifically.
-    m.insert(
-        "path".to_string(),
-        TemplateValue::String(host_relative_qmd(&item.source_path, host_dir)),
-    );
+    let path = host_relative_qmd(&item.source_path, host_dir);
+    m.insert("path".to_string(), TemplateValue::String(path.clone()));
     m.insert(
         "outputHref".to_string(),
         TemplateValue::String(item.output_href.clone()),
@@ -323,7 +384,10 @@ fn build_item_map(
 
     // Pre-rendered helper strings.
     let img_html = helpers::image_html(item, listing, host_dir);
-    m.insert("image-html".to_string(), TemplateValue::String(img_html));
+    m.insert(
+        "image-html".to_string(),
+        TemplateValue::String(img_html.clone()),
+    );
     m.insert(
         "metadata-attrs".to_string(),
         TemplateValue::String(helpers::metadata_attrs(item, index)),
@@ -370,16 +434,187 @@ fn build_item_map(
         m.insert("extra".to_string(), TemplateValue::Map(extra));
     }
 
-    // Per-item show flags computed from listing.fields. Templates
-    // that want to know "did the listing config say to show field
-    // X?" read `$item.show.<field>$` (Q1 semantics).
+    // Per-item show flags computed from the effective field set
+    // (author-explicit fields, or presence-filtered defaults).
+    // Templates that want to know "did the listing config say to
+    // show field X?" read `$item.show.<field>$` (Q1 semantics).
     let mut show = HashMap::new();
-    for field in &listing.fields {
+    for field in fields {
         show.insert(field.clone(), TemplateValue::Bool(true));
     }
     m.insert("show".to_string(), TemplateValue::Map(show));
 
+    // Pre-rendered markdown table row for the table built-in
+    // (bd-listing-table-fields-peg1w3b3). Uses the values already
+    // computed above (path for linked cells, image-html for the
+    // image column).
+    m.insert(
+        "table-row".to_string(),
+        TemplateValue::String(table_row(
+            item, listing, fields, date_style, &path, &img_html,
+        )),
+    );
+
     TemplateValue::Map(m)
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Table listing pre-rendered strings
+// (bd-listing-table-fields-peg1w3b3)
+// ─────────────────────────────────────────────────────────────────
+
+/// Q1's built-in field display names (`_language.yml`
+/// `listing-page-field-*`, English hardcoded until Q2 grows
+/// language support). Unknown fields fall back to the raw field
+/// name — Q1's `utilities.fieldName` behavior, deliberately not
+/// title-cased.
+fn default_display_name(field: &str) -> &str {
+    match field {
+        "image" => " ",
+        "date" => "Date",
+        "title" => "Title",
+        "description" => "Description",
+        "author" => "Author",
+        "filename" => "File Name",
+        "date-modified" | "file-modified" => "Modified",
+        "subtitle" => "Subtitle",
+        "reading-time" => "Reading Time",
+        "word-count" => "Word Count",
+        "categories" => "Categories",
+        other => other,
+    }
+}
+
+fn display_name(field: &str, overrides: &std::collections::BTreeMap<String, String>) -> String {
+    overrides
+        .get(field)
+        .map_or_else(|| default_display_name(field), String::as_str)
+        .to_string()
+}
+
+/// Make a string safe inside one markdown pipe-table cell:
+/// newlines flatten to spaces (a cell is one line by definition)
+/// and `|` is escaped so it can't terminate the cell.
+fn escape_table_cell(s: &str) -> String {
+    s.replace("\r\n", " ")
+        .replace(['\n', '\r'], " ")
+        .replace('|', "\\|")
+}
+
+/// The pre-rendered `listing.table-header` value: header row from
+/// the effective fields (display-name overlay applied) plus the
+/// pipe-table separator row.
+fn table_header(
+    fields: &[String],
+    overrides: &std::collections::BTreeMap<String, String>,
+) -> String {
+    let names: Vec<String> = fields
+        .iter()
+        .map(|f| escape_table_cell(&display_name(f, overrides)))
+        .collect();
+    format!(
+        "| {} |\n|{}|",
+        names.join(" | "),
+        vec!["---"; fields.len().max(1)].join("|")
+    )
+}
+
+/// The pre-rendered per-item `table-row` value.
+fn table_row(
+    item: &ListingItem,
+    listing: &Listing,
+    fields: &[String],
+    date_style: &DateStyle,
+    path: &str,
+    image_html: &str,
+) -> String {
+    let linked = listing.field_links.as_deref().unwrap_or_default();
+    let cells: Vec<String> = fields
+        .iter()
+        .map(|field| {
+            if field == "image" {
+                return escape_table_cell(image_html);
+            }
+            let Some(value) = item_field_display_value(item, field, date_style) else {
+                return String::new();
+            };
+            let value = escape_table_cell(&value);
+            if !value.is_empty() && !path.is_empty() && linked.iter().any(|l| l == field) {
+                // Same link shape the templates use for titles;
+                // LinkRewriteTransform rewrites the `.qmd` target
+                // downstream.
+                format!("[{}]({}){{.no-external}}", value, path)
+            } else {
+                value
+            }
+        })
+        .collect();
+    format!("| {} |", cells.join(" | "))
+}
+
+/// Display value for one field of one item — the table-cell
+/// equivalent of Q1's `readField` + item-record pre-formatting.
+/// `None` means "the item doesn't carry this field" (renders as an
+/// empty cell; also drives presence filtering of defaulted field
+/// sets).
+fn item_field_display_value(
+    item: &ListingItem,
+    field: &str,
+    date_style: &DateStyle,
+) -> Option<String> {
+    match field {
+        "title" => Some(item.title.clone()),
+        "subtitle" => item.subtitle.clone(),
+        "description" => item.description.clone(),
+        "author" => item.author.clone(),
+        "authors" => (!item.authors.is_empty()).then(|| item.authors.join(", ")),
+        "date" => item.date.as_deref().map(|s| display_date(s, date_style)),
+        "date-modified" | "file-modified" => item
+            .date_modified
+            .as_deref()
+            .map(|s| display_date(s, date_style)),
+        "categories" => (!item.categories.is_empty()).then(|| item.categories.join(", ")),
+        "image-alt" => item.image_alt.clone(),
+        "reading-time" => item.reading_time_minutes.map(|n| format!("{} min read", n)),
+        "word-count" => item.word_count.map(|n| n.to_string()),
+        "filename" => item
+            .source_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        _ => extra_field_value(&item.extra, field),
+    }
+}
+
+/// Free-form field lookup: literal key first, then Q1's
+/// dotted-path deref (`a.b` walks nested maps).
+fn extra_field_value(
+    extra: &std::collections::BTreeMap<String, ConfigValue>,
+    field: &str,
+) -> Option<String> {
+    if let Some(cv) = extra.get(field) {
+        return config_value_cell_string(cv);
+    }
+    if !field.contains('.') {
+        return None;
+    }
+    let mut parts = field.split('.');
+    let mut cv = extra.get(parts.next()?)?;
+    for part in parts {
+        cv = cv.get(part)?;
+    }
+    config_value_cell_string(cv)
+}
+
+/// Scalar → text; arrays join with `", "` (Q1 `readField`); maps
+/// have no cell representation.
+fn config_value_cell_string(cv: &ConfigValue) -> Option<String> {
+    if let Some(items) = cv.as_array() {
+        let parts: Vec<String> = items.iter().filter_map(config_value_cell_string).collect();
+        return Some(parts.join(", "));
+    }
+    cv.as_plain_text()
 }
 
 /// Compute a host-page-relative forward-slash path string for
@@ -401,11 +636,24 @@ fn host_relative_qmd(source_path: &std::path::Path, host_dir: &str) -> String {
     if host_dir.is_empty() {
         return project_relative;
     }
-    let prefix = format!("{}/", host_dir);
-    project_relative
-        .strip_prefix(&prefix)
-        .map(str::to_string)
-        .unwrap_or(project_relative)
+    // Walk off the shared directory prefix, then climb out of the
+    // remaining host segments with `..`. An item outside the host's
+    // directory (legal since bd-v7ixzsp5 — e.g. a `../rootpost.qmd`
+    // or `_quarto.yml`-declared glob) gets `../…` exactly as a
+    // hand-written body link from the host would, so
+    // `LinkRewriteTransform` resolves it to the right page-relative
+    // output URL.
+    let host_segments: Vec<&str> = host_dir.split('/').collect();
+    let path_segments: Vec<&str> = project_relative.split('/').collect();
+    let common = host_segments
+        .iter()
+        .zip(path_segments.iter())
+        .take_while(|(h, p)| h == p)
+        .count();
+    let mut out: Vec<&str> = Vec::new();
+    out.extend(std::iter::repeat_n("..", host_segments.len() - common));
+    out.extend(&path_segments[common..]);
+    out.join("/")
 }
 
 fn build_project_map(meta: &ConfigValue) -> TemplateValue {
@@ -492,6 +740,7 @@ mod tests {
             image_lazy_loading: None,
             reading_time_minutes: Some(5),
             word_count: None,
+            order: None,
             source_path: PathBuf::from("posts/foo.qmd"),
             output_href: "posts/foo.html".to_string(),
             extra: BTreeMap::new(),
@@ -786,6 +1035,260 @@ mod tests {
             m.get("category-html"),
             Some(&TemplateValue::String(String::new()))
         );
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // bd-listing-table-fields-peg1w3b3: dynamic table columns.
+    // `listing.table-header` + per-item `table-row` are pre-rendered
+    // markdown strings computed from listing.fields /
+    // field-display-names / field-links (Q1 parity).
+    // ─────────────────────────────────────────────────────────────
+
+    fn table_listing(fields: &[&str]) -> Listing {
+        let mut l = Listing {
+            id: "t".to_string(),
+            kind: ListingType::Table,
+            ..Listing::default()
+        };
+        apply_type_defaults(&mut l);
+        if !fields.is_empty() {
+            l.fields = fields.iter().map(|s| s.to_string()).collect();
+            l.fields_explicit = true;
+        }
+        // Decouple these unit tests from apply_type_defaults'
+        // field-links hydration; tests that want other linking set
+        // the field explicitly.
+        l.field_links
+            .get_or_insert_with(|| vec!["title".to_string(), "filename".to_string()]);
+        l
+    }
+
+    fn header_of(ctx: &TemplateContext) -> String {
+        let TemplateValue::String(s) = ctx
+            .get("listing")
+            .unwrap()
+            .get_path(&["table-header"])
+            .expect("listing.table-header present")
+            .clone()
+        else {
+            panic!("table-header not a string");
+        };
+        s
+    }
+
+    fn row_of(ctx: &TemplateContext) -> String {
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!("items not a list");
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!("item not a map");
+        };
+        let TemplateValue::String(s) = m.get("table-row").expect("item table-row present") else {
+            panic!("table-row not a string");
+        };
+        s.clone()
+    }
+
+    fn ctx_for(l: &Listing, items: &[ListingItem]) -> TemplateContext {
+        build_listing_context(l, items, "posts", &ConfigValue::default())
+    }
+
+    #[test]
+    fn table_header_uses_display_name_overlay_and_defaults() {
+        let mut l = table_listing(&["date", "title", "author"]);
+        l.field_display_names
+            .insert("title".to_string(), "How To".to_string());
+        let ctx = ctx_for(&l, &[item("A")]);
+        assert_eq!(header_of(&ctx), "| Date | How To | Author |\n|---|---|---|");
+    }
+
+    #[test]
+    fn table_header_unknown_field_falls_back_to_raw_name() {
+        let l = table_listing(&["title", "status"]);
+        let ctx = ctx_for(&l, &[item("A")]);
+        assert_eq!(header_of(&ctx), "| Title | status |\n|---|---|");
+    }
+
+    // Q1's default display name for `image` is a single space.
+    #[test]
+    fn table_header_image_field_header_is_blank() {
+        let l = table_listing(&["image", "title"]);
+        let ctx = ctx_for(&l, &[item("A")]);
+        assert_eq!(header_of(&ctx), "|   | Title |\n|---|---|");
+    }
+
+    #[test]
+    fn table_row_links_title_and_formats_date() {
+        let l = table_listing(&["title", "date"]);
+        let ctx = ctx_for(&l, &[item("Hello")]);
+        assert_eq!(
+            row_of(&ctx),
+            "| [Hello](foo.qmd){.no-external} | Jan 1, 2026 |"
+        );
+    }
+
+    #[test]
+    fn table_row_missing_value_renders_empty_cell() {
+        let l = table_listing(&["title", "date"]);
+        let mut i = item("X");
+        i.date = None;
+        let ctx = ctx_for(&l, &[i]);
+        assert_eq!(row_of(&ctx), "| [X](foo.qmd){.no-external} |  |");
+    }
+
+    #[test]
+    fn table_row_escapes_pipes_and_flattens_newlines() {
+        let l = table_listing(&["title"]);
+        let mut i = item("A|B\nC");
+        i.date = None;
+        let ctx = ctx_for(&l, &[i]);
+        assert_eq!(row_of(&ctx), "| [A\\|B C](foo.qmd){.no-external} |");
+    }
+
+    #[test]
+    fn table_row_field_links_empty_unlinks_title() {
+        let mut l = table_listing(&["title"]);
+        l.field_links = Some(Vec::new());
+        let ctx = ctx_for(&l, &[item("Hello")]);
+        assert_eq!(row_of(&ctx), "| Hello |");
+    }
+
+    #[test]
+    fn table_row_filename_linked_by_default() {
+        let l = table_listing(&["filename"]);
+        let ctx = ctx_for(&l, &[item("X")]);
+        assert_eq!(row_of(&ctx), "| [foo.qmd](foo.qmd){.no-external} |");
+    }
+
+    #[test]
+    fn table_row_dotted_path_reads_nested_extra() {
+        use quarto_pandoc_types::ConfigMapEntry;
+        use quarto_source_map::SourceInfo;
+        let l = table_listing(&["title", "meta.status"]);
+        let mut i = item("X");
+        let inner = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "status".to_string(),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_string("draft", SourceInfo::for_test()),
+            }],
+            SourceInfo::for_test(),
+        );
+        i.extra.insert("meta".to_string(), inner);
+        let ctx = ctx_for(&l, &[i]);
+        assert_eq!(row_of(&ctx), "| [X](foo.qmd){.no-external} | draft |");
+    }
+
+    #[test]
+    fn table_row_array_extra_field_joins_with_comma() {
+        use quarto_pandoc_types::ConfigValue;
+        use quarto_source_map::SourceInfo;
+        let l = table_listing(&["tags"]);
+        let mut i = item("X");
+        i.extra.insert(
+            "tags".to_string(),
+            ConfigValue::new_array(
+                vec![
+                    ConfigValue::new_string("x", SourceInfo::for_test()),
+                    ConfigValue::new_string("y", SourceInfo::for_test()),
+                ],
+                SourceInfo::for_test(),
+            ),
+        );
+        let ctx = ctx_for(&l, &[i]);
+        assert_eq!(row_of(&ctx), "| x, y |");
+    }
+
+    #[test]
+    fn table_row_authors_and_categories_join_with_comma() {
+        let l = table_listing(&["authors", "categories"]);
+        let mut i = item("X");
+        i.authors = vec!["A".to_string(), "B".to_string()];
+        i.categories = vec!["rust".to_string(), "design".to_string()];
+        let ctx = ctx_for(&l, &[i]);
+        assert_eq!(row_of(&ctx), "| A, B | rust, design |");
+    }
+
+    #[test]
+    fn table_row_reading_time_uses_min_read_form() {
+        let l = table_listing(&["reading-time"]);
+        let ctx = ctx_for(&l, &[item("X")]);
+        assert_eq!(row_of(&ctx), "| 5 min read |");
+    }
+
+    #[test]
+    fn table_row_image_field_uses_image_html() {
+        let l = table_listing(&["image"]);
+        let mut i = item("X");
+        i.image = Some("static.png".to_string());
+        let ctx = ctx_for(&l, &[i]);
+        let row = row_of(&ctx);
+        assert!(row.contains("<img"), "expected inline img html: {row}");
+        assert!(!row.contains('\n'), "cell must be single-line: {row}");
+    }
+
+    // ── Presence filtering of *defaulted* fields (Q1 parity) ──
+
+    #[test]
+    fn defaulted_table_fields_presence_filtered_when_no_author() {
+        // Table default fields [date, title, author], NOT explicit.
+        let mut l = table_listing(&[]);
+        assert!(!l.fields_explicit);
+        l.field_links = Some(Vec::new());
+        let mut i = item("X");
+        i.author = None;
+        i.authors = Vec::new();
+        let ctx = ctx_for(&l, &[i]);
+        assert_eq!(header_of(&ctx), "| Date | Title |\n|---|---|");
+        assert_eq!(row_of(&ctx), "| Jan 1, 2026 | X |");
+        // The binding's fields list + show flags follow the filter.
+        let listing_map = ctx.get("listing").unwrap();
+        let TemplateValue::List(fields) = listing_map.get_path(&["fields"]).unwrap() else {
+            panic!("fields not a list");
+        };
+        assert_eq!(
+            fields,
+            &vec![
+                TemplateValue::String("date".to_string()),
+                TemplateValue::String("title".to_string())
+            ]
+        );
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!()
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!()
+        };
+        let TemplateValue::Map(show) = m.get("show").unwrap() else {
+            panic!("show not a map");
+        };
+        assert!(!show.contains_key("author"));
+    }
+
+    #[test]
+    fn explicit_fields_never_presence_filtered() {
+        let mut l = table_listing(&["title", "author"]);
+        l.field_links = Some(Vec::new());
+        let mut i = item("X");
+        i.author = None;
+        i.authors = Vec::new();
+        let ctx = ctx_for(&l, &[i]);
+        assert_eq!(header_of(&ctx), "| Title | Author |\n|---|---|");
+        assert_eq!(row_of(&ctx), "| X |  |");
+    }
+
+    // `image` is exempt from presence filtering (Q1: placeholders
+    // can fill it at render time even when no item declares one).
+    #[test]
+    fn presence_filter_keeps_image_field() {
+        let mut l = table_listing(&[]);
+        l.fields = vec!["title".to_string(), "image".to_string()];
+        l.fields_explicit = false;
+        l.field_links = Some(Vec::new());
+        let mut i = item("X");
+        i.image = None;
+        let ctx = ctx_for(&l, &[i]);
+        assert_eq!(header_of(&ctx), "| Title |   |\n|---|---|");
     }
 
     #[test]

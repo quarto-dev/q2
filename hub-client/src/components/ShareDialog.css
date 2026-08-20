@@ -1,46 +1,10 @@
-/* Share Dialog - uses common dialog-overlay from NewFileDialog.css */
+/* ShareDialog — warning box and URL field. Shared dialog chrome (backdrop,
+   header/close, content/actions sections, buttons, inputs) comes from
+   src/ui.css (the .ph-dialog, .ph-btn, .ph-input families and the editor
+   dialog chrome section). */
 
-.share-dialog {
-  background: var(--dialog-bg);
-  border: 1px solid var(--dialog-border);
-  border-radius: 12px;
-  width: 90%;
-  max-width: 520px;
-  box-shadow: 0 8px 32px var(--dialog-shadow);
-}
-
-.share-dialog .dialog-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--dialog-border);
-}
-
-.share-dialog .dialog-header h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--editor-text);
-}
-
-.share-dialog .close-btn {
-  background: none;
-  border: none;
-  color: var(--editor-text-muted);
-  font-size: 24px;
-  cursor: pointer;
+.ph-dialog.share-dialog {
   padding: 0;
-  line-height: 1;
-  transition: color 0.2s;
-}
-
-.share-dialog .close-btn:hover {
-  color: var(--editor-text);
-}
-
-.share-dialog .dialog-content {
-  padding: 20px;
 }
 
 /* Warning box */
@@ -88,63 +52,14 @@
 }
 
 .url-field input {
-  width: 100%;
-  padding: 12px;
-  background: var(--dialog-input-bg);
-  border: 1px solid var(--dialog-input-border);
-  border-radius: 6px;
   color: var(--editor-text-muted);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  box-sizing: border-box;
   cursor: text;
 }
 
 .url-field input:focus {
-  outline: none;
-  border-color: var(--dialog-tab-active);
   color: var(--editor-text-dim);
-}
-
-/* Actions */
-.share-dialog .dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--dialog-border);
-}
-
-.share-dialog .cancel-btn {
-  padding: 10px 20px;
-  background: none;
-  border: 1px solid var(--dialog-input-border);
-  border-radius: 6px;
-  color: var(--editor-text-muted);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.share-dialog .cancel-btn:hover {
-  border-color: var(--editor-text-muted);
-  color: var(--editor-text-dim);
-}
-
-.share-dialog .copy-btn {
-  padding: 10px 24px;
-  background: var(--dialog-primary-bg);
-  border: none;
-  border-radius: 6px;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.share-dialog .copy-btn:hover {
-  background: var(--dialog-primary-hover);
 }
 
 .share-dialog .copy-btn.copied {

@@ -20,7 +20,7 @@
 //! format-flattened config. Downstream stages (AST transforms, rendering)
 //! can read metadata without knowing about the layering.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use quarto_config::{MergedConfig, resolve_format_config};
@@ -117,6 +117,46 @@ fn build_extension_metadata_layer(
     config.map(|cv| (cv, ext.path.clone()))
 }
 
+/// Build the per-document layers from extension `contributes.metadata`
+/// (bd-ad7i1pc6 Phase 5, absorbing bd-zb2tod5f).
+///
+/// One layer per extension declaring `contributes.metadata`, in
+/// discovery order. The `project` key is stripped — it is a
+/// project-config concern, merged into the project config by
+/// `ProjectContext::parse_config` — and the rest is format-flattened
+/// like every metadata layer, with `Path`-kind values rebased from the
+/// extension dir to the document dir.
+///
+/// These layers sit at the **bottom** of the merge stack (below the
+/// project config): extension metadata fills gaps, and everything the
+/// user writes — `_quarto.yml`, directory metadata, the document —
+/// wins over it.
+fn build_metadata_contribution_layers(
+    extensions: &[Extension],
+    base_format: &str,
+    document_dir: &Path,
+) -> Vec<ConfigValue> {
+    extensions
+        .iter()
+        .filter_map(|ext| {
+            let meta = ext.contributes.metadata.as_ref()?;
+            let entries: Vec<quarto_pandoc_types::config_value::ConfigMapEntry> = meta
+                .as_map_entries()?
+                .iter()
+                .filter(|e| e.key != "project")
+                .cloned()
+                .collect();
+            if entries.is_empty() {
+                return None;
+            }
+            let wrapped = ConfigValue::new_map(entries, meta.source_info.clone());
+            let mut flattened = resolve_format_config(&wrapped, base_format);
+            adjust_paths_to_document_dir(&mut flattened, &ext.path, document_dir);
+            Some(flattened)
+        })
+        .collect()
+}
+
 /// Merge project, directory, document, and runtime metadata.
 ///
 /// This stage takes a `DocumentAst` and replaces `doc.ast.meta` with the
@@ -201,8 +241,10 @@ impl PipelineStage for MetadataMergeStage {
             ctx.format.identifier.as_str()
         };
         // target_format is the full format string (e.g., "acm-html") used
-        // to look up extension metadata.
-        let target_format = &ctx.format.target_format;
+        // to look up extension metadata. Cloned so `ctx` stays mutably
+        // borrowable for the css-marking diagnostics below.
+        let target_format = ctx.format.target_format.clone();
+        let target_format = target_format.as_str();
 
         // Layer 1: Project metadata (flattened for format)
         // Adjust !path values to be relative to document directory
@@ -214,8 +256,30 @@ impl PipelineStage for MetadataMergeStage {
         let project_layer = ctx.project.config.metadata.as_ref().map(|m| {
             let mut flattened = resolve_format_config(m, base_format);
             adjust_paths_to_document_dir(&mut flattened, &ctx.project.dir, &document_dir);
+            // Mark path-shaped format values (css / theme / include-*) as
+            // document-relative Path values against this layer's base
+            // (bd-format-css-not-copied-crn3bjdz; generalized for
+            // bd-oejuizi9 / GH #455 — see project/format_paths.rs).
+            // Runs after the `!path` adjustment so explicit Path values are
+            // rebased exactly once. Missing-css diagnostics for the project
+            // layer are dropped here — the orchestrator reports them once per
+            // project render (`missing_project_css_diagnostics`), not once
+            // per page.
+            let _ = crate::project::format_paths::mark_format_path_values(
+                &mut flattened,
+                &ctx.project.dir,
+                &ctx.project.dir,
+                &document_dir,
+                ctx.runtime.as_ref(),
+            );
             flattened
         });
+
+        // Layer 0 (lowest priority): extension `contributes.metadata`
+        // (non-`project` keys; bd-ad7i1pc6 Phase 5). Sits below the
+        // project config so everything user-written wins over it.
+        let metadata_contribution_layers =
+            build_metadata_contribution_layers(&ctx.extensions, base_format, &document_dir);
 
         // Layer 2: Extension metadata (uses full target_format for lookup)
         // Adjust !path values from extension dir to document dir
@@ -227,26 +291,123 @@ impl PipelineStage for MetadataMergeStage {
         );
 
         // Layer 3: Directory metadata layers (each flattened for base format)
-        let dir_layers: Vec<_> = if !ctx.project.is_single_file {
+        let dir_layer_entries: Vec<(PathBuf, ConfigValue)> = if !ctx.project.is_single_file {
             directory_metadata_for_document(&ctx.project, &ctx.document.input, ctx.runtime.as_ref())
                 .unwrap_or_default()
-                .into_iter()
-                .map(|m| resolve_format_config(&m, base_format))
-                .collect()
         } else {
             vec![]
         };
 
+        // Register the YAML metadata layer files (`_quarto.yml` +
+        // each `_metadata.yml`) in the document's SourceContexts
+        // under their hash-based FileIds
+        // (`quarto_yaml::file_id_for_filename`), so downstream
+        // provenance consumers can map a merged value's `SourceInfo`
+        // back to the file it was written in — listing contents-glob
+        // base-dir resolution (bd-v7ixzsp5) reads this, and ariadne
+        // diagnostics gain renderable spans into these files.
+        //
+        // Registration goes to BOTH `doc.ast_context.source_context`
+        // and `doc.source_context`, appending to each in the same
+        // order: `IncludeExpansionStage` keeps the two contexts'
+        // sequential FileIds in lockstep (it debug-asserts parity),
+        // and appending to only one would desynchronize the shared
+        // index space.
+        {
+            let mut register = |path: &std::path::Path| {
+                let path_str = path.to_string_lossy().to_string();
+                let id = quarto_yaml::file_id_for_filename(&path_str);
+                let content = ctx.runtime.file_read_string(path).ok();
+                for source_context in [&mut doc.ast_context.source_context, &mut doc.source_context]
+                {
+                    // Skip when already registered (pipeline
+                    // re-entry) or on the astronomically unlikely
+                    // hash collision with a sequential doc-file id —
+                    // `add_file_with_id` would panic on a duplicate.
+                    if source_context.get_file(id).is_none() {
+                        source_context.add_file_with_id(id, path_str.clone(), content.clone());
+                    }
+                }
+            };
+            if let Some(config_path) = ctx.project.config.config_path.as_deref() {
+                register(config_path);
+            }
+            // Project-profile overlays (`_quarto-<name>.yml`) and
+            // `_quarto.yml.local` (bd-fu16z22k): values merged from
+            // these layers keep their own filename-hash FileIds, so
+            // the files must be registered like `_quarto.yml` itself
+            // or overlay-anchored diagnostics render span-less.
+            for path in &ctx.project.config.profile_config_paths {
+                register(path);
+            }
+            for (path, _) in &dir_layer_entries {
+                register(path);
+            }
+            // Extension manifests too (bd-r64mj1aa): values merged from
+            // `contributes.metadata` / `contributes.format` keep their
+            // `_extension.yml`-hash FileIds, and without this registration
+            // every doc-scoped diagnostic anchored in a manifest rendered
+            // span-less.
+            for path in &ctx.project.config.extension_manifest_paths {
+                register(path);
+            }
+        }
+
+        // Directory-metadata and front-matter path-shaped entries
+        // (css / theme / include-*) resolve against their declaring
+        // file's directory; marking normalizes them to document-relative
+        // Path values and returns a Q-5-29 per missing css file,
+        // surfaced through this document's own diagnostics
+        // (bd-format-css-not-copied-crn3bjdz; bd-oejuizi9).
+        let mut css_diagnostics: Vec<quarto_error_reporting::DiagnosticMessage> = Vec::new();
+        let dir_layers: Vec<_> = dir_layer_entries
+            .into_iter()
+            .map(|(path, m)| {
+                let mut flattened = resolve_format_config(&m, base_format);
+                let layer_base = path
+                    .parent()
+                    .map_or_else(|| ctx.project.dir.clone(), |p| p.to_path_buf());
+                css_diagnostics.extend(crate::project::format_paths::mark_format_path_values(
+                    &mut flattened,
+                    &layer_base,
+                    &ctx.project.dir,
+                    &document_dir,
+                    ctx.runtime.as_ref(),
+                ));
+                flattened
+            })
+            .collect();
+
         // Layer 4: Document metadata (flattened for base format)
-        let doc_layer = resolve_format_config(&doc.ast.meta, base_format);
+        let mut doc_layer = resolve_format_config(&doc.ast.meta, base_format);
+        css_diagnostics.extend(crate::project::format_paths::mark_format_path_values(
+            &mut doc_layer,
+            &document_dir,
+            &ctx.project.dir,
+            &document_dir,
+            ctx.runtime.as_ref(),
+        ));
+        // Native only: the WASM VFS is not authoritative for non-qmd
+        // project files (an on-disk stylesheet may simply not be
+        // synced), so surfacing these there yields false warnings.
+        // See the matching gate on `missing_project_css_diagnostics`
+        // in the orchestrator.
+        #[cfg(not(target_arch = "wasm32"))]
+        ctx.add_diagnostics(css_diagnostics);
+        #[cfg(target_arch = "wasm32")]
+        drop(css_diagnostics);
 
         // Layer 5: Runtime metadata (flattened for base format)
         let runtime_layer = runtime_meta_json
             .as_ref()
             .map(|json| resolve_format_config(&json_to_config_value(json), base_format));
 
-        // Build merge layers: project → extension → dir[0..] → document → runtime
+        // Build merge layers: metadata-contributions → project →
+        // extension-format → dir[0..] → document → runtime
         let mut layers: Vec<&ConfigValue> = Vec::new();
+        for contrib in &metadata_contribution_layers {
+            layers.push(contrib);
+        }
         if let Some(ref proj) = project_layer {
             layers.push(proj);
         }
@@ -311,6 +472,17 @@ impl PipelineStage for MetadataMergeStage {
         // If `trace: true`, swap the observer to a tracing observer.
         // The trace file is written to `.quarto/trace/<stem>/latest.json`.
         activate_trace_from_metadata(&doc.ast.meta, &doc.path, ctx);
+
+        // Resolve the `diagnostics:` suppression policy here — this is the
+        // first point at which project, directory, and document layers have
+        // been merged, so precedence between them is whatever the merge
+        // already decided rather than a second set of rules. The policy is
+        // *applied* much later, in `run_pipeline`
+        // (bd-lone-bracket-diagnostic-mxu41qbt).
+        let (policy, policy_diagnostics) =
+            crate::diagnostic_policy::DiagnosticPolicy::from_metadata(&doc.ast.meta);
+        ctx.diagnostic_policy = policy;
+        ctx.add_diagnostics(policy_diagnostics);
 
         Ok(PipelineData::DocumentAst(doc))
     }
@@ -402,7 +574,7 @@ mod tests {
     use quarto_pandoc_types::pandoc::Pandoc;
     use quarto_source_map::SourceContext;
     use quarto_system_runtime::TempDir;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::Arc;
 
     // Mock runtime for testing
@@ -588,6 +760,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -640,6 +814,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -689,6 +865,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -738,6 +916,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -796,6 +976,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html(); // Rendering to HTML, not PDF
@@ -854,6 +1036,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1050,6 +1234,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1098,6 +1284,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1140,6 +1328,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1181,6 +1371,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1229,6 +1421,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::from_format_string("q2-slides").unwrap();
@@ -1286,6 +1480,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1339,6 +1535,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1381,6 +1579,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::from_format_string("acm-html").unwrap();
@@ -1427,6 +1627,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1472,6 +1674,8 @@ mod tests {
             is_single_file: false,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1516,6 +1720,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1567,6 +1773,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1646,6 +1854,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         // Use from_format_string so target_format is "test-ext-html"
@@ -1699,6 +1909,8 @@ mod tests {
             is_single_file: true,
             files: vec![],
             output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
         };
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
@@ -1784,6 +1996,140 @@ mod tests {
         // Regression test: with no extensions, behavior is identical to before
         let layer = build_extension_metadata_layer(&[], "html");
         assert!(layer.is_none());
+    }
+
+    // === build_metadata_contribution_layers (bd-ad7i1pc6 Phase 5) ===
+
+    fn make_metadata_extension(name: &str, metadata: ConfigValue) -> Extension {
+        Extension {
+            id: ExtensionId::new(name),
+            title: Some(name.to_string()),
+            author: Some("Test".to_string()),
+            version: None,
+            quarto_required: None,
+            path: PathBuf::from("/extensions").join(name),
+            contributes: Contributes {
+                metadata: Some(metadata),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn metadata_contribution_layer_strips_project_and_flattens_format() {
+        let meta = config_map(vec![
+            (
+                "project",
+                config_map(vec![("pre-render", config_str("x.ts"))]),
+            ),
+            ("author-notice", config_str("from extension")),
+            (
+                "format",
+                config_map(vec![("html", config_map(vec![("toc", config_bool(true))]))]),
+            ),
+        ]);
+        let ext = make_metadata_extension("meta-ext", meta);
+
+        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        assert_eq!(layers.len(), 1);
+        let layer = &layers[0];
+        assert!(
+            layer.get("project").is_none(),
+            "`project` is a project-config concern, merged in parse_config"
+        );
+        assert_eq!(
+            layer.get("author-notice").and_then(|v| v.as_str()),
+            Some("from extension")
+        );
+        // `format.html.*` flattens for the html render, like every
+        // other metadata layer.
+        assert_eq!(layer.get("toc").and_then(|v| v.as_bool()), Some(true));
+        assert!(layer.get("format").is_none());
+    }
+
+    #[test]
+    fn metadata_contribution_layer_rebases_path_values_to_document_dir() {
+        let css = ConfigValue {
+            value: ConfigValueKind::Path("assets/extra.css".to_string()),
+            source_info: SourceInfo::for_test(),
+            merge_op: Default::default(),
+        };
+        let meta = config_map(vec![("css", css)]);
+        let ext = make_metadata_extension("meta-ext", meta);
+
+        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        assert_eq!(layers.len(), 1);
+        assert_eq!(
+            layers[0].get("css").and_then(|v| v.as_str()),
+            Some("../extensions/meta-ext/assets/extra.css"),
+            "Path-kind values rebase ext dir → document dir"
+        );
+    }
+
+    #[test]
+    fn metadata_contribution_layer_absent_when_only_project_key() {
+        let meta = config_map(vec![(
+            "project",
+            config_map(vec![("pre-render", config_str("x.ts"))]),
+        )]);
+        let ext = make_metadata_extension("meta-ext", meta);
+        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        assert!(layers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn metadata_contribution_reaches_merged_doc_meta_below_document() {
+        let runtime = Arc::new(MockRuntime);
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let mut ctx = StageContext::new(runtime, Format::html(), project, doc).unwrap();
+        ctx.extensions = vec![make_metadata_extension(
+            "meta-ext",
+            config_map(vec![
+                ("author-notice", config_str("from extension")),
+                ("subtitle", config_str("extension subtitle")),
+            ]),
+        )];
+
+        let mut doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc::default(),
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+            recorded_includes: Vec::new(),
+        };
+        // The document sets its own subtitle — it must win.
+        doc_ast.ast.meta = config_map(vec![("subtitle", config_str("doc subtitle"))]);
+
+        let stage = MetadataMergeStage::new();
+        let output = stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(
+            result
+                .ast
+                .meta
+                .get("author-notice")
+                .and_then(|v| v.as_str()),
+            Some("from extension"),
+            "extension metadata fills gaps in document metadata"
+        );
+        assert_eq!(
+            result.ast.meta.get("subtitle").and_then(|v| v.as_str()),
+            Some("doc subtitle"),
+            "document metadata wins over extension metadata"
+        );
     }
 
     #[test]

@@ -9,8 +9,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  /* WCAG 2.5.8: minimum 24x24 CSS px target size */
+  width: 24px;
+  height: 24px;
   background: var(--view-toggle-bg);
   border: none;
   border-radius: 2px;

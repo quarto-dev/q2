@@ -1,0 +1,9 @@
+---
+engine: julia
+execute:
+  daemon: false
+---
+
+```{julia}
+1 + 1
+```

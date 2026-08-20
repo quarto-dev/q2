@@ -23,6 +23,38 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-19
+
+- [`b62746e7`](https://github.com/quarto-dev/q2/commits/b62746e7): Sidebar cleanup — the Project tab no longer duplicates the header's switch-project button, Screenshot Preview moves from Settings to the Project tab next to Export ZIP, the Settings tab drops its Editor/Preview section headings so the toggles read as one flat list, and the Files header's New, Upload, and Print actions become equal-width icon buttons that always share one row (Print last).
+- [`e71b1ac5`](https://github.com/quarto-dev/q2/commits/e71b1ac5): WCAG 2.2 accessibility pass — dialogs are announced as dialogs with titles, Tab stays inside an open dialog and focus returns to the button that opened it, a "Skip to main content" link leads the tab order, view-toggle and dialog close buttons meet the 24px minimum target size, and keyboard focus is always visible.
+- [`63f2a178`](https://github.com/quarto-dev/q2/commits/63f2a178): Tint the editor file sidebar with the same posit-blue alpha family as the other editor bars, so it no longer reads neutral gray next to them.
+
+### 2026-08-18
+
+- [`a8944df3`](https://github.com/quarto-dev/q2/commits/a8944df3): Fix the `q2-sandboxed-preview` pane in dark mode — its document paints no background of its own, so the newly theme-following preview pane turned its canvas dark and hid the text; the iframe now keeps a light canvas in both themes.
+- [`af0161a5`](https://github.com/quarto-dev/q2/commits/af0161a5): Align the editor UI with the projects-home visual language — white surfaces with hairline borders in light mode, a desaturated slate ramp in dark mode, teal primary actions, blue secondary links, and soft error treatments replace the filled blue-gray chrome and off-brand indigo/purple accents.
+- [`510b3ae7`](https://github.com/quarto-dev/q2/commits/510b3ae7): q2-preview render components now receive headings wrapped in section Divs, matching the rest of the pipeline; the bundled `kanban_rc.jsx` sample and the component README were updated to read that shape.
+
+### 2026-08-14
+
+- [`9b60bbe2`](https://github.com/quarto-dev/q2/commits/9b60bbe2): Keep the WASM-driven theme/SASS cache in memory during `q2 preview` sessions (viewer and editor alike), so preview origins leave no IndexedDB databases behind at all.
+- [`f2db6bce`](https://github.com/quarto-dev/q2/commits/f2db6bce): Keep all browser storage in memory for `q2 preview --ui editor` sessions, so each ephemeral preview origin no longer accumulates a stale IndexedDB document cache and project entries; reloading the editor now rebuilds the session from the preview server's boot config.
+
+### 2026-08-12
+
+- [`e5769e5b`](https://github.com/quarto-dev/q2/commits/e5769e5b): Bump the samod sync library to 0.13.0 and the JS automerge package to 3.4.1.
+
+### 2026-08-09
+
+- [`6ffe5211`](https://github.com/quarto-dev/q2/commits/6ffe5211): The ephemeral-session banner's config fetch now retries once on a transient network failure, so a dropped first request (for example a `--join` guest's tunnel mid-handshake) no longer hides the banner for the whole session.
+- [`4111452f`](https://github.com/quarto-dev/q2/commits/4111452f): The editor shows a persistent "Ephemeral session — edits won't be saved to disk" banner when the serving `q2 preview` was started without `--allow-edit`; guests of a shared session see it too.
+- [`bcfbb47f`](https://github.com/quarto-dev/q2/commits/bcfbb47f): `q2 preview --ui editor` boots skip the project-set setup and migration screens and land straight in the previewed document.
+- [`9dfce50e`](https://github.com/quarto-dev/q2/commits/9dfce50e): `q2 preview --ui editor` serves the full collaborative editor (Monaco, file sidebar, live preview pane) from the preview server, to the host and any `--join` guests alike.
+
+### 2026-08-07
+
+- [`279d7e5e`](https://github.com/quarto-dev/q2/commits/279d7e5e): `.md` files are now first-class source files: they sync into hub projects, get live preview, outline, folding, diagnostics, and qmd highlighting in the editor, and cross-document links into `.md` pages navigate like `.qmd` ones.
+
 ### 2026-08-04
 
 - [`2c21233c`](https://github.com/quarto-dev/q2/commits/2c21233c): Importing a project list now shows the projects immediately — previously "Imported 30 project(s)" displayed nothing until the page was reloaded.

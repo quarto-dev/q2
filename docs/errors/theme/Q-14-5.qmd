@@ -1,0 +1,58 @@
+---
+title: "Unknown highlight style"
+description: "The `highlight-style:` value does not name a syntax-highlight palette shipped with Quarto; the default palette is used instead."
+code: Q-14-5
+subsystem: theme
+status: stub
+since: "99.9.9"
+categories:
+  - theme
+---
+
+# `Q-14-5` — Unknown Highlight Style
+
+> The `highlight-style:` value does not name a syntax-highlight
+> palette shipped with Quarto; the default palette is used
+> instead.
+
+## What this means
+
+The `highlight-style:` option selects the color palette used for
+syntax highlighting in code blocks. The configured name is not one
+of the palettes shipped with Quarto, so the document renders with
+the default palette. This is a warning, not an error — the render
+completes.
+
+## Why this happens
+
+Common causes:
+
+- **A typo in the style name.** The warning lists every available
+  palette; check the configured name against that list.
+- **A custom `.theme` file path.** Quarto 1 accepts a path to a
+  user-supplied `.theme` file here; Quarto 2 does not support that
+  yet — only the shipped catalog names.
+
+Quarto ships the full Quarto 1 palette catalog: the adaptive names
+`a11y`, `arrow`, `atom-one`, `ayu`, `breeze`, `github`, `gruvbox`,
+and `monochrome` (each resolves to its `-light` / `-dark` variant
+per theme, and the explicit forms are accepted too), the
+single-variant palettes `ayu-mirage`, `breezedark`, `dracula`,
+`espresso`, `haddock`, `kate`, `monokai`, `nord`, `oblivion`,
+`printing`, `pygments`, `radical`, `solarized`, `tango`,
+`vim-dark`, and `zenburn`, plus Quarto's own `default` and `none`.
+
+## How to fix
+
+Pick one of the available palettes, or remove `highlight-style:`
+to use the default. An adaptive name pairs naturally with a
+light/dark theme configuration:
+
+```yaml
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+highlight-style: github
+```

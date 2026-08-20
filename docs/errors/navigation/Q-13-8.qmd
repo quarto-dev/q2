@@ -1,0 +1,55 @@
+---
+title: "Unsupported toc-location value"
+description: "The `toc-location` option has a value Quarto does not support; a fallback placement is used."
+code: Q-13-8
+subsystem: navigation
+status: stub
+since: "99.9.9"
+categories:
+  - navigation
+---
+
+# `Q-13-8` — Unsupported toc-location Value
+
+> The `toc-location` option has a value Quarto does not support;
+> a fallback placement is used.
+
+## What this means
+
+The `toc-location` option controls where the table of contents is
+placed in HTML output:
+
+```yaml
+toc: true
+toc-location: left
+```
+
+Supported values are `left`, `right` (the default), and `body`.
+This warning fires when the option carries any other value. The
+document still renders, with a fallback placement:
+
+- `left-body` falls back to `left`, and `right-body` falls back
+  to `right`. These two values (which in Quarto 1 render a
+  sidebar TOC *plus* a copy in the document body) are not
+  implemented yet.
+- Any other value falls back to the default, `right`.
+
+## Why this happens
+
+Either a typo (`toc-location: lft`), or use of the `left-body` /
+`right-body` double-TOC values, which Quarto 2 does not implement
+yet.
+
+## How to fix
+
+Use one of the supported values:
+
+```yaml
+toc-location: left   # TOC in a left sidebar
+toc-location: right  # TOC in the right margin (default)
+toc-location: body   # TOC at the top of the document body
+```
+
+If you need the `left-body` / `right-body` double-TOC behavior,
+follow Quarto 2 development — until it lands, the sidebar half of
+the value is honored.

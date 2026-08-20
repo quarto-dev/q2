@@ -62,6 +62,94 @@ functions also traverse metadata values — a `Str` function will visit
 the words of your `title` as well as your document body, exactly as in
 Pandoc.
 
+## Two ways to organize a filter
+
+Everything above defines handlers as **global functions**. A filter may
+instead **return a table** of them, which keeps the handlers out of the
+global namespace:
+
+``` lua
+return {
+  Str = function(el)
+    return pandoc.Str(el.text:upper())
+  end,
+}
+```
+
+Both forms are equivalent, and both work in Pandoc. Set `traverse` as a
+key of the table rather than as a global when you use this form:
+
+``` lua
+return {
+  traverse = 'topdown',
+  Div = function(el) ... end,
+}
+```
+
+::: callout-important
+## A returned table replaces the globals
+
+If a script both defines global handlers and returns a table, **only the
+returned table runs** — the globals are ignored entirely. This follows
+Pandoc.
+
+It also means an *empty* returned table silently disables every global
+handler in the file, and that an accidental `return nil` at the end of a
+script is an error rather than a no-op ([`Q-11-6`](../../errors/lua/Q-11-6.qmd)).
+To use your global functions, end the script without returning anything
+at all.
+:::
+
+## Several passes in a fixed order
+
+Returning a *list* of handler tables runs each one as a separate pass
+over the whole document, in order. Each pass sees the previous pass's
+output:
+
+``` lua
+return {
+  -- pass 1: mark the elements of interest
+  { Div = function(el) ... end },
+  -- pass 2: act on what pass 1 produced
+  { Span = function(el) ... end },
+}
+```
+
+Each entry carries its own `traverse` setting; a `traverse` on one entry
+does not affect the others.
+
+Reach for this when one transformation has to finish everywhere before
+another begins. Within a single filter table you cannot get that
+ordering by rearranging the handlers — the traversal order is fixed by
+the document structure, not by the order you wrote them in. (A `Pandoc`
+handler calling `doc:walk{...}` can also sequence passes by hand; a
+returned list is the declarative way to say the same thing.)
+
+## When a handler never runs
+
+Handlers are dispatched **by name**, so a misspelled one is simply never
+looked up. Quarto warns rather than leaving you to wonder
+([`Q-11-7`](../../errors/lua/Q-11-7.qmd)):
+
+```
+Warning [Q-11-7]: Lua filter 'my-filter.lua' defines a handler 'Strs',
+which is not an element type Quarto knows about, so it will never run.
+Did you mean 'Str'?
+```
+
+If you keep helper functions on a returned filter table, they will be
+warned about too. Make them `local` instead:
+
+``` lua
+local function shout(text)
+  return text:upper()
+end
+
+return {
+  Str = function(el) return pandoc.Str(shout(el.text)) end,
+}
+```
+
 ## How metadata looks from Lua
 
 Metadata values appear as natural Lua values, following modern Pandoc's
@@ -109,3 +197,64 @@ function Meta(meta)
   return meta
 end
 ```
+
+## Attaching scripts and stylesheets: `quarto.doc.add_html_dependency`
+
+A filter that needs JavaScript or CSS in the rendered page registers an
+**HTML dependency**. Quarto copies the files into the output and adds the
+`<script>` and `<link>` tags for you:
+
+``` lua
+function Image(img)
+  quarto.doc.add_html_dependency({
+    name = 'zoom',
+    version = '1.2.0',
+    scripts = { 'zoom.js' },
+    stylesheets = { 'zoom.css' },
+  })
+  return img
+end
+```
+
+Paths are resolved relative to the filter's own directory, so an extension
+can ship its assets alongside its `.lua` file and reference them by bare
+name. An entry may also be written as a table with a `path` field —
+`{ path = 'src/zoom.js' }` — which is equivalent to the bare string. The
+copied file always keeps the base name of its path.
+
+Dependencies are **deduplicated by name**, so it is safe — and intended — to
+call `add_html_dependency` unconditionally from a handler that runs many
+times. The example above fires once per image; only the first registration
+does anything, and the rest are silently ignored.
+
+Only `name` is required. Because the dependency only affects HTML output,
+guard the call when your filter also targets other formats:
+
+``` lua
+if quarto.doc.is_format('html:js') then
+  quarto.doc.add_html_dependency({ name = 'zoom', scripts = { 'zoom.js' } })
+end
+```
+
+### Versions
+
+The optional `version` keeps releases of the same dependency apart on disk.
+Assets land under `site_libs/libs/{name}/`, with a version adding one level:
+
+``` {.default}
+_site/site_libs/libs/zoom/1.2.0/zoom.js   # with version = '1.2.0'
+_site/site_libs/libs/zoom/zoom.js         # without
+```
+
+Declaring a version costs nothing and is worth doing for any dependency you
+expect to update. Within a single document the first registration still
+wins, so registering one name at two different versions reports a warning —
+a page cannot sensibly load two copies of the same library.
+
+### Fields not yet supported
+
+Quarto 1 accepts several other fields on a dependency: `meta`, `links`,
+`resources`, `serviceworkers`, and `head`. Quarto 2 does not implement them
+yet, and warns once per dependency that names one, so a filter carried over
+from Quarto 1 tells you what was dropped rather than failing. Any other
+field is a typo and raises an error.

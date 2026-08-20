@@ -65,8 +65,6 @@ Hello!
 (document
   (section
     (pandoc_paragraph
-      (pandoc_str)
-      (pandoc_str)
       (pandoc_str))))
 
 ================================================================================

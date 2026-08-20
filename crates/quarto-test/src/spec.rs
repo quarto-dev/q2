@@ -34,6 +34,16 @@ pub struct RunConfig {
     /// runners that can (Playwright) run them. The TS WASM unit test's
     /// `format !== 'html'` filter handles q2-debug skipping orthogonally.
     pub requires_js: bool,
+    /// Execution engines whose runtime this fixture needs (e.g.
+    /// `["jupyter"]`). Mirrors `requires_js` for engine runtimes: a
+    /// fixture that names a `{python}` cell resolves `jupyter` as the
+    /// owning engine, and under the resolution-driven execution model a
+    /// registered-but-unavailable owner is a **loud** render error
+    /// (P2-12). On a machine without that runtime installed the fixture
+    /// is skipped, not failed. The availability check lives in the
+    /// runner (it needs an `EngineRegistry`); see
+    /// `runner::required_engine_unavailable`.
+    pub requires: Vec<String>,
 }
 
 impl RunConfig {
@@ -65,6 +75,10 @@ impl RunConfig {
 
             if let Some(req) = map.get("requires_js") {
                 config.requires_js = req.as_bool().unwrap_or(false);
+            }
+
+            if let Some(req) = map.get("requires") {
+                config.requires = parse_string_or_array(req).unwrap_or_default();
             }
         }
 
@@ -482,6 +496,48 @@ mod tests {
 
         let config = RunConfig::from_yaml(&yaml).unwrap();
         assert_eq!(config.skip, Some("needs special setup".to_string()));
+    }
+
+    #[test]
+    fn test_parse_run_config_requires_scalar() {
+        let yaml: Value = serde_yaml::from_str(
+            r#"
+            requires: jupyter
+            "#,
+        )
+        .unwrap();
+
+        let config = RunConfig::from_yaml(&yaml).unwrap();
+        assert_eq!(config.requires, vec!["jupyter".to_string()]);
+    }
+
+    #[test]
+    fn test_parse_run_config_requires_array() {
+        let yaml: Value = serde_yaml::from_str(
+            r#"
+            requires: [jupyter, knitr]
+            "#,
+        )
+        .unwrap();
+
+        let config = RunConfig::from_yaml(&yaml).unwrap();
+        assert_eq!(
+            config.requires,
+            vec!["jupyter".to_string(), "knitr".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_parse_run_config_requires_default_empty() {
+        let yaml: Value = serde_yaml::from_str(
+            r#"
+            skip: false
+            "#,
+        )
+        .unwrap();
+
+        let config = RunConfig::from_yaml(&yaml).unwrap();
+        assert!(config.requires.is_empty());
     }
 
     #[test]

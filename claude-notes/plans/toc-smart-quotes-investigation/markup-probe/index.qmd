@@ -1,0 +1,12 @@
+---
+title: "Markup probe"
+toc: true
+---
+
+## Use `code` and *em* and **strong**
+
+Probe: does the TOC entry keep inline markup?
+
+## Math $x+y$ and a [link](https://example.com)
+
+Probe: math and links.

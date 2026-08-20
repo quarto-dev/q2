@@ -83,6 +83,9 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
     let mut output: Vec<Block> = vec![];
 
     for block in blocks {
+        // Recurse into Divs first, so an inner heading is already a
+        // section by the time the absorb check below looks at it.
+        let block = sectionize_div(block);
         if let Block::Header(ref header) = block {
             let level = header.level;
             let (id, classes, attrs) = &header.attr;
@@ -163,6 +166,77 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
     }
 
     output
+}
+
+/// Sectionize the content of a non-section `Div`, then apply pandoc's
+/// absorb rule.
+///
+/// `makeSections` recurses into Divs and replaces a Div by the section it
+/// wraps when — and only when — the Div has an **empty id** and its
+/// content is **exactly one section**; the Div's classes and key-values
+/// are merged onto that section. Anything else keeps the Div and nests
+/// the section(s) inside it.
+///
+/// The five cases are pinned by Quarto 1's render of
+/// `claude-notes/plans/tabset-headings-in-toc-investigation/absorb-rule-probe/`:
+/// a bare wrapper absorbs (`<section id="case-a" class="level3 wrap-a">`);
+/// a Div with its own id does not; leading content before the heading
+/// does not; two sibling headings do not; key-values are merged.
+///
+/// Blocks other than `Div` are returned untouched — in particular
+/// `BlockQuote`, which pandoc does not descend into, so a heading quoted
+/// there stays a bare `Header` and never reaches the table of contents.
+fn sectionize_div(block: Block) -> Block {
+    let Block::Div(div) = block else {
+        return block;
+    };
+    if is_section(&div.attr.1) {
+        return Block::Div(div);
+    }
+
+    let Div {
+        attr,
+        content,
+        source_info,
+        attr_source,
+    } = div;
+    let mut content = sectionize_blocks(content);
+
+    let absorbable = attr.0.is_empty()
+        && content.len() == 1
+        && matches!(&content[0], Block::Div(inner) if is_section(&inner.attr.1));
+    if !absorbable {
+        return Block::Div(Div {
+            attr,
+            content,
+            source_info,
+            attr_source,
+        });
+    }
+
+    let Some(Block::Div(mut section)) = content.pop() else {
+        unreachable!("checked by `absorbable`")
+    };
+    // The section keeps its own id (the header's) and its `section` /
+    // `levelN` markers; the wrapper contributes its classes and
+    // key-values. `attr_source` for the merged-in pieces is dropped:
+    // the section Div is `By::sectionize()`-generated anyway, and a
+    // stale offset would be worse than none.
+    for class in attr.1 {
+        if !section.attr.1.contains(&class) {
+            section.attr.1.push(class);
+        }
+    }
+    for (k, v) in attr.2 {
+        section.attr.2.entry(k).or_insert(v);
+    }
+    section.attr_source = AttrSourceInfo::empty();
+    Block::Div(section)
+}
+
+/// A Div produced by [`sectionize_blocks`] carries the `section` class.
+fn is_section(classes: &[String]) -> bool {
+    classes.iter().any(|c| c == "section")
 }
 
 #[cfg(test)]
@@ -575,6 +649,215 @@ mod tests {
         let Block::Header(_) = &div.content[0] else {
             panic!("Expected Header inside section");
         };
+    }
+
+    // ── recursion into Divs, and pandoc's absorb rule ──────────────
+    //
+    // Ground truth for every case below was captured from Quarto 1's
+    // render of `claude-notes/plans/tabset-headings-in-toc-investigation/
+    // absorb-rule-probe/`. pandoc's `makeSections` recurses into Divs and
+    // replaces a Div by the section it wraps when — and only when — the
+    // Div has an empty id and its content is exactly one section.
+
+    fn make_div(
+        id: &str,
+        classes: Vec<&str>,
+        attrs: Vec<(&str, &str)>,
+        content: Vec<Block>,
+    ) -> Block {
+        let mut attr_map = LinkedHashMap::new();
+        for (k, v) in attrs {
+            attr_map.insert(k.to_string(), v.to_string());
+        }
+        Block::Div(Div {
+            attr: (
+                id.to_string(),
+                classes.iter().map(|s| s.to_string()).collect(),
+                attr_map,
+            ),
+            content,
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    /// Unwrap a `Block::Div`, or panic with a useful message.
+    fn as_div<'a>(block: &'a Block, what: &str) -> &'a Div {
+        match block {
+            Block::Div(d) => d,
+            other => panic!("expected {what} to be a Div, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_sectionize_recurses_into_divs() {
+        // A heading inside a Div must become a section; before this it
+        // stayed a bare Header and the HTML writer emitted <div><h3>.
+        let blocks = vec![make_div(
+            "",
+            vec!["wrap"],
+            vec![],
+            vec![make_header(3, "inner", vec![], "Inner"), make_para("Body")],
+        )];
+        let result = sectionize_blocks(blocks);
+        assert_eq!(result.len(), 1);
+        let section = as_div(&result[0], "the absorbed wrapper");
+        assert_eq!(section.attr.0, "inner");
+        assert!(section.attr.1.contains(&"section".to_string()));
+    }
+
+    /// Case A: bare Div, one header-led run → absorbed, classes merged.
+    #[test]
+    fn test_sectionize_absorbs_bare_div_into_section() {
+        let blocks = vec![make_div(
+            "",
+            vec!["wrap-a"],
+            vec![],
+            vec![
+                make_header(3, "case-a", vec![], "Case A"),
+                make_para("Body"),
+            ],
+        )];
+        let result = sectionize_blocks(blocks);
+        assert_eq!(result.len(), 1, "the Div is replaced, not nested");
+        let section = as_div(&result[0], "section");
+        assert_eq!(section.attr.0, "case-a", "the header's id wins");
+        assert_eq!(
+            section.attr.1,
+            vec![
+                "section".to_string(),
+                "level3".to_string(),
+                "wrap-a".to_string()
+            ],
+            "the Div's classes are merged after the section markers"
+        );
+    }
+
+    /// Case B: a Div with its own id is *not* absorbed.
+    #[test]
+    fn test_sectionize_does_not_absorb_div_with_id() {
+        let blocks = vec![make_div(
+            "has-id",
+            vec!["wrap-b"],
+            vec![],
+            vec![make_header(3, "case-b", vec![], "Case B")],
+        )];
+        let result = sectionize_blocks(blocks);
+        let outer = as_div(&result[0], "the surviving wrapper");
+        assert_eq!(outer.attr.0, "has-id");
+        assert!(!outer.attr.1.contains(&"section".to_string()));
+        assert_eq!(outer.content.len(), 1);
+        let inner = as_div(&outer.content[0], "the nested section");
+        assert_eq!(inner.attr.0, "case-b");
+        assert!(inner.attr.1.contains(&"section".to_string()));
+    }
+
+    /// Case C: content before the first header blocks absorption.
+    #[test]
+    fn test_sectionize_does_not_absorb_div_with_leading_content() {
+        let blocks = vec![make_div(
+            "",
+            vec!["wrap-c"],
+            vec![],
+            vec![
+                make_para("Leading"),
+                make_header(3, "case-c", vec![], "Case C"),
+            ],
+        )];
+        let result = sectionize_blocks(blocks);
+        let outer = as_div(&result[0], "the surviving wrapper");
+        assert_eq!(outer.attr.1, vec!["wrap-c".to_string()]);
+        assert_eq!(outer.content.len(), 2, "leading para + one section");
+        assert!(matches!(outer.content[0], Block::Paragraph(_)));
+        assert!(
+            as_div(&outer.content[1], "nested section")
+                .attr
+                .1
+                .contains(&"section".to_string())
+        );
+    }
+
+    /// Case D: two sibling sections cannot collapse into one.
+    #[test]
+    fn test_sectionize_does_not_absorb_div_with_two_sections() {
+        let blocks = vec![make_div(
+            "",
+            vec!["wrap-d"],
+            vec![],
+            vec![
+                make_header(3, "d-one", vec![], "D one"),
+                make_header(3, "d-two", vec![], "D two"),
+            ],
+        )];
+        let result = sectionize_blocks(blocks);
+        let outer = as_div(&result[0], "the surviving wrapper");
+        assert_eq!(outer.attr.1, vec!["wrap-d".to_string()]);
+        assert_eq!(outer.content.len(), 2, "two sibling sections");
+        for (i, child) in outer.content.iter().enumerate() {
+            assert!(
+                as_div(child, "a nested section")
+                    .attr
+                    .1
+                    .contains(&"section".to_string()),
+                "child {i} is sectionized even though the Div is not absorbed"
+            );
+        }
+    }
+
+    /// Case E: key-value attributes are merged on absorption.
+    #[test]
+    fn test_sectionize_absorb_merges_key_values() {
+        let blocks = vec![make_div(
+            "",
+            vec!["wrap-e"],
+            vec![("data-thing", "x")],
+            vec![make_header(3, "case-e", vec![], "Case E")],
+        )];
+        let result = sectionize_blocks(blocks);
+        let section = as_div(&result[0], "section");
+        assert!(
+            section.attr.1.contains(&"section".to_string()),
+            "the Div was absorbed, so what remains is the section itself"
+        );
+        assert_eq!(section.attr.0, "case-e");
+        assert_eq!(
+            section.attr.2.get("data-thing").map(String::as_str),
+            Some("x")
+        );
+        assert!(section.attr.1.contains(&"wrap-e".to_string()));
+    }
+
+    /// An already-sectionized Div is left alone — sectionize must be
+    /// idempotent, and a `section` Div is not a candidate for absorbing.
+    #[test]
+    fn test_sectionize_is_idempotent_over_divs() {
+        let blocks = vec![make_div(
+            "",
+            vec!["wrap"],
+            vec![],
+            vec![make_header(3, "inner", vec![], "Inner")],
+        )];
+        let once = sectionize_blocks(blocks);
+        let twice = sectionize_blocks(once.clone());
+        assert_eq!(format!("{once:?}"), format!("{twice:?}"));
+    }
+
+    /// pandoc's `makeSections` does not descend into a `BlockQuote`, so a
+    /// heading there stays a bare Header (and thus out of the TOC).
+    #[test]
+    fn test_sectionize_does_not_descend_into_blockquote() {
+        let blocks = vec![Block::BlockQuote(quarto_pandoc_types::block::BlockQuote {
+            content: vec![make_header(3, "quoted", vec![], "Quoted")],
+            source_info: dummy_source_info(),
+        })];
+        let result = sectionize_blocks(blocks);
+        let Block::BlockQuote(bq) = &result[0] else {
+            panic!("blockquote survives")
+        };
+        assert!(
+            matches!(bq.content[0], Block::Header(_)),
+            "the heading stays a bare Header"
+        );
     }
 
     #[test]

@@ -21,6 +21,70 @@ import { buildSnippet, type SearchFiles, type SearchResult } from '../services/s
 import { openPrintableDocument } from '../services/printableDocument';
 import './FileSidebar.css';
 
+/** Document with a plus — "new file". Matches the MinimalHeader icon style. */
+function FilePlusIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M9 15h6" />
+      <path d="M12 12v6" />
+    </svg>
+  );
+}
+
+/** Arrow rising out of a tray — "upload". */
+function UploadIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
+}
+
+/** Printer — "open printable version". */
+function PrintIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="6 9 6 2 18 2 18 9" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+      <rect x="6" y="14" width="12" height="8" />
+    </svg>
+  );
+}
+
 export interface FileSidebarProps {
   files: FileEntry[];
   currentFile: FileEntry | null;
@@ -73,10 +137,10 @@ function isImageFile(path: string): boolean {
   return IMAGE_EXTENSIONS.includes(ext);
 }
 
-/** Check if a file path is a qmd file */
-function isQmdFile(path: string): boolean {
+/** Check if a file path is a renderable source file (.qmd or .md) */
+function isSourceFile(path: string): boolean {
   const ext = path.split('.').pop()?.toLowerCase() || '';
-  return ext === 'qmd';
+  return ext === 'qmd' || ext === 'md';
 }
 
 /** Get file icon based on extension */
@@ -360,7 +424,7 @@ export default function FileSidebar({
     let fileType: 'image' | 'qmd' | 'other' = 'other';
     if (isImageFile(file.path)) {
       fileType = 'image';
-    } else if (isQmdFile(file.path)) {
+    } else if (isSourceFile(file.path)) {
       fileType = 'qmd';
     }
 
@@ -380,7 +444,7 @@ export default function FileSidebar({
     const isRenaming = renamingFile?.path === file.path;
     // Only make images and qmd files draggable (for editor insertion)
     const isDraggable =
-      !isRenaming && (isImageFile(file.path) || isQmdFile(file.path));
+      !isRenaming && (isImageFile(file.path) || isSourceFile(file.path));
     // Parent folder of this file, used by resolveDefaultDestination when a
     // drop lands on a file row (the drop target is the file, but the
     // destination for an upload is the enclosing folder).
@@ -512,27 +576,33 @@ export default function FileSidebar({
       onClick={handleSidebarClick}
     >
       <div className="sidebar-header">
+        <button
+          className="ph-btn small outline new-file-btn"
+          onClick={onNewFile}
+          title="New file"
+          aria-label="New file"
+        >
+          <FilePlusIcon />
+        </button>
+        <button
+          className="ph-btn small outline upload-asset-btn"
+          onClick={handleUploadClick}
+          title="Upload asset"
+          aria-label="Upload asset"
+        >
+          <UploadIcon />
+        </button>
         {canOpenPrintable && (
           <button
-            className="print-file-btn"
+            className="ph-btn small outline print-file-btn"
             onClick={handleOpenPrintable}
             disabled={isPreparingPrintable}
             title="Open a printable version of this document in a new tab (use your browser's Print to save as PDF)"
             aria-label="Open printable version in a new tab"
           >
-            {isPreparingPrintable ? '…' : '🖨 Print'}
+            {isPreparingPrintable ? '…' : <PrintIcon />}
           </button>
         )}
-        <button className="new-file-btn" onClick={onNewFile} title="New file">
-          + New
-        </button>
-        <button
-          className="upload-asset-btn"
-          onClick={handleUploadClick}
-          title="Upload asset"
-        >
-          ⬆ Upload
-        </button>
       </div>
       {printableError && (
         <div className="sidebar-printable-error" role="alert">

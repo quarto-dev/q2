@@ -1,22 +1,19 @@
 /*
  * NewAssetDialog styles.
  *
- * The drop zone, file preview rows, buttons, and error-message styling are
- * shared with NewFileDialog and defined in NewFileDialog.css. We import it
- * as a side-effect so NewAssetDialog is self-contained. When Phase C strips
- * the upload UI out of NewFileDialog, these shared rules should be lifted
- * into components/fileUpload/.
+ * The drop zone, file preview rows, and add-more button are shared with
+ * NewFileDialog and defined in NewFileDialog.css, imported here as a
+ * side-effect so NewAssetDialog is self-contained. When Phase C strips the
+ * upload UI out of NewFileDialog, these shared rules should be lifted into
+ * components/fileUpload/. The remaining dialog chrome (backdrop, header,
+ * buttons, inputs, error banner) comes from src/ui.css.
  */
 
 @import './NewFileDialog.css';
 
-.new-asset-dialog {
-  background: var(--dialog-bg);
-  border: 1px solid var(--dialog-border);
-  border-radius: 12px;
-  width: 90%;
-  max-width: 480px;
-  box-shadow: 0 8px 32px var(--dialog-shadow);
+.ph-dialog.new-asset-dialog {
+  width: 480px;
+  padding: 0;
 }
 
 .new-asset-dialog .destination-input {
@@ -28,20 +25,4 @@
   margin-bottom: 8px;
   color: var(--editor-text-dim);
   font-size: 14px;
-}
-
-.new-asset-dialog .destination-input input {
-  width: 100%;
-  padding: 12px;
-  background: var(--dialog-input-bg);
-  border: 1px solid var(--dialog-input-border);
-  border-radius: 6px;
-  color: var(--editor-text);
-  font-size: 14px;
-  box-sizing: border-box;
-}
-
-.new-asset-dialog .destination-input input:focus {
-  outline: none;
-  border-color: var(--dialog-tab-active);
 }
