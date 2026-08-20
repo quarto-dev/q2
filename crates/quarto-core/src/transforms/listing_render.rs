@@ -202,6 +202,26 @@ fn render_one(
     };
     let Some(markdown) = markdown else { return };
 
+    // Q1 parity (bd-listing-ellipsis-no-matching-l963osy1): every
+    // listing — built-in and custom alike — is followed by a hidden
+    // "No matching items" placeholder, mirroring Q1's
+    // `_pagination.ejs.md` partial (appended after the rendered
+    // template in `website-listing-template.ts`). The vendored
+    // quarto-listing.js reveals it when a filter/search matches
+    // nothing (the List.js init wiring that drives that is
+    // bd-nbv80e33). Emitted as a qmd div rather than raw HTML so
+    // Lua filters and AST transforms can see it. The text comes
+    // from the localized `listing-page-no-matches` term.
+    let no_matching = crate::language::LanguageTerms::from_meta(&ast.meta)
+        .and_then(|terms| {
+            terms
+                .get("listing-page-no-matches")
+                .map(ToString::to_string)
+        })
+        .unwrap_or_else(|| "No matching items".to_string());
+    let markdown =
+        format!("{markdown}\n\n::: {{.listing-no-matching .d-none}}\n{no_matching}\n:::\n");
+
     // Re-parse the markdown. Discard the fresh SourceContext
     // (bd-0jyl tracks proper threading); collect any parse
     // diagnostics into a single host-page warning.

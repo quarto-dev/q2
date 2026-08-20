@@ -129,48 +129,88 @@ be meaningful. (Phase-0 tests will build their own minimal fixtures in-tree.)
 
 ## Work items
 
-- **Phase 0 — Tests (TDD: write first, verify they fail).**
-  - [ ] Unit tests for `truncate_text_at_space`: word-boundary cut + `…`
-    suffix; trailing `,`/`/`/`:` stripped before the `…`; short strings
-    untouched; no-space-in-window hard cut; multi-byte safety.
-  - [ ] Wrapper-level tests: `maybe_truncate` `Some(0)`/`None` disable;
-    feed `maybe_truncate_visible` `max == 0` disable + HTML projection,
-    truncated output ends with `…`.
-  - [ ] Integration tests (`crates/quarto-core/tests/integration/listing_pipeline.rs`):
-    rendered listing page contains `listing-no-matching` + `d-none` with
-    the localized/default "No matching items" text, for a built-in type
-    and a custom-template listing; derived description ends with `…`.
-  - [ ] Explicit-description test: item with long explicit `description:`
-    renders truncated with `…` at the listing's `max-description-length`;
-    a second listing with a different limit truncates differently
-    (per-listing semantics); `max-description-length: 0` disables.
-  - [ ] Check Q1's feed behavior for *explicit* descriptions before wiring
-    Phase 3 into the feed path — if Q1 feeds don't truncate explicit
-    descriptions, neither do we (parity, not invention).
-- **Phase 1 — Shared truncation helper + ellipsis.**
-  - [ ] Add `truncate_text_at_space` (listing module; likely `helpers.rs`).
-  - [ ] Rewire `maybe_truncate` (reader.rs) and the feed's
-    `maybe_truncate_visible`/`truncate_plain_at_word_boundary` onto it;
-    delete the duplicate body.
-- **Phase 2 — No-matching placeholder div.**
-  - [ ] In `listing_render.rs::render_one`, append
-    `::: {.listing-no-matching .d-none}` + localized term to the rendered
-    template markdown before the re-parse, all listing types. Localize via
-    `LanguageTerms::from_meta(&ast.meta).get("listing-page-no-matches")`,
-    English fallback "No matching items" (toc-title fallback pattern).
-- **Phase 3 — Explicit description truncation (bd-pcmdb7qg).**
-  - [ ] Truncate explicit descriptions at binding time with the listing's
-    `max_description_length` via the shared helper; derived-path
-    placeholder markers must pass through untouched (Q1's `isPlaceHolder`
-    guard equivalent).
+- **Phase 0 — Tests (TDD: write first, verify they fail).** ✅ 17 expected
+  failures confirmed 2026-08-20 before any implementation.
+  - [x] Unit battery on `maybe_truncate` (Q1-exact spec, 11 tests in
+    `post_render_upgrade/reader.rs`): ellipsis, `,`/`/`/`:` strip, short
+    unchanged, exactly-max truncated (Q1 quirk), hard cut, space-at-0 not
+    a boundary, `None`/`Some(0)` disable, multi-byte, char-vs-UTF-16.
+  - [x] Feed wrapper tests (`feed/reader_ext.rs`): word-boundary + `…`,
+    tag-strip + comma-strip on truncation, `max == 0` disable (existing).
+  - [x] Integration tests (`listing_pipeline.rs`, 5 new): placeholder div
+    on default + custom listings, derived-description ellipsis on both,
+    `lang: de` localization ("Keine Treffer"), explicit-description
+    truncation, `max-description-length: 0` disable.
+  - [x] Binding unit tests: explicit truncation at listing max; 0 disables.
+  - [x] Q1 feed behavior for *explicit* descriptions checked: Q1 never
+    truncates them in feeds (`truncateNode` only serves the derived
+    placeholder fill) → Phase 3 does not touch the feed.
+- **Phase 1 — Shared truncation helper + ellipsis.** ✅
+  - [x] `truncate_text_at_space` added to `listing/helpers.rs` — an
+    **exact port** of Q1 `truncateText(s, n, "space")`, including the
+    strict-`<` fits-check and drop-one-before-space-search behavior
+    (decision recorded below). Only documented divergence: Rust chars vs
+    UTF-16 units.
+  - [x] `maybe_truncate` (reader.rs) and the feed's
+    `maybe_truncate_visible` rewired onto it; the verbatim-duplicate
+    `truncate_plain_at_word_boundary` deleted. One pre-existing test
+    (`substitute_description_truncates_to_max_from_marker`) updated to
+    the new expected cut.
+- **Phase 2 — No-matching placeholder div.** ✅
+  - [x] `listing_render.rs::render_one` appends
+    `::: {.listing-no-matching .d-none}` + localized
+    `listing-page-no-matches` term (English fallback) to the rendered
+    template markdown before the re-parse — all listing types.
+- **Phase 3 — Explicit description truncation (bd-pcmdb7qg).** ✅
+  - [x] `binding.rs::build_item_map` truncates explicit descriptions via
+    the shared helper at the listing's `max_description_length`
+    (0 disables). Derived-path markers unaffected (separate envelope
+    machinery).
+- **Discovered during Phase 2 verification: bd-yjsz6hdu.** ✅ (this
+  strand's slice)
+  - [x] `max-description-length: 40` (unquoted YAML integer) was silently
+    ignored — `as_plain_text()` returns `None` for `Yaml::Integer`, so
+    the 175 default always won. Fixed here via `parse_u32_scalar`
+    (`as_int()` fallback) + regression test through the real YAML path.
+    Sibling numeric keys (`page-size`, `max-items`, `grid-columns`)
+    remain on the broken pattern → filed as **bd-yjsz6hdu**.
 - **Phase 4 — End-to-end verification.**
-  - [ ] `cargo run --bin q2 -- render` on the connect-docs repro; inspect
-    output for `…` and the placeholder div; record invocation + snippet
-    here.
-  - [ ] Snapshot audit: report any `.snap` changes per CLAUDE.md policy.
-  - [ ] Full `cargo xtask verify` (quarto-core changes → WASM leg affected).
-- **Phase 5 — Docs.** Likely none (behavior-parity fix); confirm
-  `docs/` listing pages don't document the no-ellipsis behavior.
+  - [x] Rendered a pristine copy of the strand's repro through the real
+    binary (2026-08-20):
+    `cargo run --bin q2 -- render <scratch-copy-of-repro>` (sources from
+    `~/repos/github/cscheid/q2-connect-docs/llms-info/repros/listing-ellipsis-no-matching/`,
+    output inspected by hand). Both truncation endings are
+    character-identical to the Q1 reference (`_site-q1/index.html`):
+    `…listing page has to…` and `…guaranteeing that…` (2 ellipsis chars
+    per page, matching Q1). Both listing pages now emit
+    `<div class="listing-no-matching d-none"><p>No matching items</p></div>`
+    (Q1: same div, text not wrapped in `<p>` — see decision above).
+  - [x] Snapshot audit: **zero `.snap` changes** across the full
+    workspace run.
+  - [x] Full workspace tests: 12966/12966 passed. `cargo fmt --check`
+    clean; `cargo clippy -p quarto-core` clean (one `map().unwrap_or()`
+    nit fixed). Full `cargo xtask verify` (Rust + WASM + hub-client
+    legs): **all steps passed** (2026-08-20).
+- **Phase 5 — Docs.** ✅ No-op confirmed: nothing under `docs/` documents
+  `max-description-length`, truncation, or the placeholder (the listings
+  docs page is bd-2nb6i1qv's scope).
+
+## Implementation decisions (recorded during execution)
+
+- **Exact Q1 port, not a cleaned-up variant.** `truncate_text_at_space`
+  reproduces Q1's `truncateText(s, n, "space")` char-for-char on BMP
+  input, including two behaviors beyond the ellipsis that differ from
+  q2's old cutter: (1) the fits-check is strict `<`, so an
+  exactly-`max`-char string is truncated (Q1's `trimLength`); (2) the
+  cut window is the first `max` chars *minus one*, cut at the last
+  literal `' '` with index > 0 (old code cut at the last whitespace
+  within `max`). Rationale: the strand's goal is Q1 parity; a variant
+  that diverges on edge inputs would diff against Q1 forever.
+- **Placeholder div text sits in a `<p>`** inside the div (qmd div →
+  Para). Q1 puts the text directly in the div. Invisible while
+  `d-none`; when revealed (bd-nbv80e33), `.listing-no-matching`'s
+  centering/padding applies to the container either way — the inner
+  `<p>` only adds its bottom margin.
 
 ## Risks / tradeoffs (draft)
 

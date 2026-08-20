@@ -1175,3 +1175,217 @@ fn listing_css_rules_land_in_rendered_theme_css() {
         "rendered theme CSS must contain category-chip rules"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────
+// bd-listing-ellipsis-no-matching-l963osy1: hidden "No matching
+// items" placeholder + derived-description ellipsis.
+//
+// The 62-char fixture sentence below truncates at
+// `max-description-length: 40` to exactly
+// "alpha bravo charlie delta echo foxtrot…" under Q1's
+// `truncateText(s, 40, "space")` (first 40 chars, drop one, cut at
+// the last space, append `…`).
+// ─────────────────────────────────────────────────────────────────
+
+const LONG_SENTENCE: &str = "alpha bravo charlie delta echo foxtrot golf hotel india juliet";
+const TRUNCATED_SENTENCE: &str = "alpha bravo charlie delta echo foxtrot…";
+
+/// Default-type listing page: emits the hidden no-matching
+/// placeholder (Q1's `_pagination.ejs.md` parity) and the derived
+/// description ends with `…`.
+///
+/// Fixture note: the default item template guards the description
+/// envelope with `$if(description)$` (br-listing-default-no-derived-
+/// desc-ywc4zvu8), so the post carries a short explicit
+/// `description:` to make the envelope render; the post-render
+/// substitution then overwrites it with the derived first paragraph
+/// (bd-listing-description-precedence-x4bh6w3m). If either of those
+/// strands changes behavior, revisit this fixture.
+#[test]
+fn default_listing_emits_no_matching_placeholder_and_derived_ellipsis() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  contents: posts\n  max-description-length: 40\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            &format!(
+                "---\ntitle: Alpha\ndate: 2026-01-01\ndescription: placeholder\nformat: html\n---\n\n{LONG_SENTENCE}\n"
+            ),
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    assert!(
+        host.contains(r#"class="listing-no-matching d-none""#),
+        "expected hidden no-matching placeholder div; got:\n{}",
+        host
+    );
+    assert!(
+        host.contains("No matching items"),
+        "expected default-English no-matching text; got:\n{}",
+        host
+    );
+    assert!(
+        host.contains(TRUNCATED_SENTENCE),
+        "expected derived description truncated with ellipsis; got:\n{}",
+        host
+    );
+}
+
+/// Custom-template listing (the Connect-docs cookbook shape from the
+/// strand's repro): the no-matching placeholder and the derived-
+/// description ellipsis both apply to `type: custom` too. Unlike the
+/// default template, the repro template emits the description
+/// envelope markers unconditionally, so this path is independent of
+/// the `$if(description)$` guard and the precedence bug.
+#[test]
+fn custom_listing_emits_no_matching_placeholder_and_derived_ellipsis() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Custom Listing\nlisting:\n  type: custom\n  template: listing.template\n  contents: posts\n  max-description-length: 40\nformat: html\n---\n",
+        );
+        write(
+            &p.join("listing.template"),
+            "$for(items)$\n[$items.title$]($items.path$)\n\n::: {.listing-description}\n```{=html}\n$items.description-placeholder-begin$\n```\n\n$if(items.description)$\n$items.description$\n$endif$\n\n```{=html}\n$items.description-placeholder-end$\n```\n:::\n\n$endfor$\n",
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            &format!("---\ntitle: Alpha\nformat: html\n---\n\n{LONG_SENTENCE}\n"),
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    assert!(
+        host.contains(r#"class="listing-no-matching d-none""#),
+        "expected hidden no-matching placeholder div on custom listing; got:\n{}",
+        host
+    );
+    assert!(
+        host.contains("No matching items"),
+        "expected no-matching text on custom listing; got:\n{}",
+        host
+    );
+    assert!(
+        host.contains(TRUNCATED_SENTENCE),
+        "expected derived description truncated with ellipsis; got:\n{}",
+        host
+    );
+    // The envelope markers themselves must be gone.
+    assert!(
+        !host.contains("desc-begin(5A0113B34292)") && !host.contains("desc-end(5A0113B34292)"),
+        "description envelope markers must be stripped"
+    );
+}
+
+/// The placeholder text is localized: `lang: de` renders the
+/// `listing-page-no-matches` term from `_language-de.yml`
+/// ("Keine Treffer"), not the English default.
+#[test]
+fn no_matching_placeholder_is_localized() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nlang: de\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  contents: posts\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: Alpha\ndate: 2026-01-01\nformat: html\n---\n\nBody.\n",
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    assert!(
+        host.contains(r#"class="listing-no-matching d-none""#),
+        "expected hidden no-matching placeholder div; got:\n{}",
+        host
+    );
+    assert!(
+        host.contains("Keine Treffer"),
+        "expected German no-matching text under lang: de; got:\n{}",
+        host
+    );
+    assert!(
+        !host.contains("No matching items"),
+        "English fallback must not appear when lang: de provides the term"
+    );
+}
+
+/// bd-pcmdb7qg: an explicit `description:` is truncated at the
+/// listing's `max-description-length` (with `…`), Q1 parity. The
+/// post body is heading-only so no derived paragraph exists — the
+/// post-render substitution keeps the template fallback, which is
+/// the binding-truncated explicit description.
+#[test]
+fn explicit_description_truncated_at_max_length() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  contents: posts\n  max-description-length: 40\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            &format!(
+                "---\ntitle: Alpha\ndate: 2026-01-01\ndescription: \"{LONG_SENTENCE}\"\nformat: html\n---\n\n# Heading only\n"
+            ),
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    assert!(
+        host.contains(TRUNCATED_SENTENCE),
+        "expected explicit description truncated with ellipsis; got:\n{}",
+        host
+    );
+    assert!(
+        !host.contains("golf hotel india juliet"),
+        "explicit description must not appear untruncated"
+    );
+}
+
+/// bd-pcmdb7qg: `max-description-length: 0` disables explicit-
+/// description truncation (Q1 treats 0 as missing).
+#[test]
+fn explicit_description_untruncated_when_max_length_zero() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  contents: posts\n  max-description-length: 0\nformat: html\n---\n",
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            &format!(
+                "---\ntitle: Alpha\ndate: 2026-01-01\ndescription: \"{LONG_SENTENCE}\"\nformat: html\n---\n\n# Heading only\n"
+            ),
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    assert!(
+        host.contains(LONG_SENTENCE),
+        "expected full explicit description with truncation disabled; got:\n{}",
+        host
+    );
+}
