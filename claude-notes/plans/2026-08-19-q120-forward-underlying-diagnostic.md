@@ -142,7 +142,7 @@ investigation dir's `observed-output.txt` for the captured render output.
 
 ### Phase 3 — Verification + docs
 
-- [ ] Full `cargo xtask verify` green (includes `cargo nextest run
+- [x] Full `cargo xtask verify` green (includes `cargo nextest run
   --workspace`; pampa is in the WASM closure).
 - [x] End-to-end: `cargo run --bin q2 -- render` on the repro fixture;
   captured output (`repro/observed-output.txt`, inspected) shows the
@@ -150,10 +150,10 @@ investigation dir's `observed-output.txt` for the captured render output.
   ("This key-value pair cannot appear before the class specifier." /
   "This class specifier appears after the key-value pair.") plus an
   `ℹ [Q-2-3] Key-value Pair Before Class Specifier in Attribute` footer.
-- [ ] Check `docs/errors/yaml/Q-1-20.qmd` — message text unchanged (decision
+- [x] Check `docs/errors/yaml/Q-1-20.qmd` — message text unchanged (decision
   4), so likely no edit; update only if it shows example output that now
   differs materially.
-- [ ] Close the strand.
+- [x] Close the strand (commit 4e116ba5).
 
 ## Risks / tradeoffs (draft)
 
