@@ -3,7 +3,7 @@
 **Date:** 2026-08-19
 **Braid:** bd-footer-link-attrs-dropped-1axx82op
 **Checkout:** invoked in the bd-nn2fou8h worktree, on `main` @ `87c0e21a` (v0.25.0) — no dedicated branch created; user decides where implementation lands.
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design aligned 2026-08-20; implementation approved and in progress on branch `braid/bd-footer-link-attrs-dropped-1axx82op`.
 
 ## Triage verdict
 
@@ -41,24 +41,29 @@ All description claims verified at `main` @ `87c0e21a`:
 
 **Reproduced at HEAD**: `claude-notes/plans/footer-link-attrs-investigation/repro/` — `cargo run --bin q2 -- render <dir>`, inspect `_site/index.html`. Footer link renders as bare `<a href>`, span unwraps, image keeps class+style, body control keeps everything. README there has the captured output.
 
-## Proposed phases (draft)
+## Design decisions (aligned with Carlos, 2026-08-20)
 
-Skeleton only — actual phase contents wait on the design discussion.
+1. **Title precedence:** target title wins; a `title` kv is suppressed only when a target title is present (pandoc parity, never a duplicate attribute). Applied uniformly to Link *and* Image (the Image arm had the same latent duplicate-title path). The body writer's own duplicate-title quirk is filed as **bd-nkk2z7on** (discovered-from this strand, P3).
+2. **Span wrapping:** attr-only — a span with a non-empty attr renders `<span ...>content</span>`; an attr-less span stays unwrapped as today.
+3. **Code attrs:** in scope, fixed in the same pass via the same helper.
+4. **Snapshot churn:** treated as mechanical during implementation, **plus a spot check of the resulting snapshot diffs before declaring the work finished** (per Carlos).
 
-- **Phase 0 — Test plan (TDD).** Unit tests in `render_html.rs`'s in-file test module (link with id/class/kv/title, attributed span, attr-less span, title-precedence case); e2e regression in `crates/quarto-core/tests/integration/navbar_footer_pipeline.rs` (or `navigation_e2e.rs`) driving a real project render with region- and item-level cases. Write, verify failures.
-- **Phase 1 — Attr-emission helper.** Factor the Image arm's id/class/kv emission into a helper (`push_attr_html` or similar) in `render_html.rs`.
-- **Phase 2 — Link arm.** Use the helper; settle title precedence per design answer. Image arm switches to the helper too.
-- **Phase 3 — Span arm.** Emit `<span ...>` wrapper per the chosen policy (attr-only vs always).
-- **Phase 4 — (If in scope) Code arm attrs.**
-- **Phase 5 — End-to-end verification.** Re-render the investigation repro; inspect footer HTML; record invocation + output snippet. Full `cargo nextest run --workspace` + `cargo xtask verify` (WASM leg — quarto-navigation feeds the preview path).
-- **Phase 6 — Close out.** Snapshot-change report if any `.snap` files move; update strand; docs likely not needed (bug fix, no new surface).
+Emission order (matches the existing Image arm): tag-specific attrs first (`href`/`src`+`alt`), then target `title`, then `id`, `class`, kvs in insertion order (Attr's kv store is a `LinkedHashMap`). Helper: `push_attr_html(out, attr, suppress_title_kv)` in `render_html.rs`.
 
-## Open design questions for the user
+## Work items
 
-1. **Title precedence.** When a link has both a target title (`[l](u "T1")`) and an attr kv title (`{title="T2"}`), which wins? The strand notes pandoc's HTML writer emits the target title. The body writer (`pampa/html.rs`) emits attr kvs *before* the target title, so a duplicate `title=` can occur and browsers keep the first (attr wins) — arguably a latent bug there too. Options: (a) match the body writer byte-for-byte (consistency, keeps its quirk), (b) target title wins, kv title suppressed when target title present (pandoc parity, no duplicate attribute). My lean: (b), and optionally file a discovered-from strand for the body writer's duplicate-title quirk.
-2. **Span wrapping policy.** Strand suggests wrapping only when attr is non-empty (attr-less spans stay unwrapped, minimizing footer-markup churn); the body writer always emits `<span>`. Which do you want for nav surfaces? My lean: attr-only, per the strand.
-3. **Code attrs in scope?** `Inline::Code` in nav text also drops its attr (e.g. `` `x`{.numberLines} `` — admittedly exotic in a footer). Fix in the same pass, or file separately as discovered-from? My lean: same pass, it's the same helper call.
-4. **Attribute ordering / snapshot churn.** Reusing the helper in the Image arm keeps its current order (id, class, kvs after src/alt/title) — Link would match. OK to treat any resulting snapshot diffs as mechanical, reported per the snapshot policy?
+- [x] Phase 0 — TDD: failing unit tests in `render_html.rs` (link attrs, title precedence, attributed span, attr-less span unwrapped, code attrs) + failing e2e in `crates/quarto-core/tests/integration/navbar_footer_pipeline.rs` (region- and item-level). Verified failures: 3/4 unit tests failed as predicted (`link_target_title_suppresses_title_kv` passes pre-fix by coincidence — with all attrs dropped, target-title-only output matches the desired precedence output; kept as a regression guard); e2e failed showing `<a href="https://example.com/">prefs</a> and sp`.
+- [x] Phase 1 — `push_attr_html` helper; Link, Span, Code arms fixed; Image arm refactored onto the helper (byte-identical output for images without a `title` kv; with target title + `title` kv, images now also suppress the kv).
+- [x] Phase 2 — All 12,951 workspace tests pass. **Snapshot spot check: zero `.snap` files changed, and `grep -rl 'nav-footer|footer-items' --include='*.snap' crates/` finds no snapshot covering footer/nav HTML at all — zero churn is structural.** Clippy clean on quarto-navigation.
+- [x] Phase 3 — End-to-end verified through the real binary:
+  `cargo run --bin q2 -- render claude-notes/plans/footer-link-attrs-investigation/repro`, then inspected `_site/index.html`:
+  ```html
+  <div class="nav-footer-center"><a href="https://example.com/prefs" id="open_preferences_center" class="footer-link" title="Cookie Preferences">cookie prefs</a> and <span id="sp" class="sp-cls">attributed span</span> and <img src="images/logo.svg" alt="logo" class="footer-logo" style="height: 22px;"></div>
+  ...
+  <li class="nav-item"><a href="https://example.com/item" id="item-id" class="item-cls">item link</a></li>
+  ```
+  Region- and item-level links keep id/class/title; attributed span keeps its wrapper; image control unchanged.
+- [ ] Phase 4 — full `cargo xtask verify` (quarto-navigation is in the WASM closure); commit; update strand.
 
 ## Risks / tradeoffs (draft)
 

@@ -32,6 +32,14 @@ Body control in the same page keeps everything:
 <a href="https://example.com/prefs" id="open_preferences_center_body" class="footer-link" title="Cookie Preferences">cookie prefs</a> and <span id="spb" class="sp-cls">attributed span</span>
 ```
 
+## After the fix (branch braid/bd-footer-link-attrs-dropped-1axx82op, 2026-08-20)
+
+```html
+<div class="nav-footer-center"><a href="https://example.com/prefs" id="open_preferences_center" class="footer-link" title="Cookie Preferences">cookie prefs</a> and <span id="sp" class="sp-cls">attributed span</span> and <img src="images/logo.svg" alt="logo" class="footer-logo" style="height: 22px;"></div>
+...
+<li class="nav-item"><a href="https://example.com/item" id="item-id" class="item-cls">item link</a></li>
+```
+
 ## Root cause
 
 `crates/quarto-navigation/src/render_html.rs`, `push_inline` (the strand calls it
