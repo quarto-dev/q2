@@ -1,0 +1,8 @@
+project:
+  type: website
+
+website:
+  page-footer:
+    center: '[cookie prefs](https://example.com/prefs){#open_preferences_center .footer-link title="Cookie Preferences"} and [attributed span]{#sp .sp-cls} and ![logo](images/logo.svg){.footer-logo style="height: 22px;"}'
+    right:
+      - text: '[item link](https://example.com/item){#item-id .item-cls}'

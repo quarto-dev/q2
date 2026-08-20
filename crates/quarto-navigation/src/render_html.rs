@@ -971,6 +971,38 @@ fn inlines_to_html(inlines: &[Inline]) -> String {
     out
 }
 
+/// Emit an `Attr`'s id/class/kv attributes, each preceded by a space.
+/// `suppress_title_kv` skips a `title` kv when the caller already
+/// emitted the target's title — the target title wins (pandoc parity)
+/// and the element never carries a duplicate `title=` attribute.
+fn push_attr_html(
+    out: &mut String,
+    attr: &quarto_pandoc_types::attr::Attr,
+    suppress_title_kv: bool,
+) {
+    let (id, classes, kvs) = attr;
+    if !id.is_empty() {
+        out.push_str(" id=\"");
+        out.push_str(&escape_attr(id));
+        out.push('"');
+    }
+    if !classes.is_empty() {
+        out.push_str(" class=\"");
+        out.push_str(&escape_attr(&classes.join(" ")));
+        out.push('"');
+    }
+    for (k, v) in kvs {
+        if suppress_title_kv && k == "title" {
+            continue;
+        }
+        out.push(' ');
+        out.push_str(&escape_attr(k));
+        out.push_str("=\"");
+        out.push_str(&escape_attr(v));
+        out.push('"');
+    }
+}
+
 fn push_inline(out: &mut String, inline: &Inline) {
     match inline {
         Inline::Str(s) => out.push_str(&escape_html(&s.text)),
@@ -1012,7 +1044,9 @@ fn push_inline(out: &mut String, inline: &Inline) {
             out.push_str("</span>");
         }
         Inline::Code(c) => {
-            out.push_str("<code>");
+            out.push_str("<code");
+            push_attr_html(out, &c.attr, false);
+            out.push('>');
             out.push_str(&escape_html(&c.text));
             out.push_str("</code>");
         }
@@ -1026,13 +1060,25 @@ fn push_inline(out: &mut String, inline: &Inline) {
                 out.push_str(&escape_attr(title));
                 out.push('"');
             }
+            push_attr_html(out, &l.attr, !title.is_empty());
             out.push('>');
             out.push_str(&inlines_to_html(&l.content));
             out.push_str("</a>");
         }
         Inline::Span(s) => {
-            // Drop attributes for simplicity; render content.
-            out.push_str(&inlines_to_html(&s.content));
+            // Attr-less spans stay unwrapped — nav surfaces render
+            // minimal markup. An attributed span keeps its wrapper: the
+            // id/class may be what page JS or CSS hooks on (e.g. the
+            // Connect docs' cookie-preferences footer control).
+            if quarto_pandoc_types::attr::is_empty_attr(&s.attr) {
+                out.push_str(&inlines_to_html(&s.content));
+            } else {
+                out.push_str("<span");
+                push_attr_html(out, &s.attr, false);
+                out.push('>');
+                out.push_str(&inlines_to_html(&s.content));
+                out.push_str("</span>");
+            }
         }
         Inline::Quoted(q) => {
             use quarto_pandoc_types::inline::QuoteType;
@@ -1070,24 +1116,7 @@ fn push_inline(out: &mut String, inline: &Inline) {
                 out.push_str(&escape_attr(&img.target.1));
                 out.push('"');
             }
-            let (id, classes, kvs) = &img.attr;
-            if !id.is_empty() {
-                out.push_str(" id=\"");
-                out.push_str(&escape_attr(id));
-                out.push('"');
-            }
-            if !classes.is_empty() {
-                out.push_str(" class=\"");
-                out.push_str(&escape_attr(&classes.join(" ")));
-                out.push('"');
-            }
-            for (k, v) in kvs {
-                out.push(' ');
-                out.push_str(&escape_attr(k));
-                out.push_str("=\"");
-                out.push_str(&escape_attr(v));
-                out.push('"');
-            }
+            push_attr_html(out, &img.attr, !img.target.1.is_empty());
             out.push('>');
         }
         // An unresolved shortcode reaching the renderer means it was
@@ -1244,6 +1273,121 @@ mod tests {
         assert_eq!(
             html, "<img src=\"images/logo.svg\" alt=\"cap\">",
             "exactly the figure's image — no figcaption text, no wrapper"
+        );
+    }
+
+    fn test_attr(
+        id: &str,
+        classes: &[&str],
+        kvs: &[(&str, &str)],
+    ) -> quarto_pandoc_types::attr::Attr {
+        (
+            id.to_string(),
+            classes.iter().map(|c| c.to_string()).collect(),
+            kvs.iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        )
+    }
+
+    fn link_inline(
+        attr: quarto_pandoc_types::attr::Attr,
+        url: &str,
+        target_title: &str,
+        text: &str,
+    ) -> Inline {
+        use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+        use quarto_pandoc_types::inline::Link;
+        Inline::Link(Link {
+            attr,
+            content: vec![str_inline(text)],
+            target: (url.to_string(), target_title.to_string()),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })
+    }
+
+    /// A link's id/class/kv attributes reach the emitted `<a>`
+    /// (bd-footer-link-attrs-dropped-1axx82op): the Connect docs'
+    /// cookie-preferences control depends on `#open_preferences_center`
+    /// surviving into the footer HTML.
+    #[test]
+    fn link_attrs_survive_to_anchor() {
+        let html = inlines_to_html(&[link_inline(
+            test_attr(
+                "open_prefs",
+                &["flink", "x"],
+                &[("data-x", "1"), ("title", "KV")],
+            ),
+            "https://example.com/",
+            "",
+            "prefs",
+        )]);
+        assert_eq!(
+            html,
+            "<a href=\"https://example.com/\" id=\"open_prefs\" class=\"flink x\" data-x=\"1\" title=\"KV\">prefs</a>"
+        );
+    }
+
+    /// Target title wins over a `title` kv attr — the kv is suppressed
+    /// so the anchor never carries a duplicate `title=` (pandoc parity;
+    /// see bd-nkk2z7on for the body writer's variant of this).
+    #[test]
+    fn link_target_title_suppresses_title_kv() {
+        let html = inlines_to_html(&[link_inline(
+            test_attr("", &[], &[("title", "KV")]),
+            "u",
+            "TT",
+            "l",
+        )]);
+        assert_eq!(html, "<a href=\"u\" title=\"TT\">l</a>");
+    }
+
+    /// An attributed span keeps its wrapper and attributes; an
+    /// attr-less span stays unwrapped (nav surfaces render minimal
+    /// markup — bd-footer-link-attrs-dropped-1axx82op).
+    #[test]
+    fn attributed_span_keeps_wrapper_attrless_span_unwrapped() {
+        use quarto_pandoc_types::attr::AttrSourceInfo;
+        use quarto_pandoc_types::inline::Span;
+        let attributed = inlines_to_html(&[Inline::Span(Span {
+            attr: test_attr("spid", &["scls"], &[]),
+            content: vec![str_inline("sp")],
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        })]);
+        assert_eq!(attributed, "<span id=\"spid\" class=\"scls\">sp</span>");
+
+        let attrless = inlines_to_html(&[Inline::Span(Span {
+            attr: Default::default(),
+            content: vec![str_inline("plain")],
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        })]);
+        assert_eq!(attrless, "plain");
+    }
+
+    /// Inline code keeps its attributes; attr-less code is unchanged.
+    #[test]
+    fn code_attrs_survive_to_code_tag() {
+        use quarto_pandoc_types::attr::AttrSourceInfo;
+        use quarto_pandoc_types::inline::Code;
+        let code = |attr| {
+            Inline::Code(Code {
+                attr,
+                text: "x".to_string(),
+                source_info: SourceInfo::for_test(),
+                attr_source: AttrSourceInfo::empty(),
+            })
+        };
+        assert_eq!(
+            inlines_to_html(&[code(test_attr("", &["numberLines"], &[]))]),
+            "<code class=\"numberLines\">x</code>"
+        );
+        assert_eq!(
+            inlines_to_html(&[code(Default::default())]),
+            "<code>x</code>"
         );
     }
 

@@ -1,0 +1,5 @@
+---
+title: Repro
+---
+
+Body control: [cookie prefs](https://example.com/prefs){#open_preferences_center_body .footer-link title="Cookie Preferences"} and [attributed span]{#spb .sp-cls}.

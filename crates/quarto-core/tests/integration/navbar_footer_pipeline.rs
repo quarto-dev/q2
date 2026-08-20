@@ -721,3 +721,57 @@ fn pipeline_navbar_logo_variants_rebased_and_copied() {
         "dark variant file must be copied to the output tree"
     );
 }
+
+// === Footer link/span attrs (bd-footer-link-attrs-dropped-1axx82op) ======
+
+/// Config-authored markdown in footer regions keeps Link attributes
+/// and attributed Span wrappers, at region level and item level alike
+/// (bd-footer-link-attrs-dropped-1axx82op). The real-world case is the
+/// Connect docs' cookie-preferences control, whose `#open_preferences_center`
+/// id is what the cookie-consent JS hooks on.
+#[test]
+fn pipeline_footer_link_and_span_attrs_survive() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             page-footer:\n\
+             \x20 center: '[prefs](https://example.com/){#open_prefs .flink title=\"Cookie Preferences\"} and [sp]{#spid .scls}'\n\
+             \x20 right:\n\
+             \x20   - text: '[item](https://example.com/i){#item-id .icls}'\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+    });
+
+    let html = find_html(&outputs, "index");
+    // Region level: link keeps id, classes, and the title kv (no target
+    // title present, so the kv is emitted).
+    assert!(
+        html.contains(
+            "<a href=\"https://example.com/\" id=\"open_prefs\" class=\"flink\" title=\"Cookie Preferences\">prefs</a>"
+        ),
+        "region-level footer link must keep id/class/title attrs; footer got: {}",
+        html.lines()
+            .find(|l| l.contains("nav-footer-center"))
+            .unwrap_or("<no nav-footer-center line>")
+    );
+    // Region level: attributed span keeps its wrapper.
+    assert!(
+        html.contains("<span id=\"spid\" class=\"scls\">sp</span>"),
+        "region-level attributed span must keep its wrapper; footer got: {}",
+        html.lines()
+            .find(|l| l.contains("nav-footer-center"))
+            .unwrap_or("<no nav-footer-center line>")
+    );
+    // Item level: same treatment for an item's text.
+    assert!(
+        html.contains("<a href=\"https://example.com/i\" id=\"item-id\" class=\"icls\">item</a>"),
+        "item-level footer link must keep id/class attrs; footer got: {}",
+        html.lines()
+            .find(|l| l.contains("footer-items"))
+            .unwrap_or("<no footer-items line>")
+    );
+}
