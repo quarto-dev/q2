@@ -1,0 +1,48 @@
+/* UpdateAvailableToast — fixed bottom-right toast for the SW update
+   prompt. Shares the .toast color tokens (theme.css) but sits in the
+   corner and stays put: unlike .toast it is persistent, so it must not
+   read as a transient notification. */
+
+.update-available-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--toast-bg);
+  color: var(--toast-text);
+  padding: 10px 12px 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: system-ui, -apple-system, sans-serif;
+  box-shadow: 0 4px 12px var(--toast-shadow);
+  z-index: 10001; /* above the transient .toast (10000) */
+  animation: update-available-toast-in 0.2s ease-out;
+}
+
+.update-available-toast-dismiss {
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  font-size: 16px;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.update-available-toast-dismiss:hover {
+  opacity: 1;
+}
+
+@keyframes update-available-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
