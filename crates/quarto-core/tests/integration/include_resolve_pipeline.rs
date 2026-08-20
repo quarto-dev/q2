@@ -227,6 +227,71 @@ async fn three_slots_reach_rendered_html_via_full_pipeline() {
     );
 }
 
+/// `text:` holding block-level markdown — a fenced ```{=html} block
+/// or two HTML paragraphs — must reach `<head>` (bd-include-in-header-text-blocks-ins2v6za).
+/// Before the fix both spellings were dropped with Q-5-5.
+#[tokio::test]
+async fn text_block_markdown_reaches_head_via_full_pipeline() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let project_dir = tmp.path().to_path_buf();
+
+    // A raw string, not `\`-continued lines: the block scalar's
+    // indentation is significant.
+    let qmd = r#"---
+title: Block Includes
+include-in-header:
+  - text: |
+      ```{=html}
+      <style type="text/css">
+        .marker-fence { color: rebeccapurple; }
+      </style>
+      ```
+  - text: |
+      <meta name="marker-para-one" content="1">
+
+      <meta name="marker-para-two" content="2">
+---
+
+Body.
+"#;
+    let qmd_path = project_dir.join("test.qmd");
+    std::fs::write(&qmd_path, qmd).unwrap();
+
+    let project = make_project(&project_dir);
+    let doc = make_document(&project_dir);
+    let format = Format::html();
+    let binaries = BinaryDependencies::new();
+    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+    let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+        Arc::new(quarto_system_runtime::NativeRuntime::new());
+    let config = HtmlRenderConfig::default();
+
+    let output = render_qmd_to_html(
+        qmd.as_bytes(),
+        &qmd_path.to_string_lossy(),
+        &mut ctx,
+        &config,
+        runtime,
+    )
+    .await
+    .expect("render");
+    let html = output.html;
+
+    let head_close = html.find("</head>").expect("</head>");
+    for marker in ["marker-fence", "marker-para-one", "marker-para-two"] {
+        let pos = html
+            .find(marker)
+            .unwrap_or_else(|| panic!("{marker} must reach the output:\n{html}"));
+        assert!(pos < head_close, "{marker} must be inside <head>:\n{html}");
+    }
+    let fence_open = html.find("```");
+    assert!(
+        fence_open.is_none(),
+        "fence markers must not leak into the output:\n{html}"
+    );
+}
+
 // Suppress unused-warning when only one test runs.
 #[allow(dead_code)]
 fn _silence_unused() {

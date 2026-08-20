@@ -1,0 +1,10 @@
+---
+title: "B: text: holding bare HTML (no raw markers)"
+include-in-header:
+  text: |
+    <style type="text/css">
+      .marker-b { color: rebeccapurple; }
+    </style>
+---
+
+Works, but warns Q-1-20 "Failed to parse metadata value as markdown".

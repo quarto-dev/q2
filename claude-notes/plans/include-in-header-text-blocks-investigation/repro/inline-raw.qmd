@@ -1,0 +1,11 @@
+---
+title: "C: text: holding an inline raw span (the workaround)"
+include-in-header:
+  text: |
+    `<style type="text/css">
+      .marker-c { color: rebeccapurple; }
+    </style>`{=html}
+---
+
+Works and is silent, but requires wrapping a multi-line block in a
+single inline code span.

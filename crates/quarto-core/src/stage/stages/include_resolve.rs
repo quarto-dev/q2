@@ -343,6 +343,12 @@ fn extend_with_inline_value(out: &mut Vec<String>, value: &ConfigValue) {
 ///   nodes. Without this `<meta>` / `<script>` etc. would be dropped
 ///   (since `inlines_to_plain_text` skips raw inlines), turning a
 ///   user's literal HTML include into empty/garbled output.
+/// - `PandocBlocks` → walk the blocks via [`blocks_to_html_literal`].
+///   A `text:` value that parses to more than one paragraph — a
+///   fenced ```` ```{=html} ```` block, two `<meta>` paragraphs — lands
+///   here rather than in `PandocInlines`; before this arm existed it
+///   fell through to `None` and was dropped with a misleading Q-5-5
+///   (bd-include-in-header-text-blocks-ins2v6za).
 /// - Anything else → `None`.
 fn literal_html_text(value: &ConfigValue) -> Option<String> {
     use quarto_pandoc_types::config_value::ConfigValueKind as K;
@@ -352,8 +358,69 @@ fn literal_html_text(value: &ConfigValue) -> Option<String> {
         K::Scalar(Yaml::String(s)) => Some(s.clone()),
         K::Path(s) | K::Glob(s) | K::Expr(s) => Some(s.clone()),
         K::PandocInlines(inlines) => Some(inlines_to_html_literal(inlines)),
+        K::PandocBlocks(blocks) => Some(blocks_to_html_literal(blocks)),
         _ => None,
     }
+}
+
+/// Block-level counterpart of [`inlines_to_html_literal`]: emit
+/// `RawBlock` / `CodeBlock` text verbatim, flatten inline-bearing
+/// blocks through the inline walker, and recurse into containers.
+/// Blocks are separated by a newline so consecutive paragraphs
+/// don't run together. Non-raw structure (list bullets, heading
+/// levels, table grid) is deliberately flattened to its text — the
+/// slot wants literal HTML, and the inline path already flattens
+/// `*emph*` the same way.
+fn blocks_to_html_literal(blocks: &[quarto_pandoc_types::block::Block]) -> String {
+    use quarto_pandoc_types::block::Block;
+
+    let mut parts: Vec<String> = Vec::new();
+    for block in blocks {
+        let text = match block {
+            Block::RawBlock(r) => r.text.clone(),
+            Block::CodeBlock(c) => c.text.clone(),
+            Block::Plain(p) => inlines_to_html_literal(&p.content),
+            Block::Paragraph(p) => inlines_to_html_literal(&p.content),
+            Block::Header(h) => inlines_to_html_literal(&h.content),
+            Block::LineBlock(l) => l
+                .content
+                .iter()
+                .map(|line| inlines_to_html_literal(line))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Block::BlockQuote(b) => blocks_to_html_literal(&b.content),
+            Block::Div(d) => blocks_to_html_literal(&d.content),
+            Block::Figure(f) => blocks_to_html_literal(&f.content),
+            Block::BulletList(l) => l
+                .content
+                .iter()
+                .map(|item| blocks_to_html_literal(item))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Block::OrderedList(l) => l
+                .content
+                .iter()
+                .map(|item| blocks_to_html_literal(item))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Block::DefinitionList(l) => l
+                .content
+                .iter()
+                .map(|(term, defs)| {
+                    let mut s = inlines_to_html_literal(term);
+                    for def in defs {
+                        s.push('\n');
+                        s.push_str(&blocks_to_html_literal(def));
+                    }
+                    s
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            _ => continue,
+        };
+        parts.push(text);
+    }
+    parts.join("\n")
 }
 
 /// Walk Pandoc inlines preserving raw HTML markup and original
@@ -595,7 +662,10 @@ mod tests {
 
     use super::*;
     use async_trait::async_trait;
+    use quarto_pandoc_types::attr::AttrSourceInfo;
+    use quarto_pandoc_types::block::{Block, Div, Paragraph, RawBlock};
     use quarto_pandoc_types::config_value::ConfigMapEntry;
+    use quarto_pandoc_types::inline::{Inline, RawInline};
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -892,6 +962,107 @@ mod tests {
             recorded.is_empty(),
             "smart-text entries should not produce file-include records"
         );
+    }
+
+    // --- Block-level `text:` values (bd-include-in-header-text-blocks-ins2v6za) ---
+    //
+    // Quarto's YAML reader parses a `text:` scalar as markdown; a
+    // fenced ```{=html} block or two paragraphs arrive as
+    // `PandocBlocks`, not `PandocInlines`. These must reach the
+    // rendered slot verbatim, not fall into the Q-5-5 "invalid form"
+    // branch.
+
+    fn raw_html_block(text: &str) -> Block {
+        Block::RawBlock(RawBlock {
+            format: "html".to_string(),
+            text: text.to_string(),
+            source_info: SourceInfo::for_test(),
+        })
+    }
+
+    fn para_of_raw_html(text: &str) -> Block {
+        Block::Paragraph(Paragraph {
+            content: vec![Inline::RawInline(RawInline {
+                format: "html".to_string(),
+                text: text.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            source_info: SourceInfo::for_test(),
+        })
+    }
+
+    fn blocks(items: Vec<Block>) -> ConfigValue {
+        ConfigValue::new_blocks(items, SourceInfo::for_test())
+    }
+
+    fn resolve_text_blocks(value: ConfigValue) -> (Vec<String>, Vec<DiagnosticMessage>) {
+        let runtime = rt(vec![]);
+        let mut meta = map(vec![(KEY_INCLUDE_IN_HEADER, map(vec![("text", value)]))]);
+        let mut diags = Vec::new();
+        resolve_includes(
+            &mut meta,
+            runtime.as_ref(),
+            Path::new("/proj"),
+            &empty_pandoc_includes(),
+            &mut diags,
+        );
+        (rendered_strings(&meta, "header"), diags)
+    }
+
+    #[test]
+    fn text_holding_raw_html_fenced_block_is_inserted_verbatim() {
+        let css = "<style>\n  .marker-a { color: rebeccapurple; }\n</style>\n";
+        let (header, diags) = resolve_text_blocks(blocks(vec![raw_html_block(css)]));
+        assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
+        assert_eq!(header, vec![css]);
+    }
+
+    #[test]
+    fn text_holding_two_paragraphs_keeps_both_in_order() {
+        let (header, diags) = resolve_text_blocks(blocks(vec![
+            para_of_raw_html("<meta name=\"one\" content=\"1\">"),
+            para_of_raw_html("<meta name=\"two\" content=\"2\">"),
+        ]));
+        assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
+        assert_eq!(header.len(), 1, "one text entry → one slot item");
+        let one = header[0]
+            .find("name=\"one\"")
+            .expect("first paragraph present");
+        let two = header[0]
+            .find("name=\"two\"")
+            .expect("second paragraph present");
+        assert!(one < two, "paragraph order preserved: {:?}", header[0]);
+    }
+
+    #[test]
+    fn text_holding_blocks_inside_div_recurses_into_container() {
+        let div = Block::Div(Div {
+            attr: quarto_pandoc_types::empty_attr(),
+            content: vec![raw_html_block("<meta name=\"nested\">")],
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let (header, diags) = resolve_text_blocks(blocks(vec![div]));
+        assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
+        assert_eq!(header.len(), 1);
+        assert!(header[0].contains("<meta name=\"nested\">"), "{:?}", header);
+    }
+
+    #[test]
+    fn map_with_neither_file_nor_text_still_warns_invalid_form() {
+        let runtime = rt(vec![]);
+        let mut meta = map(vec![(KEY_INCLUDE_IN_HEADER, map(vec![("bogus", s("x"))]))]);
+        let mut diags = Vec::new();
+        resolve_includes(
+            &mut meta,
+            runtime.as_ref(),
+            Path::new("/proj"),
+            &empty_pandoc_includes(),
+            &mut diags,
+        );
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].title, "Invalid include form");
+        assert!(rendered_strings(&meta, "header").is_empty());
     }
 
     // === Test 4: array of mixed forms preserves authored order. ===
