@@ -3,7 +3,7 @@
 **Date:** 2026-08-20
 **Braid:** bd-include-in-header-text-blocks-ins2v6za
 **Branch:** `main` @ `87c0e21a` (investigated in the main checkout; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Implemented 2026-08-20 (design questions answered by the user the same day; see "Decisions").
 
 ## Triage verdict
 
@@ -82,25 +82,25 @@ HEAD run.
 
 ## Proposed phases (draft)
 
-- **Phase 0 — Test plan (TDD).** Unit tests in `include_resolve.rs`'s test
+- [x] **Phase 0 — Test plan (TDD).** Unit tests in `include_resolve.rs`'s test
   module: (a) `text:` holding `PandocBlocks` with a `RawBlock{html}` reaches the
   rendered list verbatim; (b) multi-paragraph blocks are joined; (c) a `Map`
   with neither `file:` nor `text:` still gets the "invalid form" code; (d) the
   new block-content diagnostic (if we keep one) has the right code and its
   span is the `text:` value, not the entry. Plus one end-to-end render test via
   the repro fixture (marker survives into `<head>`).
-- **Phase 1 — Accept blocks.** Add `K::PandocBlocks` arm to `literal_html_text`
+- [x] **Phase 1 — Accept blocks.** Add `K::PandocBlocks` arm to `literal_html_text`
   backed by a `blocks_to_html_literal` that mirrors `inlines_to_html_literal`
   (RawBlock/CodeBlock text, recurse into containers, paragraphs separated by
   `\n`). This also benefits `extend_with_inline_value` (`header-includes`),
   which shares `literal_html_text`.
-- **Phase 2 — Split / re-home the diagnostics.** Decide (Q2 below) whether
+- [ ] **Phase 2 — Split / re-home the diagnostics.** *(Moved to bd-x9ujtvnt. After Phase 1 a `text:` entry can no longer reach Q-5-5 — every `ConfigValueKind` a markdown-parsed scalar can produce is now accepted — so no new "block content" code is needed.)* Decide (Q2 below) whether
   anything remains unliteral-able after Phase 1; if so, give it its own code
   with a value-span location. Independently, resolve the `Q-5-4`/`Q-5-5`
   collision by moving the include diagnostics to fresh codes with catalog
   entries, `docs/errors/project/` pages and sidebar entries in the same commit
   (lint rules `error-docs-page-missing`, `error-docs-sidebar-unlisted`).
-- **Phase 3 — Docs.** Mention the ```` ```{=html} ```` fenced form as the
+- [ ] **Phase 3 — Docs.** *(Not done: `docs/` has no page for `include-in-header`; only passing mentions in `guides/authoring/{shortcodes,extensions}.qmd`. Writing a new page is out of this strand's scope.)* Mention the ```` ```{=html} ```` fenced form as the
   recommended multi-line spelling in the user docs for `include-in-header`.
 
 ## Open design questions for the user
@@ -137,3 +137,30 @@ HEAD run.
 - `file:` path resolution is already covered by the path-resolution contract
   (layer_base marking in `metadata_merge.rs`, fixed 2026-08-19 for
   bd-oejuizi9); nothing in this strand touches it.
+
+## End-to-end verification (2026-08-20)
+
+Tests: 4 new unit tests in `include_resolve.rs` (fenced RawBlock, two
+paragraphs, nested Div, and a control that a map with neither `file:` nor
+`text:` still warns) + `text_block_markdown_reaches_head_via_full_pipeline`
+in `tests/integration/include_resolve_pipeline.rs`. All failed before the
+fix with Q-5-5, pass after.
+
+Real binary, repro project:
+
+    cargo run --bin q2 -- render claude-notes/plans/include-in-header-text-blocks-investigation/repro
+    grep -o 'marker-[a-d]' _site/*.html
+
+    index (fence):      marker-a   (was: none + Q-5-5)
+    multi-para:         marker-d   (was: none + Q-5-5)
+    bare-html:          marker-b   (unchanged, still Q-1-20)
+    inline-raw:         marker-c   (unchanged)
+
+`_site/index.html` lines 14–17, inspected:
+
+    <style type="text/css">
+      .marker-a { color: rebeccapurple; }
+    </style>
+    </head>
+
+No Q-5-5 in the render output; no ``` fence markers leak into the HTML.
