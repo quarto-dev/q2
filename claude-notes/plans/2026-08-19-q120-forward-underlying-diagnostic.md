@@ -3,7 +3,7 @@
 **Date:** 2026-08-19
 **Braid:** bd-q120-masks-config-md-diagnostic-a039r80t
 **Checkout:** main checkout at `/Users/cscheid/rooms/room-3/q2`, branch `main` @ `6bee9ebe`
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled 2026-08-20 (user answered all four questions); implementation in progress.
 
 ## Triage verdict
 
@@ -87,57 +87,73 @@ In-repo fixture: `claude-notes/plans/q120-forward-underlying-diagnostic-investig
 the precise Q-2-3 error for the identical text in `body-control.qmd`). See the
 investigation dir's `observed-output.txt` for the captured render output.
 
-## Proposed phases (draft)
+## Settled design (user answered 2026-08-20)
 
-Skeleton only — actual phase contents wait on the design discussion.
+1. **Reroot at birth** (option a). Implementation refinement: the reroot
+   happens inside `readers::qmd::read` immediately before the `Err` return —
+   *after* `produce_diagnostic_messages` and the pruning/widening passes, which
+   do their offset arithmetic in the raw-input-bytes domain and must keep doing
+   so. From every caller's perspective the diagnostics are born rerooted; the
+   Lua `config_value.rs:620` caller is fixed for free; no signature change in
+   `quarto-parse-errors` needed.
+2. **Fold children into the single Q-1-20 diagnostic as located details**
+   (option b). Untagged branch stays a warning; `!md` branch stays an error;
+   in both, each child diagnostic's title (+code) and its located notes become
+   `add_info_at` details on the Q-1-20 message. No severity change.
+3. **Forward all children.** Revisit only on a compelling real-world "too
+   many diagnostics" case.
+4. **Q-1-20's own text unchanged.**
 
-- **Phase 0 — Test plan (TDD).** Unit tests in `pampa::pandoc::meta` following
-  the existing `config_string_image_target_source_reroots_through_parent`
-  pattern: parse `![logo](x.svg){width="65px" .light-content}` with a parent
-  `SourceInfo::original(FileId(7), 100, …)`; assert the emitted diagnostics
-  carry the underlying Q-2-3 content AND that every forwarded span
-  (`location` + detail locations) `resolve_byte_range()`s into FileId(7) at
-  shifted offsets. Plus an end-to-end render test against the repro fixture
-  shape (per the end-to-end verification policy).
-- **Phase 1 — Span rerooting for Err-path diagnostics.** Either in
-  `readers::qmd::read` / `produce_diagnostic_messages` (at birth) or via a
-  remap helper applied in `meta.rs` (post-hoc) — see design question 1.
-- **Phase 2 — Forward the diagnostics from `parse_yaml_string_as_markdown_to_config`.**
-  Attach/emit remapped child diagnostics in both the `!md` and untagged
-  branches; resolve the severity question (design question 2).
-- **Phase 3 — End-to-end verification + docs.** Render the repro fixture via
-  `cargo run --bin q2 -- render`, inspect stderr; update
-  `docs/errors/*/Q-1-20.qmd` if the message shape changed.
+## Phases
 
-## Open design questions for the user
+### Phase 0 — Tests (TDD, written first, verified failing)
 
-1. **Where to reroot the spans.** (a) At birth: thread `parent_source_info`
-   into `readers::qmd::read`'s error path so `produce_diagnostic_messages`
-   builds rerooted spans — matches how the Ok path behaves, and fixes the Lua
-   `config_value.rs` caller for free; requires a signature change in
-   `quarto-parse-errors::produce_diagnostic_messages` (in-tree, cheap). (b)
-   Post-hoc: a `remap_diagnostic_into_parent(diag, parent)` helper applied only
-   in `meta.rs` — smaller blast radius, but leaves the Err path's
-   coordinate-domain trap armed for the next caller. I lean (a).
-2. **Severity in the untagged branch.** Today an untagged config value that
-   fails to parse is a *warning* + literal-text fallback; the underlying parser
-   diagnostics are *errors*. Forwarding them as errors would turn a
-   warn-and-continue situation into a render failure. Options: (a) demote
-   forwarded children to warnings (`kind` is a pub field); (b) fold the
-   children into the single Q-1-20 warning as located details
-   (`add_info_at`-style), keeping one diagnostic; (c) keep them errors
-   (behavior change). For the `!md` branch the parse failure is already an
-   error, so children can stay errors there. I lean (b) for untagged — one
-   diagnostic, Q-1-20 stays the code, the child's message + two-part span
-   become its details — and (b)-or-sibling-errors for `!md`.
-3. **All children or first?** A config string that fails to parse can produce
-   several diagnostics (the generator dedups by position but can still emit
-   more than one). Forward all, or first-N with a "and N more" note? (Config
-   strings are short; I lean "all".)
-4. **Does Q-1-20's own text change?** If children are folded in as details,
-   the "Could not parse '…' as markdown" problem line could drop the raw value
-   echo (the span already shows it) — or stay unchanged for snapshot stability.
-   Any change ripples into snapshots and possibly `docs/errors` examples.
+- [x] `pampa::pandoc::meta` unit test (untagged): parse
+  `![logo](images/logo.svg){width="65px" .light-content}` with parent
+  `SourceInfo::original(FileId(7), 100, …)`; assert single Q-1-20 warning
+  whose details carry the Q-2-3 content, with every detail location
+  resolving into FileId(7) at offsets shifted by 100.
+  (`config_string_parse_failure_forwards_underlying_diagnostic`)
+- [x] `pampa::pandoc::meta` unit test (`!md` branch): same input via
+  `parse_yaml_string_as_markdown_to_config(…, is_explicit_md = true, …)`;
+  assert error kind + forwarded located details.
+  (`explicit_md_parse_failure_forwards_underlying_diagnostic`)
+- [x] Reroot test at the `read` level (covers the Lua caller path):
+  `readers::qmd::tests::err_path_diagnostics_reroot_through_parent_source_info`.
+- [x] All three verified failing before the fix (FileId(0), raw offsets
+  38..52 observed in the failure output).
+
+### Phase 1 — Reroot Err-path diagnostics in `readers::qmd::read`
+
+- [x] `reroot_diagnostics_into_parent` walks each diagnostic's `location` +
+  `details[].location` and rebuilds them as
+  `SourceInfo::substring(parent, start, end)` from the resolved byte range.
+- [x] Applied when `context.parent_source_info` is `Some`, after pruning,
+  before `return Err(diagnostics)`.
+
+### Phase 2 — Forward children from `parse_yaml_string_as_markdown_to_config`
+
+- [x] `fold_child_diagnostics` in `meta.rs`, applied in both the `!md` and
+  untagged branches. Folding shape (refined after e2e inspection): the
+  child's `problem` becomes the located label on the child's main span —
+  so the config rendering mirrors the body rendering exactly — and
+  `[code] title` becomes a location-less Info footer line; child details
+  keep their own `DetailKind`; child hints forwarded with exact-dup dedup.
+
+### Phase 3 — Verification + docs
+
+- [ ] Full `cargo xtask verify` green (includes `cargo nextest run
+  --workspace`; pampa is in the WASM closure).
+- [x] End-to-end: `cargo run --bin q2 -- render` on the repro fixture;
+  captured output (`repro/observed-output.txt`, inspected) shows the
+  Q-1-20 warning on `_quarto.yml:8` carrying the Q-2-3 two-part span
+  ("This key-value pair cannot appear before the class specifier." /
+  "This class specifier appears after the key-value pair.") plus an
+  `ℹ [Q-2-3] Key-value Pair Before Class Specifier in Attribute` footer.
+- [ ] Check `docs/errors/yaml/Q-1-20.qmd` — message text unchanged (decision
+  4), so likely no edit; update only if it shows example output that now
+  differs materially.
+- [ ] Close the strand.
 
 ## Risks / tradeoffs (draft)
 

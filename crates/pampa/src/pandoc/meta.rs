@@ -80,6 +80,63 @@ fn unwrap_lone_figure(kind: &mut ConfigValueKind) {
     *kind = ConfigValueKind::PandocInlines(vec![Inline::Image(image)]);
 }
 
+/// Fold the recursive parse's own diagnostics into the Q-1-20 message as
+/// located details, so the author learns *what* is wrong with the markdown
+/// rather than just that it failed
+/// (bd-q120-masks-config-md-diagnostic-a039r80t). Child spans arrive
+/// already rerooted into the config file by `readers::qmd::read`'s Err
+/// path; Q-1-20's severity (warning untagged, error under `!md`) is the
+/// severity of the whole folded message.
+fn fold_child_diagnostics(
+    mut builder: quarto_error_reporting::DiagnosticMessageBuilder,
+    children: &[quarto_error_reporting::DiagnosticMessage],
+) -> quarto_error_reporting::DiagnosticMessageBuilder {
+    use quarto_error_reporting::DetailKind;
+
+    let mut seen_hints = std::collections::HashSet::new();
+    for child in children {
+        // The child's `problem` is its anchored explanation (the ariadne
+        // renderer draws it as the label on the child's main span), so
+        // fold it in as the located label — the config rendering then
+        // mirrors what the same markdown produces in a document body.
+        // The code + title identify the underlying error in a footer
+        // line, where the author can search for it.
+        let identity = match &child.code {
+            Some(code) => format!("[{}] {}", code, child.title),
+            None => child.title.clone(),
+        };
+        builder = match (&child.location, &child.problem) {
+            (Some(location), Some(problem)) => builder
+                .add_info_at(problem.as_str().to_string(), location.clone())
+                .add_info(identity),
+            (Some(location), None) => builder.add_info_at(identity, location.clone()),
+            (None, Some(problem)) => builder
+                .add_info(identity)
+                .add_info(problem.as_str().to_string()),
+            (None, None) => builder.add_info(identity),
+        };
+        for detail in &child.details {
+            let text = detail.content.as_str().to_string();
+            builder = match (&detail.location, &detail.kind) {
+                (Some(location), DetailKind::Error) => {
+                    builder.add_detail_at(text, location.clone())
+                }
+                (Some(location), DetailKind::Info) => builder.add_info_at(text, location.clone()),
+                (Some(location), _) => builder.add_note_at(text, location.clone()),
+                (None, DetailKind::Error) => builder.add_detail(text),
+                (None, DetailKind::Info) => builder.add_info(text),
+                (None, _) => builder.add_note(text),
+            };
+        }
+        for hint in &child.hints {
+            if seen_hints.insert(hint.as_str().to_string()) {
+                builder = builder.add_hint(hint.as_str().to_string());
+            }
+        }
+    }
+    builder
+}
+
 /// Parse a YAML string as markdown and return ConfigValue with PandocInlines/PandocBlocks.
 ///
 /// - If `is_explicit_md` is true: This is a !md tagged value, ERROR on parse failure
@@ -117,32 +174,36 @@ fn parse_yaml_string_as_markdown_to_config(
             }
             ConfigValueKind::PandocBlocks(pandoc.blocks)
         }
-        Err(_parse_errors) => {
-            if is_explicit_md {
+        Err(parse_errors) => {
+            let diagnostic = if is_explicit_md {
                 // !md tag: ERROR on parse failure
-                let diagnostic =
+                fold_child_diagnostics(
                     DiagnosticMessageBuilder::error("Failed to parse !md tagged value")
                         .with_code("Q-1-20")
                         .with_location(source_info.clone())
                         .problem("The `!md` tag requires valid markdown syntax")
-                        .add_detail(format!("Could not parse: {}", value))
-                        .add_hint("Remove the `!md` tag or fix the markdown syntax")
-                        .build();
-                diagnostics.add(diagnostic);
+                        .add_detail(format!("Could not parse: {}", value)),
+                    &parse_errors,
+                )
+                .add_hint("Remove the `!md` tag or fix the markdown syntax")
+                .build()
             } else {
                 // Untagged: WARN on parse failure
-                let diagnostic = DiagnosticMessageBuilder::warning(
-                    "Failed to parse metadata value as markdown",
+                fold_child_diagnostics(
+                    DiagnosticMessageBuilder::warning(
+                        "Failed to parse metadata value as markdown",
+                    )
+                    .with_code("Q-1-20")
+                    .with_location(source_info.clone())
+                    .problem(format!("Could not parse '{}' as markdown", value)),
+                    &parse_errors,
                 )
-                .with_code("Q-1-20")
-                .with_location(source_info.clone())
-                .problem(format!("Could not parse '{}' as markdown", value))
                 .add_hint(
                     "Add the `!str` tag to treat this as a plain string, or fix the markdown syntax",
                 )
-                .build();
-                diagnostics.add(diagnostic);
-            }
+                .build()
+            };
+            diagnostics.add(diagnostic);
 
             // Return error recovery span. The bytes are the raw YAML
             // value; reuse the caller's source_info so attribution
@@ -956,5 +1017,114 @@ mod tests {
         let result =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
         assert!(matches!(result.value, ConfigValueKind::Expr(_)));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Forwarding the underlying parser diagnostic on config-string
+    // parse failure (bd-q120-masks-config-md-diagnostic-a039r80t).
+    //
+    // A config value that fails to parse as markdown must not reduce
+    // to the generic Q-1-20 "could not parse" — the underlying parser
+    // diagnostic (e.g. Q-2-3, kv-pair before class specifier) is
+    // folded into the Q-1-20 message as located details, with spans
+    // rerooted into the file the scalar was authored in.
+    // ─────────────────────────────────────────────────────────────
+
+    /// Markdown that fails q2's attribute grammar with Q-2-3
+    /// (key-value pair before class specifier) — accepted by
+    /// Pandoc/Q1, so common in ported configs.
+    const KV_BEFORE_CLASS: &str = r#"![logo](images/logo.svg){width="65px" .light-content}"#;
+
+    #[test]
+    fn config_string_parse_failure_forwards_underlying_diagnostic() {
+        use quarto_source_map::FileId;
+        let parent =
+            quarto_source_map::SourceInfo::original(FileId(7), 100, 100 + KV_BEFORE_CLASS.len());
+        let mut diagnostics = Vec::new();
+        let _ = parse_config_string_as_markdown(KV_BEFORE_CLASS, &parent, &mut diagnostics);
+
+        assert_eq!(
+            diagnostics.len(),
+            1,
+            "children fold into the single Q-1-20, got {:#?}",
+            diagnostics
+        );
+        let diag = &diagnostics[0];
+        assert_eq!(diag.code.as_deref(), Some("Q-1-20"));
+        assert!(
+            matches!(diag.kind, quarto_error_reporting::DiagnosticKind::Warning),
+            "untagged branch stays a warning"
+        );
+
+        let detail_texts: Vec<&str> = diag.details.iter().map(|d| d.content.as_str()).collect();
+        assert!(
+            detail_texts
+                .iter()
+                .any(|t| t.contains("Key-value Pair Before Class Specifier")),
+            "the child diagnostic's title must be folded in, got {:?}",
+            detail_texts
+        );
+        assert!(
+            detail_texts
+                .iter()
+                .any(|t| t.contains("cannot appear before the class specifier")),
+            "the child's located notes must be folded in, got {:?}",
+            detail_texts
+        );
+
+        let mut located = 0;
+        for det in &diag.details {
+            if let Some(loc) = &det.location {
+                let (fid, start, end) = loc
+                    .resolve_byte_range()
+                    .expect("forwarded detail spans must resolve");
+                assert_eq!(fid, 7, "detail spans must reroot into the parent's file");
+                assert!(
+                    start >= 100 && end <= 100 + KV_BEFORE_CLASS.len(),
+                    "detail span {}..{} must land inside the scalar's range in the parent",
+                    start,
+                    end
+                );
+                located += 1;
+            }
+        }
+        assert!(
+            located >= 2,
+            "the child's two-part span must survive forwarding, got {:#?}",
+            diag.details
+        );
+    }
+
+    #[test]
+    fn explicit_md_parse_failure_forwards_underlying_diagnostic() {
+        use quarto_source_map::FileId;
+        let parent =
+            quarto_source_map::SourceInfo::original(FileId(7), 100, 100 + KV_BEFORE_CLASS.len());
+        let mut collector = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let _ =
+            parse_yaml_string_as_markdown_to_config(KV_BEFORE_CLASS, &parent, true, &mut collector);
+        let diagnostics = collector.into_diagnostics();
+
+        assert_eq!(diagnostics.len(), 1, "got {:#?}", diagnostics);
+        let diag = &diagnostics[0];
+        assert_eq!(diag.code.as_deref(), Some("Q-1-20"));
+        assert!(
+            matches!(diag.kind, quarto_error_reporting::DiagnosticKind::Error),
+            "!md branch stays an error"
+        );
+        assert!(
+            diag.details.iter().any(|d| d
+                .content
+                .as_str()
+                .contains("Key-value Pair Before Class Specifier")),
+            "the child diagnostic must be folded in, got {:#?}",
+            diag.details
+        );
+        for det in &diag.details {
+            if let Some(loc) = &det.location {
+                let (fid, _, _) = loc.resolve_byte_range().expect("must resolve");
+                assert_eq!(fid, 7, "detail spans must reroot into the parent's file");
+            }
+        }
     }
 }
