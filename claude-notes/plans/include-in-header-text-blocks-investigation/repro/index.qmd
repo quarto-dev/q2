@@ -1,0 +1,13 @@
+---
+title: "A: text: holding a raw-HTML fenced block"
+include-in-header:
+  text: |
+    ```{=html}
+    <style type="text/css">
+      .marker-a { color: rebeccapurple; }
+    </style>
+    ```
+---
+
+The `<style>` block never reaches the output, and the warning blames
+the include *form* rather than the value's shape.

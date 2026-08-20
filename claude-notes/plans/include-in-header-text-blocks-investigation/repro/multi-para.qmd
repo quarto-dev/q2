@@ -1,0 +1,10 @@
+---
+title: "D: text: holding two paragraphs"
+include-in-header:
+  text: |
+    <meta name="marker-d-one" content="1">
+
+    <meta name="marker-d-two" content="2">
+---
+
+Two blocks, no raw markers.
