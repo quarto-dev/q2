@@ -6,8 +6,11 @@
  * open for hours); a visible tab gets the update prompt instead and
  * reloads on its next transition to hidden — never against the user's
  * will. Also pins the update polling that lets long-lived tabs discover
- * new versions at all: an hourly interval plus a check on every
- * hidden → visible transition.
+ * new versions at all: an hourly interval plus a check on hidden →
+ * visible transitions. Focus checks are throttled to one per 5 minutes;
+ * the hourly poll is not, so the hidden-tab self-heal always runs on
+ * schedule. Failed checks (offline) are swallowed and retried on the
+ * next trigger.
  *
  * `virtual:pwa-register` is mocked — the real module is a vite-plugin-pwa
  * build artifact (a no-op stub outside production builds), and the tests
@@ -25,6 +28,7 @@ vi.mock('virtual:pwa-register', () => ({ registerSW: registerSWMock }));
 import { setupSwUpdates } from './pwa';
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
+const MIN_CHECK_GAP_MS = 5 * 60 * 1000;
 
 const reloadMock = vi.fn();
 const prompt = { show: vi.fn() };
@@ -46,7 +50,9 @@ function registeredOptions(): RegisterSWOptions {
 }
 
 function fakeRegistration() {
-  return { update: vi.fn() } as unknown as ServiceWorkerRegistration;
+  return {
+    update: vi.fn(() => Promise.resolve()),
+  } as unknown as ServiceWorkerRegistration;
 }
 
 beforeEach(() => {
@@ -134,6 +140,60 @@ describe('setupSwUpdates', () => {
     expect(registration.update).not.toHaveBeenCalled();
     setVisibilityState('visible');
     expect(registration.update).toHaveBeenCalledOnce();
+  });
+
+  it('throttles repeat focus checks to one per 5 minutes', () => {
+    vi.useFakeTimers();
+    const registration = fakeRegistration();
+    setupSwUpdates(prompt);
+    registeredOptions().onRegisteredSW!('/sw.js', registration);
+    setVisibilityState('hidden');
+    setVisibilityState('visible');
+    expect(registration.update).toHaveBeenCalledTimes(1);
+    // Refocusing within the gap does not check again.
+    setVisibilityState('hidden');
+    setVisibilityState('visible');
+    expect(registration.update).toHaveBeenCalledTimes(1);
+    // Once the gap has elapsed, focus checks resume.
+    vi.advanceTimersByTime(MIN_CHECK_GAP_MS);
+    setVisibilityState('hidden');
+    setVisibilityState('visible');
+    expect(registration.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs the hourly poll on schedule even right after a focus check', () => {
+    vi.useFakeTimers();
+    const registration = fakeRegistration();
+    setupSwUpdates(prompt);
+    registeredOptions().onRegisteredSW!('/sw.js', registration);
+    // Focus check two minutes before the hourly tick...
+    vi.advanceTimersByTime(ONE_HOUR_MS - 2 * 60 * 1000);
+    setVisibilityState('hidden');
+    setVisibilityState('visible');
+    expect(registration.update).toHaveBeenCalledTimes(1);
+    // ...does not suppress the tick: the poll drives the hidden-tab
+    // self-heal, so it always runs on schedule.
+    vi.advanceTimersByTime(2 * 60 * 1000);
+    expect(registration.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('swallows a failed check (offline) and retries on the next trigger', async () => {
+    const update = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValue(undefined);
+    const registration = { update } as unknown as ServiceWorkerRegistration;
+    setupSwUpdates(prompt);
+    registeredOptions().onRegisteredSW!('/sw.js', registration);
+    setVisibilityState('hidden');
+    setVisibilityState('visible');
+    expect(update).toHaveBeenCalledTimes(1);
+    // Let the rejection land: the throttle resets, so the next focus
+    // retries immediately instead of waiting out the gap.
+    await Promise.resolve();
+    setVisibilityState('hidden');
+    setVisibilityState('visible');
+    expect(update).toHaveBeenCalledTimes(2);
   });
 
   it('starts no polling when registration is unavailable', () => {

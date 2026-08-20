@@ -63,10 +63,13 @@ depends on the tab:
   its next transition to hidden, or immediately via the toast's Reload button.
   A visible tab is never reloaded against the user's will.
 
-Update checks happen on page load, on an hourly interval, and on every
-hidden → visible transition, so long-lived tabs discover deploys without a
-reload. Each check is a cheap conditional request (nginx serves `sw.js` with
-`no-cache`).
+Update checks happen on page load, on an hourly interval, and on
+hidden → visible transitions, so long-lived tabs discover deploys without a
+reload. Focus-triggered checks are throttled to one per 5 minutes; the
+hourly interval is not throttled, so the hidden-tab self-heal always runs
+on schedule. A failed check (e.g. offline right after waking from sleep) is
+swallowed and retried on the next trigger. Each check is a cheap
+conditional request (nginx serves `sw.js` with `no-cache`).
 
 ## Limitations
 
