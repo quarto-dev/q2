@@ -148,6 +148,9 @@ pub fn read<T: Write>(
                     prune_diagnostics_by_error_nodes(diagnostics, &error_nodes, &outer_nodes);
             }
 
+            if let Some(parent) = &context.parent_source_info {
+                reroot_diagnostics_into_parent(&mut diagnostics, parent);
+            }
             return Err(diagnostics);
         }
     }
@@ -255,4 +258,81 @@ pub fn read<T: Write>(
     let warnings = error_collector.into_diagnostics();
 
     Ok((result, context, warnings))
+}
+
+/// Reroot Err-path diagnostic spans through `parent`.
+///
+/// `produce_diagnostic_messages` and the pruning/widening passes after it
+/// do their offset arithmetic in the raw-input-bytes domain, against this
+/// parse's own `FileId(0)`. Under a recursive parse of an embedded string
+/// (config values, `!md` metadata, Lua-filter config values) those are
+/// offsets *into the string*; returning them unmapped hands the caller
+/// spans against the wrong file. Rebuild each span as a substring of the
+/// parent — the same rerooting `range_to_source_info_with_context`
+/// applies on the Ok path.
+fn reroot_diagnostics_into_parent(
+    diagnostics: &mut [quarto_error_reporting::DiagnosticMessage],
+    parent: &quarto_source_map::SourceInfo,
+) {
+    let reroot = |location: &mut Option<quarto_source_map::SourceInfo>| {
+        if let Some(loc) = location
+            && let Some((_file_id, start, end)) = loc.resolve_byte_range()
+        {
+            *loc = quarto_source_map::SourceInfo::substring(parent.clone(), start, end);
+        }
+    };
+    for diagnostic in diagnostics {
+        reroot(&mut diagnostic.location);
+        for detail in &mut diagnostic.details {
+            reroot(&mut detail.location);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Err-path diagnostics must reroot through `parent_source_info`
+    /// exactly like Ok-path spans do
+    /// (bd-q120-masks-config-md-diagnostic-a039r80t): a recursive
+    /// parse of an embedded string (config values, `!md` metadata,
+    /// Lua-filter config values) that *fails* must not hand back
+    /// spans at raw offsets-into-the-string against the throwaway
+    /// `<metadata>` context's FileId(0).
+    #[test]
+    fn err_path_diagnostics_reroot_through_parent_source_info() {
+        use quarto_source_map::FileId;
+        let text = "![logo](images/logo.svg){width=\"65px\" .light-content}\n";
+        let parent = quarto_source_map::SourceInfo::original(FileId(3), 50, 50 + text.len());
+        let mut sink = std::io::sink();
+        let err = super::read(
+            text.as_bytes(),
+            false,
+            "<metadata>",
+            &mut sink,
+            true,
+            Some(parent),
+        )
+        .expect_err("kv-before-class must fail to parse");
+        assert!(!err.is_empty());
+        for diag in &err {
+            let loc = diag
+                .location
+                .as_ref()
+                .expect("Err-path diagnostic must carry a location");
+            let (fid, start, end) = loc.resolve_byte_range().expect("location must resolve");
+            assert_eq!(
+                fid, 3,
+                "Err-path spans must reroot into the parent's file, got {:#?}",
+                diag
+            );
+            assert!(start >= 50 && end <= 50 + text.len());
+            for det in &diag.details {
+                if let Some(l) = &det.location {
+                    let (f, ds, de) = l.resolve_byte_range().expect("detail must resolve");
+                    assert_eq!(f, 3, "detail spans must reroot too, got {:#?}", diag);
+                    assert!(ds >= 50 && de <= 50 + text.len());
+                }
+            }
+        }
+    }
 }

@@ -53,9 +53,11 @@ The `!str` tag tells Quarto to skip markdown parsing for this
 value, so any of the characters above pass through unchanged.
 
 For values you genuinely want to render as markdown, fix the
-markdown so that it parses. The hint in the error message points
-at the value Quarto was unable to parse; the surrounding context
-in the YAML file shows what the metadata is.
+markdown so that it parses. The message includes the underlying
+markdown parser's diagnostic — the same error the text would
+produce in a document body, with spans pointing into your YAML
+file — so it shows exactly which part of the value failed to
+parse, and why.
 
 If the value is explicitly tagged `!md` and you do not actually
 need markdown interpretation, remove the tag.
