@@ -63,7 +63,7 @@ Emission order (matches the existing Image arm): tag-specific attrs first (`href
   <li class="nav-item"><a href="https://example.com/item" id="item-id" class="item-cls">item link</a></li>
   ```
   Region- and item-level links keep id/class/title; attributed span keeps its wrapper; image control unchanged.
-- [ ] Phase 4 — full `cargo xtask verify` (quarto-navigation is in the WASM closure); commit; update strand.
+- [x] Phase 4 — full `cargo xtask verify` green (Rust + WASM + hub-client legs, exit 0). Committed as f434e0e0; strand commented. Not pushed (awaiting approval).
 
 ## Risks / tradeoffs (draft)
 
