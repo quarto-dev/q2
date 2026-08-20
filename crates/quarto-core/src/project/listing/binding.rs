@@ -274,9 +274,21 @@ fn build_item_map(
         m.insert("subtitle".to_string(), TemplateValue::String(s.to_string()));
     }
     if let Some(s) = item.description.as_deref() {
+        // bd-pcmdb7qg: explicit descriptions are truncated at the
+        // *listing's* `max-description-length` (0 disables), Q1
+        // parity with `website-listing-template.ts:130-140`. This
+        // happens here and not in `hydrate_item` because the limit
+        // is per-listing — the same item may appear in two listings
+        // with different limits. Derived descriptions are truncated
+        // separately by the post-render envelope substitution.
+        let description = if listing.max_description_length > 0 {
+            helpers::truncate_text_at_space(s, listing.max_description_length as usize)
+        } else {
+            s.to_string()
+        };
         m.insert(
             "description".to_string(),
-            TemplateValue::String(s.to_string()),
+            TemplateValue::String(description),
         );
     }
     if let Some(s) = item.author.as_deref() {
@@ -819,6 +831,56 @@ mod tests {
         assert_eq!(
             m.get("image-html"),
             Some(&TemplateValue::String(String::new()))
+        );
+    }
+
+    // bd-pcmdb7qg: explicit `description:` is truncated at the
+    // *listing's* `max-description-length` when the record is built
+    // — Q1 parity (`website-listing-template.ts:130-140`, which
+    // truncates per-listing template records with `truncateText`).
+    // The same item can appear in two listings with different
+    // limits, which is why this happens here and not in
+    // `hydrate_item`.
+    #[test]
+    fn binding_truncates_explicit_description_at_max_length() {
+        let mut l = listing();
+        l.max_description_length = 20;
+        let mut it = item("Hello");
+        it.description = Some("The quick brown fox jumps over.".to_string());
+        let ctx = build_listing_context(&l, &[it], "posts", &ConfigValue::default());
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!("items not a list");
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!("item not a map");
+        };
+        // Q1-exact cut: first 20 chars, drop one, cut at last
+        // space, append `…`.
+        assert_eq!(
+            m.get("description"),
+            Some(&TemplateValue::String("The quick brown…".to_string()))
+        );
+    }
+
+    // bd-pcmdb7qg: `max-description-length: 0` disables truncation
+    // (Q1 treats 0/missing as "no limit").
+    #[test]
+    fn binding_zero_max_length_leaves_explicit_description_untruncated() {
+        let mut l = listing();
+        l.max_description_length = 0;
+        let long = "This explicit description is much longer than any default limit would allow.";
+        let mut it = item("Hello");
+        it.description = Some(long.to_string());
+        let ctx = build_listing_context(&l, &[it], "posts", &ConfigValue::default());
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!("items not a list");
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!("item not a map");
+        };
+        assert_eq!(
+            m.get("description"),
+            Some(&TemplateValue::String(long.to_string()))
         );
     }
 

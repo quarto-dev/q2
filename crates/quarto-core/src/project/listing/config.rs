@@ -558,7 +558,7 @@ fn parse_one_listing(
             "image-lazy-loading" => l.image_lazy_loading = entry.value.as_bool(),
             "date-format" => l.date_format = entry.value.as_plain_text(),
             "max-description-length" => {
-                if let Some(n) = entry.value.as_plain_text().and_then(|s| s.parse().ok()) {
+                if let Some(n) = parse_u32_scalar(&entry.value) {
                     l.max_description_length = n;
                 }
             }
@@ -697,6 +697,20 @@ fn parse_contents(
             .collect(),
         _ => Vec::new(),
     }
+}
+
+/// Numeric config scalar: accepts an unquoted YAML integer (`40`,
+/// which arrives as `Yaml::Integer` — `as_plain_text()` returns
+/// `None` for it) as well as the quoted/inline string form (`"40"`).
+/// Out-of-range and non-numeric values yield `None` (caller keeps
+/// its default). Discovered via bd-listing-ellipsis-no-matching-
+/// l963osy1; migrating the sibling numeric keys still on the
+/// plain-text-only pattern is bd-yjsz6hdu.
+fn parse_u32_scalar(value: &ConfigValue) -> Option<u32> {
+    if let Some(i) = value.as_int() {
+        return u32::try_from(i).ok();
+    }
+    value.as_plain_text().and_then(|s| s.parse().ok())
 }
 
 fn parse_string_list(value: &ConfigValue) -> Vec<String> {
@@ -1174,6 +1188,29 @@ listing:
         let q124 = diag_with_code(&diags, "Q-12-4");
 
         quarto_config::span_assert::assert_diagnostic_underlines(q124, &ctx, "dupe");
+    }
+
+    // Discovered during bd-listing-ellipsis-no-matching-l963osy1: an
+    // unquoted YAML integer reaches `parse_listings` as
+    // `Yaml::Integer`, for which `as_plain_text()` returns `None` —
+    // so `max-description-length: 40` silently kept the 175 default.
+    // Must travel the real YAML path: the `s()` builder constructs
+    // string scalars and can't reproduce the integer shape.
+    #[test]
+    fn max_description_length_accepts_unquoted_integer() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    max-description-length: 40
+";
+        let (listings, _diags, _ctx) = parse_from_yaml(yaml);
+        assert_eq!(
+            listings
+                .first()
+                .expect("one listing")
+                .max_description_length,
+            40
+        );
     }
 
     // bd-2mxo: L5 captures the `categories:` *key* span here purely to

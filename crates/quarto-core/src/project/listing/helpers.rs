@@ -249,6 +249,56 @@ fn html_escape_text(s: &str) -> String {
         .replace('>', "&gt;")
 }
 
+/// Q1-parity word-boundary truncation: a direct port of quarto-cli's
+/// `truncateText(s, n, "space")` (`src/core/text.ts`). Single source
+/// of truth for every listing-side truncation — the derived-
+/// description reader, the feed reader, and explicit-description
+/// records all delegate here so their cut points can never diverge
+/// (bd-listing-ellipsis-no-matching-l963osy1).
+///
+/// Semantics, all Q1-observable and kept exactly:
+/// - A string of *fewer* than `max` chars is returned unchanged. A
+///   string of exactly `max` chars IS truncated (Q1's `trimLength`
+///   compares with strict `<`).
+/// - Truncation takes the first `max` chars, drops one more (Q1's
+///   `trimAtSpace` shortens before searching), cuts at the last
+///   `' '` when its index is > 0 (a space at index 0 is not a
+///   boundary; no space at all → hard cut), strips one trailing
+///   `,` / `/` / `:`, and appends `…`.
+/// - `max == 0` returns the string unchanged (callers treat 0 as
+///   "truncation disabled"; this makes the helper safe either way).
+///
+/// Deliberate divergence: positions count Rust `char`s where JS
+/// counts UTF-16 code units, so cut points differ on non-BMP input
+/// (and a surrogate pair can never be split).
+pub(crate) fn truncate_text_at_space(s: &str, max: usize) -> String {
+    if max == 0 || s.chars().count() < max {
+        return s.to_string();
+    }
+    // First `max` chars minus one. `char_indices` boundaries make
+    // the byte slice safe for any multi-byte content; the guard
+    // above ensures the char at position `max - 1` exists.
+    let end = s
+        .char_indices()
+        .nth(max - 1)
+        .map_or(s.len(), |(byte_idx, _)| byte_idx);
+    let window: &str = &s[..end];
+    // Q1's `trimSpace`: cut at the last space only when its index
+    // is > 0. A space is ASCII, so byte index 0 ⇔ char index 0 and
+    // slicing at it is always char-boundary-safe.
+    let cut: &str = match window.rfind(' ') {
+        Some(idx) if idx > 0 => &window[..idx],
+        _ => window,
+    };
+    // Q1's `trimEnd`: strip one trailing `,` / `/` / `:` (ASCII,
+    // so the one-byte slice is safe).
+    let trimmed = match cut.chars().last() {
+        Some(',' | '/' | ':') => &cut[..cut.len() - 1],
+        _ => cut,
+    };
+    format!("{trimmed}…")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

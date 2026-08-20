@@ -181,36 +181,17 @@ fn collect_text(elem: &scraper::ElementRef) -> String {
     elem.text().collect::<Vec<_>>().concat()
 }
 
-/// Truncate `s` at a word boundary ≤ `max_length` characters. Mirrors
-/// Q1's `truncateText(s, n, "space")` — break at the last space
-/// before `n`. `Some(0)` disables truncation (Q1 treats 0 as missing).
+/// Truncate `s` at a word boundary per Q1's
+/// `truncateText(s, n, "space")`, appending `…`. `Some(0)` and
+/// `None` disable truncation (Q1 treats 0 as missing). The exact
+/// cut semantics live in [`helpers::truncate_text_at_space`], the
+/// single truncator shared with the feed reader and the
+/// explicit-description record path.
 fn maybe_truncate(s: &str, max_length: Option<usize>) -> String {
-    let max = match max_length {
-        Some(0) | None => return s.to_string(),
-        Some(n) => n,
-    };
-    if s.chars().count() <= max {
-        return s.to_string();
+    match max_length {
+        Some(0) | None => s.to_string(),
+        Some(n) => crate::project::listing::helpers::truncate_text_at_space(s, n),
     }
-    // Walk char indices to find the truncation point at or before
-    // `max` characters; back up to the last space.
-    let mut last_space_byte: Option<usize> = None;
-    let mut byte_at_max: Option<usize> = None;
-    for (idx, (byte_idx, c)) in s.char_indices().enumerate() {
-        if idx >= max {
-            byte_at_max = Some(byte_idx);
-            break;
-        }
-        if c.is_whitespace() {
-            last_space_byte = Some(byte_idx);
-        }
-    }
-    let cut = match (last_space_byte, byte_at_max) {
-        (Some(b), _) => b,
-        (None, Some(b)) => b, // No space within window — hard cut at max.
-        (None, None) => return s.to_string(),
-    };
-    s[..cut].trim_end().to_string()
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -326,22 +307,120 @@ mod tests {
         assert_eq!(result.as_deref(), Some("Second paragraph wins."));
     }
 
-    // L7 plan §"Tests" Phase 3 #16
+    // L7 plan §"Tests" Phase 3 #16 — expectation updated for
+    // bd-listing-ellipsis-no-matching-l963osy1 (Q1-exact port of
+    // `truncateText(s, 20, "space")`): take first 20 chars
+    // "The quick brown fox ", drop one, cut at the last space
+    // ("The quick brown"), append `…`.
     #[test]
     fn extract_first_para_truncates_to_max_length() {
-        // 30-char text; max=20 → truncate at last word boundary ≤ 20.
         let html = r#"<html><body><main class="content"><p>The quick brown fox jumps over.</p></main></body></html>"#;
         let result = extract_first_para(&parse(html), &opts(Some(20))).unwrap();
-        assert!(
-            result.chars().count() <= 20,
-            "expected ≤ 20 chars, got {}: `{}`",
-            result.chars().count(),
-            result
+        assert_eq!(result, "The quick brown…");
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Q1 `truncateText(s, n, "space")` parity battery for
+    // `maybe_truncate` (bd-listing-ellipsis-no-matching-l963osy1).
+    //
+    // Reference: quarto-cli `src/core/text.ts` — `trimLength`
+    // (strict `<`, so an exactly-n-char string IS truncated), then
+    // `trimAtSpace`: drop one char, cut at `lastIndexOf(' ')` when
+    // that index is > 0, strip one trailing `,`/`/`/`:`, append `…`.
+    // Deliberate divergence: we count Rust `char`s where JS counts
+    // UTF-16 units, so cut positions differ on non-BMP input (and
+    // we can never split a surrogate pair).
+    // ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn maybe_truncate_appends_ellipsis_after_word_boundary_cut() {
+        assert_eq!(
+            maybe_truncate("The quick brown fox jumps over.", Some(20)),
+            "The quick brown…"
         );
-        // Truncation happens at the last space before char-20.
-        // "The quick brown fox " is 20 chars; the last space is
-        // before 'jumps'. Result: "The quick brown fox" (trimmed).
-        assert_eq!(result, "The quick brown fox");
+    }
+
+    #[test]
+    fn maybe_truncate_strips_trailing_comma_before_ellipsis() {
+        // First 18 chars "Hello there, world", drop one, last space
+        // at 12 → "Hello there," → comma stripped → "Hello there…".
+        assert_eq!(
+            maybe_truncate("Hello there, world of examples", Some(18)),
+            "Hello there…"
+        );
+    }
+
+    #[test]
+    fn maybe_truncate_strips_trailing_slash_before_ellipsis() {
+        // First 12 chars "See docs/ fo", drop one, last space at 9
+        // → "See docs/" → slash stripped → "See docs…".
+        assert_eq!(
+            maybe_truncate("See docs/ for more information", Some(12)),
+            "See docs…"
+        );
+    }
+
+    #[test]
+    fn maybe_truncate_strips_trailing_colon_before_ellipsis() {
+        // First 7 chars "Note: t", drop one, last space at 5 →
+        // "Note:" → colon stripped → "Note…".
+        assert_eq!(
+            maybe_truncate("Note: this is a longer sentence", Some(7)),
+            "Note…"
+        );
+    }
+
+    #[test]
+    fn maybe_truncate_short_string_unchanged() {
+        assert_eq!(maybe_truncate("short", Some(175)), "short");
+    }
+
+    #[test]
+    fn maybe_truncate_exactly_max_is_truncated_q1_parity() {
+        // Q1's `trimLength` uses strict `<`: a string of exactly n
+        // chars is treated as too long and truncated. Quirky but
+        // Q1-observable; kept for parity.
+        assert_eq!(maybe_truncate("abc def", Some(7)), "abc…");
+    }
+
+    #[test]
+    fn maybe_truncate_hard_cuts_when_no_space_in_window() {
+        // No space in the first n-1 chars → keep the n-1-char
+        // prefix and append `…`.
+        assert_eq!(maybe_truncate("abcdefghijklmnop", Some(10)), "abcdefghi…");
+    }
+
+    #[test]
+    fn maybe_truncate_space_at_index_zero_is_not_a_boundary() {
+        // Q1's `trimSpace` requires `lastSpace > 0`; a space at
+        // index 0 does not count as a cut point.
+        assert_eq!(maybe_truncate(" abcdefghij", Some(8)), " abcdef…");
+    }
+
+    #[test]
+    fn maybe_truncate_none_and_zero_disable_truncation() {
+        let long = "This string is definitely longer than ten characters.";
+        assert_eq!(maybe_truncate(long, None), long);
+        assert_eq!(maybe_truncate(long, Some(0)), long);
+    }
+
+    #[test]
+    fn maybe_truncate_counts_multibyte_chars_not_bytes() {
+        // 20 chars; first 10 are "café au la" → drop one, last
+        // space at 7 → "café au…". Byte-index arithmetic would
+        // panic or cut inside 'é'.
+        assert_eq!(maybe_truncate("café au lait est bon", Some(10)), "café au…");
+    }
+
+    #[test]
+    fn maybe_truncate_counts_chars_not_utf16_units() {
+        // Documented divergence from Q1: each 🎉 is one Rust char
+        // (two UTF-16 units in JS). First 10 chars are
+        // "🎉🎉🎉 party ", drop one, last space at 3 → "🎉🎉🎉…".
+        assert_eq!(
+            maybe_truncate("🎉🎉🎉 party time forever", Some(10)),
+            "🎉🎉🎉…"
+        );
     }
 
     // L7 plan §"Tests" Phase 3 #17

@@ -619,15 +619,17 @@ mod tests {
             .unwrap();
 
         let after = read_file(&host_path);
-        // Substituted text is "The quick brown fox" (19 chars,
-        // last word boundary ≤ 20). The full sentence should not
+        // Substituted text follows Q1's `truncateText(s, 20,
+        // "space")` (bd-listing-ellipsis-no-matching-l963osy1):
+        // first 20 chars "The quick brown fox ", drop one, cut at
+        // the last space, append `…`. The full sentence should not
         // appear.
         assert!(
-            after.contains("The quick brown fox"),
-            "expected truncated preview present; got: {after}"
+            after.contains("The quick brown…"),
+            "expected truncated preview with ellipsis present; got: {after}"
         );
         assert!(
-            !after.contains("jumps over the lazy"),
+            !after.contains("fox jumps over the lazy"),
             "expected post-truncation text absent; got: {after}"
         );
         assert!(diags.is_empty());
