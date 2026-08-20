@@ -80,7 +80,7 @@ pub const DEFAULT_MATHJAX_URL: &str =
 /// `katex_cdn_version_matches_npm_pin` test enforces the pairing —
 /// bump this together with the `katex` pins in the root and
 /// `hub-client/quarto-hub-sandboxed-preview` package.json.
-pub const DEFAULT_KATEX_URL_BASE: &str = "https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/";
+pub const DEFAULT_KATEX_URL_BASE: &str = "https://cdn.jsdelivr.net/npm/katex@0.18.0/dist/";
 
 /// Math-rendering engine selected by `html-math-method:`.
 #[derive(Debug, Clone, PartialEq, Eq)]
