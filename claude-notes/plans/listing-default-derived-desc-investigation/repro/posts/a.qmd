@@ -1,0 +1,7 @@
+---
+title: Post A
+---
+
+This is the first paragraph of post A, which is long enough that it should be truncated somewhere around the one hundred and seventy-fifth character when Quarto derives a listing description from it automatically.
+
+Second paragraph.

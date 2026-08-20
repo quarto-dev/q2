@@ -1,0 +1,6 @@
+---
+title: Home
+listing:
+  contents: posts
+  type: default
+---

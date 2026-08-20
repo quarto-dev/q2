@@ -1,0 +1,5 @@
+---
+title: Post B
+---
+
+Short body of B.
