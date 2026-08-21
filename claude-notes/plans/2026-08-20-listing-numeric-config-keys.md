@@ -99,42 +99,45 @@ real YAML path); new tests would follow the same pattern per key.
 Commit structure (stacked): **A** accessors, **B** broken-site fixes,
 **C** bare-`as_int` migration. Each commit green on its own.
 
-- **Phase 0 — Failing tests for the broken sites (before commit B's fixes).**
-  - [ ] `parse_from_yaml` regression tests: unquoted `page-size`,
+- **Phase 0 — Failing tests for the broken sites (before commit B's fixes).** ✅
+  - [x] `parse_from_yaml` regression tests: unquoted `page-size`,
     `max-items`, `grid-columns`, `feed: items:`; quoted-string forms as
     guards for the currently-working path.
-  - [ ] revealjs `margin:` as `Yaml::Real` (via `new_scalar`) →
+  - [x] revealjs `margin:` as `Yaml::Real` (via `new_scalar`) →
     `v["margin"] == 0.2`; guard: int `margin` and default.
-  - [ ] Verify each fails at HEAD.
+  - [x] Verified: 5 bug tests failing at HEAD, 2 guards passing (2026-08-21).
 - **Phase 1 — Accessors (commit A).**
-  - [ ] `as_int_lenient() -> Option<i64>` and `as_f64_lenient() -> Option<f64>`
+  - [x] `as_int_lenient() -> Option<i64>` and `as_f64_lenient() -> Option<f64>`
     on `ConfigValue` (`quarto-pandoc-types/src/config_value.rs`) with unit
     tests (Integer, Real, quoted string, PandocInlines, garbage, Real-to-int
-    rejection, whitespace trim).
+    rejection, whitespace trim). **Commit A = `2e1bc26f1`.**
 - **Phase 2 — Broken-site + hand-rolled-reader migration (commit B).**
-  - [ ] listing `config.rs`: `page-size`, `max-items`, `grid-columns`,
+  - [x] listing `config.rs`: `page-size`, `max-items`, `grid-columns`,
     `feed.items` → via `parse_u32_scalar`, itself reimplemented over
     `as_int_lenient` (keeps the u32 clamp in one place).
-  - [ ] revealjs `int_opt`/`float_opt` → thin wrappers over the accessors
-    (or deleted if call sites read cleanly); fixes `margin:`.
-  - [ ] `pampa/src/toc.rs:240` `level` → `as_int_lenient` (behavior-neutral
-    consolidation; it was already robust).
+  - [x] revealjs `int_opt`/`float_opt` → thin wrappers over the accessors;
+    fixes `margin:`. (`int_opt` leniency also makes quoted `width:`/`height:`
+    integers parse instead of falling into the %-string branch.)
+  - [x] `pampa/src/toc.rs:240` `level` → `as_int_lenient` (behavior-neutral
+    consolidation; it was already robust). **Commit B = `1b1bb54fd`.**
 - **Phase 3 — Bare-`as_int` sites, quoted-number miss (commit C).**
-  - [ ] Failing tests first (quoted `"3"` / front-matter-inlines forms), then
-    migrate: `document_profile.rs:798` (`order:`), `:905`
-    (`extract_u32_field` — `reading-time-minutes`, `word-count`),
-    `revealjs/transform.rs:62` (`slide-level:`), `extension/read.rs:566,584`
-    (claim `priority`).
-  - [ ] **Excluded with rationale:** `template.rs:1240` — that `as_int()` is
+  - [x] Failing tests first (4 verified failing), then migrated: `order:`,
+    `extract_u32_field` (`reading-time-minutes`, `word-count`),
+    `slide-level:` (read extracted into testable `slide_level_from_meta`),
+    extension claim `priority` (both object forms). **Commit C = `544ba2321`.**
+  - [x] **Excluded with rationale:** `template.rs:1240` — that `as_int()` is
     a type-dispatch arm in `config_value_to_template_value` (bool → int →
     null → …), not an option read; string-to-int coercion there would change
     template semantics.
 - **Phase 4 — Verification.**
-  - [ ] Full workspace tests; full `cargo xtask verify`
-    (quarto-pandoc-types → WASM leg); snapshot audit.
-  - [ ] E2E probe through `cargo run --bin q2 -- render`: a listing with
-    unquoted `grid-columns` + a revealjs doc with `margin: 0.2`; inspect
-    output; record here.
+  - [x] Full `cargo xtask verify` (Rust + WASM + hub legs): all steps
+    passed (2026-08-21). Snapshot audit: zero .snap changes. Clippy clean
+    on all three touched crates; fmt clean.
+  - [x] E2E probe (2026-08-21): scratch website with `grid-columns: 4`
+    (unquoted) renders `quarto-listing-cols-4` (was silently cols-3);
+    revealjs doc with `margin: 0.2` renders `"margin": 0.2` in the deck
+    config (was silently 0.1). Output inspected by hand; invocation:
+    `cargo run --bin q2 -- render <scratch>`.
 
 ## Open design questions for the user
 
