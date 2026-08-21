@@ -42,10 +42,16 @@
  *                   document, proving the harness and the listener are sound
  *                   and isolating the difference to the DOM swap.
  * T4 (guard)      — a caret-move click inside an already-open editor (not a
- *                   click on a new block) must not move the editor. Passes
- *                   today because nothing reveals yet; its binding is
- *                   post-fix, via the named revert "delete the active-region
- *                   guard from `lineForClickTarget`" (a later task).
+ *                   click on a new block) must not move the editor. Uses its
+ *                   own `wrapperFixture()` (task 11, 2026-08-21 plan):
+ *                   the edited block sits inside a located non-section
+ *                   wrapper (a plain fenced div — NOT a callout; see that
+ *                   fixture's doc comment for why callouts don't work here),
+ *                   so a deleted active-region guard resolves to the
+ *                   wrapper's own line instead of doing nothing. Named
+ *                   revert: delete the active-region guard from
+ *                   `lineForClickTarget` → RED (the editor jumps to the
+ *                   wrapper's line).
  *
  * Run via:
  *   cd hub-client && npx playwright test e2e/q2-preview-click-to-editor-scroll.spec.ts \
@@ -102,6 +108,159 @@ function fixture(format: string | null): string {
     ].join('\n');
 }
 
+/**
+ * T5's own fixture — self-contained (no `.scratch/` dependency), confirmed
+ * by direct probing against a real hub server (see task-9-report.md) to
+ * reproduce a genuine browser `scroll` event on the preview when the FIRST
+ * callout's body is clicked, and — unguarded — a real overwrite of the
+ * editor's reveal a few ms later.
+ *
+ * This is deliberately NOT `fixture()`. Probing found the reflow-then-scroll
+ * is NOT produced by a callout in isolation (`fixture()`'s heading + one
+ * short numbered paragraph + a callout produces no `scroll` event at all —
+ * confirmed with direct instrumentation, several variations tried). It IS
+ * reliably produced by this shape: a full title block (title + subtitle +
+ * author — a bare `format:` front-matter was NOT enough) followed by a
+ * multi-paragraph intro, mirroring the structure of
+ * `.scratch/demo/scroll-sync-demo.qmd` (where task-8 first found the race)
+ * without depending on that file. The exact mechanism ("why" the toolbar
+ * mount reflows here and not in a barer document) was not pinned down further
+ * — see task-9-report.md for the elimination steps — but the reproduction
+ * itself was confirmed twice, deterministically.
+ *
+ * Layout, mirroring `fixture()`'s own T2 trick for the same reason:
+ *   - 40 filler paragraphs before "## Callouts" — without them the callout
+ *     sits within Monaco's initial render window and there is nothing for a
+ *     reveal (or an overwrite) to do; the "off-screen" precondition needs
+ *     real distance.
+ *   - a trailing 6000px spacer AFTER the callouts — decouples the target
+ *     callout's low PREVIEW pixel-ratio from its high source LINE-ratio, the
+ *     same way `fixture()`'s spacer does for `Paragraph N.`. Without it, the
+ *     pre-existing ratio-sync's guess is usually close enough to the correct
+ *     line to still (accidentally) satisfy a "still contains the target"
+ *     assertion — confirmed by probing: the same click, same reflow, same
+ *     `scroll` event, but a much smaller (~8-line) and inconsequential drift
+ *     without the spacer, vs. a large, target-excluding drift with it.
+ */
+function reflowFixture(): string {
+    const filler: string[] = [];
+    for (let i = 1; i <= 40; i++) filler.push(`Paragraph ${i}.`, '');
+    return [
+        '---',
+        'title: "Click-to-Editor Scroll Sync — Element Gallery"',
+        'subtitle: "A document for exercising preview → editor scroll sync"',
+        'author: "Quarto 2"',
+        'format: q2-preview',
+        '---',
+        '',
+        '# Introduction',
+        '',
+        'This document exists to exercise **click-to-editor scroll sync** in the',
+        'q2-preview. Clicking any block below should scroll the Monaco source editor to',
+        "that block's line, *without* stealing focus from the inline editor the same",
+        'click opens.',
+        '',
+        'It is deliberately long and deliberately varied: every block kind is a',
+        'different shape in the DOM, and the interesting question is whether',
+        '`lineForClickTarget` resolves each one to the right `data-loc`.',
+        '',
+        'Try clicking a paragraph near the bottom first — the editor should jump to a',
+        'line in the nineties, not to the top of the file.',
+        '',
+        ...filler,
+        '## Callouts',
+        '',
+        '::: {.callout-note}',
+        '## A note callout',
+        '',
+        'Callouts nest their content inside a div, so the nearest data-loc ancestor',
+        'of this paragraph is the paragraph — not the callout wrapper.',
+        ':::',
+        '',
+        '::: {.callout-tip}',
+        '## A tip callout',
+        '',
+        'Clicking the heading of a callout is a different DOM path from clicking its',
+        'body. Both should resolve.',
+        ':::',
+        '',
+        '::: {.callout-warning}',
+        '## A warning callout',
+        '',
+        'Warnings, notes, tips, cautions and importants all render through the same',
+        'machinery but with different classes.',
+        ':::',
+        '',
+        '::: {.callout-important}',
+        '## An important callout',
+        '',
+        'This one exists mostly to add height so the document needs more scrolling.',
+        ':::',
+        '',
+        '::: {.callout-caution collapse="true"}',
+        '## A collapsed caution callout',
+        '',
+        'Collapsed callouts start closed, which means their body is in the DOM but not',
+        'visible — a useful edge case for hit-testing.',
+        ':::',
+        '',
+        '::: {style="height: 6000px"}',
+        'Spacer.',
+        ':::',
+        '',
+    ].join('\n');
+}
+
+/**
+ * T4's own fixture (task 11, 2026-08-21 plan) — a plain fenced div
+ * (`.plain-wrapper`), NOT a callout, wrapping a single paragraph, after 40
+ * filler paragraphs so the wrapper starts off-screen at load.
+ *
+ * Why not a callout (reflowFixture()'s existing wrapper): inspecting the real
+ * q2-preview DOM (via the ancestor chain from `#q2-active-edit-region` after
+ * opening a callout's body paragraph) shows the callout's own `<div>` never
+ * carries `data-loc` — `Callout.tsx`'s dispatcher spreads `affordanceAttr`
+ * onto its wrapper but never `dataLocProps`, unlike the generic Div
+ * dispatcher (`Div.tsx`, used for a plain `::: {...}` fenced div), which
+ * does. So with a callout, `closest('[data-loc]')` from inside the region
+ * walks all the way past the callout AND the enclosing `<section>` (which
+ * also carries no `data-loc` in this renderer) to nothing — it returns null
+ * via the "no ancestor at all" case regardless of whether the active-region
+ * guard exists, exactly the vacuous-row failure task 11 was dispatched to
+ * fix. A plain fenced div's outer element DOES carry its own `data-loc`
+ * (confirmed empirically), so it is the wrapper this row actually needs.
+ *
+ * Why the test also has to scroll Monaco directly (see the test body): the
+ * wrapper's own `data-loc` start line and its single paragraph child's start
+ * line differ by only 1-3 lines (the fence line itself, maybe a heading).
+ * Opening the paragraph's editor reveals its own line correctly either way,
+ * but `revealEditorLine` calls `revealLineInCenterIfOutsideViewport` — since
+ * the wrapper's line is already inside that same small-gap viewport, a
+ * missing guard's reveal call would silently no-op too, and the row would be
+ * vacuous again for a completely different reason. The test scrolls Monaco
+ * away from both lines (a real user could do this with the mouse wheel,
+ * without touching the preview or closing the open editor) so the wrapper's
+ * line is genuinely outside the viewport at the moment of the final click.
+ */
+function wrapperFixture(): string {
+    const filler: string[] = [];
+    for (let i = 1; i <= 40; i++) filler.push(`Paragraph ${i}.`, '');
+    return [
+        '---',
+        'title: "T4 — active-region guard, non-section wrapper"',
+        'format: q2-preview',
+        '---',
+        '',
+        '# Introduction',
+        '',
+        ...filler,
+        '::: {.plain-wrapper}',
+        'Wrapped paragraph for the T4 active-region guard row.',
+        ':::',
+        '',
+    ].join('\n');
+}
+
 /** 1-based source line of `Paragraph n.` in the fixture above. */
 function paraLine(n: number): number {
     return 5 + 2 * n;
@@ -124,6 +283,22 @@ async function openDoc(
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/doc.qmd`);
     await waitForPreviewRender(page, { kind, timeout: 30000 });
+}
+
+/**
+ * Like {@link openDoc}, but for a dedicated fixture's content (T5's
+ * `reflowFixture()`, T4's `wrapperFixture()`).
+ */
+async function openDocWithContent(page: Page, content: string): Promise<void> {
+    const serverUrl = getServerUrl();
+    const docId = await createProjectOnServer(serverUrl, [
+        { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+        { path: 'doc.qmd', content, contentType: 'text' },
+    ]);
+    await bootstrapProjectSet(page, serverUrl);
+    const localId = await seedProjectInBrowser(page, docId, serverUrl);
+    await page.goto(`/#/p/${localId}/file/doc.qmd`);
+    await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30000 });
 }
 
 /**
@@ -228,6 +403,35 @@ async function previewScrollY(page: Page): Promise<number> {
 }
 
 /**
+ * Install a `scroll` counter on the preview iframe's `contentWindow` — the
+ * same event `Q2PreviewIframe`'s production listener (and `handlePreviewScroll`
+ * → the ratio-sync debounce) reacts to. Modeled on {@link recordIframeDocClicks}
+ * (install-then-read-back via `page.evaluate`), not a new shape. T5 uses this
+ * to confirm a real scroll actually fired, rather than assuming it did.
+ */
+async function recordIframePreviewScrolls(page: Page, iframeSelector: string): Promise<void> {
+    await page.evaluate((sel) => {
+        const frame = document.querySelector(sel) as HTMLIFrameElement | null;
+        const win = frame?.contentWindow;
+        if (!win) throw new Error(`no contentWindow for ${sel}`);
+        (window as unknown as { __previewScrollCount: number }).__previewScrollCount = 0;
+        win.addEventListener(
+            'scroll',
+            () => {
+                (window as unknown as { __previewScrollCount: number }).__previewScrollCount += 1;
+            },
+            { passive: true },
+        );
+    }, iframeSelector);
+}
+
+async function readIframePreviewScrollCount(page: Page): Promise<number> {
+    return page.evaluate(
+        () => (window as unknown as { __previewScrollCount: number }).__previewScrollCount,
+    );
+}
+
+/**
  * Text of the lines Monaco currently has rendered (i.e. what the user sees).
  *
  * **Monaco renders spaces as `\u00a0`.** Without the normalisation below,
@@ -242,7 +446,7 @@ async function editorVisibleText(page: Page): Promise<string> {
     return raw.replace(/\u00a0/g, ' ');
 }
 
-test.describe('preview→editor scroll sync on click (repro)', () => {
+test.describe('preview→editor scroll sync on click', () => {
     test.setTimeout(120000);
 
     test.beforeEach(async ({ page }, testInfo) => {
@@ -372,25 +576,47 @@ test.describe('preview→editor scroll sync on click (repro)', () => {
     });
 
     test('T4 — a caret-move click inside the open editor must not move the editor', async ({ page }) => {
-        await openDoc(page, 'q2-preview', 'q2-preview');
+        // Own fixture (`wrapperFixture()`) — see its doc comment for why a
+        // plain fenced div, not one of reflowFixture()'s callouts, is the
+        // wrapper this row needs, and why the block being edited must sit
+        // inside it (not directly inside the section).
+        await openDocWithContent(page, wrapperFixture());
         const iframe = page.frameLocator(Q2_IFRAME);
         await iframe.locator('[data-block-pool-id]').first().waitFor({ timeout: 15_000 });
 
-        // Open the editor on a LATE paragraph. Once a reveal exists (post-fix)
-        // this is what displaces the editor away from `# Section one` — the
-        // editor will be showing line ~75, not line 5.
-        const targetText = `Paragraph ${PARA_COUNT}.`;
-        const target = iframe.locator('p[data-block-pool-id]').filter({ hasText: targetText }).first();
-        await target.scrollIntoViewIfNeeded();
-        await target.click();
+        // 1. Click a block deep in the document (far from the wrapper, which
+        // sits after 40 filler paragraphs) to displace the editor there.
+        const deep = iframe.locator('p[data-block-pool-id]').filter({ hasText: 'Paragraph 1.' }).first();
+        await deep.scrollIntoViewIfNeeded();
+        await deep.click();
         const textarea = iframe.locator('textarea').first();
         await textarea.waitFor({ timeout: 5000 });
         await page.waitForTimeout(800); // debounce (50ms) + smooth scroll (300ms) + slack, mirrors T2
 
+        // 2. Open the wrapper-nested block's editor. Correctly reveals its
+        // own line (this happens whether or not the active-region guard
+        // exists — the click target isn't inside the region yet).
+        const target = iframe.getByText(/^Wrapped paragraph for the T4 active-region guard row/).first();
+        await target.scrollIntoViewIfNeeded();
+        await target.click();
+        await textarea.waitFor({ timeout: 5000 });
+        await page.waitForTimeout(800);
+
+        // 3. Displace Monaco's OWN viewport again, directly — a real user
+        // action (mouse wheel over the editor pane) that does not touch the
+        // preview and so cannot close the edit region just opened. Needed
+        // per wrapperFixture()'s doc comment: the wrapper's line is only a
+        // few lines from the paragraph's own line, so without this the
+        // wrapper's line would already be inside the viewport and a missing
+        // guard's reveal call would no-op too, same as a correct guard would.
+        await page.hover('.monaco-editor');
+        for (let i = 0; i < 40; i++) await page.mouse.wheel(0, -2000);
+        await page.waitForTimeout(300);
+
         const before = await editorVisibleText(page);
 
-        // A caret move WITHIN the block already being edited — not a click on
-        // a new block. This must land inside `#q2-active-edit-region`.
+        // 4. A caret move WITHIN the block already being edited — not a
+        // click on a new block. This must land inside `#q2-active-edit-region`.
         await textarea.click();
         await page.waitForTimeout(300);
 
@@ -399,5 +625,90 @@ test.describe('preview→editor scroll sync on click (repro)', () => {
             after,
             'a caret-move click inside the already-open editor must not move the editor',
         ).toEqual(before);
+    });
+
+    test('T5 — a reflow-causing rich-text activation must not let the reveal be overwritten by ratio sync', async ({ page }) => {
+        // richText defaults OFF for this describe's shared preferences seed
+        // (bootstrapProjectSet's e2e baseline), so T1–T4's plain-textarea
+        // assertions are unaffected. This test opts IN, registering its own
+        // addInitScript AFTER the shared beforeEach's — it runs later, so it
+        // wins, and bootstrapProjectSet's merge (`cur.richText === undefined`)
+        // then leaves it alone. Mirrors q2-preview-richtext-bold-content-loss.spec.ts.
+        await page.addInitScript(() => {
+            localStorage.setItem(
+                'quarto-hub:preferences',
+                JSON.stringify({
+                    version: 1,
+                    scrollSyncEnabled: true,
+                    errorOverlayCollapsed: true,
+                    colorScheme: 'auto',
+                    richText: true,
+                }),
+            );
+        });
+
+        await openDocWithContent(page, reflowFixture());
+        const iframe = page.frameLocator(Q2_IFRAME);
+        await iframe.locator('[data-block-pool-id]').first().waitFor({ timeout: 15_000 });
+
+        const targetText = 'Callouts nest their content inside a div';
+        const target = iframe.getByText(new RegExp(`^${targetText}`)).first();
+
+        // Precondition: the target is genuinely off-screen in the editor
+        // before any interaction — see reflowFixture()'s doc comment for why
+        // the 40 filler paragraphs are needed for this to hold.
+        const before = await editorVisibleText(page);
+        expect(before, 'precondition: the target line is off-screen in the editor').not.toContain(
+            targetText,
+        );
+
+        await target.scrollIntoViewIfNeeded();
+
+        // Install the scroll counter AFTER the setup scroll above (so it
+        // only counts scrolls the CLICK itself produces, not the one from
+        // bringing the target into view) and BEFORE the click.
+        await recordIframePreviewScrolls(page, Q2_IFRAME);
+
+        await target.click();
+        // Activation opens the rich-text (tiptap) editor for this block —
+        // `.ProseMirror`, not a `<textarea>` — confirming the click landed
+        // and the block is now in rich-edit mode.
+        await iframe.locator('.ProseMirror').first().waitFor({ timeout: 5000 });
+
+        // Runtime precondition, not assumed: activation must have produced at
+        // least one real `scroll` event on the preview. Without this, the
+        // poll loop below would pass VACUOUSLY if `reflowFixture()` ever
+        // stops reproducing the post-activation reflow (a dependency bump, a
+        // CSS change, a font-loading change, ...) — nothing would move the
+        // reveal, so "still contains target text" would hold trivially. A
+        // failure here means this row's fixture precondition broke, not that
+        // the fix regressed — re-derive `reflowFixture()` (see its doc
+        // comment), don't delete this row.
+        const scrollCount = await readIframePreviewScrollCount(page);
+        expect(
+            scrollCount,
+            'precondition: activation must produce at least one real preview scroll event — ' +
+                'if this is 0, reflowFixture() has stopped reproducing the reflow this row exists ' +
+                'to survive; re-derive the fixture, this is not a product regression',
+        ).toBeGreaterThan(0);
+
+        // Poll across (and past) the ratio-sync debounce window (50ms) plus
+        // its own smooth-scroll animation (300ms). A single post-click check
+        // would land right where the existing T2 does today and miss a
+        // reveal that arrives correctly, then is silently overwritten a few
+        // ms later — which is exactly what task-8 found (and task-9-report.md
+        // reproduces directly against this fixture) and this row exists to
+        // catch. Once overwritten, the wrong position is not self-correcting
+        // (nothing else scrolls the editor again), so any single sample in
+        // this window catches a regression — the loop's job is to not miss a
+        // narrow window by sampling too coarsely.
+        for (let elapsed = 0; elapsed <= 500; elapsed += 25) {
+            const visible = await editorVisibleText(page);
+            expect(
+                visible,
+                `the reveal must still hold ${elapsed}ms after the click, not just immediately after it`,
+            ).toContain(targetText);
+            await page.waitForTimeout(25);
+        }
     });
 });

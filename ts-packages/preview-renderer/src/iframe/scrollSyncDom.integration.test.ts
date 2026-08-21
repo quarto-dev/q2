@@ -127,14 +127,27 @@ describe('lineForClickTarget', () => {
         expect(lineForClickTarget(doc.getElementById('s'))).toBeNull();
     });
 
-    it('U1c: returns null inside the active-edit-region even when nested in a located section', () => {
-        // Load-bearing hazard row: the edit region is nested INSIDE the
-        // located <section> (not floating at the document root), so a
-        // deleted active-region guard would fall through to the section's
-        // closest('[data-loc]') and return 5 instead of null.
+    it('U1c: returns null inside the active-edit-region even when nested in a located non-section wrapper', () => {
+        // Load-bearing hazard row: the edit region is nested INSIDE a located
+        // non-section wrapper (a callout/fenced-div stand-in) which is itself
+        // inside the located <section>. The wrapper must NOT be a <section> —
+        // if it were, the *separate, pre-existing* section guard would return
+        // null on its own and this row would pass with the active-region
+        // guard deleted too, telling you nothing (that was the original bug:
+        // both U1c and Playwright T4 passed with the guard gone). With a
+        // non-section wrapper, closest('[data-loc]') from inside the region
+        // resolves the wrapper (20), which is not a <section>, so only the
+        // active-region guard stands between this row and a wrong line.
+        //
+        // Named revert: delete the active-region guard (`if
+        // (el.closest('#q2-active-edit-region')) return null;`) from
+        // `lineForClickTarget` → returns 20 (the wrapper's line) instead of
+        // null → RED.
         const doc = docWith(
             '<section data-loc="0:5:1-30:1">' +
+                '<div class="callout" data-loc="0:20:1-24:9">' +
                 '<div id="q2-active-edit-region"><span id="inEdit">y</span></div>' +
+                '</div>' +
                 '</section>',
         );
         expect(lineForClickTarget(doc.getElementById('inEdit'))).toBeNull();
@@ -199,5 +212,30 @@ describe('lineForClickTarget', () => {
         } finally {
             document.body.removeChild(iframe);
         }
+    });
+
+    it('U1g: returns null for a located element whose fileId is not the rendered document (0)', () => {
+        // Task 10 (2026-08-21 plan): the rendered document is always
+        // FileId(0) (ParseDocumentStage registers it before
+        // IncludeExpansionStage registers any included file). A non-zero
+        // fileId means the line belongs to an included file's own line
+        // numbering, not the currently open editor's — revealing it would
+        // be a silent mis-navigation.
+        //
+        // Named revert: remove the fileId check from lineForClickTarget →
+        // returns 12 (a line number belonging to a different file) → RED.
+        const doc = docWith('<p data-loc="3:12:1-14:20"><em id="t">x</em></p>');
+        expect(lineForClickTarget(doc.getElementById('t'))).toBeNull();
+    });
+
+    it('U1h: resolves normally for a located element whose fileId is the rendered document (0)', () => {
+        // Same-file control for U1g: guards against a guard that rejects
+        // every click regardless of fileId (which would pass U1g while
+        // breaking every existing same-file row).
+        //
+        // Named revert: reject unconditionally regardless of fileId →
+        // returns null instead of 12 → RED.
+        const doc = docWith('<p data-loc="0:12:1-14:20"><em id="t">x</em></p>');
+        expect(lineForClickTarget(doc.getElementById('t'))).toBe(12);
     });
 });

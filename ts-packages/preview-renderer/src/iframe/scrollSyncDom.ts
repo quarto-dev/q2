@@ -95,17 +95,29 @@ export function findElementForLine(
  *
  * Walks up from `target` via `closest`, so the innermost located ancestor
  * wins (never a document-wide `querySelector`, which would ignore the
- * target entirely). Three cases return `null` rather than a line:
+ * target entirely). Four cases return `null` rather than a line:
  *
  *  - the target is inside `#q2-active-edit-region` — q2-preview's block
  *    activation replaces the clicked subtree with this synthetic region on
  *    the same `pointerup`; a caret move inside an already-open editor must
  *    not yank the editor to the enclosing block.
- *  - the nearest `[data-loc]` ancestor is a `<section>` — sections carry a
- *    `data-loc` too (`SectionizeTransform` is unconditional), so
- *    inter-block whitespace or an edit region nested inside a section would
- *    otherwise resolve to the section's own (usually distant) line.
+ *  - the nearest `[data-loc]` ancestor is a `<section>` — sections are pure
+ *    `SectionizeTransform` synthesis with no source preimage
+ *    (`SourceInfo::Generated`), so `dataLocProps` never actually emits a
+ *    `data-loc` for one and this branch is currently unreachable under
+ *    q2-preview. Kept as defence-in-depth: correct the day sections gain a
+ *    resolvable location.
  *  - there is no `[data-loc]` ancestor at all.
+ *  - the located ancestor's `fileId` is not the rendered document's own
+ *    (`0` — `ParseDocumentStage` always registers the document being
+ *    rendered before `IncludeExpansionStage` registers any included file,
+ *    so the current file is always id 0 and any other id is included
+ *    content). The line number belongs to the *included* file's own line
+ *    numbering, not the currently open editor's; revealing it there would
+ *    be a silent mis-navigation to an unrelated, coincidentally-numbered
+ *    line. Scrolling to the `{{< include … >}}` shortcode's own line
+ *    instead is deferred follow-up work (D5) — this guard only makes the
+ *    wrong reveal stop happening; it is not that answer.
  *
  * Narrows with a duck-typed `.closest` check rather than `instanceof
  * Element`: in production this runs in the *parent* frame's realm against a
@@ -130,6 +142,7 @@ export function lineForClickTarget(target: EventTarget | null): number | null {
     if (!dataLoc) return null;
     const loc = parseDataLoc(dataLoc);
     if (!loc) return null;
+    if (loc.fileId !== 0) return null;
 
     return loc.startLine;
 }

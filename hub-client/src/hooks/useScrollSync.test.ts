@@ -205,6 +205,55 @@ describe('useScrollSync revealEditorLine (RED — pinned API, Phase 2 not yet im
 });
 
 /**
+ * U2e — Task 9: `revealEditorLine` must suppress the pre-existing
+ * preview→editor ratio sync for a short window after a reveal, the same way
+ * `flushPendingScroll` / `syncPreviewToEditor` already suppress each other's
+ * echo. Without this, a real (even tiny) `scroll` event on the preview within
+ * ~50ms of the click reaches `syncPreviewToEditor` unguarded and overwrites
+ * the just-completed, correct reveal with a position derived from the
+ * preview's raw scroll ratio — see
+ * `.superpowers/sdd/2026-08-21-preview-click-to-editor-scroll/task-8-report.md`.
+ */
+describe('useScrollSync revealEditorLine suppresses the ratio-sync echo (Task 9)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('U2e: a preview scroll within the suppression window does not overwrite the reveal, and the window is time-bounded', () => {
+    const { result, editor } = setup({ line: 1, focus: false });
+
+    act(() => {
+      result.current.revealEditorLine(73);
+    });
+    // The reveal itself still happens synchronously — a fix that made
+    // revealEditorLine a no-op would satisfy the assertions below vacuously.
+    expect(editor.revealLineInCenterIfOutsideViewport).toHaveBeenCalledExactlyOnceWith(73);
+
+    // A scroll event arriving within the suppression window (today: 50ms
+    // debounce, then unguarded) must not echo through and overwrite the
+    // reveal.
+    act(() => {
+      result.current.handlePreviewScroll();
+      vi.advanceTimersByTime(50);
+    });
+    expect(editor.setScrollTop).not.toHaveBeenCalled();
+
+    // The suppression must be time-bounded, not permanent — otherwise a fix
+    // that disabled ratio sync forever would satisfy the row above while
+    // breaking the HTML preview path (U4) in production. Advance past the
+    // 300ms window, then a fresh preview scroll must resume ratio sync as
+    // normal.
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    act(() => {
+      result.current.handlePreviewScroll();
+      vi.advanceTimersByTime(50);
+    });
+    expect(editor.setScrollTop).toHaveBeenCalledExactlyOnceWith(300, 1);
+  });
+});
+
+/**
  * U4 — regression cover for the pre-existing preview→editor ratio path
  * (`syncPreviewToEditor`, reached via `handlePreviewScroll`). Nothing in the
  * suite exercised this before; the upcoming revealEditorLine refactor touches
