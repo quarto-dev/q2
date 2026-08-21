@@ -296,10 +296,13 @@ Skeleton only — contents wait on the design discussion.
    lines in the stage predicate plus docs. Ship here, or file separately?
    I'd ship here — it is the only opt-out from scroll-away, and Q1 users
    expect it.
-6. **Theme offset table.** If Option A: port the 13-theme
-   `navbar-default-offset` table as-is (known-wrong for custom themes) or
-   ship just the 64 px fallback plus a `ResizeObserver` that fixes it up
-   post-load? The table only affects the pre-JS flash.
+6. **Theme offset table.** ~~Port verbatim or fallback-only?~~ **Resolved
+   2026-08-21 (Carlos): port the 13-theme `navbar-default-offset` map
+   verbatim.** It is Q1's per-Bootswatch pre-JS padding guess; porting it
+   avoids load-time-jump surprises for migrating users on the themes we
+   vendor. Host: `resources/scss/bootstrap/_bootstrap-functions.scss`,
+   keyed on the existing `$theme-name` (`_bootstrap-variables.scss:2`).
+   May not survive a future layout redesign (Option B); fine.
 7. **How does `nav-fixed` reach `<body>`?** `template.rs:911-915` replaces
    rather than appends, and `SidebarRenderTransform` only writes
    `body-classes` when a sidebar exists. Options: (a) a new
