@@ -648,7 +648,10 @@ fn parse_contents(
         }];
     }
     match &value.value {
-        ConfigValueKind::Scalar(Yaml::String(s)) => {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(s),
+            ..
+        } => {
             vec![ListingContents::Glob {
                 pattern: s.clone(),
                 source: value.source_info.clone(),
@@ -670,7 +673,10 @@ fn parse_contents(
                     });
                 }
                 match &item.value {
-                    ConfigValueKind::Scalar(Yaml::String(s)) => Some(ListingContents::Glob {
+                    ConfigValueKind::Scalar {
+                        yaml: Yaml::String(s),
+                        ..
+                    } => Some(ListingContents::Glob {
                         pattern: s.clone(),
                         source: item.source_info.clone(),
                     }),
@@ -782,7 +788,11 @@ fn parse_sort(
     value: &ConfigValue,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Option<Vec<ListingSort>> {
-    if let ConfigValueKind::Scalar(Yaml::Boolean(b)) = &value.value {
+    if let ConfigValueKind::Scalar {
+        yaml: Yaml::Boolean(b),
+        ..
+    } = &value.value
+    {
         return if *b { None } else { Some(Vec::new()) };
     }
     // String-shaped values (including the routine PandocInlines

@@ -47,18 +47,18 @@ fn json_to_config_value(value: &serde_json::Value) -> ConfigValue {
 
     let source_info = SourceInfo::generated(By::programmatic_config());
     let kind = match value {
-        serde_json::Value::Null => ConfigValueKind::Scalar(Yaml::Null),
-        serde_json::Value::Bool(b) => ConfigValueKind::Scalar(Yaml::Boolean(*b)),
+        serde_json::Value::Null => ConfigValueKind::scalar(Yaml::Null),
+        serde_json::Value::Bool(b) => ConfigValueKind::scalar(Yaml::Boolean(*b)),
         serde_json::Value::Number(n) => {
             if let Some(i) = n.as_i64() {
-                ConfigValueKind::Scalar(Yaml::Integer(i))
+                ConfigValueKind::scalar(Yaml::Integer(i))
             } else if let Some(f) = n.as_f64() {
-                ConfigValueKind::Scalar(Yaml::Real(f.to_string()))
+                ConfigValueKind::scalar(Yaml::Real(f.to_string()))
             } else {
-                ConfigValueKind::Scalar(Yaml::String(n.to_string()))
+                ConfigValueKind::scalar(Yaml::String(n.to_string()))
             }
         }
-        serde_json::Value::String(s) => ConfigValueKind::Scalar(Yaml::String(s.clone())),
+        serde_json::Value::String(s) => ConfigValueKind::scalar(Yaml::String(s.clone())),
         serde_json::Value::Array(arr) => {
             let items: Vec<ConfigValue> = arr.iter().map(json_to_config_value).collect();
             ConfigValueKind::Array(items)

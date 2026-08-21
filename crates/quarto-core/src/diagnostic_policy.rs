@@ -225,7 +225,13 @@ fn parse_entry(value: &ConfigValue) -> Result<PolicyEntry, String> {
 /// because YAML 1.1 resolves a bare `off` to `false` — an author who
 /// writes the documented spelling must not be told it is invalid.
 fn parse_level(value: &ConfigValue) -> Result<PolicyLevel, String> {
-    if matches!(&value.value, ConfigValueKind::Scalar(Yaml::Boolean(false))) {
+    if matches!(
+        &value.value,
+        ConfigValueKind::Scalar {
+            yaml: Yaml::Boolean(false),
+            ..
+        }
+    ) {
         return Ok(PolicyLevel::Off);
     }
     // `as_plain_text` (not `as_str`) because a bare YAML string in
@@ -277,7 +283,7 @@ mod tests {
             Yaml::Array(items) => {
                 ConfigValueKind::Array(items.iter().map(yaml_to_config).collect())
             }
-            scalar => ConfigValueKind::Scalar(scalar.clone()),
+            scalar => ConfigValueKind::scalar(scalar.clone()),
         };
         ConfigValue {
             value: kind,

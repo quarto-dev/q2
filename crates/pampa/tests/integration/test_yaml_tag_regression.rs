@@ -86,7 +86,11 @@ regular: This has *emphasis*
         .find(|e| e.key == "tagged_str")
         .expect("tagged_str not found");
 
-    if let ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) = &tagged_str_entry.value.value {
+    if let ConfigValueKind::Scalar {
+        yaml: yaml_rust2::Yaml::String(s),
+        ..
+    } = &tagged_str_entry.value.value
+    {
         assert_eq!(s, "_foo_.py");
     } else {
         panic!(

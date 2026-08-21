@@ -417,11 +417,11 @@ mod tests {
     }
 
     fn yaml_bool(b: bool) -> quarto_pandoc_types::ConfigValueKind {
-        quarto_pandoc_types::ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(b))
+        quarto_pandoc_types::ConfigValueKind::scalar(yaml_rust2::Yaml::Boolean(b))
     }
 
     fn yaml_str(s: &str) -> quarto_pandoc_types::ConfigValueKind {
-        quarto_pandoc_types::ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s.to_string()))
+        quarto_pandoc_types::ConfigValueKind::scalar(yaml_rust2::Yaml::String(s.to_string()))
     }
 
     /// A `code-copy` value as it is actually stored after a bare front-matter

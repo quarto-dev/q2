@@ -2238,7 +2238,7 @@ mod tests {
 
     fn project_with_theme(theme: &str) -> ProjectContext {
         let theme_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(theme.to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };

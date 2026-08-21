@@ -64,7 +64,10 @@ fn test_project_config_keeps_strings_literal() {
     let config = parse_yaml("This has *emphasis*", InterpretationContext::ProjectConfig);
 
     match &config.value {
-        ConfigValueKind::Scalar(Yaml::String(s)) => {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(s),
+            ..
+        } => {
             assert_eq!(s, "This has *emphasis*");
         }
         other => panic!(
@@ -95,7 +98,10 @@ fn test_simple_string_project_config() {
     let config = parse_yaml("Hello World", InterpretationContext::ProjectConfig);
 
     match &config.value {
-        ConfigValueKind::Scalar(Yaml::String(s)) => {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(s),
+            ..
+        } => {
             assert_eq!(s, "Hello World");
         }
         other => panic!("Expected Scalar, got: {:?}", other),
@@ -113,7 +119,10 @@ fn test_str_tag_in_document_metadata() {
     let config = parse_yaml(content, InterpretationContext::DocumentMetadata);
 
     match &config.value {
-        ConfigValueKind::Scalar(Yaml::String(s)) => {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(s),
+            ..
+        } => {
             assert_eq!(
                 s, "_foo_.py",
                 "!str should keep underscore-surrounded text literal"
@@ -130,7 +139,10 @@ fn test_str_tag_in_project_config() {
     let config = parse_yaml(content, InterpretationContext::ProjectConfig);
 
     match &config.value {
-        ConfigValueKind::Scalar(Yaml::String(s)) => {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(s),
+            ..
+        } => {
             assert_eq!(s, "literal_value");
         }
         other => panic!("Expected Scalar for !str, got: {:?}", other),
@@ -244,7 +256,10 @@ fn test_prefer_tag_on_string() {
 
     assert_eq!(config.merge_op, MergeOp::Prefer);
     match &config.value {
-        ConfigValueKind::Scalar(Yaml::String(s)) => {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(s),
+            ..
+        } => {
             assert_eq!(s, "value");
         }
         other => panic!("Expected Scalar, got: {:?}", other),
@@ -267,7 +282,10 @@ fn test_prefer_with_str_tag() {
 
     assert_eq!(config.merge_op, MergeOp::Prefer);
     match &config.value {
-        ConfigValueKind::Scalar(Yaml::String(s)) => {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(s),
+            ..
+        } => {
             assert_eq!(s, "_literal_");
         }
         other => panic!("Expected Scalar, got: {:?}", other),
@@ -337,7 +355,10 @@ fn test_array_in_project_config() {
             // Each item should be literal Scalar
             for item in items {
                 match &item.value {
-                    ConfigValueKind::Scalar(Yaml::String(_)) => {}
+                    ConfigValueKind::Scalar {
+                        yaml: Yaml::String(_),
+                        ..
+                    } => {}
                     other => panic!("Expected Scalar for array item, got: {:?}", other),
                 }
             }
@@ -363,7 +384,10 @@ key2: value2
                 .find(|e| e.key == "key1")
                 .expect("key1 not found");
             match &key1.value.value {
-                ConfigValueKind::Scalar(Yaml::String(s)) => {
+                ConfigValueKind::Scalar {
+                    yaml: Yaml::String(s),
+                    ..
+                } => {
                     assert_eq!(s, "value1");
                 }
                 other => panic!("Expected Scalar for key1, got: {:?}", other),
@@ -423,7 +447,10 @@ fn test_boolean_values() {
     ] {
         let config_true = parse_yaml("true", context);
         match &config_true.value {
-            ConfigValueKind::Scalar(Yaml::Boolean(b)) => {
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Boolean(b),
+                ..
+            } => {
                 assert!(*b);
             }
             other => panic!("Expected Boolean true, got: {:?}", other),
@@ -431,7 +458,10 @@ fn test_boolean_values() {
 
         let config_false = parse_yaml("false", context);
         match &config_false.value {
-            ConfigValueKind::Scalar(Yaml::Boolean(b)) => {
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Boolean(b),
+                ..
+            } => {
                 assert!(!*b);
             }
             other => panic!("Expected Boolean false, got: {:?}", other),
@@ -447,7 +477,10 @@ fn test_integer_values() {
     ] {
         let config = parse_yaml("42", context);
         match &config.value {
-            ConfigValueKind::Scalar(Yaml::Integer(i)) => {
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Integer(i),
+                ..
+            } => {
                 assert_eq!(*i, 42);
             }
             other => panic!("Expected Integer, got: {:?}", other),
@@ -463,7 +496,10 @@ fn test_float_values() {
     ] {
         let config = parse_yaml("1.234", context);
         match &config.value {
-            ConfigValueKind::Scalar(Yaml::Real(r)) => {
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Real(r),
+                ..
+            } => {
                 let f: f64 = r.parse().expect("Failed to parse float");
                 assert!((f - 1.234).abs() < 0.001);
             }
@@ -480,14 +516,18 @@ fn test_null_value() {
     ] {
         let config = parse_yaml("null", context);
         match &config.value {
-            ConfigValueKind::Scalar(Yaml::Null) => {}
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Null, ..
+            } => {}
             other => panic!("Expected Null, got: {:?}", other),
         }
 
         // Also test ~ which is YAML null
         let config_tilde = parse_yaml("~", context);
         match &config_tilde.value {
-            ConfigValueKind::Scalar(Yaml::Null) => {}
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Null, ..
+            } => {}
             other => panic!("Expected Null for ~, got: {:?}", other),
         }
     }
@@ -511,7 +551,10 @@ fn test_md_tag_with_invalid_markdown_produces_error() {
         ConfigValueKind::PandocInlines(_) | ConfigValueKind::PandocBlocks(_) => {
             // Parsed successfully (markdown is permissive)
         }
-        ConfigValueKind::Scalar(Yaml::String(_)) => {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(_),
+            ..
+        } => {
             // Fallback to string on error is also acceptable
             assert!(
                 diagnostics.has_errors(),
@@ -570,7 +613,10 @@ format:
                                 .find(|e| e.key == "theme")
                                 .expect("theme not found");
                             match &theme.value.value {
-                                ConfigValueKind::Scalar(Yaml::String(s)) => {
+                                ConfigValueKind::Scalar {
+                                    yaml: Yaml::String(s),
+                                    ..
+                                } => {
                                     assert_eq!(s, "cosmo");
                                 }
                                 other => panic!("Expected Scalar for theme, got: {:?}", other),
@@ -581,7 +627,10 @@ format:
                                 .find(|e| e.key == "toc")
                                 .expect("toc not found");
                             match &toc.value.value {
-                                ConfigValueKind::Scalar(Yaml::Boolean(b)) => {
+                                ConfigValueKind::Scalar {
+                                    yaml: Yaml::Boolean(b),
+                                    ..
+                                } => {
                                     assert!(*b);
                                 }
                                 other => panic!("Expected Boolean for toc, got: {:?}", other),
@@ -683,7 +732,10 @@ baz: 42
 
     let foo = config.get("foo").expect("foo not found");
     match &foo.value {
-        ConfigValueKind::Scalar(Yaml::String(s)) => {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(s),
+            ..
+        } => {
             assert_eq!(s, "bar");
         }
         other => panic!("Expected Scalar, got: {:?}", other),
@@ -691,7 +743,10 @@ baz: 42
 
     let baz = config.get("baz").expect("baz not found");
     match &baz.value {
-        ConfigValueKind::Scalar(Yaml::Integer(i)) => {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::Integer(i),
+            ..
+        } => {
             assert_eq!(*i, 42);
         }
         other => panic!("Expected Integer, got: {:?}", other),

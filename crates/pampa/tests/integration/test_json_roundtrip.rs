@@ -94,7 +94,7 @@ fn test_json_roundtrip_complex_document() {
                 key: "title".to_string(),
                 key_source: SourceInfo::for_test(),
                 value: ConfigValue {
-                    value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(
+                    value: ConfigValueKind::scalar(yaml_rust2::Yaml::String(
                         "Test Document".to_string(),
                     )),
                     source_info: SourceInfo::for_test(),
@@ -238,7 +238,10 @@ fn test_json_roundtrip_complex_document() {
 
         if let Some(entry) = title_entry {
             match &entry.value.value {
-                ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) => {
+                ConfigValueKind::Scalar {
+                    yaml: yaml_rust2::Yaml::String(s),
+                    ..
+                } => {
                     assert_eq!(s, "Test Document");
                 }
                 other => panic!("Expected String for title, got {:?}", other),

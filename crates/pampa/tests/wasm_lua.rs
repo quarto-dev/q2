@@ -189,7 +189,10 @@ end
                 .find(|e| e.key == "stage")
                 .expect("stage key missing");
             match &stage.value.value {
-                ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) => {
+                ConfigValueKind::Scalar {
+                    yaml: yaml_rust2::Yaml::String(s),
+                    ..
+                } => {
                     assert_eq!(s, "meta-ran+pandoc")
                 }
                 other => panic!("expected string scalar, got {other:?}"),

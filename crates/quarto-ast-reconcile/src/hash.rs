@@ -571,7 +571,11 @@ fn hash_config_value_kind(
     std::mem::discriminant(kind).hash(hasher);
 
     match kind {
-        ConfigValueKind::Scalar(yaml) => {
+        // Provenance is deliberately excluded, for the same reason
+        // `ConfigValue.source_info` is excluded above: this is the
+        // change-detection hash for incremental rebuilds, and a value
+        // moving in the source without changing must not churn it.
+        ConfigValueKind::Scalar { yaml, .. } => {
             yaml.hash(hasher);
         }
         ConfigValueKind::PandocInlines(inlines) => {
@@ -2500,7 +2504,7 @@ mod tests {
 
     fn scalar_str(s: &str) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(s.to_string())),
             source_info: dummy_source(),
             merge_op: MergeOp::default(),
         }
@@ -2508,7 +2512,7 @@ mod tests {
 
     fn scalar_int(i: i64) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Integer(i)),
+            value: ConfigValueKind::scalar(Yaml::Integer(i)),
             source_info: dummy_source(),
             merge_op: MergeOp::default(),
         }
@@ -2624,12 +2628,12 @@ mod tests {
     #[test]
     fn meta_hash_merge_op_participates() {
         let a = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String("x".into())),
+            value: ConfigValueKind::scalar(Yaml::String("x".into())),
             source_info: dummy_source(),
             merge_op: MergeOp::Concat,
         };
         let b = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String("x".into())),
+            value: ConfigValueKind::scalar(Yaml::String("x".into())),
             source_info: dummy_source(),
             merge_op: MergeOp::Prefer,
         };

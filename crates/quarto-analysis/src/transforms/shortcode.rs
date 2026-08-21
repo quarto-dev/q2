@@ -400,7 +400,7 @@ mod tests {
                 key: k.to_string(),
                 key_source: SourceInfo::for_test(),
                 value: ConfigValue {
-                    value: ConfigValueKind::Scalar(Yaml::String(v.to_string())),
+                    value: ConfigValueKind::scalar(Yaml::String(v.to_string())),
                     source_info: SourceInfo::for_test(),
                     merge_op: MergeOp::Concat,
                 },

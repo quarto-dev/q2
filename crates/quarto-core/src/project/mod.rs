@@ -733,8 +733,11 @@ fn rebase_fragment_paths(
     runtime: &dyn SystemRuntime,
 ) {
     crate::extension::paths::walk_pattern_leaves(fragment, FRAGMENT_PATH_PATTERNS, &mut |leaf| {
-        let (ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) | ConfigValueKind::Path(s)) =
-            &leaf.value
+        let (ConfigValueKind::Scalar {
+            yaml: yaml_rust2::Yaml::String(s),
+            ..
+        }
+        | ConfigValueKind::Path(s)) = &leaf.value
         else {
             return;
         };

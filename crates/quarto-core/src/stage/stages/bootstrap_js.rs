@@ -250,7 +250,7 @@ mod tests {
 
     fn meta_with_theme(theme: &str) -> ConfigValue {
         let theme_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(theme.to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -269,7 +269,7 @@ mod tests {
     /// `theme: {light: <light>, dark: <dark>}` (bd-o76p01wb).
     fn meta_with_light_dark_theme(light: &str, dark: &str) -> ConfigValue {
         let scalar = |s: &str| ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(s.to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -295,7 +295,7 @@ mod tests {
 
     fn meta_with_minimal(value: bool) -> ConfigValue {
         let v = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Boolean(value)),
+            value: ConfigValueKind::scalar(Yaml::Boolean(value)),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };

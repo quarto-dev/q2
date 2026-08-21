@@ -471,13 +471,24 @@ pub struct ShortcodeArgs {
 /// - `PandocBlocks` and other kinds without a string form map to nil
 fn config_value_to_lua(lua: &Lua, v: &ConfigValue) -> Result<Value> {
     Ok(match &v.value {
-        ConfigValueKind::Scalar(Yaml::Boolean(b)) => Value::Boolean(*b),
-        ConfigValueKind::Scalar(Yaml::Integer(i)) => Value::Integer(*i),
-        ConfigValueKind::Scalar(Yaml::Real(s)) => match s.parse::<f64>() {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::Boolean(b),
+            ..
+        } => Value::Boolean(*b),
+        ConfigValueKind::Scalar {
+            yaml: Yaml::Integer(i),
+            ..
+        } => Value::Integer(*i),
+        ConfigValueKind::Scalar {
+            yaml: Yaml::Real(s),
+            ..
+        } => match s.parse::<f64>() {
             Ok(f) => Value::Number(f),
             Err(_) => Value::String(lua.create_string(s)?),
         },
-        ConfigValueKind::Scalar(Yaml::Null) => Value::Nil,
+        ConfigValueKind::Scalar {
+            yaml: Yaml::Null, ..
+        } => Value::Nil,
         ConfigValueKind::Array(items) => {
             let t = lua.create_table()?;
             for (i, item) in items.iter().enumerate() {

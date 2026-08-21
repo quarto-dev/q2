@@ -212,7 +212,7 @@ mod tests {
 
     fn scalar(s: &str) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(s.to_string())),
             source_info: si(),
             merge_op: MergeOp::default(),
         }

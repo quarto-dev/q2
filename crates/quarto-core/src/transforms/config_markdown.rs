@@ -282,7 +282,11 @@ fn apply_pattern(value: &mut ConfigValue, pattern: &[&str], depth: usize, walk: 
 /// kind with `PandocInlines`/`PandocBlocks`. All other kinds pass
 /// through untouched.
 fn parse_scalar_string_in_place(value: &mut ConfigValue, diagnostics: &mut Vec<DiagnosticMessage>) {
-    let ConfigValueKind::Scalar(Yaml::String(text)) = &value.value else {
+    let ConfigValueKind::Scalar {
+        yaml: Yaml::String(text),
+        ..
+    } = &value.value
+    else {
         return;
     };
     value.value =
@@ -407,11 +411,11 @@ mod tests {
 
         assert!(matches!(
             kind_at(&meta, &["version"]),
-            ConfigValueKind::Scalar(_)
+            ConfigValueKind::Scalar { .. }
         ));
         assert!(matches!(
             kind_at(&meta, &["website", "site-url"]),
-            ConfigValueKind::Scalar(_)
+            ConfigValueKind::Scalar { .. }
         ));
     }
 
@@ -431,7 +435,10 @@ mod tests {
 
         assert!(matches!(
             kind_at(&meta, &["navbar", "title"]),
-            ConfigValueKind::Scalar(Yaml::Boolean(false))
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Boolean(false),
+                ..
+            }
         ));
     }
 
@@ -491,7 +498,7 @@ mod tests {
         // `href` must stay a literal scalar — never markdown-parsed.
         assert!(matches!(
             &sub.get("href").unwrap().value,
-            ConfigValueKind::Scalar(_)
+            ConfigValueKind::Scalar { .. }
         ));
     }
 
@@ -596,7 +603,7 @@ mod tests {
             .unwrap();
         for key in ["href", "icon", "rel", "target", "aria-label"] {
             assert!(
-                matches!(&it.get(key).unwrap().value, ConfigValueKind::Scalar(_)),
+                matches!(&it.get(key).unwrap().value, ConfigValueKind::Scalar { .. }),
                 "`{}` must stay a literal scalar; got {:?}",
                 key,
                 it.get(key).unwrap().value

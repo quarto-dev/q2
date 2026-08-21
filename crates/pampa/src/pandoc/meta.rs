@@ -351,7 +351,7 @@ fn yaml_to_config_value_at(
                 Some(quarto_config::Interpretation::Expr) => ConfigValueKind::Expr(s),
                 Some(quarto_config::Interpretation::PlainString) => {
                     // !str: Keep as literal scalar
-                    ConfigValueKind::Scalar(Yaml::String(s))
+                    ConfigValueKind::scalar(Yaml::String(s))
                 }
                 Some(quarto_config::Interpretation::Markdown) => {
                     // !md: Parse as markdown
@@ -396,7 +396,7 @@ fn yaml_to_config_value_at(
                             quarto_config::Interpretation::Glob => ConfigValueKind::Glob(s),
                             quarto_config::Interpretation::Expr => ConfigValueKind::Expr(s),
                             quarto_config::Interpretation::PlainString => {
-                                ConfigValueKind::Scalar(Yaml::String(s))
+                                ConfigValueKind::scalar(Yaml::String(s))
                             }
                             quarto_config::Interpretation::Markdown => {
                                 parse_yaml_string_as_markdown_to_config(
@@ -421,7 +421,7 @@ fn yaml_to_config_value_at(
                             }
                             InterpretationContext::ProjectConfig => {
                                 // Project config: keep literal
-                                ConfigValueKind::Scalar(Yaml::String(s))
+                                ConfigValueKind::scalar(Yaml::String(s))
                             }
                         }
                     }
@@ -436,31 +436,31 @@ fn yaml_to_config_value_at(
         }
 
         Yaml::Boolean(b) => ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Boolean(b)),
+            value: ConfigValueKind::scalar(Yaml::Boolean(b)),
             source_info,
             merge_op,
         },
 
         Yaml::Integer(i) => ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Integer(i)),
+            value: ConfigValueKind::scalar(Yaml::Integer(i)),
             source_info,
             merge_op,
         },
 
         Yaml::Real(r) => ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Real(r)),
+            value: ConfigValueKind::scalar(Yaml::Real(r)),
             source_info,
             merge_op,
         },
 
         Yaml::Null => ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Null),
+            value: ConfigValueKind::scalar(Yaml::Null),
             source_info,
             merge_op,
         },
 
         Yaml::BadValue => ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Null),
+            value: ConfigValueKind::scalar(Yaml::Null),
             source_info,
             merge_op,
         },
@@ -468,7 +468,7 @@ fn yaml_to_config_value_at(
         Yaml::Alias(_) => {
             // YAML aliases are resolved by yaml-rust2, so this shouldn't happen
             ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::Null),
+                value: ConfigValueKind::scalar(Yaml::Null),
                 source_info,
                 merge_op,
             }
@@ -620,7 +620,10 @@ mod tests {
         // In project config context, strings stay as literals
         assert!(matches!(
             result.value,
-            ConfigValueKind::Scalar(Yaml::String(_))
+            ConfigValueKind::Scalar {
+                yaml: Yaml::String(_),
+                ..
+            }
         ));
     }
 
@@ -870,7 +873,7 @@ mod tests {
             .and_then(|l| l.get("contents"))
             .expect("listing.contents");
         assert!(
-            matches!(&contents.value, ConfigValueKind::Scalar(Yaml::String(s)) if s == "*.qmd"),
+            matches!(&contents.value, ConfigValueKind::Scalar { yaml: Yaml::String(s), .. } if s == "*.qmd"),
             "explicit tags always win over the annotation; got {:?}",
             contents.value
         );
@@ -902,7 +905,10 @@ mod tests {
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
         assert!(matches!(
             result.value,
-            ConfigValueKind::Scalar(Yaml::Boolean(true))
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Boolean(true),
+                ..
+            }
         ));
     }
 
@@ -914,7 +920,10 @@ mod tests {
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
         assert!(matches!(
             result.value,
-            ConfigValueKind::Scalar(Yaml::Integer(42))
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Integer(42),
+                ..
+            }
         ));
     }
 
@@ -926,7 +935,10 @@ mod tests {
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
         assert!(matches!(
             result.value,
-            ConfigValueKind::Scalar(Yaml::Real(_))
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Real(_),
+                ..
+            }
         ));
     }
 
@@ -936,7 +948,13 @@ mod tests {
         let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
         let result =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
-        assert!(matches!(result.value, ConfigValueKind::Scalar(Yaml::Null)));
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Null,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -946,7 +964,13 @@ mod tests {
         let result =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
         // BadValue becomes Null
-        assert!(matches!(result.value, ConfigValueKind::Scalar(Yaml::Null)));
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Null,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -957,7 +981,13 @@ mod tests {
         let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
         let result =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
-        assert!(matches!(result.value, ConfigValueKind::Scalar(Yaml::Null)));
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Null,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -976,7 +1006,10 @@ mod tests {
         // !str tag keeps string literal even in document metadata context
         assert!(matches!(
             result.value,
-            ConfigValueKind::Scalar(Yaml::String(_))
+            ConfigValueKind::Scalar {
+                yaml: Yaml::String(_),
+                ..
+            }
         ));
     }
 

@@ -53,7 +53,7 @@ fn flattened_config(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
 
 fn scalar_string(s: &str) -> ConfigValue {
     ConfigValue {
-        value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+        value: ConfigValueKind::scalar(Yaml::String(s.to_string())),
         source_info: SourceInfo::for_test(),
         merge_op: MergeOp::Concat,
     }
@@ -142,7 +142,7 @@ fn brand_key_as_inline_map_produces_inline_ref() {
     brand_map.insert(Yaml::String("color".into()), Yaml::Hash(color_map));
 
     let brand_value = ConfigValue {
-        value: ConfigValueKind::Scalar(Yaml::Hash(brand_map)),
+        value: ConfigValueKind::scalar(Yaml::Hash(brand_map)),
         source_info: SourceInfo::for_test(),
         merge_op: MergeOp::Concat,
     };
@@ -181,7 +181,7 @@ fn resolve_inline_brand_parses_typed_brand() {
     brand_map.insert(Yaml::String("color".into()), Yaml::Hash(color_map));
 
     let brand_value = ConfigValue {
-        value: ConfigValueKind::Scalar(Yaml::Hash(brand_map)),
+        value: ConfigValueKind::scalar(Yaml::Hash(brand_map)),
         source_info: SourceInfo::for_test(),
         merge_op: MergeOp::Concat,
     };

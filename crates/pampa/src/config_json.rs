@@ -55,7 +55,7 @@ pub enum ProseMode {
 /// writer, with source resolution off); [`ProseMode::Value`] ignores it.
 pub fn config_value_to_json(value: &ConfigValue, mode: ProseMode, context: &ASTContext) -> Value {
     match &value.value {
-        ConfigValueKind::Scalar(yaml) => yaml_to_json(yaml),
+        ConfigValueKind::Scalar { yaml, .. } => yaml_to_json(yaml),
 
         // D6: drop the tag, emit the deferred expression / pattern / path as a
         // plain string. These are unresolved at the profile checkpoint.

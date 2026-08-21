@@ -1103,7 +1103,7 @@ mod tests {
 
     fn meta_with_theme(theme: &str) -> ConfigValue {
         let theme_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(theme.to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -1126,7 +1126,7 @@ mod tests {
     fn meta_with_light_dark_theme(light: &str, dark: &str) -> ConfigValue {
         let list = |name: &str| ConfigValue {
             value: ConfigValueKind::Array(vec![ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::String(name.to_string())),
+                value: ConfigValueKind::scalar(Yaml::String(name.to_string())),
                 source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             }]),
@@ -1787,7 +1787,7 @@ mod tests {
 
         // theme: null
         let theme_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Null),
+            value: ConfigValueKind::scalar(Yaml::Null),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -1821,7 +1821,7 @@ mod tests {
         let items: Vec<ConfigValue> = themes
             .iter()
             .map(|s| ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+                value: ConfigValueKind::scalar(Yaml::String(s.to_string())),
                 source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             })
@@ -2234,12 +2234,12 @@ mod tests {
     fn meta_with_website_sidebar_style(style: &str) -> ConfigValue {
         // Inner sidebar object: { id: "guide", style: "<style>" }
         let style_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(style.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(style.to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let id_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String("guide".to_string())),
+            value: ConfigValueKind::scalar(Yaml::String("guide".to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -2285,7 +2285,7 @@ mod tests {
         meta.insert_path(
             &[key],
             ConfigValue {
-                value: ConfigValueKind::Scalar(value),
+                value: ConfigValueKind::scalar(value),
                 source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
@@ -2304,7 +2304,7 @@ mod tests {
         meta.insert_path(
             &["code-block-color"],
             ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::String("#333334".to_string())),
+                value: ConfigValueKind::scalar(Yaml::String("#333334".to_string())),
                 source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
@@ -2396,17 +2396,17 @@ mod tests {
     /// `sidebar.border` wins over the implicit `style == docked` default.
     fn meta_with_website_sidebar_style_and_border(style: &str, border: bool) -> ConfigValue {
         let style_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(style.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(style.to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let border_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Boolean(border)),
+            value: ConfigValueKind::scalar(Yaml::Boolean(border)),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
         let id_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String("guide".to_string())),
+            value: ConfigValueKind::scalar(Yaml::String("guide".to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -2476,7 +2476,7 @@ mod tests {
         // Same shape as `meta_with_website_sidebar_style("docked")`,
         // but stored at the top level instead of under `website:`.
         let style_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String("docked".to_string())),
+            value: ConfigValueKind::scalar(Yaml::String("docked".to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };

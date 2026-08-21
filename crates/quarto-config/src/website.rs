@@ -297,6 +297,6 @@ mod tests {
         let resolved = resolve_website_value(&meta, "navbar").unwrap();
         assert_eq!(resolved.as_bool(), Some(false));
         // Sanity: ConfigValueKind preserved as scalar through (Some, None) branch.
-        assert!(matches!(resolved.value, ConfigValueKind::Scalar(_)));
+        assert!(matches!(resolved.value, ConfigValueKind::Scalar { .. }));
     }
 }

@@ -346,7 +346,7 @@ mod tests {
     }
 
     fn meta_code_copy_false() -> ConfigValue {
-        meta_with_code_copy(quarto_pandoc_types::ConfigValueKind::Scalar(
+        meta_with_code_copy(quarto_pandoc_types::ConfigValueKind::scalar(
             yaml_rust2::Yaml::Boolean(false),
         ))
     }

@@ -438,7 +438,7 @@ mod tests {
 
     #[tokio::test]
     async fn clipboard_js_stage_skips_both_when_code_copy_false() {
-        let meta = meta_with_entry("code-copy", ConfigValueKind::Scalar(Yaml::Boolean(false)));
+        let meta = meta_with_entry("code-copy", ConfigValueKind::scalar(Yaml::Boolean(false)));
         let mut ctx = make_stage_context(Arc::new(MockRuntime), true);
         ClipboardJsStage::new()
             .run(make_doc_ast(meta), &mut ctx)
@@ -459,7 +459,7 @@ mod tests {
         // `minimal: true` opts the document into the minimal-HTML
         // template, which has no script-injection slot. Matches the
         // gate used by BootstrapJsStage.
-        let meta = meta_with_entry("minimal", ConfigValueKind::Scalar(Yaml::Boolean(true)));
+        let meta = meta_with_entry("minimal", ConfigValueKind::scalar(Yaml::Boolean(true)));
         let mut ctx = make_stage_context(Arc::new(MockRuntime), true);
         ClipboardJsStage::new()
             .run(make_doc_ast(meta), &mut ctx)

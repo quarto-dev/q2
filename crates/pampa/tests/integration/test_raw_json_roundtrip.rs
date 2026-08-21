@@ -289,7 +289,7 @@ fn test_raw_json_roundtrip_note_definitions_and_block_metadata() {
                         key: "layout".to_string(),
                         key_source: si(23, 29),
                         value: ConfigValue {
-                            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(
+                            value: ConfigValueKind::scalar(yaml_rust2::Yaml::String(
                                 "wide".to_string(),
                             )),
                             source_info: si(31, 35),
@@ -344,7 +344,7 @@ fn test_raw_json_meta_fidelity() {
         value,
     };
     let scalar = |yaml: yaml_rust2::Yaml, s: (usize, usize)| ConfigValue {
-        value: ConfigValueKind::Scalar(yaml),
+        value: ConfigValueKind::scalar(yaml),
         source_info: si(s.0, s.1),
         merge_op: MergeOp::default(),
     };
@@ -482,7 +482,7 @@ fn test_raw_json_rejects_non_scalar_yaml_in_scalar() {
                 key: "bad".to_string(),
                 key_source: si(0, 3),
                 value: ConfigValue {
-                    value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Array(vec![
+                    value: ConfigValueKind::scalar(yaml_rust2::Yaml::Array(vec![
                         yaml_rust2::Yaml::Integer(1),
                     ])),
                     source_info: si(5, 8),

@@ -241,7 +241,7 @@ impl<'a> MergedCursor<'a> {
         for (i, layer) in self.config.layers.iter().enumerate().rev() {
             if let Some(value) = self.navigate_to(layer) {
                 return match &value.value {
-                    ConfigValueKind::Scalar(_)
+                    ConfigValueKind::Scalar { .. }
                     | ConfigValueKind::PandocInlines(_)
                     | ConfigValueKind::PandocBlocks(_)
                     | ConfigValueKind::Path(_)
@@ -267,7 +267,7 @@ impl<'a> MergedCursor<'a> {
             if let Some(value) = self.navigate_to(layer)
                 && matches!(
                     value.value,
-                    ConfigValueKind::Scalar(_)
+                    ConfigValueKind::Scalar { .. }
                         | ConfigValueKind::PandocInlines(_)
                         | ConfigValueKind::PandocBlocks(_)
                         | ConfigValueKind::Path(_)

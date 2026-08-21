@@ -436,7 +436,7 @@ mod tests {
         use quarto_pandoc_types::{ConfigValueKind, MergeOp};
         use yaml_rust2::Yaml;
         quarto_pandoc_types::ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(s.into())),
+            value: ConfigValueKind::scalar(Yaml::String(s.into())),
             source_info: quarto_source_map::SourceInfo::original(FileId(0), 0, 0),
             merge_op: MergeOp::default(),
         }

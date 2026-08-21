@@ -7270,7 +7270,7 @@ fn meta_test_doc() -> Pandoc {
                 key: "draft".to_string(),
                 key_source: meta_si(13),
                 value: ConfigValue {
-                    value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(true)),
+                    value: ConfigValueKind::scalar(yaml_rust2::Yaml::Boolean(true)),
                     source_info: meta_si(14),
                     merge_op: MergeOp::default(),
                 },
@@ -7339,7 +7339,7 @@ end
     let subtitle = entries.iter().find(|e| e.key == "subtitle").unwrap();
     assert_eq!(
         subtitle.value.value,
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("added by filter".into()))
+        ConfigValueKind::scalar(yaml_rust2::Yaml::String("added by filter".into()))
     );
     assert_eq!(
         subtitle.value.source_info,
@@ -7419,7 +7419,7 @@ end
     // Phase 4) + the two body Strs.
     assert_eq!(
         seen.value.value,
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(3))
+        ConfigValueKind::scalar(yaml_rust2::Yaml::Integer(3))
     );
 }
 
@@ -7533,15 +7533,15 @@ end
     };
     assert_eq!(
         get("meta_type").value.value,
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("Meta".into()))
+        ConfigValueKind::scalar(yaml_rust2::Yaml::String("Meta".into()))
     );
     assert_eq!(
         get("title_type").value.value,
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("Inlines".into()))
+        ConfigValueKind::scalar(yaml_rust2::Yaml::String("Inlines".into()))
     );
     assert_eq!(
         get("draft_type").value.value,
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("boolean".into()))
+        ConfigValueKind::scalar(yaml_rust2::Yaml::String("boolean".into()))
     );
 }
 
@@ -7587,7 +7587,7 @@ end
     let stage = entries.iter().find(|e| e.key == "stage").unwrap();
     assert_eq!(
         stage.value.value,
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("pandoc-ran".into()))
+        ConfigValueKind::scalar(yaml_rust2::Yaml::String("pandoc-ran".into()))
     );
     // Meta keys untouched by both handlers keep their exact provenance
     // through the whole doc round-trip.
@@ -7633,7 +7633,7 @@ end
     let via = entries.iter().find(|e| e.key == "via").unwrap();
     assert_eq!(
         via.value.value,
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::String("doc-alias".into()))
+        ConfigValueKind::scalar(yaml_rust2::Yaml::String("doc-alias".into()))
     );
 }
 

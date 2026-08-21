@@ -382,7 +382,7 @@ fn config_value_to_inlines(value: &ConfigValue) -> Vec<Inline> {
             flatten_blocks_to_inlines(blocks, &value.source_info)
         }
         // Scalar that wasn't captured by helpers (e.g., float, null)
-        ConfigValueKind::Scalar(_) => {
+        ConfigValueKind::Scalar { .. } => {
             if let Some(plain) = value.as_plain_text() {
                 vec![Inline::Str(Str {
                     text: plain,
@@ -1411,7 +1411,7 @@ fn resolve_config_value<'a>(
                     .await;
                 }
             }
-            ConfigValueKind::Scalar(_)
+            ConfigValueKind::Scalar { .. }
             | ConfigValueKind::Path(_)
             | ConfigValueKind::Glob(_)
             | ConfigValueKind::Expr(_) => {}
@@ -1442,7 +1442,11 @@ async fn expand_include_slot_shortcodes(
             continue;
         };
         for item in items {
-            let ConfigValueKind::Scalar(yaml_rust2::Yaml::String(text)) = &item.value else {
+            let ConfigValueKind::Scalar {
+                yaml: yaml_rust2::Yaml::String(text),
+                ..
+            } = &item.value
+            else {
                 continue;
             };
             let Some(segments) = crate::transforms::parse_text_shortcodes(text, &item.source_info)
@@ -1459,7 +1463,7 @@ async fn expand_include_slot_shortcodes(
                 UnhandledInclude::Report,
             )
             .await;
-            item.value = ConfigValueKind::Scalar(yaml_rust2::Yaml::String(expanded));
+            item.value = ConfigValueKind::scalar(yaml_rust2::Yaml::String(expanded));
         }
     }
 }

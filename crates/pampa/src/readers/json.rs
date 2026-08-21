@@ -2720,7 +2720,7 @@ fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Re
                 JsonReadError::InvalidType("MetaString content must be string".to_string())
             })?;
             Ok(ConfigValue {
-                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(c.to_string())),
+                value: ConfigValueKind::scalar(yaml_rust2::Yaml::String(c.to_string())),
                 source_info,
                 merge_op,
             })
@@ -2752,7 +2752,7 @@ fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Re
                 JsonReadError::InvalidType("MetaBool content must be boolean".to_string())
             })?;
             Ok(ConfigValue {
-                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(c)),
+                value: ConfigValueKind::scalar(yaml_rust2::Yaml::Boolean(c)),
                 source_info,
                 merge_op,
             })
@@ -2847,7 +2847,7 @@ fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Re
                 JsonReadError::InvalidType("MetaInt content must be integer".to_string())
             })?;
             Ok(ConfigValue {
-                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(c)),
+                value: ConfigValueKind::scalar(yaml_rust2::Yaml::Integer(c)),
                 source_info,
                 merge_op,
             })
@@ -2858,13 +2858,13 @@ fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Re
                 JsonReadError::InvalidType("MetaReal content must be string".to_string())
             })?;
             Ok(ConfigValue {
-                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Real(c.to_string())),
+                value: ConfigValueKind::scalar(yaml_rust2::Yaml::Real(c.to_string())),
                 source_info,
                 merge_op,
             })
         }
         "MetaNull" if deserializer.raw => Ok(ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Null),
+            value: ConfigValueKind::scalar(yaml_rust2::Yaml::Null),
             source_info,
             merge_op,
         }),

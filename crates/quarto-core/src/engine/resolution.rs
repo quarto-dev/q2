@@ -1000,7 +1000,9 @@ fn strip_claims_key(mut config: ConfigValue) -> ConfigValue {
 /// config values take.
 fn config_content_eq(a: &ConfigValue, b: &ConfigValue) -> bool {
     match (&a.value, &b.value) {
-        (ConfigValueKind::Scalar(ya), ConfigValueKind::Scalar(yb)) => ya == yb,
+        (ConfigValueKind::Scalar { yaml: ya, .. }, ConfigValueKind::Scalar { yaml: yb, .. }) => {
+            ya == yb
+        }
         (ConfigValueKind::Path(sa), ConfigValueKind::Path(sb)) => sa == sb,
         (ConfigValueKind::Glob(sa), ConfigValueKind::Glob(sb)) => sa == sb,
         (ConfigValueKind::Expr(sa), ConfigValueKind::Expr(sb)) => sa == sb,

@@ -184,7 +184,13 @@ pub enum ConfigValueKind {
     ///
     /// For strings, this means "keep as literal" (was `!str` or context default).
     /// Always uses "last wins" semantics regardless of MergeOp.
-    Scalar(Yaml),
+    Scalar {
+        yaml: Yaml,
+        /// Provenance of the *decoded* scalar content, when this value came
+        /// from YAML. `None` for values with no YAML origin (CLI `-M`, Lua,
+        /// defaults files) and for non-string scalars.
+        content_source_info: Option<SourceInfo>,
+    },
 
     // === Parsed content (interpretation happened at parse time) ===
     /// Pandoc inline content (for already-interpreted values).
@@ -218,6 +224,30 @@ pub enum ConfigValueKind {
     Map(Vec<ConfigMapEntry>),
 }
 
+impl ConfigValueKind {
+    /// Construct a `Scalar` with no known content provenance.
+    ///
+    /// Most call sites have no YAML origin to report; this is the mechanical
+    /// replacement for the old tuple-variant `Scalar(yaml)` constructor.
+    pub fn scalar(yaml: Yaml) -> Self {
+        ConfigValueKind::Scalar {
+            yaml,
+            content_source_info: None,
+        }
+    }
+
+    /// Construct a `Scalar` carrying the provenance of its decoded content.
+    ///
+    /// This is the YAML reader's entry point: only code that actually knows
+    /// where the decoded scalar text came from in source should call this.
+    pub fn scalar_with_provenance(yaml: Yaml, content_source_info: SourceInfo) -> Self {
+        ConfigValueKind::Scalar {
+            yaml,
+            content_source_info: Some(content_source_info),
+        }
+    }
+}
+
 // Custom serialization for ConfigValueKind to handle Yaml type
 impl Serialize for ConfigValueKind {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -227,7 +257,10 @@ impl Serialize for ConfigValueKind {
         use serde::ser::SerializeMap;
 
         match self {
-            ConfigValueKind::Scalar(yaml) => {
+            // Provenance is deliberately dropped on the wire: the `{"Scalar": <value>}`
+            // shape predates provenance and downstream consumers (DocumentProfile JSON,
+            // etc.) depend on it staying exactly that shape.
+            ConfigValueKind::Scalar { yaml, .. } => {
                 let mut map = serializer.serialize_map(Some(1))?;
                 map.serialize_entry("Scalar", &yaml_to_serde_value(yaml))?;
                 map.end()
@@ -330,7 +363,9 @@ impl<'de> Deserialize<'de> for ConfigValueKind {
                 match key.as_str() {
                     "Scalar" => {
                         let value: serde_json::Value = map.next_value()?;
-                        Ok(ConfigValueKind::Scalar(serde_value_to_yaml(&value)))
+                        // No provenance on the wire (see the Serialize arm), so this
+                        // always comes back `None`.
+                        Ok(ConfigValueKind::scalar(serde_value_to_yaml(&value)))
                     }
                     "PandocInlines" => {
                         let inlines: Inlines = map.next_value()?;
@@ -422,7 +457,7 @@ impl ConfigValue {
     /// Create a new scalar ConfigValue with default merge semantics.
     pub fn new_scalar(yaml: Yaml, source_info: SourceInfo) -> Self {
         Self {
-            value: ConfigValueKind::Scalar(yaml),
+            value: ConfigValueKind::scalar(yaml),
             source_info,
             merge_op: MergeOp::Concat,
         }
@@ -434,7 +469,7 @@ impl ConfigValue {
     /// Use this when you need to create a string value without importing yaml_rust2.
     pub fn new_string(s: impl Into<String>, source_info: SourceInfo) -> Self {
         Self {
-            value: ConfigValueKind::Scalar(Yaml::String(s.into())),
+            value: ConfigValueKind::scalar(Yaml::String(s.into())),
             source_info,
             merge_op: MergeOp::Concat,
         }
@@ -446,7 +481,7 @@ impl ConfigValue {
     /// Use this when you need to create a boolean value without importing yaml_rust2.
     pub fn new_bool(b: bool, source_info: SourceInfo) -> Self {
         Self {
-            value: ConfigValueKind::Scalar(Yaml::Boolean(b)),
+            value: ConfigValueKind::scalar(Yaml::Boolean(b)),
             source_info,
             merge_op: MergeOp::Concat,
         }
@@ -473,7 +508,7 @@ impl ConfigValue {
     /// Create a null ConfigValue.
     pub fn null(source_info: SourceInfo) -> Self {
         Self {
-            value: ConfigValueKind::Scalar(Yaml::Null),
+            value: ConfigValueKind::scalar(Yaml::Null),
             source_info,
             merge_op: MergeOp::Concat,
         }
@@ -568,7 +603,7 @@ impl ConfigValue {
     pub fn is_scalar(&self) -> bool {
         matches!(
             self.value,
-            ConfigValueKind::Scalar(_)
+            ConfigValueKind::Scalar { .. }
                 | ConfigValueKind::PandocInlines(_)
                 | ConfigValueKind::PandocBlocks(_)
                 | ConfigValueKind::Path(_)
@@ -590,7 +625,7 @@ impl ConfigValue {
     /// Get as a Yaml scalar if this is a Scalar.
     pub fn as_yaml(&self) -> Option<&Yaml> {
         match &self.value {
-            ConfigValueKind::Scalar(yaml) => Some(yaml),
+            ConfigValueKind::Scalar { yaml, .. } => Some(yaml),
             _ => None,
         }
     }
@@ -640,7 +675,10 @@ impl ConfigValue {
     /// Works for Scalar(String), Path, Glob, and Expr.
     pub fn as_str(&self) -> Option<&str> {
         match &self.value {
-            ConfigValueKind::Scalar(Yaml::String(s)) => Some(s),
+            ConfigValueKind::Scalar {
+                yaml: Yaml::String(s),
+                ..
+            } => Some(s),
             ConfigValueKind::Path(s) => Some(s),
             ConfigValueKind::Glob(s) => Some(s),
             ConfigValueKind::Expr(s) => Some(s),
@@ -651,7 +689,10 @@ impl ConfigValue {
     /// Get the boolean value if this is a boolean scalar.
     pub fn as_bool(&self) -> Option<bool> {
         match &self.value {
-            ConfigValueKind::Scalar(Yaml::Boolean(b)) => Some(*b),
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Boolean(b),
+                ..
+            } => Some(*b),
             _ => None,
         }
     }
@@ -659,7 +700,10 @@ impl ConfigValue {
     /// Get the integer value if this is an integer scalar.
     pub fn as_int(&self) -> Option<i64> {
         match &self.value {
-            ConfigValueKind::Scalar(Yaml::Integer(i)) => Some(*i),
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Integer(i),
+                ..
+            } => Some(*i),
             _ => None,
         }
     }
@@ -681,7 +725,13 @@ impl ConfigValue {
         if let Some(i) = self.as_int() {
             return Some(i);
         }
-        if matches!(&self.value, ConfigValueKind::Scalar(Yaml::Real(_))) {
+        if matches!(
+            &self.value,
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Real(_),
+                ..
+            }
+        ) {
             return None;
         }
         self.as_plain_text().and_then(|s| s.trim().parse().ok())
@@ -697,8 +747,14 @@ impl ConfigValue {
     /// `margin: 0.2` was silently dropped (bd-yjsz6hdu).
     pub fn as_f64_lenient(&self) -> Option<f64> {
         match &self.value {
-            ConfigValueKind::Scalar(Yaml::Integer(i)) => Some(*i as f64),
-            ConfigValueKind::Scalar(Yaml::Real(r)) => r.trim().parse().ok(),
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Integer(i),
+                ..
+            } => Some(*i as f64),
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Real(r),
+                ..
+            } => r.trim().parse().ok(),
             _ => self.as_plain_text().and_then(|s| s.trim().parse().ok()),
         }
     }
@@ -713,7 +769,10 @@ impl ConfigValue {
     /// as PandocInlines rather than plain scalars.
     pub fn as_plain_text(&self) -> Option<String> {
         match &self.value {
-            ConfigValueKind::Scalar(Yaml::String(s)) => Some(s.clone()),
+            ConfigValueKind::Scalar {
+                yaml: Yaml::String(s),
+                ..
+            } => Some(s.clone()),
             ConfigValueKind::Path(s) => Some(s.clone()),
             ConfigValueKind::Glob(s) => Some(s.clone()),
             ConfigValueKind::Expr(s) => Some(s.clone()),
@@ -724,7 +783,13 @@ impl ConfigValue {
 
     /// Check if this is a null/empty value.
     pub fn is_null(&self) -> bool {
-        matches!(&self.value, ConfigValueKind::Scalar(Yaml::Null))
+        matches!(
+            &self.value,
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Null,
+                ..
+            }
+        )
     }
 
     /// Get a value by path (e.g., `["format", "html", "toc"]`).
@@ -887,7 +952,10 @@ impl ConfigValue {
     /// and become PandocInlines containing a single Str node.
     pub fn is_string_value(&self, expected: &str) -> bool {
         match &self.value {
-            ConfigValueKind::Scalar(Yaml::String(s)) => s == expected,
+            ConfigValueKind::Scalar {
+                yaml: Yaml::String(s),
+                ..
+            } => s == expected,
             ConfigValueKind::Path(s) => s == expected,
             ConfigValueKind::Glob(s) => s == expected,
             ConfigValueKind::Expr(s) => s == expected,
@@ -1511,7 +1579,7 @@ mod tests {
 
     #[test]
     fn test_config_value_kind_serialize_scalar_string() {
-        let kind = ConfigValueKind::Scalar(Yaml::String("hello".to_string()));
+        let kind = ConfigValueKind::scalar(Yaml::String("hello".to_string()));
         let json = serde_json::to_string(&kind).unwrap();
         let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
         assert_eq!(kind, deserialized);
@@ -1519,10 +1587,34 @@ mod tests {
 
     #[test]
     fn test_config_value_kind_serialize_scalar_int() {
-        let kind = ConfigValueKind::Scalar(Yaml::Integer(42));
+        let kind = ConfigValueKind::scalar(Yaml::Integer(42));
         let json = serde_json::to_string(&kind).unwrap();
         let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
         assert_eq!(kind, deserialized);
+    }
+
+    #[test]
+    fn test_config_value_kind_serialize_scalar_drops_provenance() {
+        // Provenance must never appear on the wire, and must always come back
+        // `None` on deserialize — see the Serialize/Deserialize arms for `Scalar`.
+        let source_info = SourceInfo::generated(By::programmatic_config());
+        let kind =
+            ConfigValueKind::scalar_with_provenance(Yaml::String("hello".to_string()), source_info);
+
+        let json = serde_json::to_string(&kind).unwrap();
+        assert_eq!(json, r#"{"Scalar":"hello"}"#);
+
+        let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
+        match deserialized {
+            ConfigValueKind::Scalar {
+                yaml,
+                content_source_info,
+            } => {
+                assert_eq!(yaml, Yaml::String("hello".to_string()));
+                assert_eq!(content_source_info, None);
+            }
+            other => panic!("expected Scalar, got {other:?}"),
+        }
     }
 
     #[test]

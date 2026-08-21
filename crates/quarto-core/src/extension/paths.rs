@@ -123,7 +123,11 @@ fn apply_to_string_leaves(value: &mut ConfigValue, action: &mut dyn FnMut(&mut C
                 apply_to_string_leaves(item, action);
             }
         }
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::String(_)) | ConfigValueKind::Path(_) => {
+        ConfigValueKind::Scalar {
+            yaml: yaml_rust2::Yaml::String(_),
+            ..
+        }
+        | ConfigValueKind::Path(_) => {
             action(value);
         }
         _ => {}
@@ -160,7 +164,11 @@ pub(crate) fn mark_bundled_format_assets(
     runtime: &dyn SystemRuntime,
 ) {
     walk_pattern_leaves(format_config, FORMAT_ASSET_PATTERNS, &mut |leaf| {
-        let ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) = &leaf.value else {
+        let ConfigValueKind::Scalar {
+            yaml: yaml_rust2::Yaml::String(s),
+            ..
+        } = &leaf.value
+        else {
             return;
         };
         if bundled_file_exists(s, ext_dir, runtime) {
