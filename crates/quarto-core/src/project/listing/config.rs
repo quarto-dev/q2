@@ -491,12 +491,12 @@ fn parse_one_listing(
             "field-filter" => l.field_filter = parse_string_list(&entry.value),
             "field-required" => l.field_required = parse_string_list(&entry.value),
             "page-size" => {
-                if let Some(n) = entry.value.as_plain_text().and_then(|s| s.parse().ok()) {
+                if let Some(n) = parse_u32_scalar(&entry.value) {
                     l.page_size = n;
                 }
             }
             "max-items" => {
-                l.max_items = entry.value.as_plain_text().and_then(|s| s.parse().ok());
+                l.max_items = parse_u32_scalar(&entry.value);
             }
             "filter-ui" => {
                 l.filter_ui = entry.value.as_bool().unwrap_or(l.filter_ui);
@@ -535,7 +535,7 @@ fn parse_one_listing(
                 }
             }
             "grid-columns" => {
-                l.grid_columns = entry.value.as_plain_text().and_then(|s| s.parse().ok());
+                l.grid_columns = parse_u32_scalar(&entry.value);
             }
             "grid-item-border" => {
                 l.grid_item_border = entry.value.as_bool();
@@ -699,18 +699,13 @@ fn parse_contents(
     }
 }
 
-/// Numeric config scalar: accepts an unquoted YAML integer (`40`,
-/// which arrives as `Yaml::Integer` — `as_plain_text()` returns
-/// `None` for it) as well as the quoted/inline string form (`"40"`).
-/// Out-of-range and non-numeric values yield `None` (caller keeps
-/// its default). Discovered via bd-listing-ellipsis-no-matching-
-/// l963osy1; migrating the sibling numeric keys still on the
-/// plain-text-only pattern is bd-yjsz6hdu.
+/// Numeric config scalar as `u32`: any scalar form a user can write
+/// (unquoted integer, quoted string, bare front-matter scalar) via
+/// [`ConfigValue::as_int_lenient`], clamped to `u32`. Out-of-range and
+/// non-numeric values yield `None` (caller keeps its default).
+/// History: bd-listing-ellipsis-no-matching-l963osy1 / bd-yjsz6hdu.
 fn parse_u32_scalar(value: &ConfigValue) -> Option<u32> {
-    if let Some(i) = value.as_int() {
-        return u32::try_from(i).ok();
-    }
-    value.as_plain_text().and_then(|s| s.parse().ok())
+    value.as_int_lenient().and_then(|i| u32::try_from(i).ok())
 }
 
 fn parse_string_list(value: &ConfigValue) -> Vec<String> {
@@ -890,7 +885,7 @@ fn parse_feed(value: &ConfigValue) -> Option<ListingFeedOptions> {
         for e in entries {
             match e.key.as_str() {
                 "items" => {
-                    feed.items = e.value.as_plain_text().and_then(|s| s.parse().ok());
+                    feed.items = parse_u32_scalar(&e.value);
                 }
                 "type" => {
                     feed.kind = match e.value.as_plain_text().as_deref() {
@@ -1211,6 +1206,75 @@ listing:
                 .max_description_length,
             40
         );
+    }
+
+    // bd-yjsz6hdu: the sibling numeric keys share the trap fixed for
+    // max-description-length above — unquoted YAML integers arrive as
+    // `Yaml::Integer`, which `as_plain_text()` doesn't cover.
+
+    #[test]
+    fn page_size_accepts_unquoted_integer() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    page-size: 10
+";
+        let (listings, _diags, _ctx) = parse_from_yaml(yaml);
+        assert_eq!(listings.first().expect("one listing").page_size, 10);
+    }
+
+    // Guard: the quoted-string form worked before bd-yjsz6hdu and must
+    // keep working after the accessor migration.
+    #[test]
+    fn page_size_accepts_quoted_integer() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    page-size: \"10\"
+";
+        let (listings, _diags, _ctx) = parse_from_yaml(yaml);
+        assert_eq!(listings.first().expect("one listing").page_size, 10);
+    }
+
+    #[test]
+    fn max_items_accepts_unquoted_integer() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    max-items: 5
+";
+        let (listings, _diags, _ctx) = parse_from_yaml(yaml);
+        assert_eq!(listings.first().expect("one listing").max_items, Some(5));
+    }
+
+    #[test]
+    fn grid_columns_accepts_unquoted_integer() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    type: grid
+    grid-columns: 4
+";
+        let (listings, _diags, _ctx) = parse_from_yaml(yaml);
+        assert_eq!(listings.first().expect("one listing").grid_columns, Some(4));
+    }
+
+    #[test]
+    fn feed_items_accepts_unquoted_integer() {
+        let yaml = "\
+listing:
+    contents: ./a.qmd
+    feed:
+        items: 5
+";
+        let (listings, _diags, _ctx) = parse_from_yaml(yaml);
+        let feed = listings
+            .first()
+            .expect("one listing")
+            .feed
+            .as_ref()
+            .expect("feed configured");
+        assert_eq!(feed.items, Some(5));
     }
 
     // bd-2mxo: L5 captures the `categories:` *key* span here purely to

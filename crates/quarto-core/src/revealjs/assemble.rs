@@ -231,16 +231,15 @@ fn reveal_config_json(meta: &ConfigValue) -> String {
     fn str_opt(meta: &ConfigValue, key: &str) -> Option<String> {
         meta.get(key).and_then(|v| v.as_plain_text())
     }
+    // Lenient accessors (bd-yjsz6hdu): every scalar form a user can
+    // write — unquoted numbers included; `as_f64_lenient` is what
+    // handles an unquoted `margin: 0.2` (`Yaml::Real`), which the old
+    // hand-rolled reader here missed.
     fn int_opt(meta: &ConfigValue, key: &str) -> Option<i64> {
-        meta.get(key).and_then(|v| v.as_int())
+        meta.get(key).and_then(|v| v.as_int_lenient())
     }
-    // No `as_f64` on ConfigValue; accept an int or a parseable numeric string.
     fn float_opt(meta: &ConfigValue, key: &str) -> Option<f64> {
-        let v = meta.get(key)?;
-        if let Some(i) = v.as_int() {
-            return Some(i as f64);
-        }
-        v.as_plain_text().and_then(|s| s.trim().parse::<f64>().ok())
+        meta.get(key).and_then(|v| v.as_f64_lenient())
     }
 
     // Booleans — Quarto-1 opinionated defaults. `center: false` top-aligns
@@ -509,6 +508,38 @@ mod tests {
     }
     fn b(v: bool) -> ConfigValue {
         ConfigValue::new_bool(v, SourceInfo::generated(By::revealjs()))
+    }
+
+    // bd-yjsz6hdu: `margin: 0.2` in YAML arrives as
+    // `Scalar(Yaml::Real("0.2"))` — which neither `as_int()` nor
+    // `as_plain_text()` covers — so the value silently fell back to
+    // the 0.1 default.
+    #[test]
+    fn margin_accepts_unquoted_float() {
+        let real = ConfigValue::new_scalar(
+            yaml_rust2::Yaml::Real("0.2".to_string()),
+            SourceInfo::generated(By::revealjs()),
+        );
+        let m = meta(vec![("margin", real)]);
+        let v: serde_json::Value = serde_json::from_str(&reveal_config_json(&m)).unwrap();
+        assert_eq!(v["margin"], serde_json::json!(0.2));
+    }
+
+    // Guards: the integer and quoted-string forms worked before
+    // bd-yjsz6hdu and must keep working after the accessor migration.
+    #[test]
+    fn margin_accepts_unquoted_integer_and_quoted_string() {
+        let int = ConfigValue::new_scalar(
+            yaml_rust2::Yaml::Integer(1),
+            SourceInfo::generated(By::revealjs()),
+        );
+        let m = meta(vec![("margin", int)]);
+        let v: serde_json::Value = serde_json::from_str(&reveal_config_json(&m)).unwrap();
+        assert_eq!(v["margin"], serde_json::json!(1.0));
+
+        let m = meta(vec![("margin", s("0.3"))]);
+        let v: serde_json::Value = serde_json::from_str(&reveal_config_json(&m)).unwrap();
+        assert_eq!(v["margin"], serde_json::json!(0.3));
     }
 
     #[test]
