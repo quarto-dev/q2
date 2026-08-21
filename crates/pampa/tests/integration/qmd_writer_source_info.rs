@@ -197,6 +197,99 @@ fn no_blocks_produces_empty_or_frontmatter_only() {
     }
 }
 
+/// Tripwire for `quarto-source-map` commit `0c65d52` (landed in 0.1.2), which
+/// changed `SourceInfo::Concat::map_offset`'s **exclusive-end** branch (the
+/// offset one past the end of the whole concat, matching no piece) from
+///
+/// ```ignore
+/// return last.source_info.map_offset(last.length, ctx);              // pre-0.1.2
+/// return last.source_info.map_offset(last.source_info.length(), ctx); // 0.1.2+
+/// ```
+///
+/// `last.length` is the last piece's *written* (content) byte length;
+/// `last.source_info.length()` is the last piece's *source span* length.
+/// They coincide for a verbatim piece and diverge whenever a piece's written
+/// bytes differ from its source extent — exactly the shape of the QMD
+/// writer's provenance concat in `write_impl_tracked`
+/// (`crates/pampa/src/writers/qmd.rs`), which pairs each block's
+/// `source_info()` (a source span) with the count of bytes *written* for
+/// that block.
+///
+/// This test originally pinned the pre-0.1.2 answer against the lock as it
+/// stood when it was written (`quarto-source-map` 0.1.0). The lock has since
+/// been refreshed to 0.1.3, which carries the `0c65d52` fix, and the value
+/// below moved as expected: `mapped.location.offset` went from **10 to
+/// 106** — exactly `last.source_info.length() (100) - last.length (4) =
+/// 96`, the divergence between the last piece's source-span length and its
+/// written length asserted by `assert_ne!` below. This test now pins the
+/// **post-0.1.3** (current, correct) behavior. A future upstream change to
+/// this branch would turn it red again; the same response applies — update
+/// the expected value and document the movement, never delete or weaken the
+/// test.
+#[test]
+fn concat_exclusive_end_maps_via_source_length() {
+    // Last block: source_info span is deliberately much wider (100 chars,
+    // 6..106) than the bytes the writer actually emits for "Hi" (a couple of
+    // bytes plus the blank-line separator from the preceding block) — the
+    // deliberate divergence this test exists to pin.
+    let pandoc = Pandoc {
+        meta: ConfigValue::default(),
+        blocks: vec![
+            paragraph("Hello", si(0, 0, 5)),
+            paragraph("Hi", si(0, 6, 106)),
+        ],
+    };
+
+    let (buf, source_info) = write_with_source_info(&pandoc).unwrap();
+
+    let pieces = match &source_info {
+        SourceInfo::Concat { pieces } => pieces,
+        other => panic!("Expected Concat, got {:?}", other),
+    };
+    let last = pieces.last().expect("at least one piece");
+
+    // Non-degeneracy check: if these ever coincided, this test would silently
+    // stop exercising the divergent branch it's meant to pin.
+    assert_ne!(
+        last.length,
+        last.source_info.length(),
+        "test fixture must give the last piece a written length that differs \
+         from its source_info() span length, or this test degenerates into \
+         the verbatim case where both map_offset branches agree"
+    );
+
+    let total_len: usize = pieces.iter().map(|p| p.length).sum();
+    assert_eq!(total_len, buf.len(), "pieces must tile the entire buffer");
+
+    // File content long enough that both branches' absolute offset
+    // (start_offset + last.length pre-0.1.2, start_offset +
+    // last.source_info.length() post-0.1.2) resolve within it, so the
+    // mapping succeeds (`Some`) rather than failing on bounds either way.
+    let mut ctx = SourceContext::new();
+    ctx.add_file("test.qmd".to_string(), Some("x".repeat(200)));
+
+    // The exclusive end: the one offset that matches no piece and falls into
+    // the branch under test.
+    let mapped = source_info.map_offset(total_len, &ctx);
+
+    // Pinned against the current lock (quarto-source-map 0.1.3, post-`0c65d52`).
+    // Do NOT update this value except in response to a deliberate further
+    // upstream change to this branch — document any such movement the same
+    // way the 10 -> 106 move above this test is documented.
+    assert_eq!(
+        mapped,
+        Some(quarto_source_map::MappedLocation {
+            file_id: FileId(0),
+            location: quarto_source_map::Location {
+                offset: 106,
+                row: 0,
+                column: 106,
+            },
+        }),
+        "post-0.1.3 exclusive-end map_offset value changed unexpectedly"
+    );
+}
+
 #[test]
 fn round_trip_code_block_offset_accuracy() {
     // Parse a real file, serialize, check offset maps back approximately

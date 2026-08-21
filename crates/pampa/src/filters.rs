@@ -1172,7 +1172,7 @@ mod tests {
     // Helper to create a ConfigValue with string
     fn config_str(s: &str) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(s.to_string())),
             source_info: si(),
             merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
         }
@@ -1842,7 +1842,10 @@ mod tests {
         assert_eq!(result.len(), 1);
         match &result[0] {
             Block::BlockMetadata(m) => match &m.meta.value {
-                ConfigValueKind::Scalar(Yaml::String(s)) => assert_eq!(s, "transformed"),
+                ConfigValueKind::Scalar {
+                    yaml: Yaml::String(s),
+                    ..
+                } => assert_eq!(s, "transformed"),
                 _ => panic!("Expected String scalar"),
             },
             _ => panic!("Expected BlockMetadata"),
@@ -1965,7 +1968,10 @@ mod tests {
         let value = config_str("test");
         let result = topdown_traverse_config_value(value, &mut filter, &mut ctx);
         match &result.value {
-            ConfigValueKind::Scalar(Yaml::String(s)) => assert_eq!(s, "test"),
+            ConfigValueKind::Scalar {
+                yaml: Yaml::String(s),
+                ..
+            } => assert_eq!(s, "test"),
             _ => panic!("Expected String scalar"),
         }
     }
@@ -2058,7 +2064,10 @@ mod tests {
         let meta = config_map(vec![("key", config_str("value"))]);
         let result = topdown_traverse_meta(meta, &mut filter, &mut ctx);
         match &result.value {
-            ConfigValueKind::Scalar(Yaml::String(s)) => assert_eq!(s, "transformed"),
+            ConfigValueKind::Scalar {
+                yaml: Yaml::String(s),
+                ..
+            } => assert_eq!(s, "transformed"),
             _ => panic!("Expected String scalar"),
         }
     }

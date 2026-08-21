@@ -514,7 +514,7 @@ mod tests {
 
     fn meta_with_string(key: &str, value: &str) -> ConfigValue {
         let v = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(value.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(value.to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: MergeOp::Concat,
         };
@@ -537,7 +537,7 @@ mod tests {
                     key: "method".to_string(),
                     key_source: SourceInfo::for_test(),
                     value: ConfigValue {
-                        value: ConfigValueKind::Scalar(Yaml::String(method.to_string())),
+                        value: ConfigValueKind::scalar(Yaml::String(method.to_string())),
                         source_info: SourceInfo::for_test(),
                         merge_op: MergeOp::Concat,
                     },
@@ -546,7 +546,7 @@ mod tests {
                     key: "url".to_string(),
                     key_source: SourceInfo::for_test(),
                     value: ConfigValue {
-                        value: ConfigValueKind::Scalar(Yaml::String(url.to_string())),
+                        value: ConfigValueKind::scalar(Yaml::String(url.to_string())),
                         source_info: SourceInfo::for_test(),
                         merge_op: MergeOp::Concat,
                     },

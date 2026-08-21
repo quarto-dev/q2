@@ -476,7 +476,7 @@ where
 {
     remap_source_info(&mut cv.source_info, map);
     match &mut cv.value {
-        ConfigValueKind::Scalar(_)
+        ConfigValueKind::Scalar { .. }
         | ConfigValueKind::Path(_)
         | ConfigValueKind::Glob(_)
         | ConfigValueKind::Expr(_) => {}

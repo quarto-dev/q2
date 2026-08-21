@@ -355,7 +355,10 @@ fn literal_html_text(value: &ConfigValue) -> Option<String> {
     use yaml_rust2::Yaml;
 
     match &value.value {
-        K::Scalar(Yaml::String(s)) => Some(s.clone()),
+        K::Scalar {
+            yaml: Yaml::String(s),
+            ..
+        } => Some(s.clone()),
         K::Path(s) | K::Glob(s) | K::Expr(s) => Some(s.clone()),
         K::PandocInlines(inlines) => Some(inlines_to_html_literal(inlines)),
         K::PandocBlocks(blocks) => Some(blocks_to_html_literal(blocks)),

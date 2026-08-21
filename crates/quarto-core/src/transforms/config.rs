@@ -217,7 +217,7 @@ mod tests {
 
     fn bool_value(b: bool) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Boolean(b)),
+            value: ConfigValueKind::scalar(Yaml::Boolean(b)),
             source_info: SourceInfo::for_test(),
             merge_op: Default::default(),
         }
@@ -368,7 +368,7 @@ mod tests {
 
     fn string_value(s: &str) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(s.to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: Default::default(),
         }

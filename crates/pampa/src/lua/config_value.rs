@@ -147,7 +147,7 @@ impl UserData for LuaConfigNull {
 /// | `Path`/`Glob`/`Expr` | `LuaConfigSpecial` userdata |
 pub fn push_config_value(lua: &Lua, config: &ConfigValue) -> Result<Value> {
     match &config.value {
-        ConfigValueKind::Scalar(yaml) => push_yaml_scalar(lua, yaml),
+        ConfigValueKind::Scalar { yaml, .. } => push_yaml_scalar(lua, yaml),
         ConfigValueKind::PandocInlines(inlines) => create_inlines_table(lua, inlines),
         ConfigValueKind::PandocBlocks(blocks) => create_blocks_table(lua, blocks),
         ConfigValueKind::Array(items) => {
@@ -321,13 +321,13 @@ fn build_config_value(
         merge_op: MergeOp::default(),
     };
     match val {
-        Value::Boolean(b) => Ok(mk(ConfigValueKind::Scalar(Yaml::Boolean(b)))),
-        Value::String(s) => Ok(mk(ConfigValueKind::Scalar(Yaml::String(
+        Value::Boolean(b) => Ok(mk(ConfigValueKind::scalar(Yaml::Boolean(b)))),
+        Value::String(s) => Ok(mk(ConfigValueKind::scalar(Yaml::String(
             s.to_str()?.to_string(),
         )))),
         // Divergence D-num: Lua numbers stay numeric (pandoc stringifies).
-        Value::Integer(i) => Ok(mk(ConfigValueKind::Scalar(Yaml::Integer(i)))),
-        Value::Number(n) => Ok(mk(ConfigValueKind::Scalar(Yaml::Real(n.to_string())))),
+        Value::Integer(i) => Ok(mk(ConfigValueKind::scalar(Yaml::Integer(i)))),
+        Value::Number(n) => Ok(mk(ConfigValueKind::scalar(Yaml::Real(n.to_string())))),
         Value::UserData(ref ud) => {
             if let Ok(special) = ud.borrow::<LuaConfigSpecial>() {
                 let raw = special.value.borrow().clone();
@@ -338,7 +338,7 @@ fn build_config_value(
                 };
                 Ok(mk(kind))
             } else if ud.borrow::<LuaConfigNull>().is_ok() {
-                Ok(mk(ConfigValueKind::Scalar(Yaml::Null)))
+                Ok(mk(ConfigValueKind::scalar(Yaml::Null)))
             } else if let Ok(inline) = ud.borrow::<LuaInline>() {
                 // Pandoc: single Inline userdata -> singleton MetaInlines.
                 Ok(mk(ConfigValueKind::PandocInlines(vec![
@@ -469,7 +469,13 @@ fn build_map(
         if lua_value.is_nil() {
             // Divergence D-null: a null-valued key was pushed as nil, so
             // its absence is "unchanged", not "deleted".
-            if matches!(orig_entry.value.value, ConfigValueKind::Scalar(Yaml::Null)) {
+            if matches!(
+                orig_entry.value.value,
+                ConfigValueKind::Scalar {
+                    yaml: Yaml::Null,
+                    ..
+                }
+            ) {
                 entries.push(orig_entry.clone());
             }
             continue;
@@ -531,7 +537,7 @@ pub fn config_value_structurally_eq(a: &ConfigValue, b: &ConfigValue) -> bool {
 fn config_kind_structurally_eq(a: &ConfigValueKind, b: &ConfigValueKind) -> bool {
     use ConfigValueKind::*;
     match (a, b) {
-        (Scalar(x), Scalar(y)) => yaml_scalar_eq(x, y),
+        (Scalar { yaml: x, .. }, Scalar { yaml: y, .. }) => yaml_scalar_eq(x, y),
         (PandocInlines(x), PandocInlines(y)) => {
             x == y || {
                 let ctx = crate::pandoc::ast_context::ASTContext::default();
@@ -713,7 +719,7 @@ mod tests {
 
     fn scalar(y: Yaml, source: SourceInfo) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(y),
+            value: ConfigValueKind::scalar(y),
             source_info: source,
             merge_op: MergeOp::default(),
         }
@@ -948,7 +954,7 @@ mod tests {
         let fsi = filter_si();
 
         let got = peek_config_value(&lua, Value::Boolean(true), None, &fsi).unwrap();
-        assert_eq!(got.value, ConfigValueKind::Scalar(Yaml::Boolean(true)));
+        assert_eq!(got.value, ConfigValueKind::scalar(Yaml::Boolean(true)));
         assert_eq!(got.source_info, fsi);
 
         let s = lua.create_string("hey").unwrap();
@@ -957,16 +963,19 @@ mod tests {
         // markdown-parsed.
         assert_eq!(
             got.value,
-            ConfigValueKind::Scalar(Yaml::String("hey".into()))
+            ConfigValueKind::scalar(Yaml::String("hey".into()))
         );
 
         // D-num: integers stay integers, floats stay reals — never strings.
         let got = peek_config_value(&lua, Value::Integer(5), None, &fsi).unwrap();
-        assert_eq!(got.value, ConfigValueKind::Scalar(Yaml::Integer(5)));
+        assert_eq!(got.value, ConfigValueKind::scalar(Yaml::Integer(5)));
 
         let got = peek_config_value(&lua, Value::Number(2.5), None, &fsi).unwrap();
         match &got.value {
-            ConfigValueKind::Scalar(Yaml::Real(r)) => assert_eq!(r.parse::<f64>().unwrap(), 2.5),
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Real(r),
+                ..
+            } => assert_eq!(r.parse::<f64>().unwrap(), 2.5),
             other => panic!("expected Real, got {:?}", other),
         }
     }
@@ -1052,7 +1061,7 @@ mod tests {
                 assert_eq!(items.len(), 3);
                 assert_eq!(
                     items[0].value,
-                    ConfigValueKind::Scalar(Yaml::String("eins".into()))
+                    ConfigValueKind::scalar(Yaml::String("eins".into()))
                 );
             }
             other => panic!("expected Array, got {:?}", other),
@@ -1115,7 +1124,7 @@ mod tests {
         let lua = lua_env();
         let ud = lua.create_userdata(LuaConfigNull).unwrap();
         let got = peek_config_value(&lua, Value::UserData(ud), None, &filter_si()).unwrap();
-        assert_eq!(got.value, ConfigValueKind::Scalar(Yaml::Null));
+        assert_eq!(got.value, ConfigValueKind::scalar(Yaml::Null));
     }
 
     // ------------------------------------------------------------------
@@ -1187,7 +1196,7 @@ mod tests {
         let preferred = entries.iter().find(|e| e.key == "preferred").unwrap();
         assert_eq!(
             preferred.value.value,
-            ConfigValueKind::Scalar(Yaml::String("changed".into()))
+            ConfigValueKind::scalar(Yaml::String("changed".into()))
         );
         assert_eq!(preferred.value.source_info, filter_si());
         assert_eq!(preferred.value.merge_op, MergeOp::default());
@@ -1277,7 +1286,7 @@ mod tests {
             other => panic!("expected Map, got {:?}", other),
         };
         let maybe = entries.iter().find(|e| e.key == "maybe").unwrap();
-        assert_eq!(maybe.value.value, ConfigValueKind::Scalar(Yaml::Null));
+        assert_eq!(maybe.value.value, ConfigValueKind::scalar(Yaml::Null));
         assert_eq!(maybe.value.source_info, si(61));
     }
 
@@ -1302,7 +1311,7 @@ mod tests {
                 // Unchanged element keeps original provenance.
                 assert_eq!(items[0], scalar(Yaml::String("a".into()), si(20)));
                 // Changed element re-built with filter provenance.
-                assert_eq!(items[1].value, ConfigValueKind::Scalar(Yaml::Integer(8)));
+                assert_eq!(items[1].value, ConfigValueKind::scalar(Yaml::Integer(8)));
                 assert_eq!(items[1].source_info, filter_si());
             }
             other => panic!("expected Array, got {:?}", other),
@@ -1335,7 +1344,7 @@ mod tests {
         match &nested.value.value {
             ConfigValueKind::Map(inner) => {
                 let x = inner.iter().find(|e| e.key == "x").unwrap();
-                assert_eq!(x.value.value, ConfigValueKind::Scalar(Yaml::Boolean(false)));
+                assert_eq!(x.value.value, ConfigValueKind::scalar(Yaml::Boolean(false)));
                 assert_eq!(x.value.source_info, filter_si());
                 // Sibling leaf untouched: exact original node.
                 let y = inner.iter().find(|e| e.key == "y").unwrap();
@@ -1449,7 +1458,7 @@ mod tests {
         let got = peek_config_value(&lua, v, None, &filter_si()).unwrap();
         assert_eq!(
             got.value,
-            ConfigValueKind::Scalar(Yaml::String("**not md**".into()))
+            ConfigValueKind::scalar(Yaml::String("**not md**".into()))
         );
     }
 
@@ -1459,7 +1468,7 @@ mod tests {
         let v: Value = lua.load("return quarto.config.null()").eval().unwrap();
         assert_eq!(utils_type(&lua, v.clone()), "Null");
         let got = peek_config_value(&lua, v, None, &filter_si()).unwrap();
-        assert_eq!(got.value, ConfigValueKind::Scalar(Yaml::Null));
+        assert_eq!(got.value, ConfigValueKind::scalar(Yaml::Null));
     }
 
     #[test]

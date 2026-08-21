@@ -66,7 +66,7 @@ pub fn config_to_template_value(
     ctx: &mut ConfigConversionContext,
 ) -> TemplateValue {
     match &config.value {
-        ConfigValueKind::Scalar(yaml) => yaml_to_template_value(yaml),
+        ConfigValueKind::Scalar { yaml, .. } => yaml_to_template_value(yaml),
         ConfigValueKind::Path(s) | ConfigValueKind::Glob(s) | ConfigValueKind::Expr(s) => {
             // Deferred interpretation variants - just return as string
             TemplateValue::String(s.clone())
@@ -202,7 +202,10 @@ fn derive_pagetitle(meta: &ConfigValue) -> Option<String> {
         for entry in entries {
             if entry.key == "title" {
                 return match &entry.value.value {
-                    ConfigValueKind::Scalar(Yaml::String(s)) => Some(s.clone()),
+                    ConfigValueKind::Scalar {
+                        yaml: Yaml::String(s),
+                        ..
+                    } => Some(s.clone()),
                     ConfigValueKind::PandocInlines(content) => {
                         let (plain_text, _diags) = plaintext::inlines_to_string(content);
                         Some(plain_text)
@@ -372,7 +375,9 @@ mod tests {
         let defaults = compute_template_defaults(&config);
 
         let lang = defaults.get("lang").expect("lang should be present");
-        assert!(matches!(&lang.value, ConfigValueKind::Scalar(Yaml::String(s)) if s == "en"));
+        assert!(
+            matches!(&lang.value, ConfigValueKind::Scalar { yaml: Yaml::String(s), .. } if s == "en")
+        );
     }
 
     #[test]

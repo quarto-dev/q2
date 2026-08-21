@@ -553,7 +553,9 @@ fn config_value_content_eq(a: &ConfigValue, b: &ConfigValue) -> bool {
 /// Compare two ConfigValueKind values for content equality.
 fn config_value_kind_content_eq(a: &ConfigValueKind, b: &ConfigValueKind) -> bool {
     match (a, b) {
-        (ConfigValueKind::Scalar(a), ConfigValueKind::Scalar(b)) => a == b,
+        (ConfigValueKind::Scalar { yaml: a, .. }, ConfigValueKind::Scalar { yaml: b, .. }) => {
+            a == b
+        }
         (ConfigValueKind::PandocInlines(a), ConfigValueKind::PandocInlines(b)) => {
             structural_eq_inlines(a, b)
         }

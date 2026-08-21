@@ -183,7 +183,13 @@ impl LanguageTerms {
         };
         let mut terms = BTreeMap::new();
         for entry in entries {
-            let value = if matches!(entry.value.value, ConfigValueKind::Scalar(Yaml::Null)) {
+            let value = if matches!(
+                entry.value.value,
+                ConfigValueKind::Scalar {
+                    yaml: Yaml::Null,
+                    ..
+                }
+            ) {
                 String::new()
             } else {
                 match entry.value.as_plain_text() {
@@ -382,7 +388,13 @@ fn term_entry_from_config(
 ) -> Option<TermEntry> {
     // quarto-yaml parses `key: ""` as Null (bd-gutochbq); a Null term is an
     // empty display string either way.
-    let text = if matches!(value.value, ConfigValueKind::Scalar(Yaml::Null)) {
+    let text = if matches!(
+        value.value,
+        ConfigValueKind::Scalar {
+            yaml: Yaml::Null,
+            ..
+        }
+    ) {
         Some(String::new())
     } else {
         value.as_plain_text()
@@ -481,7 +493,10 @@ fn is_stringish(value: &ConfigValue) -> bool {
 fn is_stringish_kind(kind: &ConfigValueKind) -> bool {
     matches!(
         kind,
-        ConfigValueKind::Scalar(Yaml::String(_) | Yaml::Null) | ConfigValueKind::PandocInlines(_)
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(_) | Yaml::Null,
+            ..
+        } | ConfigValueKind::PandocInlines(_)
     )
 }
 
@@ -499,7 +514,13 @@ fn term_layer_from_config(
     for entry in entries {
         // quarto-yaml parses `key: ""` as Null (bd-gutochbq); a Null term is
         // an empty display string either way.
-        let value = if matches!(entry.value.value, ConfigValueKind::Scalar(Yaml::Null)) {
+        let value = if matches!(
+            entry.value.value,
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Null,
+                ..
+            }
+        ) {
             ""
         } else {
             match entry.value.as_str() {

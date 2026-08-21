@@ -1680,7 +1680,7 @@ fn meta_node(t: &str, c: Value, s: Value) -> Value {
 fn write_config_value(value: &ConfigValue, ctx: &mut JsonWriterContext) -> Value {
     let s = ctx.serializer.to_json_ref(&value.source_info);
     match &value.value {
-        ConfigValueKind::Scalar(yaml) => match yaml {
+        ConfigValueKind::Scalar { yaml, .. } => match yaml {
             yaml_rust2::Yaml::String(str_val) => meta_node("MetaString", json!(str_val), s),
             yaml_rust2::Yaml::Boolean(b) => meta_node("MetaBool", json!(b), s),
             yaml_rust2::Yaml::Integer(i) => meta_node("MetaString", json!(i.to_string()), s),
@@ -3938,7 +3938,7 @@ fn stream_write_config_value<W: io::Write>(
 ) -> io::Result<()> {
     let raw = ctx.serializer.config.raw;
     match &value.value {
-        ConfigValueKind::Scalar(yaml) => match yaml {
+        ConfigValueKind::Scalar { yaml, .. } => match yaml {
             yaml_rust2::Yaml::String(s) => {
                 stream_write_meta_node(w, "MetaString", value, ctx, |w, _ctx| w.str_value(s))
             }

@@ -98,7 +98,7 @@ impl ConversionContext {
 /// `PandocInlines` or `PandocBlocks` to strings using the specified writer.
 pub fn meta_to_template_value(meta: &ConfigValue, ctx: &mut ConversionContext) -> TemplateValue {
     match &meta.value {
-        ConfigValueKind::Scalar(yaml) => match yaml {
+        ConfigValueKind::Scalar { yaml, .. } => match yaml {
             Yaml::String(s) => TemplateValue::String(s.clone()),
             Yaml::Boolean(b) => TemplateValue::Bool(*b),
             Yaml::Integer(i) => TemplateValue::String(i.to_string()),

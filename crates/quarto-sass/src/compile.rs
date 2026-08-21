@@ -1442,7 +1442,7 @@ mod tests {
 
         // Build flattened config: { theme: "cosmo" }
         let theme_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String("cosmo".to_string())),
+            value: ConfigValueKind::scalar(Yaml::String("cosmo".to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };

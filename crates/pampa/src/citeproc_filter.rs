@@ -652,8 +652,10 @@ fn extract_config(pandoc: &Pandoc) -> CiteprocConfig {
         if let ConfigValueKind::Map(entries) = &meta.value {
             for entry in entries {
                 if entry.key == key {
-                    if let ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(value)) =
-                        &entry.value.value
+                    if let ConfigValueKind::Scalar {
+                        yaml: yaml_rust2::Yaml::Boolean(value),
+                        ..
+                    } = &entry.value.value
                     {
                         return Some(*value);
                     }
@@ -901,7 +903,11 @@ fn extract_date(
                 .iter()
                 .filter_map(|p| {
                     // Try integer first (years like 2019 are parsed as integers by YAML)
-                    if let ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(i)) = &p.value {
+                    if let ConfigValueKind::Scalar {
+                        yaml: yaml_rust2::Yaml::Integer(i),
+                        ..
+                    } = &p.value
+                    {
                         return i32::try_from(*i).ok();
                     }
                     if let Some(s) = p.as_str() {
@@ -1233,7 +1239,7 @@ mod tests {
     // Helper to create a string ConfigValue
     fn meta_string(s: &str) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s.to_string())),
+            value: ConfigValueKind::scalar(yaml_rust2::Yaml::String(s.to_string())),
             source_info: quarto_source_map::SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
         }
@@ -1242,7 +1248,7 @@ mod tests {
     // Helper to create a boolean ConfigValue
     fn meta_bool(b: bool) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(b)),
+            value: ConfigValueKind::scalar(yaml_rust2::Yaml::Boolean(b)),
             source_info: quarto_source_map::SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
         }
@@ -1390,7 +1396,7 @@ mod tests {
     // Helper to create an integer ConfigValue
     fn meta_int(i: i64) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(i)),
+            value: ConfigValueKind::scalar(yaml_rust2::Yaml::Integer(i)),
             source_info: quarto_source_map::SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
         }

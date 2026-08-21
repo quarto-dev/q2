@@ -2203,7 +2203,7 @@ mod tests {
 
     fn make_config_string(value: &str) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(value.to_string())),
+            value: ConfigValueKind::scalar(yaml_rust2::Yaml::String(value.to_string())),
             source_info: dummy_source_info(),
             merge_op: MergeOp::default(),
         }
@@ -2211,7 +2211,7 @@ mod tests {
 
     fn make_config_bool(value: bool) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(value)),
+            value: ConfigValueKind::scalar(yaml_rust2::Yaml::Boolean(value)),
             source_info: dummy_source_info(),
             merge_op: MergeOp::default(),
         }

@@ -159,7 +159,11 @@ fn test_yaml_tagged_strings() {
 
     // Check literal_string - should be Scalar(String), not parsed as markdown
     let literal_string = get_entry("literal_string").expect("literal_string not found");
-    if let ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) = &literal_string.value.value {
+    if let ConfigValueKind::Scalar {
+        yaml: yaml_rust2::Yaml::String(s),
+        ..
+    } = &literal_string.value.value
+    {
         assert_eq!(s, "_foo_.py");
     } else {
         panic!(

@@ -386,7 +386,7 @@ mod tests {
         assert!(diags[0].title.contains("nope.css"));
         let entry = meta.get("css").unwrap();
         assert!(
-            matches!(entry.value, ConfigValueKind::Scalar(_)),
+            matches!(entry.value, ConfigValueKind::Scalar { .. }),
             "missing entry must stay Scalar"
         );
         assert_eq!(
@@ -419,12 +419,12 @@ mod tests {
         assert!(diags[0].title.contains("gone.css"));
         let items = meta.get("css").unwrap().as_array().unwrap();
         assert_eq!(items[0].value, ConfigValueKind::Path("a.css".to_string()));
-        assert!(matches!(items[1].value, ConfigValueKind::Scalar(_)));
+        assert!(matches!(items[1].value, ConfigValueKind::Scalar { .. }));
         assert_eq!(
             items[1].as_plain_text().as_deref(),
             Some("https://example.com/x.css")
         );
-        assert!(matches!(items[2].value, ConfigValueKind::Scalar(_)));
+        assert!(matches!(items[2].value, ConfigValueKind::Scalar { .. }));
         assert_eq!(items[2].as_plain_text().as_deref(), Some("gone.css"));
     }
 
@@ -552,7 +552,7 @@ mod tests {
         assert!(
             matches!(
                 items[1].get("text").unwrap().value,
-                ConfigValueKind::Scalar(_)
+                ConfigValueKind::Scalar { .. }
             ),
             "text: value must stay untouched even when it looks like a path"
         );
@@ -601,7 +601,10 @@ mod tests {
         );
         assert!(diags.is_empty(), "theme marking must never diagnose");
         assert!(
-            matches!(meta.get("theme").unwrap().value, ConfigValueKind::Scalar(_)),
+            matches!(
+                meta.get("theme").unwrap().value,
+                ConfigValueKind::Scalar { .. }
+            ),
             "builtin name must stay Scalar"
         );
     }
@@ -626,7 +629,7 @@ mod tests {
         );
         assert!(diags.is_empty());
         let items = meta.get("theme").unwrap().as_array().unwrap();
-        assert!(matches!(items[0].value, ConfigValueKind::Scalar(_)));
+        assert!(matches!(items[0].value, ConfigValueKind::Scalar { .. }));
         assert_eq!(
             items[1].value,
             ConfigValueKind::Path("../custom.scss".to_string())
@@ -672,7 +675,7 @@ mod tests {
         assert!(diags.is_empty());
         let theme = meta.get("theme").unwrap();
         let light = theme.get("light").unwrap().as_array().unwrap();
-        assert!(matches!(light[0].value, ConfigValueKind::Scalar(_)));
+        assert!(matches!(light[0].value, ConfigValueKind::Scalar { .. }));
         assert_eq!(
             light[1].value,
             ConfigValueKind::Path("../light.scss".to_string())

@@ -99,7 +99,7 @@ pub fn config_value_from_yaml(
             // available in this crate. They will be handled by pampa when creating
             // document metadata. For now, we keep them as Scalar.
             _ => ConfigValue {
-                value: ConfigValueKind::Scalar(yaml.yaml),
+                value: ConfigValueKind::scalar(yaml.yaml),
                 source_info,
                 merge_op,
             },
@@ -155,7 +155,7 @@ mod tests {
 
         assert!(diagnostics.is_empty());
         // Note: Markdown interpretation is deferred, so it's still a Scalar
-        assert!(matches!(config.value, ConfigValueKind::Scalar(_)));
+        assert!(matches!(config.value, ConfigValueKind::Scalar { .. }));
     }
 
     #[test]
@@ -167,7 +167,7 @@ mod tests {
         assert!(diagnostics.is_empty());
         assert_eq!(config.merge_op, MergeOp::Prefer);
         // Markdown interpretation is deferred
-        assert!(matches!(config.value, ConfigValueKind::Scalar(_)));
+        assert!(matches!(config.value, ConfigValueKind::Scalar { .. }));
     }
 
     #[test]
@@ -259,7 +259,7 @@ mod tests {
 
         let desc = config.get("description").expect("description not found");
         // Markdown interpretation is deferred, so it's still a Scalar
-        assert!(matches!(desc.value, ConfigValueKind::Scalar(_)));
+        assert!(matches!(desc.value, ConfigValueKind::Scalar { .. }));
     }
 
     #[test]
@@ -337,7 +337,7 @@ format:
         let docclass = pdf.get("documentclass").expect("documentclass not found");
 
         // !str keeps it as Scalar
-        assert!(matches!(docclass.value, ConfigValueKind::Scalar(_)));
+        assert!(matches!(docclass.value, ConfigValueKind::Scalar { .. }));
     }
 
     #[test]
@@ -376,7 +376,7 @@ format:
         let title = config.get("title").expect("title not found");
         assert_eq!(title.merge_op, MergeOp::Prefer);
         // Markdown interpretation is deferred
-        assert!(matches!(title.value, ConfigValueKind::Scalar(_)));
+        assert!(matches!(title.value, ConfigValueKind::Scalar { .. }));
         assert_eq!(
             title.as_yaml().unwrap().as_str(),
             Some("**Override Title**")

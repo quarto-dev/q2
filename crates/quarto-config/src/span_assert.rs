@@ -45,7 +45,7 @@
 //! the matching [`SourceContext`].
 
 use quarto_error_reporting::DiagnosticMessage;
-use quarto_source_map::{FileId, SourceContext, SourceInfo};
+use quarto_source_map::{FileId, MappedLocation, SourceContext, SourceInfo};
 
 /// A [`SourceInfo`] resolved against a [`SourceContext`], in the terms a
 /// reader of the rendered diagnostic sees.
@@ -75,7 +75,13 @@ pub enum SpanProblem {
     /// A `Generated` span with no invocation anchor: synthesized content
     /// with no source preimage to point at.
     Generated,
-    /// A `Concat` span: spans multiple sources, so it has no single range.
+    /// A **gappy** `Concat` (or a `Substring`/`Generated` chain bottoming
+    /// out in one): its pieces do not tile the source without gaps, so
+    /// there is no single contiguous range to report. A gap-free `Concat`
+    /// does *not* hit this — [`resolve_span`] resolves it piecewise (via
+    /// `map_offset` on each end) to the hull those pieces tile out. Before
+    /// piecewise resolution landed, this variant covered every `Concat`;
+    /// it is now reserved for genuinely gappy ones.
     Concat,
     /// The file is not registered in the supplied [`SourceContext`].
     UnknownFile { file_id: usize },
@@ -106,7 +112,8 @@ impl std::fmt::Display for SpanProblem {
             SpanProblem::Concat => {
                 write!(
                     f,
-                    "span is Concat (covers multiple sources, no single range)"
+                    "span is a gappy Concat (pieces don't tile the source without \
+                     gaps, so there is no single hull range)"
                 )
             }
             SpanProblem::UnknownFile { file_id } => {
@@ -143,62 +150,244 @@ pub fn context_for(filename: &str, content: &str) -> SourceContext {
     ctx
 }
 
+/// Peel off `Generated` wrappers to find the node whose own offset space we
+/// should walk with `map_offset`/`length` — `Generated` itself has none (its
+/// `map_offset` always returns `None`; see the module-level API in
+/// `quarto-source-map`). Mirrors the recursion `resolve_byte_range` used to
+/// do implicitly via `invocation_anchor().resolve_byte_range()`: each layer
+/// must carry an `Invocation` anchor, or we refuse rather than guess.
+fn peel_generated(info: &SourceInfo) -> Result<&SourceInfo, SpanProblem> {
+    let mut current = info;
+    while let SourceInfo::Generated { .. } = current {
+        current = current.invocation_anchor().ok_or(SpanProblem::Generated)?;
+    }
+    Ok(current)
+}
+
+/// Whether a `Concat`'s pieces tile the source without gaps: for every
+/// adjacent pair, the previous piece's own source end coincides with the
+/// next piece's own source start (same file, same offset).
+///
+/// Deliberately measured via each piece's **own full extent** —
+/// `piece.source_info.map_offset(0)` / `map_offset(piece.source_info.length())`
+/// — rather than the concat's declared per-piece `length` field. A piece's
+/// declared content length and its `source_info`'s own span length can
+/// differ (a decoded escape folding two source bytes into one content
+/// byte); walking a "local offset" derived from the declared length would
+/// silently misalign the piece's own coordinate space, exactly the
+/// mistake `Concat::map_offset`'s exclusive-end handling already has to
+/// route around for the *last* piece — this applies the same fix to every
+/// boundary, not just the last one.
+///
+/// This is a structural property of the whole `Concat` node, independent
+/// of which sub-range within it is being queried: a `Substring` over part
+/// of a gappy `Concat` is treated as gappy too, even if its own sub-range
+/// happens not to touch the gap. That's a conservative over-approximation
+/// documented here rather than silently assumed.
+///
+/// This is the piecewise replacement for the contiguity check
+/// `SourceInfo::preimage_in` used to make for `Concat`. `resolve_span`
+/// deliberately does not call `preimage_in`: as of quarto-source-map 0.1.3
+/// it refuses a `Substring` over a `Concat` parent outright (see the
+/// design memo this task's brief cites), which is exactly the shape this
+/// module must resolve.
+fn concat_pieces_are_contiguous(
+    pieces: &[quarto_source_map::SourcePiece],
+    ctx: &SourceContext,
+) -> bool {
+    let mut prev_end: Option<MappedLocation> = None;
+    for piece in pieces {
+        if let SourceInfo::Concat { pieces: nested } = &piece.source_info
+            && !concat_pieces_are_contiguous(nested, ctx)
+        {
+            return false;
+        }
+        let Some(this_start) = piece.source_info.map_offset(0, ctx) else {
+            return false;
+        };
+        if let Some(prev) = &prev_end
+            && (prev.file_id != this_start.file_id
+                || prev.location.offset != this_start.location.offset)
+        {
+            return false;
+        }
+        let Some(this_end) = piece
+            .source_info
+            .map_offset(piece.source_info.length(), ctx)
+        else {
+            return false;
+        };
+        prev_end = Some(this_end);
+    }
+    true
+}
+
+/// Whether `info` (or, for a `Substring`, its parent chain) is gap-free —
+/// see [`concat_pieces_are_contiguous`] for what that means and why it's
+/// measured this way. `Original`/`Generated` are trivially gap-free (a
+/// single atom, by construction).
+fn is_gapless(info: &SourceInfo, ctx: &SourceContext) -> bool {
+    match info {
+        SourceInfo::Original { .. } | SourceInfo::Generated { .. } => true,
+        SourceInfo::Substring { parent, .. } => is_gapless(parent, ctx),
+        SourceInfo::Concat { pieces } => concat_pieces_are_contiguous(pieces, ctx),
+    }
+}
+
 /// Resolve a [`SourceInfo`] to the source text it covers.
+///
+/// Resolution is **piecewise**: both ends of the span are located
+/// independently via `map_offset(0)` / `map_offset(length())`, for every
+/// shape. That is what lets a gap-free `Concat` — and a `Substring` whose
+/// parent is one, the shape a diagnostic carries once content provenance
+/// is threaded — resolve to the hull those pieces tile out, instead of
+/// refusing outright. A **gappy** `Concat` still refuses
+/// ([`SpanProblem::Concat`]): its pieces don't tile a single range, so
+/// there is nothing honest to report.
 pub fn resolve_span(info: &SourceInfo, ctx: &SourceContext) -> Result<ResolvedSpan, SpanProblem> {
     // Diagnose the shapes that cannot resolve *before* asking for a byte
     // range, so the caller gets the specific reason rather than a bare
-    // `None`. `resolve_byte_range` folds several distinct cases together.
-    match info {
-        SourceInfo::Original {
-            file_id,
-            start_offset,
-            end_offset,
-        } if file_id.0 == 0 && *start_offset == 0 && *end_offset == 0 => {
-            return Err(SpanProblem::SuspiciousDefault);
-        }
-        SourceInfo::Concat { .. } => return Err(SpanProblem::Concat),
-        SourceInfo::Generated { .. } if info.invocation_anchor().is_none() => {
-            return Err(SpanProblem::Generated);
-        }
-        _ => {}
+    // `None`.
+    if let SourceInfo::Original {
+        file_id,
+        start_offset,
+        end_offset,
+    } = info
+        && file_id.0 == 0
+        && *start_offset == 0
+        && *end_offset == 0
+    {
+        return Err(SpanProblem::SuspiciousDefault);
+    }
+    if matches!(info, SourceInfo::Generated { .. }) && info.invocation_anchor().is_none() {
+        return Err(SpanProblem::Generated);
     }
 
-    let (file_id, start, end) = info.resolve_byte_range().ok_or(SpanProblem::Generated)?;
+    // `Generated` has no offset space of its own; walk to the node whose
+    // space we actually resolve (its `Invocation` anchor, possibly several
+    // layers deep).
+    let effective = peel_generated(info)?;
+    let length = effective.length();
 
-    let file = ctx
-        .get_file(FileId(file_id))
-        .ok_or(SpanProblem::UnknownFile { file_id })?;
-    let content = file
-        .content
-        .as_deref()
-        .ok_or_else(|| SpanProblem::NoContent {
-            path: file.path.clone(),
-        })?;
+    match (
+        effective.map_offset(0, ctx),
+        effective.map_offset(length, ctx),
+    ) {
+        (Some(start_mapped), Some(end_mapped)) => {
+            // Gap-free is required for a single hull to exist at all:
+            // either the pieces don't tile without gaps, or (defensively)
+            // the two ends landed in different files despite the
+            // piecewise check below passing — both mean there's no single
+            // range to report.
+            if start_mapped.file_id != end_mapped.file_id || !is_gapless(effective, ctx) {
+                return Err(SpanProblem::Concat);
+            }
 
-    if start > end || end > content.len() {
-        return Err(SpanProblem::OutOfBounds {
-            path: file.path.clone(),
-            start,
-            end,
-            len: content.len(),
-        });
+            let file = ctx
+                .get_file(start_mapped.file_id)
+                .ok_or(SpanProblem::UnknownFile {
+                    file_id: start_mapped.file_id.0,
+                })?;
+            let content = file
+                .content
+                .as_deref()
+                .ok_or_else(|| SpanProblem::NoContent {
+                    path: file.path.clone(),
+                })?;
+
+            let start = start_mapped.location.offset;
+            let end = end_mapped.location.offset;
+
+            if start > end || end > content.len() {
+                return Err(SpanProblem::OutOfBounds {
+                    path: file.path.clone(),
+                    start,
+                    end,
+                    len: content.len(),
+                });
+            }
+
+            Ok(ResolvedSpan {
+                path: file.path.clone(),
+                // `Location` is 0-indexed; rendered diagnostics are 1-indexed.
+                line: start_mapped.location.row + 1,
+                column: start_mapped.location.column + 1,
+                text: content[start..end].to_string(),
+            })
+        }
+        (Some(start_mapped), None) => {
+            // The start resolved but the end didn't: `map_offset` defers
+            // its bounds check to `FileInformation::offset_to_location`,
+            // which reports an out-of-bounds offset as a bare `None`
+            // rather than saying how far out of bounds it is. We already
+            // know the file (from the start); report the attempted end via
+            // plain offset arithmetic — `length` past the start we did
+            // resolve — rather than reaching for a second resolution
+            // mechanism to recover the exact number.
+            let file = ctx
+                .get_file(start_mapped.file_id)
+                .ok_or(SpanProblem::UnknownFile {
+                    file_id: start_mapped.file_id.0,
+                })?;
+            let content = file
+                .content
+                .as_deref()
+                .ok_or_else(|| SpanProblem::NoContent {
+                    path: file.path.clone(),
+                })?;
+            Err(SpanProblem::OutOfBounds {
+                path: file.path.clone(),
+                start: start_mapped.location.offset,
+                end: start_mapped.location.offset + length,
+                len: content.len(),
+            })
+        }
+        (None, _) => {
+            // The *start* didn't resolve either. `map_offset`'s bounds
+            // check treats "no such offset" (past EOF) exactly like "no
+            // such file": both come back as a bare `None`, with no way to
+            // tell which happened from the `Option` alone.
+            // `resolve_byte_range` still answers this for
+            // `Original`/`Substring` chains -- it does no bounds checking
+            // at all, so it never fails just because an offset is out of
+            // range. Used here purely to recover the raw numbers for a
+            // diagnosis, not as the resolution mechanism: it still refuses
+            // `Concat`, which falls through to the file-registration
+            // checks below exactly as before.
+            if let Some((file_id, start, end)) = effective.resolve_byte_range() {
+                let file = ctx
+                    .get_file(FileId(file_id))
+                    .ok_or(SpanProblem::UnknownFile { file_id })?;
+                let content = file
+                    .content
+                    .as_deref()
+                    .ok_or_else(|| SpanProblem::NoContent {
+                        path: file.path.clone(),
+                    })?;
+                return Err(SpanProblem::OutOfBounds {
+                    path: file.path.clone(),
+                    start,
+                    end,
+                    len: content.len(),
+                });
+            }
+
+            // `resolve_byte_range` refused too (a `Concat`-rooted chain):
+            // find out why via the file registration (structural — doesn't
+            // need `ctx`) rather than via the offset, since `map_offset`
+            // gives no reason.
+            match effective.root_file_id() {
+                Some(file_id) => match ctx.get_file(file_id) {
+                    None => Err(SpanProblem::UnknownFile { file_id: file_id.0 }),
+                    Some(file) if file.content.is_none() => Err(SpanProblem::NoContent {
+                        path: file.path.clone(),
+                    }),
+                    Some(_) => Err(SpanProblem::Generated),
+                },
+                None => Err(SpanProblem::Generated),
+            }
+        }
     }
-
-    let location =
-        quarto_source_map::offset_to_location(content, start).ok_or(SpanProblem::OutOfBounds {
-            path: file.path.clone(),
-            start,
-            end,
-            len: content.len(),
-        })?;
-
-    Ok(ResolvedSpan {
-        path: file.path.clone(),
-        // `Location` is 0-indexed; rendered diagnostics are 1-indexed.
-        line: location.row + 1,
-        column: location.column + 1,
-        text: content[start..end].to_string(),
-    })
 }
 
 /// Resolve the location a [`DiagnosticMessage`] points at.
@@ -302,5 +491,194 @@ mod tests {
             resolve_span(&listing.source_info, &empty),
             Err(SpanProblem::UnknownFile { .. })
         ));
+    }
+
+    #[test]
+    fn generated_with_no_invocation_anchor_is_reported() {
+        // Pure synthesis (e.g. a sectionize wrapper): no source preimage to
+        // point at, so this must refuse rather than fall through to
+        // `resolve_byte_range`'s bare `None`.
+        let ctx = SourceContext::new();
+        let synthetic = SourceInfo::for_test();
+        assert_eq!(resolve_span(&synthetic, &ctx), Err(SpanProblem::Generated));
+    }
+
+    #[test]
+    fn no_content_is_reported() {
+        let mut ctx = SourceContext::new();
+        let file_id = quarto_yaml::file_id_for_filename("no-content.yml");
+        ctx.add_file_with_id(file_id, "no-content.yml".to_string(), None);
+        let info = SourceInfo::Original {
+            file_id,
+            start_offset: 0,
+            end_offset: 3,
+        };
+        assert!(matches!(
+            resolve_span(&info, &ctx),
+            Err(SpanProblem::NoContent { .. })
+        ));
+    }
+
+    #[test]
+    fn out_of_bounds_is_reported() {
+        let (_parsed, ctx) = fixture();
+        let file_id = quarto_yaml::file_id_for_filename("fixture.yml");
+        let info = SourceInfo::Original {
+            file_id,
+            start_offset: 0,
+            end_offset: YAML.len() + 1000,
+        };
+        assert!(matches!(
+            resolve_span(&info, &ctx),
+            Err(SpanProblem::OutOfBounds { .. })
+        ));
+    }
+
+    #[test]
+    fn out_of_bounds_start_is_reported_not_generated() {
+        // Regression: when the *start* offset alone is past EOF (not just
+        // the end), `map_offset(0)` itself returns `None` -- landing in the
+        // `(None, _)` arm rather than the `(Some(start), None)` arm that
+        // `out_of_bounds_is_reported` above exercises. These are two
+        // independent code paths to the same SpanProblem; before the fix
+        // this one fell through to `SpanProblem::Generated`, which is
+        // exactly the misdiagnosis this module's docs warn against: it
+        // sends a reader hunting for a filter-created node that was never
+        // there, when the span was simply a bad offset into a real file.
+        let (_parsed, ctx) = fixture();
+        let file_id = quarto_yaml::file_id_for_filename("fixture.yml");
+        let info = SourceInfo::Original {
+            file_id,
+            start_offset: YAML.len() + 1000,
+            end_offset: YAML.len() + 1005,
+        };
+        assert!(matches!(
+            resolve_span(&info, &ctx),
+            Err(SpanProblem::OutOfBounds { .. })
+        ));
+    }
+
+    // -------------------------------------------------------------------
+    // `peel_generated`: walking through a `Generated` wrapper to the node
+    // whose offset space `map_offset`/`length` actually operate over.
+    // `generated_with_no_invocation_anchor_is_reported` above exercises
+    // `resolve_span`'s *early guard* (the outer node itself has no
+    // anchor) -- these exercise `peel_generated` itself, which only runs
+    // once the outer node already has an anchor.
+    // -------------------------------------------------------------------
+
+    fn generated_with_anchor(anchor: SourceInfo) -> SourceInfo {
+        let mut generated = SourceInfo::generated(quarto_source_map::By::test_scaffold());
+        generated.append_anchor(
+            quarto_source_map::AnchorRole::Invocation,
+            std::sync::Arc::new(anchor),
+        );
+        generated
+    }
+
+    #[test]
+    fn generated_with_a_valid_anchor_resolves_through_it() {
+        let (parsed, ctx) = fixture();
+        let listing = parsed.get_hash_value("listing").expect("listing key");
+        let generated = generated_with_anchor(listing.source_info.clone());
+
+        let span = resolve_span(&generated, &ctx)
+            .expect("Generated with a real Invocation anchor should resolve through it");
+        assert_eq!(span.path, "fixture.yml");
+    }
+
+    #[test]
+    fn generated_nested_without_an_anchor_at_the_inner_layer_is_reported() {
+        // Outer has a real Invocation anchor (so `resolve_span`'s early
+        // guard does not fire) that points at *another* `Generated` node
+        // with no anchor of its own -- this is `peel_generated`'s own
+        // multi-layer refusal, not the early guard's.
+        let ctx = SourceContext::new();
+        let inner = SourceInfo::for_test(); // Generated { from: [] }
+        let outer = generated_with_anchor(inner);
+        assert_eq!(resolve_span(&outer, &ctx), Err(SpanProblem::Generated));
+    }
+
+    // -------------------------------------------------------------------
+    // Piecewise resolution of `Concat` and `Substring{parent: Concat}`.
+    //
+    // Shapes modeled on the design memo's measured A/B/C example (see this
+    // task's brief): three real files' worth of content is unnecessary —
+    // one real file with several `Original` spans into it, concatenated,
+    // reproduces the same piece shapes (including a piece whose declared
+    // concat-length differs from its own source span length, and a gap
+    // between two pieces).
+    // -------------------------------------------------------------------
+
+    const CONCAT_CONTENT: &str = "0123456789ABCDEF";
+
+    fn concat_fixture() -> (FileId, SourceContext) {
+        let filename = "concat-fixture.txt";
+        let file_id = quarto_yaml::file_id_for_filename(filename);
+        (file_id, context_for(filename, CONCAT_CONTENT))
+    }
+
+    fn original(file_id: FileId, start: usize, end: usize) -> SourceInfo {
+        SourceInfo::Original {
+            file_id,
+            start_offset: start,
+            end_offset: end,
+        }
+    }
+
+    #[test]
+    fn gap_free_concat_resolves_to_its_hull() {
+        let (fid, ctx) = concat_fixture();
+        // A = concat[(Original(1,3), 2), (Original(3,5), 1), (Original(5,6), 1)]
+        // Piece 1 declares content-length 1 over a 2-byte source span (a
+        // folded piece) -- deliberately, per the design memo -- and the
+        // pieces still tile the source without gaps: 1..3, 3..5, 5..6.
+        let a = SourceInfo::concat(vec![
+            (original(fid, 1, 3), 2),
+            (original(fid, 3, 5), 1),
+            (original(fid, 5, 6), 1),
+        ]);
+
+        // Sanity per the measured numbers this task's brief cites.
+        assert_eq!(a.map_offset(0, &ctx).unwrap().location.offset, 1);
+        assert_eq!(a.map_offset(4, &ctx).unwrap().location.offset, 6);
+
+        let span = resolve_span(&a, &ctx).expect("gap-free Concat should resolve");
+        assert_eq!(span.text, &CONCAT_CONTENT[1..6]);
+        assert_eq!(span.line, 1);
+        // Offset 1 into an all-ASCII single-line file -> 0-based column 1,
+        // 1-based column 2.
+        assert_eq!(span.column, 2);
+    }
+
+    #[test]
+    fn substring_over_whole_gap_free_concat_resolves_to_the_same_hull() {
+        let (fid, ctx) = concat_fixture();
+        let a = SourceInfo::concat(vec![
+            (original(fid, 1, 3), 2),
+            (original(fid, 3, 5), 1),
+            (original(fid, 5, 6), 1),
+        ]);
+        // C = substring(A, 0, 4): the whole content of A, length 4. This is
+        // the shape a diagnostic carries after the threading phase (a
+        // Substring extracted from a Concat-backed scalar). Before
+        // piecewise resolution this reported `SpanProblem::Generated`.
+        let c = SourceInfo::substring(a, 0, 4);
+
+        let span = resolve_span(&c, &ctx)
+            .expect("Substring{parent: Concat} over the whole content should resolve");
+        assert_eq!(span.text, &CONCAT_CONTENT[1..6]);
+        assert_eq!(span.line, 1);
+        assert_eq!(span.column, 2);
+    }
+
+    #[test]
+    fn gappy_concat_is_reported_not_guessed() {
+        let (fid, ctx) = concat_fixture();
+        // B = concat[(Original(6,10), 4), (Original(12,15), 3)] -- a gap at
+        // 10..12 the source bytes in between aren't part of either piece.
+        let b = SourceInfo::concat(vec![(original(fid, 6, 10), 4), (original(fid, 12, 15), 3)]);
+
+        assert_eq!(resolve_span(&b, &ctx), Err(SpanProblem::Concat));
     }
 }

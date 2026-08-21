@@ -104,7 +104,10 @@ pub fn resolve_format_config(metadata: &ConfigValue, target_format: &str) -> Con
                 // we don't extract any settings from it
             }
             // Handle format: "html" shorthand
-            ConfigValueKind::Scalar(Yaml::String(s)) if s == target_format => {
+            ConfigValueKind::Scalar {
+                yaml: Yaml::String(s),
+                ..
+            } if s == target_format => {
                 // Shorthand matches target format, but there are no additional settings
                 // to merge - just means "use this format with defaults"
             }

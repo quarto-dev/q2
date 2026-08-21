@@ -282,7 +282,7 @@ fn collect_config_text_images(
     match &cv.value {
         ConfigValueKind::PandocInlines(inlines) => collect_inline_image_refs(inlines, out),
         ConfigValueKind::PandocBlocks(blocks) => collect_block_image_refs(blocks, out),
-        ConfigValueKind::Scalar(_) => {
+        ConfigValueKind::Scalar { .. } => {
             let Some(text) = cv.as_plain_text() else {
                 return;
             };

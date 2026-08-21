@@ -247,7 +247,10 @@ mod tests {
         // Just shouldn't panic; the value remains null.
         assert!(matches!(
             meta.value,
-            ConfigValueKind::Scalar(yaml_rust2::Yaml::Null)
+            ConfigValueKind::Scalar {
+                yaml: yaml_rust2::Yaml::Null,
+                ..
+            }
         ));
     }
 

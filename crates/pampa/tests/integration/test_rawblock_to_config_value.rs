@@ -83,7 +83,10 @@ toc: true
                 .find(|e| e.key == "toc")
                 .expect("toc not found");
             match &toc.value.value {
-                ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(b)) => {
+                ConfigValueKind::Scalar {
+                    yaml: yaml_rust2::Yaml::Boolean(b),
+                    ..
+                } => {
                     assert!(*b);
                 }
                 other => panic!("Expected Boolean for toc, got: {:?}", other),
@@ -110,7 +113,10 @@ year: 2024
                 .find(|e| e.key == "year")
                 .expect("year not found");
             match &year.value.value {
-                ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(n)) => {
+                ConfigValueKind::Scalar {
+                    yaml: yaml_rust2::Yaml::Integer(n),
+                    ..
+                } => {
                     assert_eq!(*n, 2024);
                 }
                 other => panic!("Expected Integer for year, got: {:?}", other),
@@ -184,7 +190,10 @@ format:
                                 .expect("toc not found");
                             assert!(matches!(
                                 toc.value.value,
-                                ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(true))
+                                ConfigValueKind::Scalar {
+                                    yaml: yaml_rust2::Yaml::Boolean(true),
+                                    ..
+                                }
                             ));
                         }
                         other => panic!("Expected Map for html, got: {:?}", other),
@@ -250,7 +259,10 @@ filename: !str _foo_.py
                 .expect("filename not found");
             // !str tag produces Scalar(String), not PandocInlines
             match &filename.value.value {
-                ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) => {
+                ConfigValueKind::Scalar {
+                    yaml: yaml_rust2::Yaml::String(s),
+                    ..
+                } => {
                     assert_eq!(s, "_foo_.py");
                 }
                 other => panic!("Expected Scalar(String) for !str tag, got: {:?}", other),

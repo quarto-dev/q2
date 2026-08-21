@@ -260,7 +260,7 @@ fn mark_path_valued_keys(format_config: &mut ConfigValue) {
                 for item in items.iter_mut() {
                     match &mut item.value {
                         // String form: mark as Path unless reserved
-                        ConfigValueKind::Scalar(yaml) => {
+                        ConfigValueKind::Scalar { yaml, .. } => {
                             if let Some(s) = yaml.as_str()
                                 && !FILTER_RESERVED_NAMES.contains(&s)
                             {
@@ -272,7 +272,8 @@ fn mark_path_valued_keys(format_config: &mut ConfigValue) {
                         ConfigValueKind::Map(map_entries) => {
                             if let Some(path_entry) =
                                 map_entries.iter_mut().find(|e| e.key == "path")
-                                && let ConfigValueKind::Scalar(yaml) = &path_entry.value.value
+                                && let ConfigValueKind::Scalar { yaml, .. } =
+                                    &path_entry.value.value
                                 && let Some(s) = yaml.as_str()
                             {
                                 path_entry.value.value = ConfigValueKind::Path(s.to_string());
@@ -289,14 +290,14 @@ fn mark_path_valued_keys(format_config: &mut ConfigValue) {
             continue;
         }
         match &mut entry.value.value {
-            ConfigValueKind::Scalar(yaml) => {
+            ConfigValueKind::Scalar { yaml, .. } => {
                 if let Some(s) = yaml.as_str() {
                     entry.value.value = ConfigValueKind::Path(s.to_string());
                 }
             }
             ConfigValueKind::Array(items) => {
                 for item in items.iter_mut() {
-                    if let ConfigValueKind::Scalar(yaml) = &item.value
+                    if let ConfigValueKind::Scalar { yaml, .. } = &item.value
                         && let Some(s) = yaml.as_str()
                     {
                         item.value = ConfigValueKind::Path(s.to_string());
@@ -319,7 +320,7 @@ fn parse_filters(filters_cv: &ConfigValue, ext_dir: &Path) -> Vec<ExtensionFilte
         .filter_map(|item| {
             match &item.value {
                 // Simple string form: "filter.lua"
-                ConfigValueKind::Scalar(_) => {
+                ConfigValueKind::Scalar { .. } => {
                     let path_str = item.as_str()?;
                     Some(ExtensionFilter {
                         path: ext_dir.join(path_str),
@@ -361,7 +362,7 @@ fn parse_engines(
     let mut result = Vec::new();
     for item in items {
         match &item.value {
-            ConfigValueKind::Scalar(_) | ConfigValueKind::PandocInlines(_) => {
+            ConfigValueKind::Scalar { .. } | ConfigValueKind::PandocInlines(_) => {
                 // Bare string → Reorder hint
                 if let Some(name) = item.as_str().map(|s| s.to_string()) {
                     result.push(EngineContribution::Reorder { name });
@@ -530,21 +531,33 @@ pub(crate) fn parse_static_language_claim(
 ) -> Option<StaticLanguageClaim> {
     match &cv.value {
         // false or null → skip
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(false) | yaml_rust2::Yaml::Null) => None,
+        ConfigValueKind::Scalar {
+            yaml: yaml_rust2::Yaml::Boolean(false) | yaml_rust2::Yaml::Null,
+            ..
+        } => None,
         // true → Primary, use default priority
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(true)) => Some(StaticLanguageClaim {
+        ConfigValueKind::Scalar {
+            yaml: yaml_rust2::Yaml::Boolean(true),
+            ..
+        } => Some(StaticLanguageClaim {
             kind: ClaimKind::Primary,
             priority: None,
             when_class: None,
         }),
         // integer → Primary with explicit priority
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(n)) => Some(StaticLanguageClaim {
+        ConfigValueKind::Scalar {
+            yaml: yaml_rust2::Yaml::Integer(n),
+            ..
+        } => Some(StaticLanguageClaim {
             kind: ClaimKind::Primary,
             priority: Some(*n as i32),
             when_class: None,
         }),
         // bare kind string → that kind, default priority (sugar for `{ kind: <string> }`)
-        ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) => {
+        ConfigValueKind::Scalar {
+            yaml: yaml_rust2::Yaml::String(s),
+            ..
+        } => {
             let kind = match s.as_str() {
                 "primary" => ClaimKind::Primary,
                 "interop" => ClaimKind::Interop,
@@ -639,7 +652,7 @@ fn parse_file_claims(cv: &ConfigValue) -> Vec<FileClaim> {
     items
         .iter()
         .filter_map(|item| match &item.value {
-            ConfigValueKind::Scalar(_) | ConfigValueKind::PandocInlines(_) => {
+            ConfigValueKind::Scalar { .. } | ConfigValueKind::PandocInlines(_) => {
                 item.as_str().map(|s| FileClaim {
                     extension: normalize_ext(s),
                 })
@@ -1192,7 +1205,7 @@ contributes:
         let items = filters.as_array().unwrap();
         assert_eq!(items.len(), 1);
         assert!(
-            matches!(&items[0].value, ConfigValueKind::Scalar(_)),
+            matches!(&items[0].value, ConfigValueKind::Scalar { .. }),
             "expected Scalar for citeproc, got {:?}",
             items[0].value
         );
@@ -1223,7 +1236,7 @@ contributes:
         let items = filters.as_array().unwrap();
         assert_eq!(items.len(), 1);
         assert!(
-            matches!(&items[0].value, ConfigValueKind::Scalar(_)),
+            matches!(&items[0].value, ConfigValueKind::Scalar { .. }),
             "expected Scalar for quarto, got {:?}",
             items[0].value
         );
@@ -1266,13 +1279,13 @@ contributes:
         );
         // citeproc → Scalar (not marked)
         assert!(
-            matches!(&items[1].value, ConfigValueKind::Scalar(_)),
+            matches!(&items[1].value, ConfigValueKind::Scalar { .. }),
             "expected Scalar for citeproc, got {:?}",
             items[1].value
         );
         // quarto → Scalar (not marked)
         assert!(
-            matches!(&items[2].value, ConfigValueKind::Scalar(_)),
+            matches!(&items[2].value, ConfigValueKind::Scalar { .. }),
             "expected Scalar for quarto, got {:?}",
             items[2].value
         );
@@ -1420,7 +1433,7 @@ contributes:
         // Built-in theme name: no such file under the extension dir,
         // so it must stay Scalar (the theme stage resolves it by name).
         assert!(
-            matches!(&items[0].value, ConfigValueKind::Scalar(_)),
+            matches!(&items[0].value, ConfigValueKind::Scalar { .. }),
             "expected Scalar for builtin name `cosmo`, got {:?}",
             items[0].value
         );
@@ -1483,7 +1496,7 @@ contributes:
         let html_meta = &ext.contributes.formats["html"];
         let items = html_meta.get("theme").unwrap().as_array().unwrap();
         assert!(
-            matches!(&items[0].value, ConfigValueKind::Scalar(_)),
+            matches!(&items[0].value, ConfigValueKind::Scalar { .. }),
             "expected Scalar for missing.scss (no bundled file), got {:?}",
             items[0].value
         );
@@ -1518,7 +1531,7 @@ contributes:
         let theme = html_meta.get("theme").unwrap();
         let light = theme.get("light").unwrap().as_array().unwrap();
         assert!(
-            matches!(&light[0].value, ConfigValueKind::Scalar(_)),
+            matches!(&light[0].value, ConfigValueKind::Scalar { .. }),
             "expected Scalar for builtin `flatly`, got {:?}",
             light[0].value
         );
@@ -1561,7 +1574,7 @@ contributes:
             items[0].value
         );
         assert!(
-            matches!(&items[1].value, ConfigValueKind::Scalar(_)),
+            matches!(&items[1].value, ConfigValueKind::Scalar { .. }),
             "expected Scalar for not-bundled.css, got {:?}",
             items[1].value
         );

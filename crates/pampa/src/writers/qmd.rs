@@ -276,7 +276,7 @@ impl<'a, W: Write + ?Sized> Write for OrderedListContext<'a, W> {
 /// PandocInlines and PandocBlocks are rendered using the qmd writer
 fn config_value_to_yaml(value: &ConfigValue) -> std::io::Result<Yaml> {
     match &value.value {
-        ConfigValueKind::Scalar(yaml) => {
+        ConfigValueKind::Scalar { yaml, .. } => {
             // Pass through the yaml value directly
             Ok(yaml.clone())
         }

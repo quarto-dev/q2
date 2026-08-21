@@ -760,7 +760,7 @@ fn extract_single_brand_ref(value: &ConfigValue) -> Result<BrandRef, SassError> 
 fn config_value_to_yaml_value(value: &ConfigValue) -> Result<serde_yaml::Value, SassError> {
     use quarto_pandoc_types::ConfigValueKind;
     Ok(match &value.value {
-        ConfigValueKind::Scalar(yaml) => yaml_rust_to_serde(yaml),
+        ConfigValueKind::Scalar { yaml, .. } => yaml_rust_to_serde(yaml),
         ConfigValueKind::Path(s) | ConfigValueKind::Glob(s) | ConfigValueKind::Expr(s) => {
             serde_yaml::Value::String(s.clone())
         }
@@ -1060,7 +1060,7 @@ mod tests {
                 key: key.to_string(),
                 key_source: SourceInfo::for_test(),
                 value: ConfigValue {
-                    value: ConfigValueKind::Scalar(value),
+                    value: ConfigValueKind::scalar(value),
                     source_info: SourceInfo::for_test(),
                     merge_op: quarto_pandoc_types::MergeOp::Concat,
                 },
@@ -1179,7 +1179,7 @@ mod tests {
     #[test]
     fn test_from_config_value_null_theme() {
         let theme_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Null),
+            value: ConfigValueKind::scalar(Yaml::Null),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -1247,12 +1247,12 @@ mod tests {
     fn test_from_config_value_array_with_non_string() {
         let items = vec![
             ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::String("cosmo".to_string())),
+                value: ConfigValueKind::scalar(Yaml::String("cosmo".to_string())),
                 source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
             ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::Integer(42)),
+                value: ConfigValueKind::scalar(Yaml::Integer(42)),
                 source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
@@ -1339,7 +1339,7 @@ mod tests {
     /// This is the format produced by MetadataMergeStage: `{ theme: "darkly" }`
     fn flattened_config_with_theme_string(theme: &str) -> ConfigValue {
         let theme_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(theme.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(theme.to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -1363,7 +1363,7 @@ mod tests {
         let items: Vec<ConfigValue> = themes
             .iter()
             .map(|s| ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+                value: ConfigValueKind::scalar(Yaml::String(s.to_string())),
                 source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             })
@@ -1466,7 +1466,7 @@ mod tests {
     #[test]
     fn test_from_flattened_config_null_theme() {
         let theme_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Null),
+            value: ConfigValueKind::scalar(Yaml::Null),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -1543,12 +1543,12 @@ mod tests {
 
         let items = vec![
             ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::String("cosmo".to_string())),
+                value: ConfigValueKind::scalar(Yaml::String("cosmo".to_string())),
                 source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
             ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::Integer(42)),
+                value: ConfigValueKind::scalar(Yaml::Integer(42)),
                 source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
@@ -1592,7 +1592,7 @@ mod tests {
         let theme_source = SourceInfo::original(quarto_source_map::FileId(7), 500, 510);
 
         let theme_value = ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String("default".to_string())),
+            value: ConfigValueKind::scalar(Yaml::String("default".to_string())),
             source_info: theme_source.clone(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -1630,12 +1630,12 @@ mod tests {
 
         let items = vec![
             ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::String("nosuchtheme".to_string())),
+                value: ConfigValueKind::scalar(Yaml::String("nosuchtheme".to_string())),
                 source_info: item_source.clone(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
             ConfigValue {
-                value: ConfigValueKind::Scalar(Yaml::String("cosmo".to_string())),
+                value: ConfigValueKind::scalar(Yaml::String("cosmo".to_string())),
                 source_info: SourceInfo::for_test(),
                 merge_op: quarto_pandoc_types::MergeOp::Concat,
             },
@@ -1677,7 +1677,7 @@ mod tests {
     /// Compact scalar ConfigValue builder for map-form tests.
     fn scalar_value(s: &str) -> ConfigValue {
         ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+            value: ConfigValueKind::scalar(Yaml::String(s.to_string())),
             source_info: SourceInfo::for_test(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         }

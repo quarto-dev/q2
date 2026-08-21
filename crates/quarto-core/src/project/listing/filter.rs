@@ -109,7 +109,7 @@ fn curated_matches(curated: &Curated, expected: &str) -> bool {
 
 fn extra_matches(extra: &ConfigValue, expected: &str) -> bool {
     match &extra.value {
-        ConfigValueKind::Scalar(_) => extra.as_plain_text().as_deref() == Some(expected),
+        ConfigValueKind::Scalar { .. } => extra.as_plain_text().as_deref() == Some(expected),
         ConfigValueKind::Array(items) => items
             .iter()
             .any(|v| v.as_plain_text().as_deref() == Some(expected)),
