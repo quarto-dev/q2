@@ -522,12 +522,18 @@ export default function ReactPreview({
 
   // Scroll sync (editor ↔ preview). Mirrors `Preview.tsx`: the q2-preview
   // iframe exposes `scrollToLine` / `getScrollRatio` via this handle, and
-  // forwards its own scroll/click events through `handlePreviewScroll` /
-  // `handlePreviewClick`. Only the q2-preview format wires this; other
-  // React formats (q2-debug, slides) leave the handle unattached.
+  // forwards its own scroll event through `handlePreviewScroll`. Preview→
+  // editor clicks use `revealEditorLine` instead of `handlePreviewClick`'s
+  // scroll-ratio path (click-to-editor-scroll, D1/D3): q2-preview's click
+  // opens an inline editor in the preview itself, so this is a plain
+  // scroll-into-view keyed off `data-loc`, not a focus-gated ratio match.
+  // `handlePreviewClick` stays in `useScrollSync` for the HTML preview
+  // (`Preview.tsx`), which keeps wiring it unchanged. Only the q2-preview
+  // format wires this hook at all; other React formats (q2-debug, slides)
+  // leave the handle unattached.
   const previewScrollRef = useRef<Q2PreviewIframeHandle>(null);
 
-  const { handlePreviewScroll, handlePreviewClick, handleAstRendered, scrollToLineDeferred } = useScrollSync({
+  const { handlePreviewScroll, revealEditorLine, handleAstRendered, scrollToLineDeferred } = useScrollSync({
     editorRef,
     scrollPreviewToLine: (line: number) => {
       previewScrollRef.current?.scrollToLine(line);
@@ -872,7 +878,7 @@ export default function ReactPreview({
             nestedEditBuffers={nestedEditBuffers}
             scrollHandleRef={previewScrollRef}
             onPreviewScroll={handlePreviewScroll}
-            onPreviewClick={handlePreviewClick}
+            onPreviewClickAtLine={revealEditorLine}
             onAstRendered={handleAstRendered}
           />
         ) : previewState === 'ERROR_AT_START' && currentError ? (

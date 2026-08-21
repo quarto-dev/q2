@@ -3,7 +3,7 @@ import type { Ref } from 'react';
 import { vfsReadFile } from '@quarto/preview-runtime';
 import { DEFAULT_CSS_ARTIFACT_PATH } from '../types/artifactPaths';
 import { buildAssetManifest, type ManifestCacheEntry } from '../q2-preview/assetWalker';
-import { scrollIframeToLine, getIframeScrollRatio } from './scrollSyncDom';
+import { scrollIframeToLine, getIframeScrollRatio, lineForClickTarget } from './scrollSyncDom';
 
 /**
  * Imperative scroll-sync handle, parallel to `MorphIframeHandle`. The
@@ -137,8 +137,13 @@ interface Q2PreviewIframeProps {
   scrollHandleRef?: Ref<Q2PreviewIframeHandle>;
   /** Called when the preview iframe is scrolled (preview→editor sync). */
   onScroll?: () => void;
-  /** Called when the preview iframe is clicked (preview→editor sync). */
-  onClick?: () => void;
+  /**
+   * Called with the resolved source line when a capture-phase `pointerup`
+   * on the iframe document resolves one via `lineForClickTarget`
+   * (preview→editor click sync). Not called at all when the click doesn't
+   * resolve a line (see `lineForClickTarget`'s null cases).
+   */
+  onClickAtLine?: (line: number) => void;
   /**
    * Called after the iframe commits a new AST (`AST_RENDERED`), so the host
    * can re-run editor→preview scroll sync against the fresh `data-loc` DOM.
@@ -186,7 +191,7 @@ export function Q2PreviewIframe({
   onSlideChange,
   scrollHandleRef,
   onScroll,
-  onClick,
+  onClickAtLine,
   onAstRendered,
 }: Q2PreviewIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -215,6 +220,15 @@ export function Q2PreviewIframe({
   // app re-renders its body via React on each UPDATE_AST but never reloads
   // the iframe, so the contentWindow/document — and these listeners —
   // persist across edits.
+  //
+  // The click side listens for `pointerup` in the CAPTURE phase, not
+  // `click` in the bubble phase. q2-preview's block-edit activation also
+  // fires on `pointerup` (bubble phase) and replaces the clicked element's
+  // subtree with `#q2-active-edit-region` — Chromium then dispatches no
+  // `click` at all, because the `pointerup` target was detached from the
+  // document during the event. Capture-phase `pointerup` runs before that
+  // bubble-phase activation handler, while the target is still attached and
+  // its nearest `[data-loc]` ancestor is still resolvable.
   useEffect(() => {
     if (!iframeReady) return;
     const iframe = iframeRef.current;
@@ -223,15 +237,18 @@ export function Q2PreviewIframe({
     if (!win || !doc) return;
 
     const handleScroll = () => onScroll?.();
-    const handleClick = () => onClick?.();
+    const handlePointerUp = (e: Event) => {
+      const line = lineForClickTarget(e.target);
+      if (line !== null) onClickAtLine?.(line);
+    };
 
     win.addEventListener('scroll', handleScroll, { passive: true });
-    doc.addEventListener('click', handleClick);
+    doc.addEventListener('pointerup', handlePointerUp, true);
     return () => {
       win.removeEventListener('scroll', handleScroll);
-      doc.removeEventListener('click', handleClick);
+      doc.removeEventListener('pointerup', handlePointerUp, true);
     };
-  }, [iframeReady, onScroll, onClick]);
+  }, [iframeReady, onScroll, onClickAtLine]);
 
   // Track the last fingerprint we posted and the current outstanding
   // blob URL so we can dedupe re-sends and revoke replaced URLs.

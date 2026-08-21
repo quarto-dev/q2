@@ -48,6 +48,20 @@ interface UseScrollSyncReturn {
   handlePreviewScroll: () => void;
   handlePreviewClick: () => void;
   /**
+   * Preview→editor click sync (click-to-editor-scroll): reveal `line` in the
+   * editor. Scroll-only — calls `editor.revealLineInCenterIfOutsideViewport`
+   * and nothing else. Deliberately narrower than `syncPreviewToEditor`: in
+   * q2-preview the click that reaches this also opens an inline editor
+   * *inside the preview*, so pulling focus to Monaco (`setPosition` /
+   * `setSelection` / `focus()`) would break the gesture the same click just
+   * started, and `setPosition` would additionally fire
+   * `onDidChangeCursorPosition`, feeding editor→preview sync and bouncing.
+   * Not focus-gated (an explicit click is unambiguous user intent, unlike
+   * the scroll-ratio feedback loop `syncPreviewToEditor` guards against),
+   * and not debounced (there's exactly one click, not a scroll stream).
+   */
+  revealEditorLine: (line: number) => void;
+  /**
    * Call when the preview iframe reports it committed a new AST
    * (`AST_RENDERED`). Flushes any editor→preview scroll deferred while the
    * render was in flight — once, against the up-to-date DOM. A no-op when no
@@ -241,6 +255,13 @@ export function useScrollSync({
     syncPreviewToEditor();
   }, [syncPreviewToEditor]);
 
+  // Preview→editor click sync (click-to-editor-scroll): reveal-only, not
+  // routed through syncPreviewToEditor — see the UseScrollSyncReturn doc
+  // comment for why (D1/D1b in the click-to-editor-scroll plan).
+  const revealEditorLine = useCallback((line: number) => {
+    editorRef.current?.revealLineInCenterIfOutsideViewport(line);
+  }, [editorRef]);
+
   // The preview iframe committed a new AST: fresh data-loc DOM is in place,
   // so flush the deferred editor→preview scroll once.
   const handleAstRendered = useCallback(() => {
@@ -276,6 +297,7 @@ export function useScrollSync({
   return {
     handlePreviewScroll,
     handlePreviewClick,
+    revealEditorLine,
     handleAstRendered,
     scrollToLineDeferred,
   };
