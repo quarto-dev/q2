@@ -9,9 +9,19 @@
  * synced set). The reconciler closes that gap: once the project set becomes
  * connected, we compare IDB against it and upsert anything missing.
  *
- * This module is split into a pure `computeReconcileAdds` (unit-tested) and
- * an imperative `reconcileIntoConnectedProjectSet` that wires it up to the
- * real services. Keep the pure function pure.
+ * Deletions are the flip side of that comparison. An entry absent from the
+ * set is ambiguous — "never synced" and "deleted" look identical — so
+ * deletions write a tombstone (key -> deletion timestamp) into the set
+ * document. A missing IDB row is re-added only when its lastAccessed is
+ * NEWER than the tombstone (latest one wins); otherwise the stale row is
+ * purged from IDB so it can never resurrect the project. Because the
+ * tombstones sync with the document, a deletion made on one browser also
+ * wins on every other browser's reconcile.
+ *
+ * This module is split into pure `computeReconcileAdds` /
+ * `computeReconcilePurges` (unit-tested) and an imperative
+ * `reconcileIntoConnectedProjectSet` that wires them up to the real
+ * services. Keep the pure functions pure.
  *
  * See claude-notes/plans/2026-04-16-share-link-project-not-added.md.
  */
@@ -34,20 +44,13 @@ export interface ReconcilableEntry {
 }
 
 /**
- * Return the IDB entries that are missing from the synced project set.
- *
- * Comparison is by the `automerge:`-stripped indexDocId (same key as the
- * project set's Record). If IDB contains multiple rows that resolve to the
- * same key (which can happen historically because two code paths stored
- * the id with and without the prefix), the most-recently-accessed one wins.
+ * Dedupe IDB rows by canonical key, keeping the most recently accessed.
+ * (IDB can hold two rows for the same key because code paths historically
+ * stored the id with and without the `automerge:` prefix.)
  */
-export function computeReconcileAdds(
+function dedupeByKey(
   idbProjects: ReadonlyArray<ReconcilableEntry>,
-  setEntries: ReadonlyArray<Pick<ProjectSetEntry, 'indexDocId'>>,
-): ReconcilableEntry[] {
-  const setKeys = new Set(setEntries.map((e) => projectSetKey(e.indexDocId)));
-
-  // Dedupe IDB rows by canonical key, keeping the most recently accessed.
+): Map<string, ReconcilableEntry> {
   const byKey = new Map<string, ReconcilableEntry>();
   for (const entry of idbProjects) {
     const key = projectSetKey(entry.indexDocId);
@@ -56,12 +59,68 @@ export function computeReconcileAdds(
       byKey.set(key, entry);
     }
   }
+  return byKey;
+}
+
+/**
+ * Latest-wins verdict for one key: the deletion tombstone wins when it is
+ * at or newer than the row's last access (ties go to the deletion — a
+ * simultaneous delete/re-add pair resolved this way can't loop, because
+ * the re-add clears the tombstone).
+ */
+function tombstoneWins(
+  tombstones: Record<string, string>,
+  key: string,
+  lastAccessed: string,
+): boolean {
+  const deletedAt = tombstones[key];
+  return deletedAt !== undefined && deletedAt >= lastAccessed;
+}
+
+/**
+ * Return the IDB entries that are missing from the synced project set and
+ * not suppressed by a deletion tombstone.
+ *
+ * Comparison is by the `automerge:`-stripped indexDocId (same key as the
+ * project set's Record). If IDB contains multiple rows that resolve to the
+ * same key, the most-recently-accessed one is the candidate.
+ */
+export function computeReconcileAdds(
+  idbProjects: ReadonlyArray<ReconcilableEntry>,
+  setEntries: ReadonlyArray<Pick<ProjectSetEntry, 'indexDocId'>>,
+  tombstones: Record<string, string> = {},
+): ReconcilableEntry[] {
+  const setKeys = new Set(setEntries.map((e) => projectSetKey(e.indexDocId)));
 
   const adds: ReconcilableEntry[] = [];
-  for (const [key, entry] of byKey) {
-    if (!setKeys.has(key)) adds.push(entry);
+  for (const [key, entry] of dedupeByKey(idbProjects)) {
+    if (setKeys.has(key)) continue;
+    // A tombstone at or newer than the row's last access means this row is
+    // a stale pre-delete copy, not a project waiting to be restored.
+    if (tombstoneWins(tombstones, key, entry.lastAccessed)) continue;
+    adds.push(entry);
   }
   return adds;
+}
+
+/**
+ * Return the IDB rows that lost to a deletion tombstone — stale local
+ * copies of projects deleted from the set. Callers purge them so they can
+ * never resurrect the project on a later reconcile.
+ */
+export function computeReconcilePurges(
+  idbProjects: ReadonlyArray<ReconcilableEntry>,
+  setEntries: ReadonlyArray<Pick<ProjectSetEntry, 'indexDocId'>>,
+  tombstones: Record<string, string>,
+): ReconcilableEntry[] {
+  const setKeys = new Set(setEntries.map((e) => projectSetKey(e.indexDocId)));
+
+  const purges: ReconcilableEntry[] = [];
+  for (const [key, entry] of dedupeByKey(idbProjects)) {
+    if (setKeys.has(key)) continue;
+    if (tombstoneWins(tombstones, key, entry.lastAccessed)) purges.push(entry);
+  }
+  return purges;
 }
 
 /**
@@ -78,7 +137,15 @@ export async function reconcileIntoConnectedProjectSet(): Promise<number> {
 
   const idbProjects = await projectStorage.listProjects();
   const setEntries = projectSetService.listProjects();
-  const adds = computeReconcileAdds(idbProjects, setEntries);
+  const tombstones = projectSetService.getRootTombstones();
+
+  // Purge stale local copies of deleted projects first, so a losing row
+  // can never resurrect its project on a later load.
+  for (const entry of computeReconcilePurges(idbProjects, setEntries, tombstones)) {
+    await projectStorage.deleteProjectByIndexDocId(entry.indexDocId);
+  }
+
+  const adds = computeReconcileAdds(idbProjects, setEntries, tombstones);
   if (adds.length === 0) return 0;
 
   return projectSetService.addProjectsBulk(adds);

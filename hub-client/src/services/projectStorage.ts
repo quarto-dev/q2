@@ -5,6 +5,7 @@
  * with the schema versioning/migration system.
  */
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
+import { projectSetKey } from '@quarto/quarto-automerge-schema';
 import type { ExportData, UserSettings } from './storage/types';
 import { getCollectionPointers } from './projectSetStorage';
 import {
@@ -102,6 +103,34 @@ export async function touchProject(id: string): Promise<void> {
 export async function deleteProject(id: string): Promise<void> {
   const db = await getDb();
   await db.delete(STORES.PROJECTS, id);
+}
+
+/**
+ * Delete every project entry matching an index document ID.
+ *
+ * Historical rows exist both with and without the `automerge:` prefix
+ * (see projectSetReconciler), so both variants are matched. The reconciler
+ * uses this to purge rows that lost to a deletion tombstone, so a stale
+ * local copy can never resurrect a deleted project.
+ *
+ * @returns The number of rows deleted.
+ */
+export async function deleteProjectByIndexDocId(indexDocId: string): Promise<number> {
+  const db = await getDb();
+  const key = projectSetKey(indexDocId);
+  const tx = db.transaction(STORES.PROJECTS, 'readwrite');
+  const store = tx.objectStore(STORES.PROJECTS);
+  const index = store.index('indexDocId');
+  let deleted = 0;
+  for (const variant of [key, `automerge:${key}`]) {
+    const primaryKey = await index.getKey(variant);
+    if (primaryKey !== undefined) {
+      await store.delete(primaryKey);
+      deleted++;
+    }
+  }
+  await tx.done;
+  return deleted;
 }
 
 /**

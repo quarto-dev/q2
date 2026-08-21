@@ -363,7 +363,11 @@ export function useCollectionSets(): [CollectionSetsState, CollectionSetsActions
   const removeProject = useCallback((indexDocId: string) => {
     // Personal removal: root plus every subscribed collection this browser
     // can see. Other members of shared collections are unaffected (their
-    // own root supersets still hold the project).
+    // own root supersets still hold the project). Each removal also writes
+    // a deletion tombstone into that set's document; the on-load reconciler
+    // compares tombstones against stale legacy IDB rows (latest-wins) and
+    // purges the losers, so deletions survive page reloads — and other
+    // browsers' reconcilers reach the same verdict once the tombstone syncs.
     for (const c of projectSetService.listCollections()) {
       projectSetService.removeProjectFromCollection(c.docId, indexDocId);
     }

@@ -14,15 +14,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('./projectStorage', () => ({
   importData: vi.fn(),
   listProjects: vi.fn(),
+  deleteProjectByIndexDocId: vi.fn(),
 }));
 vi.mock('./projectSetService', () => ({
   isConnected: vi.fn(),
   listProjects: vi.fn(),
   addProjectsBulk: vi.fn(),
+  getRootTombstones: vi.fn(() => ({})),
 }));
 
 import {
   computeReconcileAdds,
+  computeReconcilePurges,
+  reconcileIntoConnectedProjectSet,
   importProjectsAndReconcile,
   type ReconcilableEntry,
 } from './projectSetReconciler';
@@ -183,6 +187,126 @@ describe('importProjectsAndReconcile', () => {
 
     await expect(importProjectsAndReconcile('not json')).rejects.toThrow('Invalid import format');
     expect(mockIsConnected).not.toHaveBeenCalled();
+    expect(mockAddBulk).not.toHaveBeenCalled();
+  });
+});
+
+describe('tombstones (latest-wins)', () => {
+  it('suppresses an IDB row whose deletion tombstone is newer', () => {
+    // Regression: deleting a project from the set used to leave the IDB row
+    // behind, and the on-load reconcile resurrected it on the next load.
+    const stale = idb({
+      indexDocId: 'automerge:abc',
+      lastAccessed: '2026-04-10T00:00:00.000Z',
+    });
+    expect(
+      computeReconcileAdds([stale], [], { abc: '2026-04-16T00:00:00.000Z' }),
+    ).toEqual([]);
+  });
+
+  it('adds an IDB row newer than its tombstone — the later access wins', () => {
+    const fresh = idb({
+      indexDocId: 'automerge:abc',
+      lastAccessed: '2026-04-17T00:00:00.000Z',
+    });
+    expect(
+      computeReconcileAdds([fresh], [], { abc: '2026-04-16T00:00:00.000Z' }),
+    ).toEqual([fresh]);
+  });
+
+  it('delete wins ties', () => {
+    const tie = idb({
+      indexDocId: 'automerge:abc',
+      lastAccessed: '2026-04-16T00:00:00.000Z',
+    });
+    expect(
+      computeReconcileAdds([tie], [], { abc: '2026-04-16T00:00:00.000Z' }),
+    ).toEqual([]);
+  });
+
+  it('matches tombstones by canonical key regardless of prefix', () => {
+    const row = idb({
+      indexDocId: 'abc', // unprefixed historical row
+      lastAccessed: '2026-04-10T00:00:00.000Z',
+    });
+    expect(
+      computeReconcileAdds([row], [], { abc: '2026-04-16T00:00:00.000Z' }),
+    ).toEqual([]);
+  });
+
+  it('computeReconcilePurges returns exactly the tombstone-losing rows', () => {
+    const stale = idb({
+      indexDocId: 'automerge:abc',
+      lastAccessed: '2026-04-10T00:00:00.000Z',
+    });
+    const fresh = idb({
+      indexDocId: 'automerge:def',
+      lastAccessed: '2026-04-17T00:00:00.000Z',
+    });
+    const tombstones = {
+      abc: '2026-04-16T00:00:00.000Z',
+      def: '2026-04-16T00:00:00.000Z',
+    };
+    expect(computeReconcilePurges([stale, fresh], [], tombstones)).toEqual([stale]);
+  });
+
+  it('computeReconcilePurges never proposes rows still present in the set', () => {
+    // Torn state (entry present AND tombstone present, possible after a
+    // concurrent add/delete merge): the live entry wins, nothing to purge.
+    const row = idb({
+      indexDocId: 'automerge:abc',
+      lastAccessed: '2026-04-10T00:00:00.000Z',
+    });
+    expect(
+      computeReconcilePurges(
+        [row],
+        [{ indexDocId: 'automerge:abc' }],
+        { abc: '2026-04-16T00:00:00.000Z' },
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('reconcileIntoConnectedProjectSet', () => {
+  const mockListIdb = vi.mocked(projectStorage.listProjects);
+  const mockIsConnected = vi.mocked(projectSetService.isConnected);
+  const mockListSet = vi.mocked(projectSetService.listProjects);
+  const mockAddBulk = vi.mocked(projectSetService.addProjectsBulk);
+  const mockGetTombstones = vi.mocked(projectSetService.getRootTombstones);
+  const mockDelete = vi.mocked(projectStorage.deleteProjectByIndexDocId);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetTombstones.mockReturnValue({});
+  });
+
+  it('purges tombstone-losing IDB rows and reconciles only the winners', async () => {
+    mockIsConnected.mockReturnValue(true);
+    mockListIdb.mockResolvedValue([
+      idb({ indexDocId: 'automerge:stale', lastAccessed: '2026-04-10T00:00:00.000Z' }),
+      idb({ indexDocId: 'automerge:fresh', lastAccessed: '2026-04-17T00:00:00.000Z' }),
+    ] as never);
+    mockListSet.mockReturnValue([]);
+    mockGetTombstones.mockReturnValue({ stale: '2026-04-16T00:00:00.000Z' });
+    mockAddBulk.mockReturnValue(1);
+
+    const added = await reconcileIntoConnectedProjectSet();
+
+    expect(mockDelete).toHaveBeenCalledTimes(1);
+    expect(mockDelete).toHaveBeenCalledWith('automerge:stale');
+    expect(mockAddBulk).toHaveBeenCalledWith([
+      expect.objectContaining({ indexDocId: 'automerge:fresh' }),
+    ]);
+    expect(added).toBe(1);
+  });
+
+  it('does not purge when the set is not connected', async () => {
+    mockIsConnected.mockReturnValue(false);
+
+    const added = await reconcileIntoConnectedProjectSet();
+
+    expect(added).toBe(0);
+    expect(mockDelete).not.toHaveBeenCalled();
     expect(mockAddBulk).not.toHaveBeenCalled();
   });
 });

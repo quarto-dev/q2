@@ -180,6 +180,16 @@ export interface ProjectSetDocument {
    * collections existed; the UI supplies a default until the user names it.
    */
   name?: string;
+  /**
+   * Deletion tombstones: map key -> ISO timestamp of the deletion, written
+   * by `removeProjectFromSet` and cleared by `addProjectToSet`. An entry
+   * absent from `projects` is ambiguous without these — "never synced" and
+   * "deleted" look identical — so reconcilers compare the tombstone against
+   * a candidate's lastAccessed and let the latest one win. Optional:
+   * documents created before tombstones existed simply lack the map until
+   * the first deletion lazily initializes it.
+   */
+  tombstones?: Record<string, string>;
 }
 
 /**
@@ -211,11 +221,18 @@ export function addProjectToSet(
 ): boolean {
   const key = projectSetKey(entry.indexDocId);
   const timestamp = now ?? new Date().toISOString();
+
+  // A (re-)add wins over any earlier deletion tombstone — latest-wins.
+  let changed = false;
+  if (doc.tombstones && key in doc.tombstones) {
+    delete doc.tombstones[key];
+    changed = true;
+  }
+
   const existing = doc.projects[key];
 
   if (existing) {
     // Update mutable fields if changed
-    let changed = false;
     if (existing.description !== entry.description) {
       existing.description = entry.description;
       changed = true;
@@ -238,21 +255,34 @@ export function addProjectToSet(
 }
 
 /**
- * Remove a project from a ProjectSetDocument.
- * Must be called inside an Automerge `change()` callback.
+ * Remove a project from a ProjectSetDocument, leaving a deletion tombstone
+ * (the key's deletion timestamp) so reconcilers can apply latest-wins
+ * against stale local copies. Must be called inside an Automerge `change()`
+ * callback.
  *
  * @returns true if the entry was removed
  */
 export function removeProjectFromSet(
   doc: ProjectSetDocument,
   indexDocId: string,
+  now?: string,
 ): boolean {
   const key = projectSetKey(indexDocId);
-  if (doc.projects[key]) {
-    delete doc.projects[key];
-    return true;
-  }
-  return false;
+  if (!doc.projects[key]) return false;
+  delete doc.projects[key];
+  if (!doc.tombstones) doc.tombstones = {};
+  doc.tombstones[key] = now ?? new Date().toISOString();
+  return true;
+}
+
+/**
+ * Read the deletion-tombstone map (key -> ISO deletion timestamp), or an
+ * empty object when the document predates tombstones.
+ */
+export function getProjectSetTombstones(
+  doc: ProjectSetDocument,
+): Record<string, string> {
+  return doc.tombstones ?? {};
 }
 
 /**

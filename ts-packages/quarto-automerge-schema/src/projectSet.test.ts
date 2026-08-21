@@ -16,6 +16,7 @@ import {
   touchProjectInSet,
   updateProjectSummaryInSet,
   setProjectSetName,
+  getProjectSetTombstones,
 } from './index.js';
 import type { ProjectSetDocument } from './index.js';
 
@@ -168,6 +169,79 @@ describe('ProjectSetDocument schema helpers', () => {
       const result = removeProjectFromSet(doc, 'proj1');
       expect(result).toBe(true);
       expect(doc.projects['proj1']).toBeUndefined();
+    });
+  });
+
+  describe('tombstones', () => {
+    it('removeProjectFromSet records a deletion tombstone', () => {
+      const doc = emptyDoc();
+      addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'To Remove',
+      });
+
+      const result = removeProjectFromSet(doc, 'automerge:proj1', '2026-08-21T10:00:00.000Z');
+
+      expect(result).toBe(true);
+      expect(doc.projects['proj1']).toBeUndefined();
+      expect(doc.tombstones).toEqual({ proj1: '2026-08-21T10:00:00.000Z' });
+      expect(getProjectSetTombstones(doc)).toEqual({ proj1: '2026-08-21T10:00:00.000Z' });
+    });
+
+    it('removeProjectFromSet of an absent project writes no tombstone', () => {
+      const doc = emptyDoc();
+
+      const result = removeProjectFromSet(doc, 'automerge:ghost');
+
+      expect(result).toBe(false);
+      expect(doc.tombstones).toBeUndefined();
+    });
+
+    it('addProjectToSet clears the tombstone — a re-add wins over the delete', () => {
+      const doc = emptyDoc();
+      addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'Project',
+      });
+      removeProjectFromSet(doc, 'automerge:proj1', '2026-08-21T10:00:00.000Z');
+
+      addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'Project',
+      });
+
+      expect(doc.projects['proj1']).toBeDefined();
+      expect(doc.tombstones).toEqual({});
+    });
+
+    it('addProjectToSet update path also clears a lingering tombstone', () => {
+      // Torn state after a concurrent add/delete merge: entry present AND
+      // tombstone present. The add heals it.
+      const doc = emptyDoc();
+      addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'Project',
+      });
+      doc.tombstones = { proj1: '2026-08-21T10:00:00.000Z' };
+
+      const result = addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'Project',
+      });
+
+      expect(result).toBe(true); // clearing the tombstone counts as a change
+      expect(doc.tombstones).toEqual({});
+    });
+
+    it('getProjectSetTombstones returns {} for documents predating tombstones', () => {
+      const doc = emptyDoc();
+      expect(doc.tombstones).toBeUndefined();
+      expect(getProjectSetTombstones(doc)).toEqual({});
     });
   });
 
