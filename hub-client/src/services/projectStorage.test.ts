@@ -16,6 +16,7 @@ import {
   updateProject,
   touchProject,
   deleteProject,
+  deleteProjectByIndexDocId,
   exportData,
   importData,
   closeDatabase,
@@ -132,6 +133,51 @@ describe('projectStorage', () => {
 
       const deleted = await getProject(project.id);
       expect(deleted).toBeUndefined();
+    });
+  });
+
+  describe('deleteProjectByIndexDocId', () => {
+    it('deletes the row matching the indexDocId', async () => {
+      await addProject('automerge:del-1', 'ws://localhost:3030', 'Keep');
+      await addProject('automerge:del-2', 'ws://localhost:3030', 'Delete Me');
+
+      const deleted = await deleteProjectByIndexDocId('automerge:del-2');
+
+      expect(deleted).toBe(1);
+      const projects = await listProjects();
+      expect(projects).toHaveLength(1);
+      expect(projects[0].description).toBe('Keep');
+    });
+
+    it('matches a prefixed id given unprefixed and vice versa', async () => {
+      await addProject('automerge:prefixed', 'ws://localhost:3030', 'Prefixed');
+      await addProject('unprefixed', 'ws://localhost:3030', 'Unprefixed');
+
+      expect(await deleteProjectByIndexDocId('prefixed')).toBe(1);
+      expect(await deleteProjectByIndexDocId('automerge:unprefixed')).toBe(1);
+
+      expect(await listProjects()).toHaveLength(0);
+    });
+
+    it('deletes both rows when prefixed and unprefixed duplicates exist', async () => {
+      // Historical duality: two code paths stored the id with and without
+      // the prefix (the unique index only guards identical strings).
+      await addProject('automerge:dup', 'ws://localhost:3030', 'Prefixed Row');
+      await addProject('dup', 'ws://localhost:3030', 'Unprefixed Row');
+
+      const deleted = await deleteProjectByIndexDocId('automerge:dup');
+
+      expect(deleted).toBe(2);
+      expect(await listProjects()).toHaveLength(0);
+    });
+
+    it('is a no-op when nothing matches', async () => {
+      await addProject('automerge:present', 'ws://localhost:3030', 'Present');
+
+      const deleted = await deleteProjectByIndexDocId('automerge:absent');
+
+      expect(deleted).toBe(0);
+      expect(await listProjects()).toHaveLength(1);
     });
   });
 

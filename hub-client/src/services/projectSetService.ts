@@ -38,6 +38,7 @@ import {
   updateProjectSummaryInSet,
   setProjectSetName,
   projectSetKey,
+  getProjectSetTombstones,
 } from '@quarto/quarto-automerge-schema';
 import type { CollectionPointerEntry } from './storage/types';
 
@@ -708,6 +709,8 @@ export function moveProjectBetweenCollections(
     if (!doc.projects[key]) {
       doc.projects[key] = copy;
     }
+    // The move re-adds the project here, winning over any tombstone.
+    if (doc.tombstones && key in doc.tombstones) delete doc.tombstones[key];
   });
   from.handle.change(doc => {
     removeProjectFromSet(doc, indexDocId);
@@ -810,6 +813,16 @@ export function getProject(indexDocId: string): ProjectSetEntry | undefined {
 }
 
 /**
+ * Deletion tombstones of the root set (map key -> ISO deletion timestamp).
+ * The reconciler compares these against a candidate IDB row's lastAccessed
+ * for latest-wins: a row at or older than its tombstone stays deleted.
+ */
+export function getRootTombstones(): Record<string, string> {
+  const doc = rootConnection()?.handle.doc();
+  return doc ? getProjectSetTombstones(doc) : {};
+}
+
+/**
  * Add a project to the root set.
  */
 export function addProject(
@@ -897,6 +910,8 @@ export function addProjectsBulk(
           addedAt: now,
           lastAccessed: entry.lastAccessed ?? now,
         };
+        // A (re-)add wins over any earlier deletion tombstone.
+        if (doc.tombstones && key in doc.tombstones) delete doc.tombstones[key];
         added++;
       }
     }
