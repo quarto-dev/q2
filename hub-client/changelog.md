@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-21
+
+- [`837de60b`](https://github.com/quarto-dev/q2/commits/837de60b): Fix deleted projects reappearing on the next page load — deleting a project now records a tombstone that syncs with the project set, so the on-load reconciler purges the stale local copy instead of resurrecting it, on every browser.
+
 ### 2026-08-19
 
 - [`6ddab98b`](https://github.com/quarto-dev/q2/commits/6ddab98b): Fix the hub app getting stuck on old versions (GH #447) — the app now checks for updates hourly and whenever a backgrounded tab is revisited, hidden tabs reload themselves onto the new version automatically, and visible tabs get an "Update available" toast with a Reload button instead of being reloaded mid-edit. Offline caching is slimmer too: the install-time cache drops from about 56 MB to about 14 MB because the WASM parser, Monaco editor workers, and the sass compiler now live in on-demand caches, so updates are far less likely to fail to install.
