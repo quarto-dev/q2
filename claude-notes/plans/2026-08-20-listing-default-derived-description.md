@@ -70,8 +70,46 @@ had it. L1 autofill has been dead for listings since it shipped; its unit
 tests drive the stage directly and the listing tests construct profiles by
 hand, so nothing caught it.
 
-(`IncludeResolveStage` is also absent from Pass-1 — see Risks; possibly a
-separate gap for `profile.includes` / bd-r82e cache invalidation.)
+### Head-pipeline drift (the general bug)
+
+Two hand-maintained stage lists lead up to `DocumentProfileStage`:
+
+| Stage | Full render pipeline (`pipeline.rs:277–318`) | Pass-1 head (`orchestrator.rs:2169–2186`) |
+|---|---|---|
+| `SourceConversionStage` | ✅ | ✅ |
+| `ParseDocumentStage` | ✅ | ✅ |
+| `MetadataMergeStage` | ✅ | ✅ |
+| `LanguageResolveStage` (bd-llhlzd7p, `quarto.language`) | ✅ | ❌ |
+| `IncludeExpansionStage` | ✅ | ✅ |
+| `IncludeResolveStage` (writes `profile.includes`, bd-r82e) | ✅ | ❌ |
+| `ListingItemInfoStage` (L1 autofill) | ✅ | ❌ |
+| `DocumentProfileStage` | ✅ | ✅ |
+| `LinkResolutionStage` | ✅ | ✅ |
+
+Three pre-checkpoint stages are missing from Pass-1. Each was added to
+`pipeline.rs` with a comment saying "runs before the checkpoint so X lands
+in the profile", and none was mirrored. Why it's invisible:
+
+- Pass-2 does **not** resume from the Pass-1 profile; it re-runs the full
+  pipeline from source. Every document is profiled twice by two different
+  pipelines. The complete Pass-2 profile feeds only that document's own
+  render; the incomplete Pass-1 profile feeds the `ProjectIndex` — every
+  cross-document consumer (listings, nav/sidebar, link resolution, dep
+  graph, cache invalidation).
+- No test crosses the seam: L1 tests drive the stage directly, listing
+  tests hand-build profiles, the checkpoint test uses the full pipeline.
+- The profile cache key (`cache_key.rs`) has no notion of pipeline shape;
+  the manual `PROFILE_KEY_VERSION` (currently 2) must be bumped by hand when
+  the head pipeline's behaviour changes.
+
+**Decision (2026-08-21, user):** do the refactor — extract a single
+`head_stages()` in `pipeline.rs` used by both the full pipeline and
+Pass-1, add a shape test, bump `PROFILE_KEY_VERSION`. Native/WASM impact
+survey: see §"Native vs WASM stage gating" below.
+
+(`bd-do1nv39s` tracks verifying the `IncludeResolveStage` consequence;
+`LanguageResolveStage`'s consequence — un-localized values in the index —
+is unverified.)
 
 ### Repro (reproducible at HEAD)
 
@@ -169,3 +207,53 @@ Output was inspected by hand.
   description at all (an empty `listing-description` div unless L7 strips
   it) — check L7's "no preview content" fallback path
   (`substitute.rs:412`) and Q1 parity.
+
+## Native vs WASM stage gating (survey 2026-08-21)
+
+Question: if Pass-1 and the full pipeline share one `head_stages()` list,
+does that break either target? Answer: **no** — the head contains no
+target-specific stage, and every per-target difference in the codebase is
+already expressed inside stages or at the push site, never by a separate
+stage list.
+
+**Where target differences live today**
+
+| Mechanism | Instances |
+|---|---|
+| Stage *excluded* on WASM at the push site (`#[cfg(not(wasm32))] stages.push(..)`) | `BootstrapJsStage` (`pipeline.rs:329`), `ClipboardJsStage` (`:336`), `TabsetsJsStage` (`:342`). Their modules/`pub use` are also gated in `stages/mod.rs:31,43,67,75,78,102`. All three are **tail** stages (after `CompileThemeCssStage`). |
+| Transform excluded on WASM inside `build_transform_pipeline` | `ListingFeedStageTransform` (`:1343`), `SecondaryNavRenderTransform` (`:1384`, intentional preview/render divergence). |
+| Same stage, cfg'd branch inside `run` | `metadata_merge.rs:395/397` (WASM drops missing-`css:` diagnostics), `:523/554` (trace observer vs. warn); `user_filters.rs:157/179` (`block_in_place` vs. `.await`); `code_highlight.rs:91/99` (disk grammar scan vs. built-ins); `compile_theme_css.rs:964–1017` (`grass` vs. dart-sass bridge). |
+| Same stage, differs via `SystemRuntime` / registry, no cfg | `engine_execution` (WASM registry has only markdown → fallback warning unless spliced); `compile_theme_css` cache (`cache_get` is `Ok(None)` on WASM); `capture_splice` (VFS vs. disk); all file I/O in `listing_item_info`, `language_resolve`, `include_*`, `apply_template`. |
+| WASM-only stages | **none**. |
+
+**Head stages** (`SourceConversion → Parse → MetadataMerge → LanguageResolve
+→ IncludeExpansion → IncludeResolve → ListingItemInfo → DocumentProfile →
+LinkResolution`): `MetadataMergeStage` is the only one with a cfg inside,
+and it's internal to the stage. Sharing the list changes nothing per target.
+
+**Other stage-list builders** (for completeness; none should use `head_stages()`):
+
+- `build_q2_preview_pipeline_stages` (`pipeline.rs:418`) and
+  `build_html_pipeline_stages_with_captures` (`:478`) — derive from the
+  full list by exclusion/insertion; inherit the shared head automatically.
+- `preview_record.rs:120,186` — *truncate* the full list after
+  `engine-execution` / `pre-engine-sugaring`; also inherit.
+- `build_analysis_pipeline` (`:619`, LSP) — deliberately no includes-resolve /
+  profile / engine; leave alone.
+- `parse_qmd_to_ast` (`:763`, hub-client AST debug) — 3 stages, engine before
+  metadata merge; leave alone.
+- `get_config.rs:56` — `[Parse, MetadataMerge]` only; leave alone.
+- `orchestrator.rs:2168` Pass-1 — **the one to replace** with `head_stages()`.
+
+**Pass-1 on WASM**: hub-client drives `ProjectPipeline::with_renderer`
+(`wasm-quarto-hub-client/src/lib.rs:1690,1712`), so Pass-1 runs on WASM via
+`pass_one_dispatch_async` (`orchestrator.rs:1750`), calling the same ungated
+`pass1_profile_single_file_live`. The profile cache is a transparent miss on
+WASM (`profile_cache.rs:21-23`), so the `PROFILE_KEY_VERSION` bump matters
+only natively. Net: the fix lands on both targets identically, and hub
+project previews gain L1-derived listing fields too.
+
+Cost on WASM of the three added head stages: `LanguageResolveStage` and
+`IncludeResolveStage` are metadata-only; `ListingItemInfoStage` is one AST
+walk + one `mtime` lookup through the runtime (WASM VFS may return none →
+`date-modified` stays unset, which is the existing native-without-mtime path).
