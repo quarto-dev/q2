@@ -664,6 +664,45 @@ impl ConfigValue {
         }
     }
 
+    /// Get an integer from any scalar form a user can write in config:
+    /// an unquoted YAML integer (`Yaml::Integer`), or a
+    /// parseable string form — quoted scalars, and the
+    /// `PandocInlines` that bare front-matter scalars become.
+    ///
+    /// `Yaml::Real` is deliberately rejected: a float where an integer
+    /// option is expected keeps the caller's default (matching the
+    /// silent-drop posture of config parsing generally).
+    ///
+    /// This is the intended accessor for numeric config options. The
+    /// strict [`Self::as_int`] misses quoted numbers, and
+    /// `as_plain_text().parse()` misses unquoted ones — each miss
+    /// silently drops the option (bd-yjsz6hdu).
+    pub fn as_int_lenient(&self) -> Option<i64> {
+        if let Some(i) = self.as_int() {
+            return Some(i);
+        }
+        if matches!(&self.value, ConfigValueKind::Scalar(Yaml::Real(_))) {
+            return None;
+        }
+        self.as_plain_text().and_then(|s| s.trim().parse().ok())
+    }
+
+    /// Get a float from any scalar form a user can write in config:
+    /// an unquoted YAML float (`Yaml::Real`) or integer
+    /// (`Yaml::Integer`), or a parseable string form — quoted scalars,
+    /// and the `PandocInlines` that bare front-matter scalars become.
+    ///
+    /// Companion to [`Self::as_int_lenient`]; before it existed, no
+    /// accessor handled `Yaml::Real` at all, so an unquoted
+    /// `margin: 0.2` was silently dropped (bd-yjsz6hdu).
+    pub fn as_f64_lenient(&self) -> Option<f64> {
+        match &self.value {
+            ConfigValueKind::Scalar(Yaml::Integer(i)) => Some(*i as f64),
+            ConfigValueKind::Scalar(Yaml::Real(r)) => r.trim().parse().ok(),
+            _ => self.as_plain_text().and_then(|s| s.trim().parse().ok()),
+        }
+    }
+
     /// Extract plain text from this value.
     ///
     /// Works for:
@@ -1039,6 +1078,78 @@ mod tests {
 
         let value_neg = ConfigValue::new_scalar(Yaml::Integer(-100), SourceInfo::for_test());
         assert_eq!(value_neg.as_int(), Some(-100));
+    }
+
+    // ── bd-yjsz6hdu: lenient numeric accessors ────────────────────
+
+    fn inlines_value(text: &str) -> ConfigValue {
+        use crate::inline::{Inline, Str};
+        ConfigValue::new_inlines(
+            vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            SourceInfo::for_test(),
+        )
+    }
+
+    #[test]
+    fn test_as_int_lenient_accepts_all_scalar_forms() {
+        // Unquoted YAML integer.
+        let int = ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::for_test());
+        assert_eq!(int.as_int_lenient(), Some(42));
+        // Quoted scalar.
+        let quoted = ConfigValue::new_string("42", SourceInfo::for_test());
+        assert_eq!(quoted.as_int_lenient(), Some(42));
+        // Bare front-matter scalar (PandocInlines).
+        assert_eq!(inlines_value("42").as_int_lenient(), Some(42));
+        // Whitespace tolerated.
+        let padded = ConfigValue::new_string(" 42 ", SourceInfo::for_test());
+        assert_eq!(padded.as_int_lenient(), Some(42));
+        // Negative.
+        let neg = ConfigValue::new_scalar(Yaml::Integer(-7), SourceInfo::for_test());
+        assert_eq!(neg.as_int_lenient(), Some(-7));
+    }
+
+    #[test]
+    fn test_as_int_lenient_rejects_reals_and_garbage() {
+        // A float where an integer is expected keeps the default —
+        // even an integral-valued one (documented posture).
+        let real = ConfigValue::new_scalar(Yaml::Real("2.5".to_string()), SourceInfo::for_test());
+        assert_eq!(real.as_int_lenient(), None);
+        let integral_real =
+            ConfigValue::new_scalar(Yaml::Real("2.0".to_string()), SourceInfo::for_test());
+        assert_eq!(integral_real.as_int_lenient(), None);
+        // Non-numeric text.
+        let text = ConfigValue::new_string("many", SourceInfo::for_test());
+        assert_eq!(text.as_int_lenient(), None);
+        // Non-scalar shapes.
+        let map = ConfigValue::new_map(vec![], SourceInfo::for_test());
+        assert_eq!(map.as_int_lenient(), None);
+        let boolean = ConfigValue::new_bool(true, SourceInfo::for_test());
+        assert_eq!(boolean.as_int_lenient(), None);
+    }
+
+    #[test]
+    fn test_as_f64_lenient_accepts_all_scalar_forms() {
+        // Unquoted YAML float — the form no accessor covered before.
+        let real = ConfigValue::new_scalar(Yaml::Real("0.2".to_string()), SourceInfo::for_test());
+        assert_eq!(real.as_f64_lenient(), Some(0.2));
+        // Unquoted YAML integer widens.
+        let int = ConfigValue::new_scalar(Yaml::Integer(3), SourceInfo::for_test());
+        assert_eq!(int.as_f64_lenient(), Some(3.0));
+        // Quoted scalar and bare front-matter scalar.
+        let quoted = ConfigValue::new_string("0.25", SourceInfo::for_test());
+        assert_eq!(quoted.as_f64_lenient(), Some(0.25));
+        assert_eq!(inlines_value("0.25").as_f64_lenient(), Some(0.25));
+    }
+
+    #[test]
+    fn test_as_f64_lenient_rejects_garbage() {
+        let text = ConfigValue::new_string("wide", SourceInfo::for_test());
+        assert_eq!(text.as_f64_lenient(), None);
+        let boolean = ConfigValue::new_bool(true, SourceInfo::for_test());
+        assert_eq!(boolean.as_f64_lenient(), None);
     }
 
     #[test]
