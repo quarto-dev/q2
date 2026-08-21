@@ -795,7 +795,7 @@ impl DocumentProfile {
             alias_sources: aliases.into_iter().map(|(_, info)| info).collect(),
             order: meta
                 .get("order")
-                .and_then(|v| v.as_int())
+                .and_then(|v| v.as_int_lenient())
                 .and_then(|i| i32::try_from(i).ok()),
             outline,
             // Phase-8 fields that come from the AST's `meta.project.*`
@@ -902,7 +902,7 @@ fn extract_listing_item(meta: &ConfigValue) -> ListingItemInfo {
 /// pattern used elsewhere in this module.
 fn extract_u32_field(meta: &ConfigValue, key: &str) -> Option<u32> {
     meta.get(key)
-        .and_then(|v| v.as_int())
+        .and_then(|v| v.as_int_lenient())
         .and_then(|i| u32::try_from(i).ok())
 }
 
@@ -1347,6 +1347,26 @@ Body.
         let ast = parse_qmd("---\ntitle: No order\n---\n\nBody.\n");
         let profile = DocumentProfile::extract(&ast, Path::new("x.qmd"), "x.html", "html");
         assert_eq!(profile.order, None);
+    }
+
+    // bd-yjsz6hdu Phase 3: quoted numbers in front matter become
+    // PandocInlines, which the strict `as_int()` misses — the option
+    // silently dropped.
+    #[test]
+    fn profile_extract_order_accepts_quoted_integer() {
+        let ast = parse_qmd("---\ntitle: Ordered\norder: \"3\"\n---\n\nBody.\n");
+        let profile = DocumentProfile::extract(&ast, Path::new("o.qmd"), "o.html", "html");
+        assert_eq!(profile.order, Some(3));
+    }
+
+    #[test]
+    fn profile_extract_listing_item_accepts_quoted_counts() {
+        let ast = parse_qmd(
+            "---\ntitle: T\nlisting-item:\n  reading-time-minutes: \"7\"\n  word-count: \"1200\"\n---\n\nBody.\n",
+        );
+        let profile = DocumentProfile::extract(&ast, Path::new("t.qmd"), "t.html", "html");
+        assert_eq!(profile.listing_item.reading_time_minutes, Some(7));
+        assert_eq!(profile.listing_item.word_count, Some(1200));
     }
 
     #[test]

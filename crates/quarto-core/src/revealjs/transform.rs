@@ -56,12 +56,7 @@ impl AstTransform for RevealSlidesTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
-        let slide_level = ast
-            .meta
-            .get("slide-level")
-            .and_then(|v| v.as_int())
-            .filter(|n| *n >= 1)
-            .map_or(DEFAULT_SLIDE_LEVEL, |n| n as usize);
+        let slide_level = slide_level_from_meta(&ast.meta);
 
         let title_slide = build_title_slide(&ast.meta);
 
@@ -74,6 +69,16 @@ impl AstTransform for RevealSlidesTransform {
         ast.blocks = slides;
         Ok(())
     }
+}
+
+/// Read `slide-level:` from the merged metadata. Values below 1 (and
+/// unparseable ones) fall back to [`DEFAULT_SLIDE_LEVEL`]. Lenient:
+/// accepts quoted and bare-scalar forms too (bd-yjsz6hdu).
+fn slide_level_from_meta(meta: &quarto_pandoc_types::ConfigValue) -> usize {
+    meta.get("slide-level")
+        .and_then(|v| v.as_int_lenient())
+        .filter(|n| *n >= 1)
+        .map_or(DEFAULT_SLIDE_LEVEL, |n| n as usize)
 }
 
 /// A plain-text inline run.
@@ -169,4 +174,55 @@ fn build_title_slide(meta: &quarto_pandoc_types::ConfigValue) -> Option<Block> {
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+    use quarto_source_map::{By, SourceInfo};
+
+    fn meta_with_slide_level(value: ConfigValue) -> ConfigValue {
+        ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "slide-level".to_string(),
+                key_source: SourceInfo::generated(By::revealjs()),
+                value,
+            }],
+            SourceInfo::generated(By::revealjs()),
+        )
+    }
+
+    #[test]
+    fn slide_level_defaults_and_reads_unquoted_integer() {
+        let empty = ConfigValue::new_map(vec![], SourceInfo::generated(By::revealjs()));
+        assert_eq!(slide_level_from_meta(&empty), DEFAULT_SLIDE_LEVEL);
+
+        let int = ConfigValue::new_scalar(
+            yaml_rust2::Yaml::Integer(3),
+            SourceInfo::generated(By::revealjs()),
+        );
+        assert_eq!(slide_level_from_meta(&meta_with_slide_level(int)), 3);
+    }
+
+    // bd-yjsz6hdu Phase 3: a quoted `slide-level: "3"` (or the
+    // PandocInlines a bare front-matter scalar becomes) was missed by
+    // the strict `as_int()` and silently fell back to the default.
+    #[test]
+    fn slide_level_accepts_quoted_integer() {
+        let quoted = ConfigValue::new_string("3", SourceInfo::generated(By::revealjs()));
+        assert_eq!(slide_level_from_meta(&meta_with_slide_level(quoted)), 3);
+    }
+
+    #[test]
+    fn slide_level_below_one_falls_back_to_default() {
+        let zero = ConfigValue::new_scalar(
+            yaml_rust2::Yaml::Integer(0),
+            SourceInfo::generated(By::revealjs()),
+        );
+        assert_eq!(
+            slide_level_from_meta(&meta_with_slide_level(zero)),
+            DEFAULT_SLIDE_LEVEL
+        );
+    }
 }

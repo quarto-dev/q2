@@ -232,12 +232,12 @@ impl TocEntry {
         let id = cv.get("id")?.as_plain_text()?;
         let title = config_value_to_inlines(cv.get("title")?)?;
         // Accept both integer and string-encoded integer for level
-        // (YAML parsing may convert integers to strings in some contexts)
-        let level_cv = cv.get("level")?;
-        let level = level_cv
-            .as_int()
-            .map(|i| i as i32)
-            .or_else(|| level_cv.as_plain_text().and_then(|s| s.parse::<i32>().ok()))?;
+        // (YAML parsing may convert integers to strings in some
+        // contexts) — `as_int_lenient` handles both (bd-yjsz6hdu).
+        let level = cv
+            .get("level")?
+            .as_int_lenient()
+            .and_then(|i| i32::try_from(i).ok())?;
         let number = cv.get("number").and_then(|v| v.as_plain_text());
 
         let children = if let Some(children_cv) = cv.get("children") {
