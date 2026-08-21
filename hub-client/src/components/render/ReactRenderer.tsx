@@ -135,7 +135,12 @@ interface ReactRendererProps {
    */
   scrollHandleRef?: Ref<Q2PreviewIframeHandle>;
   onPreviewScroll?: () => void;
-  onPreviewClick?: () => void;
+  /**
+   * Preview→editor click sync (click-to-editor-scroll): called with the
+   * resolved source line when a click in the preview resolves one via
+   * `lineForClickTarget`. Forwarded to `Q2PreviewIframe` as `onClickAtLine`.
+   */
+  onPreviewClickAtLine?: (line: number) => void;
   onAstRendered?: () => void;
 }
 
@@ -165,7 +170,7 @@ function ReactRenderer({
   nestedEditBuffers,
   scrollHandleRef,
   onPreviewScroll,
-  onPreviewClick,
+  onPreviewClickAtLine,
   onAstRendered,
 }: ReactRendererProps) {
   // Stable wrappers for Q2PreviewIframe props that are useEffect dependencies.
@@ -334,7 +339,7 @@ function ReactRenderer({
             onSlideChange={onSlideChange}
             scrollHandleRef={scrollHandleRef}
             onScroll={onPreviewScroll}
-            onClick={onPreviewClick}
+            onClickAtLine={onPreviewClickAtLine}
             onAstRendered={onAstRendered}
           />
         </div>

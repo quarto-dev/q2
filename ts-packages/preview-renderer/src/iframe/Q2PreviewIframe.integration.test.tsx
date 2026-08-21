@@ -12,6 +12,7 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { act } from 'react';
+import type { ComponentProps } from 'react';
 
 // Mock the VFS reads so the test doesn't need WASM. The theme mock is
 // keyed off `mockBytes`; the asset-binary mock is keyed off a per-path
@@ -62,33 +63,47 @@ interface RenderHarness {
     postMessage: ReturnType<typeof vi.fn>;
 }
 
-function renderWithFingerprint(
-    initial: string | null | undefined,
-): RenderHarness {
-    // We want to spy on the iframe element's contentWindow.postMessage.
-    // Defer the spy until after first render mounts the iframe DOM.
+const BASE_AST_JSON = '{"pandoc-api-version":[1,23,0],"meta":{},"blocks":[]}';
+const BASE_FILE_PATH = '/test.qmd';
+
+/**
+ * Shared mount step for `renderWithFingerprint` and
+ * `renderWithClickListenerSpy`: render `<Q2PreviewIframe>` with the common
+ * base props plus whatever the caller adds, pull out the iframe's
+ * `contentWindow`/`contentDocument`, and stub `contentWindow.postMessage`
+ * so tests can inspect posted payloads. Callers dispatch `IFRAME_READY`
+ * themselves (via `dispatchIframeReady`, below) — some need to install a
+ * spy on the iframe document in between mount and dispatch, so this
+ * helper does not dispatch on its own.
+ */
+function mountIframe(extraProps: Partial<ComponentProps<typeof Q2PreviewIframe>> = {}) {
     const utils = render(
         <Q2PreviewIframe
-            astJson={'{"pandoc-api-version":[1,23,0],"meta":{},"blocks":[]}'}
-            currentFilePath="/test.qmd"
+            astJson={BASE_AST_JSON}
+            currentFilePath={BASE_FILE_PATH}
             setAst={() => {}}
-            themeFingerprint={initial}
+            {...extraProps}
         />,
     );
 
     const iframe = utils.container.querySelector('iframe');
     if (!iframe) throw new Error('iframe not mounted');
-    // jsdom auto-creates a contentWindow on the iframe; spy on its
-    // postMessage method so we can assert on the payloads.
+    // jsdom auto-creates a contentWindow/contentDocument on the iframe.
     const cw = iframe.contentWindow;
-    if (!cw) throw new Error('iframe.contentWindow is null');
+    const doc = iframe.contentDocument;
+    if (!cw || !doc) throw new Error('iframe contentWindow/contentDocument is null');
+
     const postMessage = vi.fn();
     Object.defineProperty(cw, 'postMessage', {
         value: postMessage,
         configurable: true,
     });
 
-    // Drive IFRAME_READY so the effects gated on `iframeReady` fire.
+    return { utils, cw, doc, postMessage };
+}
+
+/** Drive IFRAME_READY so the effects gated on `iframeReady` fire. */
+function dispatchIframeReady(cw: Window) {
     act(() => {
         window.dispatchEvent(
             new MessageEvent('message', {
@@ -97,15 +112,20 @@ function renderWithFingerprint(
             }),
         );
     });
+}
+
+function renderWithFingerprint(
+    initial: string | null | undefined,
+): RenderHarness {
+    const { utils, cw, postMessage } = mountIframe({ themeFingerprint: initial });
+    dispatchIframeReady(cw);
 
     return {
         rerender: (fp) =>
             utils.rerender(
                 <Q2PreviewIframe
-                    astJson={
-                        '{"pandoc-api-version":[1,23,0],"meta":{},"blocks":[]}'
-                    }
-                    currentFilePath="/test.qmd"
+                    astJson={BASE_AST_JSON}
+                    currentFilePath={BASE_FILE_PATH}
                     setAst={() => {}}
                     themeFingerprint={fp}
                 />,
@@ -113,6 +133,53 @@ function renderWithFingerprint(
         unmount: utils.unmount,
         postMessage,
     };
+}
+
+/**
+ * Variant of `renderWithFingerprint` for the click-to-editor-scroll row
+ * (U3, 2026-08-21 plan), sharing `mountIframe` rather than forking it.
+ * `renderWithFingerprint` dispatches IFRAME_READY immediately after
+ * mounting and exposes no handle on the iframe element, so there is no
+ * window in which to install a spy before the production listener
+ * registers. This variant instead installs the spy on
+ * `contentDocument.addEventListener` between `mountIframe` and
+ * `dispatchIframeReady`, so it observes the registration call.
+ *
+ * `fixtureHtml`, if given, is injected into the contentDocument via
+ * `open()`/`write()`/`close()` — **before** the spy is installed and
+ * IFRAME_READY is dispatched. Two reasons, not one:
+ *  - `Q2PreviewIframe`'s real `<iframe src="q2-preview.html">` never
+ *    completes navigation under jsdom's default (no external resource
+ *    loading), so `contentDocument.body` stays `null` forever; directly
+ *    assigning `.body.innerHTML` throws. `open()/write()/close()` is the
+ *    idiom this package already uses for the same constraint elsewhere
+ *    (`iframePostProcessor.integration.test.ts`'s `makeIframe()`).
+ *  - Building the fixture first, then installing the spy, then
+ *    dispatching IFRAME_READY keeps the ordering independent of whether
+ *    `open()` would clear document listeners per spec (jsdom happens not
+ *    to enforce that, but a test should not depend on it deviating).
+ */
+function renderWithClickListenerSpy(
+    onClickAtLine?: (line: number) => void,
+    fixtureHtml?: string,
+): {
+    doc: Document;
+    win: Window;
+    addEventListenerSpy: ReturnType<typeof vi.spyOn>;
+    unmount: () => void;
+} {
+    const { utils, cw, doc } = mountIframe({ onClickAtLine });
+
+    if (fixtureHtml !== undefined) {
+        doc.open();
+        doc.write(fixtureHtml);
+        doc.close();
+    }
+
+    const addEventListenerSpy = vi.spyOn(doc, 'addEventListener');
+    dispatchIframeReady(cw);
+
+    return { doc, win: cw, addEventListenerSpy, unmount: utils.unmount };
 }
 
 function themePosts(postMessage: ReturnType<typeof vi.fn>) {
@@ -293,5 +360,45 @@ describe('Q2PreviewIframe theme blob-URL lifecycle', () => {
         const revokesBefore = revokeUrlSpy.mock.calls.length;
         harness.unmount();
         expect(revokeUrlSpy.mock.calls.length).toBe(revokesBefore);
+    });
+});
+
+describe('Q2PreviewIframe click-to-editor-scroll listener registration', () => {
+    test('U3: registers a capture-phase pointerup listener and forwards the resolved line via onClickAtLine', () => {
+        const onClickAtLine = vi.fn();
+        // Fixture built via open()/write()/close() (not `doc.body.innerHTML =`)
+        // — `Q2PreviewIframe`'s real `src`-bearing iframe never completes
+        // navigation under jsdom, so `contentDocument.body` stays null and a
+        // direct innerHTML assignment throws. See `renderWithClickListenerSpy`.
+        const { doc, win, addEventListenerSpy, unmount } = renderWithClickListenerSpy(
+            onClickAtLine,
+            '<p data-loc="0:12:1-14:20"><em id="t">x</em></p>',
+        );
+
+        // Assertion 1 (mandatory — the row's real binding). jsdom keeps
+        // propagating an event through a detached target regardless of
+        // listener phase, so a *bubble*-phase pointerup listener would
+        // satisfy assertion 2 below just as well. Only the exact
+        // registration tuple discriminates capture from bubble at this
+        // tier; do not weaken this to `toHaveBeenCalledWith('pointerup',
+        // expect.anything())`.
+        const pointerUpCalls = addEventListenerSpy.mock.calls.filter(
+            (call: unknown[]) => call[0] === 'pointerup',
+        );
+        expect(pointerUpCalls).toHaveLength(1);
+        expect(typeof pointerUpCalls[0][1]).toBe('function');
+        expect(pointerUpCalls[0][2]).toBe(true);
+
+        // Assertion 2: dispatching pointerup on the located node built above
+        // (same 0:12:1-14:20 <p> as U1a) forwards its startLine to onClickAtLine.
+        const target = doc.getElementById('t')!;
+        const PointerEventCtor = (win as unknown as { PointerEvent?: typeof PointerEvent })
+            .PointerEvent ?? Event;
+        act(() => {
+            target.dispatchEvent(new PointerEventCtor('pointerup', { bubbles: true }));
+        });
+        expect(onClickAtLine).toHaveBeenCalledWith(12);
+
+        unmount();
     });
 });

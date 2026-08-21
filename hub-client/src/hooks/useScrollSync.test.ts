@@ -29,6 +29,10 @@ function makeEditor(line: number) {
     getScrollHeight: () => 1000,
     getLayoutInfo: () => ({ height: 400 }),
     setScrollTop: vi.fn(),
+    revealLineInCenterIfOutsideViewport: vi.fn(),
+    setPosition: vi.fn(),
+    setSelection: vi.fn(),
+    focus: vi.fn(),
     onDidChangeCursorPosition: (cb: () => void) => {
       cursorCb = cb;
       return { dispose: vi.fn() };
@@ -63,7 +67,7 @@ function setup(opts: { line: number; focus: boolean; deferToRender?: boolean }) 
     }),
   );
 
-  return { result, scrollPreviewToLine, fireCursorChange, fireContentChange, editorHasFocusRef };
+  return { result, scrollPreviewToLine, fireCursorChange, fireContentChange, editorHasFocusRef, editor };
 }
 
 describe('useScrollSync deferred editor→preview scroll', () => {
@@ -129,5 +133,106 @@ describe('useScrollSync deferred editor→preview scroll', () => {
       setup({ line: 20, focus: true, deferToRender: false });
     act(() => { fireCursorChange(); vi.advanceTimersByTime(50); });
     expect(scrollPreviewToLine).toHaveBeenCalledExactlyOnceWith(20);
+  });
+});
+
+/**
+ * `revealEditorLine` (pinned API, not yet implemented — see Phase 2 of
+ * claude-notes/plans/2026-08-21-preview-click-to-editor-scroll.md).
+ *
+ * Preview→editor click reveal, deliberately narrower than the existing
+ * `useSelectionSync` preview→editor sync: in q2-preview the click opens an
+ * inline editor *inside* the preview, so pulling focus to Monaco (what
+ * `setSelection` + `revealRangeInCenter` + `focus()` do) would break the
+ * gesture the same click just started. `revealEditorLine` must call
+ * `editor.revealLineInCenterIfOutsideViewport(line)` and nothing else: no
+ * `setPosition` (which would also fire `onDidChangeCursorPosition` and
+ * bounce back into editor→preview sync), no `setSelection`, no `focus()`,
+ * no debounce, no focus gate.
+ *
+ * `result.current.revealEditorLine` does not exist yet, so every row in this
+ * block is expected to fail with "is not a function" until Phase 2 adds it.
+ * These rows are frozen once green (G2 in the task brief): Phase 2 must make
+ * them pass by writing `revealEditorLine`, never by editing these assertions.
+ */
+describe('useScrollSync revealEditorLine (RED — pinned API, Phase 2 not yet implemented)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('U2a: calls revealLineInCenterIfOutsideViewport with the given line', () => {
+    const { result, editor } = setup({ line: 1, focus: false });
+    act(() => {
+      result.current.revealEditorLine(73);
+    });
+    expect(editor.revealLineInCenterIfOutsideViewport).toHaveBeenCalledExactlyOnceWith(73);
+  });
+
+  it('U2b: never moves the cursor, changes the selection, or steals focus', () => {
+    const { result, editor } = setup({ line: 1, focus: false });
+    act(() => {
+      result.current.revealEditorLine(73);
+    });
+    expect(editor.setPosition).not.toHaveBeenCalled();
+    expect(editor.setSelection).not.toHaveBeenCalled();
+    expect(editor.focus).not.toHaveBeenCalled();
+  });
+
+  it('U2c: still reveals when the editor has focus (not routed through the focus-gated syncPreviewToEditor)', () => {
+    // focus: true is the point of this row. syncPreviewToEditor's first
+    // statement is `if (... || editorHasFocusRef.current) return` — an
+    // implementation that (wrongly) delegates revealEditorLine to that
+    // function would silently no-op here. With the convenient focus: false
+    // default this row would pass even for that broken implementation.
+    const { result, editor } = setup({ line: 1, focus: true });
+    act(() => {
+      result.current.revealEditorLine(73);
+    });
+    expect(editor.revealLineInCenterIfOutsideViewport).toHaveBeenCalledExactlyOnceWith(73);
+  });
+
+  it('U2d: reveals immediately, with no debounce', () => {
+    // Deliberately no vi.advanceTimersByTime anywhere in this test. The
+    // suite runs under vi.useFakeTimers(), so an implementation that wraps
+    // the reveal in the existing 50ms editorDebounceRef timer would leave
+    // this assertion unmet until a timer advance — asserting before any
+    // advance is what discriminates a debounced call from an immediate one.
+    const { result, editor } = setup({ line: 1, focus: false });
+    act(() => {
+      result.current.revealEditorLine(73);
+    });
+    expect(editor.revealLineInCenterIfOutsideViewport).toHaveBeenCalledExactlyOnceWith(73);
+  });
+});
+
+/**
+ * U4 — regression cover for the pre-existing preview→editor ratio path
+ * (`syncPreviewToEditor`, reached via `handlePreviewScroll`). Nothing in the
+ * suite exercised this before; the upcoming revealEditorLine refactor touches
+ * this function's neighbourhood and could silently delete its body.
+ */
+describe('useScrollSync handlePreviewScroll (pre-existing preview→editor ratio path)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('U4: applies the preview scroll ratio to the editor scrollTop, smoothly, when unfocused', () => {
+    const { result, editor } = setup({ line: 1, focus: false });
+    act(() => {
+      result.current.handlePreviewScroll();
+      vi.advanceTimersByTime(50);
+    });
+    // getPreviewScrollRatio() fakes 0.5; getScrollHeight() is 1000 and
+    // getLayoutInfo().height is 400, so 0.5 * (1000 - 400) = 300. The `1` is
+    // Monaco's ScrollType.Smooth — a bare toHaveBeenCalledWith(300) would
+    // pass on a call with no second argument at all, so assert both.
+    expect(editor.setScrollTop).toHaveBeenCalledExactlyOnceWith(300, 1);
+  });
+
+  it('U4: does not scroll the editor when it has focus (feedback-loop guard)', () => {
+    const { result, editor } = setup({ line: 1, focus: true });
+    act(() => {
+      result.current.handlePreviewScroll();
+      vi.advanceTimersByTime(50);
+    });
+    expect(editor.setScrollTop).not.toHaveBeenCalled();
   });
 });

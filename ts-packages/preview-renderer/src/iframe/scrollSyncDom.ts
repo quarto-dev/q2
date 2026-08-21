@@ -89,6 +89,52 @@ export function findElementForLine(
 }
 
 /**
+ * Preview→editor click sync (click-to-editor-scroll, bd-9kzfi follow-up):
+ * resolve a `pointerup` event target to the source line it should reveal in
+ * the editor, or `null` when the click should be inert.
+ *
+ * Walks up from `target` via `closest`, so the innermost located ancestor
+ * wins (never a document-wide `querySelector`, which would ignore the
+ * target entirely). Three cases return `null` rather than a line:
+ *
+ *  - the target is inside `#q2-active-edit-region` — q2-preview's block
+ *    activation replaces the clicked subtree with this synthetic region on
+ *    the same `pointerup`; a caret move inside an already-open editor must
+ *    not yank the editor to the enclosing block.
+ *  - the nearest `[data-loc]` ancestor is a `<section>` — sections carry a
+ *    `data-loc` too (`SectionizeTransform` is unconditional), so
+ *    inter-block whitespace or an edit region nested inside a section would
+ *    otherwise resolve to the section's own (usually distant) line.
+ *  - there is no `[data-loc]` ancestor at all.
+ *
+ * Narrows with a duck-typed `.closest` check rather than `instanceof
+ * Element`: in production this runs in the *parent* frame's realm against a
+ * `pointerup` target from the sandboxed *iframe*'s realm, and each realm has
+ * its own `Element` constructor — `target instanceof Element` (the parent's
+ * `Element`) is always false for an iframe-realm node, even a real `<p>`.
+ * `closest` is realm-agnostic duck typing that still excludes `Document`,
+ * `Window`, and other non-Element `EventTarget`s (none of which have it).
+ */
+export function lineForClickTarget(target: EventTarget | null): number | null {
+    if (target === null || typeof (target as { closest?: unknown }).closest !== 'function') {
+        return null;
+    }
+    const el = target as Element;
+    if (el.closest('#q2-active-edit-region')) return null;
+
+    const locEl = el.closest('[data-loc]');
+    if (!locEl) return null;
+    if (locEl.tagName.toLowerCase() === 'section') return null;
+
+    const dataLoc = locEl.getAttribute('data-loc');
+    if (!dataLoc) return null;
+    const loc = parseDataLoc(dataLoc);
+    if (!loc) return null;
+
+    return loc.startLine;
+}
+
+/**
  * Check if an element is fully visible within the iframe viewport.
  * `win` is the iframe's own `contentWindow` (so `innerHeight` is the
  * preview viewport, not the host page's).
