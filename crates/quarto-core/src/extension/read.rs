@@ -563,7 +563,7 @@ pub(crate) fn parse_static_language_claim(
                 // fallback key: object form is `{ priority?: int }`, kind is implicit Fallback
                 let priority = cv
                     .get("priority")
-                    .and_then(|v| v.as_int())
+                    .and_then(|v| v.as_int_lenient())
                     .map(|n| n as i32);
                 Some(StaticLanguageClaim {
                     kind: ClaimKind::Fallback,
@@ -581,7 +581,7 @@ pub(crate) fn parse_static_language_claim(
                 };
                 let priority = cv
                     .get("priority")
-                    .and_then(|v| v.as_int())
+                    .and_then(|v| v.as_int_lenient())
                     .map(|n| n as i32);
                 let when_class = cv
                     .get("whenClass")
@@ -1987,6 +1987,39 @@ contributes:
     }
 
     /// Shorthand claim values: `true` → Primary(None), number → Primary(Some(n)),
+    /// bd-yjsz6hdu Phase 3: a quoted `priority: "2"` arrives as a
+    /// string scalar, which the strict `as_int()` missed — the
+    /// priority silently dropped to `None`.
+    #[test]
+    fn test_engine_claim_priority_accepts_quoted_integer() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims:
+        sql:
+          kind: interop
+          priority: "2"
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims, .. } => {
+                let sql = &claims.as_ref().unwrap().get("sql").unwrap()[0];
+                assert_eq!(sql.kind, ClaimKind::Interop);
+                assert_eq!(sql.priority, Some(2));
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
     /// `fallback: { priority: 0 }` → Fallback entry. Each still parses to a
     /// 1-element Vec (4c0 back-compat for the scalar/single-object shape).
     #[test]
