@@ -25,6 +25,8 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-08-21
 
+- [`167dd4d5a`](https://github.com/quarto-dev/q2/commits/167dd4d5a): Clicking a block in the q2-preview pane now scrolls the source editor to that block, instead of leaving the editor where it was.
+- [`6187ea9f5`](https://github.com/quarto-dev/q2/commits/6187ea9f5): Fix a race where clicking a block in q2-preview correctly scrolled the source editor to that block, then had the scroll silently overwritten a few ms later by an unrelated preview scroll (e.g. a rich-text editor's toolbar mounting).
 - [`837de60b`](https://github.com/quarto-dev/q2/commits/837de60b): Fix deleted projects reappearing on the next page load — deleting a project now records a tombstone that syncs with the project set, so the on-load reconciler purges the stale local copy instead of resurrecting it, on every browser.
 
 ### 2026-08-19

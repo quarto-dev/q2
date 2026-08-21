@@ -275,7 +275,7 @@ is a Phase 2 checklist item — not a later cleanup, and not a deletion of E1.
 | Every other pointerup in the iframe also reaches the capture listener — `EditToolbar` buttons, links, comment UI, breadcrumb crumbs | **Covered by construction, not by a row:** those all sit inside either the active edit region (U1c) or a located block whose line is the right answer anyway. **Accepted-untested** for the toolbar/comment chrome specifically; revisit if a stray reveal shows up in the live pass |
 | Keyboard activation (roving Enter/Space) and touch hold-to-edit produce no `pointerup`, so they get no reveal | **Accepted-untested, and a known behaviour gap of this design.** Covering it needs the deferred `EDIT_CARET`-style postMessage (which the iframe app must originate). Not silently omitted — if we want it now, the design changes from a parent-side DOM listener to a message |
 | `format: revealjs` also routes through `Q2PreviewIframe` (`ReactRenderer`'s `format === 'q2-preview' \|\| 'revealjs'` branch), so clicking a slide will now reveal lines | **Accepted-untested.** Decks have their own cursor↔slide sync (`SET_SLIDE`/`SLIDE_CHANGED`); a line reveal is additive. Flagged for follow-up if it fights slide navigation |
-| Included-file content (foreign `fileId`) | **Phase 4** — inert in Phase 2, then D5. Rows specced there |
+| Included-file content (foreign `fileId`) | **Phase 4 investigation (2026-08-21) found this is NOT inert in Phase 2 as shipped — see the task-7 report** (`.superpowers/sdd/2026-08-21-preview-click-to-editor-scroll/task-7-report.md` §0): it reveals a wrong line. Bugfix (`U1f`/`U1g`) and the D5 enhancement (`U5a`–`c`/`E5`) are specced in Phase 4, follow-up implementation |
 
 ## Running these tests (fresh worktree)
 
@@ -368,13 +368,19 @@ per spec `document.open()` wipes document listeners (jsdom merely happens not to
 implement that). Assertions unchanged.
 
 ### Phase 3 — verify
-- [ ] `npm run test` + `npm run test:integration` in **both** `ts-packages/preview-renderer` and `hub-client`.
-- [ ] `npm run typecheck:tests` (preview-renderer) — `cargo xtask verify` runs it *before* the unit tests, so a harness typing slip fails there first.
-- [ ] `cd hub-client && npm run build:all` (production `tsc -b` is stricter). Full `cargo xtask verify` is **not** required — this change is TypeScript-only.
-- [ ] Playwright spec green.
-- [ ] Fail-on-revert, executed not just documented: (a) capture arg `true` → `false` reddens U3+E2; (b) `revealEditorLine` → `syncPreviewToEditor` reddens U2c+E2; (c) delete the active-region guard reddens U1c+E4.
-- [ ] Live browser session: click blocks top/middle/bottom, click inside an open editor, confirm no oscillation with editor→preview sync.
-- [ ] `hub-client/changelog.md` entry (two-commit workflow).
+- [x] `npm run test` + `npm run test:integration` in **both** `ts-packages/preview-renderer` and `hub-client`. (preview-renderer 549 unit / 587 integration; hub-client 986 / 112. One **pre-existing, unrelated** integration failure: `custom-components` `Equation > appends \tag{N}` under the pinned katex 0.18.1 — braid **bd-s36g9dav**, fails identically before and after every change here.)
+- [x] `npm run typecheck:tests` (preview-renderer) — clean.
+- [x] `cd hub-client && npm run build:all` — succeeded (chunk-size warnings only). Full `cargo xtask verify` was **not** required; the change stayed TypeScript-only as planned.
+- [x] Playwright spec green — **5/5** (T1 characterization, T2 reveal, T3 HTML control, T4 D4 guard, T5 no-overwrite).
+- [x] Fail-on-revert, **executed** not just documented — and it found two rows that were not bound. Six hunks (the plan anticipated three; (d)-(f) came from defects found during execution), each reverted individually and restored with `git checkout --`:
+  - (a) capture arg `true` → `false` — U3 reddened. **Playwright T2 did NOT redden** (reproduced twice). See correction 1 below: the plan's claim that dropping the capture argument reddens E2 is false.
+  - (b) `revealEditorLine` → `syncPreviewToEditor` — U2c + T2 reddened. Bound.
+  - (c) delete the active-region guard — **neither U1c nor T4 reddened** (reproduced twice). Both rows were vacuous; both fixed, and each is now proven to redden in both directions.
+  - (d) duck-typed guard → `instanceof Element` — U1f reddened, and *only* U1f among the 17 jsdom rows, which is exactly why U1f exists.
+  - (e) remove the `isSyncingRef` bracketing — U2e + T5 reddened. Bound.
+  - (f) remove the `fileId !== 0` guard — U1g reddened, and only U1g (U1h, the same-file control, stayed green, proving the guard is not over-broad).
+- [x] Live browser session against a real local-prod hub, on a 292-line multi-element document: top/middle/bottom clicks all revealed the clicked block's line; a caret move inside an open editor left the editor unmoved; preview `scrollY` held constant across click→cursor-move→click (no oscillation). An element-kind sweep of nine block kinds passed 8/9 — **the one failure was a real bug and is fixed below**.
+- [x] `hub-client/changelog.md` entry (two-commit workflow) — `ed6462682` for `6187ea9f5`.
 
 ### Phase 1 execution notes (2026-08-21)
 
@@ -403,23 +409,194 @@ because its `node_modules` is stale at 0.17.0. The pin arrived via Snyk PR #571
 (`669ad7534`), which did not update the assertion. Treat that row as an expected
 baseline failure while working in a correctly-installed tree.
 
+### Corrections to this plan, found by executing it (2026-08-21)
+
+Three of this plan's own stated premises turned out to be false. Each had already
+caused a real defect or a vacuous test, so they are recorded here: a wrong premise
+left in place causes the next one.
+
+**1. "Dropping the capture argument reddens E2." False.** Reverting the capture flag
+reddens U3 but leaves Playwright T2 green (reproduced twice). The app's own
+bubble-phase handler runs first and detaches the clicked node — but a *detached*
+`<p>` still carries its own `data-loc`, and `closest('[data-loc]')` called on a
+detached node finds itself, so the line still resolves. Capture phase remains the
+right choice (it guarantees the target is attached, which matters when the resolved
+*ancestor* rather than the target is what gets replaced), and **U3's
+registration-tuple assertion is the only thing binding it** — do not delete that
+assertion on the theory that the browser tier covers it.
+
+**2. "The enclosing `<section>` carries a `data-loc`." False — and this was the whole
+stated basis for D4.** The spread *is* unconditional, but its input never exists:
+
+- `dataLocProps` (`framework/sourceLoc.ts`) returns `{}` for any node with no `l`.
+- `crates/pampa/src/transforms/sectionize.rs` builds section Divs with
+  `SourceInfo::Generated { by: By::sectionize(), from: smallvec![] }`.
+- `quarto-source-map`'s own docs name **"sectionize wrappers"** as the canonical
+  example of pure synthesis with no source-side preimage, and its `map_offset`
+  returns `None` for `Generated` unconditionally.
+- so `resolve_location` never emits an `l` for a section, and **no `<section>` in a
+  rendered q2-preview document ever carries `data-loc`.** Confirmed both from that
+  chain and by dumping a real ancestor chain in the live app
+  (`section#callouts[data-loc=null]`).
+
+Consequence: `lineForClickTarget`'s `<section>` null case is **dead code under
+q2-preview today**, and U1d exercises a situation that cannot currently occur. The
+guard is kept as defence-in-depth — one comparison, and correct if a future change
+ever gives sections a resolvable location — but read the D4 rationale as "the
+enclosing *located wrapper*", not "the section".
+
+The hazard D4 really guards is a block inside a located **non-section** wrapper: a
+fenced div (`Div.tsx` spreads `dataLocProps` on its plain-`<div>` branch too), a
+column, and so on. **Callouts are not such a wrapper** — `Callout.tsx` never spreads
+`dataLocProps` at all. This is why U1c's original fixture was vacuous: it nested the
+edit region directly inside a located `<section>`, so with the active-region guard
+deleted the *separate* section guard returned `null` anyway and the row could not
+tell the two implementations apart. Measured:
+
+```
+edit region inside a located <section>  ->  null   (old fixture: passes with the guard DELETED)
+edit region inside a located <div>      ->  20     (wrong line: discriminates)
+```
+
+A second, independent vacuity hazard surfaced while binding T4:
+`revealLineInCenterIfOutsideViewport` is a **no-op when the target line is already
+visible**, and a wrapper's start line sits only 1-3 lines from its child's — so
+without first scrolling Monaco away, a missing guard's reveal would also no-op and
+T4 would pass either way. T4 therefore scrolls the editor pane (a host-frame action;
+the edit region lives in the sandboxed iframe, so it cannot close it) before the
+final caret click.
+
+**3. "Phase 2 leaves foreign-`fileId` clicks inert." False — they were wrong, not
+inert.** `lineForClickTarget` parsed the `fileId` and never checked it, so clicking
+included content revealed the *included* file's line number as a line in the
+currently-open file: a real, editable, wrong line. Fixed on this branch with a fourth
+null case (`fileId !== 0`), rows U1g/U1h. D5 proper — revealing the
+`{{< include … >}}` shortcode's own line — remains deferred follow-up.
+
+### Two defects the automated suite could not have caught
+
+Both were found by this plan's own mandated live-browser step, and both are the
+argument for keeping it.
+
+**The cross-realm guard** (documented above under Phase 2) — all thirteen jsdom rows
+then existing passed against a guard that returned `null` for every real click.
+
+**The reveal-then-overwrite race.** `revealEditorLine` did not set `isSyncingRef`, and
+by design it never takes focus — so *both* of `syncPreviewToEditor`'s feedback-loop
+guards were unarmed after a reveal, and any real preview scroll within 50 ms
+overwrote the correct reveal with a scroll-ratio-derived position. Measured: Monaco
+correctly at 149-189 (containing the clicked line 171) at t=1 ms; a genuine 6 px
+preview scroll at t=6 ms as the rich-text toolbar mounted and reflowed the page;
+Monaco silently at 174-211 by t=83 ms, with no second `pointerup`. **Not
+callout-specific** — any post-click reflow can do this to any block. Fixed by
+bracketing the reveal with the file's existing `isSyncingRef`/300 ms idiom; bound by
+U2e (which also asserts the suppression is *time-bounded*, so the fix cannot degrade
+into disabling ratio sync outright) and by T5.
+
+T5's binding depends on a post-activation reflow whose mechanism is documented as not
+fully understood, so T5 asserts as an explicit precondition that a preview `scroll`
+event actually fired. **If T5 ever fails with a scroll count of 0, that is the
+fixture precondition breaking, not a product regression** — re-derive the fixture, do
+not delete the row.
+
+### Row inventory as shipped
+
+| Rows | Tier | Binds |
+|---|---|---|
+| U1a, U1b | jsdom | innermost-wins resolution; no located ancestor |
+| U1c | jsdom | the active-region guard (fixture must nest the region in a located **non-section** wrapper) |
+| U1d | jsdom | the `<section>` guard — **synthetic; cannot occur in production today** (correction 2) |
+| U1e | jsdom | non-Element targets don't throw |
+| U1f | jsdom | the **cross-realm** duck-typed narrowing (reverting it reddens only this row) |
+| U1g, U1h | jsdom | foreign `fileId` rejected; same-file control |
+| U2a-U2d | jsdom | reveal is scroll-only, not focus-gated, not debounced |
+| U2e | jsdom | reveal survives a following preview scroll, and suppression is time-bounded |
+| U3 | jsdom | the capture-phase registration tuple — **the only binding for capture** (correction 1) |
+| U4 | jsdom | the pre-existing preview-scroll→editor ratio path |
+| T1 | Chromium | characterization: Chromium delivers no `click` when the `pointerup` target was detached |
+| T2 | Chromium | the real reveal, provably not satisfiable by ratio matching |
+| T3 | Chromium | HTML-preview control (D3: that path is untouched) |
+| T4 | Chromium | the active-region guard in the real app |
+| T5 | Chromium | no reveal-then-overwrite, with a self-check that the reflow really happened |
+
 ### Phase 4 — included content (D5), sequenced after Phase 2
-Phase 2 leaves foreign-`fileId` clicks **inert** (no reveal), so the primary fix
-is not blocked. Then:
-- [ ] **Investigate** whether the include splice point is recoverable. What is
-      known: the JSON wire already carries `astContext.files[]`
-      (`fileId` → `name`) and the `p` source-info pool
-      (`crates/pampa/src/writers/json.rs`); `include_expansion.rs` splices with
-      `blocks.splice(i..i+1, children)` after `remap_file_ids`, so included
-      blocks carry the *included* file's spans and **nothing retains the
-      shortcode's own span** in the parent. So either (a) stamp the splice point
-      producer-side (Rust + wire change), or (b) client-side: `files[f].name` →
-      locate the matching `{{< include … >}}` line in the current source.
-- [ ] Decide (a) vs (b) once the investigation lands. (b) is heuristic — a file
-      included twice is ambiguous, and a *nested* include is not referenced from
-      the current file at all. Those cases need a stated fallback (inert).
-- [ ] Rows: `U1f` (foreign `fileId` → not the raw line), plus a browser row for
-      the shortcode reveal. Neither can be pinned before the decision above.
+
+**Investigation (task-7, 2026-08-21) — finding, decision, and pinned rows.**
+Full writeup: `.superpowers/sdd/2026-08-21-preview-click-to-editor-scroll/task-7-report.md`.
+
+- [x] **§0 — correction to the premise above: today's behaviour is NOT
+      inert, it is wrong.** `lineForClickTarget` parses `fileId` out of
+      `data-loc` (`parseDataLoc`) but never reads it — it returns
+      `loc.startLine` unconditionally, and no caller
+      (`Q2PreviewIframe.tsx`'s `handlePointerUp`, `useScrollSync.ts`'s
+      `revealEditorLine`) checks `fileId` either. A click on included
+      content reveals the included file's own line number *as if it were a
+      line in the currently open file* — a real, editable, but **wrong**
+      line, not "nothing." This is a live defect in code Phase 2 already
+      shipped, independent of D5, and is fixable with a pure TS change (no
+      wire change): reject when `fileId !== 0` (the rendered document is
+      always `FileId(0)` — confirmed via `ParseDocumentStage` always running
+      before `IncludeExpansionStage`, and `IncludeExpansionStage` only
+      allocating fresh ids for spliced-in files). **Flagging prominently per
+      the brief — whether to fix this ahead of / independent of the D5
+      heuristic below is Gordon's call.**
+- [x] **Investigate** whether the include splice point is recoverable.
+      Confirmed via full read of `include_expansion.rs`:
+      `blocks.splice(i..i+1, children)` (line 412) drops the shortcode's own
+      block with no trace; spliced blocks carry only the included file's
+      `Original` `SourceInfo` (remapped `FileId`). Two routes assessed in
+      full in the report:
+      - **(a) producer-side.** The `SourceInfo::Generated{by, from}` +
+        `Anchor{role: Invocation}` machinery already exists and is used
+        elsewhere (revealjs transforms, programmatic config) — `"include"`
+        is even a documented `By` kind already. But it's a *replacement*
+        variant, and spliced nodes must keep their `Original` info (the
+        stage's own heading-id dedup and cache invalidation key off
+        `root_file_id()`). So (a) needs either a new field alongside the
+        existing location or a per-node rewrite pass added to
+        `IncludeExpansionStage` — a real schema change to a *published,
+        externalized* crate (`quarto-source-map`) plus its JSON writer plus
+        the TS hand-mirror. Nested includes need a multi-hop anchor
+        chain-walk on top of that. Out of scope for a TS-only bugfix branch
+        (Phase 3), and not obviously smaller even as its own project.
+      - **(b) client-side.** `files[fileId].name` (the *resolved* path) →
+        scan the current file's source text for a `{{< include … >}}` line
+        whose raw path resolves (mirroring `resolve_include_target`'s
+        leading-`/`-is-project-root rule) to the same name. No wire change;
+        cost is duplicating that one path-resolution rule in TS.
+- [x] **Decision: route (b).** Reasoning (full version in the report §2):
+      Phase 3 already commits this branch to TS-only/no-wire-change for good
+      reason; (a) is a schema-level decision with cross-crate blast radius,
+      not a small patch, and even fully built still needs the same
+      "resolve to the nearest current-file anchor" logic for nested includes
+      that (b) needs anyway. (b)'s heuristic failure modes all degrade to
+      **inert** — never to a wrong reveal — which is exactly the property
+      that made D4's guards acceptable in Phase 2. Stated fallbacks (§1 of
+      the report):
+      - **File included twice in the current file** → ambiguous which
+        invocation → **inert**.
+      - **Nested include** (not named in the current file's own source at
+        all) → **inert**. (A chain-walk to the nearest ancestor invocation
+        that *is* in the current file is a plausible future enhancement,
+        needing either route-(a)-style provenance or the render's
+        file-inclusion graph wired to the client — explicitly deferred, not
+        silently dropped.)
+      - **Code-fence includes** (`{{< include app.py >}}` spliced into
+        fence *text*) already work correctly by construction — the fence's
+        own `data-loc` is unaffected by what's inside its text, so no
+        fallback is needed there.
+- [x] **Pinned rows** (full table + rationale in the report §3): `U1f`/`U1g`
+      (jsdom, `lineForClickTarget` extended with a `currentFileId` param —
+      foreign fileId → `null`, same-file fileId unaffected), `U5a`/`U5b`/`U5c`
+      (the route-(b) scan resolver: single match resolves, duplicate match is
+      ambiguous → `null`, nested include has no textual match → `null`), and
+      `E5` (Playwright: click included content, assert the editor stays on
+      the current file and reveals the include shortcode's line).
+- [ ] **Follow-up implementation** (not done in this task — investigation
+      only, per the brief): land the §0 bugfix (foreign `fileId` → `null`,
+      unconditionally) and the route-(b) scan enhancement, in that order;
+      write `U1f`/`U1g` RED before the bugfix, `U5a`–`c`/`E5` RED before the
+      enhancement.
 
 ## Housekeeping
 - [x] Point `claude-notes/plans/CURRENT.md` at this plan.

@@ -258,8 +258,20 @@ export function useScrollSync({
   // Preview→editor click sync (click-to-editor-scroll): reveal-only, not
   // routed through syncPreviewToEditor — see the UseScrollSyncReturn doc
   // comment for why (D1/D1b in the click-to-editor-scroll plan).
+  //
+  // Bracketed with isSyncingRef the same way flushPendingScroll and
+  // syncPreviewToEditor already bracket their own scroll calls: a click that
+  // activates an inline editor can produce a tiny, real reflow-driven scroll
+  // in the preview a few ms later, which would otherwise reach
+  // syncPreviewToEditor unguarded and overwrite this reveal with a
+  // ratio-derived position ~50ms after it lands correctly (task-9 fix for
+  // the race found in task-8's report).
   const revealEditorLine = useCallback((line: number) => {
+    isSyncingRef.current = true;
     editorRef.current?.revealLineInCenterIfOutsideViewport(line);
+    setTimeout(() => {
+      isSyncingRef.current = false;
+    }, 300);
   }, [editorRef]);
 
   // The preview iframe committed a new AST: fresh data-loc DOM is in place,
