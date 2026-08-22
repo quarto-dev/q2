@@ -975,9 +975,15 @@ fn test_div_kv_keys_have_tight_source() {
     // The regression: this one absorbed the space before it.
     assert_source_matches(input, second_key, "custom-key");
 
-    // Values keep their quotes: P1 includes a node's own delimiters.
-    assert_source_matches(input, first_value, "\"42\"");
-    assert_source_matches(input, second_value, "\"test\"");
+    // Values carry *content* provenance, so the range covers the decoded
+    // value and excludes the surrounding quotes (bd-mxa44voa). A value's
+    // decoded text can no longer be addressed by a raw node range once an
+    // escape has collapsed, so the value slot is a SourceInfo over the
+    // content rather than over the node. Quote-trimming and the escape
+    // cases are pinned in detail by annotated-qmd's content-provenance
+    // test; the keys above are still raw node ranges.
+    assert_source_matches(input, first_value, "42");
+    assert_source_matches(input, second_value, "test");
 }
 
 #[test]

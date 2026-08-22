@@ -31,7 +31,11 @@ pub fn process_target(
         },
     };
     let mut url_range = empty_range.clone();
-    let mut title_range = empty_range.clone();
+    // The title's *content* provenance (quotes stripped, escapes
+    // collapsed). Only read when `title` is non-empty, so the placeholder
+    // never reaches a consumer.
+    let mut title_source =
+        quarto_source_map::SourceInfo::from_range(quarto_source_map::FileId(0), empty_range);
 
     for (node_name, child) in children {
         match node_name.as_str() {
@@ -42,9 +46,9 @@ pub fn process_target(
                 }
             }
             "title" => {
-                if let PandocNativeIntermediate::IntermediateBaseText(text, r) = child {
+                if let PandocNativeIntermediate::IntermediateDecodedText(text, source) = child {
                     title = text;
-                    title_range = r;
+                    title_source = source;
                 }
             }
             "](" | ")" => {} // Ignore delimiters
@@ -52,7 +56,7 @@ pub fn process_target(
         }
     }
 
-    PandocNativeIntermediate::IntermediateTarget(url, title, url_range, title_range)
+    PandocNativeIntermediate::IntermediateTarget(url, title, url_range, title_source)
 }
 
 /// Process content node (context-aware for code_span vs links/spans/images)
@@ -101,11 +105,12 @@ pub fn process_pandoc_span(
                     url,
                     title,
                     url_range,
-                    title_range,
+                    title_source,
                 ) = child
                 {
                     target = Some((url.clone(), title.clone()));
-                    // Populate target_source with the ranges
+                    // The url slot is still a raw range (no decoding);
+                    // the title slot already carries content provenance.
                     target_source = TargetSourceInfo {
                         url: if !url.is_empty() {
                             Some(crate::pandoc::location::range_to_source_info_with_context(
@@ -115,10 +120,7 @@ pub fn process_pandoc_span(
                             None
                         },
                         title: if !title.is_empty() {
-                            Some(crate::pandoc::location::range_to_source_info_with_context(
-                                &title_range,
-                                context,
-                            ))
+                            Some(title_source)
                         } else {
                             None
                         },
@@ -256,11 +258,12 @@ pub fn process_pandoc_image(
                     url,
                     title,
                     url_range,
-                    title_range,
+                    title_source,
                 ) = child
                 {
                     target = Some((url.clone(), title.clone()));
-                    // Populate target_source with the ranges
+                    // The url slot is still a raw range (no decoding);
+                    // the title slot already carries content provenance.
                     target_source = TargetSourceInfo {
                         url: if !url.is_empty() {
                             Some(crate::pandoc::location::range_to_source_info_with_context(
@@ -270,10 +273,7 @@ pub fn process_pandoc_image(
                             None
                         },
                         title: if !title.is_empty() {
-                            Some(crate::pandoc::location::range_to_source_info_with_context(
-                                &title_range,
-                                context,
-                            ))
+                            Some(title_source)
                         } else {
                             None
                         },

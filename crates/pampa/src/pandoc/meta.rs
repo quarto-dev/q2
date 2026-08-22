@@ -339,10 +339,32 @@ fn yaml_to_config_value_at(
 
     // Handle scalar values
     let source_info = yaml.source_info.clone();
+    // Provenance of the *decoded* content, when derivation ran (see
+    // `YamlWithSourceInfo::content_source_info`'s contract). `source_info`
+    // above describes the raw source text — quote delimiters, per-line
+    // block-scalar indentation — so pairing a decoded string with it and
+    // doing offset arithmetic drifts by whatever decoding stripped. This is
+    // the base to use instead, everywhere a decoded string is re-parsed or
+    // stored for later re-parsing.
+    let content_source_info = yaml.content_source_info().cloned();
     let yaml_value = yaml.yaml;
+    // Fallback to `source_info` when no content provenance is available
+    // (non-scalar — unreachable here since compound types returned above —
+    // hand-built node, unresolved alias, or a `quarto-yaml` desync).
+    let markdown_base = content_source_info.as_ref().unwrap_or(&source_info);
 
     match yaml_value {
         Yaml::String(s) => {
+            // q2 has already established this node is a string scalar, so a
+            // `None` here is a desync report, not a silent fallback (see
+            // `content_provenance_desync_warning`'s doc comment). Mirrors
+            // `quarto_config::convert::content_provenance_desync_warning` —
+            // the two must stay in lockstep for the same reason
+            // `scalar_string_with_content_provenance` does.
+            if content_source_info.is_none() {
+                diagnostics.add(content_provenance_desync_warning(&source_info));
+            }
+
             // Determine how to interpret the string based on tag and context
             let value = match interpretation {
                 // Explicit tags always override context
@@ -351,11 +373,11 @@ fn yaml_to_config_value_at(
                 Some(quarto_config::Interpretation::Expr) => ConfigValueKind::Expr(s),
                 Some(quarto_config::Interpretation::PlainString) => {
                     // !str: Keep as literal scalar
-                    ConfigValueKind::scalar(Yaml::String(s))
+                    scalar_string_with_content_provenance(s, &content_source_info)
                 }
                 Some(quarto_config::Interpretation::Markdown) => {
                     // !md: Parse as markdown
-                    parse_yaml_string_as_markdown_to_config(&s, &source_info, true, diagnostics)
+                    parse_yaml_string_as_markdown_to_config(&s, markdown_base, true, diagnostics)
                 }
                 None => {
                     // Check if there are unknown tag components to preserve
@@ -396,12 +418,12 @@ fn yaml_to_config_value_at(
                             quarto_config::Interpretation::Glob => ConfigValueKind::Glob(s),
                             quarto_config::Interpretation::Expr => ConfigValueKind::Expr(s),
                             quarto_config::Interpretation::PlainString => {
-                                ConfigValueKind::scalar(Yaml::String(s))
+                                scalar_string_with_content_provenance(s, &content_source_info)
                             }
                             quarto_config::Interpretation::Markdown => {
                                 parse_yaml_string_as_markdown_to_config(
                                     &s,
-                                    &source_info,
+                                    markdown_base,
                                     true,
                                     diagnostics,
                                 )
@@ -414,14 +436,14 @@ fn yaml_to_config_value_at(
                                 // Document metadata: parse as markdown
                                 parse_yaml_string_as_markdown_to_config(
                                     &s,
-                                    &source_info,
+                                    markdown_base,
                                     false,
                                     diagnostics,
                                 )
                             }
                             InterpretationContext::ProjectConfig => {
                                 // Project config: keep literal
-                                ConfigValueKind::scalar(Yaml::String(s))
+                                scalar_string_with_content_provenance(s, &content_source_info)
                             }
                         }
                     }
@@ -479,6 +501,67 @@ fn yaml_to_config_value_at(
             unreachable!("Array/Hash should be handled by is_array/is_hash checks")
         }
     }
+}
+
+/// Build a `Scalar(String)` for a literal (non-markdown) string value,
+/// carrying the decoded-content provenance derived by the YAML reader when
+/// available. This is the deferred-project-config path's entry point:
+/// `ConfigMarkdownTransform` (`quarto-core/src/transforms/config_markdown.rs`)
+/// reads `content_source_info` back off the stored value when it later
+/// re-parses a blessed key (e.g. `website.title`) as markdown.
+///
+/// Deliberately scoped to `Yaml::String`: q2 has no consumer that does
+/// sub-offset arithmetic into a non-string scalar (a later provenance-desync
+/// warning's rule is "`None` on a *string* scalar is a bug"), so every other
+/// scalar kind continues to construct via `ConfigValueKind::scalar` with no
+/// provenance.
+fn scalar_string_with_content_provenance(
+    s: String,
+    content_source_info: &Option<quarto_source_map::SourceInfo>,
+) -> ConfigValueKind {
+    match content_source_info {
+        Some(csi) => ConfigValueKind::scalar_with_provenance(Yaml::String(s), csi.clone()),
+        None => ConfigValueKind::scalar(Yaml::String(s)),
+    }
+}
+
+/// Build the consistency warning for a `Yaml::String` scalar whose
+/// `content_source_info` came back `None`. Per
+/// `YamlWithSourceInfo::content_source_info`'s doc comment, `None` on a node
+/// already known to be a scalar means one of: no derivation ran (the node
+/// was hand-built, e.g. in a test, or is an unresolved alias — `Yaml::Alias`
+/// is excluded by the `Yaml::String` scoping here, so that half needs no
+/// special case), or the lockstep derivation desynced (a `quarto-yaml` bug).
+/// Either way this is worth reporting, but never worth failing a render
+/// over — warning-level and non-fatal, a wrong caret beats no output.
+///
+/// Deliberately carries **no `Q-` code**: this is an internal consistency
+/// signal a user cannot act on, not a user-facing/documented error (adding
+/// one would require a `docs/errors/` page per `cargo xtask lint`'s
+/// `error-docs-page-missing`/`error-docs-sidebar-unlisted` rules).
+///
+/// Mirrors `quarto_config::convert::content_provenance_desync_warning` — the
+/// two must stay in lockstep for the same reason
+/// `scalar_string_with_content_provenance` does (see its doc comment).
+fn content_provenance_desync_warning(
+    source_info: &quarto_source_map::SourceInfo,
+) -> quarto_error_reporting::DiagnosticMessage {
+    quarto_error_reporting::DiagnosticMessageBuilder::warning(
+        "YAML string scalar has no content provenance",
+    )
+    .with_location(source_info.clone())
+    .problem(
+        "`YamlWithSourceInfo::content_source_info()` returned `None` for a node already \
+         established to be a `Yaml::String` scalar",
+    )
+    .add_detail(
+        "Expected only for a hand-built test fixture (no derivation ran) or an unresolved \
+         alias; otherwise this is a `quarto-yaml` provenance-derivation desync",
+    )
+    .add_hint(
+        "Falling back to the raw node span, which may misalign a caret pointed at decoded content",
+    )
+    .build()
 }
 
 fn extract_between_delimiters(input: &str) -> Option<&str> {
@@ -597,7 +680,13 @@ mod tests {
 
     #[test]
     fn test_yaml_to_config_value_string_document_metadata() {
-        let yaml = YamlWithSourceInfo::new_scalar(Yaml::String("test *bold*".to_string()), si());
+        // .with_content_provenance(si()): a hand-built node derives no
+        // content provenance by construction; attach a synthetic one so
+        // this fixture doesn't trip the desync warning tested separately
+        // below (this test is about markdown interpretation, not that
+        // warning).
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::String("test *bold*".to_string()), si())
+            .with_content_provenance(si());
         let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
         let result = yaml_to_config_value(
             yaml,
@@ -613,7 +702,10 @@ mod tests {
 
     #[test]
     fn test_yaml_to_config_value_string_project_config() {
-        let yaml = YamlWithSourceInfo::new_scalar(Yaml::String("test string".to_string()), si());
+        // See the sibling document-metadata test above for why this
+        // attaches synthetic content provenance.
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::String("test string".to_string()), si())
+            .with_content_provenance(si());
         let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
         let result =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
@@ -992,11 +1084,14 @@ mod tests {
 
     #[test]
     fn test_yaml_to_config_value_with_str_tag() {
+        // .with_content_provenance(si()): see the document-metadata test
+        // above for why hand-built fixtures attach a synthetic span.
         let yaml = YamlWithSourceInfo::new_scalar_with_tag(
             Yaml::String("plain text".to_string()),
             si(),
             Some(("str".to_string(), si())),
-        );
+        )
+        .with_content_provenance(si());
         let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
         let result = yaml_to_config_value(
             yaml,
@@ -1019,7 +1114,8 @@ mod tests {
             Yaml::String("/path/to/file".to_string()),
             si(),
             Some(("path".to_string(), si())),
-        );
+        )
+        .with_content_provenance(si());
         let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
         let result =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
@@ -1032,7 +1128,8 @@ mod tests {
             Yaml::String("*.qmd".to_string()),
             si(),
             Some(("glob".to_string(), si())),
-        );
+        )
+        .with_content_provenance(si());
         let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
         let result =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
@@ -1045,7 +1142,8 @@ mod tests {
             Yaml::String("1 + 2".to_string()),
             si(),
             Some(("expr".to_string(), si())),
-        );
+        )
+        .with_content_provenance(si());
         let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
         let result =
             yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
@@ -1159,5 +1257,128 @@ mod tests {
                 assert_eq!(fid, 7, "detail spans must reroot into the parent's file");
             }
         }
+    }
+
+    // C6: the desync/no-derivation warning (bd-yaml-provenance).
+    //
+    // `YamlWithSourceInfo::new_scalar` yields `content_source_info: None`
+    // by construction (no derivation ran), so this hand-built node is
+    // exactly the injection seam the warning exists to report on. This
+    // pair is what makes the warning revertible: reverting the call to
+    // `content_provenance_desync_warning` in `yaml_to_config_value_at`
+    // turns the positive test red, and widening the rule beyond
+    // `Yaml::String` would turn the negative test red.
+
+    #[test]
+    fn test_yaml_to_config_value_string_without_content_provenance_warns() {
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::String("no provenance".to_string()), si());
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+
+        let diags = diagnostics.diagnostics();
+        assert_eq!(
+            diags.len(),
+            1,
+            "expected exactly one warning, got {diags:?}"
+        );
+        assert_eq!(
+            diags[0].kind,
+            quarto_error_reporting::DiagnosticKind::Warning,
+            "must be a warning, not an error"
+        );
+        assert!(
+            diags[0].code.is_none(),
+            "no Q- code: this is an internal consistency signal, not user-actionable"
+        );
+        assert!(
+            !diagnostics.has_errors(),
+            "non-fatal: a walker bug must not turn a working render into a hard failure"
+        );
+        // The returned ConfigValue is still usable — non-fatal means the
+        // conversion completes, not that it's discarded.
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar {
+                yaml: Yaml::String(_),
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_non_string_scalar_without_content_provenance_does_not_warn() {
+        // The rule is scoped to `Yaml::String`: a non-string scalar's
+        // `None` is correct (production never derives content provenance
+        // for a non-string scalar either — see
+        // `scalar_string_with_content_provenance`'s doc comment), so it
+        // must not warn. Without this test, a later widening of the rule
+        // beyond `Yaml::String` would go unnoticed.
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::Integer(7), si());
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+
+        assert!(
+            diagnostics.diagnostics().is_empty(),
+            "non-string scalar's None must not warn, got {:?}",
+            diagnostics.diagnostics()
+        );
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar {
+                yaml: Yaml::Integer(7),
+                ..
+            }
+        ));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // C4a: content provenance in the re-parse base (bd-yaml-provenance).
+    //
+    // A block scalar's decoded content is not the same string as its
+    // raw source text (decoding strips per-line indentation), so
+    // pairing the decoded text with the raw span and doing offset
+    // arithmetic into it drifts. This is a text-path assertion, not
+    // just a JSON-column assertion (see the CLI tests in
+    // `crates/quarto/tests/integration/json_errors.rs` for those): it
+    // proves the diagnostic's resolved span underlines the *exact
+    // source bytes* of each HTML tag, using
+    // `quarto_config::span_assert::assert_diagnostic_underlines`
+    // (task C3's piecewise `resolve_span`, which resolves the `Concat`
+    // of per-line pieces a multi-line block scalar's content
+    // provenance produces).
+    // ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn q_2_9_underlines_exact_html_tag_bytes_in_a_block_scalar() {
+        const FIXTURE_FILE: &str = "fixture.yml";
+        // Same shape as the canonical multi-line block-scalar fixture in
+        // task-C4a-brief.md / the CLI test, reduced to just the scalar:
+        // this test exercises `yaml_to_config_value` directly rather
+        // than a full render.
+        let yaml_text = "center: |\n  line one\n  line two\n  <span id=\"y\">Footer</span>\n";
+        let parsed = quarto_yaml::parse_file(yaml_text, FIXTURE_FILE).expect("valid yaml");
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let _ = yaml_to_config_value(
+            parsed,
+            InterpretationContext::DocumentMetadata,
+            &mut diagnostics,
+        );
+
+        let diags = diagnostics.diagnostics();
+        let q29: Vec<_> = diags
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("Q-2-9"))
+            .collect();
+        assert_eq!(
+            q29.len(),
+            2,
+            "expected two Q-2-9 warnings (open + close <span> tags); got {diags:?}"
+        );
+
+        let ctx = quarto_config::span_assert::context_for(FIXTURE_FILE, yaml_text);
+        quarto_config::span_assert::assert_diagnostic_underlines(q29[0], &ctx, "<span id=\"y\">");
+        quarto_config::span_assert::assert_diagnostic_underlines(q29[1], &ctx, "</span>");
     }
 }

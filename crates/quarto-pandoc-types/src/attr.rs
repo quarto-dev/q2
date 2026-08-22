@@ -23,7 +23,24 @@ pub fn is_empty_attr(attr: &Attr) -> bool {
 /// This struct tracks source locations for each component:
 /// - id: Source location of the id string (None if id is empty "")
 /// - classes: Source locations for each class string
-/// - attributes: Source locations for each key-value pair (both key and value)
+/// - attributes: Source locations for each key-value pair (key and value)
+///
+/// **The key and value slots are not the same kind of span** (since D1,
+/// `claude-notes/plans/2026-08-20-provenance-2-consumers/`). The key slot is
+/// always a raw, quote-inclusive node span. The value slot is **content
+/// provenance**: quotes excluded, escapes collapsed, produced by
+/// `pandoc::treesitter_utils::text_helpers::extract_quoted_text`. For a
+/// value with no escapes the two kinds coincide up to quote-trimming and
+/// the span is `Original`. For a value with at least one collapsed escape
+/// there is no affine map from content back to source, so the span is a
+/// top-level `Concat` of `Original` leaves instead (the decoder builds via
+/// `ProvenanceBuilder::in_file`, so there is no `Substring` wrapper) — and
+/// `SourceInfo::resolve_byte_range` returns `None` for that shape
+/// (`quarto-source-map` 0.1.3 `source_info.rs:403`), where it previously
+/// returned a drifting `Some` against the old quote-inclusive span. A
+/// consumer that needs the byte range of an escaped value must resolve it
+/// piecewise (walk the `Concat`'s pieces, or use the `map_offset` pair)
+/// rather than reach for `resolve_byte_range`.
 ///
 /// **Positional-alignment invariant** (added 2026-05-22, Plan 6):
 /// `attributes[i]` is the `(key_src, val_src)` for the i-th entry in
@@ -113,8 +130,18 @@ impl AttrSourceInfo {
 ///
 /// Target is a tuple: (url: String, title: String)
 /// This struct tracks source locations for each component:
-/// - url: Source location of the URL string (None if url is empty "")
-/// - title: Source location of the title string (None if title is empty "")
+/// - url: Source location of the URL string (None if url is empty ""). This
+///   is a raw, quote-inclusive node span — the URL is never decoded.
+/// - title: Source location of the title string (None if title is empty
+///   ""). Since D1 (`claude-notes/plans/2026-08-20-provenance-2-consumers/`)
+///   this is **content provenance**, not a raw span: quotes excluded,
+///   escapes collapsed, produced by the same
+///   `extract_quoted_text`/`unescape_punctuation` decoder as
+///   `AttrSourceInfo.attributes[i].1` (see that struct's doc for the
+///   key/value-asymmetry note, which applies here identically between
+///   `url` and `title`). An escaped title's span is a top-level `Concat`
+///   of `Original` leaves, for which `resolve_byte_range` returns `None` —
+///   resolve it piecewise instead.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TargetSourceInfo {
     pub url: Option<SourceInfo>,

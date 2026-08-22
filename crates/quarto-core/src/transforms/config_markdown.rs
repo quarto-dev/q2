@@ -284,13 +284,47 @@ fn apply_pattern(value: &mut ConfigValue, pattern: &[&str], depth: usize, walk: 
 fn parse_scalar_string_in_place(value: &mut ConfigValue, diagnostics: &mut Vec<DiagnosticMessage>) {
     let ConfigValueKind::Scalar {
         yaml: Yaml::String(text),
-        ..
+        content_source_info,
     } = &value.value
     else {
         return;
     };
-    value.value =
-        pampa::pandoc::meta::parse_config_string_as_markdown(text, &value.source_info, diagnostics);
+    // `content_source_info` is the decoded content's own provenance (see
+    // `YamlWithSourceInfo::content_source_info`'s contract); `value.source_info`
+    // is the raw node span (quote delimiters, stripped block-scalar indent)
+    // and is only a fallback for values with no known content provenance.
+    //
+    // This fallback is NOT a bug when `content_source_info` is `None` here,
+    // because the only producers that reach this function without YAML
+    // provenance are CLI `-M`, Lua, and defaults-file metadata — none of
+    // which have a YAML origin to derive from. `json_to_config_value`
+    // (`crates/quarto-core/src/stage/stages/metadata_merge.rs:48`, `:71`,
+    // `:460`, `:463`) stamps those values with
+    // `SourceInfo::generated(By::programmatic_config())`, and offset
+    // arithmetic into a `Generated` span already resolves to `None` rather
+    // than a wrong position — so falling back to `value.source_info` here
+    // is inert (it degrades to today's coarser-grained caret, not a wrong
+    // one) for that traffic. Do **not** read this as license to extend the
+    // fallback to YAML-rooted values: for those, a missing
+    // `content_source_info` is exactly what the desync warning in
+    // `pampa::pandoc::meta::content_provenance_desync_warning` /
+    // `quarto_config::convert::content_provenance_desync_warning` reports.
+    //
+    // A related, deliberately-untested degradation path lands here too: a
+    // Lua filter that touches a blessed key (e.g. `website.page-footer`)
+    // runs `UserFiltersStage::pre()` (`crates/quarto-core/src/pipeline.rs:349`)
+    // *before* this transform (`ConfigMarkdownTransform`, spliced in at
+    // `:1176`), and pampa's Lua bridge discards provenance on the way out
+    // to Lua (`crates/pampa/src/lua/config_value.rs:150`) and rebuilds the
+    // `Scalar` without it on the way back in (`:324-341`). So a
+    // filter-touched value also arrives here with `content_source_info:
+    // None`, and falls back to `value.source_info` the same way — a caret
+    // one byte left of ideal, not a crash. That is a direct, safe
+    // consequence of provenance living *inside* the `Scalar` variant rather
+    // than beside it: losing it degrades precision, it doesn't invalidate
+    // the value.
+    let base = content_source_info.as_ref().unwrap_or(&value.source_info);
+    value.value = pampa::pandoc::meta::parse_config_string_as_markdown(text, base, diagnostics);
 }
 
 #[cfg(test)]

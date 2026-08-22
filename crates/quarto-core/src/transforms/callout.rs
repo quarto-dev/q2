@@ -331,7 +331,7 @@ fn title_from_attribute(
         return None;
     }
 
-    let parent = attribute_value_source(attr, attr_source, "title", value.len());
+    let parent = attribute_value_source(attr, attr_source, "title");
 
     match pampa::pandoc::meta::parse_config_string_as_markdown(value, &parent, diagnostics) {
         ConfigValueKind::PandocInlines(inlines) => Some(inlines),
@@ -373,37 +373,24 @@ fn single_paragraph_inlines(blocks: Vec<Block>) -> Option<Vec<Inline>> {
 
 /// The `SourceInfo` to use as the parent of a re-parsed attribute value.
 ///
-/// This is subtler than it looks. `Attr.2` stores the value **unescaped
-/// and unquoted** (`extract_quoted_text` → `unescape_punctuation` in
-/// `pampa::pandoc::treesitter_utils::text_helpers`), while the recorded
-/// span covers the **raw, quote-inclusive** source, because the grammar
-/// token includes its delimiters. `SourceInfo::substring` composes only
-/// *affine* maps, so handing it the raw span shifts every parsed node by
-/// one (the opening quote) plus one more byte per collapsed escape — the
-/// same latent drift the YAML path has.
+/// `AttrSourceInfo.attributes[i].1` is the value's **content provenance**:
+/// its offset space is the decoded value's (quotes stripped, `\X` escapes
+/// collapsed), not the raw node's. It is produced by
+/// `extract_quoted_text` in
+/// `pampa::pandoc::treesitter_utils::text_helpers`, which tiles the decode
+/// through `quarto_source_map::ProvenanceBuilder`. So it can be handed to a
+/// re-parse directly — there is no length arithmetic to do here, and the
+/// mapping is exact even for the non-affine (escape-collapsing) case.
 ///
-/// We do not need the source text to detect this: the span's length *is*
-/// the raw length, and the value's length is known.
+/// What is left in this function is the *lookup*, not the mapping: find the
+/// key's index, check the `Attr.2` ↔ `AttrSourceInfo.attributes` positional
+/// alignment invariant (broken on duplicate keys — bd-3aolj / bd-1e6a5),
+/// and fall back to a `Generated` span when there is no provenance at all.
 ///
-/// | `span_len` vs `n` | meaning                    | result             |
-/// |-------------------|----------------------------|--------------------|
-/// | `== n`            | bare, unquoted value       | exact (as-is)      |
-/// | `== n + 2`        | quoted, no escapes         | exact (skip quote) |
-/// | otherwise         | escapes were collapsed     | bounded fallback   |
-///
-/// The fallback is safe rather than merely tolerable: unescaping only ever
-/// shrinks the string, so every mapped offset stays inside the attribute's
-/// own raw extent. The error is at most `1 + escapes` bytes and can never
-/// point at a neighbouring attribute.
-///
-/// Exact non-affine mapping is tracked by bd-mxa44voa, which is shared
-/// with the YAML and ipynb paths.
-fn attribute_value_source(
-    attr: &Attr,
-    attr_source: &AttrSourceInfo,
-    key: &str,
-    value_len: usize,
-) -> SourceInfo {
+/// bd-mxa44voa tracked exact non-affine mapping across the attribute,
+/// YAML and ipynb paths; the attribute path is what this function reads,
+/// and it is now exact.
+fn attribute_value_source(attr: &Attr, attr_source: &AttrSourceInfo, key: &str) -> SourceInfo {
     let generated = || SourceInfo::generated(By::callout());
 
     let Some(index) = attr.2.keys().position(|k| k == key) else {
@@ -424,27 +411,10 @@ fn attribute_value_source(
         return generated();
     }
 
-    let Some(value_source) = attr_source.attributes[index].1.clone() else {
-        return generated();
-    };
-
-    match value_source.resolve_byte_range() {
-        Some((_file_id, start, end)) if end >= start => {
-            let span_len = end - start;
-            if span_len == value_len {
-                // Bare value: the span already is the value's text.
-                value_source
-            } else if span_len == value_len + 2 {
-                // Quoted with nothing collapsed: step past the opening
-                // quote and the mapping is exact.
-                SourceInfo::substring(value_source, 1, 1 + value_len)
-            } else {
-                // Escapes were collapsed; no affine map exists.
-                value_source
-            }
-        }
-        _ => value_source,
-    }
+    attr_source.attributes[index]
+        .1
+        .clone()
+        .unwrap_or_else(generated)
 }
 
 #[cfg(test)]
@@ -737,10 +707,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn escaped_title_span_stays_inside_the_attribute() {
-        // `\"` collapses to `"`, so the value is shorter than its span and
-        // the mapping cannot be affine. We accept a bounded error, but it
-        // must never point outside the attribute's own raw extent.
+    async fn escaped_title_span_maps_exactly() {
+        // `\"` collapses to `"`, so the value is shorter than its raw span
+        // and no affine map exists. The value's content provenance tiles
+        // the decode piecewise instead, so the mapping is exact — this test
+        // used to accept a bounded error inside the attribute's raw extent.
         let text = "::: {.callout-note title=\"Say \\\"hi\\\" now\"}\nBody.\n:::\n";
         let (ast, _diags, ctx) = parse_and_transform(text).await;
 
@@ -749,12 +720,37 @@ mod tests {
 
         let resolved = quarto_config::span_assert::resolve_span(inlines[0].source_info(), &ctx)
             .expect("title span should resolve");
-        let attribute_extent = "\"Say \\\"hi\\\" now\"";
-        assert!(
-            attribute_extent.contains(resolved.text.trim()),
-            "span text {:?} escaped the attribute extent {:?}",
-            resolved.text,
-            attribute_extent
+        assert_eq!(
+            resolved.text, "Say",
+            "the leading Str must underline exactly its own source bytes"
+        );
+    }
+
+    #[tokio::test]
+    async fn escaped_title_code_span_maps_exactly() {
+        // Two `\"` escapes collapse *before* the backticked run, so a raw
+        // quote-inclusive span drifts by 1 (the opening quote) plus one
+        // byte per collapsed escape. Content provenance on
+        // `AttrSourceInfo.attributes[i].1` tiles the decode piecewise, so
+        // the mapping is exact even though it is not affine.
+        let text = "::: {.callout-note title=\"Say \\\"hi\\\" to `renv` now\"}\nBody.\n:::\n";
+        let (ast, _diags, ctx) = parse_and_transform(text).await;
+
+        use quarto_pandoc_types::inline::Inline;
+        let code = title_inlines(&ast)
+            .iter()
+            .find_map(|i| match i {
+                Inline::Code(c) if c.text == "renv" => Some(c),
+                _ => None,
+            })
+            .expect("expected a Code inline in the title");
+
+        let resolved = quarto_config::span_assert::resolve_span(&code.source_info, &ctx)
+            .expect("code span should resolve");
+        assert_eq!(
+            resolved.text, "`renv`",
+            "the code span must underline the backticked source, not a window \
+             shifted by the opening quote and the collapsed escapes"
         );
     }
 

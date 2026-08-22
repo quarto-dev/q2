@@ -2,6 +2,7 @@
 //! See bd-xvdop / claude-notes/plans/2026-05-28-integration-test-consolidation.md.
 
 pub mod apostrophe_quotes_test;
+pub mod attr_provenance_splice_test;
 pub mod attribute_ordering_test;
 pub mod bracket_analysis_test;
 pub mod grid_tables_test;

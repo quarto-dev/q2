@@ -1198,6 +1198,101 @@ fn attach_config_source(group: &mut CoalescedDiagnostic, candidates: &[PathBuf])
     );
 }
 
+// ====================================================================
+// Panic boundary around per-diagnostic rendering (Task E1,
+// bd-ariadne-config-span-char-boundary-panic-rkqmhzrg Phase 5)
+//
+// The panic this hardens against is not reachable today — Phases
+// 1-4 of the epic already floor the bad source offsets that used to
+// reach `quarto-error-reporting`'s renderers, and that crate now
+// clamps to char boundaries itself. This section hardens the
+// *class*: a diagnostic render that aborts an already-successful
+// render (and discards every diagnostic queued behind it) is
+// disproportionate however a bad offset might arise in the future.
+// ====================================================================
+
+/// Test-only fault-injection seam for [`render_diagnostic_guarded`].
+///
+/// Armed by setting `QUARTO_FAULT_INJECT_DIAGNOSTIC_RENDER=<N>`
+/// (0-based): the Nth diagnostic rendered through
+/// `render_diagnostic_guarded` in this process panics deliberately,
+/// so tests can exercise the `catch_unwind` boundary without a real
+/// bad source offset.
+///
+/// `cfg(debug_assertions)`-gated so arming it is structurally
+/// impossible in a release build: the function — and every call to
+/// it, since the call sites are gated the same way — does not exist
+/// in that build. This is not a runtime check that could be left
+/// armed by accident; the code is absent.
+#[cfg(debug_assertions)]
+static FAULT_INJECT_DIAGNOSTIC_RENDER_COUNTER: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(debug_assertions)]
+fn fault_inject_diagnostic_render(code: Option<&str>) {
+    let Ok(raw) = std::env::var("QUARTO_FAULT_INJECT_DIAGNOSTIC_RENDER") else {
+        return;
+    };
+    let Ok(target) = raw.parse::<usize>() else {
+        return;
+    };
+    let seen =
+        FAULT_INJECT_DIAGNOSTIC_RENDER_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    if seen == target {
+        panic!(
+            "fault injection: QUARTO_FAULT_INJECT_DIAGNOSTIC_RENDER={target} (diagnostic {})",
+            code.unwrap_or("<unknown>")
+        );
+    }
+}
+
+/// Render one diagnostic inside a panic boundary.
+///
+/// A diagnostic render (ariadne text, or JSON conversion under
+/// `--json-errors`) runs after the render it describes has already
+/// completed and its output already written — see the call sites in
+/// `execute_single_doc` / `execute_project`, both of which call
+/// `print_render_diagnostics` after the pipeline run and before
+/// `should_exit_nonzero`. A panic while rendering *one* diagnostic
+/// must not abort that already-successful render, nor discard every
+/// diagnostic queued behind it.
+///
+/// Wraps exactly the render call passed in `render` — never any
+/// surrounding mutation (e.g. [`attach_config_source`]'s `&mut`
+/// binding, which callers run *before* calling this) — matching the
+/// `catch_unwind(AssertUnwindSafe(..))` prior art in
+/// `pass2_renderer.rs` / `orchestrator.rs`. Unlike that prior art, no
+/// `AssertUnwindSafe` is needed here: every closure passed in only
+/// borrows `&CoalescedDiagnostic` / `&DiagnosticMessage` /
+/// `&SourceContext`, none of which carry interior mutability, so
+/// they satisfy `UnwindSafe` on their own (verified by this function
+/// compiling with an explicit, non-asserted `UnwindSafe` bound).
+///
+/// On a caught panic the diagnostic is dropped and a loud "internal
+/// error rendering diagnostic `<code>`" line takes its place on
+/// stderr — surfaced, not swallowed, but survivable. (The default
+/// panic hook also prints its own `thread '...' panicked at ...`
+/// line first; that is left in place, not suppressed.)
+fn render_diagnostic_guarded<T>(
+    code: Option<&str>,
+    render: impl FnOnce() -> T + std::panic::UnwindSafe,
+) -> Option<T> {
+    match std::panic::catch_unwind(move || {
+        #[cfg(debug_assertions)]
+        fault_inject_diagnostic_render(code);
+        render()
+    }) {
+        Ok(value) => Some(value),
+        Err(_) => {
+            eprintln!(
+                "internal error rendering diagnostic {}",
+                code.unwrap_or("<unknown>")
+            );
+            None
+        }
+    }
+}
+
 fn print_render_diagnostics_text(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
     quiet: bool,
@@ -1236,7 +1331,10 @@ fn print_render_diagnostics_text(
                     .map(move |d| (f.input.clone(), d.clone(), f.source_context.clone()))
             });
         for group in coalesce_by_source(entries) {
-            eprintln!("{}", group.to_text());
+            let code = group.representative.code.as_deref();
+            if let Some(text) = render_diagnostic_guarded(code, || group.to_text()) {
+                eprintln!("{}", text);
+            }
         }
         for failure in legacy_failures {
             eprintln!("error: {}: {}", failure.input.display(), failure.error);
@@ -1244,7 +1342,12 @@ fn print_render_diagnostics_text(
     }
     let project_ctx = config_source_context(config_sources);
     for diagnostic in &summary.project_diagnostics {
-        eprintln!("{}", diagnostic.to_text(project_ctx.as_ref()));
+        let code = diagnostic.code.as_deref();
+        if let Some(text) =
+            render_diagnostic_guarded(code, || diagnostic.to_text(project_ctx.as_ref()))
+        {
+            eprintln!("{}", text);
+        }
     }
 
     // bd-mg3ckvp7: per-page diagnostics from *successful* renders go
@@ -1268,7 +1371,10 @@ fn print_render_diagnostics_text(
         });
         for mut group in coalesce_by_source(entries) {
             attach_config_source(&mut group, config_sources);
-            eprintln!("{}", group.to_text());
+            let code = group.representative.code.as_deref();
+            if let Some(text) = render_diagnostic_guarded(code, || group.to_text()) {
+                eprintln!("{}", text);
+            }
         }
 
         // Per-file output line stays on `tracing::info!` (opt-in via
@@ -1353,7 +1459,12 @@ fn print_render_diagnostics_json(
             Some(ctx) => failure
                 .diagnostics
                 .iter()
-                .map(|d| with_source_file(diagnostic_to_json(d, ctx), source_file.clone()))
+                .filter_map(|d| {
+                    let code = d.code.as_deref();
+                    render_diagnostic_guarded(code, || {
+                        with_source_file(diagnostic_to_json(d, ctx), source_file.clone())
+                    })
+                })
                 .collect(),
             None => Vec::new(),
         };
@@ -1374,11 +1485,15 @@ fn print_render_diagnostics_json(
             let diag = DiagnosticMessageBuilder::error("Render failed")
                 .problem(failure.error.clone())
                 .build();
-            let json = with_source_file(
-                diagnostic_to_json(&diag, &SourceContext::new()),
-                source_file,
-            );
-            emit_json_line(&json);
+            let code = diag.code.as_deref();
+            if let Some(json) = render_diagnostic_guarded(code, || {
+                with_source_file(
+                    diagnostic_to_json(&diag, &SourceContext::new()),
+                    source_file,
+                )
+            }) {
+                emit_json_line(&json);
+            }
             continue;
         }
         let ctx_owned;
@@ -1391,8 +1506,12 @@ fn print_render_diagnostics_json(
         };
         let source_file = failure.input.display().to_string();
         for d in &failure.diagnostics {
-            let json = with_source_file(diagnostic_to_json(d, ctx_ref), source_file.clone());
-            emit_json_line(&json);
+            let code = d.code.as_deref();
+            if let Some(json) = render_diagnostic_guarded(code, || {
+                with_source_file(diagnostic_to_json(d, ctx_ref), source_file.clone())
+            }) {
+                emit_json_line(&json);
+            }
         }
     }
 
@@ -1402,7 +1521,12 @@ fn print_render_diagnostics_json(
     // through the config's source context.
     let project_ctx = config_source_context(config_sources).unwrap_or_default();
     for diagnostic in &summary.project_diagnostics {
-        emit_json_line(&diagnostic_to_json(diagnostic, &project_ctx));
+        let code = diagnostic.code.as_deref();
+        if let Some(json) =
+            render_diagnostic_guarded(code, || diagnostic_to_json(diagnostic, &project_ctx))
+        {
+            emit_json_line(&json);
+        }
     }
 
     // Per-page render diagnostics on successful outputs. The
@@ -1412,7 +1536,12 @@ fn print_render_diagnostics_json(
     // location.file_id encoded in the diagnostic.
     for result in &summary.outputs {
         for d in &result.render_output.diagnostics {
-            emit_json_line(&diagnostic_to_json(d, &result.render_output.source_context));
+            let code = d.code.as_deref();
+            if let Some(json) = render_diagnostic_guarded(code, || {
+                diagnostic_to_json(d, &result.render_output.source_context)
+            }) {
+                emit_json_line(&json);
+            }
         }
     }
 }

@@ -1212,17 +1212,29 @@ fn native_visitor<T: Write>(
             )
         }
         "key_value_value" => {
-            // Extract value, strip quotes if present
+            // Extract value, strip quotes if present. `extract_quoted_text`
+            // also hands back the *content* provenance of the decoded
+            // value, which is what downstream consumers offset into (the
+            // raw node span includes the quotes and over-counts every
+            // collapsed escape).
             let text = node.utf8_text(input_bytes).unwrap();
-            let value = extract_quoted_text(text);
-            PandocNativeIntermediate::IntermediateBaseText(value, node_location(node))
+            let (value, content_source) =
+                extract_quoted_text(text, context.current_file_id(), node.start_byte());
+            PandocNativeIntermediate::IntermediateDecodedText(value, content_source)
         }
         "key_value_specifier" => {
             // Collect key and value from children
             let mut key = String::new();
             let mut value = String::new();
             let mut key_range = node_location(node);
-            let mut value_range = node_location(node);
+            // Fallback for a specifier with no `key_value_value` child:
+            // the whole specifier node, in the same coordinate space
+            // `process_commonmark_attribute` used before this carried a
+            // `SourceInfo` (`from_range(current_file_id, ..)`).
+            let mut value_source = quarto_source_map::SourceInfo::from_range(
+                context.current_file_id(),
+                node_location(node),
+            );
 
             for (node_name, child) in children {
                 match node_name.as_str() {
@@ -1233,9 +1245,11 @@ fn native_visitor<T: Write>(
                         }
                     }
                     "key_value_value" => {
-                        if let PandocNativeIntermediate::IntermediateBaseText(text, range) = child {
+                        if let PandocNativeIntermediate::IntermediateDecodedText(text, source) =
+                            child
+                        {
                             value = text;
-                            value_range = range;
+                            value_source = source;
                         }
                     }
                     "=" => {} // Ignore delimiter
@@ -1247,7 +1261,7 @@ fn native_visitor<T: Write>(
                 key,
                 value,
                 key_range,
-                value_range,
+                value_source,
             )])
         }
         "commonmark_specifier" => {
@@ -1305,10 +1319,13 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateBaseText(text, node_location(node))
         }
         "title" => {
-            // Extract title text, strip quotes
+            // Extract title text, strip quotes. As with `key_value_value`,
+            // the span we keep is the decoded title's content provenance,
+            // not the quote-inclusive raw node range.
             let text = node.utf8_text(input_bytes).unwrap();
-            let title = extract_quoted_text(text);
-            PandocNativeIntermediate::IntermediateBaseText(title, node_location(node))
+            let (title, content_source) =
+                extract_quoted_text(text, context.current_file_id(), node.start_byte());
+            PandocNativeIntermediate::IntermediateDecodedText(title, content_source)
         }
         "target" => process_target(children),
         "pandoc_span" => process_pandoc_span(node, children, context),

@@ -87,6 +87,10 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 quarto-util.workspace = true
+# Self-enable quarto-config's span-assert feature so meta.rs's own tests can
+# use `quarto_config::span_assert::assert_diagnostic_underlines` (mirrors
+# quarto-core's Cargo.toml, which enables it the same way).
+quarto-config = { path = "../quarto-config", features = ["span-assert"] }
 
 # Native-only dev-dependencies (proptest pulls in getrandom which doesn't
 # compile for wasm32-unknown-unknown; insta/tempfile/tokio are native-only too)

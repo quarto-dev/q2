@@ -282,16 +282,23 @@ fn collect_config_text_images(
     match &cv.value {
         ConfigValueKind::PandocInlines(inlines) => collect_inline_image_refs(inlines, out),
         ConfigValueKind::PandocBlocks(blocks) => collect_block_image_refs(blocks, out),
-        ConfigValueKind::Scalar { .. } => {
+        ConfigValueKind::Scalar {
+            content_source_info,
+            ..
+        } => {
             let Some(text) = cv.as_plain_text() else {
                 return;
             };
+            // Parse against content provenance the same way
+            // `ConfigMarkdownTransform::parse_scalar_string_in_place` does:
+            // `content_source_info` is the decoded content's own provenance,
+            // and `cv.source_info` is only a fallback for values with no
+            // known content provenance. Parse warnings are dropped; the
+            // per-doc pipeline already reported them.
+            let base = content_source_info.as_ref().unwrap_or(&cv.source_info);
             let mut parse_diags = Vec::new();
-            let kind = pampa::pandoc::meta::parse_config_string_as_markdown(
-                &text,
-                &cv.source_info,
-                &mut parse_diags,
-            );
+            let kind =
+                pampa::pandoc::meta::parse_config_string_as_markdown(&text, base, &mut parse_diags);
             match &kind {
                 ConfigValueKind::PandocInlines(inlines) => collect_inline_image_refs(inlines, out),
                 ConfigValueKind::PandocBlocks(blocks) => collect_block_image_refs(blocks, out),
