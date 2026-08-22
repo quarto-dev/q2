@@ -61,6 +61,14 @@
  *                   so nothing below this tier can catch a wrong iframe
  *                   offset; see that row's own comment for the tolerance
  *                   and why.
+ * P2a (2026-08-22 plan, Phase 2) — the HTML preview's own click-to-ALIGN
+ *                   (T3's control proves the HTML preview receives clicks
+ *                   at all; this proves what it does with them). Uses a
+ *                   dedicated fixture, `htmlAlignFixture()`, whose target
+ *                   paragraph wraps across several visual rows — the only
+ *                   way to prove `hostY` comes from the clicked SPAN, not
+ *                   the containing block, since a single-line paragraph
+ *                   (as in `fixture()`) can't tell the two apart.
  *
  * Run via:
  *   cd hub-client && npx playwright test e2e/q2-preview-click-to-editor-scroll.spec.ts \
@@ -270,6 +278,47 @@ function wrapperFixture(): string {
     ].join('\n');
 }
 
+/**
+ * P2a's own fixture (2026-08-22 plan, Phase 2) — a single long paragraph,
+ * all on ONE source line, with enough words to wrap across several visual
+ * lines in the HTML preview at the default viewport width.
+ *
+ * The wrap is the whole point: the HTML writer stamps `data-loc` on
+ * inlines, so each word gets its own `<span data-loc>`, all sharing the
+ * SAME source line (there is only one line of source). On `fixture()`'s
+ * own one-line-per-paragraph text this would be indistinguishable from
+ * measuring the containing `<p>` — a single-line block's own top coincides
+ * with any of its words' tops. Only a WRAPPED paragraph separates the two:
+ * a word near the end renders several line-heights below the block's own
+ * top, so a wrong implementation that measured the `<p>` instead of the
+ * clicked span would land the editor at the wrong on-screen y by a
+ * detectable amount, not just be off by the sub-pixel noise A1g's
+ * tolerance already absorbs.
+ */
+function htmlAlignFixture(): string {
+    // Filler before AND after the target paragraph, mirroring wrapperFixture()'s
+    // reasoning: enough total content that the editor actually has scroll
+    // range (with only the target paragraph, `getScrollHeight() -
+    // getLayoutInfo().height` could be ≤ 0, and revealEditorLine's clamp would
+    // force scrollTop to 0 regardless of hostY — vacuous, same trap A1g's own
+    // "paragraph 20 of 80" choice avoids), and positioned away from either end
+    // so the clamp can't coincidentally mask a wrong computation.
+    const filler: string[] = [];
+    for (let i = 1; i <= 30; i++) filler.push(`Filler paragraph ${i}.`, '');
+    const words: string[] = [];
+    for (let i = 1; i <= 40; i++) words.push(`word${i}`);
+    return [
+        '---',
+        'title: "P2a — HTML preview alignment anchors on the clicked span, not the block"',
+        '---',
+        '',
+        ...filler,
+        words.join(' ') + '.',
+        '',
+        ...filler,
+    ].join('\n');
+}
+
 /** 1-based source line of `Paragraph n.` in the fixture above. */
 function paraLine(n: number): number {
     return 5 + 2 * n;
@@ -308,6 +357,22 @@ async function openDocWithContent(page: Page, content: string): Promise<void> {
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/doc.qmd`);
     await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30000 });
+}
+
+/**
+ * Like {@link openDocWithContent}, but waits on the HTML preview's own
+ * readiness signal instead of q2-preview's (P2a's `htmlAlignFixture()`).
+ */
+async function openHtmlDocWithContent(page: Page, content: string): Promise<void> {
+    const serverUrl = getServerUrl();
+    const docId = await createProjectOnServer(serverUrl, [
+        { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+        { path: 'doc.qmd', content, contentType: 'text' },
+    ]);
+    await bootstrapProjectSet(page, serverUrl);
+    const localId = await seedProjectInBrowser(page, docId, serverUrl);
+    await page.goto(`/#/p/${localId}/file/doc.qmd`);
+    await waitForPreviewRender(page, { kind: 'html', timeout: 30000 });
 }
 
 /**
@@ -777,6 +842,70 @@ test.describe('preview→editor scroll sync on click', () => {
         expect(
             Math.abs(lineBox!.y - hostY),
             `clicked block's on-screen y (${hostY}) and the target line's rendered y in Monaco (${lineBox!.y}) must agree within ${ALIGNMENT_TOLERANCE_PX}px`,
+        ).toBeLessThanOrEqual(ALIGNMENT_TOLERANCE_PX);
+    });
+
+    test('P2a — clicking a word in the HTML preview aligns it to the same on-screen y as that SPECIFIC word, not the containing block', async ({ page }) => {
+        // htmlAlignFixture()'s target paragraph wraps across several visual
+        // rows in the preview; word40 (its last word) renders well below the
+        // paragraph's own <p> top. hostY is measured from word40 itself — the
+        // only way to discriminate "hostY comes from the clicked SPAN" (this
+        // phase's decision) from a wrong implementation that used the
+        // containing block's rect instead, which fixture()'s one-line
+        // paragraphs (T1-T5, A1g) cannot: a single-line block's own top
+        // coincides with any of its words' tops, so that mistake would pass
+        // there by coincidence.
+        await openHtmlDocWithContent(page, htmlAlignFixture());
+        const iframe = page.frameLocator(HTML_IFRAME);
+        await iframe.locator('p').first().waitFor({ timeout: 15_000 });
+
+        const targetWord = iframe.locator('span').filter({ hasText: /^word40\.$/ }).first();
+        await targetWord.scrollIntoViewIfNeeded();
+        await page.waitForTimeout(300);
+
+        const wordBox = await targetWord.boundingBox();
+        expect(wordBox, 'precondition: the clicked word must be measurable').not.toBeNull();
+        const hostY = wordBox!.y;
+
+        const blockBox = await iframe
+            .locator('p')
+            .filter({ hasText: 'word1 word2' })
+            .first()
+            .boundingBox();
+        expect(blockBox, 'precondition: the target paragraph must be measurable').not.toBeNull();
+        expect(
+            hostY - blockBox!.y,
+            "precondition: word40 must render well below the paragraph's own top — i.e. the paragraph must actually wrap in the preview. If this fails, the fixture stopped wrapping (viewport width changed?) and this row can no longer tell a span-anchored hostY from a block-anchored one.",
+        ).toBeGreaterThan(20);
+
+        await targetWord.click();
+        // handlePreviewSelection is not debounced, but Monaco's own smooth
+        // scroll animation and the isSyncingRef suppression window both run
+        // for up to 300ms (mirrors A1g's own wait).
+        await page.waitForTimeout(600);
+
+        // The row `revealEditorLine` actually positions is the target model
+        // line's FIRST rendered row (`getTopForLineNumber` — alignment is
+        // line-granular, not column-granular), regardless of which word in
+        // that line was clicked or how the PREVIEW happened to wrap it. So
+        // the row to measure in Monaco is the one starting the paragraph
+        // (word1), not one containing word40 — word40 only supplies hostY.
+        // `\s` (not a literal ASCII space) — Monaco renders spaces as
+        // U+00A0 non-breaking space, which `\s` matches but a literal
+        // `' '` in the regex would not (see editorVisibleText()'s doc
+        // comment on the same gotcha).
+        const firstRow = page
+            .locator('.monaco-editor .view-lines .view-line')
+            .filter({ hasText: /^word1\s/ })
+            .first();
+        await firstRow.waitFor({ timeout: 5000 });
+        const lineBox = await firstRow.boundingBox();
+        expect(lineBox, 'the target line must be rendered (in the DOM) after alignment').not.toBeNull();
+
+        const ALIGNMENT_TOLERANCE_PX = 6;
+        expect(
+            Math.abs(lineBox!.y - hostY),
+            `word40's on-screen y (${hostY}) and the target line's rendered y in Monaco (${lineBox!.y}) must agree within ${ALIGNMENT_TOLERANCE_PX}px`,
         ).toBeLessThanOrEqual(ALIGNMENT_TOLERANCE_PX);
     });
 });

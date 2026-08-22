@@ -25,6 +25,8 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-08-22
 
+- [`7505e8aaf`](https://github.com/quarto-dev/q2/commits/7505e8aaf): Fix a bug where selecting text from an included document in the HTML preview moved the source editor's caret to the wrong file's line instead of leaving it alone.
+- [`cc4c83480`](https://github.com/quarto-dev/q2/commits/cc4c83480): Clicking or selecting text in the HTML preview pane now aligns its source line to the same on-screen height as the clicked text, instead of just scrolling it into view.
 - [`ec05241e8`](https://github.com/quarto-dev/q2/commits/ec05241e8): Clicking a block in the q2-preview pane now aligns its source line to the same on-screen height as the clicked block, instead of just scrolling it into view.
 
 ### 2026-08-21
