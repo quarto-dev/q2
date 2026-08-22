@@ -139,8 +139,10 @@ interface ReactRendererProps {
    * Preview→editor click sync (click-to-editor-scroll): called with the
    * resolved source line when a click in the preview resolves one via
    * `lineForClickTarget`. Forwarded to `Q2PreviewIframe` as `onClickAtLine`.
+   * The second argument, `hostY`, is the clicked block's top edge in
+   * host-page coordinates, used to align (not just reveal) the line.
    */
-  onPreviewClickAtLine?: (line: number) => void;
+  onPreviewClickAtLine?: (line: number, hostY?: number) => void;
   onAstRendered?: () => void;
 }
 

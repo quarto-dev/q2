@@ -160,7 +160,7 @@ function renderWithFingerprint(
  *    to enforce that, but a test should not depend on it deviating).
  */
 function renderWithClickListenerSpy(
-    onClickAtLine?: (line: number) => void,
+    onClickAtLine?: (line: number, hostY?: number) => void,
     fixtureHtml?: string,
 ): {
     doc: Document;
@@ -390,14 +390,22 @@ describe('Q2PreviewIframe click-to-editor-scroll listener registration', () => {
         expect(pointerUpCalls[0][2]).toBe(true);
 
         // Assertion 2: dispatching pointerup on the located node built above
-        // (same 0:12:1-14:20 <p> as U1a) forwards its startLine to onClickAtLine.
+        // (same 0:12:1-14:20 <p> as U1a) forwards its startLine to
+        // onClickAtLine — and (A1f, 2026-08-22 plan) a second, numeric
+        // argument: the clicked block's top edge in host-page coordinates
+        // (`hostY`), which `useScrollSync.revealEditorLine` needs to align
+        // the line rather than merely reveal it. jsdom lays out nothing, so
+        // the concrete value is 0 (both the block's and the iframe's
+        // getBoundingClientRect().top default to 0 under jsdom) — the
+        // binding this row cares about is arity and type, not the number;
+        // A1g (Playwright) is what actually exercises real coordinates.
         const target = doc.getElementById('t')!;
         const PointerEventCtor = (win as unknown as { PointerEvent?: typeof PointerEvent })
             .PointerEvent ?? Event;
         act(() => {
             target.dispatchEvent(new PointerEventCtor('pointerup', { bubbles: true }));
         });
-        expect(onClickAtLine).toHaveBeenCalledWith(12);
+        expect(onClickAtLine).toHaveBeenCalledWith(12, expect.any(Number));
 
         unmount();
     });

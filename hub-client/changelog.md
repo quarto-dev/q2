@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-22
+
+- [`ec05241e8`](https://github.com/quarto-dev/q2/commits/ec05241e8): Clicking a block in the q2-preview pane now aligns its source line to the same on-screen height as the clicked block, instead of just scrolling it into view.
+
 ### 2026-08-21
 
 - [`167dd4d5a`](https://github.com/quarto-dev/q2/commits/167dd4d5a): Clicking a block in the q2-preview pane now scrolls the source editor to that block, instead of leaving the editor where it was.
