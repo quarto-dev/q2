@@ -173,24 +173,66 @@ plan: clicking `Paragraph 35.` moved the editor to lines ~45–77 and Monaco too
 focus.) So this phase **replaces the centring**, and per A4 leaves the cursor move
 and focus alone.
 
-- [ ] **Investigate first, and report before implementing:** `MorphIframe`'s
+**Investigation settled 2026-08-22 — rulings:**
+
+- **`hostY` comes from widening `onSelectionChange` to `(startPos, endPos, hostY?)`**,
+  computed inline in `MorphIframe.handleSelectionChange` as
+  `anchorNode.parentElement.getBoundingClientRect().top + iframeRef.getBoundingClientRect().top`
+  — symmetric with `Q2PreviewIframe`'s existing `blockTop + iframeTop`. The
+  alternative (compute in `useSelectionSync` from `previewRef`) was rejected:
+  `MorphIframeHandle` exposes only imperative methods, so it would mean adding one
+  purely to read back a value computed a line earlier.
+- **Anchor on the innermost span, not the containing block.** The reported
+  `SourceLocation` is already span/column-precision, so anchoring `hostY` to a
+  coarser block's top would desync from the very line being reported — on a long
+  paragraph that desync *is* the constant-offset symptom, arriving via granularity
+  rather than coordinate spaces. **Consequence for the browser row: it must locate
+  and measure the actual span under the click**, not the enclosing `<p>`, or it
+  passes and fails for reasons unrelated to its claim.
+- **`lineForClickTarget` gates only the `hostY` computation, never the callback.**
+  Returning early on a null (as `Q2PreviewIframe` does) would also skip
+  `setSelection`/`focus()`, which A4 requires to keep firing unconditionally here.
+  Guard audit against this path: `fileId !== 0` is fully relevant and *more*
+  load-bearing than on q2 (see A7); `#q2-active-edit-region` never appears outside
+  q2-preview, so it is a harmless no-op; and `<section>` is dead here too — the same
+  format-agnostic `SectionizeTransform` synthesises sections as
+  `SourceInfo::Generated` for both consumers, so the writer never stamps a real
+  `data-loc` on one.
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| A7 | **The reveal-then-overwrite race exists on this path too, and threading `revealEditorLine` is what closes it.** | `Preview.tsx:395` wires ratio scroll sync, so a post-click reflow lets `syncPreviewToEditor` replace the alignment ~50 ms later. `revealEditorLine` brackets **`useScrollSync`'s** `isSyncingRef` — the flag `syncPreviewToEditor` actually reads. Extracting the arithmetic into a shared pure helper called from `useSelectionSync` would instead set that hook's *own* unrelated `isSyncingRef` and leave the race wide open. So the callback is threaded deliberately; **do not "decouple the hooks".** Pinned by the HTML-path analogue of U2e. |
+| A8 | **The pre-existing `fileId` bug in `useSelectionSync` is fixed in this phase**, in its own commit, rather than deferred to a strand. | `handlePreviewSelection` builds a Monaco range from `startPos` and never checks `fileId`, so selecting inside *included* content moves the caret to a bogus line of the currently-open file. Same class as the q2-side defect fixed on-branch two days ago, and materially worse: that one produced a wrong *scroll*, this produces a wrong *caret and selection*, so a user who then types edits the wrong location. Leaving it would also make the paths asymmetric right as they converge — q2 inert, HTML mis-positioning. The site already calls `lineForClickTarget`, so the guard is one condition in a function this phase edits. No strand filed: resolved in the same breath. |
+
+- [x] **Investigate first, and report before implementing:** `MorphIframe`'s
       `onSelectionChange` reports only `(startPos, endPos)` — no anchor rect. Decide
       where the anchor Y comes from. Candidates: widen `onSelectionChange` to carry
       it (symmetric with `onClickAtLine`), or compute it in `useSelectionSync` from
       the `previewRef` handle. Note the HTML writer stamps `data-loc` on **inlines**
       too, so the anchor may be a `<span>` rather than the block — decide whether to
-      anchor on the innermost span or its containing block, and say why.
-- [ ] **There are no `useSelectionSync` tests at all.** Create the file. Tier note:
+      anchor on the innermost span or its containing block, and say why. (Settled
+      2026-08-22 — see the rulings above.)
+- [x] **There are no `useSelectionSync` tests at all.** Create the file. Tier note:
       `*.test.ts` runs in the **node** environment, so a DOM fixture needs either
       `*.integration.test.ts` or a `@vitest-environment jsdom` docblock pragma.
-- [ ] Rows: alignment arithmetic (as A1a), both clamps, and — importantly — that
+      (`hub-client/src/hooks/useSelectionSync.test.ts`, `@vitest-environment jsdom`
+      pragma — no DOM fixture needed after all, since `revealEditorLine` is
+      threaded in rather than computed from a DOM handle.)
+- [x] Rows: alignment arithmetic (as A1a), both clamps, and — importantly — that
       `setSelection` and `focus()` are **still called** (A4), so this phase cannot
-      accidentally import q2's no-focus rule into the HTML preview.
-- [ ] A Playwright row equivalent to A1g on the HTML preview path. T3 in the
-      existing spec is the HTML-preview control and must stay green.
-- [ ] Reuse `lineForClickTarget`/`parseDataLoc` rather than adding a parallel
+      accidentally import q2's no-focus rule into the HTML preview. (Wiring rows
+      against a mocked `revealEditorLine`, plus end-to-end rows against a real
+      `useScrollSync().revealEditorLine` for the arithmetic/clamps/A7 race.)
+- [x] A Playwright row equivalent to A1g on the HTML preview path. T3 in the
+      existing spec is the HTML-preview control and must stay green. (P2a, its own
+      dedicated `htmlAlignFixture()` — a wrapping paragraph, since a single-line
+      one like `fixture()`'s can't discriminate span- from block-anchored `hostY`.
+      Fail-on-revert confirmed: measuring the containing `<p>` instead of the
+      clicked span reddens this row.)
+- [x] Reuse `lineForClickTarget`/`parseDataLoc` rather than adding a parallel
       resolver, but note its `fileId !== 0` and `#q2-active-edit-region` guards were
       written for q2-preview — check each still makes sense on this path and say so.
+      (A8's guard commit — see below.)
 
 ## Verification (both phases)
 
@@ -199,17 +241,48 @@ and focus alone.
       (Phase 1: hub-client 991 unit + 112 integration + 131 wasm passed, typecheck
       clean, `build:all` green; preview-renderer 549 unit/36 skipped + 587
       integration passed with the known baseline failure below, typecheck +
-      typecheck:tests clean.)
-- [x] Playwright spec green. (6/6, including the new A1g row, against a real
+      typecheck:tests clean. Phase 2, after both commits: hub-client 1001 unit
+      (+10, `useSelectionSync.test.ts`) + 112 integration + 131 wasm passed;
+      preview-renderer 549 unit/36 skipped + 590 integration (+3: the hostY row
+      and the two fileId-guard rows) passed with the same known baseline
+      failure, typecheck + typecheck:tests clean both packages. Ran
+      `npm run build` — `tsc -b && vite build`, the same stricter check
+      `build:all` runs — rather than the full `build:all`, since no Rust
+      changed and the wasm/sandboxed legs were already current in this
+      worktree; see the commit for the exact command.)
+- [x] Playwright spec green. (Phase 1: 6/6 including A1g. Phase 2: 7/7 —
+      adds P2a, its own dedicated `htmlAlignFixture()` — against a real
       `VITE_E2E=1` build.)
 - [x] Executed fail-on-revert for every row above that names one. (A1a-A1e,
       U2c/U2d/U2e, A1f: observed RED against the pre-fix implementation before
       writing it, then GREEN after. A1g and A1h needed explicit revert probes
-      since they postdate the implementation — see phase1-report.md.)
+      since they postdate the implementation — see phase1-report.md. Phase 2:
+      P2a probed by measuring the containing `<p>` instead of the clicked span
+      — reddened, then reverted; the fileId guard probed by disabling its
+      condition — reddened the foreign-fileId row, control row stayed green,
+      then reverted.)
 - [x] `hub-client/changelog.md` entry per commit that touches `hub-client/`
       (two-commit workflow). **Both** phases touch it. (Phase 1: `ec05241e8` /
-      `0df2d4f1e`.)
+      `0df2d4f1e`. Phase 2: implementation commits `cc4c83480` (hostY +
+      centring→alignment) and `7505e8aaf` (fileId guard fix, own commit per
+      A8), both entries added in one changelog commit.)
 - [x] TypeScript-only; `cargo xtask verify` not required. (No Rust changed.)
+
+### Final verification at the branch tip (2026-08-22)
+
+Phase 2 originally ran `npm run build` rather than the full `npm run build:all`,
+reasoning that no Rust changed and none of the touched files live under
+`quarto-hub-sandboxed-preview`. That reasoning is sound — `build` is the
+`tsc -b && vite build` project-references check `CLAUDE.md` actually cares about —
+but Phase 1 ran the full `build:all` under identical conditions, so the
+inconsistency was closed rather than carried: **`build:all` was run at the tip and
+is clean.**
+
+Note for anyone repeating this: `build:all` emits a PWA service worker and a
+non-local-prod bundle, so it *replaces* a local-prod demo build. Follow it with
+`VITE_DISABLE_PWA=1 npm run build:local-prod` to restore one. The service worker
+is the reason a stale bundle can survive a reload — disable it for any
+build-and-look-at-it loop.
 
 ## Known baseline failure
 

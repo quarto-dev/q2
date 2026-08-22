@@ -21,13 +21,28 @@ interface UseSelectionSyncOptions {
   previewRef: RefObject<MorphIframeHandle | null>;
   /** Whether selection sync is enabled */
   enabled: boolean;
+  /**
+   * `useScrollSync`'s `revealEditorLine` — threaded in, not re-implemented
+   * (2026-08-22 click-align-editor-y plan, Phase 2, decision A7). Calling the
+   * SAME callback (rather than extracting the alignment arithmetic into a
+   * shared pure helper) is what keeps `handlePreviewSelection`'s reveal
+   * bracketed by `useScrollSync`'s own `isSyncingRef` — the flag
+   * `syncPreviewToEditor`'s ratio-sync path actually reads. A helper called
+   * from here would set THIS hook's unrelated `isSyncingRef` instead and
+   * leave the overwrite race wide open. Do not "decouple the hooks".
+   */
+  revealEditorLine: (line: number, hostY?: number) => void;
 }
 
 /**
  * Return type: callback for preview to call when selection changes
  */
 interface UseSelectionSyncReturn {
-  handlePreviewSelection: (startPos: SourceLocation | null, endPos: SourceLocation | null) => void;
+  handlePreviewSelection: (
+    startPos: SourceLocation | null,
+    endPos: SourceLocation | null,
+    hostY?: number,
+  ) => void;
 }
 
 /**
@@ -38,6 +53,7 @@ export function useSelectionSync({
   editorRef,
   previewRef,
   enabled,
+  revealEditorLine,
 }: UseSelectionSyncOptions): UseSelectionSyncReturn {
   // Track if we're currently syncing to prevent feedback loops
   const isSyncingRef = useRef(false);
@@ -45,7 +61,8 @@ export function useSelectionSync({
   // Preview → Editor selection sync
   const handlePreviewSelection = useCallback((
     startPos: SourceLocation | null,
-    endPos: SourceLocation | null
+    endPos: SourceLocation | null,
+    hostY?: number,
   ) => {
     const editor = editorRef.current;
     if (!editor || !startPos || !endPos) return;
@@ -67,8 +84,13 @@ export function useSelectionSync({
     // Set the selection in the editor
     editor.setSelection(range);
 
-    // Reveal the selection in the editor viewport
-    editor.revealRangeInCenter(range);
+    // Align (not merely reveal) the selection's start line to the same
+    // on-screen y as the clicked/selected span in the preview (2026-08-22
+    // click-align-editor-y plan, Phase 2). Per decision A4, the HTML preview
+    // keeps this cursor move + focus steal unlike q2-preview's click path —
+    // only the reveal itself changes here, from `revealRangeInCenter` to
+    // this alignment.
+    revealEditorLine(startPos.startLine, hostY);
 
     // Optionally focus the editor
     editor.focus();
@@ -77,7 +99,7 @@ export function useSelectionSync({
     setTimeout(() => {
       isSyncingRef.current = false;
     }, 50);
-  }, [editorRef]);
+  }, [editorRef, revealEditorLine]);
 
   // Editor → Preview selection sync
   useEffect(() => {

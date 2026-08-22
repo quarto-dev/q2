@@ -250,7 +250,7 @@ export default function Preview({
   );
 
   // Scroll synchronization between editor and preview
-  const { handlePreviewScroll, handlePreviewClick } = useScrollSync({
+  const { handlePreviewScroll, handlePreviewClick, revealEditorLine } = useScrollSync({
     editorRef,
     scrollPreviewToLine: (line: number) => {
       doubleBufferedIframeRef.current?.scrollToLine(line);
@@ -262,11 +262,17 @@ export default function Preview({
     editorHasFocusRef,
   });
 
-  // Selection synchronization between preview and editor
+  // Selection synchronization between preview and editor. Threads
+  // `revealEditorLine` from the `useScrollSync` call above (2026-08-22
+  // click-align-editor-y plan, Phase 2, decision A7) rather than
+  // re-implementing the alignment arithmetic here — that keeps the reveal
+  // bracketed by `useScrollSync`'s own `isSyncingRef`, the flag its
+  // ratio-sync overwrite-race guard actually reads.
   const { handlePreviewSelection } = useSelectionSync({
     editorRef,
     previewRef: doubleBufferedIframeRef,
     enabled: scrollSyncEnabled && editorReady,
+    revealEditorLine,
   });
 
   // Set scroll sync via runtime metadata when the prop changes

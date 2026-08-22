@@ -6,6 +6,7 @@ import {
   parseDataLoc,
   scrollIframeToLine,
   getIframeScrollRatio,
+  lineForClickTarget,
   type SourceLocation,
 } from './scrollSyncDom';
 
@@ -37,8 +38,17 @@ interface MorphIframeProps {
   onScroll?: () => void;
   // Optional callback when preview is clicked
   onClick?: () => void;
-  // Optional callback when selection changes in preview
-  onSelectionChange?: (startPos: SourceLocation | null, endPos: SourceLocation | null) => void;
+  // Optional callback when selection changes in preview. The third
+  // argument, `hostY`, is the anchor span's top edge in HOST-PAGE
+  // coordinates (see `handleSelectionChange` below) — used by
+  // `useScrollSync.revealEditorLine` to align the editor to the same
+  // on-screen y as the selected text, rather than merely reveal it
+  // (2026-08-22 click-align-editor-y plan, Phase 2).
+  onSelectionChange?: (
+    startPos: SourceLocation | null,
+    endPos: SourceLocation | null,
+    hostY?: number,
+  ) => void;
   // Ref to expose imperative methods
   ref: Ref<MorphIframeHandle>;
 }
@@ -441,13 +451,44 @@ function MorphIframe({
 
       if (anchorNode?.nodeType === Node.TEXT_NODE && focusNode?.nodeType === Node.TEXT_NODE) {
         if (anchorNode.parentElement?.tagName !== 'SPAN' || focusNode.parentElement?.tagName !== 'SPAN') return;
-        const anchorLoc = parseDataLoc(anchorNode.parentElement?.getAttribute('data-loc')!);
-        const focusLoc = parseDataLoc(focusNode.parentElement?.getAttribute('data-loc')!);
+        const anchorSpan = anchorNode.parentElement;
+        const focusSpan = focusNode.parentElement;
+        const anchorLoc = parseDataLoc(anchorSpan.getAttribute('data-loc')!);
+        const focusLoc = parseDataLoc(focusSpan.getAttribute('data-loc')!);
         if (anchorLoc === null || focusLoc === null) return;
+
+        // Guard: skip this call entirely — no setSelection/focus/reveal at
+        // all — when either end resolves outside the current file (fileId
+        // !== 0, e.g. inside `{{< include >}}`'d content). Fix, not
+        // pre-existing behavior (2026-08-22 click-align-editor-y plan,
+        // decision A8): before this, a selection inside included content
+        // moved the editor's caret + focus to a same-numbered but unrelated
+        // line of the currently-open file. Reuses `lineForClickTarget`
+        // (already relied on below for `hostY`) rather than re-deriving its
+        // checks — on this path only the fileId check is actually
+        // reachable (`#q2-active-edit-region` never appears outside
+        // q2-preview, and sections never carry a real `data-loc` here
+        // either), but reusing the function catches all three should that
+        // ever change.
+        if (lineForClickTarget(anchorSpan) === null || lineForClickTarget(focusSpan) === null) {
+          return;
+        }
 
         const start = addOffsetToPosition(qmdContent, anchorLoc.startLine, anchorLoc.startCol, anchorOffset)
         const end = addOffsetToPosition(qmdContent, focusLoc.startLine, focusLoc.startCol, focusOffset)
         if (start === null || end === null) return;
+
+        // hostY: align the anchor SPAN's on-screen y to the same line in
+        // the editor (2026-08-22 click-align-editor-y plan, Phase 2).
+        // Anchored on the SPAN itself, not a containing block: the
+        // SourceLocation below is already span/column precision (via
+        // addOffsetToPosition), so a coarser block's top would desync from
+        // the very line being reported on any multi-line block. Mirrors
+        // Q2PreviewIframe's `blockTop + iframeTop` pattern — the span's
+        // rect is in the IFRAME's viewport, so the iframe element's own top
+        // in the host page has to be added.
+        const hostY =
+          anchorSpan.getBoundingClientRect().top + iframe.getBoundingClientRect().top;
 
         onSelectionChange({
           startCol: start.col,
@@ -461,7 +502,7 @@ function MorphIframe({
           endCol: end.col,
           endLine: end.row,
           fileId: anchorLoc.fileId
-        });
+        }, hostY);
       }
     };
 
