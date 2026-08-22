@@ -141,9 +141,13 @@ interface Q2PreviewIframeProps {
    * Called with the resolved source line when a capture-phase `pointerup`
    * on the iframe document resolves one via `lineForClickTarget`
    * (preview→editor click sync). Not called at all when the click doesn't
-   * resolve a line (see `lineForClickTarget`'s null cases).
+   * resolve a line (see `lineForClickTarget`'s null cases). The second
+   * argument, `hostY`, is the clicked block's top edge in HOST-PAGE
+   * coordinates (see the `pointerup` handler below) — used by
+   * `useScrollSync.revealEditorLine` to align that source line to the same
+   * on-screen y, not just reveal it (2026-08-22 click-align-editor-y plan).
    */
-  onClickAtLine?: (line: number) => void;
+  onClickAtLine?: (line: number, hostY?: number) => void;
   /**
    * Called after the iframe commits a new AST (`AST_RENDERED`), so the host
    * can re-run editor→preview scroll sync against the fresh `data-loc` DOM.
@@ -239,7 +243,21 @@ export function Q2PreviewIframe({
     const handleScroll = () => onScroll?.();
     const handlePointerUp = (e: Event) => {
       const line = lineForClickTarget(e.target);
-      if (line !== null) onClickAtLine?.(line);
+      if (line === null) return;
+      // Report the clicked block's top edge in HOST-PAGE coordinates, so
+      // the editor can align that line to the same on-screen y as the
+      // preview's editing pane (decision A2, 2026-08-22 plan): the block's
+      // rect is in the IFRAME's viewport, so the iframe element's own top
+      // in the host page has to be added. The edit region doesn't exist yet
+      // at capture-phase pointerup — it replaces the clicked block in
+      // place, so the block's top *is* the pane's top.
+      const target = e.target as { closest?: Element['closest'] } | null;
+      const block = target?.closest?.('[data-loc]');
+      const blockTop = block?.getBoundingClientRect().top;
+      const iframeTop = iframe?.getBoundingClientRect().top;
+      const hostY =
+        blockTop !== undefined && iframeTop !== undefined ? blockTop + iframeTop : undefined;
+      onClickAtLine?.(line, hostY);
     };
 
     win.addEventListener('scroll', handleScroll, { passive: true });

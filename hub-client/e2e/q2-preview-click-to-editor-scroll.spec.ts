@@ -52,6 +52,15 @@
  *                   revert: delete the active-region guard from
  *                   `lineForClickTarget` → RED (the editor jumps to the
  *                   wrapper's line).
+ * A1g (2026-08-22 plan) — click-to-ALIGN, not just reveal: the clicked
+ *                   block's on-screen y (before the click) and the target
+ *                   line's rendered y in Monaco (after the click settles)
+ *                   must agree within a stated tolerance. This is the only
+ *                   row in the suite that binds the two coordinate spaces
+ *                   (iframe viewport vs. host page) — jsdom has no layout,
+ *                   so nothing below this tier can catch a wrong iframe
+ *                   offset; see that row's own comment for the tolerance
+ *                   and why.
  *
  * Run via:
  *   cd hub-client && npx playwright test e2e/q2-preview-click-to-editor-scroll.spec.ts \
@@ -710,5 +719,64 @@ test.describe('preview→editor scroll sync on click', () => {
             ).toContain(targetText);
             await page.waitForTimeout(25);
         }
+    });
+
+    test('A1g — clicking a block aligns its source line to the same on-screen y, not merely reveals it', async ({ page }) => {
+        // Paragraph 20 sits at source line 45 of 80 (paraLine(20)), safely away
+        // from the document's start or end — the alignment clamp (plan's "near
+        // the start or end… the clamp wins") would otherwise mask a wrong
+        // unclamped computation by coincidentally landing at the same clamped
+        // bound regardless of hostY.
+        await openDoc(page, 'q2-preview', 'q2-preview');
+        const iframe = page.frameLocator(Q2_IFRAME);
+        await iframe.locator('[data-block-pool-id]').first().waitFor({ timeout: 15_000 });
+
+        const targetText = 'Paragraph 20.';
+        const target = iframe.locator('p[data-block-pool-id]').filter({ hasText: targetText }).first();
+        await target.scrollIntoViewIfNeeded();
+        await page.waitForTimeout(300); // let the scrollIntoView settle before measuring
+
+        // hostY: the clicked block's top edge in HOST-PAGE coordinates — exactly
+        // what Q2PreviewIframe's pointerup handler computes and passes as
+        // `onClickAtLine`'s second argument. Playwright's boundingBox() is
+        // already reported relative to the main frame's viewport (not the
+        // iframe's), so this is the same coordinate space without redoing the
+        // iframe-offset arithmetic by hand.
+        const blockBoxBeforeClick = await target.boundingBox();
+        expect(blockBoxBeforeClick, 'precondition: the clicked block must be measurable').not.toBeNull();
+        const hostY = blockBoxBeforeClick!.y;
+
+        await target.click();
+        await iframe.locator('textarea').first().waitFor({ timeout: 5000 });
+        // Debounce is not in play here (revealEditorLine is not debounced —
+        // U2d), but Monaco's own ScrollType.Smooth animation and the
+        // isSyncingRef suppression window both run for up to 300ms.
+        await page.waitForTimeout(600);
+
+        // The target line's rendered y in Monaco, in the same host-page
+        // coordinate space (Monaco lives directly in the host page, not in an
+        // iframe, so no offset arithmetic is needed here).
+        const monacoLine = page
+            .locator('.monaco-editor .view-lines .view-line')
+            .filter({ hasText: targetText })
+            .first();
+        await monacoLine.waitFor({ timeout: 5000 });
+        const lineBox = await monacoLine.boundingBox();
+        expect(lineBox, 'the target line must be rendered (in the DOM) after alignment').not.toBeNull();
+
+        // Tolerance: 6px. The computation is exact integer arithmetic
+        // (getTopForLineNumber - (hostY - editorTop)), but two independent
+        // boundingBox() reads and Monaco's own sub-pixel line positioning can
+        // each be off by a fraction of a pixel; 6px comfortably absorbs that
+        // without masking a real defect. A wrong iframe-coordinate-space
+        // computation (the bug this row exists to catch — see the plan's "two
+        // coordinate spaces" note) is off by a whole constant offset: the
+        // height of whatever chrome sits above the preview pane (tens to
+        // hundreds of px), an order of magnitude past this tolerance.
+        const ALIGNMENT_TOLERANCE_PX = 6;
+        expect(
+            Math.abs(lineBox!.y - hostY),
+            `clicked block's on-screen y (${hostY}) and the target line's rendered y in Monaco (${lineBox!.y}) must agree within ${ALIGNMENT_TOLERANCE_PX}px`,
+        ).toBeLessThanOrEqual(ALIGNMENT_TOLERANCE_PX);
     });
 });
