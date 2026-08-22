@@ -1,0 +1,3 @@
+::: {plain="hello" esc="a\*b" both="\[x\]" tail="y\*"}
+Escapes in attribute values.
+:::

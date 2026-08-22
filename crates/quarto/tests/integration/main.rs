@@ -7,6 +7,7 @@ pub mod build_ts_extension_e2e;
 pub mod coalesced_diagnostics;
 pub mod conditional_content_cli;
 pub mod create;
+pub mod diagnostic_render_panic_boundary;
 pub mod engine_diagnostics_cli;
 pub mod extension_config_spans;
 pub mod get_config_cli;

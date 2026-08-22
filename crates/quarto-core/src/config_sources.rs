@@ -87,8 +87,17 @@ pub fn bind_source_candidates<'a>(
     info: &SourceInfo,
     candidates: impl IntoIterator<Item = (FileId, &'a Path)>,
 ) -> Option<&'a Path> {
-    let (fid_usize, _, _) = info.resolve_byte_range()?;
-    let fid = FileId(fid_usize);
+    // `root_file_id()`, not `resolve_byte_range()`: this function only
+    // ever wants the id (the discarded `_, _` above used to hide that),
+    // and `root_file_id()` resolves it for `Concat`/`Substring{parent:
+    // Concat}` shapes too — which `resolve_byte_range()` refuses,
+    // returning `None` and skipping registration entirely (bd-related
+    // regression: a multi-line block scalar's re-parsed diagnostics
+    // carry exactly this shape after content provenance was threaded
+    // into the re-parse bases). Using the same accessor the renderer
+    // uses (`root_file_id()`, `diagnostic.rs:819`/`:1022`) also makes
+    // the binder agree with the renderer about how to obtain the id.
+    let fid = info.root_file_id()?;
     for (candidate_id, candidate) in candidates {
         if candidate_id != fid {
             continue;
@@ -262,6 +271,55 @@ mod tests {
         let info = SourceInfo::generated(quarto_source_map::By::programmatic_config());
         let mut sc = SourceContext::new();
         assert_eq!(bind_config_source(&mut sc, &info, [config.as_path()]), None);
+    }
+
+    /// A `Concat`-backed `SourceInfo`, wrapped in a `Substring` — the
+    /// exact shape a diagnostic re-parsed out of a multi-line block
+    /// scalar carries once content provenance is threaded into the
+    /// re-parse bases (commit `1b6d30c08`): decoding strips each
+    /// line's leading indent, so the decoded content is discontiguous
+    /// in the source and its `SourceInfo` is a `Concat` of per-line
+    /// pieces, all rooted in the same file.
+    ///
+    /// `resolve_byte_range()` refuses any `Concat`-backed location
+    /// (`SourceInfo::Concat { .. } => None`, and a `Substring` whose
+    /// parent is a `Concat` inherits that `None`) — that used to be
+    /// `bind_source_candidates`'s first and only way to obtain the
+    /// file id, so this exact shape used to return `None` and
+    /// register nothing, degrading the diagnostic to a span-less
+    /// render (task C5's regression). `root_file_id()` resolves it
+    /// fine: it recurses through the `Substring` to the `Concat`, then
+    /// `find_map`s over the pieces to the first one with a root.
+    fn concat_backed_source_info_in(path: &Path) -> SourceInfo {
+        let fid = quarto_yaml::file_id_for_filename(&path.to_string_lossy());
+        let piece_a = SourceInfo::substring(SourceInfo::original(fid, 0, 20), 0, 8);
+        let piece_b = SourceInfo::substring(SourceInfo::original(fid, 0, 20), 9, 17);
+        let concat = SourceInfo::concat(vec![(piece_a, 8), (piece_b, 8)]);
+        SourceInfo::substring(concat, 2, 10)
+    }
+
+    #[test]
+    fn binds_a_concat_backed_source_info() {
+        let temp = TempDir::new().unwrap();
+        let config = temp.path().join("_quarto.yml");
+        std::fs::write(&config, "project:\n  type: default\n").unwrap();
+
+        let info = concat_backed_source_info_in(&config);
+        let mut sc = SourceContext::new();
+        let matched = bind_config_source(&mut sc, &info, [config.as_path()]);
+        assert_eq!(
+            matched,
+            Some(config.as_path()),
+            "a Concat-backed location must still resolve to its root file"
+        );
+        let fid = quarto_yaml::file_id_for_filename(&config.to_string_lossy());
+        let registered = sc
+            .get_file(fid)
+            .expect("Concat-backed match must still register the file's content");
+        assert_eq!(
+            registered.content.as_deref(),
+            Some("project:\n  type: default\n"),
+        );
     }
 
     #[test]

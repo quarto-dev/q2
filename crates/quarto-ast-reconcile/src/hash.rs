@@ -575,6 +575,9 @@ fn hash_config_value_kind(
         // `ConfigValue.source_info` is excluded above: this is the
         // change-detection hash for incremental rebuilds, and a value
         // moving in the source without changing must not churn it.
+        // The exclusion is additionally enforced at the type level:
+        // `content_source_info`'s `SourceInfo` does not implement `Hash`,
+        // so a mutation that tried to hash it would not even compile.
         ConfigValueKind::Scalar { yaml, .. } => {
             yaml.hash(hasher);
         }
@@ -2563,6 +2566,33 @@ mod tests {
             entries[0].value.source_info = other_source();
         }
         assert_eq!(compute_meta_hash_fresh(&a), compute_meta_hash_fresh(&b));
+    }
+
+    #[test]
+    fn meta_hash_excludes_scalar_content_provenance() {
+        // A string scalar's *content* provenance (the inner span of a
+        // quoted/block scalar, threaded in by this epic) must not reach the
+        // change-detection hash either. Hashing it would over-invalidate
+        // every incremental rebuild: a value that merely moved in the source
+        // would churn the hash even though its content is unchanged.
+        //
+        // `scalar_str` and friends always build `content_source_info: None`,
+        // so no other test in this module can observe this arm's behavior --
+        // it is reachable only by constructing the `Some` variants directly.
+        let with_prov = |prov: SourceInfo| ConfigValue {
+            value: ConfigValueKind::scalar_with_provenance(Yaml::String("hello".to_string()), prov),
+            source_info: dummy_source(),
+            merge_op: MergeOp::default(),
+        };
+
+        let a = map_of(vec![("title", with_prov(dummy_source()))]);
+        let b = map_of(vec![("title", with_prov(other_source()))]);
+
+        assert_eq!(
+            compute_meta_hash_fresh(&a),
+            compute_meta_hash_fresh(&b),
+            "content provenance must be excluded from the meta hash",
+        );
     }
 
     #[test]

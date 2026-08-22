@@ -492,7 +492,7 @@ mod tests {
         fn layer(name: &str, text: &str) -> (ConfigValue, SourceContext) {
             let parsed = quarto_yaml::parse_file(text, name).expect("valid yaml");
             let mut diags = Vec::new();
-            let cv = crate::config_value_from_yaml(parsed, &mut diags);
+            let cv = crate::convert::config_value_from_yaml(parsed, &mut diags);
             (cv, crate::span_assert::context_for(name, text))
         }
 

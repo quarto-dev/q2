@@ -7,6 +7,7 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Inline, LineBreak, SoftBreak, Space};
 use crate::pandoc::location::node_location;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
+use quarto_source_map::ProvenanceBuilder;
 
 /// Helper function to filter out delimiter nodes
 pub fn filter_delimiter_children(
@@ -19,40 +20,116 @@ pub fn filter_delimiter_children(
         .collect()
 }
 
-/// Helper function to extract text from string quotes.
+/// Helper function to extract text from string quotes, together with the
+/// **content provenance** of the string it produces.
 ///
 /// Strips surrounding `"..."` or `'...'` and applies CommonMark/Pandoc-style
 /// backslash escapes: `\X` collapses to `X` when `X` is ASCII punctuation,
-/// otherwise the backslash is preserved literally. Bare (unquoted) values
-/// are returned unchanged.
-pub fn extract_quoted_text(text: &str) -> String {
+/// otherwise the backslash is preserved literally. Escape processing runs
+/// unconditionally, quoted or not — a bare value is unreachable-with-escapes
+/// today only because the grammar never hands one a backslash: the naked
+/// value token's charset (`tree-sitter-qmd`'s scanner, `[A-Za-z0-9_%.-]`)
+/// excludes `\`, and `title` — this function's only other caller — is always
+/// an alias of the quoted-string production. Shortcode strings never reach
+/// this function at all: the naked form is taken verbatim by
+/// `shortcode::process_shortcode_string_arg`, and the quoted form has its own
+/// ad hoc `\"`/`\'`-only unescaper in `treesitter.rs`. If a future grammar
+/// change ever lets `\` reach a bare value, it will be unescaped exactly like
+/// a quoted one, not passed through.
+///
+/// The returned [`SourceInfo`] maps *content* offsets of the returned
+/// `String` back to the source bytes they were decoded from, so a caller
+/// that re-parses the value and offsets into it lands on the right source
+/// byte. It is an `Original` when nothing was rewritten (the common case)
+/// and a `Concat` when at least one escape collapsed.
+///
+/// Two properties are load-bearing:
+///
+/// - **The quotes are excluded.** Quote stripping trims the *ends* of the
+///   content range; it does not leave an interior gap, so the delimiters
+///   are not recorded as zero-content pieces. Storing them that way would
+///   push the hull's exclusive end past the closing quote and re-include
+///   both delimiters in the span.
+/// - **Verbatim is tagged by bytes, not by length.** Each piece is emitted
+///   by the decode branch that produced it, so a piece is `verbatim` only
+///   when its source run really is byte-identical to its content run.
+///   Equal lengths are not sufficient: a 1→1 piece with differing bytes
+///   would license a consumer to Verbatim-copy the wrong bytes.
+///
+/// An empty inner text at file offset 0 in `FileId(0)` is a degenerate case:
+/// `ProvenanceBuilder::finish` with no pieces returns `leaf(anchor, anchor)`,
+/// so the result is `Original { FileId(0), 0, 0 }` — indistinguishable from
+/// `span_assert::resolve_span`'s `SuspiciousDefault` sentinel. Unreachable
+/// from the grammar today: an empty attribute value always arrives at a
+/// non-zero source offset, so this function never actually produces that
+/// exact shape in practice.
+///
+/// # Arguments
+/// * `text` — the raw node text, quotes included
+/// * `file_id` — the file `text` came from
+/// * `text_start` — the absolute byte offset of `text`'s first byte in
+///   `file_id`, i.e. the node's `start_byte()`
+pub fn extract_quoted_text(
+    text: &str,
+    file_id: quarto_source_map::FileId,
+    text_start: usize,
+) -> (String, quarto_source_map::SourceInfo) {
     let is_double = text.starts_with('"') && text.ends_with('"') && text.len() >= 2;
     let is_single = text.starts_with('\'') && text.ends_with('\'') && text.len() >= 2;
-    if is_double || is_single {
-        unescape_punctuation(&text[1..text.len() - 1])
+    let (inner, inner_start) = if is_double || is_single {
+        (&text[1..text.len() - 1], text_start + 1)
     } else {
-        text.to_string()
-    }
+        (text, text_start)
+    };
+
+    let mut builder = ProvenanceBuilder::in_file(file_id, inner_start);
+    let out = unescape_punctuation(inner, inner_start, &mut builder);
+    (out, builder.finish())
 }
 
 /// Collapse `\X` to `X` when `X` is ASCII punctuation. Otherwise the
 /// backslash is preserved. A trailing backslash with no following
 /// character is preserved as-is.
-fn unescape_punctuation(s: &str) -> String {
+///
+/// Every branch also records its own piece on `builder`, in content order:
+///
+/// | source                       | content         | piece                        |
+/// |------------------------------|-----------------|------------------------------|
+/// | `\X`, X ASCII punctuation    | `X`             | `replacement(i..i + 2, 1)`   |
+/// | `\Y`, Y not punctuation      | `\Y`, identical | `verbatim`                   |
+/// | trailing `\`, nothing after  | `\`, identical  | `verbatim`                   |
+/// | ordinary char                | itself          | `verbatim`                   |
+///
+/// `base` is the absolute byte offset of `s`'s first byte, so the pieces
+/// are recorded in `builder`'s coordinate space rather than `s`-relative.
+fn unescape_punctuation(s: &str, base: usize, builder: &mut ProvenanceBuilder) -> String {
     let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
+    let mut chars = s.char_indices();
+    while let Some((i, c)) = chars.next() {
         if c == '\\' {
             match chars.next() {
-                Some(next) if next.is_ascii_punctuation() => out.push(next),
-                Some(next) => {
+                Some((j, next)) if next.is_ascii_punctuation() => {
+                    // Two source bytes (`\` + a 1-byte punctuation char)
+                    // collapse to one content byte.
+                    out.push(next);
+                    builder.replacement(base + i..base + j + next.len_utf8(), next.len_utf8());
+                }
+                Some((j, next)) => {
+                    // Not an escape: the backslash and the following char
+                    // are re-emitted unchanged, so this run is genuinely
+                    // byte-identical.
                     out.push('\\');
                     out.push(next);
+                    builder.verbatim(base + i..base + j + next.len_utf8());
                 }
-                None => out.push('\\'),
+                None => {
+                    out.push('\\');
+                    builder.verbatim(base + i..base + i + 1);
+                }
             }
         } else {
             out.push(c);
+            builder.verbatim(base + i..base + i + c.len_utf8());
         }
     }
     out
@@ -543,38 +620,160 @@ where
 #[cfg(test)]
 mod tests {
     use super::extract_quoted_text;
+    use quarto_source_map::{FileId, SourceInfo};
+
+    /// Decode `text` as if it started at byte 0 of `FileId(0)`, keeping
+    /// only the decoded string.
+    fn decode(text: &str) -> String {
+        extract_quoted_text(text, FileId(0), 0).0
+    }
 
     #[test]
     fn double_quoted_escape_punctuation() {
         // CommonMark/Pandoc rule: backslash before ASCII punctuation collapses.
-        assert_eq!(extract_quoted_text(r#""\[1,2\]""#), "[1,2]");
-        assert_eq!(extract_quoted_text(r#""a\"b""#), "a\"b");
-        assert_eq!(extract_quoted_text(r#""a\\b""#), "a\\b");
+        assert_eq!(decode(r#""\[1,2\]""#), "[1,2]");
+        assert_eq!(decode(r#""a\"b""#), "a\"b");
+        assert_eq!(decode(r#""a\\b""#), "a\\b");
     }
 
     #[test]
     fn double_quoted_no_escape_nonpunctuation() {
         // Backslash before a non-punctuation char is preserved.
-        assert_eq!(extract_quoted_text(r#""a\bc""#), "a\\bc");
+        assert_eq!(decode(r#""a\bc""#), "a\\bc");
     }
 
     #[test]
     fn single_quoted_escape_punctuation() {
-        assert_eq!(extract_quoted_text(r"'a\'b'"), "a'b");
-        assert_eq!(extract_quoted_text(r"'a\\b'"), "a\\b");
+        assert_eq!(decode(r"'a\'b'"), "a'b");
+        assert_eq!(decode(r"'a\\b'"), "a\\b");
     }
 
     #[test]
     fn unquoted_text_passthrough() {
-        // Bare values get no escape processing.
-        assert_eq!(extract_quoted_text(r"a\b"), "a\\b");
-        assert_eq!(extract_quoted_text("plain"), "plain");
+        // Escape processing still runs on a bare value (there is no quote
+        // check gating it) — this just happens to be a no-op here because
+        // `\b` isn't `\<ASCII punctuation>`. It stays green as a boundary
+        // guard, not because bare values are exempt: the grammar's naked
+        // value charset excludes `\` entirely, so a real bare value never
+        // reaches this function carrying an escape to collapse.
+        assert_eq!(decode(r"a\b"), "a\\b");
+        assert_eq!(decode("plain"), "plain");
     }
 
     #[test]
     fn trailing_backslash_preserved() {
         // A dangling backslash with nothing after it stays literal.
-        assert_eq!(extract_quoted_text(r#""abc\""#), "abc\\");
+        assert_eq!(decode(r#""abc\""#), "abc\\");
+    }
+
+    // ---------------------------------------------------------------
+    // Content provenance
+    //
+    // Every offset below is a *source* offset taken from the node's own
+    // extent (`text_start` + an index into `text`) — never derived from
+    // a content length.
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn quoted_value_with_no_escapes_spans_the_value_without_its_quotes() {
+        // The sanity check for the "quotes are not zero-content pieces"
+        // rule: `"hello"` occupies bytes 0..7, and the value's span must
+        // be 1..6 — the opening quote excluded, the exclusive end
+        // landing *on* the closing quote rather than after it. Nothing
+        // was rewritten, so the tiling collapses to one contiguous piece.
+        let (text, source) = extract_quoted_text(r#""hello""#, FileId(0), 0);
+        assert_eq!(text, "hello");
+        assert_eq!(source, SourceInfo::original(FileId(0), 1, 6));
+    }
+
+    #[test]
+    fn bare_value_spans_the_whole_node() {
+        // No quotes to strip, nothing to collapse: the span is the node.
+        // A non-zero `text_start` pins that pieces are recorded in
+        // absolute file coordinates, not node-relative ones.
+        let (text, source) = extract_quoted_text("plain", FileId(0), 40);
+        assert_eq!(text, "plain");
+        assert_eq!(source, SourceInfo::original(FileId(0), 40, 45));
+    }
+
+    #[test]
+    fn collapsed_escape_tiles_the_decode_piecewise() {
+        // `"a\*b"` starting at byte 10:
+        //   10 `"`   11 `a`   12 `\`   13 `*`   14 `b`   15 `"`
+        // The `\*` pair is two source bytes for one content byte, so no
+        // affine map exists and the result is a three-piece `Concat`.
+        let (text, source) = extract_quoted_text(r#""a\*b""#, FileId(0), 10);
+        assert_eq!(text, "a*b");
+
+        let SourceInfo::Concat { pieces } = &source else {
+            panic!("expected a Concat for a collapsed escape, got {source:?}");
+        };
+        assert_eq!(pieces.len(), 3);
+        assert_eq!(
+            pieces[0].source_info,
+            SourceInfo::original(FileId(0), 11, 12)
+        );
+        assert_eq!(pieces[0].length, 1);
+        // Two source bytes, one content byte.
+        assert_eq!(
+            pieces[1].source_info,
+            SourceInfo::original(FileId(0), 12, 14)
+        );
+        assert_eq!(pieces[1].length, 1);
+        assert_eq!(
+            pieces[2].source_info,
+            SourceInfo::original(FileId(0), 14, 15)
+        );
+        assert_eq!(pieces[2].length, 1);
+    }
+
+    #[test]
+    fn escapes_at_both_ends_still_stop_before_the_closing_quote() {
+        // `"\*x\*"`: the last piece is a *replacement*, which is the
+        // shape most likely to walk the hull's exclusive end past the
+        // closing quote if the delimiters were recorded as zero-content
+        // pieces.
+        //   0 `"`   1 `\`   2 `*`   3 `x`   4 `\`   5 `*`   6 `"`
+        let (text, source) = extract_quoted_text(r#""\*x\*""#, FileId(0), 0);
+        assert_eq!(text, "*x*");
+
+        let SourceInfo::Concat { pieces } = &source else {
+            panic!("expected a Concat, got {source:?}");
+        };
+        assert_eq!(pieces.len(), 3);
+        assert_eq!(pieces[0].source_info, SourceInfo::original(FileId(0), 1, 3));
+        assert_eq!(pieces[1].source_info, SourceInfo::original(FileId(0), 3, 4));
+        assert_eq!(pieces[2].source_info, SourceInfo::original(FileId(0), 4, 6));
+        // The hull ends at 6, on the closing quote, not after it.
+        assert_eq!(source.length(), 3);
+    }
+
+    #[test]
+    fn non_punctuation_escape_is_verbatim_not_a_replacement() {
+        // `\z` is re-emitted as the same two bytes, so it is byte-identical
+        // and tagged verbatim — which lets it merge with its neighbours and
+        // collapse to one contiguous piece.
+        let (text, source) = extract_quoted_text(r#""a\zb""#, FileId(0), 0);
+        assert_eq!(text, "a\\zb");
+        assert_eq!(source, SourceInfo::original(FileId(0), 1, 5));
+    }
+
+    #[test]
+    fn trailing_backslash_is_verbatim() {
+        // `"abc\"` — the dangling backslash is one source byte producing
+        // one identical content byte.
+        let (text, source) = extract_quoted_text(r#""abc\""#, FileId(0), 0);
+        assert_eq!(text, "abc\\");
+        assert_eq!(source, SourceInfo::original(FileId(0), 1, 5));
+    }
+
+    #[test]
+    fn multibyte_content_advances_by_utf8_length() {
+        // `é` is two bytes; the span must be byte-based, so the value's
+        // extent is 1..6 for a 4-char / 5-byte value.
+        let (text, source) = extract_quoted_text("\"café\"", FileId(0), 0);
+        assert_eq!(text, "café");
+        assert_eq!(source, SourceInfo::original(FileId(0), 1, 6));
     }
 }
 

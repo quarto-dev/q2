@@ -506,8 +506,15 @@ struct OptionValue {
         reason = "consumed by the unknown-key diagnostics in Phase 6"
     )]
     key_source: SourceInfo,
-    /// Provenance of the value scalar — the anchor a re-parse of the
-    /// value (e.g. a caption read as markdown) hangs its spans off.
+    /// Provenance of the value scalar's *decoded content* — the anchor a
+    /// re-parse of the value (e.g. a caption read as markdown) hangs its
+    /// spans off. Falls back to the raw node span (quote delimiters
+    /// included) when the YAML parser recorded no content provenance for
+    /// this scalar, which is inert rather than wrong: it degrades to the
+    /// coarser, quote-inclusive caret this field used to carry
+    /// unconditionally, never a mismatched one (see
+    /// `parse_scalar_string_in_place` in `transforms/config_markdown.rs`
+    /// for the equivalent front-matter/project-config reasoning).
     value_source: SourceInfo,
 }
 
@@ -548,7 +555,11 @@ fn parse_cell_options(language: &str, text: &str, body_source: SourceInfo) -> Ce
                 OptionValue {
                     value,
                     key_source: entry.key.source_info.clone(),
-                    value_source: entry.value.source_info.clone(),
+                    value_source: entry
+                        .value
+                        .content_source_info()
+                        .cloned()
+                        .unwrap_or_else(|| entry.value.source_info.clone()),
                 },
             );
         }
@@ -1249,5 +1260,197 @@ mod tests {
             panic!("expected inner Div, got {:?}", wrapper.content[0]);
         };
         assert_eq!(crossref_div.attr.0, "fig-inner");
+    }
+
+    // --- Content provenance (task C7, bd-... YAML provenance epic) -----
+    //
+    // `value_source` used to be `entry.value.source_info` — the raw,
+    // quote-inclusive YAML node span — and `caption_inlines` handed that
+    // straight to `parse_config_string_as_markdown` as the offset base
+    // for re-parsing the decoded caption as markdown. So a quoted
+    // `fig-cap: "A *strong* claim."` drifted one byte left of the true
+    // position: the base included the opening `"` the decoded value does
+    // not have. These tests parse REAL qmd text (per
+    // `quarto_config::span_assert`'s module docs — `SourceInfo::for_test()`
+    // fixtures are synthetic, so a wrong span is indistinguishable from a
+    // right one) and resolve the caption's inline spans back against it.
+
+    /// Parse `text` as qmd, run the desugar over the real AST, and hand
+    /// back the resulting blocks alongside the `SourceContext` the parse
+    /// produced — so a caption inline's `SourceInfo` can be resolved back
+    /// to the exact bytes this text supplied.
+    fn desugar_real_qmd(
+        text: &str,
+        reg: &RefTypeRegistry,
+    ) -> (Blocks, quarto_source_map::SourceContext) {
+        let (ast, ast_context, _parse_diags) = pampa::readers::qmd::read(
+            text.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            false,
+            None,
+        )
+        .expect("fixture should parse");
+
+        let mut blocks = ast.blocks;
+        let mut diagnostics = Vec::new();
+        desugar_blocks(
+            &mut blocks,
+            reg,
+            &ast_context.source_context,
+            &mut diagnostics,
+        );
+        (blocks, ast_context.source_context)
+    }
+
+    /// The drift itself: a single quoted `fig-cap` containing markup on
+    /// an unlabelled diagram cell (so it wraps as a bare `Figure`, no
+    /// label option needed). The caption's `Emph` must resolve to the
+    /// true `strong` span in the source, not a window shifted by the
+    /// opening quote.
+    #[test]
+    fn quoted_caption_markup_resolves_to_its_true_source_position() {
+        let reg = RefTypeRegistry::builtin();
+        let text =
+            "```{mermaid}\n%%| fig-cap: \"A *strong* claim.\"\nflowchart LR\n  A --> B\n```\n";
+        let (blocks, sources) = desugar_real_qmd(text, &reg);
+
+        let Block::Figure(fig) = &blocks[0] else {
+            panic!("expected Figure, got {:?}", blocks[0]);
+        };
+        let long = fig.caption.long.as_ref().expect("caption present");
+        let Block::Plain(p) = &long[0] else {
+            panic!("expected a Plain caption block, got {:?}", long[0]);
+        };
+        let emph = p
+            .content
+            .iter()
+            .find_map(|i| match i {
+                Inline::Emph(e) => Some(e),
+                _ => None,
+            })
+            .expect("caption must carry an Emph");
+        assert_eq!(plain_text(&emph.content), "strong");
+
+        let resolved =
+            quarto_config::span_assert::resolve_span(emph.content[0].source_info(), &sources)
+                .expect("emph span should resolve");
+        assert_eq!(
+            resolved.text, "strong",
+            "the emphasis span must underline the true source text, not a window \
+             shifted by the caption's opening quote"
+        );
+    }
+
+    /// The nested-`Concat` shape the epic's builder contract exists for:
+    /// cell options hand `quarto_yaml::parse_with_parent` a
+    /// `SourceInfo::concat(...)` of per-line substrings
+    /// (`crate::cell_options::partition_cell_options`), so with more than
+    /// one option line the caption's raw node span is a
+    /// `Substring{parent: Concat}` over *part* of that concat — never a
+    /// flat parent. Confirm the shape directly, then confirm the fix
+    /// still resolves correctly through it.
+    #[test]
+    fn nested_concat_cell_options_caption_resolves_correctly() {
+        let reg = RefTypeRegistry::builtin();
+        let text = "```{python}\n#| label: fig-plot\n#| fig-cap: \"A *strong* claim.\"\nprint('hi')\n```\n";
+
+        // Confirm the shape independently of the desugar: the raw (pre-
+        // content-provenance) span of the fig-cap value is a Substring
+        // over a Concat with more than one piece — label's line and
+        // fig-cap's line are each their own piece.
+        let (ast, ast_context, _parse_diags) = pampa::readers::qmd::read(
+            text.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            false,
+            None,
+        )
+        .expect("fixture should parse");
+        let Block::CodeBlock(cb) = &ast.blocks[0] else {
+            panic!("expected a CodeBlock, got {:?}", ast.blocks[0]);
+        };
+        let body_source = body_source_for(cb, &ast_context.source_context);
+        let part =
+            partition_cell_options("python", &cb.text, body_source).expect("options should parse");
+        let options = part.options.expect("cell has options");
+        let entries = options.as_hash().expect("options are a mapping");
+        let fig_cap_entry = entries
+            .iter()
+            .find(|e| e.key.yaml.as_str() == Some("fig-cap"))
+            .expect("fig-cap entry present");
+        match &fig_cap_entry.value.source_info {
+            SourceInfo::Substring { parent, .. } => match &**parent {
+                SourceInfo::Concat { pieces } => {
+                    assert!(
+                        pieces.len() >= 2,
+                        "expected a multi-piece Concat (one piece per option \
+                         line); got {} piece(s)",
+                        pieces.len()
+                    );
+                }
+                other => panic!("expected the Substring's parent to be a Concat, got {other:?}"),
+            },
+            other => panic!("expected fig-cap's raw span to be a Substring, got {other:?}"),
+        }
+
+        // Now confirm the fix resolves correctly through that shape.
+        let (blocks, sources) = desugar_real_qmd(text, &reg);
+        let Block::Div(div) = &blocks[0] else {
+            panic!("expected Div, got {:?}", blocks[0]);
+        };
+        let Block::Paragraph(p) = &div.content[1] else {
+            panic!("expected a caption paragraph, got {:?}", div.content[1]);
+        };
+        let emph = p
+            .content
+            .iter()
+            .find_map(|i| match i {
+                Inline::Emph(e) => Some(e),
+                _ => None,
+            })
+            .expect("caption must carry an Emph");
+        assert_eq!(plain_text(&emph.content), "strong");
+
+        // NOTE (finding, not a bug in this task's one-line fix): calling
+        // `resolve_span` here returns `Err(SpanProblem::Concat)`, not
+        // `Ok`. `resolve_span`'s `is_gapless` check (task C3) walks
+        // *every* piece of the enclosing Concat for contiguity, not just
+        // the piece the span in question actually falls inside — and a
+        // multi-line `#|` options block is *always* gappy under that
+        // definition: each line's piece covers `content_start..line_len`
+        // (real source bytes only, marker elided), so consecutive lines'
+        // pieces never abut in the underlying document (the next line's
+        // `#| ` marker sits in the gap). That is inherent to how
+        // multi-line cell options are reassembled, not a defect this
+        // task introduced, and `resolve_span`/its gap policy is out of
+        // scope here (owned by C3). So this test proves the fix's
+        // correctness directly via `map_offset`, which — unlike
+        // `resolve_span` — only asks whether *this span's own* two
+        // endpoints resolve, not whether the whole Concat is gapless.
+        let inner = emph.content[0].source_info();
+        let length = inner.length();
+        let start = inner
+            .map_offset(0, &sources)
+            .expect("emph span start should map");
+        let end = inner
+            .map_offset(length, &sources)
+            .expect("emph span end should map");
+        assert_eq!(
+            start.file_id, end.file_id,
+            "emph span must not cross a file boundary"
+        );
+        let file = sources
+            .get_file(start.file_id)
+            .expect("file should be registered");
+        let content = file.content.as_deref().expect("file should have content");
+        assert_eq!(
+            &content[start.location.offset..end.location.offset],
+            "strong",
+            "the emphasis span must underline the true source text through the \
+             nested-Concat parent, not a shifted window"
+        );
     }
 }

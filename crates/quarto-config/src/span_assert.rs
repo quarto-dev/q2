@@ -130,7 +130,12 @@ impl std::fmt::Display for SpanProblem {
                 start,
                 end,
                 len,
-            } => write!(f, "range {start}..{end} is outside `{path}` (length {len})"),
+            } => write!(
+                f,
+                "range {start}..{end} (end may be approximate — derived from \
+                 arithmetic, not independently resolved, when only the start \
+                 of the span resolved) is outside `{path}` (length {len})"
+            ),
         }
     }
 }

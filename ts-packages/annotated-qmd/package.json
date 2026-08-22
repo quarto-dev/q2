@@ -1,6 +1,6 @@
 {
   "name": "@quarto/annotated-qmd",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Convert quarto-markdown-pandoc JSON output to AnnotatedParse structures",
   "license": "MIT",
   "author": {

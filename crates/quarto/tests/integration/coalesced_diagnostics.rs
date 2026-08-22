@@ -189,6 +189,97 @@ fn config_anchored_warning_shows_config_snippet() {
     );
 }
 
+/// A per-page Q-2-9 diagnostic re-parsed out of a **multi-line block
+/// scalar** (`page-footer.center: |`) renders with an ariadne snippet
+/// naming `_quarto.yml` at the corrected position (task C5 / C4a).
+///
+/// Why this fixture and not `write_broken_navbar_project`'s plain
+/// scalar: threading content provenance into the YAML re-parse bases
+/// (commit `1b6d30c08`) fixed the *carets* (they used to land on the
+/// wrong line) but changed the *shape* of these diagnostics' source
+/// locations to `Substring { parent: Concat }` — a block scalar's
+/// decoded content is discontiguous in the source once each line's
+/// leading indent is stripped.
+///
+/// **Important limitation, recorded rather than hidden:** this
+/// end-to-end test cannot by itself distinguish `bind_source_candidates`
+/// using `resolve_byte_range()` (refuses `Concat`, registers nothing)
+/// from using `root_file_id()` (resolves it, registers the file) —
+/// both pass here, because `MetadataMergeStage`
+/// (`stage/stages/metadata_merge.rs`) unconditionally pre-registers
+/// `_quarto.yml`'s content into `doc.source_context` *before* the
+/// block-scalar re-parse ever runs, independently of
+/// `attach_config_source`/`bind_config_source`. That pre-registration
+/// covers every candidate `attach_config_source` ever supplies
+/// (`config_path`, profile overlays, extension manifests), so for any
+/// diagnostic anchored in one of those files, `bind_source_candidates`
+/// returning `None` is a harmless no-op in this call path today —
+/// confirmed by running this exact fixture against the pre-fix
+/// `resolve_byte_range()` binder (it still passed). The real
+/// regression proof — a case where the file is *not* already
+/// registered and `bind_source_candidates`'s own return value is the
+/// only thing standing between the diagnostic and a snippet — is the
+/// focused unit test `config_sources::tests::binds_a_concat_backed_source_info`
+/// in `crates/quarto-core/src/config_sources.rs`, which fails red
+/// (`None` where `Some(path)` is expected) before the fix and passes
+/// after.
+///
+/// This test is kept anyway as the CLAUDE.md-mandated end-to-end
+/// check: it drives the real binary and inspects real stderr for the
+/// corrected caret position *and* a rendered snippet together, and it
+/// guards against a future regression in `MetadataMergeStage`'s
+/// pre-registration (if that ever narrowed, this call path would
+/// start depending on `bind_source_candidates` for real, and this
+/// test would then catch a regression there too).
+///
+/// The assertion is snippet *presence*, not diagnostic presence.
+/// Checking only that `Q-2-9` appears in stderr would pass whether or
+/// not a snippet renders (the diagnostic itself is never suppressed)
+/// and would be vacuous. Instead this asserts on the literal offending
+/// source line (`<span id="y">Footer</span>`) appearing in stderr,
+/// which can only come from ariadne's rendered excerpt of
+/// `_quarto.yml`'s actual content — that text exists nowhere else in
+/// the diagnostic's title, problem prose, or hints.
+#[test]
+fn block_scalar_config_diagnostic_binds_concat_backed_source() {
+    let dir = TempDir::new().unwrap();
+    write_file(
+        &dir.path().join("_quarto.yml"),
+        "project:\n  type: website\nwebsite:\n  title: \"T\"\n  page-footer:\n    center: |\n      line one\n      line two\n      <span id=\"y\">Footer</span>\n",
+    );
+    write_file(
+        &dir.path().join("index.qmd"),
+        "---\ntitle: \"Index\"\n---\n\nbody\n",
+    );
+
+    let (success, stderr) = run_q2_render(dir.path());
+    assert!(
+        success,
+        "Q-2-9 is a warning; it must not fail the render:\n{stderr}"
+    );
+
+    let q2_9_count = stderr.matches("Q-2-9").count();
+    assert_eq!(
+        q2_9_count, 2,
+        "expected two Q-2-9 warnings (open + close <span> tags); got {q2_9_count}:\n{stderr}"
+    );
+
+    assert!(
+        stderr.contains("_quarto.yml"),
+        "Q-2-9 should name _quarto.yml as its source:\n{stderr}"
+    );
+    // The non-vacuous signal: this exact line only appears in stderr
+    // if ariadne actually read and rendered _quarto.yml's content —
+    // it is not part of the diagnostic's title/problem/hint text.
+    assert!(
+        stderr.contains("<span id=\"y\">Footer</span>"),
+        "Q-2-9 should render the offending _quarto.yml source line; \
+         see this test's doc comment for why the real regression proof \
+         lives in config_sources::tests::binds_a_concat_backed_source_info \
+         instead:\n{stderr}"
+    );
+}
+
 /// A single-page project still emits the warning once, with no
 /// `Affected files:` tail — the legacy single-page shape.
 #[test]

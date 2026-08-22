@@ -1,6 +1,6 @@
 # Examples
 
-This directory contains example Quarto Markdown files and their corresponding JSON output from `quarto-markdown-pandoc`.
+This directory contains example Quarto Markdown files and their corresponding JSON output from the `pampa` binary.
 
 ## Files
 
@@ -26,14 +26,25 @@ Demonstrates inline elements:
 
 ## Generating JSON
 
-To regenerate the JSON files from the .qmd sources:
+To regenerate the JSON files from the .qmd sources, run from **this directory**
+(`ts-packages/annotated-qmd/examples`):
 
 ```bash
-# From the repository root
-cargo run --bin quarto-markdown-pandoc -- -t json -i ts-packages/annotated-qmd/examples/simple.qmd > ts-packages/annotated-qmd/examples/simple.json
-cargo run --bin quarto-markdown-pandoc -- -t json -i ts-packages/annotated-qmd/examples/table.qmd > ts-packages/annotated-qmd/examples/table.json
-cargo run --bin quarto-markdown-pandoc -- -t json -i ts-packages/annotated-qmd/examples/links.qmd > ts-packages/annotated-qmd/examples/links.json
+for q in *.qmd; do
+  cargo run --quiet --bin pampa -- -t json -i "$q" > "${q%.qmd}.json"
+done
 ```
+
+Two details matter:
+
+- The binary is **`pampa`** (it was once called `quarto-markdown-pandoc`; that
+  name no longer exists).
+- Run it **from this directory**, not from the repository root. `pampa` records
+  the input path it was given in `astContext.files[].name`, so invoking it with
+  a longer path bakes that path into every example.
+
+Some of these fixtures deliberately contain malformed constructs and will emit
+warnings on stderr; the JSON on stdout is still what the tests consume.
 
 ## Using in Code
 

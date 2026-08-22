@@ -54,8 +54,6 @@ pub use types::{
 
 pub use tag::{ParsedTag, parse_tag};
 
-pub use convert::config_value_from_yaml;
-
 pub use merged::{
     MergedArray, MergedArrayItem, MergedConfig, MergedCursor, MergedMap, MergedScalar, MergedValue,
 };
