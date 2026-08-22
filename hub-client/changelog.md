@@ -25,14 +25,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-08-22
 
-- [`7505e8aaf`](https://github.com/quarto-dev/q2/commits/7505e8aaf): Fix a bug where selecting text from an included document in the HTML preview moved the source editor's caret to the wrong file's line instead of leaving it alone.
-- [`cc4c83480`](https://github.com/quarto-dev/q2/commits/cc4c83480): Clicking or selecting text in the HTML preview pane now aligns its source line to the same on-screen height as the clicked text, instead of just scrolling it into view.
-- [`ec05241e8`](https://github.com/quarto-dev/q2/commits/ec05241e8): Clicking a block in the q2-preview pane now aligns its source line to the same on-screen height as the clicked block, instead of just scrolling it into view.
+- [`0de96cd7a`](https://github.com/quarto-dev/q2/commits/0de96cd7a): Clicking in either preview pane now lines the source editor up with what you clicked: the first line of that block's source sits at the same height on screen as the block itself, so the two panes read side by side. Previously the q2-preview did nothing at all when you clicked a block, and the HTML preview scrolled your line to the middle of the editor. Selecting text that came from an included file also no longer moves your cursor to an unrelated line of the file you are editing.
 
 ### 2026-08-21
 
-- [`167dd4d5a`](https://github.com/quarto-dev/q2/commits/167dd4d5a): Clicking a block in the q2-preview pane now scrolls the source editor to that block, instead of leaving the editor where it was.
-- [`6187ea9f5`](https://github.com/quarto-dev/q2/commits/6187ea9f5): Fix a race where clicking a block in q2-preview correctly scrolled the source editor to that block, then had the scroll silently overwritten a few ms later by an unrelated preview scroll (e.g. a rich-text editor's toolbar mounting).
 - [`837de60b`](https://github.com/quarto-dev/q2/commits/837de60b): Fix deleted projects reappearing on the next page load — deleting a project now records a tombstone that syncs with the project set, so the on-load reconciler purges the stale local copy instead of resurrecting it, on every browser.
 
 ### 2026-08-19
