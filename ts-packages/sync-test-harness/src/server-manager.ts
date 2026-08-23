@@ -6,6 +6,7 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -141,16 +142,37 @@ export async function startHubServer(options: StartOptions): Promise<ServerHandl
 }
 
 /**
+ * Path to the TypeScript reference sync server. It lives in
+ * `external-sources/`, which is NOT version-controlled — see the External
+ * Sources Policy in CLAUDE.md. Tests that need it must skip when it is
+ * absent rather than fail, so the suite is CI-able (GH #250).
+ */
+const TS_SYNC_SERVER_DIR = path.join(
+  REPO_ROOT,
+  'external-sources',
+  'automerge-repo-sync-server',
+);
+
+/**
+ * True when the TS reference sync server is checked out locally.
+ *
+ * Use with `describe.skipIf(!tsSyncServerAvailable())` — never assume it
+ * is present. CI never has it.
+ */
+export function tsSyncServerAvailable(): boolean {
+  return existsSync(path.join(TS_SYNC_SERVER_DIR, 'src', 'index.js'));
+}
+
+/**
  * Start the TypeScript automerge-repo-sync-server.
  *
  * Uses `node src/index.js` in the external-sources directory.
  */
 export async function startTsSyncServer(options: StartOptions): Promise<ServerHandle> {
   const dataDir = options.dataDir ?? (await makeTempDir('ts-sync-test-'));
-  const serverDir = path.join(REPO_ROOT, 'external-sources', 'automerge-repo-sync-server');
 
   const proc = spawn('node', ['src/index.js'], {
-    cwd: serverDir,
+    cwd: TS_SYNC_SERVER_DIR,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
