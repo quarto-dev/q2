@@ -100,13 +100,18 @@ tests, so ordering this suite after that step is enough.
 
 ### 2.3 `sync-test-harness` depends on `external-sources/` — policy violation
 
-`ts-packages/sync-test-harness/src/server-manager.ts:148` spawns
+`ts-packages/sync-test-harness/src/server-manager.ts:152` spawns
 `node src/index.js` in `external-sources/automerge-repo-sync-server`. That
 directory is not version-controlled, so the `ts-sync-server` tier **can never**
 run in CI, and it violates the repo's External Sources Policy ("Test fixtures
 that depend on external-sources/" is listed as prohibited). Its sibling
-`hub` tier (which spawns our own binary) passes: 8 tests green, including the
-three reconnect-delay cases #250 suspected of flake.
+`hub` tier passes: 8 tests green, including the three reconnect-delay cases
+#250 suspected of flake. **Caveat on that measurement:** the hub tier spawns
+`cargo run --bin hub` (`server-manager.ts:96-117`) with a 120 s readiness
+timeout, so "green" here means green against a *warm* local `target/`. On a CI
+runner with no Rust cache that is a cold workspace build and would time out —
+which is why the fix plan gates this suite in `hub-client-e2e.yml`, the workflow
+that already pre-builds that binary, rather than in `ts-test-suite.yml`.
 
 Options: skip the tier when the directory is absent, vendor the sync server, or
 delete the tier. Needs a decision — it is not a wiring problem.
