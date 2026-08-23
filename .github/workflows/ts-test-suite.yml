@@ -205,6 +205,16 @@ jobs:
           npm run bundle -w @quarto/engine-host-deno
           git diff --exit-code -- ts-packages/quarto-engine-host-deno/dist/engine-host-deno.js
 
+      # preview-renderer's integration tier imports wasm-quarto-hub-client
+      # (aliased in vitest.integration.config.ts:53-55 to the committed
+      # hub-client/wasm-quarto-hub-client symlink -> crates/.../pkg). Without it
+      # 26 of 50 files fail on module resolution, which is why this one suite
+      # lives here rather than in workspace-ts-suites: it must run below the
+      # `Build WASM module` step. GH #250.
+      - name: Run preview-renderer integration tests
+        shell: bash
+        run: npm run test:integration -w ts-packages/preview-renderer
+
   # ── Workspace TS suites (GH #250) ────────────────────────────────────────
   #
   # A separate job on purpose. These suites need only Node + npm ci + the
@@ -298,3 +308,14 @@ jobs:
       - name: Run trace-viewer tests
         shell: bash
         run: npm test -w trace-viewer
+
+      # These two resolve workspace siblings through dist/, so they need the
+      # "Build ts-packages workspaces" step above. hub-mcp is the heaviest
+      # suite in this job (~32s: bundle.test.ts runs esbuild in beforeAll).
+      - name: Run quarto-sync-client tests
+        shell: bash
+        run: npm test -w ts-packages/quarto-sync-client
+
+      - name: Run quarto-hub-mcp tests
+        shell: bash
+        run: npm test -w ts-packages/quarto-hub-mcp
