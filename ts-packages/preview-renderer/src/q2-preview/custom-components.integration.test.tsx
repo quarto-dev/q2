@@ -656,11 +656,11 @@ describe('Equation', () => {
         ]);
         const span = container.querySelector('span#eq-pyth');
         expect(span).not.toBeNull();
-        // KaTeX renders \tag{N} as a side-floated number; the rendered
-        // tree contains a `<span class="tag">` whose textContent is the
-        // parenthesized number. Splitting by individual character spans
-        // means we check textContent rather than innerHTML.
-        const tagEl = span!.querySelector('.tag');
+        // KaTeX renders \tag{N} as a side-floated number. Since 0.18 the
+        // wrapper class is `katex-tag` (0.17 and earlier emitted a bare
+        // `tag`); the number is split across character spans, so assert on
+        // textContent rather than innerHTML.
+        const tagEl = span!.querySelector('.katex-tag');
         expect(tagEl).not.toBeNull();
         expect(tagEl!.textContent).toBe('(1)');
     });
@@ -671,9 +671,10 @@ describe('Equation', () => {
         ]);
         const span = container.querySelector('span#eq-x');
         expect(span).not.toBeNull();
-        // No KaTeX-emitted `.tag` wrapper when no \tag{} command was
-        // appended to the latex.
-        expect(span!.querySelector('.tag')).toBeNull();
+        // No KaTeX-emitted `.katex-tag` wrapper when no \tag{} command was
+        // appended to the latex. (This assertion was vacuous under KaTeX
+        // 0.18 while it still queried the pre-0.18 `.tag`.)
+        expect(span!.querySelector('.katex-tag')).toBeNull();
     });
 
     it('renders empty <span id> for an empty content slot (defensive branch 1)', () => {
