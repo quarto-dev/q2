@@ -1308,7 +1308,7 @@ fn audit_custom_node(
                     check_containment(par, child, "CustomNode.slot.Inline", findings);
                 }
                 if let Some(ref r) = child_range {
-                    check_tightness(inline_node_type(i), r, src, findings);
+                    check_tightness(inline_node_type(i), r, src, inline_own_text(i), findings);
                 }
                 audit_inline_node_children(i, child_range, target, src, findings);
             }
@@ -1363,7 +1363,13 @@ fn audit_inline_siblings(
             continue;
         }
         if let Some(ref r) = inline.source_info().preimage_in(target) {
-            check_tightness(inline_node_type(inline), r, src, findings);
+            check_tightness(
+                inline_node_type(inline),
+                r,
+                src,
+                inline_own_text(inline),
+                findings,
+            );
         }
     }
 
@@ -1564,7 +1570,8 @@ fn audit_attr_source(
             let Some(range) = si.preimage_in(target) else {
                 continue;
             };
-            check_tightness(label, &range, src, findings);
+            // `None`: an attr key/value must never retain boundary whitespace.
+            check_tightness(label, &range, src, None, findings);
             if let Some(ref par) = parent_range {
                 check_containment(par, &range, label, findings);
             }
@@ -1765,35 +1772,102 @@ fn check_containment(
 ///
 /// Inline level only. Newlines at boundaries are **not** violations
 /// (decided 2026-06-03 round-2 review). Empty ranges are vacuously tight.
+/// Count of U+00A0 (NO-BREAK SPACE) characters at one end of `text`.
+fn nbsp_run(text: &str, at_end: bool) -> usize {
+    if at_end {
+        text.chars().rev().take_while(|c| *c == '\u{a0}').count()
+    } else {
+        text.chars().take_while(|c| *c == '\u{a0}').count()
+    }
+}
+
+/// Count of space/tab bytes at one end of `range` within `src`.
+fn space_byte_run(src: &[u8], range: &std::ops::Range<usize>, at_end: bool) -> usize {
+    let Some(slice) = src.get(range.clone()) else {
+        return 0;
+    };
+    let is_ws = |b: &&u8| **b == b' ' || **b == b'\t';
+    if at_end {
+        slice.iter().rev().take_while(is_ws).count()
+    } else {
+        slice.iter().take_while(is_ws).count()
+    }
+}
+
+/// `own_text` is the node's own text, when it has one.
+///
+/// A boundary space is **not** a violation when it is the **abbreviation NBSP
+/// substitution**. Pandoc-parity abbreviation handling absorbs the `Space` after
+/// an abbreviation into the preceding `Str` as U+00A0, so the abbreviation cannot
+/// be separated from its referent — `e.g. ` becomes `Str("e.g.\u{a0}")` spanning
+/// five source bytes (`postprocess.rs`, the `ends_with_abbreviation` branch; the
+/// `\<space>` escape in `text_helpers.rs` does the same). Those bytes are the
+/// node's own, so there is nothing to report.
+///
+/// The exclusion is keyed to **exactly** that substitution, not to "the text has
+/// whitespace":
+///
+/// - the text's boundary characters must be U+00A0, and
+/// - **in matching quantity** — *n* NBSP characters account for exactly *n*
+///   source space/tab bytes.
+///
+/// So a `Str` retaining a *plain* space is still reported (no producer does
+/// that), and a range absorbing two trailing spaces against one NBSP is still
+/// reported (it is claiming a byte that is not its own). A different producer
+/// that starts retaining some other character fails loudly and names its
+/// document, rather than being silently forgiven.
+///
+/// Pass `None` to keep the check strict — attribute keys and values must never
+/// retain boundary whitespace, and passing their text would weaken exactly the
+/// assertion bd-1d6io exists to make.
 fn check_tightness(
     node_type: &str,
     range: &std::ops::Range<usize>,
     src: &[u8],
+    own_text: Option<&str>,
     findings: &mut Vec<TilingFinding>,
 ) {
     if range.is_empty() {
         return;
     }
     let (s, e) = (range.start, range.end);
-    for (boundary, byte_opt) in [
-        ("leading", src.get(s).copied()),
+    for (boundary, at_end, byte_opt) in [
+        ("leading", false, src.get(s).copied()),
         (
             "trailing",
+            true,
             if e > 0 { src.get(e - 1).copied() } else { None },
         ),
     ] {
-        if let Some(b) = byte_opt
-            && (b == b' ' || b == b'\t')
-        {
-            findings.push(TilingFinding {
-                kind: TilingFindingKind::TightnessViolation,
-                message: format!(
-                    "TightnessViolation: `{node_type}` [{}..{}] has {boundary} \
-                         space/tab byte ({:?})",
-                    s, e, b as char,
-                ),
-            });
+        let Some(b) = byte_opt else { continue };
+        if b != b' ' && b != b'\t' {
+            continue;
         }
+        // Sanctioned abbreviation NBSP substitution, exactly accounted for?
+        let nbsp = own_text.map_or(0, |t| nbsp_run(t, at_end));
+        if nbsp > 0 && space_byte_run(src, range, at_end) == nbsp {
+            continue;
+        }
+        findings.push(TilingFinding {
+            kind: TilingFindingKind::TightnessViolation,
+            message: format!(
+                "TightnessViolation: `{node_type}` [{}..{}] has {boundary} \
+                     space/tab byte ({:?})",
+                s, e, b as char,
+            ),
+        });
+    }
+}
+
+/// The node's own text, for [`check_tightness`]'s abbreviation-NBSP exclusion.
+/// `None` for everything whose range boundaries are delimiters rather than
+/// content (`Code`'s backticks, `Math`'s `$`, `RawInline`'s fence) — those can
+/// never present a boundary space, so there is nothing to exclude and passing
+/// their trimmed text would only risk masking a real violation.
+fn inline_own_text(inline: &Inline) -> Option<&str> {
+    match inline {
+        Inline::Str(s) => Some(s.text.as_str()),
+        _ => None,
     }
 }
 
@@ -2003,5 +2077,109 @@ mod tiling_auditor_tests {
             "non-overlapping Original siblings must not produce SiblingOverlap; got: {:#?}",
             findings.iter().map(|f| &f.message).collect::<Vec<_>>(),
         );
+    }
+
+    // ── check_tightness retained-whitespace exclusion ─────────────────────────
+    //
+    // The exclusion must key on the node's OWN TEXT, not on its type. If it
+    // ever degrades into "Str is exempt", the auditor goes blind to the whole
+    // Str family — so pin both directions directly on the private function.
+
+    #[test]
+    fn tightness_skipped_for_the_abbreviation_nbsp_substitution() {
+        let mut findings = Vec::new();
+        // Range covers "e.g. "; the Str kept that space as a NBSP.
+        check_tightness(
+            "Str",
+            &(0..5),
+            b"e.g. `code`",
+            Some("e.g.\u{a0}"),
+            &mut findings,
+        );
+        assert!(
+            findings.is_empty(),
+            "a Str retaining the boundary space must not be flagged; got: {:#?}",
+            findings.iter().map(|f| &f.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn tightness_still_reported_when_node_text_drops_the_boundary_space() {
+        let mut findings = Vec::new();
+        // Same node type and same range shape, but the text does NOT end in
+        // whitespace — the node is claiming a byte that is not its own.
+        check_tightness("Str", &(0..5), b"abcd hello", Some("abcd"), &mut findings);
+        assert_eq!(
+            findings.len(),
+            1,
+            "a Str NOT retaining the boundary space must still be flagged; got: {:#?}",
+            findings.iter().map(|f| &f.message).collect::<Vec<_>>(),
+        );
+        assert_eq!(findings[0].kind, TilingFindingKind::TightnessViolation);
+    }
+
+    #[test]
+    fn tightness_reported_when_node_retains_a_plain_space_not_an_nbsp() {
+        // The exclusion is keyed to the abbreviation NBSP *substitution*, not to
+        // "the text has whitespace". A Str whose text ends in a plain space has
+        // no sanctioned producer, so it must still be flagged — otherwise the
+        // exclusion forgives an entire class it was never meant to cover.
+        let mut findings = Vec::new();
+        check_tightness("Str", &(0..5), b"abcd hello", Some("abcd "), &mut findings);
+        assert_eq!(
+            findings.len(),
+            1,
+            "a plain retained space is not the NBSP substitution and must be flagged; got: {:#?}",
+            findings.iter().map(|f| &f.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn tightness_reported_when_the_range_absorbs_more_space_than_the_nbsp_accounts_for() {
+        // One NBSP accounts for exactly one source whitespace byte. A range
+        // covering TWO trailing spaces is absorbing a byte that is not the
+        // node's own, even though the boundary looks like the sanctioned case.
+        let mut findings = Vec::new();
+        check_tightness(
+            "Str",
+            &(0..6),
+            b"e.g.  x",
+            Some("e.g.\u{a0}"),
+            &mut findings,
+        );
+        assert_eq!(
+            findings.len(),
+            1,
+            "2 source spaces vs 1 NBSP is over-absorption and must be flagged; got: {:#?}",
+            findings.iter().map(|f| &f.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn tightness_skipped_when_the_substituted_source_byte_is_a_tab() {
+        // A Pandoc `Space` can come from a tab, and the substitution is the
+        // same, so the exclusion must accept either.
+        let mut findings = Vec::new();
+        check_tightness(
+            "Str",
+            &(0..5),
+            b"e.g.\tx",
+            Some("e.g.\u{a0}"),
+            &mut findings,
+        );
+        assert!(
+            findings.is_empty(),
+            "a tab is the same substitution as a space; got: {:#?}",
+            findings.iter().map(|f| &f.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn tightness_strict_when_no_text_is_supplied() {
+        let mut findings = Vec::new();
+        // The attr-key/attr-val path passes None and must stay strict — this is
+        // the assertion bd-1d6io exists to make.
+        check_tightness("attr-key", &(0..5), b" bb=1", None, &mut findings);
+        assert_eq!(findings.len(), 1, "None must keep the check strict");
     }
 }

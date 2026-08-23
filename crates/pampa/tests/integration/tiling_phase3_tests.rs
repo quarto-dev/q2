@@ -211,3 +211,33 @@ fn list_table_cell_containment_no_violation() {
         "ContainmentViolation after list_table fix: {containment:#?}"
     );
 }
+
+// =============================================================================
+// check_tightness — nodes whose own text retains the boundary whitespace
+// =============================================================================
+
+fn tightness_messages(src: &str) -> Vec<String> {
+    audit(src)
+        .into_iter()
+        .filter(|f| f.kind == TilingFindingKind::TightnessViolation)
+        .map(|f| f.message)
+        .collect()
+}
+
+#[test]
+fn abbreviation_nbsp_str_not_tightness_violation() {
+    // `e.g. ` — the abbreviation handler substitutes a NON-BREAKING space for
+    // the source space and keeps it in the Str's text ("e.g.\u{a0}"), so the
+    // node's range legitimately ends on a source space byte: those 5 bytes are
+    // exactly what produced the node. Same reasoning that already excludes
+    // Space/SoftBreak/LineBreak — a node whose own content *is* that
+    // whitespace is not claiming a neighbour's bytes.
+    //
+    // Found by the corpus audit (pandoc-match-corpus/markdown/048.qmd), which
+    // was reporting this as a violation (bd-1d6io).
+    let msgs = tightness_messages("e.g. `code`\n");
+    assert!(
+        msgs.is_empty(),
+        "abbreviation NBSP Str should not be a TightnessViolation, got: {msgs:?}"
+    );
+}
