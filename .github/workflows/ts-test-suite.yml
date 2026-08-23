@@ -258,3 +258,43 @@ jobs:
       - name: Smoke-check quarto-hub-mcp module graph
         shell: bash
         run: node ts-packages/quarto-hub-mcp/dist/index.js --help
+
+      # Suites that are green as-is (GH #250 census, 2026-08-22). Explicit
+      # `npm test` rather than each package's `test:ci`: kanban's test:ci chains
+      # a test:wasm leg whose glob matches zero files, and preview-runtime's
+      # test:wasm names a config file that does not exist.
+      - name: Run preview-renderer unit tests
+        shell: bash
+        run: npm test -w ts-packages/preview-renderer
+
+      - name: Run preview-runtime unit tests
+        shell: bash
+        run: npm test -w ts-packages/preview-runtime
+
+      - name: Run quarto-api tests
+        shell: bash
+        run: npm test -w ts-packages/quarto-api
+
+      - name: Run quarto-automerge-schema tests
+        shell: bash
+        run: npm test -w ts-packages/quarto-automerge-schema
+
+      - name: Run wasm-js-bridge tests
+        shell: bash
+        run: npm test -w ts-packages/wasm-js-bridge
+
+      - name: Run q2-preview-spa tests
+        shell: bash
+        run: |
+          npm test -w q2-preview-spa
+          npm run test:integration -w q2-preview-spa
+
+      - name: Run kanban demo tests
+        shell: bash
+        run: |
+          npm test -w q2-demos/kanban
+          npm run test:integration -w q2-demos/kanban
+
+      - name: Run trace-viewer tests
+        shell: bash
+        run: npm test -w trace-viewer
