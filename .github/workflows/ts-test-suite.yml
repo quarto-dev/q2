@@ -204,3 +204,57 @@ jobs:
         run: |
           npm run bundle -w @quarto/engine-host-deno
           git diff --exit-code -- ts-packages/quarto-engine-host-deno/dist/engine-host-deno.js
+
+  # ── Workspace TS suites (GH #250) ────────────────────────────────────────
+  #
+  # A separate job on purpose. These suites need only Node + npm ci + the
+  # ts-packages dists — no Rust, no WASM, no pandoc/tree-sitter/deno. Keeping
+  # them out of `test-suite` means a red hub-client test, a deno step or the
+  # bundle-freshness gate cannot mask them, and they are not serialised behind
+  # an uncached WASM build on both matrix legs. The one suite that does need
+  # the WASM (preview-renderer's integration tier) lives in `test-suite`.
+  workspace-ts-suites:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    name: Workspace TS suites
+    if: github.repository == 'quarto-dev/q2'
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        shell: bash
+        run: npm ci
+
+      # quarto-sync-client, quarto-hub-mcp and annotated-qmd resolve workspace
+      # siblings through the `"import": "./dist/index.js"` export condition, and
+      # hub-client bundles these packages from *source*, so nothing else builds
+      # them. Build order is irrelevant — types resolve via src/ (see
+      # crates/xtask/src/ts_packages.rs). Same guarded loop as
+      # hub-client-e2e.yml:144-153.
+      - name: Build ts-packages workspaces
+        shell: bash
+        run: |
+          for pkg in ts-packages/*/; do
+            if [ -f "$pkg/package.json" ]; then
+              npm run build --workspace "$pkg" --if-present
+            fi
+          done
+
+      # `--help` exits 0 only after the whole ESM graph links, so a missing or
+      # stale dependency dist fails here rather than in someone's MCP session.
+      # This is the same smoke check cargo xtask verify step 6 runs.
+      - name: Smoke-check quarto-hub-mcp module graph
+        shell: bash
+        run: node ts-packages/quarto-hub-mcp/dist/index.js --help
