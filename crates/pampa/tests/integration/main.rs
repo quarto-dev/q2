@@ -88,6 +88,7 @@ pub mod test_wasm_entrypoints;
 pub mod test_whitespace_re_compile_once;
 pub mod test_yaml_tag_regression;
 pub mod test_yaml_to_config_value;
+pub mod tiling_corpus_tests;
 pub mod tiling_phase3_tests;
 
 fn main() {}
