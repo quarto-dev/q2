@@ -3235,6 +3235,225 @@ mod tests {
         );
     }
 
+    /// **T1 (Plan 3, Phase 1) — invariant pin, not a regression test.**
+    ///
+    /// Pins the invariant that makes the incremental writer's *byte-copy*
+    /// arms safe: **every `SourceInfo` referenced by a body node's `s` key in
+    /// the captured baseline pool is an `Original` rooted at the document's
+    /// own `FileId`.**
+    ///
+    /// # Why this matters
+    ///
+    /// `SourceInfo::preimage_in` returns a hull for a contiguous `Concat`,
+    /// and that hull is an **offset claim, not a byte-identity claim**
+    /// (`quarto-source-map-0.1.3/src/source_info.rs:410-425`). Three sites in
+    /// the incremental writer nevertheless slice `original_qmd` at a
+    /// `preimage_in` range and emit those bytes as the node's own text:
+    ///
+    /// - `pampa/src/writers/incremental.rs:205` — `BlockAlignment::KeepBefore`
+    ///   → `CoarsenedEntry::Verbatim`;
+    /// - `pampa/src/writers/incremental.rs:816` — `InlineAlignment::KeepBefore`
+    ///   in `assemble_inline_content`;
+    /// - `pampa/src/writers/incremental.rs:868` — `assemble_recursed_container`
+    ///   with no nested plan or no children.
+    ///
+    /// Their `.get()` guards check **bounds, not identity**. What actually
+    /// keeps them correct is the shape of the baseline they consume: a body
+    /// whose provenance is all `Original` in its own file has no `Concat`,
+    /// hence no fold, hence no gap between "the bytes at this range" and
+    /// "this node's content". The safety is incidental to the writer and
+    /// structural to the capture, which is why the guard lives here rather
+    /// than at the copy sites.
+    ///
+    /// # What this pin does and does not cover
+    ///
+    /// It pins **one entry point**: the artifact
+    /// `capture_untransformed_ast_json` produces, as reached through
+    /// `render_qmd_to_preview_ast`. `apply_node_edit`
+    /// (`pampa/src/apply_node_edit.rs:120`) deserializes that same artifact,
+    /// so it **inherits** this guard.
+    ///
+    /// `incremental_write_qmd`
+    /// (`crates/wasm-quarto-hub-client/src/lib.rs:2952`) does **not**. It
+    /// reaches its own `qmd_to_pandoc(original_qmd.as_bytes())` on raw bytes.
+    /// The invariant there is analogous — a fresh, parent-less parse of the
+    /// very text being sliced — but **no test asserts it**, and all three copy
+    /// sites sit on that path too. Do not read this test as covering it.
+    ///
+    /// # Why the body, and not the whole pool
+    ///
+    /// The plan specced this as "every `astContext.p` entry". Measured, that
+    /// is false and would have made the test unpassable: the pool also holds
+    /// **front-matter metadata** provenance, which is legitimately
+    /// `Substring` (wire-code `1`) over the front-matter `Original` — for
+    /// this fixture, entries `13..=26` chaining to entry `12` (`[0,39]`, the
+    /// `---` block), against `0..=11` for the body (`[40,73]`).
+    ///
+    /// Restricting to the body is not a weakening; it is the set that
+    /// load-bears. `coarsen` and `assemble` walk `original_ast.blocks` and
+    /// their inlines and copy bytes from those spans alone — metadata is
+    /// never byte-copied. A folded scalar in front matter would put a genuine
+    /// `Concat` in the pool and harm nothing.
+    ///
+    /// # What "body-reachable" means here, exactly
+    ///
+    /// The `s` key, and only that. **Attr and link/image target provenance
+    /// are also body-reachable pool refs and are deliberately out of scope**:
+    /// `write_attr_source` (`pampa/src/writers/json.rs:694-720`) and
+    /// `write_target_source` emit them through `to_json_ref` (`json.rs:430-433`)
+    /// as **bare integers** with no `s` key, so `collect_pool_ids` does not
+    /// see them. Do not "fix" that by collecting bare numbers under `blocks`:
+    /// header levels, alignment indices and column widths are bare numbers
+    /// too, and blind collection would assert against them. Both failure modes
+    /// below still redden this test through the `s` ids, so the pin holds —
+    /// its reach is simply narrower than "everything the body touches".
+    ///
+    /// # Why one assertion covers both failure modes
+    ///
+    /// - Thread a parent into the baseline parse and every body node becomes
+    ///   `Substring` (wire-code `1`) — `pampa/src/pandoc/location.rs:214`
+    ///   consumes `parent_source_info` at parse time.
+    /// - Move the capture after the transform stages and transform-injected
+    ///   nodes appear in the body carrying `Generated` (wire-code `4`) —
+    ///   `footnotes.rs`, `appendix.rs`, `title_block.rs`,
+    ///   `shortcode_resolve.rs:1175` — or a foreign `file_id`.
+    ///
+    /// So "every `s`-referenced body entry is `t: 0` with `d: 0`" catches
+    /// both, and it is a claim about a *value* rather than about the order of
+    /// statements in a function body.
+    ///
+    /// # Fixture
+    ///
+    /// One inline footnote. `FootnotesTransform` runs in the q2-preview
+    /// pipeline while `title-block` does not, and no project config is
+    /// needed — so a capture that drifted downstream of the transforms would
+    /// demonstrably pick up a `Generated` section here.
+    ///
+    /// # No line-level revert hunk
+    ///
+    /// There is no single production line whose flip reddens this test. The
+    /// body is all-`Original` because `capture_untransformed_ast_json`
+    /// re-parses the raw bytes through `qmd_to_pandoc` with a fresh,
+    /// parent-less reader context (`pipeline.rs:1007`) — *not* because of the
+    /// `parent_source_info: None` at `:1013`, which is built after the parse
+    /// and read only by the JSON writer. The honest hunk is the rewrite the
+    /// comment at `:914-919` invites ("derive the baseline from the
+    /// pipeline's own parse"), under which the footnote transform's
+    /// `Generated { by: footnotes() }` section enters the body. This test is
+    /// therefore an invariant pin: it is green on arrival, and its job is to
+    /// go red the day someone performs that rewrite.
+    ///
+    /// # Ownership
+    ///
+    /// The invariant load-bears for provenance correctness in `pampa`'s
+    /// writer, but it is a property of a `quarto-core` function, and neither
+    /// `quarto-source-map` nor `quarto-yaml` owns it. It is pinned here
+    /// because here is where it can be broken.
+    #[test]
+    fn preview_untransformed_baseline_body_pool_is_all_original_own_file() {
+        let content =
+            b"---\ntitle: Test\nformat: q2-preview\n---\n\nA paragraph^[the footnote body].\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_preview_ast(
+            content,
+            "test.qmd",
+            &mut ctx,
+            runtime,
+            None,
+            Vec::new(),
+        ))
+        .expect("q2-preview render");
+
+        let baseline = output
+            .untransformed_ast_json
+            .expect("capture_untransformed_ast_json must succeed for a well-formed document");
+        let baseline: serde_json::Value =
+            serde_json::from_str(&baseline).expect("untransformed AST JSON must parse");
+        let pool = baseline["astContext"]["p"]
+            .as_array()
+            .expect("untransformed AST must carry a source-info pool at astContext.p");
+
+        // Every wire node carries its pool id under `"s"`.
+        use std::collections::BTreeSet;
+        fn collect_pool_ids(v: &serde_json::Value, out: &mut BTreeSet<usize>) {
+            match v {
+                serde_json::Value::Object(map) => {
+                    for (key, child) in map {
+                        match (key.as_str(), child.as_u64()) {
+                            ("s", Some(id)) => {
+                                out.insert(id as usize);
+                            }
+                            _ => collect_pool_ids(child, out),
+                        }
+                    }
+                }
+                serde_json::Value::Array(items) => {
+                    for item in items {
+                        collect_pool_ids(item, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut body_ids = BTreeSet::new();
+        collect_pool_ids(&baseline["blocks"], &mut body_ids);
+        assert!(
+            !body_ids.is_empty(),
+            "no source-info ids reachable from the baseline body — the assertion \
+             below would pass vacuously; the fixture or the wire format changed"
+        );
+
+        // The capture's filename table holds exactly one entry — the document
+        // itself (`pipeline.rs:1010`) — so `FileId(0)` is this document and
+        // any other value is foreign provenance.
+        const OWN_FILE_ID: u64 = 0;
+        let offenders: Vec<String> = body_ids
+            .iter()
+            .map(|&id| (id, &pool[id]))
+            .filter(|(_, e)| e["t"].as_u64() != Some(0) || e["d"].as_u64() != Some(OWN_FILE_ID))
+            .map(|(id, e)| format!("  [{id}] {e}"))
+            .collect();
+        assert!(
+            offenders.is_empty(),
+            "Every source-info referenced by a body node's `s` key must be an \
+             `Original` (wire-code 0) rooted at the document's own \
+             FileId({OWN_FILE_ID}); {} of {} are not:\n{}\n\n\
+             Two changes cause this, and both make the incremental writer's \
+             byte-copy arms unsafe. Those arms slice `original_qmd` at a \
+             `preimage_in` range and emit those bytes as the node's text, \
+             guarded for bounds and never for byte identity — in \
+             `pampa/src/writers/incremental.rs`:\n\
+             \x20 - `coarsen`, the `BlockAlignment::KeepBefore` arm (~:205);\n\
+             \x20 - `assemble_inline_content`, the `InlineAlignment::KeepBefore` \
+             arm (~:816);\n\
+             \x20 - `assemble_recursed_container`, the verbatim early returns \
+             (~:868).\n\
+             The causes:\n\
+             \x20 (1) a parent was threaded into the baseline parse, making body \
+             nodes `Substring` (wire-code 1) over a possibly-`Concat` parent; or\n\
+             \x20 (2) the capture moved downstream of the transform stages, so \
+             transform-injected nodes (`Generated`, wire-code 4) or nodes from \
+             another file entered the body.\n\
+             Restore the invariant — do not relax this assertion. If the baseline \
+             body must genuinely change shape, the three copy sites need a \
+             byte-identity check first. Note that front-matter *metadata* entries \
+             are legitimately `Substring`, and that attr/target refs are bare \
+             integers this check does not reach — both deliberately out of \
+             scope; see this test's doc comment.",
+            offenders.len(),
+            body_ids.len(),
+            offenders.join("\n"),
+        );
+    }
+
     /// PR #214 follow-up probe: verify the q2-preview pipeline
     /// emits the `quarto-appendix` wrapper Div around the footnotes
     /// section. The smoke-all `q2-preview/multi-element-doc.qmd`

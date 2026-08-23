@@ -29,16 +29,11 @@ pub fn process_shortcode_string_arg(
 
 // Helper function to process shortcode_string nodes
 pub fn process_shortcode_string(
-    extract_quoted_text_fn: &dyn Fn() -> PandocNativeIntermediate,
+    extract_quoted_text_fn: &dyn Fn() -> String,
     node: &tree_sitter::Node,
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
-    let PandocNativeIntermediate::IntermediateBaseText(id, _) = extract_quoted_text_fn() else {
-        panic!(
-            "Expected BaseText in shortcode_string, got {:?}",
-            extract_quoted_text_fn()
-        )
-    };
+    let id = extract_quoted_text_fn();
     let source_info = node_source_info_with_context(node, context);
     let range =
         crate::pandoc::location::source_info_to_qsm_range_or_fallback(&source_info, context);

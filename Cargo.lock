@@ -854,6 +854,7 @@ dependencies = [
  "proptest",
  "quarto-pandoc-types",
  "quarto-source-map",
+ "serde_json",
 ]
 
 [[package]]

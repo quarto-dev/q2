@@ -278,10 +278,30 @@ fn calculate_byte_offset(input: &[u8], row: usize, column: usize) -> usize {
 /// Advance `size` characters from `start` within `input`, returning
 /// the resulting byte offset. Decodes UTF-8 a codepoint at a time;
 /// each byte that fails to start a valid sequence counts as one
-/// "character" and advances by one byte. That matches what
-/// `from_utf8_lossy` would emit (each maximal ill-formed subpart
-/// becomes one `U+FFFD`) while keeping all offsets in the original
-/// byte domain.
+/// "character" and advances by one byte, keeping all offsets in the
+/// original byte domain.
+///
+/// **This is not `from_utf8_lossy`'s rule, despite an earlier version of
+/// this comment claiming it was** (corrected 2026-08-23, Plan 3 Phase 2).
+/// `from_utf8_lossy` folds each maximal ill-formed *subpart* into one
+/// `U+FFFD`, while this walker advances **one byte per ill-formed byte**.
+///
+/// So the two coincide exactly when every maximal ill-formed subpart is a
+/// **single byte**, and diverge as soon as one spans two or more.
+/// `[0xFF, 0xFE, 0xFD]` coincides (three one-byte subparts), and so do
+/// `[0xC2]` and `[0xC2, 0x41]` — `0xC2` is a *valid* 2-byte lead, merely
+/// truncated or mis-continued, and its maximal subpart is still just
+/// `[0xC2]`. `[0xE2, 0x82]` diverges 2 vs 1, because a valid 2-byte prefix
+/// of a 3-byte sequence is a 2-byte subpart. (An earlier version of this
+/// sentence said the rules coincide "only when every ill-formed byte is
+/// independently invalid" — false, as `[0xC2]` shows; corrected in fix
+/// round 2.) Exhaustively pinned by
+/// `ill_formed_counting_diverges_exactly_when_a_subpart_spans_multiple_bytes`.
+///
+/// Counting each byte separately is the deliberate choice: it keeps a
+/// character step from ever crossing more bytes than it can account for.
+/// [`offset_to_location_bytes`] uses this same walker, so the two agree with
+/// each other — which is what actually matters.
 fn advance_chars(input: &[u8], start: usize, size: usize) -> usize {
     let mut pos = start.min(input.len());
     let mut count = 0_usize;
@@ -322,11 +342,47 @@ fn next_codepoint_size(bytes: &[u8]) -> usize {
 }
 
 /// Bytes-aware sibling of `quarto_source_map::utils::offset_to_location`.
-/// Returns `None` if the offset is out of bounds. Column is reported
-/// as the number of characters on the current line as a
-/// `from_utf8_lossy` reader would count them — for valid UTF-8 this
-/// matches the source-map utility exactly; for invalid UTF-8 it
-/// counts each ill-formed byte as a single replacement character.
+/// Returns `None` if the offset is out of bounds.
+///
+/// Column is the number of characters preceding `offset` on its line,
+/// counted with [`next_codepoint_size`] — the same walker
+/// [`advance_chars`] uses, so the two agree on what a "character" is.
+/// **Each ill-formed byte counts as one**, and this differs from
+/// `from_utf8_lossy`, which folds a maximal ill-formed subpart into a
+/// single `U+FFFD`: `[0xE2, 0x82]` is one replacement character to it and
+/// **two** characters here. Pinned by
+/// `offset_to_location_bytes_counts_each_ill_formed_byte_separately`.
+///
+/// An `offset` landing *inside* a character is **floored** to that
+/// character's first byte, and that character is not counted. Both
+/// `quarto-source-map` implementations do this — `utils::offset_to_location`
+/// and `FileInformation::offset_to_location`, which Plan 1 measured
+/// disagreeing by one column here and made agree — and a consumer that
+/// slices with the returned offset needs a char boundary. Pinned by
+/// `offset_to_location_bytes_agrees_with_source_map_on_mid_character_offsets`.
+///
+/// **Flooring is not unconditionally safe on corrupt input.** It cannot
+/// panic and `start <= end` always holds, but flooring the *end* of a span
+/// can collapse it: for a 4-byte codepoint at `0..4` with `byte_offset = 2`
+/// and `size = 1`, `advance_chars` yields `span_end = 3` and both ends floor
+/// to `0` — a zero-width span. That is strictly better than the pre-fix
+/// panic and is only reachable when a tree-sitter offset lands mid-character,
+/// which valid UTF-8 does not produce.
+///
+/// **Only `offset` reaches production.** All four call sites (`:122`, `:128`,
+/// `:203`, `:210`) hand the result to `SourceInfo::from_range`, which keeps
+/// `range.start.offset` and `range.end.offset` and discards `row` and
+/// `column` (`quarto-source-map-0.1.3/src/source_info.rs:185-191`). The
+/// column rule below is therefore documentation and test surface, not
+/// something a diagnostic renders today; the floored **offset** is the half
+/// that actually ships.
+///
+/// *Measured 2026-08-23 (Plan 3 Phase 2, `bd-mxa44voa`).* Before that test,
+/// this function returned the raw offset and a column overcounted by one for
+/// a mid-character offset — slicing mid-character leaves a truncated tail
+/// that `from_utf8_lossy` renders as a single `U+FFFD`. The doc comment
+/// nevertheless claimed it "matches the source-map utility exactly" on valid
+/// UTF-8. It did not; the claim had never been exercised.
 fn offset_to_location_bytes(input: &[u8], offset: usize) -> Option<quarto_source_map::Location> {
     if offset > input.len() {
         return None;
@@ -339,11 +395,23 @@ fn offset_to_location_bytes(input: &[u8], offset: usize) -> Option<quarto_source
             line_start = i + 1;
         }
     }
-    let column = String::from_utf8_lossy(&input[line_start..offset])
-        .chars()
-        .count();
+    // Walk the line a character at a time. `pos` ends on the first byte of
+    // the character containing `offset` (== `offset` when it is already a
+    // boundary), which is the floor both source-map implementations return.
+    let mut column = 0_usize;
+    let mut pos = line_start;
+    while pos < offset {
+        let step = next_codepoint_size(&input[pos..]);
+        // `pos < offset <= input.len()` keeps the slice non-empty, so `step`
+        // is always >= 1; the `== 0` arm is belt-and-braces against a spin.
+        if step == 0 || pos + step > offset {
+            break; // `offset` is inside this character — floor to its start.
+        }
+        pos += step;
+        column += 1;
+    }
     Some(quarto_source_map::Location {
-        offset,
+        offset: pos,
         row,
         column,
     })
@@ -664,6 +732,185 @@ mod tests {
         ProcessMessage, TreeSitterLogObserver, TreeSitterParseLog, TreeSitterProcessLog,
     };
     use hashlink::LinkedHashMap as HashMap;
+
+    /// Pins the exact boundary between this crate's character rule and
+    /// `from_utf8_lossy`'s, as a biconditional rather than an example.
+    ///
+    /// Written because this phase asserted the boundary in prose **twice** and
+    /// got it wrong both times: first that the two rules matched, then that
+    /// they "coincide only when every ill-formed byte is independently
+    /// invalid". `[0xC2]` refutes the second — `0xC2` is a perfectly valid
+    /// 2-byte lead, merely truncated by end of input, and the rules coincide
+    /// there anyway.
+    ///
+    /// The real rule is about subpart *length*: [`next_codepoint_size`]
+    /// advances one byte for every ill-formed byte, while `from_utf8_lossy`
+    /// emits one `U+FFFD` per maximal ill-formed subpart. The counts are
+    /// therefore equal iff every such subpart is exactly one byte long.
+    ///
+    /// The predicate is derived from `from_utf8_lossy`'s own output rather
+    /// than reimplemented: bytes not accounted for by a non-replacement
+    /// character are the ill-formed ones, and each `U+FFFD` is one subpart,
+    /// so "every subpart is one byte" is `ill_formed_bytes == n_replacements`.
+    /// The alphabet deliberately excludes a genuine `U+FFFD`
+    /// (`[0xEF, 0xBF, 0xBD]`), which would otherwise be counted as a
+    /// replacement it is not.
+    #[test]
+    fn ill_formed_counting_diverges_exactly_when_a_subpart_spans_multiple_bytes() {
+        // One representative of each class the `next_codepoint_size` arms
+        // distinguish: ASCII, a 2-/3-/4-byte lead, a bare continuation byte,
+        // and a byte that is no lead at all.
+        const ALPHABET: [u8; 6] = [0x41, 0xC2, 0xE2, 0xF0, 0x82, 0xFF];
+
+        let mut sequences: Vec<Vec<u8>> = ALPHABET.iter().map(|&b| vec![b]).collect();
+        let mut all = sequences.clone();
+        for _ in 0..3 {
+            sequences = sequences
+                .iter()
+                .flat_map(|seq| {
+                    ALPHABET.iter().map(move |&b| {
+                        let mut next = seq.clone();
+                        next.push(b);
+                        next
+                    })
+                })
+                .collect();
+            all.extend(sequences.iter().cloned());
+        }
+
+        let mut diverging = 0_usize;
+        for bytes in &all {
+            let column = offset_to_location_bytes(bytes, bytes.len())
+                .expect("offset is in bounds at the end of input")
+                .column;
+
+            let lossy = String::from_utf8_lossy(bytes);
+            let replacements = lossy
+                .chars()
+                .filter(|&c| c == char::REPLACEMENT_CHARACTER)
+                .count();
+            let valid_bytes: usize = lossy
+                .chars()
+                .filter(|&c| c != char::REPLACEMENT_CHARACTER)
+                .map(char::len_utf8)
+                .sum();
+            let ill_formed_bytes = bytes.len() - valid_bytes;
+
+            let every_subpart_is_one_byte = ill_formed_bytes == replacements;
+            let counts_agree = column == lossy.chars().count();
+            if !counts_agree {
+                diverging += 1;
+            }
+
+            assert_eq!(
+                counts_agree, every_subpart_is_one_byte,
+                "{bytes:02X?}: column {column}, from_utf8_lossy {:?} \
+                 ({replacements} replacement(s) over {ill_formed_bytes} ill-formed byte(s))",
+                lossy,
+            );
+        }
+
+        // Anti-vacuity: the biconditional would hold trivially over an
+        // alphabet on which the two rules never disagree.
+        assert!(
+            diverging > 0,
+            "alphabet no longer produces any divergence, so the biconditional above proves nothing",
+        );
+    }
+
+    /// The invalid-UTF-8 half of the column rule, which the valid-UTF-8
+    /// agreement test above cannot reach.
+    ///
+    /// **This behaviour changed in Plan 3 Phase 2 and was undocumented as a
+    /// change.** The old implementation counted with `from_utf8_lossy`, which
+    /// folds a maximal ill-formed *subpart* into one `U+FFFD`; the walk
+    /// counts each ill-formed byte separately. The rules coincide only when
+    /// every bad byte is independently invalid — which is exactly what the
+    /// pre-existing `bd-6qbto` regression fixture (`[0xFF, 0xFE, 0xFD]`) is,
+    /// so that test passing across the change proved nothing about it.
+    ///
+    /// The truncated-but-well-formed prefixes below are the discriminating
+    /// cases. Each asserts the column *and* what `from_utf8_lossy` would have
+    /// said, so the divergence is pinned rather than merely described.
+    #[test]
+    fn offset_to_location_bytes_counts_each_ill_formed_byte_separately() {
+        // (bytes, expected column, what `from_utf8_lossy` would count)
+        let cases: [(&[u8], usize, usize); 4] = [
+            // Truncated 3- and 4-byte sequences: one `U+FFFD` to
+            // `from_utf8_lossy`, one character per byte here.
+            (&[0xE2, 0x82], 2, 1),
+            (&[0xF0, 0x9F, 0x98], 3, 1),
+            // A bad lead followed by valid ASCII, and three independently
+            // invalid bytes: the two rules agree on both.
+            (&[0xE2, 0x41, 0x42], 3, 3),
+            (&[0xFF, 0xFE, 0xFD], 3, 3),
+        ];
+
+        for (bytes, expected_column, lossy_column) in cases {
+            let location = offset_to_location_bytes(bytes, bytes.len())
+                .expect("offset is in bounds at the end of input");
+            assert_eq!(location.column, expected_column, "column for {bytes:02X?}",);
+            assert_eq!(
+                String::from_utf8_lossy(bytes).chars().count(),
+                lossy_column,
+                "from_utf8_lossy baseline for {bytes:02X?} — if this moves, the \
+                 divergence documented on offset_to_location_bytes has changed",
+            );
+        }
+    }
+
+    /// `offset_to_location_bytes` documents itself as the bytes-aware sibling
+    /// of `quarto_source_map::utils::offset_to_location` that "for valid UTF-8
+    /// … matches the source-map utility exactly". **Measured 2026-08-23 (Plan
+    /// 3 Phase 2): it did not.** Both source-map implementations floor a
+    /// mid-character offset to the start of the enclosing character and do not
+    /// count that character in the column. This one returned the raw offset and
+    /// a column overcounted by one, because slicing mid-character leaves a
+    /// truncated tail that `from_utf8_lossy` renders as one `U+FFFD`.
+    ///
+    /// Plan 1 measured the two `quarto-source-map` implementations disagreeing
+    /// by one column on exactly this input and made them agree; this test pins
+    /// the third implementation to the same rule.
+    #[test]
+    fn offset_to_location_bytes_agrees_with_source_map_on_mid_character_offsets() {
+        // First fixture: 'a' at 0, 'é' spanning 1..3, ' ' at 3, 'b' at 4.
+        // Second: the same shape on row 1, so the `line_start != 0` path is
+        // exercised too.
+        for content in ["aé b", "xx\nyé z"] {
+            let bytes = content.as_bytes();
+            let file_info = quarto_source_map::FileInformation::new(content);
+            for offset in 0..=bytes.len() {
+                let measured =
+                    offset_to_location_bytes(bytes, offset).expect("offset is in bounds");
+                let utils = quarto_source_map::utils::offset_to_location(content, offset)
+                    .expect("offset is in bounds");
+                let via_file_info = file_info
+                    .offset_to_location(offset, content)
+                    .expect("offset is in bounds");
+                assert_eq!(
+                    measured, utils,
+                    "utils::offset_to_location disagrees at offset {offset} of {content:?}",
+                );
+                assert_eq!(
+                    measured, via_file_info,
+                    "FileInformation::offset_to_location disagrees at offset {offset} of {content:?}",
+                );
+            }
+        }
+
+        // The one discriminating offset, stated outright so a reader need not
+        // rerun the loop to see what the agreement is about: offset 2 lands
+        // inside 'é'.
+        let mid = offset_to_location_bytes("aé b".as_bytes(), 2).expect("offset is in bounds");
+        assert_eq!(
+            mid.offset, 1,
+            "a mid-character offset floors to the char start"
+        );
+        assert_eq!(
+            mid.column, 1,
+            "the character the offset lands inside is not counted"
+        );
+    }
 
     /// Build a minimal observer whose parse log carries one error
     /// state at the given (row, column). The state-machine numbers

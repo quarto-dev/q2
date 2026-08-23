@@ -383,6 +383,7 @@ dependencies = [
  "hashlink",
  "quarto-pandoc-types",
  "quarto-source-map",
+ "serde_json",
 ]
 
 [[package]]

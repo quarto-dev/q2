@@ -160,12 +160,46 @@ fn coarsen(
         let entry = match alignment {
             BlockAlignment::KeepBefore(orig_idx) => {
                 // A kept block is Verbatim-copied out of `original_qmd`, so
-                // it must have a byte preimage in the target file. Foreign
-                // provenance (include-spliced blocks) and gappy Concat spans
-                // have none — `preimage_in` returns `None` — and the old raw
-                // `start_offset()..end_offset()` fallback sliced
-                // `original_qmd` at the foreign file's offsets
-                // (bd-f6h40a9r). Rewrite such blocks instead.
+                // this arm needs the block's bytes — but `preimage_in` cannot
+                // promise them. A `Some(hull)` is an **offset claim, not a
+                // byte-identity claim**: for a contiguous `Concat` the hull's
+                // source run and the node's content run can have equal length
+                // and different bytes (a 1→1 fold), and no length or
+                // contiguity check can tell (quarto-source-map 0.1.3,
+                // `source_info.rs:410-425`). The `.get()` below therefore
+                // checks **bounds, not identity** — it only keeps a
+                // reversed or out-of-range slice from panicking.
+                //
+                // What makes this arm correct is the *baseline*, not the
+                // accessor: `original_ast` is always an untransformed,
+                // parent-less parse of `original_qmd` itself, so every body
+                // node is a plain `Original` in the target file and the hull
+                // is byte-identical after all. Both production callers supply
+                // that shape, but only one of them is **pinned by a test**:
+                //
+                // - **Pinned.** `apply_node_edit`
+                //   (`pampa/src/apply_node_edit.rs:120`) consumes
+                //   `capture_untransformed_ast_json`'s output, and that
+                //   artifact's pool shape is asserted by
+                //   `preview_untransformed_baseline_body_pool_is_all_original_own_file`
+                //   in `quarto-core/src/pipeline.rs`. This path inherits the
+                //   guard from the producer.
+                // - **Argued, not pinned.** `incremental_write_qmd`
+                //   (`wasm-quarto-hub-client/src/lib.rs:2952`) reaches its own
+                //   `qmd_to_pandoc(original_qmd.as_bytes())` on raw bytes. The
+                //   invariant is analogous — a fresh, parent-less parse of the
+                //   very text being sliced — but no test exercises it. If you
+                //   change that call, nothing will fail.
+                //
+                // The same split applies to the two sibling copy sites at
+                // `assemble_inline_content` and `assemble_recursed_container`
+                // below: all three arms sit on both paths.
+                //
+                // `preimage_in` still returns `None` for foreign provenance
+                // (include-spliced blocks) and gappy `Concat` spans; the old
+                // raw `start_offset()..end_offset()` fallback sliced
+                // `original_qmd` at the foreign file's offsets (bd-f6h40a9r).
+                // Rewrite such blocks instead.
                 match original_ast.blocks[*orig_idx]
                     .source_info()
                     .preimage_in(target_file_id)
@@ -495,6 +529,24 @@ fn ensure_trailing_newline<'a>(
 }
 
 /// Extract the byte range (start..end) from a Block's source_info.
+///
+/// **Violates the accessor rule, and is latent for the same reason the
+/// byte-copy arms are.** `start_offset()`/`end_offset()` are the pair that is
+/// *silently wrong* on a `Concat`: they report `0` and the content length,
+/// never the source hull. The failure here is worse than a wrong offset — the
+/// sole caller (`assemble`, at the `first_block_start` computation) tests
+/// `start > 0` to decide whether a front-matter region exists, so a `Concat`
+/// first block yields `0`, the branch is skipped, and **the front matter is
+/// silently dropped** from the incremental output.
+///
+/// It cannot happen today: every production `original_ast` is an
+/// untransformed, parent-less parse whose body is all `Original` — the
+/// invariant pinned by
+/// `preview_untransformed_baseline_body_pool_is_all_original_own_file` in
+/// `quarto-core/src/pipeline.rs`. Recorded rather than fixed: the fix returns
+/// `Option` and threads it through callers, which is outside Phase 1's
+/// guard-not-fix mandate. See Plan 3 § Evidence → Phase 1 ("Two accessor-rule
+/// violations, recorded not fixed") and the strand linked there.
 fn block_source_span(block: &Block) -> Range<usize> {
     let si = block.source_info();
     si.start_offset()..si.end_offset()
@@ -739,10 +791,26 @@ fn assemble_inline_content(
     for (result_idx, alignment) in plan.inline_alignments.iter().enumerate() {
         match alignment {
             InlineAlignment::KeepBefore(orig_idx) => {
-                // preimage_in resolves the real byte hull (Concat-led inlines
-                // report the sentinel 0 from start_offset()/end_offset()) and
-                // returns None when the bytes are not in the target file at
-                // all — in which case the splice cannot proceed.
+                // Copy site — the inline analogue of the `KeepBefore` block
+                // arm in `coarsen`: the resolved range's bytes are emitted as
+                // this inline's text.
+                //
+                // `preimage_in` gives a *position*, not an identity. It
+                // returns `None` for provenance in another file, for a gappy
+                // `Concat`, and for a `Substring` over a `Concat` — all cases
+                // where the splice cannot proceed, so we bail. What it does
+                // NOT do is certify that the bytes at a `Some(_)` range are
+                // this inline's content: for a contiguous `Concat` the hull is
+                // an offset claim only. (It is still the right accessor here —
+                // `start_offset()`/`end_offset()` report the sentinel 0 for a
+                // `Concat`-led inline, e.g. `Str "Table:"` parsing as
+                // `Concat[Original "Table" ++ Original ":"]`.)
+                //
+                // So this arm is safe only because the baseline is
+                // untransformed and parent-less — pinned by a test on the
+                // `apply_node_edit` path, argued but unpinned on the
+                // `incremental_write_qmd` path. See the long note at that
+                // block arm.
                 let Some(range) = orig_inlines[*orig_idx]
                     .source_info()
                     .preimage_in(target_file_id)
@@ -804,6 +872,12 @@ fn assemble_recursed_container(
     let Some(plan) = nested_plan else {
         // No nested plan — container content is structurally identical.
         // Keep the original container bytes verbatim.
+        //
+        // Copy site (third of three, with the `KeepBefore` arms in `coarsen`
+        // and `assemble_inline_content`): here and at the `orig_children`
+        // early return below, `orig_span`'s bytes are emitted as the
+        // container's text. Same reasoning, and the same pinned/argued split
+        // by caller — see the long note at `coarsen`'s block arm.
         return Ok(original_qmd.get(orig_span).map(str::to_string));
     };
 
@@ -948,6 +1022,14 @@ pub fn inline_children(inline: &Inline) -> &[Inline] {
 }
 
 /// Extract the byte range (start..end) from an Inline's source_info.
+///
+/// **Violates the accessor rule** in the same way as [`block_source_span`]:
+/// `start_offset()`/`end_offset()` are silently wrong on a `Concat`, reporting
+/// `0` and the content length rather than the source hull. Unlike that
+/// function this one has **no production caller** — it is `pub` and reached
+/// only from `tests/integration/inline_splice_safety_tests.rs` — so nothing
+/// currently inherits the risk. Use `preimage_in(target)` if you revive it.
+/// See Plan 3 § Evidence → Phase 1 and the strand linked there.
 pub fn inline_source_span(inline: &Inline) -> Range<usize> {
     let si = inline.source_info();
     si.start_offset()..si.end_offset()

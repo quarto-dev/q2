@@ -3041,4 +3041,177 @@ mod tests {
             "line 2's file offset must be its real position in the file, not its local offset (6)"
         );
     }
+
+    // ── T4: characterization probe — writer provenance vs. per-line map ────
+
+    /// **Characterization probe (Plan 3 Phase 5, T4) — not a regression test.**
+    ///
+    /// `test_build_source_map_maps_lines_to_file_provenance` above is an
+    /// *identity* fixture: its `input` is a byte-for-byte slice of the file
+    /// (`assert_eq!(&file_content[7..], input)` says so outright) paired with a
+    /// single `Original` span over exactly those bytes. It therefore cannot
+    /// observe what happens when `input`'s coordinate space differs from the
+    /// one `ctx.source_info` describes.
+    ///
+    /// In production it always can. `input` is the QMD *writer's output*
+    /// (`stage/stages/engine_execution.rs:432` → `serialize_ast_to_qmd` →
+    /// `pampa::writers::qmd::write_with_source_info`), and the `SourceInfo`
+    /// handed alongside it is that writer's `Concat`, whose pieces pair each
+    /// block's **source** `source_info()` with the number of bytes the writer
+    /// **wrote** (`pampa/src/writers/qmd.rs:2876-2903`). Piece lengths live in
+    /// written-QMD space; the spans they are paired with live in
+    /// original-source space. Whenever the writer normalizes anything, the two
+    /// coordinate spaces disagree and `map_offset` recurses into a piece with a
+    /// local offset that means nothing in the span it lands in.
+    ///
+    /// This probe drives that real chain — parse → write → `build_source_map` —
+    /// with a fixture the writer demonstrably rewrites (`  - alpha` →
+    /// `* alpha`, 2 bytes shorter per item), and asserts the contract
+    /// `build_source_map`'s own doc comment states: each entry's `source` maps
+    /// "the line's start offset in `input` to its original file + byte offset".
+    ///
+    /// **This probe exercises `build_source_map` only.** That it also
+    /// characterizes the other production `map_offset` site —
+    /// `describe_location`, `engine/jupyter/text_execute.rs:494` — is a
+    /// **code-reading argument, not a measurement**: the drift lives upstream
+    /// of both, in the writer's `Concat`, and only this consumer was run.
+    ///
+    /// The two sites are related but not identical. `describe_location` is
+    /// never called on `ctx.source_info` itself: its three call sites
+    /// (`text_execute.rs:314`, `:315`, `:339`) pass either `body_source` — a
+    /// `SourceInfo::substring` of the same `ExecutionContext` provenance,
+    /// built at `:305-309` — or a YAML error's `e.location()` derived from it,
+    /// and **always at `offset: 0`**. So the receiver is a derived `Substring`
+    /// at a fixed zero offset, not the provenance at arbitrary offsets. The
+    /// conclusion still follows — a `Substring` over a `Concat` inherits the
+    /// drift — and there is an *additional* exposure there: the `Substring`'s
+    /// bounds are `block.code_start .. + code.len()`, and `code_start` comes
+    /// from `parse_code_blocks` regex-matching the *written* QMD
+    /// (`text_execute.rs:124-147`), so those bounds are themselves in
+    /// written-QMD coordinates. See bd-8hrjqcx0.
+    ///
+    /// **Outcome: RED, and deliberately left red — see bd-8hrjqcx0.** The
+    /// drift it found is a *writer-provenance* defect, a different bug class
+    /// from the decoded-vs-raw-span family this epic fixes, so Plan 3 Phase 5
+    /// characterized it rather than fixing it. Measured 2026-08-23, with an
+    /// identity control (`* alpha` bullets, which the writer round-trips
+    /// byte-for-byte) run through the same chain to separate the two causes:
+    ///
+    /// 1. A **constant +1** on every block after the first, present in the
+    ///    identity control too. `write_impl_tracked` writes the separator
+    ///    `writeln!` inside the measured piece
+    ///    (`pampa/src/writers/qmd.rs:2891-2899`) but pairs it with a span
+    ///    starting at the block's first *content* byte.
+    /// 2. **Accumulating drift inside a rewritten block** — +1, −1, −3 across
+    ///    the three list items, stepping by −2 per item, exactly the bytes each
+    ///    `  - ` → `* ` rewrite removes. This half exists only because the
+    ///    fixture is non-identity, which is what makes the fixture load-bearing.
+    ///
+    /// Run it with `--run-ignored all`; it prints the full table.
+    #[test]
+    #[ignore = "characterization probe for bd-8hrjqcx0 (writer provenance); \
+                deliberately red, out of scope for the provenance epic"]
+    fn probe_build_source_map_over_writer_concat() {
+        // A fixture the QMD writer normalizes: the two-space-indented `-`
+        // bullets come back as unindented `*` bullets.
+        let source = "Intro paragraph.\n\n  - alpha\n  - beta\n  - gamma\n\nOutro.\n";
+
+        let (ast, ast_context, _warnings) = pampa::readers::qmd::read(
+            source.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            true,
+            None,
+        )
+        .expect("fixture must parse");
+
+        let (buffer, source_info) =
+            pampa::writers::qmd::write_with_source_info(&ast).expect("fixture must serialize");
+        let input = String::from_utf8(buffer).expect("writer must emit UTF-8");
+
+        // ── The fixture is genuinely non-identity ──────────────────────────
+        // If this ever stops holding, the probe below is vacuous for the same
+        // reason the identity test above is, and must be re-fixtured.
+        assert_ne!(
+            input, source,
+            "probe requires a fixture the writer rewrites; this one round-tripped \
+             byte-for-byte, which makes everything below vacuous"
+        );
+        assert_ne!(
+            input.len(),
+            source.len(),
+            "probe requires the two coordinate spaces to differ in length"
+        );
+
+        let ctx = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/tmp"),
+            PathBuf::from("test.qmd"),
+            "html",
+        )
+        .with_source_info(source_info, Arc::new(ast_context.source_context));
+
+        let entries = build_source_map(&input, &ctx);
+
+        // Line starts in each coordinate space.
+        let line_starts = |s: &str| -> Vec<usize> {
+            std::iter::once(0)
+                .chain(s.match_indices('\n').map(|(i, _)| i + 1))
+                .filter(|i| *i < s.len())
+                .collect()
+        };
+        let source_line_starts = line_starts(source);
+        let source_lines: Vec<&str> = source.lines().collect();
+        let input_lines: Vec<&str> = input.lines().collect();
+
+        assert_eq!(
+            input_lines.len(),
+            source_lines.len(),
+            "fixture is chosen so written and original lines correspond 1:1"
+        );
+        assert_eq!(entries.len(), input_lines.len());
+
+        // Measurement table — printed so a red run reports the drift directly.
+        let mut report = String::new();
+        for (i, entry) in entries.iter().enumerate() {
+            report.push_str(&format!(
+                "line {i}: written {:?} @ {} -> reported file_offset {:?} | \
+                 original {:?} @ {}\n",
+                input_lines[i],
+                entry.start,
+                entry.source.as_ref().map(|s| s.file_offset),
+                source_lines[i],
+                source_line_starts[i],
+            ));
+        }
+        eprintln!("{report}");
+
+        // Collect every violation rather than panicking on the first, so a red
+        // run reports the whole drift profile in one go.
+        let mut drift = Vec::new();
+        for (i, entry) in entries.iter().enumerate() {
+            // Blank separator lines are synthesized by the writer, so they are
+            // not guaranteed to correspond to any original byte; not asserted
+            // on. (This fixture's original *does* have blank lines, at 17 and
+            // 47, and both drift by +1 — excluding them removes violations
+            // rather than manufacturing them.)
+            if input_lines[i].is_empty() {
+                continue;
+            }
+            let reported = entry
+                .source
+                .as_ref()
+                .unwrap_or_else(|| panic!("line {i} must resolve to provenance"));
+            assert_eq!(reported.file, "test.qmd");
+            if reported.file_offset != source_line_starts[i] {
+                drift.push((i, reported.file_offset, source_line_starts[i]));
+            }
+        }
+        assert!(
+            drift.is_empty(),
+            "every written line must map to where it actually starts in the file; \
+             drifted (line, reported, true) = {drift:?}\n{report}"
+        );
+    }
 }

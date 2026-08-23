@@ -301,11 +301,57 @@ fn empty_table_attr() -> Attr {
 /// check (b)), and for caption-extended table spans in `section.rs` /
 /// `pipe_table.rs` (bd-t3enk8gq).
 ///
-/// This is the only correct way to fuse two spans into one `Original`:
-/// same-file check via `root_file_id`, file-absolute offsets via
-/// `preimage_in` (raw `start_offset()`/`end_offset()` are parent-relative
-/// for Substrings and the sentinel 0 for Concat/Generated), and a lossless
-/// `combine()` fallback when the inputs don't share a file.
+/// How it fuses two spans: same-file check via `root_file_id`, file-absolute
+/// offsets via `preimage_in` (raw `start_offset()`/`end_offset()` are
+/// parent-relative for Substrings and the sentinel 0 for Concat/Generated,
+/// so they are never the right read here), and a lossless `combine()`
+/// fallback when the inputs don't share a file or don't both resolve.
+///
+/// **This is not the sanctioned way to build a hull, and the `Original` it
+/// returns is not a byte-identity claim.** An earlier revision of this
+/// comment called it "the only correct way to fuse two spans into one
+/// `Original`". That is false under the provenance audit's accessor rule
+/// (`claude-notes/research/2026-08-21-provenance-audit-findings.md` § 1),
+/// which reads: file id → `root_file_id()`; positions → `map_offset`; **a
+/// hull → the `map_offset(0)` / `map_offset(length())` pair; never
+/// `preimage_in` for a hull.** Corrected 2026-08-23 (Plan 3 Phase 2,
+/// `bd-mxa44voa`) — the same retraction Phase 1 had to make at
+/// `writers/incremental.rs`. Migrating the three sites onto the `map_offset`
+/// pair is `bd-ostgyku0`; it is a behaviour change with snapshot risk, which
+/// is why a comments-only phase corrected the claim and left the code.
+///
+/// # Drift amplifier — an ordering constraint, not a bug
+///
+/// (Provenance audit, `claude-notes/research/2026-08-21-provenance-audit-findings.md`
+/// § 4. Two sibling sites carry the same note: `contiguous_hull_for_run` and
+/// `math_with_attr_span_source_info`.)
+///
+/// > Drift amplifiers collapse `preimage_in()` results into a flat
+/// > `SourceInfo::original`, freezing any upstream drift and discarding the
+/// > provenance chain. An ordering constraint, not a bug: fix producers before
+/// > these consumers or the fix silently does not reach the output.
+///
+/// Mechanically: the two numbers `preimage_in` reports are baked into a fresh
+/// `Original` and the inputs' chains are dropped. Whatever offsets the
+/// producers were carrying at that moment become the answer, with nothing left
+/// downstream to say where they came from or that they were ever derived. A
+/// producer whose offsets drift therefore yields a *confidently wrong* flat
+/// range here rather than a traceable one, and no consumer-side change can
+/// recover what the flattening already discarded. So: **when a producer's
+/// provenance is fixed, verify the fix upstream of this call** — this
+/// function's output cannot distinguish a corrected producer from an
+/// uncorrected one.
+///
+/// The tension to keep in view: `preimage_in` on a `Concat` supplies an
+/// **offset claim, not a byte-identity claim**
+/// (`quarto-source-map-0.1.3/src/source_info.rs:410-457` — "a `Some(hull)`
+/// licenses *locating* … it does not license *copying*"), while the
+/// `Original` this returns reads downstream as both. § 4 triages the site as
+/// safe by shape; that verdict is about the inputs this function is reached
+/// with today, not a property of the flattening. Since 0.1.2 `preimage_in`
+/// also *refuses* for a `Substring` over a `Concat`, so those inputs silently
+/// take the coarse `combine()` fallback where the `map_offset` pair would
+/// have produced a tight hull — the other half of what `bd-ostgyku0` fixes.
 pub(crate) fn hull_source_infos(first: &SourceInfo, last: &SourceInfo) -> SourceInfo {
     let fid = first.root_file_id();
     let last_fid = last.root_file_id();
@@ -640,6 +686,20 @@ fn ends_with_abbreviation(text: &str) -> bool {
 ///
 /// Safety guard (R2, Plan 7g Phase 4b): the contiguity check ensures the hull
 /// never swallows bytes that belong to other nodes.
+///
+/// # Drift amplifier — an ordering constraint, not a bug
+///
+/// Same constraint as [`hull_source_infos`], which carries the full note
+/// (provenance audit § 4): the flat `Original` returned on the contiguous
+/// path freezes whatever offsets the run's producers reported and discards
+/// their provenance chains. Fix producers before this consumer, and verify a
+/// producer's provenance fix upstream of this call — the hull returned here
+/// cannot distinguish a corrected producer from an uncorrected one.
+///
+/// Building the hull from `preimage_in` rather than the
+/// `map_offset(0)`/`map_offset(length())` pair is off the accessor rule
+/// (findings § 1); see [`hull_source_infos`] for why that is latent here.
+/// Migration: `bd-ostgyku0`.
 fn contiguous_hull_for_run(run: &[Inline]) -> SourceInfo {
     if run.is_empty() {
         return SourceInfo::generated(By::tree_sitter_postprocess());
@@ -1808,6 +1868,31 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
 /// `[math_start .. attr_content_end + 1]` where `+1` accounts for `}`.
 ///
 /// Falls back to `combine` when source infos don't resolve to the same file.
+///
+/// # Drift amplifier — an ordering constraint, not a bug
+///
+/// Same constraint as [`hull_source_infos`], which carries the full note
+/// (provenance audit § 4): the flat `Original` built below freezes whatever
+/// offsets `math_si` and `attr_inline_si` reported and discards their
+/// provenance chains. Fix producers before this consumer, and verify a
+/// producer's provenance fix upstream of this call. Building the hull from
+/// `preimage_in` rather than the `map_offset(0)`/`map_offset(length())` pair
+/// is off the accessor rule (findings § 1) and latent for the same reason;
+/// migration: `bd-ostgyku0`, which should re-derive the `+ 1` below rather
+/// than carry it across.
+///
+/// **The `+ 1` is a hardcoded assumption, not a measurement.** This site ends
+/// the hull at `attr_end + 1` on the belief that the closing `}` is the very
+/// next raw byte after the attribute content. Nothing here checks that. It
+/// holds only while (a) `attr_end` is a *raw-source* coordinate — the
+/// `preimage_in` hull of a `Concat` attr is an offset claim only
+/// (`quarto-source-map-0.1.3/src/source_info.rs:410-457`), so a
+/// non-verbatim attr chain can put `attr_end` somewhere `}` does not follow —
+/// and (b) the grammar never admits anything between the last attribute and
+/// the brace. Whitespace, a trailing separator, or a future attribute form
+/// that allows either would make the hull end one byte short or one byte into
+/// the next token, silently. If the closing delimiter's own span becomes
+/// reachable here, prefer it to the arithmetic.
 fn math_with_attr_span_source_info(
     math_si: &SourceInfo,
     attr_inline_si: &SourceInfo,
