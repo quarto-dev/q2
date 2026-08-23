@@ -10,7 +10,12 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { DEFAULT_SERVER_URL, parseArgs, parseRedirectPort } from './index.js';
+import {
+  DEFAULT_SERVER_URL,
+  parseArgs,
+  parseRedirectPort,
+  resolveShutdownDrainMs,
+} from './index.js';
 
 describe('parseRedirectPort', () => {
   it('accepts the bottom of the non-privileged range', () => {
@@ -70,5 +75,47 @@ describe('parseArgs server URL resolution', () => {
       QUARTO_HUB_SERVER: 'wss://env.example/ws',
     });
     expect(parsed.serverUrl).toBe('wss://flag.example/ws');
+  });
+});
+
+/**
+ * `QUARTO_MCP_SHUTDOWN_DRAIN_MS` — the shutdown drain budget's test
+ * seam (bd-yw3mcdkg).
+ *
+ * The production default stays 3000 ms: it is the "exit promptly"
+ * contract (bd-9jq2a060) that stdio-hygiene.test.ts asserts. The
+ * override exists because exit-drain.test.ts has to push ~4 MB through
+ * the drain to keep its assertion binding at all, and 4 MB does not
+ * reliably clear 3000 ms on a 3-core CI runner. Overriding the budget
+ * there removes a throughput race without touching the default that
+ * real `q2 mcp` sessions get.
+ *
+ * A malformed value must fall back to the default rather than throw —
+ * this is read during startup of a stdio server whose stdout belongs to
+ * the protocol, and a typo in someone's shell must not brick the server.
+ */
+describe('resolveShutdownDrainMs', () => {
+  it('defaults to 3000 ms when unset', () => {
+    expect(resolveShutdownDrainMs(undefined)).toBe(3000);
+  });
+
+  it('defaults when set to the empty string', () => {
+    expect(resolveShutdownDrainMs('')).toBe(3000);
+  });
+
+  it('accepts an explicit override', () => {
+    expect(resolveShutdownDrainMs('30000')).toBe(30000);
+  });
+
+  it('accepts 0, which disables the drain', () => {
+    // Deliberate: it is how the drain can be proven load-bearing
+    // without editing source (see exit-drain.test.ts's payload notes).
+    expect(resolveShutdownDrainMs('0')).toBe(0);
+  });
+
+  it('falls back to the default on a malformed value rather than throwing', () => {
+    expect(resolveShutdownDrainMs('abc')).toBe(3000);
+    expect(resolveShutdownDrainMs('3000.5')).toBe(3000);
+    expect(resolveShutdownDrainMs('-1')).toBe(3000);
   });
 });

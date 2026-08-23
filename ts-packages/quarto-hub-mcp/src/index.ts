@@ -81,6 +81,39 @@ export function parseRedirectPort(raw: string): number {
   return port;
 }
 
+/** Production shutdown drain budget, in ms. See {@link resolveShutdownDrainMs}. */
+export const DEFAULT_SHUTDOWN_DRAIN_MS = 3000;
+
+/**
+ * The outbound-sync drain budget at shutdown, honouring the
+ * `QUARTO_MCP_SHUTDOWN_DRAIN_MS` test seam (bd-yw3mcdkg).
+ *
+ * The default is deliberately unchanged: 3000 ms is what keeps the
+ * stdin-EOF exit inside the 5 s promptness contract (bd-9jq2a060) that
+ * `stdio-hygiene.test.ts` asserts, and no real `q2 mcp` session sets
+ * the override.
+ *
+ * The seam exists because `exit-drain.test.ts` is squeezed from both
+ * sides: its assertion only binds with a payload big enough to still be
+ * in flight at EOF (~4 MB), and ~4 MB does not reliably clear 3000 ms on
+ * a 3-core CI runner. Overriding the budget in that one test removes a
+ * throughput race while leaving the shipped behaviour untouched. The
+ * alternatives were measured and rejected — a smaller payload stops the
+ * test binding at all, and a retry lets it pass even with the drain
+ * deleted.
+ *
+ * Malformed input falls back to the default instead of throwing: this is
+ * read while starting a stdio server whose stdout carries the protocol,
+ * and a typo in a shell profile must not brick the server. `0` is
+ * accepted and disables the drain — that is how the drain can be shown
+ * to be load-bearing without patching source.
+ */
+export function resolveShutdownDrainMs(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === '') return DEFAULT_SHUTDOWN_DRAIN_MS;
+  if (!/^\d+$/.test(raw.trim())) return DEFAULT_SHUTDOWN_DRAIN_MS;
+  return Number.parseInt(raw, 10);
+}
+
 export function parseArgs(
   argv: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -276,7 +309,13 @@ async function main(): Promise<void> {
   // when the hub is slow or unreachable. 3 s keeps the stdin-EOF exit
   // comfortably inside the 5 s promptness contract that
   // stdio-hygiene.test.ts asserts (bd-9jq2a060).
-  const SHUTDOWN_DRAIN_MS = 3000;
+  //
+  // Overridable via QUARTO_MCP_SHUTDOWN_DRAIN_MS for exit-drain.test.ts
+  // only (bd-yw3mcdkg); the default is unchanged and nothing in a real
+  // session sets it. See resolveShutdownDrainMs.
+  const SHUTDOWN_DRAIN_MS = resolveShutdownDrainMs(
+    process.env['QUARTO_MCP_SHUTDOWN_DRAIN_MS'],
+  );
 
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {

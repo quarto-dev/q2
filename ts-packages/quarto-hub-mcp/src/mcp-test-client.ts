@@ -49,11 +49,18 @@ export class McpTestClient {
    * (callers spread process.env themselves if they want it); when omitted
    * the child inherits process.env minus the auth-gating vars
    * (QUARTO_HUB_MCP_CLIENT_ID/SECRET) so the server runs unauthenticated
-   * regardless of the developer's shell (bd-uyiqciqk).
+   * regardless of the developer's shell (bd-uyiqciqk). `envOverrides`
+   * MERGES on top of whichever of those two applies — use it to set one
+   * variable without hand-rebuilding (and re-sanitising) the environment.
    */
   async start(
     args: string[],
-    opts?: { entry?: string; command?: { program: string; args: string[] }; env?: NodeJS.ProcessEnv },
+    opts?: {
+      entry?: string;
+      command?: { program: string; args: string[] };
+      env?: NodeJS.ProcessEnv;
+      envOverrides?: NodeJS.ProcessEnv;
+    },
   ): Promise<void> {
     const [program, leading] = opts?.command
       ? [opts.command.program, opts.command.args]
@@ -67,6 +74,11 @@ export class McpTestClient {
       env = { ...process.env };
       delete env['QUARTO_HUB_MCP_CLIENT_ID'];
       delete env['QUARTO_HUB_MCP_CLIENT_SECRET'];
+    }
+    // Applied last, so a test can set one variable without having to
+    // rebuild (and re-sanitise) the whole environment itself.
+    if (opts?.envOverrides) {
+      env = { ...env, ...opts.envOverrides };
     }
     this.proc = spawn(program, [...leading, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
