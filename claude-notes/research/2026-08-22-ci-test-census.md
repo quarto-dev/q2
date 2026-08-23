@@ -41,7 +41,7 @@ scratchpad). "In CI" = gated by a push/PR workflow.
 | `q2-preview-spa` | `test` | 5 | 46 | green | no |
 | `q2-preview-spa` | `test:integration` | 6 | 76 | green | no |
 | `@quarto/preview-renderer` | `test` | 42 (2 skipped) | 585 (549 pass / 36 skip) | green | no (verify only) |
-| `@quarto/preview-renderer` | `test:integration` | 50 | 459 | **1 real failure** (rest need WASM built) | no (verify only) |
+| `@quarto/preview-renderer` | `test:integration` | 50 | 580 | **1 real failure** (578 pass / 1 skip, WASM built) | no (verify only) |
 | `@quarto/preview-runtime` | `test` | 8 | 77 | green | no (verify only) |
 | `@quarto/api` | `test` | 26 | 369 (368 pass / 1 skip) | green | no |
 | `@quarto/quarto-automerge-schema` | `test` | 2 | 36 | green | no |
@@ -76,9 +76,10 @@ installed in my local checkout" — it is a build-order requirement, not flake.
 
 `@quarto/preview-renderer`'s integration tier additionally needs the **WASM**
 package present (`wasm-quarto-hub-client`): 26 of its 27 file-level failures
-locally are `Failed to resolve import "wasm-quarto-hub-client"`. CI's
-`ts-test-suite.yml` already builds WASM before hub-client tests, so ordering
-this suite after that step is enough.
+in a WASM-less tree are `Failed to resolve import "wasm-quarto-hub-client"`.
+With WASM built the tier reports **49 of 50 files, 578 passed / 1 failed / 1
+skipped**. CI's `ts-test-suite.yml` already builds WASM before hub-client
+tests, so ordering this suite after that step is enough.
 
 ### 2.2 Genuinely red today
 
@@ -89,9 +90,11 @@ this suite after that step is enough.
 - `@quarto/preview-renderer` `test:integration` — one real assertion failure in
   `custom-components.integration.test.tsx > Equation > appends \tag{N} to the
   LaTeX when plain_data.order is set` (`expect(tagEl).not.toBeNull()` at
-  `custom-components.integration.test.tsx:664`). Needs a WASM-built tree to
-  confirm it isn't a side effect of the missing WASM import — **verification
-  pending** (WASM build in flight at time of writing).
+  `custom-components.integration.test.tsx:664`). **Confirmed real**: re-run
+  after a full `npm run build:wasm` still fails, with every other file green
+  (49/50 files, 578 pass / 1 fail / 1 skip). Since `verify` step 11 runs this
+  suite, **`cargo xtask verify` is red on `main` today** — which is itself
+  evidence that a verify-only gate does not hold.
 - `@quarto/sync-test-harness` — the `ts-sync-server` describe block times out
   after 30 s. Cause is structural, see below.
 
