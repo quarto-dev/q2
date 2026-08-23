@@ -175,20 +175,6 @@ jobs:
           cd hub-client
           npx playwright test
 
-      # sync-test-harness's hub tier spawns `cargo run --bin hub` with a 120s
-      # readiness timeout, so it belongs in this workflow rather than
-      # ts-test-suite.yml: "Pre-build hub binary" above has already compiled
-      # that binary, so `cargo run` is a no-op re-exec. It also needs the
-      # ts-packages dists built above (it depends on quarto-sync-client and
-      # quarto-automerge-schema through their dist entries). Its ts-sync-server
-      # tier skips itself — that needs external-sources/, which CI never has.
-      #
-      # Placed after "Run E2E tests" on purpose: this suite spawns servers and
-      # waits on ports, and a flake here must not block the pre-existing
-      # Playwright gate. GH #250.
-      - name: Run sync-test-harness tests
-        run: npm test -w ts-packages/sync-test-harness
-
       # Did this PR touch smoke-all fixtures? If so we run smoke-all below, so
       # a fixture can't be authored against `q2 render` (no source-location),
       # land green, and then sit red in a nightly nobody watches — which is
@@ -268,6 +254,25 @@ jobs:
       - name: Fail on visual regression
         if: steps.visual-retry.outcome == 'failure'
         run: exit 1
+
+      # sync-test-harness's hub tier spawns `cargo run --bin hub` with a 120s
+      # readiness timeout, so it belongs in this workflow rather than
+      # ts-test-suite.yml: "Pre-build hub binary" above has already compiled
+      # that binary, so `cargo run` is a no-op re-exec. It also needs the
+      # ts-packages dists built above (it depends on quarto-sync-client and
+      # quarto-automerge-schema through their dist entries). Its ts-sync-server
+      # tier skips itself — that needs external-sources/, which CI never has.
+      #
+      # Placed last, with `if: always()`, on purpose: this suite spawns servers
+      # and waits on ports, and a flake here must not abort the pre-existing
+      # Playwright gate, the smoke-all fixture gate, or the visual-regression
+      # steps above — each of those has a bare `if:` (implicit `success()`), so
+      # a non-zero exit from this step would otherwise silently skip all of
+      # them. Running last with `always()` still reports this step's own
+      # result without gating anything upstream of it. GH #250.
+      - name: Run sync-test-harness tests
+        if: always()
+        run: npm test -w ts-packages/sync-test-harness
 
       # Upload test artifacts on failure
       - name: Upload Playwright report

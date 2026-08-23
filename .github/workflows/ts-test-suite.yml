@@ -312,9 +312,17 @@ jobs:
       # These two resolve workspace siblings through dist/, so they need the
       # "Build ts-packages workspaces" step above. hub-mcp is the heaviest
       # suite in this job (~32s: bundle.test.ts runs esbuild in beforeAll).
+      #
+      # --retry=2: `src/doc-inventory.test.ts > getDocInventory > reports
+      # index, text, and binary docs with states and heads` fails
+      # intermittently on an async peer-connection race — measured at 2
+      # failures in 8 local runs (~25%), which across this job's two OS legs
+      # is a ~44% false-red rate per PR. `--retry=2` brings that to roughly 3%
+      # while keeping all 137 tests gating. The underlying race is tracked
+      # separately — see the GH #250 follow-up strands.
       - name: Run quarto-sync-client tests
         shell: bash
-        run: npm test -w ts-packages/quarto-sync-client
+        run: npm test -w ts-packages/quarto-sync-client -- --retry=2
 
       - name: Run quarto-hub-mcp tests
         shell: bash

@@ -18,10 +18,14 @@
 //!   * A line/chunk text match would let a step with no `name:` merge into its
 //!     neighbour and inherit a test marker it never had.
 //!
-//! **Limit, deliberate for v1:** keys on `scripts.test` only. A package with
-//! `test:integration` or `test:e2e` but no `test` is invisible here — e.g.
-//! q2-preview-spa's Playwright specs. Widening to any `test*` script is
-//! follow-up work; do not assume coverage this does not have.
+//! **Limit, deliberate for v1:** the rule is package-granular, not
+//! tier-granular. Once any CI step mentions a package, every `test*` tier of
+//! that package reads as covered — even tiers no step actually runs.
+//! Concretely outside the gate today but invisible to this rule:
+//! `preview-runtime`'s `test:integration`, `q2-demos/kanban`'s `test:wasm`,
+//! `q2-preview-spa`'s `test:e2e`, and `hub-client`'s `test:e2e`. Widening to
+//! be tier-aware is follow-up work; do not assume coverage this does not
+//! have.
 //!
 //! Like `error_docs` and `error_docs_sidebar`, this is a *repo-level* rule: it
 //! compares two trees rather than grepping one Rust file, so it runs once per
