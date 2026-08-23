@@ -389,6 +389,22 @@ Use `tight_source_info_for_node(node, ctx)` and
 `leading_whitespace_source_info(&whole, &tight)` from `location.rs` when
 peeling a leading `Space`.
 
+**Also implemented** (2026-08-22, bd-1d6io): the attribute key path — the
+`"key_value_key"` arm in `treesitter.rs`. It records a `Range`, not a
+`SourceInfo`, so it uses `tight_node_location(node, input_bytes)` (the
+`Range` counterpart, added alongside `node_location`). Reach for that helper
+whenever a handler stores a `Range` over a whitespace-absorbing external
+token; it trims with `str::trim` semantics so a caller that records
+`node.utf8_text(..).trim()` keeps text and range in lockstep.
+
+**Also implemented** (2026-08-22, bd-1d6io): the attribute key path — the
+`"key_value_key"` arm in `treesitter.rs`. It records a `Range`, not a
+`SourceInfo`, so it uses `tight_node_location(node, input_bytes)` (the `Range`
+counterpart, added alongside `node_location`). Reach for that helper whenever a
+handler stores a `Range` over a whitespace-absorbing external token; it trims
+with `str::trim` semantics so a caller that records
+`node.utf8_text(..).trim()` keeps text and range in lockstep.
+
 ### P2 — Whitespace ownership (producer obligation, not auditor-checked)
 
 Inter-token ASCII whitespace belongs to a `Space` node (or block structure)

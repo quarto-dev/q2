@@ -1,3 +1,11 @@
 
 # Use bd merge for beads JSONL files
 .beads/issues.jsonl merge=beads
+
+# Byte-offset fixtures: the annotated-qmd example JSONs record byte offsets
+# into these .qmd sources (and their line_breaks), so a CRLF checkout would
+# shift every offset. Pin the whole directory, not just the .qmd sources: the
+# JSON fixtures are single-line today, but the guard byte-compares them, so a
+# future multi-line writer would break on Windows in exactly the way this pin
+# exists to prevent (bd-1d6io).
+ts-packages/annotated-qmd/examples/* text eol=lf
