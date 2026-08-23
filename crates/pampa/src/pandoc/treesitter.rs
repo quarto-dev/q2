@@ -1201,9 +1201,15 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateBaseText(class.to_string(), node_location(node))
         }
         "key_value_key" => {
-            // Extract key name and trim whitespace
+            // Extract key name and trim whitespace. The range must be trimmed in
+            // lockstep: `key_value_key` is the external `KEY_SPECIFIER` token, and
+            // the 2nd+ same-line pair in `{a=1 bb=2}` absorbs the separator, so the
+            // raw node spans `" bb"` while the text is `"bb"` (bd-1d6io, §P1).
             let text = node.utf8_text(input_bytes).unwrap().trim().to_string();
-            PandocNativeIntermediate::IntermediateBaseText(text, node_location(node))
+            PandocNativeIntermediate::IntermediateBaseText(
+                text,
+                crate::pandoc::location::tight_node_location(node, input_bytes),
+            )
         }
         "key_value_value" => {
             // Extract value, strip quotes if present

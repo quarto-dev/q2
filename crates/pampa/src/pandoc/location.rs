@@ -141,6 +141,91 @@ pub fn node_location(node: &tree_sitter::Node) -> quarto_source_map::Range {
     }
 }
 
+/// Advance a [`quarto_source_map::Location`] over `text`.
+///
+/// `column` is a byte offset within the row, matching tree-sitter's
+/// `Point::column`.
+fn advance_location(from: &quarto_source_map::Location, text: &str) -> quarto_source_map::Location {
+    let mut row = from.row;
+    let mut column = from.column;
+    for ch in text.chars() {
+        if ch == '\n' {
+            row += 1;
+            column = 0;
+        } else {
+            column += ch.len_utf8();
+        }
+    }
+    quarto_source_map::Location {
+        offset: from.offset + text.len(),
+        row,
+        column,
+    }
+}
+
+/// [`node_location`] narrowed to the node's non-whitespace extent — the
+/// `Range` counterpart of [`tight_source_info_for_node`], honoring
+/// §P1 (tight ranges) and §P3 (trim both ends) of
+/// `claude-notes/designs/provenance-contract.md`.
+///
+/// Needed for handlers that record a `Range` rather than a `SourceInfo` over a
+/// **whitespace-absorbing external token**. The qmd scanner's leading-whitespace
+/// preamble advances token-*inclusively* (`lexer->advance(lexer, false)`, to
+/// accumulate `s->indentation`), and tree-sitter fixes an external token's start
+/// at scanner entry — `mark_end` can only move the end. So any external token
+/// the scanner is entered *at* whitespace for absorbs it: the 2nd+
+/// `key_value_key` in `{a=1 bb=2}` spans `" bb"` (bd-1d6io).
+///
+/// Trimming uses `str::trim` semantics so that callers which record
+/// `node.utf8_text(..).trim()` as the node's text keep text and range in exact
+/// lockstep — the invariant that `input[range] == recorded_text`.
+///
+/// Returns the range unchanged when the slice is not valid UTF-8 (no trim is
+/// definable), and collapses to a **zero-length range at the start** when the
+/// slice is entirely whitespace — see [`trim_whitespace_range`].
+pub fn tight_node_location(
+    node: &tree_sitter::Node,
+    input_bytes: &[u8],
+) -> quarto_source_map::Range {
+    trim_whitespace_range(&node_location(node), input_bytes)
+}
+
+/// [`tight_node_location`]'s implementation, over a `Range` rather than a node
+/// so it is directly testable.
+///
+/// An **all-whitespace** slice collapses to a zero-length range at the start.
+/// It has no tight extent, and returning it untrimmed would contradict this
+/// helper's own invariant (the caller records `""`) while inviting the tiling
+/// auditor to report a bogus boundary-space finding against a node with no
+/// content. Zero-length-at-start is also what the sibling helper
+/// [`crate::utils::trim_source_location::trim_whitespace`] does, and these two
+/// must not drift.
+fn trim_whitespace_range(
+    range: &quarto_source_map::Range,
+    input_bytes: &[u8],
+) -> quarto_source_map::Range {
+    let Some(slice) = input_bytes.get(range.start.offset..range.end.offset) else {
+        return range.clone();
+    };
+    let Ok(text) = std::str::from_utf8(slice) else {
+        return range.clone();
+    };
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return quarto_source_map::Range {
+            start: range.start,
+            end: range.start,
+        };
+    }
+    if trimmed.len() == text.len() {
+        return range.clone();
+    }
+    let leading = text.len() - text.trim_start().len();
+    let start = advance_location(&range.start, &text[..leading]);
+    let end = advance_location(&start, trimmed);
+    quarto_source_map::Range { start, end }
+}
+
 /// Options for extracting source info from tree-sitter nodes
 #[derive(Debug, Clone, Default)]
 pub struct SourceInfoOptions {
@@ -642,5 +727,84 @@ mod tests {
         assert_eq!(combined.range.end.offset, 20);
         assert_eq!(combined.range.end.row, 1);
         assert_eq!(combined.range.end.column, 10);
+    }
+
+    fn qloc(offset: usize, row: usize, column: usize) -> quarto_source_map::Location {
+        quarto_source_map::Location {
+            offset,
+            row,
+            column,
+        }
+    }
+
+    fn qrange(s: usize, e: usize) -> quarto_source_map::Range {
+        quarto_source_map::Range {
+            start: qloc(s, 0, s),
+            end: qloc(e, 0, e),
+        }
+    }
+
+    // ── advance_location ──────────────────────────────────────────────────────
+    //
+    // `tight_node_location`'s only in-tree caller trims a single ASCII space,
+    // so the newline and multi-byte branches below are not otherwise exercised.
+    // `advance_location` is private, but its public entry point
+    // `tight_node_location` is documented as a general helper for
+    // whitespace-absorbing external tokens, so the next caller may well hit a
+    // newline prefix — pin the arithmetic now (bd-1d6io review, finding #6).
+
+    #[test]
+    fn advance_location_over_ascii_keeps_row_and_advances_column() {
+        let got = advance_location(&qloc(10, 2, 4), "abc");
+        assert_eq!((got.offset, got.row, got.column), (13, 2, 7));
+    }
+
+    #[test]
+    fn advance_location_over_newline_resets_column_and_bumps_row() {
+        let got = advance_location(&qloc(10, 2, 4), "\n  ");
+        assert_eq!((got.offset, got.row, got.column), (13, 3, 2));
+    }
+
+    #[test]
+    fn advance_location_over_crlf_resets_column_once() {
+        // `\r` bumps the column, `\n` then resets it — net effect is one row.
+        let got = advance_location(&qloc(0, 0, 0), "a\r\nb");
+        assert_eq!((got.offset, got.row, got.column), (4, 1, 1));
+    }
+
+    #[test]
+    fn advance_location_counts_column_in_bytes_not_chars() {
+        // `column` mirrors tree-sitter's `Point::column`, which is a BYTE
+        // offset within the row. "é" is 2 bytes, "€" is 3.
+        let got = advance_location(&qloc(0, 0, 0), "é€");
+        assert_eq!((got.offset, got.row, got.column), (5, 0, 5));
+    }
+
+    // ── tight_node_location fallbacks ─────────────────────────────────────────
+
+    #[test]
+    fn trim_whitespace_range_collapses_an_all_whitespace_slice() {
+        // An all-whitespace slice has no tight extent. Returning the untrimmed
+        // range would contradict the helper's own invariant
+        // (`input[range] == recorded_text`, where the caller records ""), and
+        // would let the auditor report a bogus boundary-space finding against a
+        // node with no content. Collapse to a zero-length range at the start,
+        // matching the sibling helper `utils::trim_source_location::trim_whitespace`.
+        let r = trim_whitespace_range(&qrange(3, 6), b"abc   xyz");
+        assert_eq!(r.start.offset, 3);
+        assert_eq!(r.end.offset, 3, "expected a zero-length range at the start");
+    }
+
+    #[test]
+    fn trim_whitespace_range_leaves_an_already_tight_range_alone() {
+        let r = trim_whitespace_range(&qrange(0, 3), b"abc");
+        assert_eq!((r.start.offset, r.end.offset), (0, 3));
+    }
+
+    #[test]
+    fn trim_whitespace_range_trims_both_ends() {
+        // §P3 symmetry.
+        let r = trim_whitespace_range(&qrange(0, 5), b" ab \n");
+        assert_eq!((r.start.offset, r.end.offset), (1, 3));
     }
 }

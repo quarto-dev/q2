@@ -922,6 +922,142 @@ fn test_div_with_classes_has_attr_source() {
 }
 
 // ============================================================================
+// Key-Value Attribute P1 Tightness Tests (bd-1d6io)
+// ============================================================================
+//
+// `provenance-contract.md` §P1 requires a node's range to cover exactly the
+// bytes that constitute it, surrounding whitespace excluded. The 2nd+ same-line
+// kv key violated it for a year: the external `KEY_SPECIFIER` token absorbs the
+// inter-pair separator (the scanner's leading-whitespace preamble advances
+// token-inclusively, and tree-sitter fixes an external token's start at scanner
+// entry), and the `"key_value_key"` arm recorded the raw node range while
+// already `.trim()`-ing the key text.
+//
+// This file's header has claimed to cover "source locations for key-value
+// pairs" since it was written, but no test touched a kv key until these.
+
+/// Helper: pull the (key, value) source pair for the i-th kv attribute.
+fn kv_sources(
+    attr_source: &pampa::pandoc::attr::AttrSourceInfo,
+    i: usize,
+) -> (&SourceInfo, &SourceInfo) {
+    let (key, value) = &attr_source.attributes[i];
+    (
+        key.as_ref().expect("kv key should have a SourceInfo"),
+        value.as_ref().expect("kv value should have a SourceInfo"),
+    )
+}
+
+#[test]
+fn test_div_kv_keys_have_tight_source() {
+    // The div-attrs.qmd shape that has been failing annotated-qmd's
+    // block-types test: `custom-key` resolved to " custom-key".
+    let input = "::: {.panel data-value=\"42\" custom-key=\"test\"}\nContent\n:::";
+    let pandoc = parse_qmd(input);
+
+    let Block::Div(div) = &pandoc.blocks[0] else {
+        panic!("Expected Div, got {:?}", pandoc.blocks[0]);
+    };
+
+    assert_eq!(div.attr.2.len(), 2, "Div should have 2 kv attributes");
+    assert_eq!(
+        div.attr_source.attributes.len(),
+        2,
+        "attr_source should have 2 kv entries"
+    );
+
+    let (first_key, first_value) = kv_sources(&div.attr_source, 0);
+    let (second_key, second_value) = kv_sources(&div.attr_source, 1);
+
+    // First key is correct even before the fix — a grammar regex token
+    // consumes the separator before the external scanner is entered.
+    assert_source_matches(input, first_key, "data-value");
+    // The regression: this one absorbed the space before it.
+    assert_source_matches(input, second_key, "custom-key");
+
+    // Values keep their quotes: P1 includes a node's own delimiters.
+    assert_source_matches(input, first_value, "\"42\"");
+    assert_source_matches(input, second_value, "\"test\"");
+}
+
+#[test]
+fn test_third_kv_key_has_tight_source() {
+    // "any non-first attribute" — confirm it is not just the second.
+    let input = "::: {a=1 bb=2 ccc=3}\nContent\n:::";
+    let pandoc = parse_qmd(input);
+
+    let Block::Div(div) = &pandoc.blocks[0] else {
+        panic!("Expected Div, got {:?}", pandoc.blocks[0]);
+    };
+    assert_eq!(div.attr_source.attributes.len(), 3);
+
+    assert_source_matches(input, kv_sources(&div.attr_source, 0).0, "a");
+    assert_source_matches(input, kv_sources(&div.attr_source, 1).0, "bb");
+    assert_source_matches(input, kv_sources(&div.attr_source, 2).0, "ccc");
+}
+
+#[test]
+fn test_span_kv_keys_have_tight_source() {
+    // Same defect on the inline path, alongside an id and a class to confirm
+    // those slots stay correct.
+    let input = "[x]{#the-id .cls k1=v1 k2=v2}";
+    let pandoc = parse_qmd(input);
+
+    let Block::Paragraph(para) = &pandoc.blocks[0] else {
+        panic!("Expected Paragraph, got {:?}", pandoc.blocks[0]);
+    };
+    let Inline::Span(span) = &para.content[0] else {
+        panic!("Expected Span, got {:?}", para.content[0]);
+    };
+
+    assert_eq!(span.attr_source.attributes.len(), 2);
+    assert_source_matches(input, kv_sources(&span.attr_source, 0).0, "k1");
+    assert_source_matches(input, kv_sources(&span.attr_source, 1).0, "k2");
+
+    // The id and class slots were never affected; pin them so a future
+    // tightness change cannot quietly widen them.
+    assert_source_matches(input, span.attr_source.id.as_ref().unwrap(), "#the-id");
+    assert_source_matches(input, span.attr_source.classes[0].as_ref().unwrap(), ".cls");
+}
+
+#[test]
+fn test_kv_key_with_spaces_around_equals_has_tight_source() {
+    // §P3 requires trimming both ends. The key node stops before the space
+    // preceding `=`, so the trailing side is already tight — pin it so the
+    // leading-side fix cannot regress it.
+    let input = "::: {a = 1 bb = 2}\nContent\n:::";
+    let pandoc = parse_qmd(input);
+
+    let Block::Div(div) = &pandoc.blocks[0] else {
+        panic!("Expected Div, got {:?}", pandoc.blocks[0]);
+    };
+    assert_eq!(div.attr_source.attributes.len(), 2);
+
+    assert_source_matches(input, kv_sources(&div.attr_source, 0).0, "a");
+    assert_source_matches(input, kv_sources(&div.attr_source, 1).0, "bb");
+}
+
+#[test]
+fn test_multiline_attr_list_kv_keys_have_tight_source() {
+    // Already correct before the fix: a soft line break is tokenized
+    // separately, so the scanner is never entered at whitespace. This is a
+    // regression guard for the currently-good path — a leading-trim fix must
+    // not start eating the newline + indent.
+    let input = "::: {#ml\n  .cls\n  m1=\"a\"\n  m2=\"b\"\n}\nContent\n:::";
+    let pandoc = parse_qmd(input);
+
+    let Block::Div(div) = &pandoc.blocks[0] else {
+        panic!("Expected Div, got {:?}", pandoc.blocks[0]);
+    };
+    assert_eq!(div.attr_source.attributes.len(), 2);
+
+    assert_source_matches(input, kv_sources(&div.attr_source, 0).0, "m1");
+    assert_source_matches(input, kv_sources(&div.attr_source, 1).0, "m2");
+    assert_source_matches(input, div.attr_source.id.as_ref().unwrap(), "#ml");
+    assert_source_matches(input, div.attr_source.classes[0].as_ref().unwrap(), ".cls");
+}
+
+// ============================================================================
 // Editorial Marks with Attributes Tests
 // ============================================================================
 
