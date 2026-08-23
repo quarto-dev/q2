@@ -115,7 +115,7 @@ nothing.
 - Produces: a green `npm run test:integration` in `ts-packages/preview-renderer`,
   which Task 5 depends on.
 
-- [ ] **Step 1: Reproduce the failure**
+- [x] **Step 1: Reproduce the failure**
 
 The WASM package must exist or 26 unrelated files fail on
 `Failed to resolve import "wasm-quarto-hub-client"`.
@@ -140,7 +140,7 @@ npm run test:integration -w ts-packages/preview-renderer
 Expected: `Test Files 1 failed | 49 passed (50)`, `Tests 1 failed | 578 passed | 1 skipped (580)`,
 failing on `Equation > appends \tag{N}`.
 
-- [ ] **Step 2: Fix the positive assertion's selector**
+- [x] **Step 2: Fix the positive assertion's selector**
 
 Replace lines 659–665 — this exact block:
 
@@ -166,7 +166,7 @@ with:
         expect(tagEl!.textContent).toBe('(1)');
 ```
 
-- [ ] **Step 3: Fix the negative assertion's selector**
+- [x] **Step 3: Fix the negative assertion's selector**
 
 In `it('does NOT append \\tag when order is missing')`, replace lines 674–676 —
 this exact block:
@@ -186,7 +186,7 @@ with:
         expect(span!.querySelector('.katex-tag')).toBeNull();
 ```
 
-- [ ] **Step 4: Run the suite to verify it passes**
+- [x] **Step 4: Run the suite to verify it passes**
 
 ```bash
 npm run test:integration -w ts-packages/preview-renderer
@@ -197,7 +197,7 @@ Expected: `Test Files 50 passed (50)`, `Tests 579 passed | 1 skipped (580)`.
 **579 is the post-fix figure** and is what every later task expects; the census
 recorded 578 because it measured the suite while this test was failing.
 
-- [ ] **Step 5: Prove both assertions actually bind (revert check)**
+- [x] **Step 5: Prove both assertions actually bind (revert check)**
 
 A test fixed by editing its expectation is guilty until proven otherwise. Break
 the product code and confirm **both** tests notice.
@@ -237,7 +237,7 @@ git checkout -- ts-packages/preview-renderer/src/q2-preview/custom/Equation.tsx
 npm run test:integration -w ts-packages/preview-renderer
 ```
 
-- [ ] **Step 6: Check for other stale KaTeX class assertions**
+- [x] **Step 6: Check for other stale KaTeX class assertions**
 
 From the worktree root:
 
@@ -251,7 +251,7 @@ Expected: no output. (At time of writing the two lines fixed above were the only
 hits in the whole tree. If new ones appear, fix them the same way and note them
 in the commit.)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add ts-packages/preview-renderer/src/q2-preview/custom-components.integration.test.tsx
@@ -310,7 +310,7 @@ without this the suite can time out and you will misread it as your own bug.
   `./server-manager.js`; a `sync-test-harness` `npm test` that exits 0 without
   `external-sources/`. Task 5b wires that suite into CI.
 
-- [ ] **Step 1: Reproduce the failure**
+- [x] **Step 1: Reproduce the failure**
 
 ```bash
 cargo build --bin hub
@@ -328,7 +328,7 @@ binary was not built — go back and build it.
 the ts-sync-server tier will pass instead. Rename the directory aside to
 reproduce.)
 
-- [ ] **Step 2: Export an availability probe from `server-manager.ts`**
+- [x] **Step 2: Export an availability probe from `server-manager.ts`**
 
 The file currently imports `mkdtemp, rm` from `node:fs/promises` (line 9) and
 has no `node:fs` import. Add one:
@@ -373,7 +373,7 @@ Then, inside `startTsSyncServer`, delete the now-redundant `serverDir` line
     cwd: TS_SYNC_SERVER_DIR,
 ```
 
-- [ ] **Step 3: Skip the tier in `roundtrip.test.ts`**
+- [x] **Step 3: Skip the tier in `roundtrip.test.ts`**
 
 Extend the existing import block (lines 9–13):
 
@@ -403,7 +403,7 @@ describe.skipIf(!tsSyncServerAvailable())('ts-sync-server', () => {
 
 Leave the `describe('hub', ...)` at line 150 alone.
 
-- [ ] **Step 4: Run the suite to verify it passes**
+- [x] **Step 4: Run the suite to verify it passes**
 
 ```bash
 npm test -w ts-packages/sync-test-harness
@@ -417,7 +417,7 @@ running, so the **file** reports passed, not skipped. The 8 passing tests are 3
 hub reconnect cases plus 5 from `concurrent-editing.test.ts`; the 3 skipped are
 the `ts-sync-server` cases.
 
-- [ ] **Step 5: Verify the skip is conditional, not unconditional**
+- [x] **Step 5: Verify the skip is conditional, not unconditional**
 
 The failure mode to rule out is a probe that always returns `false`, which would
 silently disable the tier for developers who *do* have the server.
@@ -446,7 +446,7 @@ Failed-instead-of-skipped is the whole observation: it proves the probe read the
 filesystem. (`external-sources/` is gitignored at `.gitignore:6`, so the stub
 never shows in `git status`.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add ts-packages/sync-test-harness/src/server-manager.ts \
@@ -502,7 +502,7 @@ running all ten suites locally on a tree with no WASM built.
 - Produces: the `workspace-ts-suites` job, with `ts-packages/*/dist/` present
   for every later step in it. Tasks 4 and 5 add steps to this job.
 
-- [ ] **Step 1: Add the job**
+- [x] **Step 1: Add the job**
 
 Append a sibling job to `test-suite` (i.e. at the same indentation as
 `  test-suite:`, after its last step at line 206):
@@ -563,7 +563,7 @@ Append a sibling job to `test-suite` (i.e. at the same indentation as
         run: node ts-packages/quarto-hub-mcp/dist/index.js --help
 ```
 
-- [ ] **Step 2: Verify the job parses and has the expected shape**
+- [x] **Step 2: Verify the job parses and has the expected shape**
 
 ```bash
 yq '.jobs | keys' .github/workflows/ts-test-suite.yml
@@ -571,11 +571,17 @@ yq '.jobs."workspace-ts-suites".steps | length' .github/workflows/ts-test-suite.
 yq '.jobs."test-suite".steps | length' .github/workflows/ts-test-suite.yml
 ```
 
-Expected: three job keys — `test-suite`, `wasm-tests`, `workspace-ts-suites`;
+Expected: two job keys — `test-suite`, `workspace-ts-suites`;
 the new job has **5** steps; `test-suite` still has **25** (unchanged by this
 task).
 
-- [ ] **Step 3: Verify the build loop locally from a clean state**
+> **Correction, 2026-08-23 (execution).** This step originally expected *three*
+> job keys, including `wasm-tests`. That was wrong: `wasm-tests` is a job in the
+> **Rust** `.github/workflows/test-suite.yml`, a different file that also happens
+> to contain a job named `test-suite`. `ts-test-suite.yml` had exactly one job
+> before this task and has two after it.
+
+- [x] **Step 3: Verify the build loop locally from a clean state**
 
 `ts-packages/quarto-engine-host-deno/dist/engine-host-deno.js` is the **only**
 tracked file under any `ts-packages/*/dist` (the bundle-freshness gate diffs
@@ -599,7 +605,7 @@ ignored by `.gitignore:26`, and the deno bundle is force-tracked by the
 negation triple at `.gitignore:33-35` — `tsc` will not regenerate it, because
 there is no `src/engine-host-deno.ts`.
 
-- [ ] **Step 4: Verify the dists fix all three cold failures**
+- [x] **Step 4: Verify the dists fix all three cold failures**
 
 ```bash
 npm test -w ts-packages/quarto-sync-client && \
@@ -615,7 +621,7 @@ be** (that is bd-1d6io, Task 7); the point is that it no longer dies with
 `ERR_MODULE_NOT_FOUND` partway through. That is why its command is on its own
 line rather than chained with `&&`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .github/workflows/ts-test-suite.yml
@@ -678,7 +684,7 @@ Two deliberate choices:
   they are in this job because it is the Node-only job.)
 - Produces: nothing later tasks depend on.
 
-- [ ] **Step 1: Add the steps**
+- [x] **Step 1: Add the steps**
 
 Append to the `workspace-ts-suites` job's `steps`:
 
@@ -724,7 +730,7 @@ Append to the `workspace-ts-suites` job's `steps`:
         run: npm test -w trace-viewer
 ```
 
-- [ ] **Step 2: Verify every command works from the repo root**
+- [x] **Step 2: Verify every command works from the repo root**
 
 ```bash
 npm test -w ts-packages/preview-renderer && \
@@ -748,7 +754,7 @@ by a test or two with everything still passing, is drift — note the new number
 and move on. Only a non-zero exit, or a count that has dropped sharply, needs
 investigating.
 
-- [ ] **Step 3: Verify the workflow parses and the steps landed in the right job**
+- [x] **Step 3: Verify the workflow parses and the steps landed in the right job**
 
 ```bash
 yq '.jobs."workspace-ts-suites".steps | length' .github/workflows/ts-test-suite.yml
@@ -759,7 +765,7 @@ Expected: **13** steps (5 from Task 3 + 8 here), and the printed names end with
 the eight `Run …` steps above. Checking the count *and* the job key matters: a
 step indented under the wrong key still parses.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/ts-test-suite.yml
@@ -804,7 +810,7 @@ satisfies; appending is the simplest such position.
 - Consumes: Task 1 (`\tag` fix), Task 3 (job + dists), Task 4 (the job's step list).
 - Produces: nothing later tasks depend on.
 
-- [ ] **Step 1: Add the two dist-dependent steps to `workspace-ts-suites`**
+- [x] **Step 1: Add the two dist-dependent steps to `workspace-ts-suites`**
 
 ```yaml
       # These two resolve workspace siblings through dist/, so they need the
@@ -819,7 +825,7 @@ satisfies; appending is the simplest such position.
         run: npm test -w ts-packages/quarto-hub-mcp
 ```
 
-- [ ] **Step 2: Add the WASM-dependent step to `test-suite`**
+- [x] **Step 2: Add the WASM-dependent step to `test-suite`**
 
 Append to the **`test-suite`** job (after the bundle-freshness step at line 206
 — note this is the *other* job):
@@ -836,7 +842,7 @@ Append to the **`test-suite`** job (after the bundle-freshness step at line 206
         run: npm run test:integration -w ts-packages/preview-renderer
 ```
 
-- [ ] **Step 3: Verify locally**
+- [x] **Step 3: Verify locally**
 
 ```bash
 npm test -w ts-packages/quarto-sync-client && \
@@ -847,7 +853,7 @@ npm run test:integration -w ts-packages/preview-renderer && echo ALL GREEN
 Expected: `ALL GREEN`, reporting 137, 246+3skip, and 579+1skip (579 because
 Task 1 landed). The count-mismatch rule from Task 4 Step 2 applies here too.
 
-- [ ] **Step 4: Confirm the WASM ordering constraint is real, not cargo-culted**
+- [x] **Step 4: Confirm the WASM ordering constraint is real, not cargo-culted**
 
 ```bash
 mv crates/wasm-quarto-hub-client/pkg /tmp/pkg-stash
@@ -860,7 +866,7 @@ Expected: a non-zero count (26 file-level failures at time of writing). Moving
 `pkg` is what breaks it — `hub-client/wasm-quarto-hub-client` is a symlink whose
 target this removes.
 
-- [ ] **Step 5: Verify step counts per job, then commit**
+- [x] **Step 5: Verify step counts per job, then commit**
 
 ```bash
 yq '.jobs."workspace-ts-suites".steps | length' .github/workflows/ts-test-suite.yml
@@ -927,7 +933,7 @@ workflow.
 - Produces: nothing later tasks depend on. Task 6's lint rule must scan **this
   workflow too** — that is why its `WORKFLOWS` constant is a list.
 
-- [ ] **Step 1: Confirm the surrounding steps are where the plan says**
+- [x] **Step 1: Confirm the surrounding steps are where the plan says**
 
 ```bash
 sed -n '155,180p' .github/workflows/hub-client-e2e.yml
@@ -938,7 +944,7 @@ Expected: the 120 s-timeout comment, then `- name: Pre-build hub binary` /
 (162), then `- name: Run E2E tests` with `cd hub-client` / `npx playwright test`
 (173–177).
 
-- [ ] **Step 2: Add the step**
+- [x] **Step 2: Add the step**
 
 Insert **after** the `Run E2E tests` step, before the
 `Did this PR touch smoke-all fixtures?` step:
@@ -962,7 +968,7 @@ Insert **after** the `Run E2E tests` step, before the
 (No `shell: bash` — that matches this workflow's convention, unlike
 `ts-test-suite.yml`.)
 
-- [ ] **Step 3: Verify locally with a prebuilt binary**
+- [x] **Step 3: Verify locally with a prebuilt binary**
 
 ```bash
 cargo build --bin hub
@@ -971,7 +977,7 @@ npm test -w ts-packages/sync-test-harness
 
 Expected: exit 0, `Test Files 2 passed (2)`, `Tests 8 passed | 3 skipped (11)`.
 
-- [ ] **Step 4: Confirm the `cargo build` prerequisite is real**
+- [x] **Step 4: Confirm the `cargo build` prerequisite is real**
 
 This is the claim the whole task rests on, so check it rather than trusting it:
 
@@ -985,7 +991,7 @@ Expected: `startHubServer` spawning `'cargo', ['run', '--bin', 'hub', …]` with
 directly, this task's placement rationale weakens — update the comment rather
 than leaving it stale.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 ```bash
 yq '.jobs."e2e-tests".steps | length' .github/workflows/hub-client-e2e.yml
@@ -1071,7 +1077,7 @@ the rule docs so nobody assumes coverage it doesn't have.
 - Produces: `pub fn check(workspace_root: &Path) -> Result<Vec<Violation>>`,
   called from `lint::run_check`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `crates/xtask/src/lint/ci_test_wiring.rs` with **only** the test module
 below, **and** add the module declaration to `crates/xtask/src/lint/mod.rs` in
@@ -1303,7 +1309,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 cargo nextest run -p xtask -E 'test(ci_test_wiring)'
@@ -1314,7 +1320,7 @@ scope` (and the same for `EXCUSED`), because `use super::*;` resolves nothing
 yet. If instead you see "no tests to run", the `mod ci_test_wiring;`
 declaration from Step 1 is missing.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Prepend to `crates/xtask/src/lint/ci_test_wiring.rs`, above the test module:
 
@@ -1542,7 +1548,7 @@ pub fn check(workspace_root: &Path) -> Result<Vec<Violation>> {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 cargo nextest run -p xtask -E 'test(ci_test_wiring)'
@@ -1550,7 +1556,7 @@ cargo nextest run -p xtask -E 'test(ci_test_wiring)'
 
 Expected: **11** tests pass.
 
-- [ ] **Step 5: Run clippy — the tests passing is not enough**
+- [x] **Step 5: Run clippy — the tests passing is not enough**
 
 ```bash
 cargo clippy -p xtask --all-targets -- -D warnings
@@ -1564,7 +1570,14 @@ runs `cargo clippy --workspace --all-targets --profile ci -- -D warnings`
 `.map_or(1, |i| i + 1)` rather than `.map(…).unwrap_or(1)`. A `map/unwrap_or`
 here would pass all 11 tests and fail CI.
 
-- [ ] **Step 6: Wire the rule into the lint runner**
+> **Correction, 2026-08-23 (execution).** Run in the order written, this step
+> cannot pass: with the rule not yet called from `run_check`, clippy reports 8
+> `dead_code` errors (`RULE`, `WORKFLOWS`, `TEST_MARKERS`, `EXCUSED` and four
+> functions, all "never used"). **Do Step 6 first, then this step.** Nothing is
+> weakened by the swap — no `#[allow(dead_code)]` is needed, and clippy is clean
+> once the rule is wired.
+
+- [x] **Step 6: Wire the rule into the lint runner**
 
 The `mod ci_test_wiring;` declaration went in at Step 1. Now add the call. In
 `crates/xtask/src/lint/mod.rs`'s `run_check`, after the `error_docs_sidebar`
@@ -1578,7 +1591,7 @@ block (which is the last repo-level check; `workspace_root` is bound at line
     all_violations.extend(ci_test_wiring::check(&workspace_root)?);
 ```
 
-- [ ] **Step 7: Run the real lint and confirm it is clean**
+- [x] **Step 7: Run the real lint and confirm it is clean**
 
 ```bash
 cargo xtask lint
@@ -1596,7 +1609,7 @@ sees it.) If the lint flags anything else, that package genuinely isn't wired �
 add its step or add it to `EXCUSED` with a reason. Do not weaken the rule to
 make it pass.
 
-- [ ] **Step 8: Confirm the rule bites (revert check)**
+- [x] **Step 8: Confirm the rule bites (revert check)**
 
 Use `quarto-hub-mcp` deliberately: it is the package a whole-file substring
 match would have been inert for, because Task 3's smoke-check step names its
@@ -1621,7 +1634,7 @@ Expected: `patched`, then a violation naming `@quarto/hub-mcp` — even though
 the file unchanged, print no violation, and send you off debugging the lint
 rule when the bug was in this edit.
 
-- [ ] **Step 9: Document the rule in `CLAUDE.md`**
+- [x] **Step 9: Document the rule in `CLAUDE.md`**
 
 Add to the "Current Lint Rules" list, after the `metadata-as-str` entry:
 
@@ -1629,7 +1642,7 @@ Add to the "Current Lint Rules" list, after the `metadata-as-str` entry:
 - **ci-test-suite-unwired**: Every npm-workspace package with a `test` script must be run by a step in `.github/workflows/ts-test-suite.yml` or `.github/workflows/hub-client-e2e.yml`, or be listed in `EXCUSED` in `crates/xtask/src/lint/ci_test_wiring.rs` with a reason and a tracking strand. CI ran only `hub-client` and `engine-host-deno` for months while ~2,000 assertions across a dozen packages sat outside the merge gate — long enough for a KaTeX class rename to redden `preview-renderer` on `main` unnoticed (GH #250). Nothing reconciled "packages that have tests" against "packages CI runs"; this rule is that reconciliation. It **parses** the workflows and inspects each step's `run:` script, rather than substring-matching the file: a package path in a *build* step must not count (`ts-packages/quarto-hub-mcp` appears in the MCP smoke check, `hub-client` in the WASM build), and a step with no `name:` must not merge into its neighbour. Two workflows are scanned because `sync-test-harness`'s hub tier spawns `cargo run --bin hub`, which only the e2e workflow pre-builds. **Deliberate v1 limit:** it keys on `scripts.test` only, so a package with `test:integration`/`test:e2e` but no `test` is invisible (q2-preview-spa's Playwright specs, for one). Like the `error-docs-*` rules it is *repo-level* and anchors violations at the offending `package.json`'s `"test":` line. **When you add a `test` script to a workspace package, add its CI step in the same commit.**
 ```
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add crates/xtask/src/lint/ci_test_wiring.rs crates/xtask/src/lint/mod.rs CLAUDE.md
@@ -1751,8 +1764,10 @@ yq '.jobs."workspace-ts-suites".steps | length' .github/workflows/ts-test-suite.
 yq '.jobs."e2e-tests".steps | length' .github/workflows/hub-client-e2e.yml
 ```
 
-Expected: `[test-suite, wasm-tests, workspace-ts-suites]`; **26**, **15**, **25**.
-(Baselines before this plan: 25, n/a, 24.)
+Expected: `[test-suite, workspace-ts-suites]`; **26**, **15**, **25**.
+(Baselines before this plan: 25, n/a, 24.) **Verified 2026-08-23.**
+(This originally listed `wasm-tests` as a third key — see the correction under
+Task 3 Step 2.)
 
 - [ ] **Run the full gate before proposing a push.**
 
