@@ -118,10 +118,24 @@ function compositeKey(namespace, key) {
  */
 export async function jsCacheGet(namespace, key) {
   if (ephemeralMode()) {
-    const record = memoryStore.get(compositeKey(namespace, key));
+    const ck = compositeKey(namespace, key);
+    const record = memoryStore.get(ck);
     if (record == null) return null;
     // Touch-on-read, mirroring the IndexedDB path.
+    //
+    // Re-insert rather than only bumping the timestamp. `Date.now()` has
+    // millisecond resolution, and `evictMemoryIfNeeded` orders entries
+    // with `Array.prototype.sort`, which is stable -- so entries whose
+    // timestamps tie keep their Map insertion order. Enough cache
+    // activity fits inside one millisecond that ties are the common
+    // case, and a touched entry left at its original position then sorts
+    // to the *front* of the oldest-first list and is evicted first,
+    // exactly inverting what touch-on-read is for. Deleting and
+    // re-setting moves it to the end of the iteration order, so on a tie
+    // it is treated as the newest entry.
     record.timestamp = Date.now();
+    memoryStore.delete(ck);
+    memoryStore.set(ck, record);
     return record.value;
   }
   const database = await openDb();

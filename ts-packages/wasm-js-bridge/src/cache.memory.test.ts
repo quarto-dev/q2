@@ -13,7 +13,7 @@
  * to the persistent path throws instead of silently passing.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   jsCacheGet,
   jsCacheSet,
@@ -109,6 +109,37 @@ describe("cache bridge (ephemeral in-memory mode)", () => {
     }
 
     expect(await jsCacheGet("ns", "touched")).toEqual(value);
+  });
+
+  // The test above only fails when the whole body happens to land inside
+  // one Date.now() millisecond, which made it flaky rather than wrong
+  // (GH #250 surfaced it on a macOS runner). Pinning the clock forces
+  // that worst case every run: with every timestamp equal, the eviction
+  // order is decided purely by how jsCacheGet records a touch, so this
+  // binds the fix rather than the timing.
+  it("touch-on-read survives eviction when every timestamp ties", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    try {
+      const value = new Uint8Array([99]);
+
+      await jsCacheSet("ns", "touched", value);
+      for (let i = 1; i < MAX_ENTRIES; i++) {
+        await jsCacheSet("ns", `filler-${i}`, value);
+      }
+
+      expect(await jsCacheGet("ns", "touched")).toEqual(value);
+      for (let i = 0; i < 5; i++) {
+        await jsCacheSet("ns", `overflow-${i}`, value);
+      }
+
+      // "touched" was inserted first, so a stable sort over tied
+      // timestamps evicts it first unless the touch re-ordered it.
+      expect(await jsCacheGet("ns", "touched")).toEqual(value);
+      // And the untouched oldest filler is the one that should be gone.
+      expect(await jsCacheGet("ns", "filler-1")).toBeNull();
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("does not persist across _resetDbHandle (the session boundary)", async () => {
