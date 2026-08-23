@@ -9,6 +9,7 @@ import { describe, test, beforeAll, afterAll, expect } from 'vitest';
 import {
   startHubServer,
   startTsSyncServer,
+  tsSyncServerAvailable,
   type ServerHandle,
 } from './server-manager.js';
 import {
@@ -107,9 +108,13 @@ async function roundtrip(
 
 // ---------------------------------------------------------------------------
 // TS sync server tests (baseline — these should pass)
+//
+// The reference server lives in external-sources/, which is not
+// version-controlled, so this tier can only run on a checkout that has it.
+// It is skipped (not failed) elsewhere, including in CI. See GH #250.
 // ---------------------------------------------------------------------------
 
-describe('ts-sync-server', () => {
+describe.skipIf(!tsSyncServerAvailable())('ts-sync-server', () => {
   let server: ServerHandle;
 
   beforeAll(async () => {
