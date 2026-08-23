@@ -4,6 +4,7 @@
 //! Each lint rule is implemented as a separate submodule.
 
 mod add_file_with_id;
+mod ci_test_wiring;
 mod error_docs;
 mod error_docs_sidebar;
 mod external_sources;
@@ -99,6 +100,11 @@ pub fn run_check(config: &LintConfig) -> Result<()> {
         eprintln!("Checking docs/errors/ against the errors sidebar in docs/_quarto.yml");
     }
     all_violations.extend(error_docs_sidebar::check(&workspace_root)?);
+
+    if config.verbose {
+        eprintln!("Checking npm-workspace test scripts against the CI workflows");
+    }
+    all_violations.extend(ci_test_wiring::check(&workspace_root)?);
 
     // Report results
     if all_violations.is_empty() {
