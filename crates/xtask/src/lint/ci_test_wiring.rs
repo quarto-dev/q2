@@ -24,8 +24,8 @@
 //! Concretely outside the gate today but invisible to this rule:
 //! `preview-runtime`'s `test:integration`, `q2-demos/kanban`'s `test:wasm`,
 //! `q2-preview-spa`'s `test:e2e`, and `hub-client`'s `test:e2e`. Widening to
-//! be tier-aware is follow-up work; do not assume coverage this does not
-//! have.
+//! be tier-aware is follow-up work, tracked as bd-lkercidb; do not assume
+//! coverage this does not have.
 //!
 //! Like `error_docs` and `error_docs_sidebar`, this is a *repo-level* rule: it
 //! compares two trees rather than grepping one Rust file, so it runs once per
