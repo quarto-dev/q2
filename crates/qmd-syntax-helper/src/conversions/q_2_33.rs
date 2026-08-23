@@ -71,8 +71,18 @@ impl Q233Converter {
                 continue;
             }
 
-            let start_offset = location.as_ref().unwrap().start_offset();
-            let end_offset = location.as_ref().unwrap().end_offset();
+            // resolve_byte_range() replaces the raw start_offset()/end_offset()
+            // pair: those silently return 0 / content-length on a
+            // Concat-rooted span, while resolve_byte_range() honestly
+            // returns None there (findings doc §1's accessor rule). Both
+            // ends are needed here, so one call supplies both instead of
+            // two separate accessor calls. file_id is ignored because this
+            // conversion parses exactly one file, so any resolved span is
+            // necessarily in it.
+            let Some((_file_id, start_offset, end_offset)) = location.unwrap().resolve_byte_range()
+            else {
+                continue;
+            };
 
             violations.push(Q233Violation {
                 start_offset,

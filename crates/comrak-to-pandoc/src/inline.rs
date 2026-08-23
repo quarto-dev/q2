@@ -48,8 +48,12 @@ fn convert_inline<'a>(
     match &ast.value {
         NodeValue::Text(text) => {
             if let Some(ctx) = source_ctx {
+                // The raw slice, not just the offset: comrak's `text` is
+                // decoded, so its byte indices are not source offsets.
+                // `tokenize_text_with_source` tiles the two in lockstep.
                 let base_offset = ctx.start_offset(&ast.sourcepos);
-                tokenize_text_with_source(text, base_offset, ctx.file_id())
+                let raw = ctx.raw_slice(&ast.sourcepos);
+                tokenize_text_with_source(text, raw, base_offset, ctx.file_id())
             } else {
                 tokenize_text(text)
             }

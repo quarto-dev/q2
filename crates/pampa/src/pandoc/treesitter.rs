@@ -986,11 +986,19 @@ fn native_visitor<T: Write>(
             // Extract the quoted text by getting the full node text and stripping quotes
             // The grammar uses anonymous rules (_commonmark_*_quote_string) so there are
             // no named children - we must extract and strip quotes ourselves
+            // extract_quoted_text returns only the decoded string. The
+            // quote-inclusive node span is recomputed independently by
+            // process_shortcode_string (paired with the decoded string in
+            // the IntermediateShortcodeArg it returns); no consumer offsets
+            // into that range — ShortcodeArg::String carries no SourceInfo
+            // at all, so shortcode_resolve.rs's readers of it
+            // (crates/quarto-core/src/transforms/shortcode_resolve.rs:135,
+            // :171, :837, :848, :2236, :2269) only ever see the string.
             let extract_quoted_text = || {
                 let full_text = node.utf8_text(input_bytes).unwrap();
                 // Strip surrounding quotes and unescape internal escaped quotes
                 // The grammar recognizes \" in double-quoted and \' in single-quoted strings
-                let text = if full_text.starts_with('"') && full_text.ends_with('"') {
+                if full_text.starts_with('"') && full_text.ends_with('"') {
                     let inner = &full_text[1..full_text.len() - 1];
                     inner.replace("\\\"", "\"")
                 } else if full_text.starts_with('\'') && full_text.ends_with('\'') {
@@ -998,12 +1006,7 @@ fn native_visitor<T: Write>(
                     inner.replace("\\'", "'")
                 } else {
                     full_text.to_string()
-                };
-                let range = crate::pandoc::location::source_info_to_qsm_range_or_fallback(
-                    &node_source_info_with_context(node, context),
-                    context,
-                );
-                PandocNativeIntermediate::IntermediateBaseText(text, range)
+                }
             };
             process_shortcode_string(&extract_quoted_text, node, context)
         }

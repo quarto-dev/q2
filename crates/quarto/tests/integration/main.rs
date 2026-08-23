@@ -10,6 +10,7 @@ pub mod create;
 pub mod diagnostic_render_panic_boundary;
 pub mod engine_diagnostics_cli;
 pub mod extension_config_spans;
+pub mod founding_crash_config_span_e2e;
 pub mod get_config_cli;
 pub mod json_errors;
 pub mod jupyter_kernel_cleanup_e2e;

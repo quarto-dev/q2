@@ -1333,14 +1333,32 @@ Verified prerequisites, so the phase does not rest on assumption:
       **undercounted the project-level JSON ones by one**. The JSON path reads
       `.column` and cannot panic today — that is an argument, not an exemption.
       Verified in the landed tree: `grep -c 'render_diagnostic_guarded('` = 8,
-      3 above `print_render_diagnostics_json` and 5 below it
+      3 above `print_render_diagnostics_json` and 5 below it.
+      **Updated 2026-08-23 (Plan 3 Phase 6d): the count is now 9.** Plan 3 wrapped
+      the ninth site, the pre-render `to_text(None)` loop over config-sourced
+      diagnostics in `execute_project` (§ Hand-off item 5 / recommendations § 7);
+      it is `render_diagnostic_guarded` for **uniformity**, not a fix — that path
+      passes `ctx = None`, which never reaches a renderer, so it cannot panic
+      today. **Carry the pattern, not just the number:** the count is of
+      `render_diagnostic_guarded(` **with the trailing paren**. Grepping without
+      it returns **12** on the same tree: the 9 call sites, plus the definition
+      `fn render_diagnostic_guarded<T>(` (`:1290` — the tight grep misses it
+      because of the `<T>`), plus two prose mentions in the fault-injection
+      seam's doc comment (`:1228`, `:1232`). A reader who runs the looser grep
+      will get 12 and "correct" a correct record. (An earlier revision of this
+      note said 11; that was the pre-wrap figure, when there were 8 call sites.
+      Re-measured on HEAD 2026-08-23.)
 - [x] Verify the `UnwindSafe` obligations and **write the outcome into
       § Evidence**, including "not needed" if that is what it turns out to be.
       **Outcome: not needed** — see § Evidence, Phase 5
 - [x] Assert a caught panic while printing a **warning** does not change the
       exit code. Sequencing already favors this:
       `print_render_diagnostics` runs after `_site/` is written and before
-      `should_exit_nonzero` (`render.rs:836`/`:1010`, `:1026-1028`)
+      `should_exit_nonzero` (`render.rs:836`/`:1010`, `:1026-1028`).
+      **Anchors stale as of 2026-08-23** (noted, not rewritten — the claim is
+      still true, only its line numbers drifted): on HEAD the project path is
+      `execute_project` `:854`, printing at `:1024`, gating at `:1041`; the
+      single-doc path is `:770`/`:836`/`:848`, unchanged
 - [x] Close `bd-chmbr0zl` (closed 2026-08-22; the close reason records all three
       of the strand's own "things to check" as discharged)
 
@@ -1624,7 +1642,7 @@ crates.io publish.
    mismatch, so its cost is a **refusal** to repoint a declaration, not wrong output. A
    gap-free `Concat` does have a hull via the `map_offset` pair, so the simplification is
    available; it is declined here on the post-audit argument above, and because leaving it
-   **kept** preserves the three-way disposition that Plan 3's own Phase 7 asserts.
+   **kept** preserves the three-way disposition that Plan 3's own Phase 8 (renumbered 2026-08-23) asserts.
 2. **Narrowing `is_gapless` to the queried sub-range (R-9), with C7's measurement attached.**
    `resolve_span` refuses a real, common shape: a multi-line `#|` cell-options block is
    structurally gappy because `is_gapless` requires pairwise contiguity across *every* piece
@@ -1679,6 +1697,33 @@ crates.io publish.
    `render_diagnostic_guarded` could swallow its render panic — but it is the one property here
    worth ~20 lines of test rather than an argument. (Final whole-branch review, deferred item
    8.)
+
+   > **Correction, 2026-08-23 (Plan 3 Phase 6d, T9).** The record above is left as written; this
+   > note corrects it rather than replacing it. **The stated ordering is backwards.** Printing
+   > comes *first*: `print_render_diagnostics(&summary, …)` is `render.rs:836` and
+   > `should_exit_nonzero(&summary, …)` — which calls `diagnostic_counts()` — is `:848`. The
+   > project path has the same shape: `execute_project` (`:854`) prints at `:1024` and gates at
+   > `:1041`. So "`diagnostic_counts()` runs
+   > before printing" is false, and a reader who believed it would conclude that reordering the
+   > two calls is safe.
+   >
+   > **The property that actually holds is immutability.** Both calls take `&summary`, and every
+   > closure `render_diagnostic_guarded` runs borrows `&CoalescedDiagnostic` /
+   > `&DiagnosticMessage` / `&SourceContext` only — the function requires `UnwindSafe` *without*
+   > `AssertUnwindSafe` (the bound is in the signature at `:1290-1293`; the rationale is the doc
+   > paragraph at `:1278-1283`), which is what makes that true at the type level. A
+   > swallowed render panic therefore cannot remove a diagnostic from the summary the exit gate
+   > counts. The item's conclusion is right; only its reason was wrong.
+   >
+   > The guard's own doc comment (`:1268-1270`, "after the pipeline run and before
+   > `should_exit_nonzero`") was already correct and needed no change.
+   >
+   > **Discharged.** T9 —
+   > `diagnostic_render_panic_boundary.rs::caught_panic_on_an_error_keeps_exit_code_nonzero` —
+   > now pins it. It is labelled in-file as an **invariant pin, not a regression test**: no edit
+   > to `render_diagnostic_guarded` can redden it, because the gate counts the summary rather
+   > than what was printed. Its only hunk is the hypothetical refactor "compute the exit status
+   > from the diagnostics that were actually printed".
 
 ## Evidence
 

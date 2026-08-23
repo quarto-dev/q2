@@ -180,7 +180,21 @@ already exists to fix a related bug (bd-f6h40a9r, foreign provenance sliced at
 another file's offsets), so the failure mode has precedent at this exact line.
 
 **One confirmed *locate* site:** `postprocess.rs:660` computes a min/max span
-and never slices text. The other 24 are unclassified — Plan 3 Phase 1 owns that.
+and never slices text.
+
+> **Classified 2026-08-23 (Plan 3 Phase 1).** All 26 are now classified; the
+> table is in Plan 3 § Evidence → Phase 1. The result corrects the count above:
+> there are **three** copy sites, not one. `assemble_inline_content`'s
+> `InlineAlignment::KeepBefore` arm and `assemble_recursed_container`'s
+> verbatim early return also emit a hull's bytes as a node's text. Both are
+> latent for exactly the reason `:171` is — verified at the consumer, since
+> `incremental_write`'s only two production callers both supply an
+> untransformed, parent-less baseline (one of which is test-pinned, the other
+> only argued — see the note under § Reachability below). Every remaining site is *locate*,
+> including seven that slice `original_qmd` at **complement** ranges (gap,
+> prefix/suffix, delimiters), where only the offset claim load-bears. Line
+> numbers in the tables above are as of `816f4ed47` and have since shifted; the
+> Plan 3 table carries the rebased numbers.
 
 ### Reachability: LATENT, not live
 
@@ -202,16 +216,33 @@ Three findings, each closing one producer:
    (`pampa/src/pandoc/location.rs:214-217`).
 3. **But they cannot reach the copy site.** `incremental_write`'s baseline is
    `capture_untransformed_ast_json` (`quarto-core/src/pipeline.rs:1006-1022`,
-   called at `:920`), which (a) calls
-   `pampa::wasm_entry_points::qmd_to_pandoc(content)` and sets
-   **`parent_source_info: None`** explicitly at `:1013`, so no
-   content-provenance `Substring` can exist in the baseline; and (b) runs
+   called at `:920`), which (a) **re-parses the raw bytes** through
+   `pampa::wasm_entry_points::qmd_to_pandoc(content)` (`:1007`) with a fresh,
+   parent-less reader context, so no content-provenance `Substring` can exist
+   in the baseline (*correction 2026-08-23:* an earlier revision credited the
+   `parent_source_info: None` at `:1013` — that `ASTContext` is built after the
+   parse and is read only by the JSON writer; `parent_source_info` is consumed
+   at parse time, `pampa/src/pandoc/location.rs:214`, so `:1013` is inert); and (b) runs
    *before any pipeline stage*, so no config-derived node — spliced into
    navbar, footer or title by transforms — can be present.
 
 **The safety is incidental, not structural.** Nothing about `preimage_in`
 protects `incremental.rs:171`; the shape of the preview capture does. That is
-what Plan 3's guard exists to preserve.
+what Plan 3's guard exists to preserve. The guard's reach is narrower than the
+class, though, and Plan 3 § Evidence Phase 1 states the split: it pins the
+`capture_untransformed_ast_json` artifact (`apply_node_edit` inherits it);
+`incremental_write_qmd`'s own raw-byte re-parse
+(`wasm-quarto-hub-client/src/lib.rs:2952`) is latent by an **analogous
+invariant that no test exercises**.
+
+> **Measured 2026-08-23 (Plan 3 Phase 1).** The invariant is narrower than
+> "the baseline pool is all `Original`": the captured pool also carries
+> front-matter **metadata** provenance, which is legitimately `Substring` over
+> the front-matter `Original`. What load-bears — and what
+> `preview_untransformed_baseline_body_pool_is_all_original_own_file`
+> (`quarto-core/src/pipeline.rs`) pins — is that every `SourceInfo` the
+> **document body** reaches is an `Original` in the document's own file. The
+> writer copies bytes from body spans only.
 
 ## 4. The `SourceInfo::original(` surface
 
@@ -278,6 +309,69 @@ Inert on three independent grounds, any one sufficient:
 3. **No `Arc::make_mut`/`Arc::get_mut` anywhere in `crates/`**, so the
    `Arc<SourceInfo>` parent cannot be mutated after construction.
 
+> **Corrected 2026-08-23 (Plan 3 Phase 4).** "Any one sufficient" is false for
+> `resolve_byte_range`, and ground 1 as written overstates its reach.
+> **Measured**, by applying the T8 revert hunk — attaching an
+> `AnchorRole::Invocation` anchor in `filter_source_info`
+> (`pampa/src/lua/types.rs:2291`) in place of `from: SmallVec::new()`:
+> `resolve_byte_range()` on a `quarto.config.md('x')` node went from `None` to
+> `Some((0, 0, 1))`. So ground 1 — `map_offset`'s `Generated` arm returning
+> `None` unconditionally — is sufficient for **`map_offset` only**, and its
+> closing sentence ("Adding an anchor would not make this live") is true of
+> that accessor and false of `resolve_byte_range`. `resolve_byte_range` rests
+> on grounds 2 and 3 alone. Ground 1's own claim about `map_offset` was also
+> measured, and holds: with the same hunk applied and only the
+> `resolve_byte_range` assertion neutralized, `map_offset(0, ctx)` was still
+> `None`.
+>
+> The node's measured shape is
+> `Substring { parent: Generated { by: By::filter(..), from: [] }, 0..1 }` —
+> the `Substring` inherits the parent's answer through
+> `parent.resolve_byte_range()?`, which is why the hunk reaches it.
+>
+> Grounds 2 and 3 were re-verified against the current tree and both hold, with
+> one count correction: `append_anchor` now has **8** call sites, not 7 —
+> `quarto-config/src/span_assert.rs:577` postdates this document. All 8 still
+> sit inside their file's sole `#[cfg(test)]` module (`hash.rs:1050`,
+> `span_assert.rs:434`, `incremental.rs:1947`, `diagnostics.rs:399`), which in
+> each case opens the file's last top-level item. Ground 3 is unchanged: still
+> zero matches in `crates/`.
+>
+> **Read ground 2 as a claim about *in-place mutation only*.** Now that it and
+> ground 3 are the sole support for `resolve_byte_range`, the scope matters.
+> `append_anchor` is not the only way production code attaches an anchor —
+> three production sites do it by **constructing a new `Generated`**:
+> `quarto-core/src/transforms/shortcode_resolve.rs:1177` (unconditionally an
+> `Invocation`), `pampa/src/readers/json.rs:502` and
+> `pampa/src/lua/diagnostics.rs:195` (both take the role from the data they
+> decode; the second is in the Lua subsystem itself). The conclusion survives —
+> none of the three replaces the value `filter_source_info` mints, which passes
+> straight into `qmd::read` with nothing in between — but an auditor who
+> re-derives ground 2 by grepping `append_anchor` alone will conclude
+> "production never attaches anchors", which is false about this repo. Ground 2
+> establishes that this *particular* `SourceInfo` is never mutated after it is
+> built; it does not establish that anchors are unused.
+>
+> Line numbers: the `append_anchor` sites listed above have shifted (e.g.
+> `hash.rs:2352` → `:2359`), and so has this subsection's own opening citation
+> — `config_value.rs:601-631` was staled by the commit that added this
+> correction. The `quarto.config.md` constructor is now `:686-713`, preceded by
+> the provenance comment at `:613-685`.
+>
+> Note the version gap: this document was measured against `quarto-source-map`
+> **0.1.1**, the correction above against the currently-locked **0.1.3**. Both
+> accessor behaviours were re-read there — `map_offset`'s `Generated` arm at
+> `mapping.rs:75-79` (cited above as `:73-77`), `resolve_byte_range`'s at
+> `source_info.rs:404-406`.
+>
+> **This is now guarded.** `quarto_config_md_yields_no_byte_range` (T8, in
+> `pampa/src/lua/config_value.rs`'s `mod tests`) asserts the
+> `resolve_byte_range() == None` half and goes red under exactly the hunk
+> above; the constructor carries a comment stating the two accessors
+> separately. Nothing else in this subsection is amended. In particular, this
+> correction says nothing about *which consumers call which accessor* on these
+> nodes — that was not exercised, so it is not claimed either way.
+
 **`ProvenanceBuilder` would not fix it if it were live.** The builder maps
 content offsets onto source ranges within a parent that has a byte extent;
 `Generated { by: By::filter }` is a line-granular attribution to a `.lua` file
@@ -300,7 +394,7 @@ the fix would be an ephemeral `SourceFile`.
   with **bytes written** — writer provenance. `ProvenanceBuilder` does not fix
   it.
 
-### The workaround census — six sites, one deletion
+### The workaround census — seven sites, one deletion
 
 "The workarounds collapse" is a claim about *capability*, not deletions. Most
 stay, having become unnecessary rather than impossible.
@@ -311,9 +405,50 @@ stay, having become unnecessary rather than impossible.
 | `use_cmd/config.rs:229` | Plan 2 Phase 4 | **kept** — simplification achievable via the `map_offset` hull, "still optional; the function is correct today, merely limited" |
 | `cell_options/mod.rs:196-228` | nobody | **untouched, deliberately** — the *exemplary* case, not a workaround |
 | `theorem.rs:344-360`, `proof.rs:181-197` | Plan 2 Phase 4 | output changes as a side effect (wrong-span, not drifting) |
-| `codeblock_shorthand.rs:486` | Plan 3 Phase 7 | in neither sibling plan; byte-searches decoded text inside the raw span (`block_text.find(&cb.text)`) |
+| `codeblock_shorthand.rs:486` | Plan 3 Phase 6 (renumbered 2026-08-23) | in neither sibling plan; byte-searches decoded text inside the raw span (`block_text.find(&cb.text)`) |
+| `project/website_post_render.rs:213-222` (`copy_footer_images`) | Plan 2, final fix wave (FIX-2) | **fixed** — appended 2026-08-23, see the note below |
 
 Four independent authors hit this bug class and routed around it.
+
+> **Appended 2026-08-23 (provenance Plan 3, Phase 8).** Two amendments,
+> both to the table above; nothing else in this subsection is touched.
+>
+> **(1) A seventh site.** Plan 2's final whole-branch review found and fixed a
+> decoded/raw pairing this table predates:
+> `crates/quarto-core/src/project/website_post_render.rs`'s `copy_footer_images`
+> re-parsed `cv.as_plain_text()` against `&cv.source_info` — the *raw* span —
+> under a comment claiming to parse "the same way" as `ConfigMarkdownTransform`,
+> which stopped being true once that transform moved to content provenance. It
+> now reads `content_source_info.as_ref().unwrap_or(&cv.source_info)` (`:222`),
+> the same expression as `transforms/config_markdown.rs:326`, with the comment
+> at `:208-217` naming that line. Verified 2026-08-23: both sites read as
+> described.
+>
+> **The recount, and what each number ranges over.** The heading's count is now
+> **seven sites**, counting each row's *sites* (the `theorem.rs` / `proof.rs`
+> row is two), and it ranges only over rows of this table. The **"one deletion"
+> is unchanged** — `callout.rs` is still the only row whose code was deleted;
+> the new row was *fixed in place*. The following subsection's heading, "A
+> seventh site: the shortcode-string closure", is **left as written**: it counts
+> from the six-row census as it stood, and its subject is deliberately not a
+> census row. Counting both enumerations, the closure is the eighth site this
+> document names. **"Four independent authors"** likewise ranges over the
+> original six rows only — authorship of the new row was not re-derived.
+>
+> **(2) One row's disposition is now stale.** `codeblock_shorthand.rs:486` was
+> **fixed** by Plan 3 Phase 6a (bounded between-fences search, replacing
+> `block_text.find(&cb.text)`), guarded by
+> `body_source_for_locates_the_body_not_the_info_string`. Its row still
+> describes the pre-fix state. The other five original rows were cross-checked
+> against the tree on 2026-08-23 and each still reads true: `callout.rs`'s match
+> block is gone (the function now ends at `:418`, `#[cfg(test)]` at `:420`, and
+> its bd-3aolj guard survives at `:400-412`); `use_cmd/config.rs:229`
+> `scalar_value_span` is still present and still returns `None` on mismatch, and
+> its hull simplification is now **declined permanently** rather than left
+> optional (see the comment at that site); `cell_options/mod.rs` is untouched
+> and its constraint is now recorded in that file's header comment;
+> `theorem.rs:344-360` and `proof.rs:181-197` are unedited and their output
+> tightened exactly as Plan 2 Phase 4 predicted.
 
 ### A seventh site: the shortcode-string closure — wrong-span, and its range is dead
 

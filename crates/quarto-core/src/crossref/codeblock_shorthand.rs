@@ -458,14 +458,70 @@ fn language_of(cb: &quarto_pandoc_types::block::CodeBlock) -> String {
 /// length of the fence line. Locate `cb.text` inside the block's own
 /// source text and return the matching substring span.
 ///
+/// The search is **bounded to the region between the fence lines**
+/// ([`between_fence_lines`]), not run over the whole block. A
+/// whole-block search mislocates any body that also occurs in its own
+/// info string: for ```` ```{python} ```` with a body of exactly
+/// `python`, the first hit is at `4..10`, inside `{python}`, where the
+/// body is at `12..18` (measured 2026-08-23; pinned by
+/// `body_source_for_locates_the_body_not_the_info_string`).
+///
+/// Inside that region the body begins at (or, in a container, a fixed
+/// continuation-marker width into) offset 0, so the earliest hit is the
+/// body itself. That was measured over the shapes designed to break it —
+/// a list-indented body whose own text starts with spaces, a blockquote
+/// body whose own text starts with `> ` — and every one resolved to the
+/// true offset; it is not *proven* unique, only unbroken by those probes
+/// (2026-08-23).
+///
+/// One hole **in fenced blocks** is measured and real: a body whose
+/// **last line is made only of fence characters** in a block that
+/// tree-sitter's error recovery left *without* a closing fence
+/// (```` ````{python}\nx\n``` ````, EOF).
+/// [`between_fence_lines`] then reads the body's own final line as the
+/// closing fence and ends the region before it, `cb.text` no longer fits
+/// contiguously, and we take the block-span fallback below. Note this is
+/// coarser than the plan predicted — the span becomes the whole block,
+/// not one shifted by a few bytes — but it stays inside the block, which
+/// is the property that matters.
+///
+/// **CRLF is measured, not assumed** (2026-08-23). Every shape above was
+/// re-probed with `\r\n` line endings and the spans are right: the
+/// parser keeps the `\r` in `cb.text` (`"python\r"`), the region starts
+/// after the `\n` so no stray `\r` leads it, and the hole above
+/// degrades identically (whole block) rather than silently changing
+/// shape. See [`is_fence_line`] for the part of that which the probes
+/// actually discriminate. The CRLF behaviour is measured, **not pinned
+/// by a test** — no committed artifact re-derives it, so treat it as a
+/// dated measurement rather than a guarded invariant.
+///
+/// [`between_fence_lines`] has one other early return — `None` when the
+/// block text contains no `\n` at all — which also lands on the
+/// block-span fallback. It is unreachable from the qmd parser: a fenced
+/// block with a non-empty body always contains a newline, and qmd does
+/// not produce CommonMark 4-space indented code blocks at all (the
+/// scanner raises Q-2-35 instead —
+/// `tree-sitter-qmd/tree-sitter-markdown/grammar.js:1210-1220`).
+///
 /// Falls back to the block's span when the body is not a contiguous
-/// substring of it. That happens legitimately: a fence inside a
+/// substring of the region. That happens legitimately: a fence inside a
 /// blockquote or a list item has its continuation markers (`> `,
 /// indentation) stripped from `text` by the parser, so no contiguous
 /// range matches. Diagnostics then point at the block rather than the
 /// exact key — coarser, but never *wrong*, which is the property that
 /// matters (the alternative, binding an assumed span to real content,
 /// is the failure mode `add_file_with_id` is lint-gated against).
+///
+/// The `resolve_byte_range` call below stays deliberately, against the
+/// accessor rule's general shape (findings § 1): a byte search needs a
+/// span that is byte-identical to a contiguous run of one file, and
+/// `resolve_byte_range` is the one accessor that answers exactly that
+/// question — `None` on a `Concat`, which is an *honest* failure that
+/// lands on the block-span fallback. The `map_offset(0)` /
+/// `map_offset(length())` hull would answer a different question (where
+/// does this span reach to) and licence composing offsets over a parent
+/// that is not byte-identical to its content, which is the bug class
+/// this epic exists to remove.
 fn body_source_for(
     cb: &quarto_pandoc_types::block::CodeBlock,
     sources: &SourceContext,
@@ -483,10 +539,79 @@ fn body_source_for(
     let Some(block_text) = file.content.as_deref().and_then(|c| c.get(start..end)) else {
         return block;
     };
-    match block_text.find(&cb.text) {
-        Some(offset) => SourceInfo::substring(block, offset, offset + cb.text.len()),
+    let Some((region_start, region_end)) = between_fence_lines(block_text) else {
+        return block;
+    };
+    match block_text[region_start..region_end].find(&cb.text) {
+        Some(offset) => SourceInfo::substring(
+            block,
+            region_start + offset,
+            region_start + offset + cb.text.len(),
+        ),
         None => block,
     }
+}
+
+/// Byte range of a fenced block's **body region** inside the block's own
+/// raw text: everything after the opening fence line, up to the start of
+/// the last line when that line is a **bare** fence ([`is_fence_line`]).
+///
+/// "Bare" is load-bearing. `is_fence_line` trims only whitespace, so a
+/// closing fence carrying a container's continuation marker — `> ``` `
+/// inside a blockquote — is **not** detected, and the region then runs
+/// to the end of the block. That is harmless rather than a second hole:
+/// the body still matches earlier in the region, so the earliest-hit
+/// property (see [`body_source_for`]) carries the result on its own. A
+/// whitespace-indented closing fence inside a list item (`  ``` `) *is*
+/// detected, because `trim` removes the indentation. Both shapes were
+/// measured 2026-08-23 and both resolve to the true offset — by
+/// different routes.
+///
+/// Returns `None` when the block text has no line break at all, i.e.
+/// there is no region to search. See [`body_source_for`] for why that
+/// path is unreachable from the qmd parser.
+///
+/// The closing fence is *detected*, not assumed: tree-sitter's error
+/// recovery produces fenced blocks with no closing fence (end of file,
+/// end of a container), and dropping their last line would drop real
+/// body text. See [`body_source_for`] for the one case where the
+/// detection reads a fence-shaped final body line as the closing fence.
+fn between_fence_lines(block_text: &str) -> Option<(usize, usize)> {
+    let region_start = block_text.find('\n')? + 1;
+    // A block's own trailing newline is not a line of its own.
+    let trimmed = block_text.strip_suffix('\n').unwrap_or(block_text);
+    let last_line_start = trimmed.rfind('\n').map_or(0, |i| i + 1);
+    let region_end =
+        if last_line_start >= region_start && is_fence_line(&trimmed[last_line_start..]) {
+            last_line_start
+        } else {
+            block_text.len()
+        };
+    // `region_start <= region_end` holds by construction: `region_start`
+    // is `find('\n') + 1 <= len`, the detected-fence branch is already
+    // guarded by `>= region_start`, and the other branch is `len`. No
+    // ordering check here — it would advertise a failure mode that
+    // cannot occur.
+    Some((region_start, region_end))
+}
+
+/// Whether a line is a bare closing fence: three or more of one fence
+/// character and nothing else. Leading/trailing whitespace (including a
+/// CRLF's `\r`) is ignored.
+///
+/// The `\r` half of that is **measured, not reasoned** (2026-08-23):
+/// ```` ````{python}\r\nx\r\n```\r\n ```` (no closing fence — the
+/// hole [`body_source_for`] documents) falls back to the whole block,
+/// `0..22`, exactly as its LF twin falls back to `0..19`. Had the trim
+/// not removed the `\r`, `"```\r"` would not have read as a fence, the
+/// region would have run to the end of the block, and the search would
+/// have succeeded at `14..21` instead. That difference is what makes
+/// this fixture a discriminator; the well-formed CRLF blocks are not —
+/// they resolve correctly either way. Measured 2026-08-23 by probe and
+/// **not pinned by a test**: no committed artifact re-derives it.
+fn is_fence_line(line: &str) -> bool {
+    let line = line.trim();
+    line.len() >= 3 && (line.chars().all(|c| c == '`') || line.chars().all(|c| c == '~'))
 }
 
 /// A cell's parsed option block: scalar values by key, plus the comment
@@ -1414,43 +1539,80 @@ mod tests {
             .expect("caption must carry an Emph");
         assert_eq!(plain_text(&emph.content), "strong");
 
-        // NOTE (finding, not a bug in this task's one-line fix): calling
-        // `resolve_span` here returns `Err(SpanProblem::Concat)`, not
-        // `Ok`. `resolve_span`'s `is_gapless` check (task C3) walks
-        // *every* piece of the enclosing Concat for contiguity, not just
-        // the piece the span in question actually falls inside — and a
-        // multi-line `#|` options block is *always* gappy under that
-        // definition: each line's piece covers `content_start..line_len`
-        // (real source bytes only, marker elided), so consecutive lines'
-        // pieces never abut in the underlying document (the next line's
-        // `#| ` marker sits in the gap). That is inherent to how
-        // multi-line cell options are reassembled, not a defect this
-        // task introduced, and `resolve_span`/its gap policy is out of
-        // scope here (owned by C3). So this test proves the fix's
-        // correctness directly via `map_offset`, which — unlike
-        // `resolve_span` — only asks whether *this span's own* two
-        // endpoints resolve, not whether the whole Concat is gapless.
+        // T11 (seam spec, Plan 3 Phase 6c). This span is the shape the
+        // `is_gapless` narrowing exists for: a `Substring` over a
+        // *gappy* `Concat`. A multi-line `#|` options block is always
+        // gappy — each line's piece covers real source bytes only, so
+        // consecutive lines' pieces never abut (the next line's `#| `
+        // marker sits in the gap). Before the narrowing, `resolve_span`
+        // checked every piece of the enclosing `Concat` and refused this
+        // with `Err(SpanProblem::Concat)`; it now checks only the pieces
+        // the queried sub-range touches, so the access path is
+        // `resolve_span` rather than a hand-rolled `map_offset` pair.
+        // Reverting the narrowing reddens this assertion.
         let inner = emph.content[0].source_info();
-        let length = inner.length();
-        let start = inner
-            .map_offset(0, &sources)
-            .expect("emph span start should map");
-        let end = inner
-            .map_offset(length, &sources)
-            .expect("emph span end should map");
+        let resolved = quarto_config::span_assert::resolve_span(inner, &sources)
+            .expect("emph span should resolve through the nested-Concat parent");
         assert_eq!(
-            start.file_id, end.file_id,
-            "emph span must not cross a file boundary"
-        );
-        let file = sources
-            .get_file(start.file_id)
-            .expect("file should be registered");
-        let content = file.content.as_deref().expect("file should have content");
-        assert_eq!(
-            &content[start.location.offset..end.location.offset],
-            "strong",
+            resolved.text, "strong",
             "the emphasis span must underline the true source text through the \
              nested-Concat parent, not a shifted window"
+        );
+    }
+
+    /// T7 (seam spec, Plan 3 Phase 6a). `body_source_for` must locate the
+    /// body **between the fence lines**, not anywhere in the block's raw
+    /// text. A cell whose entire body is the word `python`, fenced
+    /// ```` ```{python} ````, is the minimal case where a whole-block
+    /// search mislocates: `python` occurs first inside the info string.
+    ///
+    /// Fixture byte layout (measured 2026-08-23):
+    /// `` ```{python}\npython\n``` `` — the info string's `python` is at
+    /// `4..10`, the body's at `12..18`. Both slices read `"python"`, so
+    /// the *offsets* are what discriminate; asserting the text alone
+    /// would pass against the bug.
+    #[test]
+    fn body_source_for_locates_the_body_not_the_info_string() {
+        let text = "```{python}\npython\n```\n";
+        let (ast, ast_context, _parse_diags) = pampa::readers::qmd::read(
+            text.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            false,
+            None,
+        )
+        .expect("fixture should parse");
+        let Block::CodeBlock(cb) = &ast.blocks[0] else {
+            panic!("expected a CodeBlock, got {:?}", ast.blocks[0]);
+        };
+        assert_eq!(
+            cb.text, "python",
+            "fixture precondition: body is the bare word"
+        );
+
+        let sources = &ast_context.source_context;
+        let body = body_source_for(cb, sources);
+
+        // Accessor rule (findings § 1): a hull is the
+        // `map_offset(0)`/`map_offset(length())` pair — never
+        // `start_offset`/`end_offset`/`resolve_byte_range`, which are
+        // silently wrong or unconditionally `None` over a `Concat`.
+        let start = body
+            .map_offset(0, sources)
+            .expect("body span start should map");
+        let end = body
+            .map_offset(body.length(), sources)
+            .expect("body span end should map");
+        assert_eq!(
+            start.file_id, end.file_id,
+            "body span must not cross a file boundary"
+        );
+        assert_eq!(
+            (start.location.offset, end.location.offset),
+            (12, 18),
+            "body span must be the body between the fences, not the \
+             `python` inside the `{{python}}` info string at 4..10"
         );
     }
 }

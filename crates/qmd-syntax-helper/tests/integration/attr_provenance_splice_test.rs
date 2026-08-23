@@ -244,11 +244,14 @@ fn q_2_12_splice_is_byte_correct_with_escaped_attributes() {
 
 /// The same round trip through the *other* accessor, and through a
 /// `replace_range` rather than an `insert`. `q-2-33` percent-encodes the space
-/// in a link target, computing the replaced range from **both**
-/// `start_offset()` and `end_offset()` — and `end_offset()` on a `Concat`
-/// returns the decoded *length*, a small, plausible-looking, entirely wrong
-/// file offset. A range built from a contaminated span would overwrite the
-/// front matter instead of the link target.
+/// in a link target, computing the replaced range from a single
+/// `resolve_byte_range()` call, using both the `start` and `end` it
+/// returns — and on a `Concat`, `resolve_byte_range()` honestly returns
+/// `None` (the conversion skips the fix) rather than the small,
+/// plausible-looking, entirely wrong offset that raw `start_offset()`/
+/// `end_offset()` would silently produce. A range built from a
+/// contaminated span would overwrite the front matter instead of the link
+/// target.
 #[test]
 fn q_2_33_replace_range_is_byte_correct_with_escaped_attributes() {
     let rm = ResourceManager::new().unwrap();

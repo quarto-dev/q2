@@ -52,6 +52,33 @@ pub fn parse_with_file_id(content: &str, file_id: FileId) -> Result<XmlWithSourc
 /// This function is used when parsing XML that is a substring of a larger
 /// document. The resulting XmlWithSourceInfo will have Substring mappings
 /// that track back to the parent document.
+///
+/// # Status: dead code — no callers anywhere, including tests
+///
+/// As of the 2026-08-21 provenance audit (see
+/// `claude-notes/research/2026-08-21-provenance-audit-findings.md` § 5), this
+/// function has zero callers in the workspace, and `quarto-xml` is not one of
+/// the externalized, published crates, so there are no outside consumers
+/// either. `XmlParser::parent` and the `Substring` branch of
+/// `make_source_info` (below) are dead paths that exist only to serve this
+/// function.
+///
+/// **Precondition if this is ever revived:** `content` must be a
+/// byte-identical slice of `parent`, occupying `parent`'s own coordinate
+/// space starting at offset 0 — the byte offsets computed while parsing
+/// `content` are used directly as `Substring` offsets into `parent` (see
+/// `make_source_info` below), with no re-basing. `make_source_info`'s
+/// `Substring` branch composes those ranges affinely over `parent` — it has
+/// no way to detect that `content` diverged from it.
+///
+/// Attribute values are exactly the shape that would violate this: attribute
+/// parsing entity-decodes the value via `unescape_value()`
+/// (`parser.rs::parse_attributes`), while the paired `value_source` spans the
+/// *raw* source text, quotes included (`find_attribute_positions`). Passing
+/// such a decoded value's text back through `parse_with_parent` as `content`
+/// against the original `value_source` as `parent` would pair decoded bytes
+/// with a raw-text span — the same decoded/raw mismatch this audit's finding
+/// § 1 documents for the YAML instance of this bug class.
 pub fn parse_with_parent(content: &str, parent: SourceInfo) -> Result<XmlWithSourceInfo> {
     // The id is unused when a parent is supplied (spans become
     // Substrings of it), but keep the non-aliasing sentinel for safety.

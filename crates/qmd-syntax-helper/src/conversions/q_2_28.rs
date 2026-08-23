@@ -75,9 +75,19 @@ impl Q228Converter {
                 continue;
             }
 
-            // The error location can span multiple tokens. Use end_offset to ensure
-            // we're after any tokens that might be part of the error
-            let error_offset = location.as_ref().unwrap().end_offset();
+            // The error location can span multiple tokens. Use the end of
+            // the resolved byte range to ensure we're after any tokens that
+            // might be part of the error. resolve_byte_range() is used
+            // instead of end_offset() because end_offset() silently returns
+            // the content length (not a real offset) on a Concat-rooted
+            // span; resolve_byte_range() is honest and returns None there
+            // instead (findings doc §1's accessor rule). file_id is ignored
+            // because this conversion parses exactly one file, so any
+            // resolved span is necessarily in it.
+            let Some((_file_id, _start, error_offset)) = location.unwrap().resolve_byte_range()
+            else {
+                continue;
+            };
 
             // Now we need to find the newline before >}}} and the start of >}}}
             // We'll scan backwards from error_offset to find the newline,
@@ -115,7 +125,12 @@ impl Q228Converter {
             close_delimiter_start += 1;
         }
 
-        // Verify that we're actually at >}}}
+        // Verify that we're actually at >}}}. This content check is the
+        // splice-safety guard: even if error_offset were wrong (e.g. a
+        // Concat-rooted diagnostic location resolving to a bogus offset),
+        // a mismatch here means no fix is applied instead of splicing the
+        // wrong bytes. Do not remove this as "redundant" with the offset
+        // computation above (design recommendations doc §3).
         if close_delimiter_start + 4 <= content.len() {
             let slice = &content[close_delimiter_start..close_delimiter_start + 4];
             if slice == ">}}}" {

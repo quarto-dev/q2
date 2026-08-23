@@ -19,6 +19,21 @@ use quarto_source_map::{FileId, SourceInfo};
 
 /// Context for converting comrak Sourcepos to quarto-source-map SourceInfo
 pub struct SourceLocationContext {
+    /// The full source text.
+    ///
+    /// Held so that the `NodeValue::Text` lockstep walker
+    /// (`text.rs::tokenize_text_with_source`) can see the *raw* bytes a
+    /// text node covers. comrak hands us decoded content paired with a raw
+    /// span, and nothing else in the AST carries the raw bytes.
+    ///
+    /// This is an owned copy, so a commonmark conversion holds the document
+    /// twice — once here and once in the caller's `SourceContext`
+    /// (`pampa/src/readers/commonmark.rs`, which already copies `input`).
+    /// An `Arc<str>` shared with that caller would avoid the second copy;
+    /// it was declined because it changes this type's public constructor
+    /// signature for a path that copies the input anyway. Reach for it if a
+    /// large-document commonmark render ever shows this in a profile.
+    source: String,
     /// Precomputed line start offsets (byte offset of each line start)
     line_offsets: Vec<usize>,
     /// File ID for the source file
@@ -37,6 +52,7 @@ impl SourceLocationContext {
             }
         }
         Self {
+            source: source.to_string(),
             line_offsets,
             file_id,
         }
@@ -75,6 +91,27 @@ impl SourceLocationContext {
         let line_start = self.line_offsets.get(line_idx).copied().unwrap_or(0);
         // Column is also 1-based; convert to 0-based
         line_start + lc.column.saturating_sub(1)
+    }
+
+    /// The raw source bytes `sourcepos` covers.
+    ///
+    /// Used by the `NodeValue::Text` lockstep walker, which needs the raw
+    /// text a decoded `Text` node came from. The returned slice starts at
+    /// [`start_offset`](Self::start_offset) for the same `sourcepos`.
+    ///
+    /// Defensive about its bounds: comrak's byte columns come from this
+    /// very source, so the range is expected to be valid and
+    /// char-aligned, but a range that is out of bounds or lands inside a
+    /// multi-byte character yields `""` rather than panicking. The walker
+    /// treats an unusable slice the same way it treats any other tiling
+    /// failure — see `text.rs`'s fallback.
+    pub fn raw_slice(&self, sourcepos: &Sourcepos) -> &str {
+        let start = self.start_offset(sourcepos);
+        let end = self.end_offset(sourcepos);
+        if start > end || end > self.source.len() {
+            return "";
+        }
+        self.source.get(start..end).unwrap_or("")
     }
 
     /// Get the file ID

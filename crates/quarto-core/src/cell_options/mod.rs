@@ -4,6 +4,32 @@
  *
  * Shared cell-options facility: identify and extract the YAML options
  * block at the head of an executable code cell (bd-ohvl879u).
+ *
+ * PROVENANCE CONSTRAINT on the option-line syntax this module accepts
+ * (recorded 2026-08-23, provenance Plan 3 Phase 8; source:
+ * claude-notes/research/2026-08-21-provenance-audit-findings.md,
+ * section 6, "The workaround census"):
+ *
+ *   A language's option-line syntax may only *elide* spans, never
+ *   *transform* them, because every byte of the reassembled YAML must
+ *   be a real source byte.
+ *
+ * Every piece of the `SourceInfo::concat` built by
+ * `partition_cell_options` below is a `SourceInfo::substring` of the
+ * caller's `body_source` paired with its own `end - start` length, so
+ * content length equals source length piece by piece. That is what makes every marker shape
+ * `CommentSyntax` describes expressible — the prefix, and for
+ * block-comment languages the trailing suffix, are both *elided* — and
+ * what would make an escape, an entity, or any other decoding
+ * inexpressible. The claim ranges over every language this module
+ * supports, prefix-only and block-comment alike; it says nothing about
+ * languages q2 does not yet support.
+ *
+ * The constraint is RECORDED, NOT LIFTED. `quarto-source-map` 0.1.3's
+ * `ProvenanceBuilder` can express a deletion (`replacement(range, 0)`
+ * stores a zero-content piece), which is exactly what lifting it would
+ * take — but no language q2 supports needs a transforming option-line
+ * syntax, so there is no consumer and nothing here changes.
  */
 
 //! Cell-option partitioning for executable code cells.

@@ -901,7 +901,21 @@ fn execute_project(
         ))
         .chain(project.config.config_diagnostics.iter().cloned())
     {
-        eprintln!("{}", diagnostic.to_text(None));
+        // Guarded for uniformity, not because this call can panic:
+        // `None` as the `SourceContext` never reaches a renderer, so
+        // the byte-slicing path is unreachable here today. Measured in
+        // the locked `quarto-error-reporting` 0.2.2:
+        // `to_text_with_renderer` (`diagnostic.rs:442`) gates the
+        // excerpt renderer on `(has_any_location, Some(ctx))`
+        // (`:460-481`) and falls through to the structured-text branch
+        // (`:486`) when `ctx` is `None`. `config_sources` is built
+        // just above (`:884-889`); the day it is bound and passed here
+        // this becomes a ninth slicing site and needs the guard like
+        // the other eight.
+        let code = diagnostic.code.as_deref();
+        if let Some(text) = render_diagnostic_guarded(code, || diagnostic.to_text(None)) {
+            eprintln!("{}", text);
+        }
     }
 
     // bd-w348iu63: run `project.pre-render` scripts, then re-discover

@@ -184,11 +184,43 @@ fn peel_generated(info: &SourceInfo) -> Result<&SourceInfo, SpanProblem> {
 /// route around for the *last* piece — this applies the same fix to every
 /// boundary, not just the last one.
 ///
-/// This is a structural property of the whole `Concat` node, independent
-/// of which sub-range within it is being queried: a `Substring` over part
-/// of a gappy `Concat` is treated as gappy too, even if its own sub-range
-/// happens not to touch the gap. That's a conservative over-approximation
-/// documented here rather than silently assumed.
+/// This function answers the question for *whatever slice of pieces it is
+/// handed*, so it is only as broad as its caller makes it. [`is_gapless`]
+/// hands it every piece of a bare `Concat`, but for a `Substring` it hands
+/// it only the pieces that substring's own content sub-range touches (see
+/// [`pieces_touching`]) — a gap elsewhere in the same `Concat` is then
+/// invisible, which is correct, because no hull over that sub-range spans
+/// it.
+///
+/// Two imprecisions remain in the **refusing** direction — they can report
+/// a gap-free span as gappy, never the reverse:
+///
+/// - a *partially* covered piece that is itself a nested `Concat` is
+///   recursed into in **full**, not narrowed to the overlapping part;
+/// - the first and last selected pieces are checked in full even when the
+///   query covers only part of them. That costs nothing *when the piece's
+///   own extent is contiguous* — which holds when its `source_info` is
+///   `Original`, `Generated`, or a `Concat` (recursed into just above) —
+///   because then only the boundaries *between* selected pieces can fail.
+///
+/// And one known gap in the **accepting** direction — a wrong `Ok`:
+///
+/// - a piece whose `source_info` is a `Substring` over a gappy `Concat`
+///   is **not** checked internally. The `if let` above matches a *bare*
+///   `Concat` only, so such a piece skips the recursion, and its own
+///   `map_offset(0)`/`map_offset(length())` straddle the gap — the
+///   endpoints this loop then measures neighbours against already span
+///   source bytes belonging to no piece. Measured on the module's own
+///   fixture: a single-piece `Concat` wrapping
+///   `Substring(Concat[(6..10, 4), (12..15, 3)], 0, 7)` resolves to
+///   `Ok("6789ABCDE")` — nine source bytes for seven content bytes,
+///   silently including the gap's `"AB"`; the honest content is
+///   `"6789CDE"`. Tracked as bd-qnubn7s0. This predates the
+///   sub-range narrowing (the loop body is unchanged), but the narrowing
+///   makes it *more reachable*: a top-level `Substring` over a gappy
+///   `Concat` used to be refused wholesale, and now resolves whenever the
+///   touched pieces pass — so such a piece among them can produce the
+///   `Ok`.
 ///
 /// This is the piecewise replacement for the contiguity check
 /// `SourceInfo::preimage_in` used to make for `Concat`. `resolve_span`
@@ -227,15 +259,93 @@ fn concat_pieces_are_contiguous(
     true
 }
 
-/// Whether `info` (or, for a `Substring`, its parent chain) is gap-free —
-/// see [`concat_pieces_are_contiguous`] for what that means and why it's
-/// measured this way. `Original`/`Generated` are trivially gap-free (a
-/// single atom, by construction).
+/// The pieces a hull over the content sub-range `[start, end]` actually
+/// depends on, as a sub-slice of `pieces`.
+///
+/// Selection is the one place in this module where the concat's declared
+/// per-piece `length` field is the right number: it is a *content* length
+/// being compared against *content* offsets, which is exactly what it is.
+/// No source position is derived from it — positions come from
+/// `map_offset` in [`concat_pieces_are_contiguous`].
+///
+/// The interval is deliberately **closed**, not half-open.
+/// `Concat::map_offset` resolves an offset that lands exactly on a piece
+/// boundary inside the *next* piece (offset 0 of it), falling back to the
+/// last piece's own end only when the offset is the concat's total length.
+/// So a query ending exactly on a boundary still reads a position out of
+/// the following piece, and a gap at that boundary would silently widen
+/// the hull. Selecting by a half-open `[start, end)` would drop that piece
+/// and miss the gap.
+fn pieces_touching(
+    pieces: &[quarto_source_map::SourcePiece],
+    start: usize,
+    end: usize,
+) -> &[quarto_source_map::SourcePiece] {
+    let Some(first) = pieces
+        .iter()
+        .position(|p| p.offset_in_concat + p.length > start)
+    else {
+        return &[];
+    };
+    let Some(last) = pieces.iter().rposition(|p| p.offset_in_concat <= end) else {
+        return &[];
+    };
+    if last < first {
+        return &[];
+    }
+    &pieces[first..=last]
+}
+
+/// Whether `info` (or, for a `Substring`, its parent chain) is gap-free
+/// **over the sub-range the query actually reads** — see
+/// [`concat_pieces_are_contiguous`] for what gap-free means and why it's
+/// measured that way, and [`pieces_touching`] for which pieces count.
+/// `Original`/`Generated` are trivially gap-free (a single atom, by
+/// construction).
 fn is_gapless(info: &SourceInfo, ctx: &SourceContext) -> bool {
+    is_gapless_over(info, None, ctx)
+}
+
+/// [`is_gapless`]'s worker. `queried` is the content sub-range, in
+/// `info`'s **own** content coordinate space, that the caller's hull
+/// reads; `None` means the whole of `info`.
+///
+/// A `Substring` layer translates that range into its parent's content
+/// space (`parent_offset = substring.start_offset + own_offset`, the same
+/// arithmetic `SourceInfo::map_offset` does) and clamps it to the
+/// substring's own extent, so nested `Substring` chains narrow correctly
+/// rather than losing track of where they sit in the root `Concat`.
+fn is_gapless_over(
+    info: &SourceInfo,
+    queried: Option<(usize, usize)>,
+    ctx: &SourceContext,
+) -> bool {
     match info {
         SourceInfo::Original { .. } | SourceInfo::Generated { .. } => true,
-        SourceInfo::Substring { parent, .. } => is_gapless(parent, ctx),
-        SourceInfo::Concat { pieces } => concat_pieces_are_contiguous(pieces, ctx),
+        SourceInfo::Substring {
+            parent,
+            start_offset,
+            end_offset,
+        } => {
+            let (start, end) = match queried {
+                None => (*start_offset, *end_offset),
+                Some((qs, qe)) => (
+                    start_offset.saturating_add(qs).min(*end_offset),
+                    start_offset.saturating_add(qe).min(*end_offset),
+                ),
+            };
+            is_gapless_over(parent, Some((start, end)), ctx)
+        }
+        SourceInfo::Concat { pieces } => match queried {
+            // Kept distinct from `Some((0, length))` on purpose: it is
+            // what makes "a bare `Concat` keeps its pre-narrowing
+            // behaviour" exactly true, including for degenerate
+            // zero-length pieces. Don't collapse the two arms.
+            None => concat_pieces_are_contiguous(pieces, ctx),
+            Some((start, end)) => {
+                concat_pieces_are_contiguous(pieces_touching(pieces, start, end), ctx)
+            }
+        },
     }
 }
 
@@ -685,5 +795,46 @@ mod tests {
         let b = SourceInfo::concat(vec![(original(fid, 6, 10), 4), (original(fid, 12, 15), 3)]);
 
         assert_eq!(resolve_span(&b, &ctx), Err(SpanProblem::Concat));
+    }
+
+    /// The narrowing (Plan 3 Phase 6c): a `Substring` that lies wholly
+    /// inside **one** piece of an otherwise-gappy `Concat` resolves, because
+    /// no hull over its sub-range crosses the gap. This is the shape a span
+    /// inside a single `#|` cell-option line has — every multi-line options
+    /// block is gappy (each line's `#| ` marker sits between the pieces).
+    /// Reverting [`is_gapless`] to whole-`Concat` contiguity reddens this.
+    #[test]
+    fn substring_inside_one_piece_of_a_gappy_concat_resolves() {
+        let (fid, ctx) = concat_fixture();
+        // Same gappy B as above: content [0,4) -> source 6..10,
+        // content [4,7) -> source 12..15, with 10..12 in neither.
+        let b = SourceInfo::concat(vec![(original(fid, 6, 10), 4), (original(fid, 12, 15), 3)]);
+        // Content 1..3 is strictly inside the first piece: source 7..9.
+        let inside = SourceInfo::substring(b, 1, 3);
+
+        let span = resolve_span(&inside, &ctx)
+            .expect("a sub-range inside one piece never crosses the gap");
+        assert_eq!(span.text, &CONCAT_CONTENT[7..9]);
+    }
+
+    /// The closed-interval half of the narrowing. A sub-range that stops
+    /// exactly **on** a piece boundary still reads its end position out of
+    /// the *following* piece (`Concat::map_offset` maps a boundary offset to
+    /// offset 0 of the next piece), so the gap at that boundary is inside
+    /// the hull and the span must still be refused. Selecting pieces by a
+    /// half-open `[start, end)` would drop the second piece and report
+    /// `Ok` with `CONCAT_CONTENT[6..12]` — six source bytes for four
+    /// content bytes.
+    #[test]
+    fn substring_ending_on_a_gappy_piece_boundary_is_still_refused() {
+        let (fid, ctx) = concat_fixture();
+        let b = SourceInfo::concat(vec![(original(fid, 6, 10), 4), (original(fid, 12, 15), 3)]);
+        // Content 0..4 == exactly the first piece, ending on the boundary.
+        let up_to_boundary = SourceInfo::substring(b, 0, 4);
+
+        assert_eq!(
+            resolve_span(&up_to_boundary, &ctx),
+            Err(SpanProblem::Concat)
+        );
     }
 }
