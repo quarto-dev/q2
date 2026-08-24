@@ -120,6 +120,50 @@ To add a new test case to an existing error:
 3. Run `./scripts/build_error_table.ts` to regenerate the error table
 4. Test your changes with `cargo test`
 
+### One LR state per *inline container* — the coverage trap
+
+The table is keyed on `(parse state, symbol)`, and for an error that can occur
+anywhere in inline content the state follows the **innermost enclosing inline
+container**, not the block. So a corpus case written in a paragraph covers
+paragraphs, headings, captions, block quotes, list items and div bodies — all
+one state — but covers *none* of the inline containers. Each of these is its
+own state and needs its own case:
+
+    *emph*  _emph_  **strong**  __strong__  ~~strike~~  ^sup^  ~sub~
+    "double quote"  'single quote'  ^[inline note]  [!! …] [-- …] [++ …] [>> …]
+    [link text](…) / ![alt](…) / [span]{.cls}   (these three share one state)
+    | pipe table cell |   (header and body cells are two *different* states)
+
+**Enumerate by "reaches `$._inline_element`", not by "wraps `$._inlines`".**
+Those are not the same set, and the difference is a live trap. Every container
+above is reached through `$._inlines` *except* pipe-table cells:
+`pipe_table_cell` (`grammar.js:393`) is built on `_line_with_maybe_spaces`, a
+**sibling** of `_inlines` (`grammar.js:606-607`), so grepping the grammar for
+`_inlines` finds every other container and silently misses table cells. The
+first pass at the Q-2-41 fix below was scoped exactly that way and shipped
+without table-cell coverage; the review caught it. Note also that a *nested*
+case does not cover the bare one — `| *{X}* |` reduces to the emphasis state,
+not the cell state, so it will pass while bare `| {X} |` still falls through.
+
+An input that fails in an unclaimed state does **not** fall back to something
+approximate — it silently drops to the generic uncoded "Parse error /
+unexpected character or token here", which tells the author nothing.
+
+This is not hypothetical, and it has recurred. Q-2-41 ("curly braces are
+reserved for attribute syntax") shipped with cases for prose and link text
+only, because the corpus that motivated it was REST path parameters. Literal
+braces inside emphasis, strong, quotes, scripts, notes, editorial spans and
+table cells stayed uncoded for months (bd-brace-hint-misses-emphasis-4fzv1n93)
+— thirteen missing states, found only when a real doc hit one. The same gap
+is open for a different diagnostic in table cells right now: bd-j30t7, "Q-2-32
+not emitted for `***` inside pipe-table cells".
+
+**When your error can occur in inline content, walk the list above and add a
+case for every container that can hold it.** The reconciliation test for
+Q-2-41 is `tests/integration/test_brace_hint_contexts.rs`; it is worth copying
+for any similarly wide-reaching diagnostic. If the grammar gains a new inline
+container, every such test needs a new row.
+
 ### Adding New Error Codes
 
 To add a completely new error code:

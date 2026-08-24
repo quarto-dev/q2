@@ -2,21 +2,35 @@
   "version": "5",
   "specifiers": {
     "jsr:@std/assert@*": "1.0.13",
+    "jsr:@std/assert@0.224": "0.224.0",
     "jsr:@std/async@*": "1.0.12",
+    "jsr:@std/fmt@0.224": "0.224.0",
     "jsr:@std/fs@*": "1.0.17",
+    "jsr:@std/internal@0.224": "0.224.0",
     "jsr:@std/internal@^1.0.6": "1.0.6",
     "jsr:@std/path@*": "1.0.9",
-    "jsr:@std/path@^1.0.9": "1.0.9"
+    "jsr:@std/path@^1.0.9": "1.0.9",
+    "jsr:@std/testing@0.224.0": "0.224.0"
   },
   "jsr": {
+    "@std/assert@0.224.0": {
+      "integrity": "8643233ec7aec38a940a8264a6e3eed9bfa44e7a71cc6b3c8874213ff401967f",
+      "dependencies": [
+        "jsr:@std/fmt",
+        "jsr:@std/internal@0.224"
+      ]
+    },
     "@std/assert@1.0.13": {
       "integrity": "ae0d31e41919b12c656c742b22522c32fb26ed0cba32975cb0de2a273cb68b29",
       "dependencies": [
-        "jsr:@std/internal"
+        "jsr:@std/internal@^1.0.6"
       ]
     },
     "@std/async@1.0.12": {
       "integrity": "d1bfcec459e8012846fe4e38dfc4241ab23240ecda3d8d6dfcf6d81a632e803d"
+    },
+    "@std/fmt@0.224.0": {
+      "integrity": "e20e9a2312a8b5393272c26191c0a68eda8d2c4b08b046bad1673148f1d69851"
     },
     "@std/fs@1.0.17": {
       "integrity": "1c00c632677c1158988ef7a004cb16137f870aafdb8163b9dce86ec652f3952b",
@@ -24,11 +38,23 @@
         "jsr:@std/path@^1.0.9"
       ]
     },
+    "@std/internal@0.224.0": {
+      "integrity": "afc50644f9cdf4495eeb80523a8f6d27226b4b36c45c7c195dfccad4b8509291",
+      "dependencies": [
+        "jsr:@std/fmt"
+      ]
+    },
     "@std/internal@1.0.6": {
       "integrity": "9533b128f230f73bd209408bb07a4b12f8d4255ab2a4d22a1fd6d87304aca9a4"
     },
     "@std/path@1.0.9": {
       "integrity": "260a49f11edd3db93dd38350bf9cd1b4d1366afa98e81b86167b4e3dd750129e"
+    },
+    "@std/testing@0.224.0": {
+      "integrity": "371b8a929aa7132240d5dd766a439be8f780ef5c176ab194e0bcab72370c761e",
+      "dependencies": [
+        "jsr:@std/assert@0.224"
+      ]
     }
   },
   "workspace": {
@@ -43,7 +69,7 @@
         "npm:at-least-node@1",
         "npm:fake-indexeddb@^6.2.5",
         "npm:html2canvas@^1.4.1",
-        "npm:katex@0.17.0",
+        "npm:katex@0.18.1",
         "npm:morphdom@^2.7.8",
         "npm:reveal.js-menu@^2.1.0",
         "npm:reveal.js@6.0.0"

@@ -12,8 +12,86 @@
     },
     {
       "name": "link-text",
-      "description": "Brace run inside link text; fails at a different LR state (2589) than the bare-paragraph form (2613).",
+      "description": "Brace run inside link text; fails at a different LR state than the bare-paragraph form. (Image alt text and bracketed span text reduce to this same state.)",
       "content": "see [the {guid} link](https://example.com) here.\n",
+      "captures": []
+    },
+    {
+      "name": "emphasis-star",
+      "description": "Brace run inside star emphasis; the LR state follows the innermost inline container, so `*...*` needs its own case (this is also the state reached by braces nested any depth inside emphasis).",
+      "content": "a *{PLACEHOLDER}* run here.\n",
+      "captures": []
+    },
+    {
+      "name": "emphasis-underscore",
+      "description": "Brace run inside underscore emphasis; a different LR state from the star spelling.",
+      "content": "a _{PLACEHOLDER}_ run here.\n",
+      "captures": []
+    },
+    {
+      "name": "strong-star",
+      "description": "Brace run inside star strong emphasis.",
+      "content": "a **{PLACEHOLDER}** run here.\n",
+      "captures": []
+    },
+    {
+      "name": "strong-underscore",
+      "description": "Brace run inside underscore strong emphasis; a different LR state from the star spelling.",
+      "content": "a __{PLACEHOLDER}__ run here.\n",
+      "captures": []
+    },
+    {
+      "name": "strikeout",
+      "description": "Brace run inside a strikeout span.",
+      "content": "a ~~{PLACEHOLDER}~~ run here.\n",
+      "captures": []
+    },
+    {
+      "name": "superscript",
+      "description": "Brace run inside a superscript span.",
+      "content": "a ^{PLACEHOLDER}^ run here.\n",
+      "captures": []
+    },
+    {
+      "name": "subscript",
+      "description": "Brace run inside a subscript span.",
+      "content": "a ~{PLACEHOLDER}~ run here.\n",
+      "captures": []
+    },
+    {
+      "name": "double-quote",
+      "description": "Brace run inside a double-quoted span; smart quotes wrap their content in their own inline container.",
+      "content": "he said \"the {PLACEHOLDER} thing\".\n",
+      "captures": []
+    },
+    {
+      "name": "single-quote",
+      "description": "Brace run inside a single-quoted span; a different LR state from the double-quoted spelling.",
+      "content": "he said 'the {PLACEHOLDER} thing'.\n",
+      "captures": []
+    },
+    {
+      "name": "inline-note",
+      "description": "Brace run inside an inline footnote.",
+      "content": "a ^[the {PLACEHOLDER} note] here.\n",
+      "captures": []
+    },
+    {
+      "name": "editorial-span",
+      "description": "Brace run inside an editorial span. The four editorial spellings ([!! ...], [-- ...], [++ ...], [>> ...]) share one LR state, so one case covers all four.",
+      "content": "a [!! the {PLACEHOLDER} run] here.\n",
+      "captures": []
+    },
+    {
+      "name": "table-header-cell",
+      "description": "Brace run in a pipe-table header cell. Table cells are NOT covered by the paragraph case: `pipe_table_cell` is built on `_line_with_maybe_spaces`, a sibling of the `_inlines` every other container wraps, so it reaches its own LR states -- one for header cells, one for body cells.",
+      "content": "| {PLACEHOLDER} | b |\n|---|---|\n| a | y |\n",
+      "captures": []
+    },
+    {
+      "name": "table-body-cell",
+      "description": "Brace run in a pipe-table body cell; a different LR state from the header cell. Any row or column of the body reduces to this one state.",
+      "content": "| a | b |\n|---|---|\n| {PLACEHOLDER} | y |\n",
       "captures": []
     }
   ]
