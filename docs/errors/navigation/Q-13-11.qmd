@@ -1,0 +1,73 @@
+---
+title: "Repository actions require a repo-url"
+description: "repo-actions lists actions to render, but no repo-url or issue-url is configured, so no links can be built."
+code: Q-13-11
+subsystem: navigation
+status: complete
+since: "99.9.9"
+categories:
+  - navigation
+  - websites
+---
+
+# `Q-13-11` — Repository actions require a `repo-url`
+
+> `repo-actions` lists actions to render, but neither
+> `website.repo-url` nor `website.issue-url` is set, so no link can
+> be built and no actions render.
+
+## What this means
+
+`repo-actions` names *which* links to show. The links themselves are
+built from the repository's web URL, so Quarto needs to know where
+the repository lives:
+
+``` yaml
+website:
+  repo-url: https://github.com/owner/repo
+  repo-actions: [edit, source, issue]
+```
+
+Without `repo-url` there is no base to build `edit` and `source`
+URLs from, and no default target for `issue`. The render still
+succeeds; the page simply has no action links.
+
+## Why this happens
+
+Common causes:
+
+- **`repo-actions` added without `repo-url`.** The two keys are
+  usually written together, and it is easy to add the action list
+  while intending to fill in the URL later.
+- **`repo-url` in the wrong scope.** It belongs under `website:`,
+  not at the top level of `_quarto.yml` or inside `format:`.
+- **`repo-url` set only in a profile file.** If it lives in
+  `_quarto-<profile>.yml`, renders without that profile active will
+  not see it.
+
+## How to fix
+
+Set `website.repo-url` to the repository's web URL — the address you
+would visit in a browser, without a trailing `.git`:
+
+``` yaml
+website:
+  repo-url: https://github.com/owner/repo
+  repo-branch: main          # optional, defaults to main
+  repo-actions: [edit, source, issue]
+```
+
+If you only want a "Report an issue" link and have no source
+repository to link to, set `issue-url` instead — it works on its
+own:
+
+``` yaml
+website:
+  issue-url: https://example.com/support
+  repo-actions: [issue]
+```
+
+## Related
+
+- `Q-13-12` — an unrecognized `repo-actions` entry.
+- `Q-13-13` — page-level `repo-actions: true` is ignored.

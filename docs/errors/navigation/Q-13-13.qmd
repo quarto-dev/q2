@@ -1,0 +1,78 @@
+---
+title: "Page-level repo-actions: true ignored"
+description: "A page sets repo-actions: true, a placement request Quarto 2 does not implement; the actions still render in the footer."
+code: Q-13-13
+subsystem: navigation
+status: complete
+since: "99.9.9"
+categories:
+  - navigation
+  - websites
+---
+
+# `Q-13-13` — Page-level `repo-actions: true` ignored
+
+> A page's front matter sets `repo-actions: true`. This key does not
+> enable repository actions — the action list always comes from
+> `website.repo-actions` — it asks only that a page with no table of
+> contents show the actions in the margin rather than the page
+> footer. Quarto 2 does not implement that placement, so the value is
+> ignored and the actions render in the page footer at every width.
+
+## What this means
+
+`repo-actions: true` in a page's front matter is easy to read as
+"turn the actions on for this page". It is not: the list of actions
+always comes from the site configuration, and a page-level `true`
+cannot add actions that the site has not configured.
+
+What it *does* request is a placement change. Normally the actions
+render twice — once at the foot of the page's table of contents, and
+once in the page footer as the small-screen fallback. On a page with
+no table of contents there is nowhere to put the first copy, and
+`repo-actions: true` asks for it to go in the right margin instead.
+
+Quarto 2 does not implement that margin placement. The value is
+ignored, and the page's actions render in the footer, visible at
+every width. Nothing is lost but the margin position.
+
+## Why this happens
+
+Common causes:
+
+- **Reading `true` as an enable switch.** The `false` value *does*
+  work as a switch — it suppresses the actions for one page — so
+  `true` reasonably looks like its opposite.
+- **A page ported from Quarto 1** that used the margin placement.
+
+## How to fix
+
+Remove the key. The actions already render:
+
+``` yaml
+---
+title: My page
+---
+```
+
+To suppress the actions on a single page, `false` is supported:
+
+``` yaml
+---
+title: My page
+repo-actions: false
+---
+```
+
+To change which actions appear site-wide, edit `_quarto.yml`:
+
+``` yaml
+website:
+  repo-url: https://github.com/owner/repo
+  repo-actions: [edit, issue]
+```
+
+## Related
+
+- `Q-13-11` — `repo-actions` set with no `repo-url`.
+- `Q-13-12` — an unrecognized `repo-actions` entry.
