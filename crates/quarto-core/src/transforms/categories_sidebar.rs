@@ -391,7 +391,7 @@ fn html_escape_text(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::project::listing::config::{Listing, ListingCategoriesMode, ListingType};
-    use crate::project::listing::item::ListingItem;
+    use crate::project::listing::item::{ItemOrigin, ItemTarget, ListingItem};
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
@@ -411,8 +411,11 @@ mod tests {
             reading_time_minutes: None,
             word_count: None,
             order: None,
-            source_path: PathBuf::from(format!("posts/{}.qmd", title)),
-            output_href: format!("posts/{}.html", title),
+            target: ItemTarget::document(
+                format!("posts/{}.qmd", title),
+                format!("posts/{}.html", title),
+            ),
+            origin: ItemOrigin::Document,
             extra: BTreeMap::new(),
         }
     }

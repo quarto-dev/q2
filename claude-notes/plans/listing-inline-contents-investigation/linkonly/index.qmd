@@ -1,0 +1,17 @@
+---
+title: "Link-only inline records (Positron shape)"
+listing:
+  id: cards
+  type: default
+  contents:
+    - title: "Get started"
+      description: "Download and install Positron"
+      icon: "bi-rocket-takeoff"
+      link: "https://positron.posit.co/download.html"
+    - title: "Migrate from RStudio"
+      description: "Bring your RStudio habits along"
+      icon: "bi-arrow-left-right"
+      link: "https://positron.posit.co/rstudio-rosetta-stone.html"
+---
+
+Body before the listing.

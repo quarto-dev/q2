@@ -126,7 +126,7 @@ pub fn description_placeholder_begin(item: &ListingItem, listing: &Listing) -> S
     placeholders::description_placeholder_begin(
         &listing.id,
         listing.max_description_length,
-        &item.output_href,
+        item.target.output_href().unwrap_or(""),
     )
 }
 
@@ -162,7 +162,13 @@ pub fn image_placeholder_begin(item: &ListingItem, listing: &Listing, idx: usize
         .as_deref()
         .map(|url| URL_SAFE_NO_PAD.encode(url.as_bytes()))
         .unwrap_or_default();
-    placeholders::image_placeholder_begin(&listing.id, idx, &item.output_href, attrs, &b64_default)
+    placeholders::image_placeholder_begin(
+        &listing.id,
+        idx,
+        item.target.output_href().unwrap_or(""),
+        attrs,
+        &b64_default,
+    )
 }
 
 /// Build the image envelope's end marker. Token-only; paired with
@@ -303,9 +309,8 @@ pub(crate) fn truncate_text_at_space(s: &str, max: usize) -> String {
 mod tests {
     use super::*;
     use crate::project::listing::config::{Listing, ListingType};
-    use crate::project::listing::item::ListingItem;
+    use crate::project::listing::item::{ItemOrigin, ItemTarget, ListingItem};
     use std::collections::BTreeMap;
-    use std::path::PathBuf;
 
     fn make_item_with_image(image: Option<&str>) -> ListingItem {
         ListingItem {
@@ -323,8 +328,8 @@ mod tests {
             reading_time_minutes: None,
             word_count: None,
             order: None,
-            source_path: PathBuf::from("posts/foo.qmd"),
-            output_href: "posts/foo.html".to_string(),
+            target: ItemTarget::document("posts/foo.qmd", "posts/foo.html"),
+            origin: ItemOrigin::Document,
             extra: BTreeMap::new(),
         }
     }

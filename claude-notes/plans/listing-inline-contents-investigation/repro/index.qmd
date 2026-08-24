@@ -1,0 +1,15 @@
+---
+title: "Inline contents, built-in listing type"
+listing:
+  id: cards
+  type: default
+  contents:
+    - title: "Get started"
+      description: "Download and install Positron"
+      path: "download.qmd"
+    - title: "Explore Features"
+      description: "Discover key Positron features"
+      path: "features.qmd"
+---
+
+Body before the listing.

@@ -65,7 +65,7 @@ pub use config::{
     parse_listings,
 };
 pub use glob_resolve::resolve_content_globs;
-pub use item::{ListingItem, hydrate_item};
+pub use item::{ItemOrigin, ItemTarget, ListingItem, hydrate_item};
 
 /// One fully-resolved listing — its config plus the hydrated item
 /// set in final sort order. Produced by `ListingGenerateTransform`

@@ -92,8 +92,8 @@ fn lookup_curated(item: &ListingItem, key: &str) -> Option<Curated> {
         "categories" => Curated::List(item.categories.clone()),
         "image" => Curated::Scalar(item.image.clone()),
         "image-alt" => Curated::Scalar(item.image_alt.clone()),
-        "path" => Curated::Scalar(Some(item.source_path.display().to_string())),
-        "output-href" => Curated::Scalar(Some(item.output_href.clone())),
+        "path" => Curated::Scalar(item.target.filter_path()),
+        "output-href" => Curated::Scalar(item.target.href().map(String::from)),
         _ => return None,
     };
     Some(v)
@@ -123,11 +123,10 @@ fn extra_matches(extra: &ConfigValue, expected: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::listing::item::ListingItem;
+    use crate::project::listing::item::{ItemOrigin, ItemTarget, ListingItem};
     use quarto_pandoc_types::ConfigValue;
     use quarto_source_map::SourceInfo;
     use std::collections::BTreeMap;
-    use std::path::PathBuf;
 
     fn s(value: &str) -> ConfigValue {
         ConfigValue::new_string(value, SourceInfo::for_test())
@@ -162,8 +161,8 @@ mod tests {
             reading_time_minutes: None,
             word_count: None,
             order: None,
-            source_path: PathBuf::from("posts/foo.qmd"),
-            output_href: "posts/foo.html".to_string(),
+            target: ItemTarget::document("posts/foo.qmd", "posts/foo.html"),
+            origin: ItemOrigin::Document,
             extra: extra_map,
         }
     }

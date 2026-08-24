@@ -315,7 +315,7 @@ fn stage_feed_inner(
     // skipped).
     let mut body = String::new();
     for it in items {
-        if it.title.trim().is_empty() || it.output_href.is_empty() {
+        if it.title.trim().is_empty() || it.target.href().is_none() {
             continue;
         }
         let fi = build_feed_item(it, feed_options, site_url, project_dir);
@@ -619,6 +619,7 @@ mod tests {
     use crate::project::index::ProjectIndex;
     use crate::project::listing::config::{Listing, apply_type_defaults};
     use crate::project::listing::config::{ListingFeedOptions, ListingType};
+    use crate::project::listing::item::{ItemOrigin, ItemTarget};
     use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
     use quarto_pandoc_types::ConfigMapEntry;
@@ -659,8 +660,11 @@ mod tests {
             reading_time_minutes: None,
             word_count: None,
             order: None,
-            source_path: PathBuf::from(format!("posts/{}.qmd", title)),
-            output_href: format!("posts/{}.html", title),
+            target: ItemTarget::document(
+                format!("posts/{}.qmd", title),
+                format!("posts/{}.html", title),
+            ),
+            origin: ItemOrigin::Document,
             extra: BTreeMap::new(),
         }
     }

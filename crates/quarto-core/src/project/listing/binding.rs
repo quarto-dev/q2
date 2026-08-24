@@ -25,7 +25,7 @@ use quarto_pandoc_types::ConfigValue;
 
 use super::config::{GridItemAlign, ImageAlign, Listing, ListingCategoriesMode, ListingType};
 use super::helpers;
-use super::item::ListingItem;
+use super::item::{ItemTarget, ListingItem};
 use crate::dates::{DateStyle, format_date, parse_date};
 
 /// Build the full [`TemplateContext`] for one [`Listing`] +
@@ -377,22 +377,23 @@ fn build_item_map(
     // `outputHref` retains the rendered .html path for templates
     // (e.g. L7's placeholder href, RSS feed item URLs) that need
     // the post-render output href specifically.
-    let path = host_relative_qmd(&item.source_path, host_dir);
-    m.insert("path".to_string(), TemplateValue::String(path.clone()));
-    m.insert(
-        "outputHref".to_string(),
-        TemplateValue::String(item.output_href.clone()),
-    );
-    m.insert(
-        "filename".to_string(),
-        TemplateValue::String(
-            item.source_path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("")
-                .to_string(),
-        ),
-    );
+    let path: Option<String> = match &item.target {
+        ItemTarget::Document { source_path, .. } => Some(host_relative_qmd(source_path, host_dir)),
+        ItemTarget::Href(href) => Some(href.clone()),
+        ItemTarget::None => None,
+    };
+    if let Some(p) = &path {
+        m.insert("path".to_string(), TemplateValue::String(p.clone()));
+    }
+    if let Some(href) = item.target.href() {
+        m.insert(
+            "outputHref".to_string(),
+            TemplateValue::String(href.to_string()),
+        );
+    }
+    if let Some(name) = item.target.filename() {
+        m.insert("filename".to_string(), TemplateValue::String(name));
+    }
 
     // Pre-rendered helper strings.
     let img_html = helpers::image_html(item, listing, host_dir);
@@ -463,7 +464,12 @@ fn build_item_map(
     m.insert(
         "table-row".to_string(),
         TemplateValue::String(table_row(
-            item, listing, fields, date_style, &path, &img_html,
+            item,
+            listing,
+            fields,
+            date_style,
+            path.as_deref().unwrap_or(""),
+            &img_html,
         )),
     );
 
@@ -589,12 +595,7 @@ fn item_field_display_value(
         "image-alt" => item.image_alt.clone(),
         "reading-time" => item.reading_time_minutes.map(|n| format!("{} min read", n)),
         "word-count" => item.word_count.map(|n| n.to_string()),
-        "filename" => item
-            .source_path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .filter(|s| !s.is_empty())
-            .map(str::to_string),
+        "filename" => item.target.filename(),
         _ => extra_field_value(&item.extra, field),
     }
 }
@@ -734,8 +735,8 @@ mod tests {
     use super::*;
     use crate::project::listing::config::apply_type_defaults;
     use crate::project::listing::config::{Listing, ListingType};
+    use crate::project::listing::item::ItemOrigin;
     use std::collections::BTreeMap;
-    use std::path::PathBuf;
 
     fn item(title: &str) -> ListingItem {
         ListingItem {
@@ -753,8 +754,8 @@ mod tests {
             reading_time_minutes: Some(5),
             word_count: None,
             order: None,
-            source_path: PathBuf::from("posts/foo.qmd"),
-            output_href: "posts/foo.html".to_string(),
+            target: ItemTarget::document("posts/foo.qmd", "posts/foo.html"),
+            origin: ItemOrigin::Document,
             extra: BTreeMap::new(),
         }
     }

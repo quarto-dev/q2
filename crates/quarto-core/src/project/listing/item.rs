@@ -11,11 +11,124 @@
 //! stored on disk; built per host-page render.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use quarto_pandoc_types::ConfigValue;
 
 use crate::document_profile::{DocumentProfile, ListingItemInfo};
+
+/// Where an item's link points. See plan
+/// `2026-08-24-listing-inline-contents.md` §D1.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ItemTarget {
+    /// A project document: the rendered output is the link.
+    Document {
+        /// Project-relative source path (forward-slash separated,
+        /// matching `DocumentProfile::source_path`).
+        source_path: PathBuf,
+        /// Rendered output href.
+        output_href: String,
+    },
+    /// A literal href the author wrote (`path:` on an inline record
+    /// that names no project document — a remote URL, a PDF, or a
+    /// `.qmd` that does not resolve, which is Q-12-20's fallback).
+    ///
+    /// Emitted into the template exactly as written. Note this is
+    /// *not* immune to `LinkRewriteTransform`: a dead `.qmd` literal
+    /// still looks like an internal reference to it, so it may draw a
+    /// second (Q-13-*) diagnostic about the same broken link. That is
+    /// the honest report of a link the author asked for and does not
+    /// exist — Q-12-20 explains the cause, the rewriter reports the
+    /// symptom.
+    Href(String),
+    /// No link at all (an inline record without `path:`).
+    None,
+}
+
+impl ItemTarget {
+    pub fn document(source_path: impl Into<PathBuf>, output_href: impl Into<String>) -> Self {
+        ItemTarget::Document {
+            source_path: source_path.into(),
+            output_href: output_href.into(),
+        }
+    }
+
+    /// Project-relative source path — documents only.
+    pub fn source_path(&self) -> Option<&Path> {
+        match self {
+            ItemTarget::Document { source_path, .. } => Some(source_path),
+            _ => None,
+        }
+    }
+
+    /// What a link should point at: the rendered output for a
+    /// document, the literal for `Href`, nothing for `None`.
+    pub fn href(&self) -> Option<&str> {
+        match self {
+            ItemTarget::Document { output_href, .. } => Some(output_href),
+            ItemTarget::Href(href) => Some(href),
+            ItemTarget::None => None,
+        }
+    }
+
+    /// The value `path` exposes to `include:`/`exclude:` and `sort:`:
+    /// the project-relative source path for a document, the literal
+    /// href otherwise. Q1's `item.path` is the link either way, so
+    /// filters written against Q1 keep working.
+    pub fn filter_path(&self) -> Option<String> {
+        match self {
+            ItemTarget::Document { source_path, .. } => Some(source_path.display().to_string()),
+            ItemTarget::Href(href) => Some(href.clone()),
+            ItemTarget::None => None,
+        }
+    }
+
+    /// Rendered output href — documents only. The key the L7
+    /// post-render placeholders and the feed's sibling lookup use.
+    pub fn output_href(&self) -> Option<&str> {
+        match self {
+            ItemTarget::Document { output_href, .. } => Some(output_href),
+            _ => None,
+        }
+    }
+
+    /// Display file name: the source file's name for a document, the
+    /// last path segment (query and fragment stripped) for a literal
+    /// href — Q1 fills `filename` from `basename(path)` either way.
+    pub fn filename(&self) -> Option<String> {
+        match self {
+            ItemTarget::Document { source_path, .. } => source_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .filter(|s| !s.is_empty())
+                .map(String::from),
+            ItemTarget::Href(href) => href
+                .split(['?', '#'])
+                .next()
+                .unwrap_or("")
+                .trim_end_matches('/')
+                .rsplit('/')
+                .next()
+                .filter(|s| !s.is_empty())
+                .map(String::from),
+            ItemTarget::None => None,
+        }
+    }
+}
+
+/// How an item came to exist. Drives the generate transform's
+/// decisions (L7 placeholder gating, diagnostics wording) so they
+/// are explicit rather than inferred from the target's shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ItemOrigin {
+    /// Matched by a `contents:` glob; hydrated from a `DocumentProfile`.
+    Document,
+    /// An inline `contents:` record with no document behind it.
+    Record,
+    /// An inline record whose `path:` named a project document; the
+    /// record's fields were laid over the document's item.
+    RecordOverDocument,
+}
 
 /// One resolved listing item. See L2 §"Per-item: ListingItem".
 #[derive(Debug, Clone, PartialEq)]
@@ -44,11 +157,10 @@ pub struct ListingItem {
     /// listing sort (`order asc, title asc`, Q1 parity —
     /// bd-listing-declared-order-3ixcvc4o).
     pub order: Option<i32>,
-    /// Project-relative source path of the input file (forward-slash
-    /// separated, matching `DocumentProfile::source_path`).
-    pub source_path: PathBuf,
-    /// Output href (the link target the template renders).
-    pub output_href: String,
+    /// Where the item links. See [`ItemTarget`].
+    pub target: ItemTarget,
+    /// How the item came to exist. See [`ItemOrigin`].
+    pub origin: ItemOrigin,
     /// Free-form fields pulled from `profile.listing_item.extra`.
     pub extra: BTreeMap<String, ConfigValue>,
 }
@@ -121,8 +233,8 @@ pub fn hydrate_item(profile: &DocumentProfile) -> ListingItem {
         reading_time_minutes: li.reading_time_minutes,
         word_count: li.word_count,
         order: profile.order,
-        source_path: profile.source_path.clone(),
-        output_href: profile.output_href.clone(),
+        target: ItemTarget::document(profile.source_path.clone(), profile.output_href.clone()),
+        origin: ItemOrigin::Document,
         extra: li.extra.clone(),
     }
 }
@@ -131,18 +243,30 @@ pub fn hydrate_item(profile: &DocumentProfile) -> ListingItem {
 /// project-relative directory, normalizing `.`/`..` segments.
 /// Absolute URLs, `data:` URIs, and root-absolute paths pass
 /// through unchanged.
-fn rebase_image(src: &str, source_path: &std::path::Path) -> String {
+fn rebase_image(src: &str, source_path: &Path) -> String {
+    let dir = source_path
+        .parent()
+        .map(|d| {
+            d.components()
+                .filter_map(|c| match c {
+                    std::path::Component::Normal(os) => os.to_str(),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("/")
+        })
+        .unwrap_or_default();
+    rebase_image_from_dir(src, &dir)
+}
+
+/// Rebase a relative image path onto a project-relative directory
+/// (`""` for the project root), normalizing `.`/`..` segments.
+/// Absolute URLs, `data:` URIs, and root-absolute paths pass through.
+pub(crate) fn rebase_image_from_dir(src: &str, dir: &str) -> String {
     if super::helpers::is_external_src(src) {
         return src.to_string();
     }
-    let dir = source_path.parent().unwrap_or(std::path::Path::new(""));
-    let mut segments: Vec<&str> = dir
-        .components()
-        .filter_map(|c| match c {
-            std::path::Component::Normal(os) => os.to_str(),
-            _ => None,
-        })
-        .collect();
+    let mut segments: Vec<&str> = dir.split('/').filter(|s| !s.is_empty()).collect();
     for seg in src.split('/') {
         match seg {
             "" | "." => {}
@@ -155,7 +279,7 @@ fn rebase_image(src: &str, source_path: &std::path::Path) -> String {
     segments.join("/")
 }
 
-fn join_authors(authors: &[String]) -> Option<String> {
+pub(crate) fn join_authors(authors: &[String]) -> Option<String> {
     if authors.is_empty() {
         return None;
     }
@@ -290,5 +414,80 @@ mod tests {
         let item = hydrate_item(&p);
         assert_eq!(item.author.as_deref(), Some("Jane Doe, John Roe"));
         assert_eq!(item.authors, vec!["Jane Doe", "John Roe"]);
+    }
+
+    #[test]
+    fn target_document_exposes_source_and_href() {
+        let t = ItemTarget::document("posts/foo.qmd", "posts/foo.html");
+        assert_eq!(t.source_path(), Some(std::path::Path::new("posts/foo.qmd")));
+        assert_eq!(t.href(), Some("posts/foo.html"));
+        assert_eq!(t.output_href(), Some("posts/foo.html"));
+        assert_eq!(t.filename().as_deref(), Some("foo.qmd"));
+    }
+
+    #[test]
+    fn target_href_is_literal_with_segment_filename() {
+        let t = ItemTarget::Href("https://example.com/docs/report.pdf?v=2#top".to_string());
+        assert_eq!(t.source_path(), None);
+        assert_eq!(
+            t.href(),
+            Some("https://example.com/docs/report.pdf?v=2#top")
+        );
+        assert_eq!(
+            t.output_href(),
+            None,
+            "only documents have a rendered output"
+        );
+        assert_eq!(t.filename().as_deref(), Some("report.pdf"));
+    }
+
+    #[test]
+    fn target_filter_path_is_source_for_documents_and_literal_for_hrefs() {
+        assert_eq!(
+            ItemTarget::document("posts/foo.qmd", "posts/foo.html")
+                .filter_path()
+                .as_deref(),
+            Some("posts/foo.qmd")
+        );
+        assert_eq!(
+            ItemTarget::Href("https://example.com/x".to_string())
+                .filter_path()
+                .as_deref(),
+            Some("https://example.com/x")
+        );
+        assert_eq!(ItemTarget::None.filter_path(), None);
+    }
+
+    #[test]
+    fn target_none_has_nothing() {
+        let t = ItemTarget::None;
+        assert_eq!(t.source_path(), None);
+        assert_eq!(t.href(), None);
+        assert_eq!(t.output_href(), None);
+        assert_eq!(t.filename(), None);
+    }
+
+    #[test]
+    fn hydrated_item_is_a_document_target() {
+        let item = hydrate_item(&profile_with(ListingItemInfo::default()));
+        assert_eq!(item.origin, ItemOrigin::Document);
+        assert_eq!(
+            item.target,
+            ItemTarget::document("posts/foo.qmd", "posts/foo.html")
+        );
+    }
+
+    #[test]
+    fn rebase_image_from_dir_handles_root_and_dotdot() {
+        assert_eq!(rebase_image_from_dir("cover.png", ""), "cover.png");
+        assert_eq!(
+            rebase_image_from_dir("cover.png", "posts"),
+            "posts/cover.png"
+        );
+        assert_eq!(
+            rebase_image_from_dir("../shared/x.png", "a/b"),
+            "a/shared/x.png"
+        );
+        assert_eq!(rebase_image_from_dir("/site.png", "posts"), "/site.png");
     }
 }

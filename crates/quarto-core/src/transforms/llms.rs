@@ -513,7 +513,10 @@ fn synthesize_listing_list(
         .items
         .iter()
         .map(|item| {
-            let href = retarget_href(&relativize(&cx.cur_dir, &item.output_href), cx);
+            let href = retarget_href(
+                &relativize(&cx.cur_dir, item.target.href().unwrap_or("")),
+                cx,
+            );
             let mut inlines: Vec<Inline> = vec![Inline::Link(quarto_pandoc_types::inline::Link {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 content: vec![str_inline(item.title.clone())],

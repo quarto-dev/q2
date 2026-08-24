@@ -1,0 +1,13 @@
+---
+title: "Mixed inline + glob contents"
+listing:
+  id: cards
+  type: default
+  contents:
+    - title: "Get started"
+      description: "Download and install Positron"
+      path: "download.qmd"
+    - "features.qmd"
+---
+
+Body before the listing.
