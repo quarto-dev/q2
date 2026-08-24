@@ -184,18 +184,31 @@ pub fn init_script_dir_stack(lua: &Lua) -> Result<()> {
     Ok(())
 }
 
+/// Registry key for the require-private module-dir stack: the directories
+/// of the modules currently being loaded by the scoped `require`, innermost
+/// last. Lives in the Lua registry (not globals) because it is an
+/// implementation detail of `require`'s candidate search — per the
+/// script-dir contract (see the section comment above), loaders must not
+/// publish the location of the file they are executing through the
+/// script-dir stack that `resolve_path` and friends read (GH #588).
+const REQUIRE_DIR_STACK_KEY: &str = "quarto_require_dir_stack";
+
 /// Replace the global `require` with a script-dir-aware loader.
 ///
 /// Q1 extensions `require` sibling modules relative to the requiring
 /// script's directory (TS Quarto patches `require` through its script-file
 /// stack, `init.lua:259-305`). This loader:
 ///
-/// 1. resolves `name` against the top of the script-dir stack, trying
-///    `<dir>/<name>.lua`, `<dir>/<name with . -> />.lua`, and
-///    `<dir>/<name>/init.lua`;
+/// 1. resolves `name` against the require-private module-dir stack
+///    (innermost loading module first) and then the script-dir stack
+///    top-down, trying `<dir>/<name>.lua`, `<dir>/<name with . -> />.lua`,
+///    and `<dir>/<name>/init.lua`;
 /// 2. executes the module in a sandboxed environment (globals-inheriting,
 ///    like shortcode scripts) with the module's own directory pushed on the
-///    script-dir stack, so nested `require`s resolve relative to the module;
+///    private module-dir stack — NOT the script-dir stack — so nested
+///    `require`s resolve relative to the module while
+///    `quarto.utils.resolve_path` (and every other script-dir consumer)
+///    keeps seeing the requiring script's root (GH #588);
 /// 3. caches by resolved absolute path (a module evaluating to `nil` caches
 ///    as `true`, matching Lua's `require`);
 /// 4. falls back to the original `require` (when the target has one — the
@@ -210,17 +223,29 @@ pub fn register_scoped_require(
     let globals = lua.globals();
     let original: Option<mlua::Function> = globals.get("require").ok();
     globals.set("_quarto_require_cache", lua.create_table()?)?;
+    lua.set_named_registry_value(REQUIRE_DIR_STACK_KEY, lua.create_table()?)?;
 
     let require = lua.create_function(move |lua, name: String| {
         let cache: Table = lua.globals().get("_quarto_require_cache")?;
 
-        // Candidate paths, walking the script-dir stack top-down: the
-        // currently-executing module's dir first (sibling-relative
-        // requires), then the dirs of the scripts that required it
-        // (Q1-style extension-root-relative paths like
-        // `require("modules/brand/brand")` from a nested module).
-        let stack: Table = lua.globals().get("_quarto_script_dir_stack")?;
+        // Candidate dirs: the private module-dir stack top-down (the
+        // currently-loading module's dir first — sibling-relative
+        // requires), then the script-dir stack top-down (Q1-style
+        // extension-root-relative paths like
+        // `require("modules/brand/brand")` from a nested module). This is
+        // the same effective order as when module dirs lived on the shared
+        // stack; only the storage moved.
         let mut dirs: Vec<String> = Vec::new();
+        let module_stack: Table = lua.named_registry_value(REQUIRE_DIR_STACK_KEY)?;
+        for i in (1..=module_stack.raw_len()).rev() {
+            if let Ok(d) = module_stack.get::<String>(i)
+                && !d.is_empty()
+                && !dirs.contains(&d)
+            {
+                dirs.push(d);
+            }
+        }
+        let stack: Table = lua.globals().get("_quarto_script_dir_stack")?;
         for i in (1..=stack.raw_len()).rev() {
             if let Ok(d) = stack.get::<String>(i)
                 && !d.is_empty()
@@ -262,13 +287,16 @@ pub fn register_scoped_require(
                 .unwrap_or(Path::new(""))
                 .to_string_lossy()
                 .to_string();
-            push_script_dir(lua, &module_dir)?;
+            // Push on the require-private stack only: the script-dir stack
+            // must not move while a module loads (GH #588).
+            let len = module_stack.raw_len();
+            module_stack.set(len + 1, module_dir)?;
             let result = lua
                 .load(&source)
                 .set_name(key.clone())
                 .set_environment(env)
                 .eval::<Value>();
-            pop_script_dir(lua)?;
+            module_stack.set(len + 1, Value::Nil)?;
 
             let value = result?;
             // A module that returns nothing caches as `true`, like Lua.
@@ -1004,6 +1032,121 @@ mod tests {
         // Should not error
         pop_script_dir(&lua).unwrap();
         assert_eq!(current_script_dir(&lua).unwrap(), "");
+    }
+
+    // =========================================================================
+    // Scoped require × script-dir contract tests (GH #588, bd-sr0nipl7)
+    //
+    // Loaders never move the script-dir stack: `resolve_path` called from
+    // inside a module loaded via the scoped `require` must resolve against
+    // the requiring script's root, exactly as it does from the top-level
+    // script (Q1's scriptFile stack moves only at script boundaries).
+    // =========================================================================
+
+    fn create_require_test_lua() -> Lua {
+        let lua = create_test_lua();
+        let runtime = Arc::new(NativeRuntime::new());
+        register_scoped_require(&lua, runtime).unwrap();
+        lua
+    }
+
+    fn write_file(dir: &Path, name: &str, content: &str) {
+        let path = dir.join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, content).unwrap();
+    }
+
+    #[test]
+    fn test_resolve_path_inside_required_module_uses_script_root() {
+        let lua = create_require_test_lua();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = quarto_util::to_forward_slashes(tmp.path());
+
+        // The module resolves an extension-root-relative path at load time.
+        write_file(
+            tmp.path(),
+            "_modules/probe.lua",
+            r#"return { resolved = quarto.utils.resolve_path("_modules/greet.lua") }"#,
+        );
+        write_file(tmp.path(), "_modules/greet.lua", r#"return "GREET""#);
+
+        push_script_dir(&lua, &root).unwrap();
+        let top: String = lua
+            .load(r#"return quarto.utils.resolve_path("_modules/greet.lua")"#)
+            .eval()
+            .unwrap();
+        let via_require: String = lua
+            .load(r#"return require("_modules/probe").resolved"#)
+            .eval()
+            .unwrap();
+
+        assert_eq!(top, format!("{}/_modules/greet.lua", root));
+        // GH #588: this used to come back as .../_modules/_modules/greet.lua
+        // because the scoped require pushed the module's own dir onto the
+        // script-dir stack that resolve_path reads.
+        assert_eq!(via_require, top);
+    }
+
+    #[test]
+    fn test_script_dir_stack_unchanged_across_require() {
+        let lua = create_require_test_lua();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = quarto_util::to_forward_slashes(tmp.path());
+
+        write_file(tmp.path(), "_modules/noop.lua", r#"return true"#);
+
+        push_script_dir(&lua, &root).unwrap();
+        lua.load(r#"require("_modules/noop")"#).exec().unwrap();
+        assert_eq!(current_script_dir(&lua).unwrap(), root);
+    }
+
+    #[test]
+    fn test_require_bare_sibling_name_from_nested_module() {
+        // Regression guard for #450's behavior: a loaded module can require
+        // a file in its own directory by bare name. This must keep working
+        // when the module dir moves off the shared script-dir stack.
+        let lua = create_require_test_lua();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = quarto_util::to_forward_slashes(tmp.path());
+
+        write_file(tmp.path(), "_modules/greet.lua", r#"return "GREET""#);
+        write_file(
+            tmp.path(),
+            "_modules/probe.lua",
+            r#"return { sib = require("greet") }"#,
+        );
+
+        push_script_dir(&lua, &root).unwrap();
+        let sib: String = lua
+            .load(r#"return require("_modules/probe").sib"#)
+            .eval()
+            .unwrap();
+        assert_eq!(sib, "GREET");
+    }
+
+    #[test]
+    fn test_require_root_relative_name_from_nested_module() {
+        // Q1-style extension-root-relative require from inside a nested
+        // module (`require("_modules/x")` written in a file under
+        // `_modules/`): resolved via the script-dir stack, not the module
+        // dir.
+        let lua = create_require_test_lua();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = quarto_util::to_forward_slashes(tmp.path());
+
+        write_file(tmp.path(), "_modules/greet.lua", r#"return "GREET""#);
+        write_file(
+            tmp.path(),
+            "_modules/probe.lua",
+            r#"return { sib = require("_modules/greet") }"#,
+        );
+
+        push_script_dir(&lua, &root).unwrap();
+        let sib: String = lua
+            .load(r#"return require("_modules/probe").sib"#)
+            .eval()
+            .unwrap();
+        assert_eq!(sib, "GREET");
     }
 
     // =========================================================================

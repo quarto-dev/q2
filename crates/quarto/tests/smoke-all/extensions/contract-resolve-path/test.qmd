@@ -1,0 +1,13 @@
+---
+title: resolve_path agrees between top-level, require, and dofile call sites
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["rp-top=OK;rp-require=SAME;rp-dofile=SAME"]
+        - ["rp-require=DIFF", "rp-dofile=DIFF"]
+---
+
+{{< rp >}}

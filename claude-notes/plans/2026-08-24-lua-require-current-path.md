@@ -36,30 +36,39 @@ never inherit the resolve_path breakage.
 
 Tests first:
 
-- [ ] Unit test (quarto_api.rs tests): a module loaded via the scoped
+- [x] Unit test (quarto_api.rs tests): a module loaded via the scoped
       require calls `quarto.utils.resolve_path("_modules/x.lua")` at module
       load time; assert it resolves against the *extension root* (script
       stack top), not the module's dir. Run, verify it fails with the
-      doubled `_modules/_modules/` segment.
-- [ ] Unit test: nested-require candidate order is preserved — a module can
+      doubled `_modules/_modules/` segment. *(Verified failing with exactly
+      the doubled segment before the fix:
+      `test_resolve_path_inside_required_module_uses_script_root`.)*
+- [x] Unit test: nested-require candidate order is preserved — a module can
       still require a sibling by bare name (today's #450 behavior). Should
-      pass before AND after (regression guard).
-- [ ] Smoke-all fixture `extensions/contract-resolve-path/` mirroring
+      pass before AND after (regression guard). *(Two guards:
+      `test_require_bare_sibling_name_from_nested_module`,
+      `test_require_root_relative_name_from_nested_module`, plus
+      `test_script_dir_stack_unchanged_across_require`.)*
+- [x] Smoke-all fixture `extensions/contract-resolve-path/` mirroring
       mcanouil's #588 repro: shortcode extension whose top-level script
       computes `top` / `via_require` / `via_dofile` (the issue's three-row
       table) and emits them; `ensureFileRegexMatches` asserts all three are
-      the same root-resolved path. Verify it fails.
+      the same root-resolved path. Verify it fails. *(Verified failing:
+      `rp-require=DIFF` before the fix, dofile row SAME as expected.)*
 
 Implementation:
 
-- [ ] In `register_scoped_require`: push/pop the module's dir on a **private**
+- [x] In `register_scoped_require`: push/pop the module's dir on a **private**
       stack (registry-held table or Rust-side state in the closure), not on
       `_quarto_script_dir_stack`. Candidate walk = private stack top-down,
       then script-dir stack top-down, deduped — same effective order as
       today. Keep the existing pop-before-`?` discipline on the error path.
-- [ ] All Phase-1 tests pass; existing `contract-require` fixture and the
+      *(Implemented as a named-registry-value table,
+      `REQUIRE_DIR_STACK_KEY` — invisible to user Lua code.)*
+- [x] All Phase-1 tests pass; existing `contract-require` fixture and the
       #450 contract corpus (`crates/quarto/tests/smoke-all/extensions/contract-*`)
-      stay green.
+      stay green. *(Full pampa suite 4600 passed; SMOKE_FILTER=contract all
+      green.)*
 
 ## Phase 2 — GH #587: scoped require in filter environments (bd-9uqdoy0e)
 
