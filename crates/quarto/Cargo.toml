@@ -60,6 +60,10 @@ quarto-brand.workspace = true
 # `q2 use brand <source>`. Shared with `q2 add` when that lands.
 quarto-source-fetch = { path = "../quarto-source-fetch" }
 quarto-test.workspace = true
+# `q2 docs llms`: the docs-site llms.txt artifacts staged by
+# `cargo xtask build-agents-docs` are embedded via `include_dir!`
+# (bd-hwop1zii; see build.rs).
+include_dir.workspace = true
 serde_yaml.workspace = true
 tempfile = "3"
 # Phase D.1 (bd-kw93.8): auto-open browser tabs on `q2 preview`.

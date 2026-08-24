@@ -125,13 +125,19 @@ jobs:
 
   # Target-independent embedded payloads, built once: the WASM module
   # (wasm32, same bytes for every release target), the preview SPA that
-  # consumes it, and the trace viewer. Toolchain steps mirror
-  # hub-client-e2e.yml (the canonical WASM CI setup).
+  # consumes it, the trace viewer, and the `q2 docs llms` docs embed.
+  # Toolchain steps mirror hub-client-e2e.yml (the canonical WASM CI
+  # setup).
+  #
+  # The docs embed step compiles a host `q2` (to render `docs/`) on top
+  # of everything else, hence the wider timeout than the SPA builds
+  # alone needed — a cold rust-cache pays for the full q2 dependency
+  # tree here.
   web-payloads:
-    name: Build web payloads (SPA + trace viewer)
+    name: Build web payloads (SPA + trace viewer + docs embed)
     needs: preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v6
         with:
@@ -190,12 +196,22 @@ jobs:
         run: npm run build
         working-directory: q2-preview-spa
 
+      # Docs embed for `q2 docs llms` (bd-hwop1zii). Target-independent
+      # like the SPA dists, so it is staged once here rather than on
+      # every build leg — where cross-compiled targets could not run the
+      # `q2` that renders the docs anyway. `build-agents-docs` builds a
+      # host `q2` itself (via `cargo run --bin q2`); a debug binary is
+      # fine, it only has to render.
+      - name: Stage docs embed (q2 docs llms)
+        run: cargo xtask build-agents-docs
+
       - uses: actions/upload-artifact@v7
         with:
           name: web-payloads
           path: |
             trace-viewer/dist
             q2-preview-spa/dist
+            agents-docs-dist
           retention-days: 7
           if-no-files-found: error
 
@@ -527,6 +543,33 @@ jobs:
               FAIL=1
             fi
           done
+
+          # Docs embed for `q2 docs llms` (bd-hwop1zii). A release binary
+          # must carry real docs, built from this tag's source — a
+          # placeholder ships a command that only knows how to say it is
+          # missing, and a foreign commit means the docs describe a
+          # different Quarto than the binary implements.
+          DOCS=$("$BIN" docs llms --embed-info)
+          printf '%s\n' "$DOCS"
+          if ! printf '%s' "$DOCS" | grep -q '^source: real$'; then
+            echo "::error::release binary embeds placeholder docs for \`q2 docs llms\`"
+            FAIL=1
+          fi
+          DOCS_COMMIT_LINE=$(printf '%s' "$DOCS" | grep '^commit: ' || true)
+          DOCS_SHA=${DOCS_COMMIT_LINE#commit: }
+          DOCS_SHA=${DOCS_SHA% (dirty)}
+          EXPECTED_SHA=$(git rev-parse HEAD)
+          if [ "$DOCS_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::embedded docs were staged from $DOCS_SHA, expected this tag's $EXPECTED_SHA"
+            FAIL=1
+          fi
+          # Dirtiness is a diagnostic, not a correctness failure: the
+          # docs still came from this commit. Surface it rather than
+          # blocking the release, since it means something modified
+          # tracked files inside the web-payloads job.
+          case "$DOCS_COMMIT_LINE" in
+            *"(dirty)") echo "::warning::embedded docs were staged from a dirty tree at $EXPECTED_SHA" ;;
+          esac
           exit $FAIL
 
       # Live-share local asset serving (plan Phase 2, bd-ee2fqm95): a

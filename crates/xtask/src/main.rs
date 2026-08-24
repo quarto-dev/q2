@@ -18,9 +18,11 @@
 //! - `build-hub-client-embed`: Build the hub-client editor bundle for `q2 preview --ui editor`
 //! - `build-hub-mcp-bundle`: Build the self-contained hub MCP server bundle
 //! - `build-engine-host-bundle`: Build the committed engine-host-deno.js bundle
+//! - `build-agents-docs`: Stage the docs-site llms.txt artifacts for `q2 docs llms`
 //! - `stage-doc-examples`: Render `examples/manifest.yml` projects into `docs/examples/`
 
 mod braid_snapshot;
+mod build_agents_docs;
 mod build_all;
 mod build_engine_host_bundle;
 mod build_hub_client_embed;
@@ -237,6 +239,16 @@ enum Command {
     /// build -p quarto-trace-server` (via `include_dir!`).
     BuildTraceViewer {},
 
+    /// Stage the docs-site llms.txt artifacts for `q2 docs llms`.
+    ///
+    /// Renders `docs/` and copies the llms-txt output (index, per-page
+    /// `.md` companions, llms-full.txt) into `agents-docs-dist/`, which
+    /// is generated and gitignored — regenerate with this command; never
+    /// commit it. The tree is picked up on the next `cargo build --bin
+    /// q2` (via `include_dir!`); without it the binary embeds a
+    /// placeholder. See bd-hwop1zii.
+    BuildAgentsDocs {},
+
     /// Build just the q2-preview SPA.
     ///
     /// Faster than `build-all` when only the SPA source has changed. The
@@ -315,6 +327,10 @@ enum Command {
         #[arg(long)]
         skip_rust_build: bool,
 
+        /// Skip staging + embedding the docs for `q2 docs llms`.
+        #[arg(long)]
+        skip_agents_docs: bool,
+
         /// Pass `--release` to `cargo build`.
         #[arg(long)]
         release: bool,
@@ -389,6 +405,7 @@ fn main() -> Result<()> {
             verify::run(&config)
         }
         Command::PandocCheck {} => pandoc_check::run(),
+        Command::BuildAgentsDocs {} => build_agents_docs::run(),
         Command::StageDocExamples {} => stage_doc_examples::run(),
         Command::BuildTraceViewer {} => build_trace_viewer::run(),
         Command::BuildQ2PreviewSpa {} => build_q2_preview_spa::run(),
@@ -404,9 +421,11 @@ fn main() -> Result<()> {
             skip_hub_mcp_bundle,
             skip_engine_host_bundle,
             skip_rust_build,
+            skip_agents_docs,
             release,
         } => {
             let config = build_all::BuildAllConfig {
+                skip_agents_docs,
                 skip_npm_install,
                 skip_ts_packages_build,
                 skip_hub_build,

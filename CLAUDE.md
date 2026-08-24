@@ -516,6 +516,34 @@ with a cargo warning); `q2 mcp` then fails at runtime pointing at the
 xtask. Design: `claude-notes/plans/2026-06-11-q2-mcp-hub-auth.md`
 (bd-81cfshmw).
 
+## Refreshing the embedded docs for `q2 docs llms`
+
+The same trap once more, with one twist. `q2 docs llms` (aliased as `q2
+agents-info`) serves the docs site's llms.txt mirror — the index, the
+per-page `.md` companions, and `llms-full.txt` — embedded from
+`agents-docs-dist/` via `include_dir!`. After changing anything under
+`docs/`, the embed is stale until you run:
+
+```bash
+cargo xtask build-agents-docs        # render docs/, stage agents-docs-dist/
+cargo build --bin q2                 # re-embed via include_dir!
+```
+
+The twist: staging *renders the docs with `q2` itself*, so unlike every
+other embed artifact this step runs **after** a Rust build, not before.
+`cargo xtask build-all` reflects that — its docs step comes last and
+ends with its own `cargo build --bin q2` (skip it with
+`--skip-agents-docs`).
+
+Diagnose staleness with `q2 docs llms --embed-info`, which prints the
+source commit, a `(dirty)` marker, and the page count. Fresh clones
+build fine without the staged tree (a placeholder is embedded, with a
+cargo warning); `q2 docs llms` then fails at runtime pointing at the
+xtask. `agents-docs-dist/` is generated and gitignored — never commit
+it. The release workflow stages it once in `web-payloads` and fails any
+leg whose binary reports a placeholder or a foreign commit. Design:
+`claude-notes/plans/2026-08-24-agents-info-command.md` (bd-hwop1zii).
+
 ## Build Commands
 
 - WASM build: `npm run build:all` (NOT `cargo build --target wasm32-unknown-unknown`)
