@@ -1,0 +1,136 @@
+# Lua require + "current path" contract: GH #587, GH #588, shortcode stack leak
+
+**Strands:**
+- bd-sr0nipl7 — GH #588: `resolve_path` returns module dir inside a required file (primary)
+- bd-9uqdoy0e — GH #587: `require` unavailable in Lua filters (blocked-by bd-sr0nipl7)
+- bd-9xa0yui7 — shortcode load-time `push_script_dir` never popped
+
+**Design/assessment doc:** `claude-notes/research/2026-08-24-lua-current-path-gh588.md`
+(read it first — it holds the full Q1/Q2 mechanism inventory and the rationale
+for the chosen approach).
+
+## Overview
+
+All three bugs live in the same subsystem — pampa's Lua script-dir machinery
+(`crates/pampa/src/lua/{quarto_api.rs,filter.rs,shortcode.rs,dofile_wasm.rs}`)
+— and are fixed under one contract, so they ship as one coherent PR:
+
+> The script-dir stack moves only at top-level script boundaries: filter
+> script load, shortcode script load, and shortcode handler invocation.
+> Loaders — `require`, `dofile`, `loadfile` — never move it. A loader that
+> needs the location of the file it is currently executing tracks that
+> privately.
+
+Chosen approach (avenue A of the research doc, confirmed with Carlos):
+**split the stacks.** `_quarto_script_dir_stack` becomes the exact analogue
+of Q1's `scriptFile` stack; `register_scoped_require` gets a private
+module-dir stack that only its own candidate walk consults (module stack
+top-down, then script stack top-down — byte-identical search order to today,
+so #450's shipped require behavior is unchanged).
+
+Phase order matters: #588 first, so that when #587 installs the scoped
+require into filter environments, filters get the *corrected* require and
+never inherit the resolve_path breakage.
+
+## Phase 1 — GH #588: split the stacks (bd-sr0nipl7)
+
+Tests first:
+
+- [ ] Unit test (quarto_api.rs tests): a module loaded via the scoped
+      require calls `quarto.utils.resolve_path("_modules/x.lua")` at module
+      load time; assert it resolves against the *extension root* (script
+      stack top), not the module's dir. Run, verify it fails with the
+      doubled `_modules/_modules/` segment.
+- [ ] Unit test: nested-require candidate order is preserved — a module can
+      still require a sibling by bare name (today's #450 behavior). Should
+      pass before AND after (regression guard).
+- [ ] Smoke-all fixture `extensions/contract-resolve-path/` mirroring
+      mcanouil's #588 repro: shortcode extension whose top-level script
+      computes `top` / `via_require` / `via_dofile` (the issue's three-row
+      table) and emits them; `ensureFileRegexMatches` asserts all three are
+      the same root-resolved path. Verify it fails.
+
+Implementation:
+
+- [ ] In `register_scoped_require`: push/pop the module's dir on a **private**
+      stack (registry-held table or Rust-side state in the closure), not on
+      `_quarto_script_dir_stack`. Candidate walk = private stack top-down,
+      then script-dir stack top-down, deduped — same effective order as
+      today. Keep the existing pop-before-`?` discipline on the error path.
+- [ ] All Phase-1 tests pass; existing `contract-require` fixture and the
+      #450 contract corpus (`crates/quarto/tests/smoke-all/extensions/contract-*`)
+      stay green.
+
+## Phase 2 — GH #587: scoped require in filter environments (bd-9uqdoy0e)
+
+Tests first:
+
+- [ ] Smoke-all fixture `extensions/contract-filter-require/` mirroring
+      mcanouil's #587 repro: extension contributes a Lua *filter* whose
+      top-level script does `require("_modules/greet")`. Verify it fails
+      today with the stock-Lua "module not found" error.
+- [ ] Same fixture (or a sibling) also exercises the absolute form
+      extensions use: `require(quarto.utils.resolve_path("_modules/greet.lua"):gsub("%.lua$", ""))`.
+      (The scoped require handles this by accident of `PathBuf::join`
+      semantics with a rooted argument — pin it with a test so it stays.)
+- [ ] Fixture asserts resolve_path parity *inside the filter-required
+      module* too — the #588 contract must hold on the filter path, not
+      just the shortcode path.
+
+Implementation:
+
+- [ ] Call `register_scoped_require(&lua, runtime.clone())` in
+      `create_filter_environment` (`filter.rs`) — the runtime `Arc` is
+      already a parameter. On native, the captured original `require`
+      remains the fallback (filters get the full stdlib); on WASM there is
+      no `package` lib, matching the shortcode state today.
+- [ ] Note (doc-only, acceptable divergence): filter states are per-filter,
+      so the require cache is per-filter-state; Q1's single emulated state
+      shares one module cache. No action, record it in the research doc.
+
+## Phase 3 — shortcode load-push leak + contract comment (bd-9xa0yui7)
+
+Tests first:
+
+- [ ] Unit test (shortcode.rs tests): load two shortcode scripts into one
+      registry; assert the script-dir stack depth returns to its baseline
+      after each load (fails today — one leaked entry per script).
+
+Implementation:
+
+- [ ] Pop the load-time push in `load_script` after script evaluation —
+      on **all** exit paths (the current code has `?`-early-returns between
+      push and end; use a guard or restructure so the pop always runs).
+      Handler registration bookkeeping (`handler_script_dirs`) is
+      unaffected; call-time push/pop already covers handler execution.
+- [ ] Write the contract statement (Overview above) as the header comment
+      of the script-dir-stack section in `quarto_api.rs`; point
+      `dofile_wasm.rs`'s header at it instead of restating it.
+
+## Phase 4 — verification and wrap-up
+
+- [ ] WASM smoke coverage per `.claude/rules/wasm.md`: add a
+      `crates/pampa/tests/wasm_lua.rs` case exercising require-then-
+      resolve_path under the `/project/` VFS prefix (shortcode and filter
+      environments both instantiate the scoped require there).
+- [ ] `cargo build --workspace` && `cargo nextest run --workspace`.
+- [ ] Full `cargo xtask verify` (pampa is in wasm-quarto-hub-client's
+      closure — the hub/WASM leg is affected; `--skip-hub-build` is not
+      enough for the final gate).
+- [ ] End-to-end per repo policy: `cargo run --bin q2 -- render` on the two
+      new fixtures; inspect the emitted HTML; record invocation + output
+      snippet here.
+- [ ] Close bd-sr0nipl7, bd-9uqdoy0e, bd-9xa0yui7 with reasons; comment on
+      GH #587/#588 (Carlos posts or approves wording).
+
+## Design decisions already settled
+
+- Avenue A (split stacks) over Q1-literal (B) and tagged entries (C) —
+  rationale in the research doc; confirmed by Carlos 2026-08-24.
+- Keep Q2's bare-name sibling require (superset of Q1) and module-first
+  candidate order; document the theoretical shadowing divergence
+  (`<root>/util.lua` vs `<root>/_modules/util.lua`) rather than chase it.
+- Q2 innermost-first vs Q1 outermost-first multi-script search order:
+  document, don't chase.
+- No `debug`-lib dependency anywhere (unavailable on WASM); all
+  calling-file tracking is Rust-side.
