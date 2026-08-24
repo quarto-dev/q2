@@ -109,13 +109,9 @@ fn field_value(item: &ListingItem, field: &str) -> Option<String> {
         "date-modified" => item.date_modified.clone(),
         "image" => item.image.clone(),
         "image-alt" => item.image_alt.clone(),
-        "filename" => item
-            .source_path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(String::from),
-        "path" => Some(item.source_path.display().to_string()),
-        "output-href" => Some(item.output_href.clone()),
+        "filename" => item.target.filename(),
+        "path" => item.target.filter_path(),
+        "output-href" => item.target.href().map(String::from),
         "reading-time" => item.reading_time_minutes.map(|n| n.to_string()),
         "word-count" => item.word_count.map(|n| n.to_string()),
         "order" => item.order.map(|n| n.to_string()),
@@ -147,9 +143,8 @@ fn is_known_sort_field(field: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::listing::item::ListingItem;
+    use crate::project::listing::item::{ItemOrigin, ItemTarget, ListingItem};
     use std::collections::BTreeMap;
-    use std::path::PathBuf;
 
     fn make_item(title: &str, date: Option<&str>) -> ListingItem {
         ListingItem {
@@ -167,8 +162,11 @@ mod tests {
             reading_time_minutes: None,
             word_count: None,
             order: None,
-            source_path: PathBuf::from(format!("posts/{}.qmd", title)),
-            output_href: format!("posts/{}.html", title),
+            target: ItemTarget::document(
+                format!("posts/{}.qmd", title),
+                format!("posts/{}.html", title),
+            ),
+            origin: ItemOrigin::Document,
             extra: BTreeMap::new(),
         }
     }

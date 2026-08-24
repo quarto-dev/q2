@@ -1,0 +1,11 @@
+---
+title: "Glob contents, built-in listing type"
+listing:
+  id: cards
+  type: default
+  contents:
+    - "download.qmd"
+    - "features.qmd"
+---
+
+Body before the listing.

@@ -507,7 +507,7 @@ mod tests {
     use crate::project::index::ProjectIndex;
     use crate::project::listing::config::apply_type_defaults;
     use crate::project::listing::config::{Listing, ListingType};
-    use crate::project::listing::item::ListingItem;
+    use crate::project::listing::item::{ItemOrigin, ItemTarget, ListingItem};
     use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
     use quarto_pandoc_types::ConfigValue;
@@ -543,8 +543,11 @@ mod tests {
             reading_time_minutes: Some(5),
             word_count: None,
             order: None,
-            source_path: PathBuf::from(format!("posts/{}.qmd", title)),
-            output_href: format!("posts/{}.html", title),
+            target: ItemTarget::document(
+                format!("posts/{}.qmd", title),
+                format!("posts/{}.html", title),
+            ),
+            origin: ItemOrigin::Document,
             extra: BTreeMap::new(),
         }
     }
