@@ -1,0 +1,15 @@
+---
+title: Extension filter requires sibling modules
+format: html
+filters:
+  - fr
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["fr-require=OK;fr-abs=OK;fr-resolve=OK"]
+        - ["fr-require=BAD", "fr-abs=BAD", "fr-resolve=BAD"]
+---
+
+Filter require contract fixture.

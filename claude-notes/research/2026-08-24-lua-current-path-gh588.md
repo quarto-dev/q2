@@ -243,6 +243,20 @@ strictly messier (every consumer needs to know about the tag, and the
 structure). Mentioned only because it is the smallest diff; A is the smallest
 *honest* diff.
 
+### Retained divergences (recorded during implementation, 2026-08-24)
+
+- **Per-filter require cache.** Q2 creates one Lua state per filter script,
+  so each filter has its own module cache; Q1's single emulated state shares
+  one cache across all wrapped filters. A module required by two different
+  filters loads twice in Q2 (two instances of its module table). Acceptable:
+  module-level mutable state shared *across* filters was never a supported
+  contract, and shortcodes (one shared state) match Q1 already.
+- **Bare-name sibling require** from a nested module keeps working in Q2
+  (superset of Q1), and the module-first candidate order means a name
+  colliding between `<root>/` and `<root>/_modules/` resolves to the module's
+  sibling in Q2 vs the root file in Q1. Both retained deliberately; see
+  avenue A discussion.
+
 ### Cross-cutting work, same contract
 
 1. **#587 (require missing in filters):** install `register_scoped_require`

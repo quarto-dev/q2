@@ -74,26 +74,31 @@ Implementation:
 
 Tests first:
 
-- [ ] Smoke-all fixture `extensions/contract-filter-require/` mirroring
+- [x] Smoke-all fixture `extensions/contract-filter-require/` mirroring
       mcanouil's #587 repro: extension contributes a Lua *filter* whose
       top-level script does `require("_modules/greet")`. Verify it fails
-      today with the stock-Lua "module not found" error.
-- [ ] Same fixture (or a sibling) also exercises the absolute form
+      today with the stock-Lua "module not found" error. *(Verified failing:
+      `[C]: in function 'require'` at fr.lua:7 before the fix.)*
+- [x] Same fixture (or a sibling) also exercises the absolute form
       extensions use: `require(quarto.utils.resolve_path("_modules/greet.lua"):gsub("%.lua$", ""))`.
       (The scoped require handles this by accident of `PathBuf::join`
       semantics with a rooted argument — pin it with a test so it stays.)
-- [ ] Fixture asserts resolve_path parity *inside the filter-required
+      *(`fr-abs=OK` row; asserts on module contents, not table identity,
+      to stay robust to key-format differences across platforms.)*
+- [x] Fixture asserts resolve_path parity *inside the filter-required
       module* too — the #588 contract must hold on the filter path, not
-      just the shortcode path.
+      just the shortcode path. *(`fr-resolve=OK` row.)*
 
 Implementation:
 
-- [ ] Call `register_scoped_require(&lua, runtime.clone())` in
+- [x] Call `register_scoped_require(&lua, runtime.clone())` in
       `create_filter_environment` (`filter.rs`) — the runtime `Arc` is
       already a parameter. On native, the captured original `require`
       remains the fallback (filters get the full stdlib); on WASM there is
       no `package` lib, matching the shortcode state today.
-- [ ] Note (doc-only, acceptable divergence): filter states are per-filter,
+      *(`create_filter_environment` is the single filter-state constructor;
+      `apply_lua_filter` reaches it at filter.rs:256.)*
+- [x] Note (doc-only, acceptable divergence): filter states are per-filter,
       so the require cache is per-filter-state; Q1's single emulated state
       shares one module cache. No action, record it in the research doc.
 
