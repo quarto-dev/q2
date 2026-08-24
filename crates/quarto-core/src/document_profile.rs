@@ -319,6 +319,35 @@ pub struct ListingItemInfo {
     pub extra: BTreeMap<String, ConfigValue>,
 }
 
+/// What [`ListingItemInfo::from_map`] does with keys it does not
+/// recognize.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnknownKeyPolicy {
+    /// Drop them. Front-matter `listing-item:` — custom fields must
+    /// be declared under `extra:` (bd-0t4e07jk owns widening this).
+    Drop,
+    /// Route them into `extra`. Inline `contents:` records — the
+    /// record *is* the item, so every key is intentional. Keys in
+    /// `except` belong to the caller and are neither typed here nor
+    /// forwarded.
+    IntoExtra { except: &'static [&'static str] },
+}
+
+/// Keys [`ListingItemInfo::from_map`] reads into typed fields.
+pub const LISTING_ITEM_KEYS: &[&str] = &[
+    "title",
+    "subtitle",
+    "description",
+    "image",
+    "image-alt",
+    "date",
+    "date-modified",
+    "categories",
+    "reading-time-minutes",
+    "word-count",
+    "extra",
+];
+
 impl ListingItemInfo {
     /// True when no author-supplied or auto-filled data is present.
     /// Used by [`DocumentProfile`]'s `serde(skip_serializing_if = …)`
@@ -337,6 +366,41 @@ impl ListingItemInfo {
             && self.reading_time_minutes.is_none()
             && self.word_count.is_none()
             && self.extra.is_empty()
+    }
+
+    /// Build from any map-shaped `ConfigValue` — the `listing-item:`
+    /// front-matter block or one inline `contents:` record. Type
+    /// mismatches at known keys leave the field at its default.
+    pub fn from_map(li: &ConfigValue, unknown: UnknownKeyPolicy) -> Self {
+        let mut extra = extract_listing_item_extra(li);
+        if let UnknownKeyPolicy::IntoExtra { except } = unknown
+            && let Some(entries) = li.as_map_entries()
+        {
+            for entry in entries {
+                let key = entry.key.as_str();
+                if LISTING_ITEM_KEYS.contains(&key) || except.contains(&key) {
+                    continue;
+                }
+                // An explicit `extra:` entry of the same name wins.
+                extra
+                    .entry(entry.key.clone())
+                    .or_insert_with(|| entry.value.clone());
+            }
+        }
+        ListingItemInfo {
+            title: plain_text_field(li, "title"),
+            subtitle: plain_text_field(li, "subtitle"),
+            description: plain_text_field(li, "description"),
+            image: plain_text_field(li, "image"),
+            image_alt: plain_text_field(li, "image-alt"),
+            date: plain_text_field(li, "date"),
+            date_modified: plain_text_field(li, "date-modified"),
+            categories: extract_string_list(li, "categories"),
+            categories_raw: li.get("categories").cloned(),
+            reading_time_minutes: extract_u32_field(li, "reading-time-minutes"),
+            word_count: extract_u32_field(li, "word-count"),
+            extra,
+        }
     }
 }
 
@@ -876,24 +940,9 @@ fn extract_categories_raw(meta: &ConfigValue) -> Option<ConfigValue> {
 /// keys leave the field at its default. Strict diagnostics are L2's
 /// job (see L0 sub-plan §"C5").
 fn extract_listing_item(meta: &ConfigValue) -> ListingItemInfo {
-    let Some(li) = meta.get("listing-item") else {
-        return ListingItemInfo::default();
-    };
-
-    ListingItemInfo {
-        title: plain_text_field(li, "title"),
-        subtitle: plain_text_field(li, "subtitle"),
-        description: plain_text_field(li, "description"),
-        image: plain_text_field(li, "image"),
-        image_alt: plain_text_field(li, "image-alt"),
-        date: plain_text_field(li, "date"),
-        date_modified: plain_text_field(li, "date-modified"),
-        categories: extract_string_list(li, "categories"),
-        categories_raw: li.get("categories").cloned(),
-        reading_time_minutes: extract_u32_field(li, "reading-time-minutes"),
-        word_count: extract_u32_field(li, "word-count"),
-        extra: extract_listing_item_extra(li),
-    }
+    meta.get("listing-item")
+        .map(|li| ListingItemInfo::from_map(li, UnknownKeyPolicy::Drop))
+        .unwrap_or_default()
 }
 
 /// Read a non-negative integer field as `u32`. Returns `None` if the
@@ -2232,5 +2281,92 @@ Body.
             }
             other => panic!("expected VersionMismatch from v6 payload, got {:?}", other),
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Task 2: ListingItemInfo::from_map with unknown-key policy
+    // ─────────────────────────────────────────────────────────────────
+
+    fn cv_s(v: &str) -> ConfigValue {
+        ConfigValue::new_string(v, quarto_source_map::SourceInfo::for_test())
+    }
+
+    fn cv_map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
+        use quarto_pandoc_types::config_value::ConfigMapEntry;
+        ConfigValue::new_map(
+            entries
+                .into_iter()
+                .map(|(k, v)| ConfigMapEntry {
+                    key: k.to_string(),
+                    key_source: quarto_source_map::SourceInfo::for_test(),
+                    value: v,
+                })
+                .collect(),
+            quarto_source_map::SourceInfo::for_test(),
+        )
+    }
+
+    #[test]
+    fn from_map_drop_policy_ignores_unknown_keys() {
+        let li = cv_map(vec![("title", cv_s("T")), ("icon", cv_s("bi-star"))]);
+        let info = ListingItemInfo::from_map(&li, UnknownKeyPolicy::Drop);
+        assert_eq!(info.title.as_deref(), Some("T"));
+        assert!(info.extra.is_empty(), "Drop must not forward `icon`");
+    }
+
+    #[test]
+    fn from_map_into_extra_routes_unknown_keys_and_skips_excepted() {
+        let li = cv_map(vec![
+            ("title", cv_s("T")),
+            ("icon", cv_s("bi-star")),
+            ("link", cv_s("x.html")),
+            ("path", cv_s("owned-by-caller.qmd")),
+        ]);
+        let info =
+            ListingItemInfo::from_map(&li, UnknownKeyPolicy::IntoExtra { except: &["path"] });
+        assert_eq!(info.title.as_deref(), Some("T"));
+        assert_eq!(
+            info.extra
+                .get("icon")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("bi-star")
+        );
+        assert_eq!(
+            info.extra
+                .get("link")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("x.html")
+        );
+        assert!(
+            !info.extra.contains_key("title"),
+            "curated keys never land in extra"
+        );
+        assert!(
+            !info.extra.contains_key("path"),
+            "excepted keys are the caller's"
+        );
+    }
+
+    #[test]
+    fn from_map_explicit_extra_wins_over_bare_key() {
+        let li = cv_map(vec![
+            ("status", cv_s("bare")),
+            ("extra", cv_map(vec![("status", cv_s("explicit"))])),
+        ]);
+        let info = ListingItemInfo::from_map(&li, UnknownKeyPolicy::IntoExtra { except: &[] });
+        assert_eq!(
+            info.extra
+                .get("status")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("explicit")
+        );
+        assert_eq!(
+            info.extra.len(),
+            1,
+            "`extra` itself is not forwarded as a key"
+        );
     }
 }

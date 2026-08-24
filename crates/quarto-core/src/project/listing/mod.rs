@@ -35,6 +35,7 @@ pub mod filter;
 pub mod helpers;
 pub mod item;
 pub mod placeholders;
+pub mod record;
 pub mod sort;
 pub mod templates;
 

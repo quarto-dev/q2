@@ -35,8 +35,8 @@ use crate::glob::{BaseDirContext, GlobOptions, GlobResolution, RawGlob, resolve_
 /// (forward slashes, `""` for the project root) — the fallback base
 /// for values whose declaring file cannot be recovered, and the base
 /// for the negation-only default. `project_dir` is the absolute
-/// project root. Inline-record entries contribute nothing (the
-/// parser already emitted `Q-12-2`).
+/// project root. Inline-record entries contribute nothing (handled by
+/// the generate transform).
 ///
 /// Patterns that escape the project root land in
 /// [`GlobResolution::escaped`] (reported as `Q-12-17`); patterns the
@@ -195,12 +195,14 @@ mod tests {
         );
     }
 
-    /// Inline-record entries are not globs; the parser already
-    /// diagnosed them (`Q-12-2`).
+    /// Inline-record entries are not globs; they are handled by the
+    /// generate transform.
     #[test]
     fn inline_records_contribute_nothing() {
         let r = resolve_content_globs(
-            &[ListingContents::Inline(Default::default())],
+            &[ListingContents::Inline(
+                quarto_pandoc_types::ConfigValue::new_map(vec![], SourceInfo::for_test()),
+            )],
             None,
             Path::new("/proj"),
             "sub",

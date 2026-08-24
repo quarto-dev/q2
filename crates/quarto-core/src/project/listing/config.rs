@@ -147,9 +147,11 @@ pub enum ListingContents {
     /// the base the pattern resolves against (GH #456,
     /// bd-v7ixzsp5).
     Glob { pattern: String, source: SourceInfo },
-    /// Inline metadata record. Schema accepts; L3 emits `Q-12-2`
-    /// and skips the entry until a follow-up bd issue lands.
-    Inline(BTreeMap<String, ConfigValue>),
+    /// Inline metadata record — the whole map, so the record's own
+    /// span and each key's `key_source` survive to the generate
+    /// transform (`record::parse_record`). The record *is* the item
+    /// (plan §D2); no glob resolution is involved.
+    Inline(ConfigValue),
 }
 
 impl ListingContents {
@@ -630,7 +632,7 @@ fn parse_grid_item_align(name: &str) -> Option<GridItemAlign> {
 
 fn parse_contents(
     value: &ConfigValue,
-    diagnostics: &mut Vec<DiagnosticMessage>,
+    _diagnostics: &mut Vec<DiagnosticMessage>,
 ) -> Vec<ListingContents> {
     // Since bd-v7ixzsp5, front-matter `contents:` strings arrive as
     // `ConfigValueKind::Glob` — the key-path annotation table in
@@ -684,19 +686,7 @@ fn parse_contents(
                         pattern: pattern.clone(),
                         source: item.source_info.clone(),
                     }),
-                    ConfigValueKind::Map(entries) => {
-                        push_diag(
-                            diagnostics,
-                            "Q-12-2",
-                            "Inline `contents:` records are not yet supported; entry skipped.",
-                            item,
-                        );
-                        let map = entries
-                            .iter()
-                            .map(|e| (e.key.clone(), e.value.clone()))
-                            .collect::<BTreeMap<_, _>>();
-                        Some(ListingContents::Inline(map))
-                    }
+                    ConfigValueKind::Map(_) => Some(ListingContents::Inline(item.clone())),
                     _ => None,
                 }
             })
@@ -1002,8 +992,8 @@ pub fn apply_type_defaults(l: &mut Listing) {
 
 /// Flatten every `contents:` glob entry across all listings declared
 /// on a host page's `meta.listing:` value, ignoring all other listing
-/// config. Inline-record entries (`Q-12-2` at render time) contribute
-/// nothing.
+/// config. Inline-record entries are handled by the generate transform;
+/// they contribute nothing here.
 ///
 /// Consumers resolve the returned entries with
 /// [`super::glob_resolve::resolve_content_globs`] — see that module
@@ -1315,24 +1305,36 @@ listing:
     // these assert the fix reaches beyond the call sites Phase A
     // touched.
 
+    // 7. inline-record contents are captured whole, with no diagnostic
     #[test]
-    fn q_12_2_underlines_the_whole_inline_contents_record() {
-        let yaml = "\
-listing:
-    contents:
-    - title: Inline
-      path: ./a.qmd
-";
-        let (_listings, diags, ctx) = parse_from_yaml(yaml);
-        let q122 = diag_with_code(&diags, "Q-12-2");
-
-        let span = quarto_config::span_assert::resolve_diagnostic_span(q122, &ctx)
-            .expect("Q-12-2 should resolve to a real span");
-        assert!(
-            span.text.contains("title: Inline") && span.text.contains("path: ./a.qmd"),
-            "expected the whole inline record, got {:?}",
-            span.text
+    fn contents_inline_record_is_captured_without_diagnostic() {
+        let (listings, diags) = parse(map(vec![(
+            "contents",
+            arr(vec![map(vec![
+                ("title", s("foo")),
+                ("path", s("bar.html")),
+            ])]),
+        )]));
+        assert_eq!(listings.len(), 1);
+        assert_eq!(listings[0].contents.len(), 1);
+        let ListingContents::Inline(record) = &listings[0].contents[0] else {
+            panic!("expected Inline, got {:?}", listings[0].contents[0]);
+        };
+        assert_eq!(
+            record
+                .get("title")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("foo")
         );
+        assert_eq!(
+            record
+                .get("path")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+            Some("bar.html")
+        );
+        assert!(diags.is_empty(), "Q-12-2 is retired; got {:?}", diags);
     }
 
     #[test]
@@ -1498,27 +1500,6 @@ listing:
             glob_patterns(&listings[0].contents),
             vec!["posts/*.qmd", "notes/*.qmd"]
         );
-    }
-
-    // 7. inline-record contents emits Q-12-2 and is captured
-    #[test]
-    fn contents_inline_record_emits_diagnostic() {
-        let (listings, diags) = parse(map(vec![(
-            "contents",
-            arr(vec![map(vec![
-                ("title", s("foo")),
-                ("path", s("bar.html")),
-            ])]),
-        )]));
-        assert_eq!(listings.len(), 1);
-        // The inline entry is captured as ListingContents::Inline.
-        assert_eq!(listings[0].contents.len(), 1);
-        assert!(matches!(
-            listings[0].contents[0],
-            ListingContents::Inline(_)
-        ));
-        assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].code.as_deref(), Some("Q-12-2"));
     }
 
     // 8. sort: ["date"] → default Asc
