@@ -106,18 +106,25 @@ Implementation:
 
 Tests first:
 
-- [ ] Unit test (shortcode.rs tests): load two shortcode scripts into one
+- [x] Unit test (shortcode.rs tests): load two shortcode scripts into one
       registry; assert the script-dir stack depth returns to its baseline
       after each load (fails today — one leaked entry per script).
+      *(Two tests, both verified failing before the fix:
+      `test_load_script_restores_script_dir_stack` and
+      `..._on_error` for the eval-error exit path.)*
 
 Implementation:
 
-- [ ] Pop the load-time push in `load_script` after script evaluation —
+- [x] Pop the load-time push in `load_script` after script evaluation —
       on **all** exit paths (the current code has `?`-early-returns between
       push and end; use a guard or restructure so the pop always runs).
       Handler registration bookkeeping (`handler_script_dirs`) is
       unaffected; call-time push/pop already covers handler execution.
-- [ ] Write the contract statement (Overview above) as the header comment
+      *(Added `ScriptDirGuard` / `push_script_dir_scoped` (RAII, owns a
+      cloned `Lua` handle) in quarto_api.rs; `load_script` holds the guard
+      for the whole load, and the call-time push/pop in `call` was
+      converted to the same guard for panic-safety.)*
+- [x] Write the contract statement (Overview above) as the header comment
       of the script-dir-stack section in `quarto_api.rs`; point
       `dofile_wasm.rs`'s header at it instead of restating it.
 

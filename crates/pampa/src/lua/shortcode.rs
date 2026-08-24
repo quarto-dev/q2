@@ -156,13 +156,18 @@ impl LuaShortcodeEngine {
             )
         })?;
 
-        // Push script dir for quarto.utils.resolve_path
+        // Push script dir for quarto.utils.resolve_path while the script
+        // loads. The guard pops on every exit path: the shared shortcode
+        // state must not accumulate one entry per loaded extension script
+        // (bd-9xa0yui7) — at rest the stack holds only currently-executing
+        // scripts (see the contract in quarto_api.rs). Call-time resolution
+        // is handled by the push in `call`.
         let script_dir = script_path
             .parent()
             .unwrap_or(Path::new(""))
             .to_string_lossy()
             .to_string();
-        super::quarto_api::push_script_dir(&self.lua, &script_dir)
+        let _script_dir_guard = super::quarto_api::push_script_dir_scoped(&self.lua, &script_dir)
             .map_err(LuaShortcodeError::LuaError)?;
 
         // Execute script in a sandboxed environment that inherits globals
@@ -244,16 +249,14 @@ impl LuaShortcodeEngine {
         let reg_key = self.handlers.get(name)?;
         let func: Function = self.lua.registry_value(reg_key).ok()?;
 
-        // Push script dir for this handler's extension, pop after call
-        if let Some(dir) = self.handler_script_dirs.get(name) {
-            let _ = super::quarto_api::push_script_dir(&self.lua, dir);
-        }
+        // Push script dir for this handler's extension for the duration of
+        // the call (guard pops on drop, error paths included).
+        let _script_dir_guard = self
+            .handler_script_dirs
+            .get(name)
+            .and_then(|dir| super::quarto_api::push_script_dir_scoped(&self.lua, dir).ok());
 
         let result = self.call_handler(name, func, args, context).await;
-
-        if self.handler_script_dirs.contains_key(name) {
-            let _ = super::quarto_api::pop_script_dir(&self.lua);
-        }
 
         Some(result)
     }
@@ -1116,6 +1119,67 @@ return {
             }
             other => panic!("Expected Text, got {:?}", other),
         }
+    }
+
+    fn script_dir_stack_depth(lua: &Lua) -> usize {
+        lua.globals()
+            .get::<Table>("_quarto_script_dir_stack")
+            .unwrap()
+            .raw_len()
+    }
+
+    #[tokio::test]
+    async fn test_load_script_restores_script_dir_stack() {
+        // The script-dir stack must hold only the scripts currently
+        // executing (bd-9xa0yui7): the shared shortcode state must not
+        // accumulate one entry per loaded extension script.
+        let tmp = TempDir::new().unwrap();
+        let first = write_script(
+            tmp.path(),
+            "first.lua",
+            r#"return { a = function() return "A" end }"#,
+        );
+        let second = write_script(
+            tmp.path(),
+            "second.lua",
+            r#"return { b = function() return "B" end }"#,
+        );
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        let baseline = script_dir_stack_depth(&engine.lua);
+
+        engine.load_script(&first).await.unwrap();
+        assert_eq!(script_dir_stack_depth(&engine.lua), baseline);
+
+        engine.load_script(&second).await.unwrap();
+        assert_eq!(script_dir_stack_depth(&engine.lua), baseline);
+
+        // Handlers still work after the loads (call-time push/pop is
+        // responsible for the handler's script dir).
+        let result = engine
+            .call("a", &make_empty_args(), ShortcodeCallContext::Inline)
+            .await
+            .unwrap();
+        match result {
+            LuaShortcodeResult::Text(s) => assert_eq!(s, "A"),
+            other => panic!("Expected Text, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_load_script_restores_script_dir_stack_on_error() {
+        // The pop must run on the error path too: a script that fails to
+        // evaluate must not leave its dir on the stack.
+        let tmp = TempDir::new().unwrap();
+        let bad = write_script(tmp.path(), "bad.lua", r#"this is not valid lua ("#);
+
+        let runtime = make_runtime();
+        let mut engine = LuaShortcodeEngine::new("html", runtime).unwrap();
+        let baseline = script_dir_stack_depth(&engine.lua);
+
+        assert!(engine.load_script(&bad).await.is_err());
+        assert_eq!(script_dir_stack_depth(&engine.lua), baseline);
     }
 
     #[tokio::test]

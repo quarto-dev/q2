@@ -174,6 +174,24 @@ fn stringify_table(lua: &Lua, table: &Table, depth: usize) -> Result<String> {
 
 // =========================================================================
 // Script-dir stack
+//
+// THE CONTRACT (settled for `dofile` in #112, generalized in GH #588 /
+// bd-sr0nipl7): the script-dir stack moves only at top-level script
+// boundaries — filter script load (`filter.rs`), shortcode script load and
+// shortcode handler invocation (`shortcode.rs`). Loaders — `require`,
+// `dofile`, `loadfile` — never move it. A loader that needs the location of
+// the file it is currently executing tracks that privately (see
+// `REQUIRE_DIR_STACK_KEY`); it must not publish it through this stack,
+// because `quarto.utils.resolve_path`, `quarto.doc` dependency resolution,
+// and the WASM `dofile`/`loadfile` overrides all define "current path" as
+// *the innermost running script's directory*, exactly as Quarto 1's
+// `scriptFile` stack does (quarto-cli `init.lua:167-186`).
+//
+// Corollary: at rest — no script executing — the stack holds exactly the
+// load-time entries of the states that keep their script for their
+// lifetime (the per-filter state's single entry). The shared shortcode
+// state balances every push with a pop (`ScriptDirGuard`), so entries
+// from one extension never linger while another runs (bd-9xa0yui7).
 // =========================================================================
 
 /// Initialize the script-dir stack in the Lua state.
@@ -339,6 +357,27 @@ pub fn push_script_dir(lua: &Lua, dir: &str) -> Result<()> {
     let len = stack.raw_len();
     stack.set(len + 1, dir)?;
     Ok(())
+}
+
+/// RAII guard that pops the script-dir stack when dropped, so a push is
+/// balanced on every exit path (early `?` returns, errors, panics). Obtain
+/// via [`push_script_dir_scoped`]. Owns a cheap clone of the `Lua` handle
+/// so it can outlive borrows of the caller's fields.
+pub struct ScriptDirGuard {
+    lua: Lua,
+}
+
+impl Drop for ScriptDirGuard {
+    fn drop(&mut self) {
+        let _ = pop_script_dir(&self.lua);
+    }
+}
+
+/// Push a directory onto the script-dir stack for the lifetime of the
+/// returned guard.
+pub fn push_script_dir_scoped(lua: &Lua, dir: &str) -> Result<ScriptDirGuard> {
+    push_script_dir(lua, dir)?;
+    Ok(ScriptDirGuard { lua: lua.clone() })
 }
 
 /// Pop the top entry from the script-dir stack.
