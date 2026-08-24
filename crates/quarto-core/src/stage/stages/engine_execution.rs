@@ -617,7 +617,30 @@ impl PipelineStage for EngineExecutionStage {
                     None, // file_id
                 )
                 .map_err(|diagnostics| {
-                    PipelineError::stage_error_with_diagnostics(self.name(), diagnostics)
+                    // bd-render-failure-unattributed-yxe0v7th shape 1:
+                    // these spans index into `result.markdown`, NOT into the
+                    // original document. Returning a bare `StageError` here
+                    // drops the only context that gives them meaning, and
+                    // `run_pipeline`'s generic `StageError -> QuartoError::Parse`
+                    // conversion then rebinds `FileId(0)` to the *source*
+                    // document's bytes. Engine output is normally much larger
+                    // than its source, so the offset lands past EOF and the
+                    // renderer emits neither an ariadne frame nor its
+                    // `at <file>:<row>:<col>` fallback — the page dies with no
+                    // attribution at all. When the source happens to be long
+                    // enough, the offset instead resolves to arbitrary
+                    // unrelated text and is reported with full confidence.
+                    //
+                    // So bind the spans here, to the buffer they actually
+                    // index, and hand back a `Structured` error that
+                    // `run_pipeline` passes through untouched.
+                    let mut source_context = quarto_source_map::SourceContext::new();
+                    source_context
+                        .add_file(intermediate_name.clone(), Some(result.markdown.clone()));
+                    PipelineError::Structured(crate::error::ParseError::new(
+                        diagnostics,
+                        source_context,
+                    ))
                 })?;
 
             // Register this engine's intermediate as a new file slot, using
@@ -979,6 +1002,177 @@ mod tests {
             warnings,
             recorded_includes: Vec::new(),
         }
+    }
+
+    /// bd-render-failure-unattributed-yxe0v7th, shape 1.
+    ///
+    /// An engine whose *output* fails to parse. The parse runs against
+    /// `result.markdown` (the engine's executed markdown), so the resulting
+    /// diagnostic spans index into that buffer — NOT into the original
+    /// `.qmd`. The stage must therefore hand back an error that carries the
+    /// engine output as its `SourceContext`.
+    ///
+    /// Revert binding: change the `map_err` on the `read` of
+    /// `result.markdown` back to `PipelineError::stage_error_with_diagnostics`
+    /// and this test reds — the error becomes a bare `StageError` with no
+    /// context, and `run_pipeline`'s generic conversion then rebinds the
+    /// spans to the original document's bytes (past EOF → no frame at all;
+    /// inside EOF → a confident frame at an arbitrary wrong location).
+    struct FaultyOutputEngine;
+
+    impl ExecutionEngine for FaultyOutputEngine {
+        fn name(&self) -> &str {
+            "faulty"
+        }
+        fn execute(
+            &self,
+            _input: &str,
+            _ctx: &ExecutionContext,
+        ) -> Result<crate::engine::ExecuteResult, crate::engine::ExecutionError> {
+            // Deliberately longer than the source document, so a span into
+            // this buffer lands past the end of the `.qmd` — the shape the
+            // strand reports.
+            let mut markdown = String::from("---\ntitle: Test\n---\n\n");
+            for _ in 0..40 {
+                markdown.push_str("Engine-produced filler paragraph.\n\n");
+            }
+            markdown.push_str("{{< fa envelope size=1x >}}\n");
+            Ok(crate::engine::ExecuteResult::new(markdown))
+        }
+        fn is_available(&self) -> bool {
+            true
+        }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "faulty" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
+        }
+    }
+
+    fn faulty_engine_context(input: &str) -> StageContext {
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectContext};
+
+        let mut reg = EngineRegistry::new();
+        reg.register(Arc::new(FaultyOutputEngine));
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            registry: Arc::new(reg),
+            is_single_file: true,
+            output_dir: PathBuf::from("/project"),
+            ..Default::default()
+        };
+        StageContext::new(
+            Arc::new(MockRuntime),
+            Format::html(),
+            project,
+            DocumentInfo::from_path(input),
+        )
+        .unwrap()
+    }
+
+    /// The failure must arrive as `PipelineError::Structured`, carrying a
+    /// `SourceContext` in which the diagnostic's span resolves.
+    #[tokio::test]
+    async fn engine_output_parse_error_carries_its_own_source_context() {
+        let stage = EngineExecutionStage::new();
+        let mut ctx = faulty_engine_context("/project/test.qmd");
+
+        let content = b"---\ntitle: Test\n---\n\n```{faulty}\nx\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        let err = stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect_err("engine output has an unparseable shortcode");
+
+        let PipelineError::Structured(parse_error) = err else {
+            panic!("expected PipelineError::Structured, got {:?}", err);
+        };
+
+        let diagnostic = parse_error
+            .diagnostics
+            .first()
+            .expect("a parse diagnostic should be present");
+        let location = diagnostic
+            .location
+            .as_ref()
+            .expect("the parse diagnostic should carry a span");
+
+        // The span must resolve to a real file in the attached context.
+        // `map_offset` takes an offset *relative* to the SourceInfo, so 0 is
+        // the start of the span — this is the same call the ariadne renderer
+        // makes to decide whether it can draw a frame at all.
+        let mapped = location
+            .map_offset(0, &parse_error.source_context)
+            .expect("span must resolve in the attached source context");
+        let file = parse_error
+            .source_context
+            .get_file(mapped.file_id)
+            .expect("resolved file id must exist in the attached context");
+
+        assert_eq!(
+            file.path, "/project/test.faulty.rmarkdown",
+            "the span belongs to the engine intermediate, so that is what \
+             must be named"
+        );
+    }
+
+    /// The registered content must be the *engine output*, and the span must
+    /// fall inside it. This is the assertion that fails loudly for the
+    /// wrong-frame face of the bug: binding these offsets to the original
+    /// `.qmd` puts them past its end (or, for a long document, over
+    /// unrelated text).
+    #[tokio::test]
+    async fn engine_output_parse_error_span_is_in_range_for_engine_output() {
+        let stage = EngineExecutionStage::new();
+        let mut ctx = faulty_engine_context("/project/test.qmd");
+
+        let content = b"---\ntitle: Test\n---\n\n```{faulty}\nx\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        let err = stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect_err("engine output has an unparseable shortcode");
+
+        let PipelineError::Structured(parse_error) = err else {
+            panic!("expected PipelineError::Structured, got {:?}", err);
+        };
+
+        let diagnostic = &parse_error.diagnostics[0];
+        let location = diagnostic.location.as_ref().unwrap();
+        let mapped = location.map_offset(0, &parse_error.source_context).unwrap();
+        let file = parse_error.source_context.get_file(mapped.file_id).unwrap();
+        let registered = file
+            .content
+            .as_ref()
+            .expect("the intermediate must be registered WITH its content");
+
+        assert!(
+            registered.contains("Engine-produced filler paragraph."),
+            "registered content must be the engine output, not the source \
+             document"
+        );
+        assert!(
+            location.start_offset() < registered.len(),
+            "span offset {} must fall inside the {}-byte engine output",
+            location.start_offset(),
+            registered.len()
+        );
+        assert!(
+            location.start_offset() >= content.len(),
+            "sanity: this span is past the end of the {}-byte source \
+             document, which is exactly why binding it there loses the frame",
+            content.len()
+        );
     }
 
     #[test]

@@ -38,7 +38,7 @@ fn write_file(path: &Path, contents: &str) {
 /// Strip ANSI escape sequences (CSI color codes and OSC-8 hyperlinks)
 /// so assertions can match the plain text of ariadne-rendered
 /// snippets, which interleave color codes inside highlighted spans.
-fn strip_ansi(s: &str) -> String {
+pub fn strip_ansi(s: &str) -> String {
     let mut out = String::new();
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
