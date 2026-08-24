@@ -13,6 +13,7 @@ use hashlink::LinkedHashMap;
 use quarto_source_map::SourceInfo;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
+use super::text_helpers::extract_quoted_text;
 
 // Helper function to process shortcode_naked_string and shortcode_name nodes
 pub fn process_shortcode_string_arg(
@@ -25,6 +26,37 @@ pub fn process_shortcode_string_arg(
     let range =
         crate::pandoc::location::source_info_to_qsm_range_or_fallback(&source_info, context);
     PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(id), range)
+}
+
+/// Process a `shortcode_naked_string` node, applying CommonMark
+/// backslash-escape semantics.
+///
+/// Unlike [`process_shortcode_string_arg`] (used for `shortcode_name`, which
+/// cannot contain a backslash), a naked argument may carry `\X` pairs since
+/// the token was widened to a blocklist — `\>` is the only way to write a
+/// literal `>`, which would otherwise close the shortcode.
+///
+/// Delegates to [`extract_quoted_text`], which already implements exactly this
+/// rule and is the same decoder `key_value_value` uses, so a naked value and a
+/// `key=value` value decode identically. Its quote-stripping cannot misfire
+/// here: the grammar forbids a naked token from *starting* with a quote, and
+/// stripping requires both ends to match.
+///
+/// Also reached by scanner-produced nodes — `_language_specifier_token`
+/// (`scanner.c:2159`) is aliased to this node kind — where it is a no-op,
+/// since that token's charset `[A-Za-z0-9_%.-]` contains no backslash.
+pub fn process_shortcode_naked_string(
+    node: &tree_sitter::Node,
+    input_bytes: &[u8],
+    context: &ASTContext,
+) -> PandocNativeIntermediate {
+    let raw = node.utf8_text(input_bytes).unwrap();
+    let (decoded, _content_source) =
+        extract_quoted_text(raw, context.current_file_id(), node.start_byte());
+    let source_info = node_source_info_with_context(node, context);
+    let range =
+        crate::pandoc::location::source_info_to_qsm_range_or_fallback(&source_info, context);
+    PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(decoded), range)
 }
 
 // Helper function to process shortcode_string nodes

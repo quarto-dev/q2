@@ -144,3 +144,117 @@ shortcode.txt 10: shortcodes can have line breaks (except in space before '>}}')
               (key_value_value
                 (shortcode_naked_string)))
             (shortcode_delimiter)))))
+================================================================================
+naked shortcode arg: backslash-escaped closing angle (bd-shortcode-escaped-gt-fatal-2u79bqp1)
+================================================================================
+{{< kbd \> >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_naked_string)
+            (shortcode_delimiter)))))
+
+================================================================================
+naked shortcode arg: non-ASCII symbol (bd-shortcode-naked-value-nonascii-47fzbmow)
+================================================================================
+{{< kbd → >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_naked_string)
+            (shortcode_delimiter)))))
+
+================================================================================
+naked shortcode arg: accented letter
+================================================================================
+{{< kbd é >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_naked_string)
+            (shortcode_delimiter)))))
+
+================================================================================
+naked shortcode arg: CJK
+================================================================================
+{{< kbd 日 >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_naked_string)
+            (shortcode_delimiter)))))
+
+================================================================================
+naked shortcode arg: asterisk
+================================================================================
+{{< kbd * >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_naked_string)
+            (shortcode_delimiter)))))
+
+================================================================================
+naked shortcode arg: pipe
+================================================================================
+{{< kbd | >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_naked_string)
+            (shortcode_delimiter)))))
+
+================================================================================
+naked shortcode arg: interior apostrophe is content, not a quote
+================================================================================
+{{< kbd don't >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_naked_string)
+            (shortcode_delimiter)))))
+
+================================================================================
+naked shortcode arg: key=value still splits, non-ASCII value
+================================================================================
+{{< kbd mac=Command-→ >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value
+                (shortcode_naked_string)))
+            (shortcode_delimiter)))))

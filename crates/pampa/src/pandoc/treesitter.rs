@@ -33,8 +33,8 @@ use crate::pandoc::treesitter_utils::postprocess::{merge_strs, postprocess};
 use crate::pandoc::treesitter_utils::quote_helpers::process_quoted;
 use crate::pandoc::treesitter_utils::section::process_section;
 use crate::pandoc::treesitter_utils::shortcode::{
-    process_shortcode, process_shortcode_number, process_shortcode_string,
-    process_shortcode_string_arg,
+    process_shortcode, process_shortcode_naked_string, process_shortcode_number,
+    process_shortcode_string, process_shortcode_string_arg,
 };
 use crate::pandoc::treesitter_utils::span_link_helpers::{
     process_content_node, process_pandoc_image, process_pandoc_span, process_target,
@@ -981,7 +981,7 @@ fn native_visitor<T: Write>(
         // Shortcode nodes
         "shortcode_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
         "shortcode_name" => process_shortcode_string_arg(node, input_bytes, context),
-        "shortcode_naked_string" => process_shortcode_string_arg(node, input_bytes, context),
+        "shortcode_naked_string" => process_shortcode_naked_string(node, input_bytes, context),
         "shortcode_string" => {
             // Extract the quoted text by getting the full node text and stripping quotes
             // The grammar uses anonymous rules (_commonmark_*_quote_string) so there are

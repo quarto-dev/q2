@@ -682,9 +682,21 @@ module.exports = grammar({
 
         shortcode_name: $ => token(prec(1, new RustRegex("[a-zA-Z_][a-zA-Z0-9_-]*"))),
 
-        // we want these to allow :, /, etc to make it possible to put URLs as naked strings
-        shortcode_naked_string: $ => 
-            choice(token(prec(1, /(?:[A-Za-z0-9_.~:/?#\]@!$%&()+,;-]|\[)+/)),
+        // Anything that is not whitespace, a shortcode/attr delimiter, or `=`
+        // (the key/value separator), plus `\`-escape pairs. Quotes are excluded
+        // only at the first character, where they would open a quoted string;
+        // interior apostrophes are content (`don't`). Deliberately a blocklist:
+        // an allowlist made every unenumerated character — all of Unicode
+        // included — a fatal parse error that dropped the whole document
+        // (bd-shortcode-escaped-gt-fatal-2u79bqp1, bd-shortcode-naked-value-nonascii-47fzbmow).
+        // `=` stays excluded: admitting it would make `a=b` ambiguous with the
+        // key/value production and could silently reinterpret existing
+        // shortcodes. Bare-`=` parity gap is bd-kx25ovmh.
+        // NOTE: this is not the only producer of `shortcode_naked_string` —
+        // the external `_language_specifier_token` (scanner.c:2159) is aliased
+        // to the same node kind and decides letter-initial arguments first.
+        shortcode_naked_string: $ =>
+            choice(token(prec(1, new RustRegex("(?:[^ \\t\\n\\r'\"<>{}=\\\\]|\\\\.)(?:[^ \\t\\n\\r<>{}=\\\\]|\\\\.)*"))),
                    token(prec(1, /(?:[A-Za-z0-9_.~:/?#\]@!$%&()+,;-]|\[)+[?](?:[A-Za-z0-9_.~:/?#\]@!%$&()+,;?=-]|\[)+/))),
 
         shortcode_string: $ => choice(

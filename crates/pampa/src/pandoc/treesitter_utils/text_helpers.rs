@@ -26,16 +26,14 @@ pub fn filter_delimiter_children(
 /// Strips surrounding `"..."` or `'...'` and applies CommonMark/Pandoc-style
 /// backslash escapes: `\X` collapses to `X` when `X` is ASCII punctuation,
 /// otherwise the backslash is preserved literally. Escape processing runs
-/// unconditionally, quoted or not — a bare value is unreachable-with-escapes
-/// today only because the grammar never hands one a backslash: the naked
-/// value token's charset (`tree-sitter-qmd`'s scanner, `[A-Za-z0-9_%.-]`)
-/// excludes `\`, and `title` — this function's only other caller — is always
-/// an alias of the quoted-string production. Shortcode strings never reach
-/// this function at all: the naked form is taken verbatim by
-/// `shortcode::process_shortcode_string_arg`, and the quoted form has its own
-/// ad hoc `\"`/`\'`-only unescaper in `treesitter.rs`. If a future grammar
-/// change ever lets `\` reach a bare value, it will be unescaped exactly like
-/// a quoted one, not passed through.
+/// unconditionally, quoted or not. Bare values reach this function from two
+/// places: attribute values, whose scanner token (`[A-Za-z0-9_%.-]`) still
+/// excludes `\`; and shortcode naked strings, whose token was widened to admit
+/// `\X` escape pairs (bd-shortcode-escaped-gt-fatal-2u79bqp1), which is why
+/// `shortcode::process_shortcode_naked_string` routes through here. The
+/// *quoted* shortcode form still has its own ad hoc `\"`/`\'`-only unescaper —
+/// the local closure at `treesitter.rs:997` — which is why a quoted argument
+/// and a naked one do not decode identically today (bd-5te3iryt).
 ///
 /// The returned [`SourceInfo`] maps *content* offsets of the returned
 /// `String` back to the source bytes they were decoded from, so a caller

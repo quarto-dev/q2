@@ -2229,43 +2229,47 @@ fn write_shortcode_string_value(s: &str, buf: &mut dyn std::io::Write) -> std::i
 }
 
 fn shortcode_string_needs_quoting(s: &str) -> bool {
-    if s.is_empty() {
-        return true;
-    }
+    let mut chars = s.chars();
+    let Some(first) = chars.next() else {
+        return true; // empty string: the parser would fail to match
+    };
     if shortcode_string_looks_like_number(s) {
         return true;
     }
-    !s.chars().all(is_shortcode_naked_char)
+    !is_shortcode_naked_first_char(first) || !chars.all(is_shortcode_naked_char)
 }
 
-/// Characters allowed in a `shortcode_naked_string` token. Mirrors the
-/// regex `[A-Za-z0-9_.~:/?#\]@!$%&()+,;-]|\[` from grammar.js. Whitespace,
-/// `>`, `<`, `{`, `}`, `'`, `"`, `\`, `*`, `=`, `^`, `|` are deliberately
-/// excluded.
+/// Characters allowed unquoted in a shortcode argument by the *writer*.
+///
+/// Mirrors the blocklist in grammar.js (`shortcode_naked_string`) with two
+/// deliberate narrowings, both in the safe direction — the writer quotes more
+/// than the parser strictly requires:
+///
+/// - `|` is excluded. The grammar accepts it, but this function has no
+///   positional context, and a bare `|` emitted inside a pipe-table cell
+///   splits the row on re-parse. The motivating repro is a table row.
+/// - Whitespace is tested with `is_ascii_whitespace`, matching the grammar's
+///   ASCII-only `[^ \t\n\r…]`. Non-ASCII whitespace is content, not
+///   whitespace, per claude-notes/plans/2026-04-30-unicode-whitespace-handling.md.
+///
+/// Non-ASCII is otherwise ordinary content. This was formerly an ASCII
+/// allowlist copied from RFC 3986's URI repertoire, which made every
+/// non-ASCII character — and `* ^ |` — a fatal parse error
+/// (bd-shortcode-escaped-gt-fatal-2u79bqp1,
+/// bd-shortcode-naked-value-nonascii-47fzbmow).
+///
+/// Note the grammar is not the only acceptor: for letter-initial values the
+/// external scanner token (`scanner.c:2159`, charset `[A-Za-z0-9_%.-]`) decides
+/// first. It is strictly narrower, so quoting decisions made here remain valid.
 fn is_shortcode_naked_char(c: char) -> bool {
-    c.is_ascii_alphanumeric()
-        || matches!(
-            c,
-            '_' | '.'
-                | '~'
-                | ':'
-                | '/'
-                | '?'
-                | '#'
-                | ']'
-                | '@'
-                | '!'
-                | '$'
-                | '%'
-                | '&'
-                | '('
-                | ')'
-                | '+'
-                | ','
-                | ';'
-                | '-'
-                | '['
-        )
+    !c.is_ascii_whitespace() && !matches!(c, '<' | '>' | '{' | '}' | '=' | '\\' | '|')
+}
+
+/// Characters allowed as the *first* character of a naked token. The grammar
+/// additionally forbids a leading quote there, since it would open a quoted
+/// string.
+fn is_shortcode_naked_first_char(c: char) -> bool {
+    is_shortcode_naked_char(c) && !matches!(c, '\'' | '"')
 }
 
 /// Mirrors the `shortcode_number` regex
@@ -2411,10 +2415,41 @@ mod shortcode_writer_tests {
     fn delimiter_chars_must_be_quoted() {
         assert!(shortcode_string_needs_quoting(">closing"));
         assert!(shortcode_string_needs_quoting("a>b"));
+        assert!(shortcode_string_needs_quoting("a<b"));
         assert!(shortcode_string_needs_quoting("{a}"));
-        assert!(shortcode_string_needs_quoting("a\"b"));
-        assert!(shortcode_string_needs_quoting("a'b"));
         assert!(shortcode_string_needs_quoting("a=b"));
+    }
+
+    #[test]
+    fn non_ascii_does_not_need_quoting() {
+        // Mirrors the widened grammar: non-ASCII is ordinary content.
+        assert!(!shortcode_string_needs_quoting("Command-\u{2192}"));
+        assert!(!shortcode_string_needs_quoting("\u{e9}"));
+        assert!(!shortcode_string_needs_quoting("\u{65e5}\u{672c}\u{8a9e}"));
+        assert!(!shortcode_string_needs_quoting("\u{2318}"));
+    }
+
+    #[test]
+    fn widened_punctuation_does_not_need_quoting() {
+        assert!(!shortcode_string_needs_quoting("*"));
+        assert!(!shortcode_string_needs_quoting("^"));
+    }
+
+    #[test]
+    fn pipe_still_needs_quoting_despite_the_grammar_accepting_it() {
+        // The grammar accepts a bare `|`, but the writer has no positional
+        // context and would emit it inside a pipe-table cell, splitting the
+        // row on re-parse. Quoting is always safe.
+        assert!(shortcode_string_needs_quoting("|"));
+        assert!(shortcode_string_needs_quoting("a|b"));
+    }
+
+    #[test]
+    fn leading_quote_needs_quoting_interior_does_not() {
+        // The grammar forbids a naked token from *starting* with a quote.
+        assert!(shortcode_string_needs_quoting("'leading"));
+        assert!(shortcode_string_needs_quoting("\"leading"));
+        assert!(!shortcode_string_needs_quoting("don't"));
     }
 
     #[test]
