@@ -48,6 +48,7 @@ pub mod language_pipeline;
 pub mod language_resolve;
 pub mod link_rewriting_pipeline;
 pub mod listing_glob_resolution;
+pub mod listing_inline_records;
 pub mod listing_pipeline;
 pub mod llms_txt;
 pub mod marimo_engine_e2e;
