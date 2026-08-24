@@ -3,7 +3,7 @@
 **Date:** 2026-08-21
 **Braid:** bd-ersobfbt
 **Branch:** `main` @ `587721bb` (investigated in the main checkout; no worktree created)
-**Status:** Design aligned 2026-08-24 (all 8 questions resolved by Carlos). Awaiting implementation go-ahead + branch decision.
+**Status:** Implementation in progress on topic branch `braid/bd-ersobfbt-headroom-fixed-top` (off `main` @ `587721bb`; investigation commits included). Started 2026-08-24.
 
 Reference material collected during the investigation:
 `claude-notes/plans/headroom-fixed-top-investigation/q1-headroom-reference.md`
@@ -212,58 +212,100 @@ iframe. Option B is the better design in a vacuum; it is a different strand
 ("replace Q1's fixed-header layout") and should be argued on its own.
 This is question 1 below.
 
-## Proposed phases (draft)
+## Work items
 
-Skeleton only — contents wait on the design discussion.
+### Phase 0 — Tests first (TDD; each written, run, and confirmed failing before its implementation lands)
 
-- **Phase 0 — Tests first (TDD).**
-  - Native: flip the three absence pins (`template.rs` "static header"
-    tests, `render_html.rs:2961` `quartoToggleHeadroom`, the body-classes
-    tests) into presence pins; add a `HeadroomJsStage` unit test in the
-    `bootstrap_js.rs` style (predicate on/off, artifact key, path layout);
-    one `secondary_nav_pipeline.rs`-style end-to-end test asserting
-    `<header id="quarto-header" class="headroom fixed-top">`,
-    `body.nav-fixed`, and the two `<script>` tags in a real project render;
-    a `pinned: true` test asserting headroom.min.js is *omitted* but
-    quarto-nav.js is not.
-  - SCSS: a `quarto-sass` compile test asserting `body.nav-fixed` gets a
-    non-zero `padding-top` and that `header.headroom--unpinned` has a
-    `transform` (the cliff guard: fixed-top without compensation).
-  - Preview: a `q2-preview` integration test (vitest, jsdom) that the
-    header wrapper exists, that `Headroom` is constructed once and survives
-    an `UPDATE_AST` re-post, and that `body.nav-fixed` arrives via
-    `rendered.navigation.body-classes`.
-- **Phase 1 — Native render.** Vendor `resources/js/headroom/headroom.min.js`
-  (v0.12.0, MIT, update `resources/js/README.md`) and
-  `resources/js/quarto-nav/quarto-nav.js`; `HeadroomJsStage` registering
-  `js:quarto-nav:headroom` + `js:quarto-nav:nav` (keys sort after
-  `js:bootstrap`, `js:clipboard`, `js:code-copy-init`; the sort-order caveat
-  in `bootstrap_js.rs` docs applies); predicate = website with navbar or
-  sidebar; headroom file gated on `!navbar.pinned && !any(sidebar.pinned)`.
-  Template: `class="headroom fixed-top"` on the partial;
-  `nav-fixed` appended to `rendered.navigation.body-classes` when the
-  header holds a `nav.navbar` (Q1's selector, `website-navigation.ts:546`).
-  `render_html.rs`: add the guarded `onclick` to the navbar toggler, the
-  secondary-nav toggle and title link. SCSS: port `quarto-nav.scss:1-33`,
-  `100-114`, `727-732`, `820-824`, and the print `.fixed-top` rule (and
-  delete the `_bootstrap-rules.scss:457` note).
-- **Phase 2 — Preview.** Add the React-owned `<header id="quarto-header">`
-  wrapper to `PreviewDocument.tsx` (mirroring `template.rs:274-277`
-  conditions, incl. `.quarto-banner`; closes bd-2yd37vuk); lift the
-  `cfg(not(wasm32))` on `SecondaryNavRenderTransform` and add a
-  `SecondaryNavSlot` (decision 4); inject headroom + quarto-nav `?raw` in
-  `entry.tsx` next to Bootstrap (decision 2); no edit-mode special-casing
-  (decision 3); verify scroll-sync and edit overlays under a fixed header
-  end-to-end in a browser.
-- **Phase 3 — `pinned:` docs + schema.** `docs/` user-facing page for
-  `website: navbar: pinned` / `sidebar: pinned` (the fields already parse);
-  confirm the YAML schema lists them.
-- **Phase 4 — Cleanup.** Rewrite the stale "reinitializes its iframe"
-  rationale in `pipeline.rs:1375-1383` and `bootstrap_js.rs` module docs;
-  re-evaluate whether `BootstrapJsStage`'s wasm gate still has a reason
-  (it does: the preview injects the bundle itself — but the *reason* text
-  is wrong). Update `title_banner.rs` / `template.rs` docs that describe the
-  header as static. Link bd-e7b7 as related and comment on its description.
+- [ ] N1 `template.rs` partial tests: header emits `class="headroom fixed-top"`;
+      banner mode composes `class="headroom fixed-top quarto-banner"` (flips the
+      exact-string pin at `template.rs:2610`).
+- [ ] N2 `template.rs` body-class tests (accumulating list, decision 7b):
+      rendered navbar present → `nav-fixed` appended after the structural
+      class; navbar+sidebar → `nav-sidebar floating nav-fixed quarto-light`;
+      no navbar → unchanged; user-supplied `body-classes` still wins whole.
+- [ ] N3 `render_html.rs`: navbar toggler + secondary-nav toggle + secondary-nav
+      title link carry `onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }"`
+      (flips the absence pin at `render_html.rs:2961-2969`).
+- [ ] N4 `transforms/quarto_nav_js.rs` unit tests: website+navbar → both
+      artifacts (`js:quarto-nav:headroom`, `js:quarto-nav:nav`); `pinned: true`
+      navbar → headroom omitted, nav kept; any pinned sidebar → same; no
+      navbar/sidebar → nothing; non-website → nothing.
+- [ ] N5 `quarto-sass` compile tests: `body.nav-fixed` gets non-zero
+      `padding-top`; `header.headroom--unpinned` has `transform:translateY(-100%)`;
+      print block gains `.fixed-top{position:relative}` (updates the deliberate-
+      absence comment at `compile.rs:1002-1007`).
+- [ ] N6 `quarto-core` integration test (website fixture, real ProjectPipeline):
+      header classes present, `body.nav-fixed` present, both `<script>` tags
+      under `site_libs/`, headroom script absent under `pinned: true`.
+- [ ] P1 preview vitest: `PreviewDocument` wraps navbar (+ secondary nav) in a
+      React-owned `<header id="quarto-header">` matching `template.rs`
+      conditions; `document.body` gains `nav-fixed` when navbar HTML present.
+- [ ] P2 preview vitest: header element identity is stable across an
+      `UPDATE_AST` re-post (Headroom's binding survives chrome churn).
+
+### Phase 1 — Native render
+
+- [ ] Vendor `resources/js/headroom/headroom.min.js` (v0.12.0, from
+      `old-docs/_site/site_libs/quarto-nav/`; version-contract note in
+      `resources/js/README.md`).
+- [ ] Write `resources/js/quarto-nav/quarto-nav.js` — ~60-line port of Q1's
+      header machinery (headerOffset, updateDocumentOffset, Headroom init +
+      `quartoToggleHeadroom`, hashchange compensation, ResizeObserver, 250ms
+      initial measure). Documented deviations: no `.headroom-target`
+      (no q2 producer), no footer/dashboard offsets, no `quarto-hrChanged`
+      (no consumer). DOMContentLoaded-guarded so script order is irrelevant.
+- [ ] `QuartoNavJsTransform` (`transforms/quarto_nav_js.rs`,
+      `cfg(not(wasm32))`, Navigation phase, `ProjectKind::Website` gate,
+      reads `navigation.navbar`/`navigation.sidebar` + `pinned`); register in
+      `pipeline.rs`; registration test.
+- [ ] Template: add `headroom fixed-top` to `QUARTO_HEADER_PARTIAL`; refactor
+      the body-class merge (`template.rs:903-924`) into an accumulating list
+      with `nav-fixed` pushed when `rendered.navigation.navbar` is non-empty.
+- [ ] `render_html.rs`: the three guarded `onclick` hooks.
+- [ ] SCSS: one fenced block "fixed-top header (bd-ersobfbt; replaced by
+      bd-pt1wxeq2)" — headroom transition/transform rules, `body.nav-fixed`
+      padding, `.notransition`, print `.fixed-top{position:relative}`;
+      `navbar-default-offset()` map in `_bootstrap-functions.scss`.
+- [ ] Re-run snapshots/goldens; **measure and report churn to Carlos**
+      (count + summary + surprises), incl.
+      `phase5-single-doc-baseline/expected_hashes.txt`.
+- [ ] End-to-end verification: `cargo run --bin q2 -- render` a website
+      fixture; inspect output HTML (record invocation + snippet in plan).
+
+### Phase 2 — Preview
+
+- [ ] React-owned `<header id="quarto-header">` wrapper in
+      `PreviewDocument.tsx` (conditions mirror `template.rs:274-278`;
+      `headroom fixed-top` + banner class; closes bd-2yd37vuk).
+- [ ] Lift `cfg(not(wasm32))` on `SecondaryNavRenderTransform`
+      (`pipeline.rs:1373-1379`); add `SecondaryNavSlot` to chromeSlots +
+      PreviewDocument; update the transform's module docs.
+- [ ] `nav-fixed` in `PreviewDocument.tsx` body-class computation (mirror of
+      the Rust accumulating list).
+- [ ] Inject `headroom.min.js` + `quarto-nav.js` `?raw` at `entry.tsx` module
+      top (idempotent, `data-q2-*` markers, F.1 pattern).
+- [ ] `npm run build:all` green; `npm run test:ci` green.
+- [ ] End-to-end browser verification (`q2 preview` after full WASM rebuild
+      chain, per CLAUDE.md §Verifying Rust changes in q2 preview): scroll
+      pin/unpin works, no overlap, scroll-sync + edit overlays sane. Record
+      in plan.
+
+### Phase 3 — `pinned:` docs + schema
+
+- [ ] `docs/` page(s) for `website: navbar: pinned` / `sidebar: pinned`;
+      confirm YAML schema coverage; render docs/ with q2.
+
+### Phase 4 — Cleanup + bookkeeping
+
+- [ ] Rewrite stale iframe-reinit rationale: `pipeline.rs:1372-1383`,
+      `bootstrap_js.rs:47-56`, `clipboard_js.rs:41-51`,
+      `secondary_nav_render.rs:35-49`.
+- [ ] Update header-is-static docs: `template.rs:616-666` partial doc,
+      `title_banner.rs` module doc if stale.
+- [ ] Stale template.rs line refs in `PreviewDocument.tsx` comments.
+- [ ] Close bd-2yd37vuk (with the Phase 2 commit); braid comments on
+      bd-ersobfbt at each phase boundary.
+- [ ] Full `cargo xtask verify` (WASM leg affected) before hand-off.
 
 ## Resolved decisions (Carlos, 2026-08-24)
 
