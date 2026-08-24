@@ -186,9 +186,14 @@ pub fn page_footer_to_html(footer: &PageFooter) -> String {
     html.push_str("  <div class=\"container-fluid\">\n");
     html.push_str("    <div class=\"nav-footer\">\n");
 
-    render_footer_region(&mut html, "nav-footer-left", &footer.left);
-    render_footer_region(&mut html, "nav-footer-center", &footer.center);
-    render_footer_region(&mut html, "nav-footer-right", &footer.right);
+    render_footer_region(&mut html, "nav-footer-left", &footer.left, None);
+    render_footer_region(
+        &mut html,
+        "nav-footer-center",
+        &footer.center,
+        footer.center_append.as_deref(),
+    );
+    render_footer_region(&mut html, "nav-footer-right", &footer.right, None);
 
     html.push_str("    </div>\n");
     html.push_str("  </div>\n");
@@ -453,6 +458,59 @@ pub fn page_navigation_to_html(page_nav: &PageNavigation) -> String {
     render_page_nav_side(&mut html, "previous", page_nav.prev.as_ref());
     render_page_nav_side(&mut html, "next", page_nav.next.as_ref());
     html.push_str("</nav>\n");
+    html
+}
+
+/// Render the repository-action links as Q1's `.toc-actions` block.
+///
+/// `extra_classes` are appended to the wrapper's class list — the
+/// footer copy carries `d-sm-block d-md-none` so it is the
+/// small-screen fallback for the TOC copy.
+///
+/// Link text is emitted **unescaped**: it comes from the language
+/// terms, and Q1 assigns it via `a.innerHTML`. q2's own
+/// `toc_block_html` interpolates the `toc-title` term the same way.
+/// URLs and classes are escaped.
+///
+/// Returns an empty string for an empty link list, so callers can
+/// store the result unconditionally and gate on emptiness.
+pub fn repo_actions_to_html(
+    links: &[crate::repo_actions::RepoActionLink],
+    extra_classes: &[&str],
+    link_target: Option<&str>,
+    link_rel: Option<&str>,
+) -> String {
+    if links.is_empty() {
+        return String::new();
+    }
+
+    let mut class = String::from("toc-actions");
+    for extra in extra_classes {
+        class.push(' ');
+        class.push_str(extra);
+    }
+
+    let mut html = format!("<div class=\"{}\"><ul>", escape_attr(&class));
+    for link in links {
+        html.push_str("<li><a href=\"");
+        html.push_str(&escape_attr(&link.url));
+        html.push('"');
+        if let Some(target) = link_target {
+            html.push_str(&format!(" target=\"{}\"", escape_attr(target)));
+        }
+        if let Some(rel) = link_rel {
+            html.push_str(&format!(" rel=\"{}\"", escape_attr(rel)));
+        }
+        html.push_str(" class=\"toc-action\"><i class=\"bi ");
+        match link.icon.as_deref() {
+            Some(icon) => html.push_str(&format!("bi-{icon}")),
+            None => html.push_str("empty"),
+        }
+        html.push_str("\"></i>");
+        html.push_str(&link.text);
+        html.push_str("</a></li>");
+    }
+    html.push_str("</ul></div>");
     html
 }
 
@@ -860,34 +918,32 @@ fn link_attrs(item: &NavigationItem) -> Vec<String> {
     attrs
 }
 
-fn render_footer_region(html: &mut String, class: &str, region: &FooterRegion) {
-    match region {
-        FooterRegion::Empty => {
-            // Emit an empty div so flex positioning stays consistent with
-            // themes that expect three regions.
-            html.push_str(&format!("    <div class=\"{}\"></div>\n", class));
-        }
-        FooterRegion::Text(cv) => {
-            html.push_str(&format!(
-                "    <div class=\"{}\">{}</div>\n",
-                class,
-                render_text(cv)
-            ));
-        }
+fn render_footer_region(
+    html: &mut String,
+    class: &str,
+    region: &FooterRegion,
+    append: Option<&str>,
+) {
+    let inner = match region {
+        FooterRegion::Empty => String::new(),
+        FooterRegion::Text(cv) => render_text(cv),
         FooterRegion::Items(items) => {
             // `.footer-items` is the class Quarto 1's SCSS targets for
-            // inline-flex alignment of links within a region. Including it
-            // on the `ul` keeps us compatible with that styling without
-            // wrapping the items in an extra element.
-            html.push_str(&format!("    <div class=\"{}\">\n", class));
-            html.push_str("      <ul class=\"nav footer-items\">\n");
+            // inline-flex alignment of links within a region.
+            let mut s = String::from("\n      <ul class=\"nav footer-items\">\n");
             for item in items {
-                html.push_str(&render_footer_item(item, 8));
+                s.push_str(&render_footer_item(item, 8));
             }
-            html.push_str("      </ul>\n");
-            html.push_str("    </div>\n");
+            s.push_str("      </ul>\n    ");
+            s
         }
-    }
+    };
+    html.push_str(&format!(
+        "    <div class=\"{}\">{}{}</div>\n",
+        class,
+        inner,
+        append.unwrap_or("")
+    ));
 }
 
 fn render_footer_item(item: &NavigationItem, indent: usize) -> String {
@@ -1906,6 +1962,50 @@ mod tests {
         assert!(html.contains("border-top: none"));
     }
 
+    #[test]
+    fn center_append_lands_inside_the_center_region() {
+        let footer = PageFooter {
+            center_append: Some("<div class=\"toc-actions\">X</div>".to_string()),
+            ..PageFooter::default()
+        };
+        let html = page_footer_to_html(&footer);
+        assert!(
+            html.contains(
+                "<div class=\"nav-footer-center\"><div class=\"toc-actions\">X</div></div>"
+            )
+        );
+    }
+
+    #[test]
+    fn center_append_follows_existing_center_text() {
+        let footer = PageFooter {
+            center: FooterRegion::Text(ConfigValue::new_string(
+                "Positron 1.0",
+                quarto_source_map::SourceInfo::for_test(),
+            )),
+            center_append: Some("<div class=\"toc-actions\">X</div>".to_string()),
+            ..PageFooter::default()
+        };
+        let html = page_footer_to_html(&footer);
+        let center = html
+            .split("<div class=\"nav-footer-center\">")
+            .nth(1)
+            .expect("center region");
+        let text_at = center.find("Positron 1.0").expect("existing text");
+        let actions_at = center.find("toc-actions").expect("appended actions");
+        assert!(
+            text_at < actions_at,
+            "actions must follow the configured text"
+        );
+    }
+
+    #[test]
+    fn center_append_absent_leaves_output_unchanged() {
+        let footer = PageFooter::default();
+        let html = page_footer_to_html(&footer);
+        assert!(html.contains("<div class=\"nav-footer-center\"></div>"));
+    }
+
     // --- href-less footer items (bd-page-footer-items-f4th80mj) -----
 
     /// Defect 5 — an item with `text:` but no `href:` renders its label
@@ -2780,6 +2880,74 @@ mod tests {
             "href escaped; got {}",
             html
         );
+    }
+
+    // --- repo_actions_to_html (bd-repo-actions-missing-99ezd2fe) --------
+
+    fn action(text: &str, url: &str, icon: Option<&str>) -> crate::repo_actions::RepoActionLink {
+        crate::repo_actions::RepoActionLink {
+            text: text.to_string(),
+            url: url.to_string(),
+            icon: icon.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn repo_actions_html_matches_q1_shape() {
+        let links = vec![
+            action(
+                "Edit this page",
+                "https://github.com/e/d/edit/main/index.qmd",
+                Some("github"),
+            ),
+            action(
+                "View source",
+                "https://github.com/e/d/blob/main/index.qmd",
+                None,
+            ),
+        ];
+        let html = repo_actions_to_html(&links, &[], None, None);
+        assert_eq!(
+            html,
+            "<div class=\"toc-actions\"><ul>\
+             <li><a href=\"https://github.com/e/d/edit/main/index.qmd\" class=\"toc-action\">\
+             <i class=\"bi bi-github\"></i>Edit this page</a></li>\
+             <li><a href=\"https://github.com/e/d/blob/main/index.qmd\" class=\"toc-action\">\
+             <i class=\"bi empty\"></i>View source</a></li>\
+             </ul></div>"
+        );
+    }
+
+    #[test]
+    fn repo_actions_html_applies_extra_classes() {
+        let links = vec![action("Edit this page", "https://x/e", Some("github"))];
+        let html = repo_actions_to_html(&links, &["d-sm-block", "d-md-none"], None, None);
+        assert!(html.starts_with("<div class=\"toc-actions d-sm-block d-md-none\">"));
+    }
+
+    #[test]
+    fn repo_actions_html_emits_target_and_rel() {
+        let links = vec![action("Edit this page", "https://x/e", None)];
+        let html = repo_actions_to_html(&links, &[], Some("_blank"), Some("noopener"));
+        assert!(html.contains(
+            "href=\"https://x/e\" target=\"_blank\" rel=\"noopener\" class=\"toc-action\""
+        ));
+    }
+
+    #[test]
+    fn repo_actions_html_escapes_the_url() {
+        let links = vec![action("Edit", "https://x/a\"b", None)];
+        let html = repo_actions_to_html(&links, &[], None, None);
+        assert!(
+            html.contains("href=\"https://x/a&quot;b\""),
+            "the escaped form must actually appear in the href"
+        );
+        assert!(!html.contains("a\"b"), "quote must be escaped in the href");
+    }
+
+    #[test]
+    fn repo_actions_html_is_empty_for_no_links() {
+        assert_eq!(repo_actions_to_html(&[], &["d-md-none"], None, None), "");
     }
 }
 

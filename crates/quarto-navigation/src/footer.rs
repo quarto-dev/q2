@@ -149,6 +149,15 @@ pub struct PageFooter {
     pub border: FooterBorder,
     pub background: Option<String>,
     pub foreground: Option<String>,
+    /// Raw HTML appended inside `.nav-footer-center`, after that
+    /// region's own content.
+    ///
+    /// Not parsed from YAML — `from_config_value` always leaves this
+    /// `None`. Populated only by `quarto-core`'s
+    /// `FooterRenderTransform` from the repo-actions transform's
+    /// output, mirroring Q1's DOM append into `.nav-footer-center`
+    /// (`website-navigation.ts:698`).
+    pub center_append: Option<String>,
 }
 
 impl PageFooter {
