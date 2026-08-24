@@ -69,6 +69,15 @@ describe('canonicalize — inline whitespace is significant', () => {
     expect(canonicalize(p)).toBe(canonicalize(el('<p>hi there</p>')));
     expect(p.childNodes.length).toBe(3); // input not mutated
   });
+
+  it('treats label/input (task items) and button/svg (code-copy scaffold) as inline neighbours', () => {
+    // <label><input …/> text</label> is how the writer renders task items (html.rs ~L1347).
+    const spaced = canonicalize(el('<li><label><input type="checkbox"> Do it</label></li>'));
+    const tight = canonicalize(el('<li><label><input type="checkbox">Do it</label></li>'));
+    expect(spaced).not.toBe(tight);
+    expect(spaced).toContain('" Do it"');
+    expect(canonicalize(el('<p>x <button>c</button></p>'))).toContain('"x "');
+  });
 });
 
 describe('PARITY_RULES', () => {

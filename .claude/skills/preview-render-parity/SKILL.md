@@ -41,6 +41,17 @@ User says any of:
 
 ## Diagnosis workflow
 
+### 0. Reproduce with the harness first
+
+Before opening Chrome, try to reproduce the divergence with the automated parity runner — it's faster to iterate on and gives you a normalised text diff instead of manual DOM inspection:
+
+1. Write a minimal fixture under `crates/quarto/tests/smoke-all/q2-preview/` (or find an existing one that already shows the symptom).
+2. Add `dom-parity: true` under its `_quarto.tests.html` block.
+3. Run it in isolation: `cd hub-client && SMOKE_FILTER=<fixture-name> npm run test:wasm -- --reporter=verbose`.
+4. Read the normalised output at `hub-client/test-results/parity/<fixture-path-with-__>/{render,preview}.norm.txt` — the diff between these two files usually points straight at the divergent tag/attribute/class.
+
+Reach for Chrome (steps 1-6 below) only when the symptom is a **computed-style** mismatch (margins, colors, layout) that the harness's DOM-only comparison can't see, or when the harness can't reproduce it at all. See `claude-notes/instructions/testing.md` § "4. Preview ↔ render DOM parity" for the runner's full contract (normalisation rules, opt-in policy, known open divergences).
+
 ### 1. Locate the element on both pages
 
 Open both URLs in Chrome via the MCP. Use `mcp__plugin_chrome-devtools-mcp_chrome-devtools__select_page` to switch between them.
@@ -137,7 +148,7 @@ Pipeline stages: `crates/quarto-core/src/stage/stages/<stage>.rs` + the q2-previ
 ```bash
 braid create "q2 preview: <one-line symptom>" \
   -t bug -p 2 \
-  --deps "parent-child:bd-kw93" \
+  -l preview-parity \
   -d "$(cat <<EOF
 <symptom — what the user sees>
 
@@ -151,12 +162,14 @@ EOF
 )"
 # braid prints the new strand id on stdout. Capture it as <id>.
 braid update <id> --status in_progress
-git switch -c braid/<id>-<short-slug>
+git switch -c braid/<id>-<short-slug> main
 ```
 
-bd-kw93 is the q2-preview epic; every parity sub-strand is parent-child to it. (The git branch prefix is `braid/` — a plain git namespace, renamed from the historical `beads/` in bd-yjh1y117.)
+Parity strands branch off `main` directly and carry the `preview-parity` label (no parent-child epic dependency — the former parent epic, bd-kw93, is closed and its branch merged via PR #214). (The git branch prefix is `braid/` — a plain git namespace, renamed from the historical `beads/` in bd-yjh1y117.)
 
 ### Write the failing test FIRST
+
+**Prefer the parity harness's `dom-parity: true` opt-in as the regression test** whenever the fixture from step 0 can be made minimal — it exercises the real render and preview pipelines end-to-end (not a hand-mounted AST fragment) and stays green forever once the fix lands, with no separate assertion to keep in sync. Add/reuse the fixture under `crates/quarto/tests/smoke-all/q2-preview/`, confirm it fails RED before the fix (the parity diff should name the divergent tag/attribute/class), then implement. Fall back to one of the three surfaces below only when the symptom can't be captured as a minimal fixture (e.g. it needs SPA-level state, or a pipeline-stage inclusion check with no DOM to compare).
 
 Three test surfaces, pick the right one:
 
@@ -220,15 +233,12 @@ braid close <id> --reason "Fixed: <one-line>"
 git add <component> <test>
 git commit -m "...(bd-<id>)"
 
-# Merge --no-ff into the integration branch
-git switch feature/q2-preview-command
-git merge --no-ff braid/<id>-<slug> -m "Merge bd-<id>: <one-line>"
-
-# Push (only after explicit user OK, per CLAUDE.md GIT PUSH POLICY)
-git push origin feature/q2-preview-command
+# Push (only after explicit user OK, per CLAUDE.md GIT PUSH POLICY) and open a PR
+# against main — no integration branch to merge into (see worktrees.md § Pushing for PR)
+git push -u origin braid/<id>-<slug>:feature/<id>-<slug>
 ```
 
-**Commit-message style** (per repo convention — read `git log -5 --pretty=format:"%h %s%n%b%n---"` on `feature/q2-preview-command` if in doubt):
+**Commit-message style** (per repo convention — read `git log -5 --pretty=format:"%h %s%n%b%n---"` on `main` if in doubt):
 
 - Title with bd-id: `<imperative one-line summary> (bd-<id>)`.
 - Body: user-visible symptom → root cause (cite native-writer file:line) → fix → verification recipe (include test counts + the `cargo xtask verify N/N green` line + a DOM-snippet from the live browser).
@@ -273,7 +283,7 @@ If diagnosis surfaces a second divergence in the same area, **file a sibling bra
 
 ## Cross-references
 
-- Parent epic: `bd-kw93` — q2 preview.
+- Former parent epic (closed, merged via PR #214): `bd-kw93` — q2 preview. Parity strands no longer depend on it; they branch off `main` and carry the `preview-parity` label.
 - Capture-splice design (separate scope): `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
 - Phase F (chrome-rendering parity): `claude-notes/plans/2026-05-14-q2-preview-phase-f.md`.
 - Native HTML writer: `crates/pampa/src/writers/html.rs`. Read this. Often.

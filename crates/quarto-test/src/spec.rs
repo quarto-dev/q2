@@ -130,6 +130,12 @@ pub struct TestSpec {
     pub check_warnings: bool,
     /// Whether render failure is expected (shouldError).
     pub expects_error: bool,
+    /// `dom-parity: true` — opt this format into the preview ↔ render DOM
+    /// parity runner (`hub-client/src/services/smokeAllParity.wasm.test.tsx`).
+    /// The native runner ignores it; the field exists so all four
+    /// smoke-all runners share one DSL grammar. Plan:
+    /// claude-notes/plans/2026-08-24-preview-render-dom-parity-harness.md
+    pub dom_parity: bool,
 }
 
 /// Parse test specifications from document YAML metadata.
@@ -181,6 +187,7 @@ fn parse_format_spec(format: &str, value: &Value, _input_path: &Path) -> Result<
     let mut assertions: Vec<Box<dyn Assertion>> = Vec::new();
     let mut check_warnings = true;
     let mut expects_error = false;
+    let mut dom_parity = false;
 
     if let Some(map) = value.as_mapping() {
         for (key, assertion_value) in map {
@@ -249,6 +256,11 @@ fn parse_format_spec(format: &str, value: &Value, _input_path: &Path) -> Result<
                         .to_string();
                     assertions.push(Box::new(FolderExists::new(path)));
                 }
+                "dom-parity" => {
+                    dom_parity = assertion_value
+                        .as_bool()
+                        .context("dom-parity must be a boolean")?;
+                }
                 other => {
                     anyhow::bail!("Unknown assertion type: '{}' in format '{}'", other, format);
                 }
@@ -261,6 +273,7 @@ fn parse_format_spec(format: &str, value: &Value, _input_path: &Path) -> Result<
         assertions,
         check_warnings,
         expects_error,
+        dom_parity,
     })
 }
 
@@ -591,6 +604,59 @@ mod tests {
             "Expected error about unknown assertion, got: {}",
             err
         );
+    }
+
+    #[test]
+    fn test_dom_parity_key_is_accepted_and_recorded() {
+        let yaml: Value = serde_yaml::from_str(
+            r#"
+            _quarto:
+              tests:
+                html:
+                  noErrors: true
+                  dom-parity: true
+            "#,
+        )
+        .unwrap();
+
+        let (_run, specs) = parse_test_specs(&yaml, std::path::Path::new("test.qmd")).unwrap();
+        let html = specs
+            .iter()
+            .find(|s| s.format == "html")
+            .expect("html spec");
+        assert!(html.dom_parity, "dom-parity: true must be recorded");
+        // Only noErrors produced an assertion; dom-parity is not one.
+        assert_eq!(html.assertions.len(), 1);
+    }
+
+    #[test]
+    fn test_dom_parity_defaults_false_and_rejects_non_bool() {
+        let yaml: Value = serde_yaml::from_str(
+            r#"
+            _quarto:
+              tests:
+                html:
+                  noErrors: true
+            "#,
+        )
+        .unwrap();
+        let (_run, specs) = parse_test_specs(&yaml, std::path::Path::new("test.qmd")).unwrap();
+        assert!(!specs[0].dom_parity);
+
+        let bad: Value = serde_yaml::from_str(
+            r#"
+            _quarto:
+              tests:
+                html:
+                  dom-parity: "yes"
+            "#,
+        )
+        .unwrap();
+        let err = format!(
+            "{:#}",
+            parse_test_specs(&bad, std::path::Path::new("test.qmd")).unwrap_err()
+        );
+        assert!(err.contains("dom-parity must be a boolean"), "got: {err}");
     }
 
     #[test]
