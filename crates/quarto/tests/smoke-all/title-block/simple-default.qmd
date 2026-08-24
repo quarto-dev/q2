@@ -14,6 +14,7 @@ _quarto:
   tests:
     html:
       noErrors: true
+      dom-parity: true
       ensureHtmlElements:
         - [
             "header#title-block-header.quarto-title-block.default",

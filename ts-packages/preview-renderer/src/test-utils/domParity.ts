@@ -92,17 +92,27 @@ export const PARITY_RULES: ParityRules = {
  * Elements whose adjacency to a text node makes that text node's edge
  * whitespace significant. Whitespace next to anything else (block
  * elements, or nothing) is the writer's pretty-printing and is dropped.
+ *
+ * `button`, `input`, `label`, `svg` are listed even though they aren't
+ * classically "inline" HTML: `label`/`input` are how the writer renders
+ * task items (`<label><input type="checkbox">…</label>`,
+ * crates/pampa/src/writers/html.rs ~L1347), and `button`/`svg` are the
+ * code-copy scaffold — both sit directly next to significant text.
  */
 export const INLINE_TAGS: ReadonlySet<string> = new Set([
-  'a', 'abbr', 'b', 'br', 'cite', 'code', 'del', 'em', 'i', 'img', 'ins',
-  'kbd', 'mark', 'q', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup',
-  'time', 'u', 'var',
+  'a', 'abbr', 'b', 'br', 'button', 'cite', 'code', 'del', 'em', 'i', 'img',
+  'input', 'ins', 'kbd', 'label', 'mark', 'q', 's', 'samp', 'small', 'span',
+  'strong', 'sub', 'sup', 'svg', 'time', 'u', 'var',
 ]);
 
 const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
 
 function escapeAttr(value: string): string {
+  // Newline → space keeps the canonical form one-line-per-node (a literal
+  // newline in an attribute value would break the line-oriented diff);
+  // attribute newlines are not semantic in HTML, so this is lossless for
+  // comparison purposes.
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/\n/g, ' ');
 }
 

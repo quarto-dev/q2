@@ -253,22 +253,22 @@ sibling's 120 s hang-detection timeout, `vitest.wasm.config.ts`).
 - [x] 0.2 Throwaway spike over 4 fixtures using the extracted helpers; research note with divergence classes + initial allowlist
 
 ### Phase 1 — `domParity.ts`
-- [ ] 1.1 `canonicalize` — shape, attribute sorting, text/whitespace rules, `<pre>` verbatim, text-node merging
-- [ ] 1.2 `PARITY_RULES` — strip list, opaque `span.math`, forbidden `data-hl-spans`
-- [ ] 1.3 `extractParityRoot` + `compareParity`
+- [x] 1.1 `canonicalize` — shape, attribute sorting, text/whitespace rules, `<pre>` verbatim, text-node merging
+- [x] 1.2 `PARITY_RULES` — strip list, opaque `span.math`, forbidden `data-hl-spans`
+- [x] 1.3 `extractParityRoot` + `compareParity`
 
 ### Phase 2 — `parity:` DSL key
-- [ ] 2.1 Rust `quarto-test`: parse into `TestSpec.parity`, runner ignores
-- [ ] 2.2 Both TS parsers (WASM sibling, Playwright discovery) ignore `parity`; Phase-2 boundary workspace nextest
+- [x] 2.1 Rust `quarto-test`: parse into `TestSpec.parity`, runner ignores
+- [x] 2.2 Both TS parsers (WASM sibling, Playwright discovery) ignore `parity`; Phase-2 boundary workspace nextest
 
 ### Phase 3 — Runner
-- [ ] 3.1 `smokeAllParity.wasm.test.tsx` + first opt-in in one green commit
-- [ ] 3.2 Opt in the remaining fixtures the spike showed green; all four runners green
+- [x] 3.1 `smokeAllParity.wasm.test.tsx` + first opt-in in one green commit
+- [x] 3.2 Opt in the remaining fixtures the spike showed green; all four runners green
 
 ### Phase 4 — Triage + docs + gate
-- [ ] 4.1 File a strand per real divergence found (bd-tmb2u5yu already filed)
-- [ ] 4.2 Update `testing.md` and the `preview-render-parity` skill
-- [ ] 4.3 Full `cargo xtask verify`; reconcile this checklist; commit
+- [x] 4.1 File a strand per real divergence found (bd-tmb2u5yu already filed)
+- [x] 4.2 Update `testing.md` and the `preview-render-parity` skill
+- [x] 4.3 Full `cargo xtask verify`; reconcile this checklist; commit
 
 ---
 
@@ -614,7 +614,7 @@ the package `tsconfig.json`, so nothing here ships in `dist/`.
   export function canonicalize(el: Element, rules?: ParityRules): string;
   ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // @vitest-environment jsdom
@@ -685,14 +685,14 @@ describe('canonicalize — inline whitespace is significant', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 cd ts-packages/preview-renderer && npx vitest run src/test-utils/domParity.test.ts
 ```
 Expected: FAIL — cannot resolve `./domParity`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 /**
@@ -848,14 +848,14 @@ export function canonicalize(el: Element, rules: ParityRules = PARITY_RULES): st
 }
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 ```bash
 cd ts-packages/preview-renderer && npx vitest run src/test-utils/domParity.test.ts
 ```
 Expected: 9 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ts-packages/preview-renderer/src/test-utils/domParity.ts ts-packages/preview-renderer/src/test-utils/domParity.test.ts
@@ -872,7 +872,7 @@ git commit -m "Add DOM canonicaliser for preview/render parity"
 - Consumes: `canonicalize`, `OPAQUE_MARKER`, `ParityRuleViolation` from Task 1.1.
 - Produces: the populated `PARITY_RULES` used by the runner.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Extend the existing import line to
 `import { canonicalize, OPAQUE_MARKER, ParityRuleViolation } from './domParity';`
@@ -922,14 +922,14 @@ describe('PARITY_RULES', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 cd ts-packages/preview-renderer && npx vitest run src/test-utils/domParity.test.ts
 ```
 Expected: the six new tests FAIL (attributes present / no opaque marker / no throw / `<div` still present).
 
-- [ ] **Step 3: Populate the rules**
+- [x] **Step 3: Populate the rules**
 
 Replace the `PARITY_RULES` constant:
 
@@ -984,14 +984,14 @@ export const PARITY_RULES: ParityRules = {
 };
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 ```bash
 cd ts-packages/preview-renderer && npx vitest run src/test-utils/domParity.test.ts
 ```
 Expected: 15 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ts-packages/preview-renderer/src/test-utils/domParity.ts ts-packages/preview-renderer/src/test-utils/domParity.test.ts
@@ -1013,7 +1013,7 @@ git commit -m "Define preview/render parity normalisation rules with reasons"
   export function compareParity(renderRoot: Element, previewRoot: Element, rules?: ParityRules): ParityResult;
   ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Extend the import line with `extractParityRoot, compareParity` and append:
 
@@ -1049,14 +1049,14 @@ describe('extractParityRoot / compareParity', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 cd ts-packages/preview-renderer && npx vitest run src/test-utils/domParity.test.ts
 ```
 Expected: 3 new FAIL (exports missing).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Append to `domParity.ts`:
 
@@ -1099,7 +1099,7 @@ export function compareParity(
 }
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 ```bash
 cd ts-packages/preview-renderer && npx vitest run src/test-utils/domParity.test.ts
@@ -1108,7 +1108,7 @@ cd ts-packages/preview-renderer && npm test && npm run test:integration
 Expected: 18 passed in the new file; the package suites green with the same
 counts as before plus 18.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ts-packages/preview-renderer/src/test-utils/domParity.ts ts-packages/preview-renderer/src/test-utils/domParity.test.ts
@@ -1133,7 +1133,7 @@ git commit -m "Add parity root extraction and comparison"
   preview↔render DOM parity runner. The native runner ignores it; the field
   exists so the DSL stays a single grammar across all four runners.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```rust
     #[test]
@@ -1187,14 +1187,14 @@ git commit -m "Add parity root extraction and comparison"
     }
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 cargo nextest run -p quarto-test test_parity
 ```
 Expected: compile error — no field `parity` on `TestSpec`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `TestSpec` add:
 
@@ -1220,7 +1220,7 @@ In `parse_format_spec`, add `let mut parity = false;` beside
 
 and `parity,` in the `Ok(TestSpec { … })` constructor at `:259`.
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 ```bash
 cargo clippy -p quarto-test --all-targets -- -D warnings
@@ -1229,7 +1229,7 @@ cargo nextest run -p quarto --test integration smoke_all
 ```
 Expected: all green; the smoke_all sweep is unchanged (no fixture opts in yet).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/quarto-test/src/spec.rs
@@ -1248,7 +1248,7 @@ git commit -m "Accept a parity key in the smoke-all test DSL (native runner igno
 Both parsers hard-error on unknown keys, so a fixture with `parity: true`
 would break the WASM sweep and the Playwright sweep until this lands.
 
-- [ ] **Step 1: Check for an existing unit test of either parser**
+- [x] **Step 1: Check for an existing unit test of either parser**
 
 ```bash
 ls hub-client/e2e/helpers/*.test.ts 2>/dev/null; grep -rln "smokeAllDiscovery" hub-client/e2e hub-client/src | head
@@ -1264,9 +1264,9 @@ it('accepts parity: true as a non-assertion', () => {
 ```
 
 If none exists, do not create one for a one-line case; Task 3.1's opt-in
-plus `npx playwright test e2e/smoke-all.spec.ts --list` is the check.
+plus `npx playwright test --config=playwright.smoke-all.config.ts e2e/smoke-all.spec.ts --list` is the check.
 
-- [ ] **Step 2: Implement — same three lines in both files**
+- [x] **Step 2: Implement — same three lines in both files**
 
 ```ts
         case 'parity':
@@ -1276,16 +1276,16 @@ plus `npx playwright test e2e/smoke-all.spec.ts --list` is the check.
           break;
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 ```bash
 cd hub-client && npm run test:wasm      # counts identical to Task 0.1 Step 1
-cd hub-client && npx playwright test e2e/smoke-all.spec.ts --list | tail -3
+cd hub-client && npx playwright test --config=playwright.smoke-all.config.ts e2e/smoke-all.spec.ts --list | tail -3   # base config's testIgnore excludes this spec
 ```
 Expected: WASM counts unchanged; Playwright lists the same number of tests
 as on `main` (`--list` does not launch a browser or the web server).
 
-- [ ] **Step 4: Phase-2 boundary — workspace nextest**
+- [x] **Step 4: Phase-2 boundary — workspace nextest**
 
 ```bash
 cargo nextest run --workspace 2>&1 | tee /private/tmp/claude-502/-Users-gordon-src-q2/6f5c0c8f-a359-437a-87d6-879b0e289c0e/scratchpad/nextest-phase2.log; grep -E "Summary|passed|failed|skipped" /private/tmp/claude-502/-Users-gordon-src-q2/6f5c0c8f-a359-437a-87d6-879b0e289c0e/scratchpad/nextest-phase2.log | tail -3
@@ -1294,7 +1294,7 @@ Expected: green; delta vs the live baseline on `main` @ `cf9c45cc8` is
 exactly +2 passed (Task 2.1's two tests). If no baseline log exists, run the
 same command on `main` first and record it.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add hub-client/src/services/smokeAll.wasm.test.ts hub-client/e2e/helpers/smokeAllDiscovery.ts
@@ -1332,7 +1332,7 @@ is red.
   test imports it from `../framework`, `q2-preview.integration.test.tsx:35`);
   `previewRegistry` from `@quarto/preview-renderer`.
 
-- [ ] **Step 1: Write the runner with its two tests (the second is the self-check)**
+- [x] **Step 1: Write the runner with its two tests (the second is the self-check)**
 
 ```tsx
 // @vitest-environment jsdom
@@ -1523,7 +1523,7 @@ describe('smoke-all preview <-> render DOM parity', () => {
 });
 ```
 
-- [ ] **Step 2: Run before opting anything in — verify the right failure**
+- [x] **Step 2: Run before opting anything in — verify the right failure**
 
 ```bash
 cd hub-client && npm run test:wasm
@@ -1536,7 +1536,7 @@ loaded for this config; Task 0.2's Q3 established none is needed. If that
 turns out wrong, add `setupFiles` to `vitest.wasm.config.ts` pointing at a
 new `src/test-utils/parity-setup.ts` with only the shim that is missing.)
 
-- [ ] **Step 3: Opt in the first fixture**
+- [x] **Step 3: Opt in the first fixture**
 
 ```yaml
 _quarto:
@@ -1550,6 +1550,8 @@ _quarto:
 cd hub-client && SMOKE_FILTER=simple-default npm run test:wasm
 ```
 Expected: `Parity results: 1 compared, 0 failed, 1 opted in`; self-check passes.
+(vitest 4 hides `console.log` from passing tests by default — append
+`-- --reporter=verbose` to see the parity summary on a green run.)
 
 If it fails with a *mismatch*, the spike note was wrong or a rule is
 missing: read the artifacts under `hub-client/test-results/parity/`, classify
@@ -1557,7 +1559,7 @@ missing: read the artifacts under `hub-client/test-results/parity/`, classify
 `domParity.ts` + a unit test (a Task-1.2-shaped mini-step). (c) → pick the
 next candidate from the note; record the divergence for Task 4.1.
 
-- [ ] **Step 4: Commit (green)**
+- [x] **Step 4: Commit (green)**
 
 ```bash
 git add hub-client/src/services/smokeAllParity.wasm.test.tsx crates/quarto/tests/smoke-all/title-block/simple-default.qmd
@@ -1572,20 +1574,20 @@ git commit -m "Add preview/render DOM parity runner over opted-in smoke-all fixt
   `appendix/footnotes-heading.qmd` (c1, c2) and `markdown/heading-auto-id.qmd`
   (c3, c4) stay out until their strands close — see § Findings.
 
-- [ ] **Step 1: Opt in one at a time, same loop as Task 3.1 Step 3**
+- [x] **Step 1: Opt in one at a time, same loop as Task 3.1 Step 3**
 
-- [ ] **Step 2: All four runners green**
+- [x] **Step 2: All four runners green**
 
 ```bash
 cargo nextest run -p quarto --test integration smoke_all           # Rust: parity key accepted
 cd hub-client && npm run test:wasm                                 # WASM sibling + parity
-cd hub-client && npx playwright test e2e/smoke-all.spec.ts --list  # discovery parses the key
+cd hub-client && npx playwright test --config=playwright.smoke-all.config.ts e2e/smoke-all.spec.ts --list  # discovery parses the key
 ```
 Expected: Rust sweep unchanged; WASM sibling counts unchanged from Task 0.1
 Step 1; parity `N compared, 0 failed, N opted in`; Playwright lists the same
 tests as before.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add crates/quarto/tests/smoke-all
@@ -1628,7 +1630,7 @@ EOF
 )" --json
 ```
 
-- [ ] Create one strand per divergence; list their ids in this plan under a
+- [x] Create one strand per divergence; list their ids in this plan under a
   new § Findings section and in the research note.
 
 ### Task 4.2: Documentation
@@ -1658,7 +1660,7 @@ EOF
     `main`); parity strands branch off `main` and carry the `preview-parity`
     label instead of a parent-child dep.
 
-- [ ] Make both edits; commit:
+- [x] Make both edits; commit:
 
 ```bash
 git add claude-notes/instructions/testing.md .claude/skills/preview-render-parity/SKILL.md
@@ -1667,27 +1669,32 @@ git commit -m "Document the preview/render DOM parity runner and harness-first w
 
 ### Task 4.3: Gate and reconcile
 
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `cargo xtask verify` (full — hub-client and preview-renderer changed;
+- [x] `cargo clippy --workspace --all-targets -- -D warnings` (clean at 1ce54e55e)
+- [x] `cargo xtask verify` (full — hub-client and preview-renderer changed;
   this reruns the workspace nextest, so report its pass/skip counts against
   the Phase-2 baseline: the delta must still be exactly +2).
-- [ ] Re-read this checklist; verify every `[x]` against the commits; fix
+  **Result (58a8d22e6):** all steps passed; workspace nextest 13217 passed /
+  199 skipped vs baseline 13215 / 199 on `main` @ cf9c45cc8 (= +2, Task 2.1's
+  tests). Final whole-branch review found two one-line Importants
+  (`INLINE_TAGS` missing `label`/`input`/`button`/`svg`; stale Playwright
+  command in testing.md), fixed in 58a8d22e6; `domParity.test.ts` is 19 tests.
+- [x] Re-read this checklist; verify every `[x]` against the commits; fix
   stale marks; commit the plan file.
-- [ ] Report; **do not push** without explicit approval (CLAUDE.md).
+- [x] Report; **do not push** without explicit approval (CLAUDE.md).
 
 ---
 
 ## Findings
 
 Real divergences the harness (spike + runner) surfaced. Out-of-plan bugs,
-one strand each (label `preview-parity`); ids filled in by Task 4.1.
+one strand each (label `preview-parity`); filed by Task 4.1.
 Details and verbatim snippets: `claude-notes/research/2026-08-24-preview-render-parity-spike.md`.
 
 | # | Symptom | Fixture | Strand |
 |---|---|---|---|
-| c1 | `Link.tsx` drops `role=` (and every kv attr outside `data-*`/`rel`/`target`) | `appendix/footnotes-heading.qmd` | _pending_ |
-| c2 | `OrderedList.tsx` omits `type="1"` for `Decimal` | `appendix/footnotes-heading.qmd` | _pending_ |
-| c3 | `Strikeout.tsx` renders `<s>`, writer `<del>` | `markdown/heading-auto-id.qmd` | _pending_ |
+| c1 | `Link.tsx` drops `role=` (and every kv attr outside `data-*`/`rel`/`target`) | `appendix/footnotes-heading.qmd` | bd-294mbrcx |
+| c2 | `OrderedList.tsx` omits `type="1"` for `Decimal` | `appendix/footnotes-heading.qmd` | bd-q88zinyv |
+| c3 | `Strikeout.tsx` renders `<s>`, writer `<del>` | `markdown/heading-auto-id.qmd` | bd-qzwlhrlv |
 | c4 | `Math.tsx` emits no `math inline|display` class | `markdown/heading-auto-id.qmd` | bd-tmb2u5yu |
 
 ## Follow-ups (not in this plan)

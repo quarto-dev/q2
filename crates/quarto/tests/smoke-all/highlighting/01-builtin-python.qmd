@@ -5,6 +5,7 @@ _quarto:
   tests:
     html:
       noErrors: true
+      dom-parity: true
       ensureFileRegexMatches:
         # Code block: outer container carries `sourceCode python` and
         # keyword / builtin tokens wrap in `<span class="hl-*">`.

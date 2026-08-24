@@ -422,7 +422,9 @@ of diffs:
 
 ## Follow-up strands to file
 
-Four, all (c), none previously tracked except the last:
+Four, all (c), none previously tracked except the last. Filed by the plan's
+Task 4.1 (label `preview-parity`): 1 → bd-294mbrcx, 2 → bd-q88zinyv,
+3 → bd-qzwlhrlv, 4 → bd-tmb2u5yu (pre-existing).
 
 1. Preview `Link` drops non-allowlisted kv attributes (`role`, `aria-*`, …) —
    `inlines/Link.tsx:10-12` vs `html.rs:520-529`.

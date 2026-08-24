@@ -154,6 +154,11 @@ function parseFormatSpec(format: string, value: Record<string, unknown>, options
         case 'folderExists':
           // Parse but don't check — filesystem assertions are no-ops in WASM
           break;
+        case 'dom-parity':
+          // Opt-in flag for the preview <-> render DOM parity runner
+          // (hub-client/src/services/smokeAllParity.wasm.test.tsx). Not an
+          // assertion here.
+          break;
         default:
           throw new Error(`Unknown assertion type: '${key}' in format '${format}'`);
       }
