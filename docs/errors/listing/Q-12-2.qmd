@@ -1,48 +1,35 @@
 ---
-title: "Inline Listing Contents Not Yet Supported"
-description: "Inline `contents:` records are not yet supported and the entry is skipped."
+title: "Inline Listing Contents Not Yet Supported (retired)"
+description: "Older Quarto 2 releases skipped inline contents records; current releases render them."
 code: Q-12-2
 subsystem: listing
-status: stub
+status: deprecated
 since: "99.9.9"
 categories:
   - listing
 ---
 
-# `Q-12-2` — Inline Listing Contents Not Yet Supported
+# `Q-12-2` — Inline Listing Contents Not Yet Supported (retired)
 
-> Inline `contents:` records are not yet supported and the entry
-> is skipped.
+> Older Quarto 2 releases skipped inline `contents:` records; current
+> releases render them.
 
 ## What this means
 
 The `contents:` key of a listing accepts a list of paths or
-globs that tell Quarto which documents to include. In Quarto 1,
-each entry could also be an *inline record* — an object with
-fields like `title`, `path`, `date` — so that a listing could
-mix real files with hand-written entries.
+globs that tell Quarto which documents to include, and it can also
+accept *inline records* — objects with fields like `title`, `path`,
+`date` — so that a listing can mix real files with hand-written
+entries.
 
-Quarto 2 does not yet implement inline-record entries. When the
-parser sees one, it emits this warning and drops the entry from
-the listing.
+Quarto 2 releases after 0.26 support inline records and no longer
+emit this code. If you see it, you are on an older release — upgrade,
+or move each record to a file until you can.
 
-## Why this happens
-
-Most often: a Quarto 1 listing configuration was copied verbatim
-into a Quarto 2 project, and one or more of the `contents:`
-entries is an object rather than a path or glob.
-
-## How to fix
-
-Two options while the feature is being implemented:
-
-- **Move each inline entry to a real file** in the listing's
-  source directory, with the metadata expressed as the file's
-  own front matter.
-- **Wait for the feature.** Track progress at the Quarto issue
-  tracker; the feature is on the roadmap.
+See the [listings guide](/guides/projects/listings.qmd) for what
+inline records accept today.
 
 ## Related
 
-- `Q-12-1` — other shapes of listing configuration the parser
-  does not yet support.
+- `Q-12-20` — a record's `path:` names no project document.
+- `Q-12-21` — a record has neither `title:` nor `path:`.

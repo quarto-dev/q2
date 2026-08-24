@@ -1,0 +1,80 @@
+---
+title: "Listings"
+description: "Generate lists of pages or hand-written entries with `listing:`."
+---
+
+## Contents
+
+`contents:` names what a listing shows. Each entry is either a glob that
+selects project documents, or an inline record — a small map that *is* an
+item.
+
+### Globs
+
+A glob resolves against the file it is written in — the listing page's
+own directory for front-matter patterns, the directory holding a
+`_metadata.yml`, or the project root for patterns in `_quarto.yml`. `*`
+matches one directory level; use `**/` or name a directory to search
+subdirectories. A leading `/` anchors at the project root from anywhere.
+See [`Q-12-19`](/errors/listing/Q-12-19.qmd) for the full rules and the
+common ways a pattern matches nothing.
+
+### Records
+
+```yaml
+listing:
+  id: cards
+  type: grid
+  contents:
+    - title: "Get started"
+      description: "Download and install"
+      image: images/rocket.png
+    - title: "Release notes"
+      path: https://example.com/releases
+```
+
+A record's `title`, `subtitle`, `description`, `author`, `date`,
+`date-modified`, `image`, `image-alt`, `categories`, `order`, `path`,
+`reading-time-minutes` and `word-count` (and other fields besides) are the
+same fields a document supplies. Any other key becomes a custom field a
+custom template can read as `$item.key$` (also `$item.extra.key$`) — which
+also makes a misspelled field name easy to miss, since it's kept rather
+than rejected; watch for [`Q-12-22`](/errors/listing/Q-12-22.qmd) if an
+item is missing a field you thought you set. A record needs a `title:` or
+a `path:` to render meaningfully — one with neither produces an
+empty-titled item ([`Q-12-21`](/errors/listing/Q-12-21.qmd)). Relative
+`image:` and `path:` values resolve against the file the listing is
+written in.
+
+### Records that point at a document
+
+`path: guide/install.qmd` merges the record over that document's own
+entry: the record's fields win, the document supplies the rest (link,
+description, date, …). A `path:` that is an external URL or a
+non-document file is used as the link as written. A `path:` that looks
+like a document (has a `.qmd`/`.md`/`.Rmd`/`.ipynb` extension) but names
+one the project doesn't render — a typo, or a file outside
+`project.render` — builds the item from the record's own fields alone
+and keeps the link as written, and warns
+([`Q-12-20`](/errors/listing/Q-12-20.qmd)).
+
+### Order
+
+Items are sorted by the listing's `sort:`. **With no `sort:` key, the
+default is `order asc, title asc`** — since records usually carry neither
+an `order:` nor a `date:`, this alphabetizes a hand-curated `contents:`
+list by title. To keep a curated list in the order you wrote it, set
+`sort: false`, or give each record an explicit `order:`.
+
+With `sort: false`, items appear in the order of the `contents:` entries
+— records included — with one exception: when `contents:` holds only
+negated patterns (e.g. `["!draft.qmd", {title: Featured}]`), the implicit
+"everything else" positive counts as declared before every entry, so a
+record sorts after those items no matter where it's written. (Quarto 1
+placed all records after all glob matches.)
+
+### Not yet supported
+
+YAML files in `contents:` (Quarto 1's `contents: items.yml`) are skipped
+with a warning ([`Q-12-23`](/errors/listing/Q-12-23.qmd)); move the
+records inline.
