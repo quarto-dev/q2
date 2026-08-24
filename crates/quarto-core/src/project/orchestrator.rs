@@ -35,7 +35,7 @@
 //! `PipelineData::AtProfile`. The re-work is accepted for v1 because
 //! it keeps the CLI rewiring scoped to *orchestration* — threading a
 //! pre-built `AtProfile` through `render_document_to_file` is a
-//! separate refactor.  A follow-up beads issue tracks the
+//! separate refactor.  A follow-up braid strand tracks the
 //! optimization.
 
 use async_trait::async_trait;
@@ -854,7 +854,7 @@ impl<O: OutputDiagnostics> ProjectRenderSummary<O> {
 /// [`ProjectIndex`], invokes `pre_render`, runs Pass 2, then
 /// `post_render`.
 ///
-/// Phase-1 restriction: **sequential**. A follow-up beads issue
+/// Phase-1 restriction: **sequential**. A follow-up braid strand
 /// tracks `rayon + pollster-per-worker` parallelism.
 ///
 /// WASM note: the driver exists only on native targets — hub-client

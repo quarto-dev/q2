@@ -9,7 +9,7 @@
  *
  * Background and policy: see
  *   claude-notes/plans/2026-04-30-unicode-whitespace-handling.md
- * Beads: bd-rmx3 (bug), bd-8oe4 (workspace-wide audit).
+ * Braid: bd-rmx3 (bug), bd-8oe4 (workspace-wide audit).
  */
 
 use pampa::readers;

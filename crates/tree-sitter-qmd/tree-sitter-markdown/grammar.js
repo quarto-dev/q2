@@ -89,7 +89,7 @@ const regexOr = (...groups) => regexBracket(groups.join("|"));
 // behavior was not characterised in the Pandoc experiment.
 //
 // See claude-notes/plans/2026-04-30-unicode-whitespace-handling.md
-// (beads bd-rmx3, bd-8oe4) for the policy and experiment record.
+// (braid bd-rmx3, bd-8oe4) for the policy and experiment record.
 const PANDOC_NON_ASCII_WHITESPACE =
     "\\u{00A0}\\u{1680}\\u{2000}-\\u{200A}\\u{2028}\\u{2029}\\u{202F}\\u{205F}\\u{3000}";
 

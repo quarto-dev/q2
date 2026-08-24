@@ -11,7 +11,7 @@
  * 3. Can we splice child inlines inside container inlines without touching delimiters?
  *
  * See: claude-notes/plans/2026-02-10-inline-splicing.md
- * Beads issue: bd-1hwd
+ * Braid strand: bd-1hwd
  *
  * Copyright (c) 2026 Posit, PBC
  */

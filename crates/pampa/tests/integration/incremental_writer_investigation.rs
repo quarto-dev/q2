@@ -6,7 +6,7 @@
  * writer should assemble output from verbatim spans and rewritten blocks.
  *
  * See: claude-notes/plans/2026-02-07-incremental-writer.md
- * Beads issue: bd-2t4o
+ * Braid strand: bd-2t4o
  *
  * Copyright (c) 2025 Posit, PBC
  */

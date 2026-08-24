@@ -828,7 +828,7 @@ fn filter_removing_meta_resources_does_not_drop_author_declaration() {
 // version through `q2 render` is deferred until pampa wires the
 // `Meta(meta)` filter callback — see grep for "Meta" in
 // `crates/pampa/src/lua/filter.rs:filter_names`. Filed as a
-// follow-up beads issue; until then, the unit test pins the
+// follow-up braid strand; until then, the unit test pins the
 // stage's contract.
 
 /// `addResource` (camelCase alias) works the same.

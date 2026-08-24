@@ -836,7 +836,7 @@ pub fn resolve_reported_resources(
         };
         // Engine/Lua-filter entries don't have a YAML source location;
         // diagnostics degrade to a span-less message. Plan 7f follow-up
-        // beads issue: refactor `canonicalize_within_project` to take
+        // braid strand: refactor `canonicalize_within_project` to take
         // `Option<&SourceInfo>` so this site doesn't need a sentinel.
         let canonical = canonicalize_within_project(
             project_root,

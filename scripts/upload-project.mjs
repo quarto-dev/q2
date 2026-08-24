@@ -35,7 +35,7 @@
  *   - Recurses into subdirectories.
  *   - Skips: _site/, node_modules/, dist/, target/, and any path
  *     whose component starts with `.` (covers .git, .quarto,
- *     .beads, .DS_Store, etc.).
+ *     .braid, .DS_Store, etc.).
  *   - Text files are uploaded as TextDocumentContent. Binary files
  *     are uploaded as BinaryDocumentContent (base64-encoded
  *     content; the schema-side base64 → bytes conversion happens

@@ -5,7 +5,7 @@
  * Tests Properties 6-10 from the plan using both hand-crafted and generated inputs.
  *
  * See: claude-notes/plans/2026-02-10-inline-splicing.md
- * Beads issue: bd-1hwd
+ * Braid strand: bd-1hwd
  *
  * Copyright (c) 2026 Posit, PBC
  */

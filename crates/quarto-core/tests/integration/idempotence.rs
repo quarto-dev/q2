@@ -14,7 +14,7 @@
  *
  * The plan documents the long-lived-integration-branch policy: a
  * fixture that surfaces real non-determinism stays failing here, and
- * a beads issue (filled in from the panic message's
+ * a braid strand (filled in from the panic message's
  * `DivergencePoint`) is filed against the offending transform/stage.
  * Do not `#[ignore]` a failing fixture without explicit user approval.
  */
@@ -352,7 +352,7 @@ fn smoke_plain_paragraph() {
 // `SingleFile` and `ProjectOrchestrator`. Failures are *expected* on
 // first run for some of these — that's the whole point of the gate.
 // Per Phase 5 / §"CI failure policy", leave failing fixtures failing
-// and file a beads issue using the sub-agent investigation prompt
+// and file a braid strand using the sub-agent investigation prompt
 // the panic message fills in. Do NOT `#[ignore]` without explicit
 // user approval.
 
