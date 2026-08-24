@@ -1307,6 +1307,75 @@ fn render_diagnostic_guarded<T>(
     }
 }
 
+/// The path to name in a `while rendering <file>` line for a failed page,
+/// or `None` when the rendered diagnostic already names it.
+///
+/// bd-render-failure-unattributed-yxe0v7th. A failed page is rendered by
+/// [`CoalescedDiagnostic::to_text`], which names files *only* through the
+/// diagnostic's own span — and deliberately omits the `Affected files:` tail
+/// for singleton groups. So a page can die without the transcript containing
+/// its name anywhere. Two ways that happens:
+///
+/// - **The span does not resolve.** Either the diagnostic carries no location
+///   (an engine execution failure — `Error: Execution failed in knitr: R
+///   process failed`), or it is bound to a buffer whose length it exceeds. The
+///   ariadne renderer bails, *and* `to_text`'s `at <file>:<row>:<col>` fallback
+///   is skipped along with it, leaving a bare title and problem statement.
+/// - **The span resolves to a different file.** Engine-output parse errors
+///   legitimately point into `<stem>.<engine>.rmarkdown`, not the `.qmd` the
+///   author wrote. The frame is correct and worth showing, but on its own it
+///   never tells the author which page to open.
+///
+/// Returns `None` for the ordinary case — a span resolving to the page being
+/// rendered — so well-attributed output stays byte-identical. Also `None` for
+/// multi-file groups, which already list their pages in the `Affected files:`
+/// tail.
+///
+/// The resolution performed here mirrors `render_ariadne_source_context`:
+/// root file id, then `map_offset(0, ctx)` (a *relative* offset — 0 is the
+/// start of the span). If that pair succeeds, a frame renders; if it fails,
+/// nothing does.
+fn failure_attribution_line(group: &quarto_error_reporting::CoalescedDiagnostic) -> Option<String> {
+    // A multi-file group prints an `Affected files:` tail already.
+    if group.affected_files.len() != 1 {
+        return None;
+    }
+    let input = group.affected_files.first()?;
+
+    // Mirror `to_text_with_renderer`'s choice of location: the main one, else
+    // the first located detail.
+    let location = group.representative.location.as_ref().or_else(|| {
+        group
+            .representative
+            .details
+            .iter()
+            .find_map(|d| d.location.as_ref())
+    });
+
+    let named = location
+        .zip(group.source_context.as_ref())
+        .and_then(|(loc, ctx)| {
+            // Both must succeed for a frame to render.
+            loc.map_offset(0, ctx)?;
+            let file = ctx.get_file(loc.root_file_id()?)?;
+            Some(file.path.clone())
+        });
+
+    // Compare on forward-slashed strings, not raw `Path`s. Registered paths
+    // reach the source context in mixed conventions — the engine intermediate
+    // is normalized through `quarto_util::to_forward_slashes`, while
+    // `FileFailure.input` is a native `PathBuf`. On Windows a raw comparison
+    // would never match, so every ordinary parse error would sprout a
+    // redundant attribution line there and nowhere else.
+    let input_key = quarto_util::to_forward_slashes(input);
+    match named {
+        // The frame names the very page that failed — nothing to add.
+        Some(path) if path.replace('\\', "/") == input_key => None,
+        // Resolves elsewhere (an engine intermediate), or not at all.
+        _ => Some(input.display().to_string()),
+    }
+}
+
 fn print_render_diagnostics_text(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
     quiet: bool,
@@ -1347,6 +1416,12 @@ fn print_render_diagnostics_text(
         for group in coalesce_by_source(entries) {
             let code = group.representative.code.as_deref();
             if let Some(text) = render_diagnostic_guarded(code, || group.to_text()) {
+                // bd-render-failure-unattributed-yxe0v7th: guarantee the
+                // failing page is named even when the diagnostic's own span
+                // cannot do it (or names an engine intermediate instead).
+                if let Some(path) = failure_attribution_line(&group) {
+                    eprintln!("error: while rendering {}", path);
+                }
                 eprintln!("{}", text);
             }
         }
@@ -1705,6 +1780,141 @@ fn emit_json_line<T: serde::Serialize>(value: &T) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+    use quarto_error_reporting::coalesce::CoalescedDiagnostic;
+    use quarto_source_map::SourceContext;
+
+    /// bd-render-failure-unattributed-yxe0v7th.
+    ///
+    /// `print_render_diagnostics_text` names the failing file only for
+    /// `legacy_failures` (failures with no structured diagnostics). Every
+    /// other failure is rendered by `CoalescedDiagnostic::to_text()`, which
+    /// relies entirely on the diagnostic's own span — and deliberately omits
+    /// the `Affected files:` tail for singleton groups. So when the span
+    /// cannot be resolved, or resolves to a file that is *not* the document
+    /// being rendered (an engine intermediate), the known-good
+    /// `FileFailure.input` is discarded and nothing names the page.
+    ///
+    /// These tests pin `failure_attribution_line`, the predicate that
+    /// decides when to restore it.
+    fn group(
+        diagnostic: quarto_error_reporting::DiagnosticMessage,
+        ctx: Option<SourceContext>,
+        files: &[&str],
+    ) -> CoalescedDiagnostic {
+        CoalescedDiagnostic {
+            representative: diagnostic,
+            source_context: ctx,
+            affected_files: files.iter().map(PathBuf::from).collect(),
+        }
+    }
+
+    fn located_in(
+        path: &str,
+        content: &str,
+        offset: usize,
+    ) -> (quarto_error_reporting::DiagnosticMessage, SourceContext) {
+        let mut ctx = SourceContext::new();
+        let id = ctx.add_file(path.to_string(), Some(content.to_string()));
+        let info = quarto_source_map::SourceInfo::from_range(
+            id,
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset,
+                    row: 0,
+                    column: offset,
+                },
+                end: quarto_source_map::Location {
+                    offset: offset + 1,
+                    row: 0,
+                    column: offset + 1,
+                },
+            },
+        );
+        let diag = DiagnosticMessageBuilder::error("Boom")
+            .with_location(info)
+            .build();
+        (diag, ctx)
+    }
+
+    /// A diagnostic with no location at all (shape 2: the knitr
+    /// execution failure, `location: None`). Nothing in the rendered text
+    /// can name the page, so the attribution line must be supplied.
+    #[test]
+    fn attribution_added_for_location_less_diagnostic() {
+        let diag =
+            DiagnosticMessageBuilder::error("Execution failed in knitr: R process failed").build();
+        let g = group(diag, None, &["/project/failing.qmd"]);
+
+        assert_eq!(
+            failure_attribution_line(&g).as_deref(),
+            Some("/project/failing.qmd"),
+        );
+    }
+
+    /// A diagnostic whose span resolves to the very file being rendered —
+    /// the ordinary parse error. The ariadne frame already names it, so no
+    /// extra line (existing output and its snapshots stay byte-identical).
+    #[test]
+    fn attribution_omitted_when_frame_already_names_the_file() {
+        let (diag, ctx) = located_in("/project/bad.qmd", "hello world\n", 3);
+        let g = group(diag, Some(ctx), &["/project/bad.qmd"]);
+
+        assert_eq!(failure_attribution_line(&g), None);
+    }
+
+    /// Shape 1 after the engine-execution fix: the span legitimately
+    /// resolves, but to the engine's `.rmarkdown` intermediate rather than
+    /// the `.qmd` the user wrote. The frame is correct and useful, but the
+    /// user still needs to be told which page died.
+    #[test]
+    fn attribution_added_when_frame_names_an_engine_intermediate() {
+        let (diag, ctx) = located_in("/project/knit.knitr.rmarkdown", "{{< fa size=1x >}}\n", 3);
+        let g = group(diag, Some(ctx), &["/project/knit.qmd"]);
+
+        assert_eq!(
+            failure_attribution_line(&g).as_deref(),
+            Some("/project/knit.qmd"),
+        );
+    }
+
+    /// A span pointing past the end of the file it is bound to does not
+    /// resolve, so no frame renders — the exact silent-failure shape the
+    /// strand reports. Attribution must be supplied.
+    #[test]
+    fn attribution_added_when_span_does_not_resolve() {
+        let (diag, ctx) = located_in("/project/knit.qmd", "short\n", 4716);
+        let g = group(diag, Some(ctx), &["/project/knit.qmd"]);
+
+        assert_eq!(
+            failure_attribution_line(&g).as_deref(),
+            Some("/project/knit.qmd"),
+        );
+    }
+
+    /// Registered paths reach the source context in mixed separator
+    /// conventions — the engine intermediate is normalized through
+    /// `to_forward_slashes`, while `FileFailure.input` stays a native
+    /// `PathBuf`. Matching must survive that, or on Windows every ordinary
+    /// parse error would gain a redundant attribution line.
+    #[test]
+    fn attribution_matching_is_separator_insensitive() {
+        let (diag, ctx) = located_in("C:/project/bad.qmd", "hello world\n", 3);
+        let g = group(diag, Some(ctx), &[r"C:\project\bad.qmd"]);
+
+        assert_eq!(failure_attribution_line(&g), None);
+    }
+
+    /// A multi-file group already lists its pages in the `Affected files:`
+    /// tail, so it needs no additional attribution line.
+    #[test]
+    fn attribution_omitted_for_multi_file_group() {
+        let diag = DiagnosticMessageBuilder::error("Shared problem").build();
+        let g = group(diag, None, &["/project/a.qmd", "/project/b.qmd"]);
+
+        assert_eq!(failure_attribution_line(&g), None);
+    }
     use quarto_core::FormatIdentifier;
     use quarto_system_runtime::NativeRuntime;
     use std::sync::Arc;

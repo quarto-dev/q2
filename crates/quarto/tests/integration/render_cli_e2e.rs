@@ -999,3 +999,121 @@ fn render_preserves_source_image_and_copies_to_site() {
         "rendered HTML must reference elephant.png; html:\n{html}",
     );
 }
+
+// ====================================================================
+// bd-render-failure-unattributed-yxe0v7th — a failed page must name
+// itself.
+//
+// Both tests are gated on a real R + knitr toolchain, following the
+// `rscript_available()` / `knitr_r_package_available()` pattern in
+// `quarto-core/tests/integration/marimo_engine_e2e.rs`. A skip here is
+// an environment signal, not a pass.
+// ====================================================================
+
+/// `true` when `Rscript` is on PATH.
+fn rscript_available() -> bool {
+    Command::new("Rscript")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+/// `true` when the R `knitr` package is installed. Checked separately
+/// from [`rscript_available`] — `KnitrEngine::is_available()` only looks
+/// for the binary, not the package.
+fn knitr_r_package_available() -> bool {
+    Command::new("Rscript")
+        .args([
+            "-e",
+            "if (!requireNamespace(\"knitr\", quietly = TRUE)) quit(status = 1)",
+        ])
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+/// Shape 1. A chunk that *executes successfully* but emits markdown q2
+/// cannot parse. The parse runs against knitr's output buffer, so the
+/// diagnostic's span indexes into the intermediate — not the `.qmd`.
+///
+/// Before the fix, `run_pipeline`'s generic `StageError` conversion
+/// rebound that span to the source document's bytes. The engine output is
+/// far larger than this 5-line source, so the offset landed past EOF, the
+/// ariadne renderer bailed, *and* its `at <file>:<row>:<col>` fallback was
+/// skipped with it: the page died with a bare title and problem statement
+/// and its name appeared nowhere in the transcript.
+///
+/// Two independent guarantees are asserted: the frame renders against the
+/// engine intermediate (Fix A, `engine_execution.rs`), and the `.qmd` is
+/// named anyway (Fix B, `failure_attribution_line`).
+#[test]
+fn engine_output_parse_failure_names_the_qmd() {
+    if !rscript_available() || !knitr_r_package_available() {
+        eprintln!("skipping: R toolchain with knitr not available");
+        return;
+    }
+
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    write_file(&dir.join("_quarto.yml"), "project:\n  type: default\n");
+    write_file(
+        &dir.join("boom.qmd"),
+        "---\ntitle: Boom\n---\n\n```{r}\n#| output: asis\ncat(\"{{< fa envelope size=1x >}}\\n\")\n```\n",
+    );
+
+    let out = run_q2(dir, &[]);
+    // ariadne interleaves color codes *inside* highlighted spans, so the
+    // offending source line is not a contiguous substring of raw stderr.
+    let stderr = crate::coalesced_diagnostics::strip_ansi(&String::from_utf8_lossy(&out.stderr));
+
+    assert!(
+        stderr.contains("boom.qmd"),
+        "a failed page must name itself; stderr was:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("while rendering"),
+        "the span resolves to the engine intermediate, so the attribution \
+         line is what supplies the .qmd name; stderr was:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("size=1x"),
+        "the frame must show the offending source line from the engine \
+         output; stderr was:\n{stderr}"
+    );
+}
+
+/// Shape 2. A chunk that calls `stop()`. The engine failure carries no
+/// span at all (`location: None`), so nothing in the diagnostic can name
+/// the page — before the fix, `print_render_diagnostics_text` discarded
+/// the known-good `FileFailure.input` and printed a bare
+/// `Error: Execution failed in knitr: R process failed`.
+///
+/// Note this asserts attribution only. Remapping knitr's traceback line
+/// numbers (`failing.rmarkdown:NNN`) back to `.qmd` lines is deliberately
+/// out of scope; see the plan doc.
+#[test]
+fn engine_execution_failure_names_the_qmd() {
+    if !rscript_available() || !knitr_r_package_available() {
+        eprintln!("skipping: R toolchain with knitr not available");
+        return;
+    }
+
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    write_file(&dir.join("_quarto.yml"), "project:\n  type: default\n");
+    write_file(
+        &dir.join("failing.qmd"),
+        "---\ntitle: Failing\n---\n\n```{r}\nstop(\"boom: this chunk always fails\")\n```\n",
+    );
+
+    let out = run_q2(dir, &[]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+
+    assert!(
+        stderr.contains("while rendering"),
+        "a span-less engine failure must still be attributed; stderr was:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("failing.qmd"),
+        "the .qmd name must appear in the transcript; stderr was:\n{stderr}"
+    );
+}
