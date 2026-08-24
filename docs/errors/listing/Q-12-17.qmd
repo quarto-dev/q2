@@ -48,4 +48,5 @@ leading `/` instead.
 
 ## Related
 
-- `Q-12-2` — inline `contents:` records are not yet supported.
+- `Q-12-20` — a record's `path:` names no project document.
+- `Q-12-21` — a record has neither `title:` nor `path:`.
