@@ -1051,7 +1051,7 @@ Done before the transform so the codes exist when the transform references them,
 - Create: `docs/errors/navigation/Q-13-11.qmd`, `Q-13-12.qmd`, `Q-13-13.qmd`
 - Modify: `docs/_quarto.yml:245` (after the `Q-13-10` entry)
 
-- [ ] **Step 1: Add the catalog entries**
+- [x] **Step 1: Add the catalog entries**
 
 Insert into `crates/quarto-error-catalog/error_catalog.json` after `"Q-13-10"`.
 
@@ -1081,7 +1081,7 @@ Insert into `crates/quarto-error-catalog/error_catalog.json` after `"Q-13-10"`.
   },
 ```
 
-- [ ] **Step 2: Write the three docs pages**
+- [x] **Step 2: Write the three docs pages**
 
 Follow the structure of `docs/errors/navigation/Q-13-10.qmd` — front matter, blockquote restating the message, then `## What this means`, `## Why this happens`, `## How to fix`, `## Related`. Each page must set `code:` and `subsystem: navigation`, and its `docs_url` in the catalog must be `https://quarto.org/docs/errors/navigation/<code>`.
 
@@ -1314,7 +1314,7 @@ website:
 - `Q-13-12` — an unrecognized `repo-actions` entry.
 ```
 
-- [ ] **Step 3: Add the sidebar entries**
+- [x] **Step 3: Add the sidebar entries**
 
 In `docs/_quarto.yml`, after line 245 (`- errors/navigation/Q-13-10.qmd`), add:
 
@@ -1326,12 +1326,12 @@ In `docs/_quarto.yml`, after line 245 (`- errors/navigation/Q-13-10.qmd`), add:
 
 Match the surrounding indentation exactly. Entries within a section must ascend by code number; 11, 12, 13 after 10 satisfies this.
 
-- [ ] **Step 4: Verify the lint rules pass**
+- [x] **Step 4: Verify the lint rules pass**
 
 Run: `cargo xtask lint`
 Expected: no `error-docs-page-missing` or `error-docs-sidebar-unlisted` violations.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/quarto-error-catalog/error_catalog.json docs/errors/navigation docs/_quarto.yml
@@ -1340,9 +1340,26 @@ git commit -m "Add Q-13-11/12/13 for repo-action misconfiguration (bd-repo-actio
 
 ### Phase 2 gate
 
-- [ ] Run `cargo nextest run --workspace`. This phase adds **no tests and no behaviour** — it is catalog data and documentation — so the delta against the Task 0 baseline must be **zero**. A non-zero delta here means the catalog JSON broke something that parses it.
+- [x] Run `cargo nextest run --workspace`. This phase adds **no tests and no behaviour** — it is catalog data and documentation — so the delta against the Task 0 baseline must be **zero**. A non-zero delta here means the catalog JSON broke something that parses it.
 
-- [ ] Run `cargo xtask lint` once more from a clean tree. `cargo xtask verify` does **not** run these repo-level rules, and no CI check in this repo is required to pass before merge, so this command is the only thing standing between a missing sidebar entry and a shipped 404.
+- [x] Run `cargo xtask lint` once more from a clean tree. `cargo xtask verify` does **not** run these repo-level rules, and no CI check in this repo is required to pass before merge, so this command is the only thing standing between a missing sidebar entry and a shipped 404.
+
+  **Result: both green.** `cargo nextest run --workspace` → **13158 passed, 199 skipped** — identical to the
+  Phase 1 gate, i.e. the required **zero delta** for a catalog-and-docs phase. `cargo xtask lint` → `All checks
+  passed! (1043 files checked)`, which covers `error-docs-page-missing` and `error-docs-sidebar-unlisted`
+  (both are called unconditionally from `run_check` in `crates/xtask/src/lint/mod.rs:97,102`; `--verbose` only
+  adds announcement lines).
+
+  One nextest `LEAK` note appeared on `quarto-core stage::stages::compile_theme_css::tests::
+  fingerprint_stable_for_identical_inputs` — the test **passed**; `LEAK` means it left a handle or subprocess
+  behind. Unrelated to this phase (nothing here touches theme compilation) and not present in the Phase 1 run,
+  so it reads as a timing artifact of the sass subprocess rather than a regression. Noted, not chased.
+
+  The three new pages were additionally confirmed to **render**: `docs/_site/errors/navigation/Q-13-11.html`,
+  `-12.html` and `-13.html` were produced with the expected `<title>`s ("Repository actions require a repo-url",
+  "Unknown repository action", "Page-level repo-actions: true ignored"), real body content, and working
+  cross-links to their siblings. (A bare `q2 render docs/` fails in a fresh worktree on the gitignored,
+  generated `docs/examples` resource — run `cargo xtask stage-doc-examples` first.)
 
 ---
 

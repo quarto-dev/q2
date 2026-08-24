@@ -1503,5 +1503,26 @@
     "message_template": "A sidebar entry carries both a `section:` and a `text:` key. They are alternate spellings for a section's display label, and `section:` takes precedence — the `text:` value is ignored. Remove one of the two keys.",
     "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-10",
     "since_version": "99.9.9"
+  },
+  "Q-13-11": {
+    "subsystem": "navigation",
+    "title": "Repository actions require a repo-url",
+    "message_template": "`repo-actions` lists actions to render, but neither `website.repo-url` nor `website.issue-url` is set, so no link can be built and no actions render. Set `website.repo-url` to the repository's web URL (for example `https://github.com/owner/repo`).",
+    "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-11",
+    "since_version": "99.9.9"
+  },
+  "Q-13-12": {
+    "subsystem": "navigation",
+    "title": "Unknown repository action",
+    "message_template": "A `repo-actions` entry names an action Quarto does not recognize. The supported actions are `edit`, `source`, and `issue`; `none` clears the list. The unrecognized entry is skipped and the remaining actions still render.",
+    "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-12",
+    "since_version": "99.9.9"
+  },
+  "Q-13-13": {
+    "subsystem": "navigation",
+    "title": "Page-level `repo-actions: true` ignored",
+    "message_template": "A page's front matter sets `repo-actions: true`. This key does not enable repository actions — the action list always comes from `website.repo-actions` — it asks only that a page with no table of contents show the actions in the margin rather than the page footer. Quarto 2 does not implement that placement, so the value is ignored and the actions render in the page footer at every width. Page-level `repo-actions: false`, which suppresses the actions for a single page, is supported.",
+    "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-13",
+    "since_version": "99.9.9"
   }
 }

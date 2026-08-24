@@ -1,0 +1,63 @@
+---
+title: "Unknown repository action"
+description: "A repo-actions entry names an action Quarto does not recognize; it is skipped."
+code: Q-13-12
+subsystem: navigation
+status: complete
+since: "99.9.9"
+categories:
+  - navigation
+  - websites
+---
+
+# `Q-13-12` — Unknown repository action
+
+> A `repo-actions` entry names an action Quarto does not recognize.
+> The supported actions are `edit`, `source`, and `issue`; `none`
+> clears the list. The unrecognized entry is skipped and the
+> remaining actions still render.
+
+## What this means
+
+`repo-actions` accepts a fixed set of names:
+
+| action | link |
+|---|---|
+| `edit` | "Edit this page" — opens the source file in the host's web editor |
+| `source` | "View source" — opens the source file for reading |
+| `issue` | "Report an issue" — opens the issue tracker |
+
+`none` is also accepted and clears the list. Anything else is
+skipped with this message; the entries Quarto does recognize still
+render.
+
+## Why this happens
+
+Common causes:
+
+- **A typo** — `sources`, `edits`, `issues`.
+- **A guessed action name** for something Quarto does not offer,
+  such as `star`, `fork`, or `history`.
+
+## How to fix
+
+Use only the supported names:
+
+``` yaml
+website:
+  repo-url: https://github.com/owner/repo
+  repo-actions: [edit, source, issue]
+```
+
+To turn the links off for the whole site, use `none` or remove the
+key:
+
+``` yaml
+website:
+  repo-actions: none
+```
+
+## Related
+
+- `Q-13-11` — `repo-actions` set with no `repo-url`.
+- `Q-13-13` — page-level `repo-actions: true` is ignored.
