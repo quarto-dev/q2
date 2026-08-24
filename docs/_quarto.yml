@@ -203,6 +203,8 @@ website:
             - errors/listing/Q-12-17.qmd
             - errors/listing/Q-12-18.qmd
             - errors/listing/Q-12-19.qmd
+            - errors/listing/Q-12-21.qmd
+            - errors/listing/Q-12-22.qmd
         - section: "xml"
           contents:
             - errors/xml/Q-9-1.qmd

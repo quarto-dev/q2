@@ -1,0 +1,65 @@
+---
+title: "Listing Record Has No Title"
+description: "An inline `contents:` record has neither `title:` nor `path:`; the item renders with an empty title."
+code: Q-12-21
+subsystem: listing
+status: stub
+since: "99.9.9"
+categories:
+  - listing
+---
+
+# `Q-12-21` — Listing Record Has No Title
+
+> An inline `contents:` record has neither `title:` nor `path:`; the
+> item renders with an empty title.
+
+## What this means
+
+A listing's `contents:` can name inline records directly, instead of
+(or alongside) glob patterns matching project documents:
+
+```yaml
+listing:
+  contents:
+    - title: Get started
+      path: download.qmd
+```
+
+The record *is* the item — there is no document behind it to fall
+back on for a title, unless `path:` names one. This warning fires
+when a record has neither: nothing tells the listing what to display,
+so the item's title is empty.
+
+## Why this happens
+
+- The record was meant to be a short standalone entry (an external
+  link, a call-to-action card) and `title:` was simply forgotten.
+- The record was meant to overlay a project document — the author
+  intended `path:` to supply the title from the document, but left
+  `path:` out too, so there is nothing to derive a title from at all.
+
+## How to fix
+
+Add `title:` to the record:
+
+```yaml
+listing:
+  contents:
+    - title: Get started
+      description: Download and install
+```
+
+Or, if the record is meant to link to a project document, add
+`path:` — the item then falls back to the document's title (or the
+file name, if the document has none):
+
+```yaml
+listing:
+  contents:
+    - path: download.qmd
+```
+
+## Related
+
+- `Q-12-22` — a record key looks like a misspelling of a listing field.

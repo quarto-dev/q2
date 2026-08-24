@@ -1,0 +1,67 @@
+---
+title: "Listing Record Key Looks Misspelled"
+description: "A key in an inline `contents:` record is a near-miss of a listing field; it was kept as a custom field."
+code: Q-12-22
+subsystem: listing
+status: stub
+since: "99.9.9"
+categories:
+  - listing
+---
+
+# `Q-12-22` — Listing Record Key Looks Misspelled
+
+> A key in an inline `contents:` record is a near-miss of a listing
+> field; it was kept as a custom field.
+
+## What this means
+
+An inline `contents:` record's curated keys (`title:`, `description:`,
+`image:`, and so on) are typed into the item's built-in fields; every
+other key is forwarded, verbatim, into `item.extra` for custom
+templates to read. That forwarding is silent by design — custom
+fields are a supported feature — so a typo'd curated key is otherwise
+invisible: it doesn't error, it just quietly becomes a custom field
+the built-in templates never look at.
+
+This warning flags a key that is *close* to a known listing field
+name, on the theory that it is more likely a typo than a deliberate
+custom field.
+
+## Why this happens
+
+Common near-misses:
+
+```yaml
+listing:
+  contents:
+    - title: Get started
+      descripton: Download and install    # meant `description:`
+      Title: duplicate case-typo of title  # meant `title:`
+```
+
+The check compares each unrecognized key against the curated field
+names using edit distance (insertions, deletions, substitutions, and
+adjacent-character swaps each count as one edit): keys of 5 characters
+or fewer must match within 1 edit, longer keys within 2. `name` is 2
+edits from `date` and is *not* flagged — short, unrelated words don't
+trigger it.
+
+## How to fix
+
+- If the key was meant to be a curated field, rename it:
+
+  ```yaml
+  listing:
+    contents:
+      - title: Get started
+        description: Download and install
+  ```
+
+- If the key is intentional — a custom template reads `item.descripton`
+  on purpose — no change is needed; the warning does not block
+  rendering, and the key still reaches `item.extra` either way.
+
+## Related
+
+- `Q-12-21` — a record has neither `title:` nor `path:`.
