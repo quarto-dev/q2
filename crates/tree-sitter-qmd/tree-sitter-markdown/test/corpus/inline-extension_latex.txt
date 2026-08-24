@@ -57,7 +57,11 @@ $$This should prevent [this from parsing$$ the link](https://google.com)
         (pandoc_space)
         (pandoc_str)
         (pandoc_space)
-        (pandoc_str)))
+        (pandoc_str)
+        (shortcode_name)
+        (pipe_table_align_left)
+        (shortcode_name)
+        (shortcode_name)))
 ================================================================================
 LaTeX inside markup
 ================================================================================

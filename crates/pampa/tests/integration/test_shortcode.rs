@@ -495,3 +495,139 @@ fn test_shortcode_at_end_no_trailing_space() {
         "Last inline should be Shortcode (no trailing Space)"
     );
 }
+
+// ============================================================================
+// Naked-argument widening (bd-shortcode-escaped-gt-fatal-2u79bqp1,
+// bd-shortcode-naked-value-nonascii-47fzbmow)
+// ============================================================================
+
+#[test]
+fn test_naked_arg_escaped_gt_unescapes() {
+    // The Positron docs case: `>` cannot be written bare because it would
+    // close the shortcode, so it is escaped. Q1 hands the shortcode `>`.
+    let pandoc = parse_qmd(r"{{< kbd \> >}}");
+    let shortcode = get_first_shortcode(&pandoc);
+
+    assert_eq!(shortcode.name, "kbd");
+    assert_eq!(get_positional_strings(shortcode), vec![">"]);
+}
+
+#[test]
+fn test_naked_arg_escaped_star_unescapes() {
+    // Q1 collapses `\X` for any ASCII punctuation X, even where X needed no
+    // escape. CommonMark semantics; `unescape_punctuation` implements them.
+    let pandoc = parse_qmd(r"{{< kbd \* >}}");
+    assert_eq!(
+        get_positional_strings(get_first_shortcode(&pandoc)),
+        vec!["*"]
+    );
+}
+
+#[test]
+fn test_naked_arg_backslash_before_non_punctuation_is_literal() {
+    // `\n` is not an escape: n is not ASCII punctuation, so the backslash
+    // survives verbatim. Passes both before and after the reader change;
+    // it is a guard, not a red-to-green test.
+    let pandoc = parse_qmd(r"{{< kbd \n >}}");
+    assert_eq!(
+        get_positional_strings(get_first_shortcode(&pandoc)),
+        vec![r"\n"]
+    );
+}
+
+#[test]
+fn test_naked_arg_non_ascii_symbol() {
+    let pandoc = parse_qmd("{{< kbd → >}}");
+    assert_eq!(
+        get_positional_strings(get_first_shortcode(&pandoc)),
+        vec!["→"]
+    );
+}
+
+#[test]
+fn test_naked_arg_non_ascii_letters() {
+    let pandoc = parse_qmd("{{< kbd é >}}");
+    assert_eq!(
+        get_positional_strings(get_first_shortcode(&pandoc)),
+        vec!["é"]
+    );
+
+    let pandoc = parse_qmd("{{< kbd 日 >}}");
+    assert_eq!(
+        get_positional_strings(get_first_shortcode(&pandoc)),
+        vec!["日"]
+    );
+}
+
+#[test]
+fn test_naked_arg_previously_excluded_punctuation() {
+    for ch in ["*", "^", "|"] {
+        let src = format!("{{{{< kbd {} >}}}}", ch);
+        let pandoc = parse_qmd(&src);
+        assert_eq!(
+            get_positional_strings(get_first_shortcode(&pandoc)),
+            vec![ch],
+            "bare {ch} should be a positional naked arg"
+        );
+    }
+}
+
+#[test]
+fn test_keyword_arg_non_ascii_value() {
+    // bd-shortcode-naked-value-nonascii-47fzbmow's real-world input. The
+    // key/value split must survive the widening.
+    let pandoc = parse_qmd("{{< kbd mac=Command-→ win=Ctrl-→ >}}");
+    let shortcode = get_first_shortcode(&pandoc);
+
+    assert_eq!(shortcode.name, "kbd");
+    assert!(
+        shortcode.positional_args.is_empty(),
+        "key=value must not collapse into a positional arg"
+    );
+    match get_keyword_arg(shortcode, "mac") {
+        Some(ShortcodeArg::String(s)) => assert_eq!(s, "Command-→"),
+        other => panic!("expected mac=Command-→, got {other:?}"),
+    }
+    match get_keyword_arg(shortcode, "win") {
+        Some(ShortcodeArg::String(s)) => assert_eq!(s, "Ctrl-→"),
+        other => panic!("expected win=Ctrl-→, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_keyword_arg_still_splits_on_ascii() {
+    // Regression guard for the highest-blast-radius risk of this change:
+    // `=` must keep separating key from value.
+    //
+    // NB: the value must not start with a digit. `size=2x` is a Q-2-34 error
+    // fixture (shortcode_number's prec(3) beats the naked token), and
+    // parse_qmd would panic on it.
+    let pandoc = parse_qmd("{{< fa envelope size=large >}}");
+    let shortcode = get_first_shortcode(&pandoc);
+
+    assert_eq!(get_positional_strings(shortcode), vec!["envelope"]);
+    match get_keyword_arg(shortcode, "size") {
+        Some(ShortcodeArg::String(s)) => assert_eq!(s, "large"),
+        other => panic!("expected size=large, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_naked_url_with_query_string_unchanged() {
+    let pandoc = parse_qmd("{{< video https://x.com/v?t=1&u=2 >}}");
+    let shortcode = get_first_shortcode(&pandoc);
+
+    assert_eq!(
+        get_positional_strings(shortcode),
+        vec!["https://x.com/v?t=1&u=2"],
+        "a query string must stay one naked token, not split on ="
+    );
+    assert!(shortcode.keyword_args.is_empty());
+}
+
+#[test]
+fn test_shortcode_name_is_not_unescaped() {
+    // shortcode_name keeps the verbatim path; guard that it still works.
+    let pandoc = parse_qmd("{{< my_shortcode-2 arg >}}");
+    assert_eq!(get_first_shortcode(&pandoc).name, "my_shortcode-2");
+}
