@@ -62,6 +62,27 @@ Q1 has all three link states (glob/`path:`-to-document, `path:` to a non-documen
 
 **D3. Ordering: declared position.** A record occupies its own slot in `contents:`; glob items keep the index of their first matching pattern. Mechanically the sort key is `(index, is_glob)`: a glob item's index is the first *positive pattern* that matched it (unchanged from today), a record's is the count of `Glob` entries declared before it, and `is_glob` breaks the tie so a record written before a glob sorts before that glob's items. Deliberately **not** derived from provenance — `SourceInfo::for_test()` and `By::programmatic_config()` are constants, so equal-comparing sources would collapse every glob to index 0. Differs from Q1 (records appended after all glob matches) only under `sort: false` with a record written before a glob, and diverges toward what the YAML says. Documented in the guide. A record whose `path:` names a document a glob also matches yields **two items** (Q1 parity, no dedupe).
 
+> **Amended during execution (Task 5, fix rounds 1-2).** The wording above —
+> "a record's [index] is the count of `Glob` entries declared before it" — is
+> wrong wherever a `contents:` entry does not survive into
+> `resolution.positives()`. A glob item's index is its *ordinal in
+> `positives()`*, which excludes negated patterns and patterns dropped as
+> escaped (Q-12-17) or invalid (Q-12-18); counting all `Glob` entries puts the
+> two keys on different scales, so `contents: ["!posts/draft.qmd", {title:
+> Featured}, "posts/*.qmd"]` under `sort: false` rendered the glob's items
+> *before* the record — the reverse of declared order. The implemented rule
+> counts only entries that contribute a positive pattern, derived from a
+> retained `GlobResolution::entry_index` mapping rather than reconstructed by
+> matching pattern text. Ruling recorded because §D3's binding intent is
+> declared position; the mechanical wording lost to the intent.
+>
+> Second amendment, same rounds: when `contents:` holds only negations,
+> `inject_default_positive` synthesizes a positive with no declared entry.
+> That synthesized positive **counts as declared before every entry**, so a
+> record in such a listing sorts after the default's items wherever it is
+> written. This preserves the behaviour the original wording produced and is
+> pinned by `record_after_negation_only_prefix_sorts_after_the_injected_default`.
+
 **D4. Record `path:` semantics (Q1 `listItemFromMeta`).** *Remote* (`http://`, `https://`, `data:`, protocol-relative `//`) → `Href` verbatim. **Not** `is_external_src`: that helper also treats a leading `/` as external (`helpers.rs:88-94`, correct for image `src` values), but a leading `/` on a config-authored path means *the project root* (`claude-notes/designs/path-resolution-model.md`, normative), and `join_and_normalize` already implements that re-anchor. Records therefore use a narrower `is_remote_src`. Otherwise resolve against the declaring file's dir via `join_and_normalize`; escaping the project → Q-12-17 + `Href`. Markdown extension (`qmd|md|rmd|ipynb`) → `ProjectIndex::lookup_by_source`; found → `hydrate_item(profile)` overlaid by the record (record wins per field; `categories` **replaces**, not tag-merges), origin `RecordOverDocument`; not found → Q-12-20 + `Href(raw)` so the page keeps its content. Non-markdown extension → `Href(raw)`. A `path:` record is a dependency edge: `flatten_content_globs` emits it as a literal pattern with the value's provenance.
 
 **D5. Drafts: a seam, not a feature.** Listings do not filter drafts today (`listing_generate.rs` never reads `profile.draft`; `sidebar_auto`, `aliases`, `llms` do). Both the glob path and the record `path:` path go through one `item_visible(&DocumentProfile) -> bool` that returns `true`, documented as the seam bd-zeormbsa's `is_linkable` replaces. No draft behaviour is added here.
@@ -156,7 +177,7 @@ compiler enumerate the sites inside each.
 **Interfaces:**
 - Produces: `pub enum ItemTarget { Document { source_path: PathBuf, output_href: String }, Href(String), None }` with `ItemTarget::document(source, href)`, `source_path() -> Option<&Path>`, `href() -> Option<&str>`, `output_href() -> Option<&str>`, `filename() -> Option<String>`, `filter_path() -> Option<String>`; `pub enum ItemOrigin { Document, Record, RecordOverDocument }`; `ListingItem { …, pub target: ItemTarget, pub origin: ItemOrigin, … }` (fields `source_path`/`output_href` removed); `pub(crate) fn join_authors(&[String]) -> Option<String>`; `pub(crate) fn rebase_image_from_dir(src: &str, dir: &str) -> String`.
 
-- [ ] **Step 1: Write the failing unit tests** — append to the `tests` module of `item.rs`:
+- [x] **Step 1: Write the failing unit tests** — append to the `tests` module of `item.rs`:
 
 ```rust
     #[test]
@@ -215,12 +236,12 @@ compiler enumerate the sites inside each.
     }
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cargo nextest run -p quarto-core -E 'test(target_) | test(hydrated_item_is_a_document_target) | test(rebase_image_from_dir_)'`
 Expected: compile error — `ItemTarget`, `ItemOrigin`, `rebase_image_from_dir` not found.
 
-- [ ] **Step 3: Add the types to `item.rs`** (above `pub struct ListingItem`), replace the two fields, and update `hydrate_item`:
+- [x] **Step 3: Add the types to `item.rs`** (above `pub struct ListingItem`), replace the two fields, and update `hydrate_item`:
 
 ```rust
 use std::path::{Path, PathBuf};
@@ -404,7 +425,7 @@ pub(crate) fn rebase_image_from_dir(src: &str, dir: &str) -> String {
 
 Make `join_authors` `pub(crate)`. Add `pub use item::{ItemOrigin, ItemTarget, ListingItem, hydrate_item};` in `mod.rs`.
 
-- [ ] **Step 4: Migrate the consumers** — each is a one-line `match`-free rewrite via the accessors:
+- [x] **Step 4: Migrate the consumers** — each is a one-line `match`-free rewrite via the accessors:
 
 `binding.rs:380-395` becomes:
 
@@ -522,12 +543,12 @@ derives `format!("posts/{title}.qmd")`. Pass each one's existing source path
 and href to `ItemTarget::document(…)` unchanged — nothing asserts on them, but
 altering them makes the diff lie about what this refactor did.
 
-- [ ] **Step 5: Gate**
+- [x] **Step 5: Gate**
 
 Run: `cargo clippy -p quarto-core --all-targets -- -D warnings && cargo nextest run -p quarto-core`
 Expected: clean clippy; all tests pass including the five new ones (no snapshot changes — this is a pure refactor).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A crates/quarto-core
@@ -546,7 +567,7 @@ git commit -m "Give listing items an explicit link target instead of assuming a 
 **Interfaces:**
 - Produces: `pub enum UnknownKeyPolicy { Drop, IntoExtra { except: &'static [&'static str] } }`; `pub const LISTING_ITEM_KEYS: &[&str]`; `impl ListingItemInfo { pub fn from_map(li: &ConfigValue, unknown: UnknownKeyPolicy) -> Self }`. Front-matter behaviour unchanged.
 
-- [ ] **Step 1: Write the failing tests** (in `document_profile.rs`'s `tests` module; build values with the crate's `ConfigValue` constructors):
+- [x] **Step 1: Write the failing tests** (in `document_profile.rs`'s `tests` module; build values with the crate's `ConfigValue` constructors):
 
 ```rust
     fn cv_s(v: &str) -> ConfigValue {
@@ -603,12 +624,12 @@ git commit -m "Give listing items an explicit link target instead of assuming a 
     }
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cargo nextest run -p quarto-core -E 'test(from_map_)'`
 Expected: compile error — `UnknownKeyPolicy` / `from_map` not found.
 
-- [ ] **Step 3: Implement** — add next to `ListingItemInfo`:
+- [x] **Step 3: Implement** — add next to `ListingItemInfo`:
 
 ```rust
 /// What [`ListingItemInfo::from_map`] does with keys it does not
@@ -688,12 +709,12 @@ fn extract_listing_item(meta: &ConfigValue) -> ListingItemInfo {
 }
 ```
 
-- [ ] **Step 4: Gate**
+- [x] **Step 4: Gate**
 
 Run: `cargo clippy -p quarto-core --all-targets -- -D warnings && cargo nextest run -p quarto-core -E 'binary(quarto-core) & (test(from_map_) | test(listing_item) | test(profile_))'`
 Expected: PASS (all existing profile tests unchanged).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/quarto-core/src/document_profile.rs
@@ -709,7 +730,7 @@ git commit -m "Lift listing-item extraction into ListingItemInfo::from_map with 
 **Interfaces:**
 - Produces: `ListingContents::Inline(ConfigValue)` — the record map with its own span and per-key `key_source`s intact.
 
-- [ ] **Step 1: Rewrite the two existing tests to the new contract** — in `config.rs` replace `contents_inline_record_emits_diagnostic` with:
+- [x] **Step 1: Rewrite the two existing tests to the new contract** — in `config.rs` replace `contents_inline_record_emits_diagnostic` with:
 
 ```rust
     // 7. inline-record contents are captured whole, with no diagnostic
@@ -735,7 +756,7 @@ git commit -m "Lift listing-item extraction into ListingItemInfo::from_map with 
 
 Delete `q_12_2_underlines_the_whole_inline_contents_record` (there is no diagnostic left to span; Task 4 adds the Q-12-22 span test in its place). In `glob_resolve.rs`, the `inline_records_contribute_nothing` test constructs `ListingContents::Inline(quarto_pandoc_types::ConfigValue::new_map(vec![], SourceInfo::for_test()))`.
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cargo nextest run -p quarto-core -E 'test(contents_inline_record_is_captured_without_diagnostic) | test(inline_records_contribute_nothing)'`
 Expected: a **compile error from `glob_resolve.rs`** — `ListingContents::Inline`
@@ -745,7 +766,7 @@ to compile: `.get("title")` resolves on a `BTreeMap` too. It fails at
 `assert!(diags.is_empty())` once the crate builds. Both edits are needed for
 this step to mean anything.)
 
-- [ ] **Step 3: Implement** — enum variant:
+- [x] **Step 3: Implement** — enum variant:
 
 ```rust
     /// Inline metadata record — the whole map, so the record's own
@@ -757,12 +778,12 @@ this step to mean anything.)
 
 and the `Map` arm of `parse_contents` becomes simply `ConfigValueKind::Map(_) => Some(ListingContents::Inline(item.clone())),` — delete the `push_diag(… "Q-12-2" …)` call and the `BTreeMap` collect. Update the doc comments on `resolve_content_globs` (`glob_resolve.rs:36-39`) and `flatten_content_globs` (`config.rs:1004-1006`) to say records are handled by the generate transform / Task 6 rather than "Q-12-2".
 
-- [ ] **Step 4: Gate**
+- [x] **Step 4: Gate**
 
 Run: `cargo clippy -p quarto-core --all-targets -- -D warnings && cargo nextest run -p quarto-core`
 Expected: PASS. `grep -rn '"Q-12-2"' crates/quarto-core/src` returns nothing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/quarto-core/src/project/listing
@@ -782,7 +803,7 @@ git commit -m "Keep inline contents records whole and stop emitting Q-12-2 (bd-l
 - Consumes: `ListingItemInfo::from_map`, `UnknownKeyPolicy` (Task 2); `ItemTarget`, `ItemOrigin`, `join_authors`, `rebase_image_from_dir` (Task 1); `crate::metadata::authors::parse_authors_model(&ConfigValue) -> AuthorsModel` (`.authors[i].name.literal: String`).
 - Produces: `pub struct ListingRecord { pub info: ListingItemInfo, pub authors: Vec<String>, pub order: Option<i32>, pub path: Option<(String, SourceInfo)>, pub source: SourceInfo }`; `pub fn parse_record(value: &ConfigValue, diags: &mut Vec<DiagnosticMessage>) -> ListingRecord`; `pub fn record_item(rec: ListingRecord, target: ItemTarget, base_dir: &str) -> ListingItem`; `pub fn overlay_record(item: ListingItem, rec: ListingRecord, base_dir: &str) -> ListingItem`.
 
-- [ ] **Step 1: Write the failing tests.** Create `record.rs` containing *only* the `tests` module below (plus `pub mod record;` in `mod.rs`), and run it. The module items it calls do not exist yet, so the failure is a compile error — that is the point.
+- [x] **Step 1: Write the failing tests.** Create `record.rs` containing *only* the `tests` module below (plus `pub mod record;` in `mod.rs`), and run it. The module items it calls do not exist yet, so the failure is a compile error — that is the point.
 
 ```rust
 #[cfg(test)]
@@ -973,12 +994,12 @@ listing:
 
 (`use crate::project::listing::ListingContents;` goes in the test module's imports.)
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cargo nextest run -p quarto-core -E 'binary(quarto-core) & test(record::tests)'`
 Expected: compile error — module items missing.
 
-- [ ] **Step 3: Implement `record.rs`** (above the tests):
+- [x] **Step 3: Implement `record.rs`** (above the tests):
 
 ```rust
 /*
@@ -1229,7 +1250,7 @@ fn osa_distance(a: &str, b: &str) -> usize {
 
 Add `pub mod record;` to `mod.rs`.
 
-- [ ] **Step 4: Catalog + pages + sidebar for Q-12-21 and Q-12-22** — insert after the `"Q-12-19"` object in `error_catalog.json`:
+- [x] **Step 4: Catalog + pages + sidebar for Q-12-21 and Q-12-22** — insert after the `"Q-12-19"` object in `error_catalog.json`:
 
 ```json
   "Q-12-21": {
@@ -1250,12 +1271,12 @@ Add `pub mod record;` to `mod.rs`.
 
 (Q-12-20 and Q-12-23 are added in Task 5, in code order; insert 21/22 now, leaving room — JSON object order is not semantically significant but keep them ascending for readers.) Create the two pages from the template in `docs/errors/README.md:100-120` with `status: stub`, `subsystem: listing`, `since: "99.9.9"`, `categories: [listing]`. Q-12-21 body: what a record is; why (forgot `title:`, or meant `path:` to a document); fix: add `title:`. Q-12-22 body: records forward unknown keys to custom fields, so typos are invisible; why (`descripton`, `Title`); fix: rename, or ignore if a custom template reads the key; the near-miss rule (≤1 edit for short keys, ≤2 otherwise). Append `- errors/listing/Q-12-21.qmd` and `- errors/listing/Q-12-22.qmd` after line 205 of `docs/_quarto.yml`.
 
-- [ ] **Step 5: Gate**
+- [x] **Step 5: Gate**
 
 Run: `cargo xtask lint --quiet && cargo clippy -p quarto-core --all-targets -- -D warnings && cargo nextest run -p quarto-core`
 Expected: lint clean; PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/quarto-core/src/project/listing crates/quarto-error-catalog/error_catalog.json docs/errors/listing/Q-12-21.qmd docs/errors/listing/Q-12-22.qmd docs/_quarto.yml
@@ -1282,7 +1303,7 @@ git commit -m "Parse inline listing records into items, with near-miss and no-ti
 - Produces: `pub(crate) fn is_remote_src(&str) -> bool` in `helpers.rs`.
 - Produces: `pub(crate) fn is_markdown_document_path(p: &str) -> bool` in `config.rs`; private `item_visible(&DocumentProfile) -> bool` seam.
 
-- [ ] **Step 1: Write the failing tests** — append to `listing_generate.rs`'s `tests` module (helpers `s`, `b`, `arr`, `map`, `make_profile`, `run_transform` exist there):
+- [x] **Step 1: Write the failing tests** — append to `listing_generate.rs`'s `tests` module (helpers `s`, `b`, `arr`, `map`, `make_profile`, `run_transform` exist there):
 
 ```rust
     fn contents_listing(entries: Vec<ConfigValue>) -> ConfigValue {
@@ -1489,12 +1510,12 @@ git commit -m "Parse inline listing records into items, with near-miss and no-ti
 
 (`use crate::project::listing::{ItemOrigin, ItemTarget};` in the test imports.)
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cargo nextest run -p quarto-core -E 'test(record_) | test(records_keep) | test(yaml_file_entry)'`
 Expected: FAIL — items empty / codes missing.
 
-- [ ] **Step 3: Implement.** In `config.rs` (near `flatten_content_globs`):
+- [x] **Step 3: Implement.** In `config.rs` (near `flatten_content_globs`):
 
 ```rust
 /// Q1's `markdownExtensions` for record `path:` values, plus
@@ -1763,7 +1784,7 @@ fn yaml_contents_unsupported(pattern: &str, source: &SourceInfo) -> DiagnosticMe
 }
 ```
 
-- [ ] **Step 4: Catalog + pages + sidebar for Q-12-20 and Q-12-23** — catalog entries (insert Q-12-20 before Q-12-21, Q-12-23 after Q-12-22):
+- [x] **Step 4: Catalog + pages + sidebar for Q-12-20 and Q-12-23** — catalog entries (insert Q-12-20 before Q-12-21, Q-12-23 after Q-12-22):
 
 ```json
   "Q-12-20": {
@@ -1788,7 +1809,7 @@ one in "How to fix" is enough — the boundary rule itself is unchanged.
 
 Pages: Q-12-20 — what (the `path:` overlay), why (typo, wrong directory — paths resolve against the declaring file, file excluded from `project.render`), fix (correct the path, use a leading `/` to anchor at the root, or drop `path:` if the record is meant to be a plain card), example with the did-you-mean. Q-12-23 — what (Q1's YAML-file source), why (copied from Q1), fix (inline the records), Related: bd-hj1ehfn8 is *not* a user-facing reference — say "planned for a later release". Sidebar: the listing section must read `…Q-12-19, Q-12-20, Q-12-21, Q-12-22, Q-12-23` in ascending order.
 
-- [ ] **Step 5: Gate**
+- [x] **Step 5: Gate**
 
 Run: `cargo xtask lint --quiet && cargo clippy -p quarto-core --all-targets -- -D warnings && cargo nextest run -p quarto-core`
 Expected: PASS. Watch the three pre-existing ordering tests especially —
@@ -1798,7 +1819,7 @@ Expected: PASS. Watch the three pre-existing ordering tests especially —
 key is unchanged by design, so all three must stay green **without edits**.
 If one of them flips, the ordering key is wrong — do not "fix" the test.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/quarto-core crates/quarto-error-catalog docs/errors/listing docs/_quarto.yml
@@ -1816,7 +1837,7 @@ git commit -m "Build listing items from inline contents records in the generate 
 - Consumes: `is_markdown_document_path` and `helpers::is_remote_src` (Task 5), `crate::glob::has_metacharacters`.
 - Produces: `flatten_content_globs` yields a `ListingContents::Glob { pattern: <raw path>, source: <path value's SourceInfo> }` for every record with a document `path:`.
 
-- [ ] **Step 1: Write the failing tests** — replace `extract_globs_drops_inline_records` in `config.rs` with:
+- [x] **Step 1: Write the failing tests** — replace `extract_globs_drops_inline_records` in `config.rs` with:
 
 ```rust
     /// A record's document `path:` is a dependency edge (plan §D4):
@@ -1869,7 +1890,7 @@ and add to `dependency_graph.rs` tests (next to `listing_globs_become_edges_host
     }
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cargo nextest run -p quarto-core -E 'test(extract_globs_keeps_record_document_paths_only) | test(record_path_literal_becomes_edge_and_forces_render)'`
 Expected: the config test FAILS, returning `vec!["*.qmd"]`.
@@ -1881,7 +1902,7 @@ literal path behaves like any other resolved pattern once it reaches the
 profile — not a regression guard. The config test is this task's only real
 coverage; do not water it down.
 
-- [ ] **Step 3: Implement** — `flatten_content_globs`'s tail becomes:
+- [x] **Step 3: Implement** — `flatten_content_globs`'s tail becomes:
 
 ```rust
     listings
@@ -1925,12 +1946,12 @@ literal `path:` of each inline `contents:` record that names a project document,
 so editing that document re-renders the host. Field type and
 `DOCUMENT_PROFILE_VERSION` unchanged."
 
-- [ ] **Step 4: Gate**
+- [x] **Step 4: Gate**
 
 Run: `cargo clippy -p quarto-core --all-targets -- -D warnings && cargo nextest run -p quarto-core`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/quarto-core claude-notes/designs/document-profile-contract.md
@@ -1945,7 +1966,7 @@ git commit -m "Treat a listing record's document path as a dependency edge (bd-l
 **Interfaces:**
 - Produces: template map has each `extra` key at top level (curated keys win) and still nested under `extra`; `description-placeholder-begin/end` and `image-placeholder-begin/end` are empty strings unless `item.origin == ItemOrigin::Document`.
 
-- [ ] **Step 1: Write the failing tests** — in `binding.rs`'s `tests` module, which already provides `item(title) -> ListingItem` and `listing() -> Listing` and reads items back through `build_listing_context(…).get("items")` (see `item_binding_extra_passes_through_via_pampa_bridge` at `:1030` for the exact access pattern):
+- [x] **Step 1: Write the failing tests** — in `binding.rs`'s `tests` module, which already provides `item(title) -> ListingItem` and `listing() -> Listing` and reads items back through `build_listing_context(…).get("items")` (see `item_binding_extra_passes_through_via_pampa_bridge` at `:1030` for the exact access pattern):
 
 ```rust
     /// The first item's template map from a one-item listing context.
@@ -1997,12 +2018,12 @@ git commit -m "Treat a listing record's document path as a dependency edge (bd-l
 
 (`use quarto_pandoc_types::ConfigValue; use quarto_source_map::SourceInfo; use super::super::{ItemOrigin, ItemTarget};` in the test module if not already imported. `TemplateValue` derives `Clone` — used by value throughout this file.)
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cargo nextest run -p quarto-core -E 'test(extra_keys_are_bound_flat) | test(record_items_get_no_l7) | test(record_over_document_keeps_path)'`
 Expected: FAIL (`link` not at top level; placeholders non-empty).
 
-- [ ] **Step 3: Implement** — gate every placeholder insertion (`description-placeholder-begin/end` and `image-placeholder-begin/end`) with:
+- [x] **Step 3: Implement** — gate every placeholder insertion (`description-placeholder-begin/end` and `image-placeholder-begin/end`) with:
 
 ```rust
     // L7 placeholders only for document-origin items (plan §D6): a
@@ -2029,12 +2050,12 @@ using `if placeholders { helpers::…(…) } else { String::new() }` for each of
 
 (`TemplateValue` must be `Clone`; it is used by value elsewhere in this file — confirm with the compiler.) Note the ordering: this block must run **after** every curated insertion and before `show`/`table-row` so `or_insert_with` sees the curated keys.
 
-- [ ] **Step 4: Gate**
+- [x] **Step 4: Gate**
 
 Run: `cargo clippy -p quarto-core --all-targets -- -D warnings && cargo nextest run -p quarto-core`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/quarto-core/src/project/listing/binding.rs
@@ -2050,7 +2071,7 @@ git commit -m "Bind listing custom fields flat and skip L7 placeholders for reco
 
 **Interfaces:** none new. Uses the `path` absence from Task 7.
 
-- [ ] **Step 1: Write the failing test** — in `listing_render.rs`'s tests. The module's helpers are `make_item(title: &str, date: Option<&str>) -> ListingItem`, `make_listing(kind: ListingType) -> Listing`, `empty_pandoc() -> Pandoc`, and `run_transform(ast: Pandoc, resolved: Vec<ResolvedListing>) -> (Pandoc, Vec<DiagnosticMessage>)`; existing tests inspect output through `format!("{:?}", ast)` (see `table_fields_subset_renders_single_column_without_diagnostics` at `:672`):
+- [x] **Step 1: Write the failing test** — in `listing_render.rs`'s tests. The module's helpers are `make_item(title: &str, date: Option<&str>) -> ListingItem`, `make_listing(kind: ListingType) -> Listing`, `empty_pandoc() -> Pandoc`, and `run_transform(ast: Pandoc, resolved: Vec<ResolvedListing>) -> (Pandoc, Vec<DiagnosticMessage>)`; existing tests inspect output through `format!("{:?}", ast)` (see `table_fields_subset_renders_single_column_without_diagnostics` at `:672`):
 
 ```rust
     #[tokio::test]
@@ -2084,12 +2105,12 @@ git commit -m "Bind listing custom fields flat and skip L7 placeholders for reco
 
 (`use crate::project::listing::{ItemOrigin, ItemTarget};` in the test imports.)
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cargo nextest run -p quarto-core -E 'test(unlinked_record_item_renders_title_without_anchor) | test(document_item_still_renders_title_as_link)'`
 Expected: the first FAILS (the template still emits `[Card]()`, a `Link(` with an empty target); the second passes and stays as the regression guard.
 
-- [ ] **Step 3: Edit the templates.** `item-default.template` thumbnail and title/subtitle blocks:
+- [x] **Step 3: Edit the templates.** `item-default.template` thumbnail and title/subtitle blocks:
 
 ```
 $if(image-html)$
@@ -2131,12 +2152,12 @@ $endif$
 
 `item-grid.template`: same pattern for its thumbnail (`:5-13`), title (`:18`, keep `.card-title`), subtitle (`:22`, keep `.card-subtitle`) and description link (`:43` → `$if(path)$[$description$]($path$){.no-external}$else$$description$$endif$`).
 
-- [ ] **Step 4: Gate**
+- [x] **Step 4: Gate**
 
 Run: `cargo clippy -p quarto-core --all-targets -- -D warnings && cargo nextest run -p quarto-core`
 Expected: PASS. If any `.snap` under `crates/quarto-core` changes, inspect it: document items must render byte-identically (the `$if(path)$` branch is the old text); report any diff explicitly per CLAUDE.md's snapshot rule.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/quarto-core
@@ -2152,7 +2173,7 @@ git commit -m "Render unlinked listing items without an anchor in the built-in t
 **Interfaces:**
 - Consumes: the harness shape of `listing_glob_resolution.rs:1-140` (`render_project`, `html_for`, `listing_titles`, `all_diag_codes`, `assert_no_code`) — copy those helpers verbatim into the new file (they are private to their module).
 
-- [ ] **Step 1: Write the tests** (they fail until Tasks 5–8 are in; if you are executing in order they pass immediately — still run them):
+- [x] **Step 1: Write the tests** (they fail until Tasks 5–8 are in; if you are executing in order they pass immediately — still run them):
 
 ```rust
 /*
@@ -2291,12 +2312,12 @@ fn yaml_file_contents_entry_warns_q_12_23() {
 
 The custom-template contract (`$for(items)$ … $items.title$ … $endfor$`, file next to the host page) is the one `listing_pipeline.rs:1247-1300` already exercises; the point of this test is that `$items.link$` / `$items.icon$` resolve **flat**. Explicit `::: {#id}` slots place each listing (`render_fills_explicit_slot`).
 
-- [ ] **Step 2: Run**
+- [x] **Step 2: Run**
 
 Run: `cargo nextest run -p quarto-core -E 'binary(integration) & test(listing_inline_records::)'`
 Expected: PASS (all five).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add crates/quarto-core/tests/integration
@@ -2316,9 +2337,9 @@ git commit -m "End-to-end tests for inline listing records (bd-listing-inline-co
 - Create: `docs/guides/projects/listings.qmd`
 - Modify: `docs/_quarto.yml:33` (add `- guides/projects/listings.qmd` after `paths.qmd`)
 
-- [ ] **Step 1: Deprecate the Q-12-2 page.** Front matter `status: deprecated`, and rewrite the now-false `title:`/`description:` (currently "Inline Listing Contents Not Yet Supported" / "…are not yet supported and the entry is skipped") — e.g. `title: "Inline Listing Contents Not Yet Supported (retired)"`, `description: "Older Quarto 2 releases skipped inline contents records; current releases render them."` The `error-docs-*` lints allow a page title to differ from the catalog title, so nothing else catches this. Replace the body's "not yet implemented" prose: "Quarto 2 releases after 0.26 support inline records and no longer emit this code. If you see it, you are on an older release — upgrade, or move each record to a file until you can." Keep the catalog entry untouched (append-only rule).
+- [x] **Step 1: Deprecate the Q-12-2 page.** Front matter `status: deprecated`, and rewrite the now-false `title:`/`description:` (currently "Inline Listing Contents Not Yet Supported" / "…are not yet supported and the entry is skipped") — e.g. `title: "Inline Listing Contents Not Yet Supported (retired)"`, `description: "Older Quarto 2 releases skipped inline contents records; current releases render them."` The `error-docs-*` lints allow a page title to differ from the catalog title, so nothing else catches this. Replace the body's "not yet implemented" prose: "Quarto 2 releases after 0.26 support inline records and no longer emit this code. If you see it, you are on an older release — upgrade, or move each record to a file until you can." Keep the catalog entry untouched (append-only rule).
 
-- [ ] **Step 2: Write `docs/guides/projects/listings.qmd`** (user-facing, usage not internals), sections:
+- [x] **Step 2: Write `docs/guides/projects/listings.qmd`** (user-facing, usage not internals), sections:
 
 ```markdown
 ---
@@ -2379,12 +2400,12 @@ with a warning ([`Q-12-23`](/docs/errors/listing/Q-12-23.qmd)); move the
 records inline.
 ```
 
-- [ ] **Step 3: Verify the docs build with Q2** (never Q1):
+- [x] **Step 3: Verify the docs build with Q2** (never Q1):
 
 Run: `cargo run --bin q2 -- render docs/ 2>&1 | grep -E "Q-1|Error|Rendered" | head`
 Expected: `Rendered N of N files`, no new diagnostics on `guides/projects/listings.qmd` or the error pages; open `docs/_site/guides/projects/listings.html` and confirm the page and sidebar entry.
 
-- [ ] **Step 4: Lint + commit**
+- [x] **Step 4: Lint + commit**
 
 ```bash
 cargo xtask lint --quiet
@@ -2398,17 +2419,17 @@ git commit -m "Document inline listing records and deprecate the Q-12-2 page (bd
 
 ### Task 11: Full verification and end-to-end record
 
-- [ ] **Step 1: Workspace tests**
+- [x] **Step 1: Workspace tests**
 
 Run: `cargo nextest run --workspace`
 Expected: 0 failures; record `passed/skipped` and the delta against 13130/199 in this file's §"End-to-end record".
 
-- [ ] **Step 2: Full verify (WASM leg included)**
+- [x] **Step 2: Full verify (WASM leg included)**
 
 Run: `cargo xtask verify > /tmp/verify.log 2>&1; tail -3 /tmp/verify.log`
 Expected: `exit=0`, all 14 steps ✓. (Inspect with grep; do not pipe nextest through `tail`.)
 
-- [ ] **Step 3: Real-binary check on the four fixtures** — from the repo root:
+- [x] **Step 3: Real-binary check on the four fixtures** — from the repo root:
 
 ```bash
 cargo build --bin q2
@@ -2419,9 +2440,9 @@ done
 
 Expected: control unchanged (2 items, 0 warnings); repro 2 items titled from YAML, `href="download.html"`/`features.html`, **0 warnings**; mixed 2 items; linkonly 2 items with no `<a` around the titles, 0 warnings. Paste the observed output into §"End-to-end record" and delete the generated `_site`/`.quarto` dirs (the investigation `.gitignore` covers them).
 
-- [ ] **Step 4: Positron smoke (local-only repo, best effort)** — `cd /Users/gordon/src/q2-positron-docs/docs-quarto-2 && <repo>/target/debug/q2 render 2>&1 | grep -c "Q-12-2"` should print `0`; the welcome grid containers should now carry items (card markup still raw EJS until bd-oywyaouf). Record the count; if the repo is absent, say so.
+- [x] **Step 4: Positron smoke (local-only repo, best effort)** — `cd /Users/gordon/src/q2-positron-docs/docs-quarto-2 && <repo>/target/debug/q2 render 2>&1 | grep -c "Q-12-2"` should print `0`; the welcome grid containers should now carry items (card markup still raw EJS until bd-oywyaouf). Record the count; if the repo is absent, say so.
 
-- [ ] **Step 5: Reconcile this plan's checklist** against what landed (confirm each `- [x]`), commit the plan, then follow `superpowers:finishing-a-development-branch`. Before that: `braid comment bd-bqf2 "…both Inline arms (parse_contents / flatten_content_globs) now agree on records — unify with the walker"`; **Do not push without approval.**
+- [x] **Step 5: Reconcile this plan's checklist** against what landed (confirm each `- [x]`), commit the plan, then follow `superpowers:finishing-a-development-branch`. Before that: `braid comment bd-bqf2 "…both Inline arms (parse_contents / flatten_content_globs) now agree on records — unify with the walker"`; **Do not push without approval.**
 
 ## Follow-ups (all filed; all out of this plan's scope)
 
@@ -2432,6 +2453,52 @@ Expected: control unchanged (2 items, 0 warnings); repro 2 items titled from YAM
 
 ## End-to-end record
 
-*(filled in by Task 11)*
+**Verification run 2026-08-24 at `3d3f3a4e2`** (17 commits on the branch; every
+command below run by the orchestrating session, not by a task implementer).
+
+**Workspace tests.** `cargo nextest run --workspace` → **13179 passed / 199
+skipped** (142s). Baseline at `596ceb572` was 13130 / 199, so **+49**, which
+accounts exactly: Task 1 +8, Task 2 +3, Task 3 −1, Task 4 +10, Task 5 +15
+(11 in the task, +2 per fix round), Task 6 +1, Task 7 +3, Task 8 +2, Task 9 +8.
+Skip count unchanged throughout — no test was silently disabled.
+
+**Full verify.** `cargo xtask verify` → all 14 steps ✓, exit 0, WASM/hub-client
+legs included. *One detour worth recording:* the first run failed at Step 4/14
+with 2 of 601 tree-sitter grammar parses failing ("LaTeX and link clashes",
+"Q-2-35: 4-space indent rejected"). This branch never touches
+`crates/tree-sitter-qmd/` (`git diff 596ceb572..HEAD -- crates/tree-sitter-qmd/`
+is empty); it is the same stale-compiled-grammar symptom recorded in
+§"Investigation record", and `tree-sitter generate && tree-sitter build` restored
+601/601. Nothing tracked changed. **The grammar artifact in a worktree goes stale
+on its own and will do this again** — check it before blaming a branch.
+
+**Real-binary check** — `target/debug/q2 render` in each fixture under
+`claude-notes/plans/listing-inline-contents-investigation/`, `_site/index.html`
+inspected, generated output deleted afterwards:
+
+| Fixture | Q-12 diagnostics | items | rendered |
+|---|---|---|---|
+| `control/` (two globs) | 0 | 2 | unchanged: Download stub, Features stub |
+| `repro/` (two records with `path:`) | **0** (was 2 × Q-12-2) | **2** (was 0) | `<a href="download.html" class="no-anchor no-external listing-title">Get started`, likewise `features.html`; each record's own `description` inlined |
+| `mixed/` (record + glob) | **0** (was 1) | **2** (was 1) | record and glob item both present |
+| `linkonly/` (Positron shape, no `path:`) | **0** (was 2) | **2** (was 0) | `<h3 id="get-started" class="no-anchor listing-title">Get started</h3>` — heading, no anchor, classes preserved |
+
+No `B4F502887207` placeholder token survives in any rendered fixture, confirming
+the origin-gating in §D6/§D6a leaves no dangling substitution key.
+
+**Positron smoke** (`/Users/gordon/src/q2-positron-docs/docs-quarto-2`, present):
+`q2 render` → **0 occurrences of Q-12-2** (42 before this branch); the only
+listing diagnostics left are 2 × Q-12-19 (a glob matching nothing), unrelated to
+records. The welcome page's `#guide-sections` container renders with
+`data-listing-rendered="1"` and its `listing-no-matching` div carries `d-none`
+— the same marker our populated fixtures emit — so the records now produce
+items. The card markup is still raw, uninterpreted EJS (`<%= item.title %>`),
+exactly as predicted: every Positron listing uses `type: custom` with an EJS
+template, which bd-oywyaouf owns. The render's 18 errors / 836 warnings are
+pre-existing and carry no Q-12 record codes.
+
+**What this does not cover.** The hub-client/WASM path was built and its tests
+run, but no browser session exercised a record-bearing listing in the live
+preview.
 
 Pre-fix baseline at `596ceb572` is in §"Investigation record".

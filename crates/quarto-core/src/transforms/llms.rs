@@ -67,6 +67,7 @@ use quarto_pandoc_types::{Attr, AttrSourceInfo, Block, ConfigValue, Inline};
 use crate::artifact::{Artifact, ArtifactScope};
 use crate::project::ProjectKind;
 use crate::project::index::ProjectIndex;
+use crate::project::listing::ItemTarget;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::navigation_active::page_relative_source;
@@ -513,18 +514,46 @@ fn synthesize_listing_list(
         .items
         .iter()
         .map(|item| {
-            let href = retarget_href(
-                &relativize(&cx.cur_dir, item.target.href().unwrap_or("")),
-                cx,
-            );
-            let mut inlines: Vec<Inline> = vec![Inline::Link(quarto_pandoc_types::inline::Link {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
-                content: vec![str_inline(item.title.clone())],
-                target: (href, String::new()),
-                source_info: gen_si(),
-                attr_source: AttrSourceInfo::empty(),
-                target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
-            })];
+            // `relativize` assumes a site-relative *output* href,
+            // which only a Document target has. A literal (`Href`)
+            // href — remote, protocol-relative, data:, root-relative,
+            // or page-relative alike — is stored verbatim by
+            // `resolve_record_path` and must pass through exactly as
+            // the HTML binding emits it (`binding.rs`), never through
+            // `relativize`. An item with no target at all has no link
+            // to build. Gate on the target variant itself, not a
+            // string predicate: `is_remote_src` deliberately does NOT
+            // treat a leading `/` as remote (it means the project
+            // root for config-authored paths), so it would miss a
+            // root-relative literal like `path: /files/report.pdf`
+            // (bd-listing-inline-contents).
+            let title_inline = str_inline(item.title.clone());
+            let mut inlines: Vec<Inline> = match &item.target {
+                ItemTarget::None => vec![title_inline],
+                ItemTarget::Href(raw_href) => {
+                    let href = retarget_href(raw_href, cx);
+                    vec![Inline::Link(quarto_pandoc_types::inline::Link {
+                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                        content: vec![title_inline],
+                        target: (href, String::new()),
+                        source_info: gen_si(),
+                        attr_source: AttrSourceInfo::empty(),
+                        target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
+                    })]
+                }
+                ItemTarget::Document { output_href, .. } => {
+                    let based = relativize(&cx.cur_dir, output_href);
+                    let href = retarget_href(&based, cx);
+                    vec![Inline::Link(quarto_pandoc_types::inline::Link {
+                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                        content: vec![title_inline],
+                        target: (href, String::new()),
+                        source_info: gen_si(),
+                        attr_source: AttrSourceInfo::empty(),
+                        target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
+                    })]
+                }
+            };
             let meta_bits: Vec<&str> = [item.date.as_deref(), item.author.as_deref()]
                 .into_iter()
                 .flatten()
@@ -1196,6 +1225,134 @@ mod tests {
         assert_eq!(relativize("a/b", "a/b/c.html"), "c.html");
     }
 
+    /// Build a minimal [`crate::project::listing::ListingItem`] for
+    /// [`synthesize_listing_list`] tests — only `title` and `target`
+    /// vary, everything else is the item's zero value.
+    fn listing_item(
+        title: &str,
+        target: crate::project::listing::ItemTarget,
+    ) -> crate::project::listing::ListingItem {
+        crate::project::listing::ListingItem {
+            title: title.to_string(),
+            subtitle: None,
+            description: None,
+            author: None,
+            authors: Vec::new(),
+            date: None,
+            date_modified: None,
+            categories: Vec::new(),
+            image: None,
+            image_alt: None,
+            image_lazy_loading: None,
+            reading_time_minutes: None,
+            word_count: None,
+            order: None,
+            target,
+            origin: crate::project::listing::ItemOrigin::Record,
+            extra: std::collections::BTreeMap::new(),
+        }
+    }
+
+    /// A companion's synthesized listing bullet must handle all three
+    /// `ItemTarget` shapes from a host page in a subdirectory (bd-listing-
+    /// inline-contents): a document (relativized + retargeted as before),
+    /// a remote href (emitted verbatim, never run through `relativize`),
+    /// and no link at all (title emitted as plain text, no `Link`).
+    #[test]
+    fn synthesize_listing_list_handles_all_target_shapes() {
+        use crate::project::listing::{ItemOrigin, ItemTarget, Listing, ResolvedListing};
+
+        let index = ProjectIndex::new(vec![profile("guide/about.html", false)]);
+        let cx = ViewContext {
+            index: Some(&index),
+            cur_dir: "guide".to_string(),
+            listings: &[],
+        };
+
+        let doc_item = listing_item(
+            "About",
+            ItemTarget::document("guide/about.qmd", "guide/about.html"),
+        );
+        let remote_item = listing_item(
+            "Example",
+            ItemTarget::Href("https://example.com/x.html".to_string()),
+        );
+        // A literal (non-remote) `path:` href — resolve_record_path
+        // stores the raw author string verbatim in `Href` for these
+        // too, exactly like the remote case above. `is_remote_src`
+        // deliberately does NOT treat a leading `/` as remote (it
+        // means the project root for config-authored paths), so a
+        // guard keyed on `is_remote_src` misses these — they must
+        // pass through exactly like an `Href` reaching the HTML
+        // binding does, never through `relativize`.
+        let root_relative_item =
+            listing_item("Report", ItemTarget::Href("/files/report.pdf".to_string()));
+        let page_relative_item = listing_item("Notes", ItemTarget::Href("report.pdf".to_string()));
+        let mut none_item = listing_item("Get started", ItemTarget::None);
+        none_item.origin = ItemOrigin::Record;
+
+        let listing = ResolvedListing {
+            listing: Listing::default(),
+            items: vec![
+                doc_item,
+                remote_item,
+                root_relative_item,
+                page_relative_item,
+                none_item,
+            ],
+        };
+
+        let Block::BulletList(list) = synthesize_listing_list(&listing, &cx) else {
+            panic!("expected a BulletList");
+        };
+        assert_eq!(list.content.len(), 5);
+
+        // Document item: relativized against "guide" (same dir -> bare
+        // filename) and eligible for .md retargeting.
+        let doc_links = collect_links(&list.content[0]);
+        assert_eq!(doc_links.len(), 1);
+        assert_eq!(doc_links[0].target.0, "about.md");
+
+        // Remote href: must NOT be run through relativize (which would
+        // prefix "../" from a subdirectory host) — emitted verbatim.
+        let remote_links = collect_links(&list.content[1]);
+        assert_eq!(remote_links.len(), 1);
+        assert_eq!(remote_links[0].target.0, "https://example.com/x.html");
+
+        // Root-relative literal href (Href, not remote by
+        // is_remote_src's definition): must also bypass relativize —
+        // it is a literal, not a site-relative output href.
+        let root_relative_links = collect_links(&list.content[2]);
+        assert_eq!(root_relative_links.len(), 1);
+        assert_eq!(root_relative_links[0].target.0, "/files/report.pdf");
+
+        // Page-relative literal href: same — emitted exactly as
+        // written, matching the HTML binding's verbatim Href handling.
+        let page_relative_links = collect_links(&list.content[3]);
+        assert_eq!(page_relative_links.len(), 1);
+        assert_eq!(page_relative_links[0].target.0, "report.pdf");
+
+        // No-link item: title appears as plain text, no Link inline at all.
+        let none_links = collect_links(&list.content[4]);
+        assert_eq!(none_links.len(), 0, "no-link item must not emit a Link");
+        let none_text: String = list.content[4]
+            .iter()
+            .filter_map(|b| match b {
+                Block::Plain(p) => Some(&p.content),
+                _ => None,
+            })
+            .flatten()
+            .filter_map(|i| match i {
+                Inline::Str(s) => Some(s.text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            none_text.contains("Get started"),
+            "title text must still appear: {none_text:?}"
+        );
+    }
+
     #[test]
     fn profile_has_companion_excludes_drafts_and_404() {
         assert!(profile_has_companion(&profile("about.html", false)));
@@ -1271,8 +1428,13 @@ mod tests {
     fn collect_links(blocks: &[Block]) -> Vec<&Link> {
         let mut links = Vec::new();
         for b in blocks {
-            if let Block::Paragraph(p) = b {
-                for i in &p.content {
+            let content = match b {
+                Block::Paragraph(p) => Some(&p.content),
+                Block::Plain(p) => Some(&p.content),
+                _ => None,
+            };
+            if let Some(content) = content {
+                for i in content {
                     if let Inline::Link(l) = i {
                         links.push(l);
                     }
