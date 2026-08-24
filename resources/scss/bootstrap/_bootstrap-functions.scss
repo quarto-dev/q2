@@ -386,3 +386,43 @@
 @function contrast-tone($color) {
   @return if(tone($color) == "dark", "light", "dark");
 }
+
+// ---------------------------------------------------------------------------
+// fixed-top header (bd-ersobfbt; slated for replacement by bd-pt1wxeq2)
+// ---------------------------------------------------------------------------
+// Our website navbar implementation will shift the body down
+// to accomodate the navbar, but the height is variable. As a result
+// we compute the height using JS (quarto-nav.js), so it is perfect.
+// This can lead to a content jump when the js executes, so place a
+// padding there at render time to minimize this.
+// Ported verbatim from Q1 quarto-nav.scss:1-33 (per-Bootswatch measured
+// navbar heights; anything unlisted — including the default theme and
+// custom themes — falls back to 64px).
+@function navbar-default-offset($theme) {
+  $offsets: (
+    darkly: 82px,
+    flatly: 82px,
+    litera: 67px,
+    lumen: 68px,
+    lux: 105px,
+    materia: 96px,
+    pulse: 89px,
+    quartz: 82px,
+    sandstone: 63px,
+    simplex: 80px,
+    sketchy: 68px,
+    slate: 66px,
+    zephyr: 76px,
+  );
+
+  $val: null;
+  @if ($theme != null) {
+    $val: quarto-map.get($offsets, $theme);
+  }
+
+  @if ($val != null) {
+    @return $val;
+  } @else {
+    @return 64px;
+  }
+}

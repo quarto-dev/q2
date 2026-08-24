@@ -613,28 +613,37 @@ $rendered.navigation.toc$
 </nav>
 "#;
 
-/// The site header: `<header id="quarto-header">` wrapping the navbar
-/// and the narrow-viewport secondary nav (bd-26bf3j1y).
+/// The site header: `<header id="quarto-header" class="headroom
+/// fixed-top">` wrapping the navbar and the narrow-viewport secondary
+/// nav (bd-26bf3j1y; fixed + scroll-away since bd-ersobfbt).
 ///
-/// Q1's equivalent (`nav-before-body.ejs:13`) gates on
-/// `nav.navbar || nav.sidebar || nav.announcement` and emits
-/// `class="headroom fixed-top"`. Two deliberate differences:
+/// Q1's equivalent (`nav-before-body.ejs:13-15`) gates on
+/// `nav.navbar || nav.sidebar || nav.announcement`. One deliberate
+/// difference:
 ///
-/// - **Static, not fixed.** No `headroom` / `fixed-top`, and
-///   correspondingly no `body.nav-fixed` (whose only Q1 consumer is a
-///   `padding-top` compensating for the fixed header). Those three go
-///   together; adding one without the others overlaps content. Deferred
-///   as a unit to bd-ersobfbt.
 /// - **Gated on content, not on config.** q2 emits the wrapper when
 ///   there is a navbar or a secondary nav to put in it. Q1's extra
 ///   `nav.sidebar` term covers the case of a sidebar whose secondary
 ///   nav is suppressed, which for q2 would produce an empty header with
 ///   no styling consumer.
 ///
+/// The `headroom fixed-top` classes are unconditional, matching Q1
+/// (even under `pinned: true`, which only omits headroom.min.js —
+/// `headroom` is also headroom.js's `initial` class, so the markup is
+/// correct with or without the script). Three things pair with
+/// `fixed-top` and must never be separated from it (bd-ersobfbt):
+/// the `nav-fixed` body class (composed in
+/// [`render_with_compiled_template`] when a navbar is rendered), the
+/// `body.nav-fixed { padding-top }` SCSS compensation, and the
+/// `quarto-nav.js` offset machinery shipped by
+/// `transforms/quarto_nav_js.rs`. A fixed header without the padding
+/// overlaps content.
+///
 /// `.quarto-banner` in banner mode is Q1's
-/// `format-html-title.ts:278-281`; its only styling consumer is
-/// `.quarto-banner nav.quarto-secondary-nav` (bd-xva3f8uy, folded in
-/// here).
+/// `format-html-title.ts:278-281` (which `classList.add`s onto the
+/// existing classes, hence the trailing position); its only styling
+/// consumer is `.quarto-banner nav.quarto-secondary-nav` (bd-xva3f8uy,
+/// folded in here).
 ///
 /// The partial holds only the markup; the "is there a header at all?"
 /// gate lives at the **call site** in [`FULL_HTML_TEMPLATE`]. That split
@@ -644,7 +653,7 @@ $rendered.navigation.toc$
 /// single-sourced. It also keeps the no-header case emitting *nothing* —
 /// a bare `$quarto-header()$` line would leave a stray blank line in
 /// every document that has no navbar.
-pub const QUARTO_HEADER_PARTIAL: &str = r#"<header id="quarto-header"$if(rendered.title-block-banner)$ class="quarto-banner"$endif$>
+pub const QUARTO_HEADER_PARTIAL: &str = r#"<header id="quarto-header" class="headroom fixed-top$if(rendered.title-block-banner)$ quarto-banner$endif$">
 $if(rendered.navigation.navbar)$
 $rendered.navigation.navbar$
 $endif$
@@ -898,9 +907,13 @@ pub fn render_with_compiled_template(
         ctx.insert("page-layout", TemplateValue::String("article".to_string()));
     }
 
-    // Compute the body class. Order of precedence:
+    // Compute the body class as an accumulating list (bd-ersobfbt
+    // refactored the old single-`String` replace into this compose).
+    // Order of precedence for the structural base:
     //
-    //   1. user-supplied `body-classes` (e.g. set in metadata) — kept as-is.
+    //   1. user-supplied `body-classes` (e.g. set in metadata) — kept
+    //      as-is, wholesale: the compose below (including the
+    //      `nav-fixed` append) is skipped entirely.
     //   2. `rendered.navigation.body-classes` (written by
     //      `SidebarRenderTransform`, e.g. `"nav-sidebar floating"`) —
     //      promoted to the top-level template variable. See bd-mgoh.
@@ -914,8 +927,25 @@ pub fn render_with_compiled_template(
     //      no TOC — but would squash a TOC if one were present, which
     //      is why case (3) exists.
     //
+    // Onto the structural base, in order:
+    //
+    //   - `nav-fixed` when a navbar is rendered (bd-ersobfbt): the
+    //     header is `fixed-top`, and `body.nav-fixed { padding-top }`
+    //     is the pre-JS anti-flash compensation for it. Same condition
+    //     as Q1's postprocessor (`#quarto-header.fixed-top nav.navbar`,
+    //     `website-navigation.ts:546-554`) — note a sidebar-only site
+    //     (secondary nav, no navbar) deliberately gets NO `nav-fixed`.
+    //     Mirrored by the preview in `PreviewDocument.tsx`; keep the
+    //     two in sync.
+    //   - the color-mode class (bd-mtzry) so theme-conditional CSS can
+    //     key off `body.quarto-light` / `body.quarto-dark`. The baked
+    //     class matches the AUTHOR default (Q1 bakes the same way);
+    //     under `respect-user-color-scheme` the inline runtime may
+    //     flip it before first paint.
+    //
     // Mirrors TS Quarto's body-class logic in
-    // `src/format/html/format-html-bootstrap.ts`.
+    // `src/format/html/format-html-bootstrap.ts` plus the
+    // `website-navigation.ts` postprocessor classes.
     if ctx.get("body-classes").is_none() {
         let from_meta = meta
             .get_path(&["rendered", "navigation", "body-classes"])
@@ -924,18 +954,21 @@ pub fn render_with_compiled_template(
             .get_path(&["rendered", "navigation", "toc"])
             .and_then(|v| v.as_plain_text())
             .is_some_and(|s| !s.is_empty());
-        let structural = match (from_meta, has_toc) {
-            (Some(s), _) => s,
-            (None, true) => String::new(),
-            (None, false) => "fullcontent".to_string(),
-        };
-        // bd-mtzry: append the color-mode class so theme-conditional CSS
-        // can key off `body.quarto-light` / `body.quarto-dark`. The
-        // baked class matches the AUTHOR default (Q1 bakes the same
-        // way); under `respect-user-color-scheme` the inline runtime
-        // may flip it before first paint.
+        let mut classes: Vec<String> = Vec::new();
+        match (from_meta, has_toc) {
+            (Some(s), _) if !s.is_empty() => classes.push(s),
+            (Some(_), _) | (None, true) => {}
+            (None, false) => classes.push("fullcontent".to_string()),
+        }
+        let navbar_rendered = meta
+            .get_path(&["rendered", "navigation", "navbar"])
+            .and_then(|v| v.as_plain_text())
+            .is_some_and(|s| !s.is_empty());
+        if navbar_rendered {
+            classes.push("nav-fixed".to_string());
+        }
         let body_classes =
-            append_color_mode_class(&structural, dark_theme_default.unwrap_or(false));
+            append_color_mode_class(&classes.join(" "), dark_theme_default.unwrap_or(false));
         ctx.insert("body-classes", TemplateValue::String(body_classes));
     }
 
@@ -2407,6 +2440,124 @@ mod tests {
         );
     }
 
+    /// bd-ersobfbt: when a navbar is rendered, the fixed header
+    /// (`#quarto-header.fixed-top`) needs the `body.nav-fixed` padding
+    /// compensation, so `nav-fixed` joins the body class list. Q1 sets
+    /// it in a DOM postprocessor keyed on `#quarto-header.fixed-top
+    /// nav.navbar` (`website-navigation.ts:546-554`); q2 keys on the
+    /// same condition — a non-empty `rendered.navigation.navbar` — at
+    /// the body-class compose point. Navbar-only page (no sidebar, no
+    /// TOC): structural fallback is `fullcontent`, and `nav-fixed`
+    /// appends after it, before the color-mode class.
+    #[test]
+    fn test_full_template_nav_fixed_appended_when_navbar_rendered() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["rendered", "navigation", "navbar"],
+            ConfigValue::new_string("<nav class=\"navbar\">N</nav>", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<body class=\"fullcontent nav-fixed quarto-light\">"),
+            "navbar present must append nav-fixed to the structural class; got: {}",
+            &html[..html.len().min(800)]
+        );
+    }
+
+    /// bd-ersobfbt: `nav-fixed` accumulates onto sidebar-produced body
+    /// classes rather than replacing them — a site with both a sidebar
+    /// and a navbar gets `nav-sidebar floating nav-fixed quarto-light`
+    /// (matching Q1's postprocessor, which classList.add's nav-sidebar,
+    /// floating, then nav-fixed).
+    #[test]
+    fn test_full_template_nav_fixed_composes_with_sidebar_body_classes() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["rendered", "navigation", "body-classes"],
+            ConfigValue::new_string("nav-sidebar floating", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "navbar"],
+            ConfigValue::new_string("<nav class=\"navbar\">N</nav>", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<body class=\"nav-sidebar floating nav-fixed quarto-light\">"),
+            "nav-fixed must accumulate onto sidebar body classes; got: {}",
+            &html[..html.len().min(800)]
+        );
+    }
+
+    /// bd-ersobfbt: a secondary-nav-only page (sidebar site with no
+    /// navbar) gets the `#quarto-header` wrapper but NOT `nav-fixed` —
+    /// Q1's postprocessor requires a `nav.navbar` descendant, so
+    /// sidebar-only sites get no static padding pre-guess.
+    #[test]
+    fn test_full_template_no_nav_fixed_without_navbar() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["rendered", "navigation", "secondary-nav"],
+            ConfigValue::new_string(
+                "<nav class=\"quarto-secondary-nav\">S</nav>",
+                dummy_source_info(),
+            ),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<header id=\"quarto-header\""),
+            "secondary nav alone still gets the header wrapper; got: {}",
+            &html[..html.len().min(800)]
+        );
+        assert!(
+            !html.contains("nav-fixed"),
+            "no navbar → no nav-fixed body class; got: {}",
+            &html[..html.len().min(800)]
+        );
+    }
+
+    /// bd-ersobfbt: an explicit user-supplied top-level `body-classes`
+    /// still wins wholesale (bd-mtzry contract) — the compose step,
+    /// including the `nav-fixed` append, is skipped entirely.
+    #[test]
+    fn test_full_template_user_body_classes_suppress_nav_fixed() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["body-classes"],
+            ConfigValue::new_string("custom-layout", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "navbar"],
+            ConfigValue::new_string("<nav class=\"navbar\">N</nav>", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<body class=\"custom-layout\">"),
+            "explicit body-classes must be kept as-is; got: {}",
+            &html[..html.len().min(800)]
+        );
+        assert!(
+            !html.contains("nav-fixed"),
+            "explicit body-classes suppresses the nav-fixed append; got: {}",
+            &html[..html.len().min(800)]
+        );
+    }
+
     #[test]
     fn test_full_template_no_sidebar_wrapper() {
         // Sidebar HTML must appear as a direct child of #quarto-content,
@@ -2563,23 +2714,26 @@ mod tests {
     /// them) are deferred to bd-ersobfbt and must land together there —
     /// `fixed-top` without the padding overlaps content.
     #[test]
-    fn test_quarto_header_is_static_not_fixed() {
+    fn test_quarto_header_carries_headroom_fixed_top() {
+        // bd-ersobfbt: the header is fixed and scroll-away, Q1-parity.
+        // `headroom` is also headroom.js's `initial` class, so the markup
+        // is correct even before (or without) the script — Q1 emits these
+        // classes unconditionally (`nav-before-body.ejs:15`), including
+        // under `pinned: true` (which only omits headroom.min.js).
+        //
+        // PAIRING INVARIANT: `fixed-top` must never ship without the
+        // `body.nav-fixed` padding compensation (see
+        // `test_full_template_nav_fixed_appended_when_navbar_rendered` and
+        // the quarto-sass compile test) — a fixed header with no body
+        // padding overlaps content.
         let template = full_html_template().unwrap();
         let ctx = ctx_with_navigation(&[("navbar", "<nav class=\"navbar\">NAVBAR_BODY</nav>")]);
 
         let html = template.render(&ctx).unwrap();
 
         assert!(
-            !html.contains("headroom"),
-            "headroom is deferred to bd-ersobfbt; got: {html}"
-        );
-        assert!(
-            !html.contains("fixed-top"),
-            "fixed-top is deferred to bd-ersobfbt; got: {html}"
-        );
-        assert!(
-            !html.contains("nav-fixed"),
-            "body.nav-fixed only makes sense with a fixed header; got: {html}"
+            html.contains("<header id=\"quarto-header\" class=\"headroom fixed-top\">"),
+            "header must carry the Q1 headroom/fixed-top classes; got: {html}"
         );
     }
 
@@ -2623,8 +2777,11 @@ mod tests {
 
         let html_banner = template.render(&ctx).unwrap();
         assert!(
-            html_banner.contains("<header id=\"quarto-header\" class=\"quarto-banner\">"),
-            "banner mode must decorate the header; got: {html_banner}"
+            html_banner.contains(
+                "<header id=\"quarto-header\" class=\"headroom fixed-top quarto-banner\">"
+            ),
+            "banner mode must decorate the header (after the headroom/fixed-top classes, \
+             matching Q1's classList.add order); got: {html_banner}"
         );
     }
 

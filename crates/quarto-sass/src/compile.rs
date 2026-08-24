@@ -888,6 +888,74 @@ mod tests {
         );
     }
 
+    /// bd-ersobfbt: the fixed scroll-away header's SCSS contract. The
+    /// template emits `<header id="quarto-header" class="headroom
+    /// fixed-top">` and `body.nav-fixed` — a fixed header WITHOUT the
+    /// `body.nav-fixed { padding-top }` compensation overlaps the top of
+    /// every page, and (like the sidebar-collapse cliff above) no markup
+    /// assertion can see it: the elements and classes are all present,
+    /// only the cascade shows the overlap. Hence a CSS-level test that
+    /// the three legs ship together:
+    ///
+    /// 1. `body.nav-fixed` gets a non-zero `padding-top` (the pre-JS
+    ///    anti-flash guess; `navbar-default-offset()`, 64px fallback);
+    /// 2. the headroom pin/unpin transforms exist for the scroll-away;
+    /// 3. print neutralizes the fixed header (`.fixed-top {
+    ///    position: relative }` — Q1 `_quarto-rules.scss:757-759`,
+    ///    deliberately unported until q2 emitted a `.fixed-top`).
+    #[test]
+    fn test_fixed_top_header_compensation_rules() {
+        let runtime = NativeRuntime::new();
+        // minified: the assertions below match minified formatting.
+        let css = compile_default_css(&runtime, true).unwrap();
+
+        // Sanity: Bootstrap's own .fixed-top positioning must be in the
+        // bundle for the header to be fixed at all.
+        assert!(
+            css.contains(".fixed-top{position:fixed"),
+            "expected Bootstrap's .fixed-top rule in the bundle"
+        );
+
+        // Leg 1: the body padding compensation. Default theme has no
+        // entry in the navbar-default-offset map → 64px fallback.
+        assert!(
+            css.contains("body.nav-fixed{padding-top:64px}"),
+            "body.nav-fixed must pre-pad for the fixed header \
+             (Q1 quarto-nav.scss:820-824); without it the header \
+             overlaps content"
+        );
+
+        // Leg 2: the scroll-away transforms headroom.js drives.
+        assert!(
+            css.contains("header.headroom--unpinned{transform:translateY(-100%)}"),
+            "headroom--unpinned must slide the header away \
+             (Q1 quarto-nav.scss:100-114)"
+        );
+        assert!(
+            css.contains("header.headroom--pinned{transform:translateY(0%)}"),
+            "headroom--pinned must restore the header"
+        );
+        assert!(
+            css.contains(".notransition{"),
+            "the .notransition suppressor must exist for non-animated \
+             offset updates (Q1 quarto-nav.scss:727-732)"
+        );
+
+        // Leg 3: print neutralization.
+        let print_blocks: Vec<_> = media_blocks(&css)
+            .into_iter()
+            .filter(|(prelude, _)| prelude.contains("print"))
+            .collect();
+        assert!(
+            print_blocks.iter().any(|(_, body)| body
+                .replace(' ', "")
+                .contains(".fixed-top{position:relative")),
+            "print must neutralize the fixed header \
+             (Q1 _quarto-rules.scss:757-759); print blocks: {}",
+            print_blocks.len()
+        );
+    }
+
     #[test]
     fn test_compile_default_css() {
         let runtime = NativeRuntime::new();

@@ -384,5 +384,17 @@
 # a natural-size logo from swallowing the navbar. doc.html hash
 # unchanged: none of the new selectors match a single-doc body (no
 # navbar), and `<head>` is unaffected.
+# Re-captured 2026-08-24 (bd-ersobfbt, fixed-top scroll-away header):
+# styles.css hash updated because the fixed-top header block was added
+# to `_bootstrap-rules.scss` (headroom transition/transforms,
+# `body.nav-fixed { padding-top: navbar-default-offset($theme-name) }`,
+# `.notransition`, and the print `.fixed-top { position: relative }`
+# rule that the bd-ih6jrf39 entry above recorded as NOT ported — q2
+# emits `.fixed-top` on `#quarto-header` now), plus the
+# `navbar-default-offset()` map in `_bootstrap-functions.scss`.
+# doc.html hash UNCHANGED: a single-doc render has no navbar and no
+# secondary nav, so the header partial emits nothing, no `nav-fixed`
+# body class is composed, and QuartoNavJsTransform ships no scripts —
+# the template/JS side of the strand is byte-neutral outside websites.
 doc.html a0540297514ad41734a23e91c9511134b1fa469281ec470339571ffd5d404494
-doc_files/styles.css b14c1db209937ed1779b6460ea494dce4c1e762cf770c71df6ecc159a9dd8c37
+doc_files/styles.css 60291dc134c93743c6ac174f12324c07f3ad7d2fe7e060f8869541cf5583b8db

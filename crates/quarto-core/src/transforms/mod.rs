@@ -73,6 +73,11 @@ mod proof;
 mod reference_link_diagnostics;
 mod resource_collector;
 mod secondary_nav_render;
+// Fixed-header JS shipping (bd-ersobfbt). Native-only: the preview
+// excludes ApplyTemplateStage (no <script> emission) and injects the
+// same vendored files itself in entry.tsx — see the module docs.
+#[cfg(not(target_arch = "wasm32"))]
+mod quarto_nav_js;
 mod sectionize;
 mod shortcode_resolve;
 mod shortcode_text;
@@ -137,6 +142,8 @@ pub use page_nav_render::PageNavRenderTransform;
 pub use panel_tabset::PanelTabsetTransform;
 pub use panel_tabset_resolve::PanelTabsetResolveTransform;
 pub use proof::ProofSugarTransform;
+#[cfg(not(target_arch = "wasm32"))]
+pub use quarto_nav_js::QuartoNavJsTransform;
 pub use reference_link_diagnostics::ReferenceLinkDiagnosticsTransform;
 pub use resource_collector::{ResourceCollectorTransform, collect_referenced_asset_urls};
 pub use secondary_nav_render::SecondaryNavRenderTransform;

@@ -1373,18 +1373,26 @@ pub fn build_transform_pipeline(
     // instances differently, so they don't share a result. See the
     // comparison table in `transforms/secondary_nav_render.rs`.
     //
-    // NATIVE ONLY, deliberately (decision 3 in the plan). The bar's
-    // only purpose is the sidebar toggle, which needs Bootstrap's
-    // collapse JS; `BootstrapJsStage` is gated the same way because
-    // the hub-client preview reinitializes its iframe every render
-    // tick. Rendering an inert toggle in preview is worse than
-    // rendering none. This means preview and render differ in DOM at
-    // narrow widths ON PURPOSE — `bd-e7b7` owns the preview JS story,
-    // and when it lands this `cfg` comes off.
-    #[cfg(not(target_arch = "wasm32"))]
+    // Registered on BOTH native and WASM since bd-ersobfbt. It was
+    // native-only at introduction (bd-26bf3j1y decision 3), on the
+    // premise that the hub-client preview reinitialized its iframe
+    // every render tick and shipped no Bootstrap JS — but the preview
+    // iframe has been persistent since Phase F.1 (bd-kw93.14), which
+    // injects Bootstrap's bundle at `entry.tsx` module top, so the
+    // toggle works there. `PreviewDocument.tsx` renders the bar via
+    // `SecondaryNavSlot` inside the `#quarto-header` wrapper.
     pipeline.push(Box::new(
         crate::transforms::SecondaryNavRenderTransform::new(),
     ));
+    // Fixed-header JS (quarto-nav.js + headroom.min.js, bd-ersobfbt).
+    // MUST come after NavbarRenderTransform and SecondaryNavRenderTransform:
+    // its predicate reads the `rendered.navigation.{navbar,secondary-nav}`
+    // keys those transforms write — the same signal the template's header
+    // gate uses. Native-only: the preview excludes ApplyTemplateStage (no
+    // `<script>` emission) and instead injects the same vendored files at
+    // entry.tsx module top (Phase F.1 pattern).
+    #[cfg(not(target_arch = "wasm32"))]
+    pipeline.push(Box::new(crate::transforms::QuartoNavJsTransform::new()));
     pipeline.push(Box::new(PageNavRenderTransform::new()));
     // Footer *generation* (above) is format-agnostic; footer *rendering* is
     // format-specific — html emits page-footer chrome, revealjs emits a
@@ -3626,16 +3634,11 @@ mod tests {
         );
     }
 
-    /// bd-26bf3j1y: the secondary nav is registered on native builds and
-    /// suppressed under WASM (decision 3 — the hub-client preview ships
-    /// no Bootstrap JS, so the toggle would be inert).
-    ///
-    /// The suppression itself is a `#[cfg(not(target_arch = "wasm32"))]`
-    /// on the `pipeline.push`, which no native test can observe. What
-    /// this pins is the other half: that the push exists at all, and in
-    /// the Navigation phase. Without it a refactor could silently drop
-    /// the bar from every website and only the integration tests would
-    /// notice.
+    /// bd-26bf3j1y: the secondary nav must be registered in the
+    /// Navigation phase (bd-ersobfbt lifted the original native-only
+    /// `cfg`, so the registration is now unconditional). Without this
+    /// pin a refactor could silently drop the bar from every website
+    /// and only the integration tests would notice.
     #[test]
     fn test_secondary_nav_registered_in_navigation_phase() {
         use crate::transform::TransformPhase;
@@ -3661,6 +3664,46 @@ mod tests {
             "secondary-nav-render must be registered in the Navigation phase; \
              pipeline was: {:?}",
             pipeline.iter().map(|t| t.name()).collect::<Vec<_>>()
+        );
+    }
+
+    /// bd-ersobfbt: quarto-nav-js must be registered in the Navigation
+    /// phase AFTER navbar-render and secondary-nav-render — its predicate
+    /// reads the `rendered.navigation.*` keys they write. Same pin
+    /// rationale as `test_secondary_nav_registered_in_navigation_phase`.
+    #[test]
+    fn test_quarto_nav_js_registered_after_nav_renders() {
+        use crate::transform::TransformPhase;
+
+        let runtime = make_test_runtime();
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        let pos = |n: &str| names.iter().position(|x| *x == n);
+
+        let nav_js = pos("quarto-nav-js").expect("quarto-nav-js registered");
+        let nav_js_phase = pipeline
+            .iter()
+            .find(|t| t.name() == "quarto-nav-js")
+            .map(|t| t.phase());
+        assert_eq!(
+            nav_js_phase,
+            Some(TransformPhase::Navigation),
+            "quarto-nav-js must be in the Navigation phase; pipeline: {names:?}"
+        );
+        let navbar = pos("navbar-render").expect("navbar-render registered");
+        let secondary = pos("secondary-nav-render").expect("secondary-nav-render registered");
+        assert!(
+            nav_js > navbar && nav_js > secondary,
+            "quarto-nav-js must run after navbar-render ({navbar}) and \
+             secondary-nav-render ({secondary}), got {nav_js}; pipeline: {names:?}"
         );
     }
 

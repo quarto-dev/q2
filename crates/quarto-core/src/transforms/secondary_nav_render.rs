@@ -32,21 +32,19 @@
 //! right behavior rather than an oversight: the bar carries the sidebar
 //! toggle, and a page outside the sidebar still needs a way to open it.
 //!
-//! ## Not rendered under WASM (decision 3)
+//! ## Rendered on native AND WASM (bd-ersobfbt lifted decision 3)
 //!
-//! This transform is registered only on native builds. The hub-client
-//! preview ships no Bootstrap JS (see `stage/stages/bootstrap_js.rs`,
-//! gated the same way, because the preview reinitializes its iframe on
-//! every render tick), so the toggle would be inert there — and an
-//! inert toggle is exactly the "wired to nothing" problem that split
-//! this work out of bd-breadcrumbs-missing-1vpuqh34.
-//!
-//! **This makes `q2 preview` and `q2 render` differ in DOM at narrow
-//! widths, deliberately and indefinitely.** If you arrived here from
-//! the `preview-render-parity` skill: that divergence is intended, not
-//! a bug to fix. `bd-e7b7` owns the preview JS story; when it lands,
-//! drop the `cfg` in `pipeline.rs` and this comment with it.
-//! Plan: `claude-notes/plans/2026-08-17-website-secondary-nav-mobile.md`.
+//! At introduction (bd-26bf3j1y decision 3) this transform was
+//! native-only, on the premise that the hub-client preview
+//! reinitialized its iframe every render tick and so shipped no
+//! Bootstrap JS — an inert toggle being worse than none. That premise
+//! went stale: the preview iframe is persistent, and Phase F.1
+//! (bd-kw93.14) injects Bootstrap's bundle at `entry.tsx` module top,
+//! so the collapse toggle works in preview. bd-ersobfbt lifted the
+//! `cfg` in `pipeline.rs`; `PreviewDocument.tsx` renders the bar via
+//! `SecondaryNavSlot` inside the `#quarto-header` wrapper.
+//! Plans: `claude-notes/plans/2026-08-17-website-secondary-nav-mobile.md`,
+//! `claude-notes/plans/2026-08-21-headroom-fixed-top-header.md`.
 //!
 //! ## Skip conditions
 //!

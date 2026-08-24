@@ -49,13 +49,28 @@ const TRANSPARENT: CSSProperties = { display: 'contents' };
 
 /**
  * Navbar HTML — emitted by `NavbarRenderTransform` into
- * `meta.rendered.navigation.navbar`. Renders BEFORE
- * `<div id="quarto-content">` (per template.rs:178-180).
+ * `meta.rendered.navigation.navbar`. Renders INSIDE the React-owned
+ * `<header id="quarto-header">` wrapper, which sits BEFORE
+ * `<div id="quarto-content">` (per template.rs QUARTO_HEADER_PARTIAL
+ * and its call-site gate; bd-ersobfbt).
  */
 export const NavbarSlot = memo(({ html }: SlotProps) => (
     <div style={TRANSPARENT} dangerouslySetInnerHTML={{ __html: html }} />
 ));
 NavbarSlot.displayName = 'NavbarSlot';
+
+/**
+ * Narrow-viewport secondary-nav HTML — emitted by
+ * `SecondaryNavRenderTransform` into
+ * `meta.rendered.navigation.secondary-nav` (bd-ersobfbt lifted that
+ * transform's native-only gate). Renders INSIDE the
+ * `<header id="quarto-header">` wrapper, AFTER the navbar (per
+ * template.rs QUARTO_HEADER_PARTIAL).
+ */
+export const SecondaryNavSlot = memo(({ html }: SlotProps) => (
+    <div style={TRANSPARENT} dangerouslySetInnerHTML={{ __html: html }} />
+));
+SecondaryNavSlot.displayName = 'SecondaryNavSlot';
 
 /**
  * Sidebar HTML — emitted by `SidebarRenderTransform` into

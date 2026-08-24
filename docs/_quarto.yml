@@ -32,6 +32,7 @@ website:
             - guides/projects/create.qmd
             - guides/projects/paths.qmd
             - guides/projects/navbar-logo.qmd
+            - guides/projects/header-scrolling.qmd
             - guides/projects/breadcrumbs.qmd
             - guides/projects/render-list.qmd
             - guides/projects/aliases.qmd

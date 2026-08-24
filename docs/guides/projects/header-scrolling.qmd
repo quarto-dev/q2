@@ -1,0 +1,47 @@
+---
+title: Header pinning
+---
+
+## Overview
+
+Website pages keep their header — the navbar and, on narrow screens,
+the sidebar toggle bar — fixed to the top of the viewport. To leave
+more room for reading, the header slides out of view as you scroll
+down and reappears as soon as you scroll back up.
+
+This matches Quarto 1's behavior and needs no configuration.
+
+## Keeping the header always visible
+
+To keep the navbar on screen at all times, pin it:
+
+```yaml
+website:
+  title: "My Site"
+  navbar:
+    pinned: true
+    left:
+      - href: index.qmd
+        text: Home
+```
+
+With `pinned: true` the header stays fixed at the top and never slides
+away.
+
+Sidebars accept the same option; pinning either the navbar or the
+sidebar keeps the whole header in place:
+
+```yaml
+website:
+  sidebar:
+    pinned: true
+    contents:
+      - index.qmd
+```
+
+## Interaction with menus
+
+While a navigation menu is open — the navbar's collapsed hamburger
+menu, or the sidebar drawer on narrow screens — the header stays put
+regardless of scrolling, so the open menu can't slide off screen. It
+resumes normal behavior when the menu closes.
