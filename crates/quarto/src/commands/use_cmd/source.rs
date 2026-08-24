@@ -98,7 +98,11 @@ pub fn read_source_brand(source: &Path, target_label: &str) -> Result<SourceBran
     // Parse before planning anything. `quarto-brand` uses
     // `deny_unknown_fields`, so a typo'd key is caught here rather than
     // becoming a render-time surprise in the user's project.
-    let brand = Brand::from_yaml_str(&text).map_err(|e| {
+    // Parse as the unified form ({light:, dark:} color values allowed
+    // — the file is copied verbatim, so unified content stays intact);
+    // asset collection reads fonts and logos, which the split carries
+    // identically in both halves, so the light half suffices.
+    let brand = quarto_brand::UnifiedBrand::from_yaml_str(&text).map_err(|e| {
         CommandFailure::new(
             format!("{target_label} does not contain a valid brand"),
             format!(
@@ -108,6 +112,7 @@ pub fn read_source_brand(source: &Path, target_label: &str) -> Result<SourceBran
         )
     })?;
 
+    let brand = brand.split().light;
     let brand_dir = brand_file.parent().unwrap_or(source);
     let assets = collect_assets(&brand, brand_dir);
 

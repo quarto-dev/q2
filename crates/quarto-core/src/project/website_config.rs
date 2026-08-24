@@ -376,7 +376,7 @@ mod tests {
     mod resolved_favicon {
         use super::*;
         use crate::project::ProjectConfig;
-        use quarto_brand::{Brand, ResolvedBrand};
+        use quarto_brand::{ResolvedBrand, UnifiedBrand as Brand};
         use std::path::PathBuf;
 
         const PROJECT_DIR: &str = "/project";
@@ -396,7 +396,10 @@ mod tests {
                     dir.join(brand_subdir)
                 };
                 ResolvedBrand::new(
-                    Brand::from_yaml_str(yaml).expect("parse brand"),
+                    Brand::from_yaml_str(yaml)
+                        .expect("parse brand")
+                        .split()
+                        .light,
                     Some(brand_dir),
                 )
             });

@@ -296,7 +296,7 @@ impl PipelineStage for CompileThemeCssStage {
         input: PipelineData,
         ctx: &mut StageContext,
     ) -> Result<PipelineData, PipelineError> {
-        let PipelineData::DocumentAst(doc) = input else {
+        let PipelineData::DocumentAst(mut doc) = input else {
             return Err(PipelineError::unexpected_input(
                 self.name(),
                 self.input_kind(),
@@ -484,55 +484,59 @@ impl PipelineStage for CompileThemeCssStage {
             .parent()
             .map_or_else(|| PathBuf::from("."), |p| p.to_path_buf());
 
-        // Resolve each variant's brand (bd-0pic6 phase C: the dark
-        // half of a `brand: {light:, dark:}` pair drives the dark
-        // compile; a single brand is shared by both variants via the
-        // parse-time fallback). I/O happens here. Failures are
+        // Resolve every brand and attach any dark variant the brand
+        // *content* calls for (bd-0pic6 phase C + the unified split,
+        // bd-unified-brand-split-ep49amad): the brand file is read
+        // ONCE, parsed as a unified brand ({light:, dark:} values
+        // allowed), and split — the light variant compiles with the
+        // light half, the dark variant with the dark half; a brand
+        // whose content enables dark mode synthesizes the dark
+        // variant right here. I/O happens here. Failures are
         // user-facing configuration errors (missing `_brand.yml`,
         // invalid YAML, unknown brand shape) — propagate them rather
         // than silently shipping DEFAULT_CSS, same reasoning as the
         // `from_config_value` error path above.
         let resolved = theme_config
-            .clone()
-            .resolve(ctx.runtime.as_ref(), &ctx.project.dir)
+            .resolve_variants(ctx.runtime.as_ref(), &ctx.project.dir)
             .map_err(|e| {
                 PipelineError::stage_error(self.name(), format!("brand resolution: {e}"))
             })?;
+        let theme_config = &resolved.config;
 
         // The ThemeContexts borrow a local Arc clone of the runtime
         // (not `ctx`) so `ctx` stays mutably borrowable inside
         // `variant_css`.
         let runtime = ctx.runtime.clone();
         let mut theme_context = ThemeContext::new(document_dir.clone(), runtime.as_ref());
-        if let Some(brand) = resolved.brand.as_ref() {
-            let brand_dir = resolved
-                .brand_dir
-                .clone()
-                .unwrap_or_else(|| ctx.project.dir.clone());
-            theme_context = theme_context.with_brand(brand, brand_dir);
+        if let Some(rb) = resolved.light_brand.as_ref() {
+            let brand_dir = rb.dir.clone().unwrap_or_else(|| ctx.project.dir.clone());
+            theme_context = theme_context.with_brand(&rb.brand, brand_dir);
         }
 
-        let light_css =
-            variant_css(ctx, &theme_config, &theme_context, &doc_vars, cache_ok).await?;
+        let light_css = variant_css(ctx, theme_config, &theme_context, &doc_vars, cache_ok).await?;
 
         if let Some(dark_cfg) = theme_config.dark_variant() {
-            let resolved_dark = dark_cfg
-                .clone()
-                .resolve(ctx.runtime.as_ref(), &ctx.project.dir)
-                .map_err(|e| {
-                    PipelineError::stage_error(self.name(), format!("dark brand resolution: {e}"))
-                })?;
             let mut dark_context = ThemeContext::new(document_dir, runtime.as_ref());
-            if let Some(brand) = resolved_dark.brand.as_ref() {
-                let brand_dir = resolved_dark
-                    .brand_dir
-                    .clone()
-                    .unwrap_or_else(|| ctx.project.dir.clone());
-                dark_context = dark_context.with_brand(brand, brand_dir);
+            if let Some(rb) = resolved.dark_brand.as_ref() {
+                let brand_dir = rb.dir.clone().unwrap_or_else(|| ctx.project.dir.clone());
+                dark_context = dark_context.with_brand(&rb.brand, brand_dir);
             }
             let dark_css = variant_css(ctx, &dark_cfg, &dark_context, &doc_vars, cache_ok).await?;
             let dark_is_default = theme_config.dark.as_ref().is_some_and(|d| d.is_default);
             store_variant_pair(ctx, light_css, dark_css, dark_is_default);
+            // Record the pair decision where the downstream consumers
+            // can read it (`rendered.theme.dark-is-default`). The
+            // color-mode script/meta (ApplyTemplateStage) and the
+            // navbar toggle (AstTransformsStage) both run after this
+            // stage but cannot re-derive a CONTENT-driven dark
+            // variant from config alone — this key is the single
+            // source of truth; their config re-derivation remains
+            // only as a fallback for pipelines that skip this stage.
+            let si = doc.ast.meta.source_info.clone();
+            doc.ast.meta.insert_path(
+                &["rendered", "theme", "dark-is-default"],
+                quarto_pandoc_types::ConfigValue::new_bool(dark_is_default, si),
+            );
         } else {
             // Single variant: plain, attribute-free link — byte-identical
             // to the pre-light/dark output.

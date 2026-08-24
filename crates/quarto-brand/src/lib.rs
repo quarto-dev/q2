@@ -13,19 +13,27 @@
 mod error;
 mod resolve;
 mod resolved;
+mod split;
 mod types;
 
 pub use error::BrandError;
 pub use resolved::ResolvedBrand;
+pub use split::SplitBrand;
 pub use types::{
-    Brand, BrandColor, BrandDefaults, BrandFont, BrandFontFile, BrandFontFileEntry,
-    BrandFontGoogle, BrandFontStyle, BrandFontSystem, BrandFontWeight, BrandFontWeightAtom,
-    BrandLogo, BrandLogoExplicit, BrandLogoResource, BrandMeta, BrandMetaLink, BrandMetaName,
-    BrandRef, BrandTypography, BrandTypographyOptions, LogoEntry,
+    Brand, BrandColor, BrandColorLightDark, BrandColorValue, BrandDefaults, BrandFont,
+    BrandFontFile, BrandFontFileEntry, BrandFontGoogle, BrandFontStyle, BrandFontSystem,
+    BrandFontWeight, BrandFontWeightAtom, BrandLogo, BrandLogoExplicit, BrandLogoResource,
+    BrandMeta, BrandMetaLink, BrandMetaName, BrandRef, BrandTypography, BrandTypographyOptions,
+    LogoEntry, UnifiedBrand,
 };
 
-impl Brand {
+impl UnifiedBrand {
     /// Parse a `_brand.yml` document from a YAML string.
+    ///
+    /// Parsing always produces the **unified** form (color values may
+    /// be plain strings or `{light:, dark:}` pairs); call
+    /// [`UnifiedBrand::split`] to obtain the single-mode [`Brand`]s
+    /// the rest of the pipeline consumes.
     pub fn from_yaml_str(yaml: &str) -> Result<Self, BrandError> {
         serde_yaml::from_str(yaml).map_err(BrandError::Parse)
     }

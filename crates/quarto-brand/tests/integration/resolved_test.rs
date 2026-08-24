@@ -14,7 +14,10 @@ use std::path::{Path, PathBuf};
 use quarto_brand::{Brand, ResolvedBrand};
 
 fn brand(yaml: &str) -> Brand {
-    Brand::from_yaml_str(yaml).expect("parse")
+    quarto_brand::UnifiedBrand::from_yaml_str(yaml)
+        .expect("parse")
+        .split()
+        .light
 }
 
 /// A brand loaded from `<project>/<subdir>/_brand.yml`.

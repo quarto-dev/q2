@@ -37,17 +37,36 @@ pub enum BrandRef {
 ///
 /// Every section is optional — Q1 accepts a brand with just colors, or
 /// just typography, etc.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+///
+/// `Brand` is generic over the color-value type `V`, mirroring Q1's
+/// `BrandUnified` / `BrandSingle` split
+/// (`external-sources/quarto-cli/src/core/brand/brand.ts`):
+///
+/// - [`UnifiedBrand`] (= `Brand<BrandColorValue>`) is the **parse
+///   form**: every named color slot and typography color accepts
+///   either a plain string or a `{light:, dark:}` pair. This is the
+///   only form [`Brand::from_yaml_str`](crate::UnifiedBrand) produces.
+/// - `Brand` (= `Brand<String>`, the default) is the **single-mode
+///   form** every downstream consumer (color resolution, SCSS layer,
+///   favicon/navbar) works with. It is obtained via
+///   [`UnifiedBrand::split`](crate::SplitBrand), which distributes
+///   each pair to its half — so the type system guarantees consumers
+///   never see an unsplit light/dark value.
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Brand {
+#[serde(bound(
+    deserialize = "V: serde::Deserialize<'de>",
+    serialize = "V: serde::Serialize"
+))]
+pub struct Brand<V = String> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<BrandMeta>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub color: Option<BrandColor>,
+    pub color: Option<BrandColor<V>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub typography: Option<BrandTypography>,
+    pub typography: Option<BrandTypography<V>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logo: Option<BrandLogo>,
@@ -58,6 +77,26 @@ pub struct Brand {
     /// independently and Q1 itself parses it permissively.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub defaults: Option<BrandDefaults>,
+}
+
+/// The unified parse form of a brand: color values may be plain
+/// strings or `{light:, dark:}` pairs. See [`Brand`] for the
+/// unified/single distinction and [`UnifiedBrand::split`] for the way
+/// down to the single-mode form.
+pub type UnifiedBrand = Brand<BrandColorValue>;
+
+// Manual `Default` (a derive would add a spurious `V: Default` bound;
+// every field is an `Option`/container that defaults without one).
+impl<V> Default for Brand<V> {
+    fn default() -> Self {
+        Self {
+            meta: None,
+            color: None,
+            typography: None,
+            logo: None,
+            defaults: None,
+        }
+    }
 }
 
 // ── meta ────────────────────────────────────────────────────────────
@@ -125,43 +164,146 @@ pub struct BrandMetaLinks {
 
 // ── color ───────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+/// A color value in the **unified** brand form: either a plain string
+/// (applies to both modes) or a `{light:, dark:}` pair.
+///
+/// Mirrors Q1's `brand-color-light-dark` schema
+/// (`external-sources/quarto-cli/src/resources/schema/definitions.yml`).
+/// Only *named* color slots and typography colors accept this shape;
+/// `palette` entries stay plain strings (a documented limitation
+/// shared with Q1).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum BrandColorValue {
+    /// A plain color string; the split sends it to both halves.
+    Single(String),
+    /// A per-mode pair; each half of the split receives its side, and
+    /// a missing side means the slot is simply absent in that half
+    /// (Q1: no fallback to the other side).
+    LightDark(BrandColorLightDark),
+}
+
+/// The `{light:, dark:}` pair form of [`BrandColorValue`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct BrandColor {
+pub struct BrandColorLightDark {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub light: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dark: Option<String>,
+}
+
+impl BrandColorValue {
+    /// The value the **light** half of a split receives: the plain
+    /// string, or the pair's `light:` side.
+    pub fn light(&self) -> Option<&str> {
+        match self {
+            BrandColorValue::Single(s) => Some(s.as_str()),
+            BrandColorValue::LightDark(pair) => pair.light.as_deref(),
+        }
+    }
+
+    /// The value the **dark** half of a split receives: the plain
+    /// string, or the pair's `dark:` side.
+    pub fn dark(&self) -> Option<&str> {
+        match self {
+            BrandColorValue::Single(s) => Some(s.as_str()),
+            BrandColorValue::LightDark(pair) => pair.dark.as_deref(),
+        }
+    }
+
+    /// Whether this value carries an explicit `dark:` side — the
+    /// per-value input to Q1's `enablesDarkMode`: only actual `dark:`
+    /// keys enable dark mode; plain strings and light-only pairs do
+    /// not.
+    pub fn has_dark(&self) -> bool {
+        matches!(
+            self,
+            BrandColorValue::LightDark(BrandColorLightDark { dark: Some(_), .. })
+        )
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+#[serde(bound(
+    deserialize = "V: serde::Deserialize<'de>",
+    serialize = "V: serde::Serialize"
+))]
+pub struct BrandColor<V = String> {
     /// Named color aliases.  Iteration order matters — Q1 preserves
     /// source order so that downstream code generates `$brand-foo`
     /// variables in the same order they were authored.
+    ///
+    /// Deliberately NOT generic over `V`: palette entries stay plain
+    /// strings even in the unified form (Q1's `brand-color-unified`
+    /// schema keeps `palette` at `brand-color-value`; the docs carry
+    /// the matching limitation callout).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette: Option<BTreeMap<String, String>>,
 
     // Bootstrap theme color slots
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub primary: Option<String>,
+    pub primary: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub secondary: Option<String>,
+    pub secondary: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tertiary: Option<String>,
+    pub tertiary: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub success: Option<String>,
+    pub success: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub info: Option<String>,
+    pub info: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub warning: Option<String>,
+    pub warning: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub danger: Option<String>,
+    pub danger: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub light: Option<String>,
+    pub light: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dark: Option<String>,
+    pub dark: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub emphasis: Option<String>,
+    pub emphasis: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub link: Option<String>,
+    pub link: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub background: Option<String>,
+    pub background: Option<V>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub foreground: Option<String>,
+    pub foreground: Option<V>,
 }
+
+impl<V> Default for BrandColor<V> {
+    fn default() -> Self {
+        Self {
+            palette: None,
+            primary: None,
+            secondary: None,
+            tertiary: None,
+            success: None,
+            info: None,
+            warning: None,
+            danger: None,
+            light: None,
+            dark: None,
+            emphasis: None,
+            link: None,
+            background: None,
+            foreground: None,
+        }
+    }
+}
+
+/// The 13 named theme-color slots, as `(name, accessor)` pairs shared
+/// by the single-mode accessors, the split, and `has_dark_mode`.
+/// Order matches the Bootstrap theme map (and `named_colors`).
+macro_rules! for_each_named_color_slot {
+    ($macro:ident) => {
+        $macro!(
+            primary, secondary, tertiary, success, info, warning, danger, light, dark, emphasis,
+            link, background, foreground
+        )
+    };
+}
+pub(crate) use for_each_named_color_slot;
 
 impl BrandColor {
     /// Lookup a named theme color (not the palette).
@@ -231,9 +373,13 @@ impl BrandColor {
 
 // ── typography ──────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct BrandTypography {
+#[serde(bound(
+    deserialize = "V: serde::Deserialize<'de>",
+    serialize = "V: serde::Serialize"
+))]
+pub struct BrandTypography<V = String> {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fonts: Vec<BrandFont>,
 
@@ -242,40 +388,71 @@ pub struct BrandTypography {
         deserialize_with = "deserialize_typography_options",
         skip_serializing_if = "Option::is_none"
     )]
-    pub base: Option<BrandTypographyOptions>,
+    pub base: Option<BrandTypographyOptions<V>>,
     #[serde(
         default,
         deserialize_with = "deserialize_typography_options",
         skip_serializing_if = "Option::is_none"
     )]
-    pub headings: Option<BrandTypographyOptions>,
+    pub headings: Option<BrandTypographyOptions<V>>,
     #[serde(
         default,
         deserialize_with = "deserialize_typography_options",
         skip_serializing_if = "Option::is_none"
     )]
-    pub link: Option<BrandTypographyOptions>,
+    pub link: Option<BrandTypographyOptions<V>>,
     #[serde(
         default,
         deserialize_with = "deserialize_typography_options",
         skip_serializing_if = "Option::is_none"
     )]
-    pub monospace: Option<BrandTypographyOptions>,
+    pub monospace: Option<BrandTypographyOptions<V>>,
     #[serde(
         default,
         rename = "monospace-inline",
         deserialize_with = "deserialize_typography_options",
         skip_serializing_if = "Option::is_none"
     )]
-    pub monospace_inline: Option<BrandTypographyOptions>,
+    pub monospace_inline: Option<BrandTypographyOptions<V>>,
     #[serde(
         default,
         rename = "monospace-block",
         deserialize_with = "deserialize_typography_options",
         skip_serializing_if = "Option::is_none"
     )]
-    pub monospace_block: Option<BrandTypographyOptions>,
+    pub monospace_block: Option<BrandTypographyOptions<V>>,
 }
+
+impl<V> Default for BrandTypography<V> {
+    fn default() -> Self {
+        Self {
+            fonts: Vec::new(),
+            base: None,
+            headings: None,
+            link: None,
+            monospace: None,
+            monospace_inline: None,
+            monospace_block: None,
+        }
+    }
+}
+
+/// The 6 typography font slots, as a callback-macro over field names
+/// (same pattern as [`for_each_named_color_slot`]); used by the split
+/// and `has_dark_mode`.
+macro_rules! for_each_typography_slot {
+    ($macro:ident) => {
+        $macro!(
+            base,
+            headings,
+            link,
+            monospace,
+            monospace_inline,
+            monospace_block
+        )
+    };
+}
+pub(crate) use for_each_typography_slot;
 
 /// Accept either a bare string (treated as `{ family: <string> }`) or
 /// a full options map. Matches Q1's `_brand.yml` shorthand:
@@ -287,20 +464,21 @@ pub struct BrandTypography {
 ///     family: Rubik
 ///     weight: 400
 /// ```
-fn deserialize_typography_options<'de, D>(
+fn deserialize_typography_options<'de, D, V>(
     deserializer: D,
-) -> Result<Option<BrandTypographyOptions>, D::Error>
+) -> Result<Option<BrandTypographyOptions<V>>, D::Error>
 where
     D: serde::Deserializer<'de>,
+    V: serde::Deserialize<'de>,
 {
     #[derive(Deserialize)]
     #[serde(untagged)]
-    enum StringOrOptions {
+    enum StringOrOptions<V> {
         Family(String),
-        Options(BrandTypographyOptions),
+        Options(BrandTypographyOptions<V>),
     }
 
-    let opt = Option::<StringOrOptions>::deserialize(deserializer)?;
+    let opt = Option::<StringOrOptions<V>>::deserialize(deserializer)?;
     Ok(opt.map(|v| match v {
         StringOrOptions::Family(s) => BrandTypographyOptions {
             family: Some(s),
@@ -315,9 +493,13 @@ where
 /// Q1 accepts either a string (treated as `{ family: <string> }`) or a
 /// map. We always normalize the string form at parse time via the
 /// `untagged` enum below.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct BrandTypographyOptions {
+#[serde(bound(
+    deserialize = "V: serde::Deserialize<'de>",
+    serialize = "V: serde::Serialize"
+))]
+pub struct BrandTypographyOptions<V = String> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub family: Option<String>,
 
@@ -338,17 +520,32 @@ pub struct BrandTypographyOptions {
     pub style: Option<BrandFontStyle>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub color: Option<String>,
+    pub color: Option<V>,
 
     #[serde(
         default,
         rename = "background-color",
         skip_serializing_if = "Option::is_none"
     )]
-    pub background_color: Option<String>,
+    pub background_color: Option<V>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decoration: Option<String>,
+}
+
+impl<V> Default for BrandTypographyOptions<V> {
+    fn default() -> Self {
+        Self {
+            family: None,
+            size: None,
+            line_height: None,
+            weight: None,
+            style: None,
+            color: None,
+            background_color: None,
+            decoration: None,
+        }
+    }
 }
 
 // The YAML can use either a bare string or a map for typography
