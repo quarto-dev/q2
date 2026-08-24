@@ -2350,7 +2350,7 @@ git commit -m "Register the repo-actions transform in the html pipeline (bd-repo
 - Create: `crates/quarto-core/tests/integration/repo_actions_pipeline.rs`
 - Modify: `crates/quarto-core/tests/integration/main.rs`
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 Create `crates/quarto-core/tests/integration/repo_actions_pipeline.rs`, copying the harness from `breadcrumbs_pipeline.rs:1-105` verbatim (`canonical`, `write`, `read`, `render_project`, `find_html`) — that file drives the real `ProjectPipeline` end to end. Then:
 
@@ -2591,16 +2591,16 @@ fn no_repo_actions_configured_changes_nothing() {
 }
 ```
 
-- [ ] **Step 2: Register the file**
+- [x] **Step 2: Register the file**
 
 In `crates/quarto-core/tests/integration/main.rs`, add `pub mod repo_actions_pipeline;` in alphabetical position.
 
-- [ ] **Step 3: Run the tests**
+- [x] **Step 3: Run the tests**
 
 Run: `cargo nextest run -p quarto-core --test integration repo_actions_pipeline`
 Expected: PASS, 12 tests. Any failure here is a real wiring bug — fix the implementation, not the assertion.
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 cargo clippy -p quarto-core --all-targets -- -D warnings
@@ -2619,7 +2619,7 @@ Task 10 drives `ProjectPipeline` in-process. The smoke-all suite drives the **do
 
 **Verified before writing this task** (do not re-litigate): a `project: type: website` fixture renders with full website chrome under this harness — `nav#TOC` and `.nav-footer-center` both present — and `render_to_file` returns the `_site/` path, which the runner follows via `result.output_path`. A deliberately impossible selector was confirmed to **fail** the run, so the assertions genuinely execute. This would be the **first** `type: website` fixture in the suite; every existing one is `type: default` or bare.
 
-- [ ] **Step 1: Write the project config**
+- [x] **Step 1: Write the project config**
 
 `crates/quarto/tests/smoke-all/repo-actions/_quarto.yml`:
 
@@ -2635,7 +2635,7 @@ website:
 
 Site-level config applies to every `.qmd` in this directory **and any subdirectory without its own `_quarto.yml`**. `actions.qmd` and `page-level-true.qmd` use it; the two fixtures that need a *different* site config get their own subdirectory in Step 3.
 
-- [ ] **Step 2: Write the happy-path fixture**
+- [x] **Step 2: Write the happy-path fixture**
 
 `actions.qmd`:
 
@@ -2671,7 +2671,7 @@ _quarto:
 Text.
 ```
 
-- [ ] **Step 3: Write the three diagnostic fixtures**
+- [x] **Step 3: Write the three diagnostic fixtures**
 
 **Two of these need their own project, not a front-matter override.** The obvious shortcut — overriding `repo-url` with `""` or re-declaring `website.repo-actions` in front matter — makes the fixture's outcome depend on `MergedConfig` scalar-over-scalar and array-merge semantics that nothing in this plan has verified. If merging resolves differently than assumed, the fixture passes for the wrong reason or fails confusingly. Give each its own directory with its own `_quarto.yml` instead; nested fixture directories are an established pattern in this suite (`highlighting/04-filter/`, `metadata/project-inherits/`, `themes/theme-array/`).
 
@@ -2765,7 +2765,7 @@ Text.
 
 **`printsMessage` matches the diagnostic *title* only** — `runner.rs:319-326` captures `diag.title` and discards the problem and hints. Match a distinctive substring of the title, and keep backticks out of the regex.
 
-- [ ] **Step 4: Run them**
+- [x] **Step 4: Run them**
 
 Run: `SMOKE_FILTER=repo-actions cargo nextest run -p quarto --test integration smoke_all`
 Expected: PASS. The filter is a substring match on the path relative to `smoke-all/`.
@@ -2774,11 +2774,11 @@ Then run the whole suite once — the fixtures are auto-discovered, so a malform
 
 Run: `cargo nextest run -p quarto --test integration smoke_all`
 
-- [ ] **Step 5: Prove the assertions are live**
+- [x] **Step 5: Prove the assertions are live**
 
 A smoke-all fixture that silently fails to assert looks identical to one that passes. Temporarily add an impossible selector (`"div.this-cannot-exist"`) to `actions.qmd`'s must-match list, re-run the filtered command, confirm it **fails**, then remove it. Do not skip this — it is the only thing distinguishing a real fixture from a decorative one.
 
-- [ ] **Step 6: Keep the render output out of git**
+- [x] **Step 6: Keep the render output out of git**
 
 These are the suite's first `type: website` fixtures, and a website render writes a whole `_site/` tree beside each `_quarto.yml`. `runner.rs:249-259` cleans only the output file and its `<stem>_files` directory, so `_site/` survives the run — and **`_site` is not in `.gitignore`** (checked: no entry). Every existing smoke-all fixture renders a single file in place, which is why this has never come up.
 
@@ -2797,7 +2797,7 @@ git status --short crates/quarto/tests/smoke-all/
 
 Expected: no untracked output. If anything else appears, widen the ignore rather than committing build output.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add crates/quarto/tests/smoke-all/repo-actions .gitignore
@@ -2810,7 +2810,7 @@ Tests passing is necessary but not sufficient — see CLAUDE.md, "End-to-end ver
 
 **Files:** none (verification only; results are recorded in this plan)
 
-- [ ] **Step 1: Render the repro with the real binary**
+- [x] **Step 1: Render the repro with the real binary**
 
 ```bash
 cargo build --bin q2                      # from the worktree
@@ -2821,7 +2821,7 @@ rm -rf _site
 "$Q2" render
 ```
 
-- [ ] **Step 2: Count the links**
+- [x] **Step 2: Count the links**
 
 ```bash
 # NOT `grep -c` — that counts matching *lines*, and the whole page body is one
@@ -2834,7 +2834,7 @@ grep -o "Edit this page\|View source\|Report an issue" _site/index.html | sort |
 Expected: **6** total (three actions × two placements), and `2` of each of the
 three labels in the `uniq -c` breakdown. Task 0 recorded `0`.
 
-- [ ] **Step 3: Compare the emitted blocks against Q1's**
+- [x] **Step 3: Compare the emitted blocks against Q1's**
 
 The canonical Q1 output is in the strand and at
 `/Users/gordon/src/q2-positron-docs/llms-info/repros/repo-actions-missing/_site-q1/index.html`.
@@ -2864,15 +2864,15 @@ and the footer block is the same with `class="toc-actions d-sm-block d-md-none"`
 
 Differences to expect and accept: the repro's `repo-url` differs from the fixture in Task 0 if you changed it; q2's footer carries an extra `.container-fluid` wrapper (a pre-existing, documented divergence at `render_html.rs:181`). Any other difference is a defect — fix it.
 
-- [ ] **Step 4: Check the whole render is clean**
+- [x] **Step 4: Check the whole render is clean**
 
 Confirm exit code 0 and no unexpected diagnostics in the transcript.
 
-- [ ] **Step 5: Record the evidence in this plan**
+- [x] **Step 5: Record the evidence in this plan**
 
 Append to the **Verification record** section at the bottom of this file: the exact invocation, the grep count before and after, a paste of one emitted `toc-actions` block, and an explicit statement that the output was inspected. This is required by CLAUDE.md, not optional.
 
-- [ ] **Step 6: Commit the plan update**
+- [x] **Step 6: Commit the plan update**
 
 ```bash
 git add claude-notes/plans/2026-08-24-repo-actions.md
@@ -2881,7 +2881,12 @@ git commit -m "Record end-to-end verification for repo actions (bd-repo-actions-
 
 ### Phase 5 gate
 
-- [ ] Run `cargo nextest run --workspace`. Expect the Task 10 integration tests (+12) and the smoke-all fixtures — note that smoke-all fixtures do **not** each register as a nextest case: they are discovered inside the single `smoke_all` test, so the workspace count grows by 12, not 16. Confirm `smoke_all` itself still passes; a malformed fixture fails the whole aggregate test, not just its own file.
+- [x] Run `cargo nextest run --workspace`. Expect the Task 10 integration tests (+12) and the smoke-all fixtures — note that smoke-all fixtures do **not** each register as a nextest case: they are discovered inside the single `smoke_all` test, so the workspace count grows by 12, not 16. Confirm `smoke_all` itself still passes; a malformed fixture fails the whole aggregate test, not just its own file.
+
+  **Result: 13191 passed, 199 skipped** against Phase 4's 13179/199 — **exactly +12, skipped unchanged, zero
+  failures.** As predicted the four new smoke-all fixtures add no nextest cases of their own; they are discovered
+  inside the single aggregate test, which passed: `PASS [6.760s] quarto::integration smoke_all::smoke_all`.
+  `git status --short` empty afterwards — no `_site/` artifact escaped the new `.gitignore` rule. Phase 5 closed.
 
 ---
 
@@ -3011,11 +3016,64 @@ braid close bd-repo-actions-missing-99ezd2fe --reason "repo-actions render in bo
 
 ### After implementation (Task 12)
 
-- Invocation: _(fill in)_
-- Link count: _(fill in — expect 6 total, 2 of each label)_
-- Emitted TOC block: _(paste)_
-- Emitted footer block: _(paste)_
-- Output inspected: _(yes/no + who)_
+- **Invocation:**
+
+  ```bash
+  cargo build --bin q2
+  Q2=$(git rev-parse --show-toplevel)/target/debug/q2
+  cd /tmp/q2-repro-repo-actions && rm -rf _site && "$Q2" render
+  ```
+
+  Exit code **0**. Transcript was exactly the two normal lines — `Rendering project:
+  /private/tmp/q2-repro-repo-actions (type: website)` and `Rendered 1 of 1 files to
+  /private/tmp/q2-repro-repo-actions/_site`. **No diagnostics of any kind**, expected or
+  otherwise (this project is correctly configured, so none should fire).
+
+- **Link count: 6**, from `grep -o … | wc -l`, with `sort | uniq -c` giving `2` of each
+  of the three labels — three actions × two placements. **Task 0 recorded `0`.**
+
+  ```
+     2 Edit this page
+     2 Report an issue
+     2 View source
+  ```
+
+- **Emitted TOC block** (single unbroken line in the real output; wrapped here only to fit):
+
+  ```html
+  <div class="toc-actions"><ul><li><a href="https://github.com/example/example-docs/edit/main/index.qmd"
+  class="toc-action"><i class="bi bi-github"></i>Edit this page</a></li><li><a
+  href="https://github.com/example/example-docs/blob/main/index.qmd" class="toc-action"><i
+  class="bi empty"></i>View source</a></li><li><a
+  href="https://github.com/example/example-docs/issues/new" class="toc-action"><i
+  class="bi empty"></i>Report an issue</a></li></ul></div>
+  ```
+
+- **Emitted footer block:** identical to the above except the wrapper class, which is
+  `class="toc-actions d-sm-block d-md-none"` — the responsive classes Q1 adds only when the
+  TOC copy also landed.
+
+- **Comparison against Quarto 1: byte-identical.** Both blocks were extracted from q2's
+  output and from Q1's canonical render at
+  `/Users/gordon/src/q2-positron-docs/llms-info/repros/repo-actions-missing/_site-q1/index.html`
+  with `rg -oP '<div class="toc-actions.*?</ul></div>'`, and `diff` reported **no
+  differences at all**:
+
+  ```
+  Q1 blocks: 2   q2 blocks: 2
+  $ diff q1-blocks.txt q2-blocks.txt
+  *** BYTE-IDENTICAL TO QUARTO 1 ***
+  ```
+
+  Every element of the port is confirmed by that equality: URL construction for all three
+  actions (`edit/`, `blob/`, `issues/new`), the branch and path segments, first-link-only
+  icons (`bi bi-github` on `edit`, `bi empty` on the rest — decision D-8), the `toc-action`
+  anchor class, list structure, and the footer copy's responsive classes. The
+  `.container-fluid` footer-wrapper divergence anticipated in Step 3 does not appear inside
+  these blocks, so nothing needed to be excused.
+
+- **Output inspected: yes** — by the orchestrating session, which ran the render, read the
+  emitted HTML, and performed the Q1 diff above. Not inferred from the absence of errors.
 
 ### Diagnostics
 
