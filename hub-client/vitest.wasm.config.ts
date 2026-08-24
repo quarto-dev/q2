@@ -13,7 +13,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       // Include only WASM test files
-      include: ['src/**/*.wasm.test.ts'],
+      include: ['src/**/*.wasm.test.{ts,tsx}'],
       // Use node environment - WASM doesn't need DOM
       environment: 'node',
       // Pass even when no test files are found (initially)
