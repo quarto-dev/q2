@@ -18054,6 +18054,201 @@
     "name": "Q-2-41/link-text"
   },
   {
+    "column": 4,
+    "row": 0,
+    "state": 2626,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/emphasis-star"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 2596,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/emphasis-underscore"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 2612,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/strong-star"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 2619,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/strong-underscore"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 2597,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/strikeout"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 2617,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/superscript"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 2598,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/subscript"
+  },
+  {
+    "column": 14,
+    "row": 0,
+    "state": 2599,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/double-quote"
+  },
+  {
+    "column": 14,
+    "row": 0,
+    "state": 2627,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/single-quote"
+  },
+  {
+    "column": 9,
+    "row": 0,
+    "state": 2602,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/inline-note"
+  },
+  {
+    "column": 11,
+    "row": 0,
+    "state": 2623,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/editorial-span"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 2613,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/table-header-cell"
+  },
+  {
+    "column": 3,
+    "row": 2,
+    "state": 2610,
+    "sym": "_language_specifier_token",
+    "errorInfo": {
+      "code": "Q-2-41",
+      "title": "Curly braces are reserved for attribute syntax",
+      "message": "Curly braces are reserved for attribute syntax in Quarto markdown. To write literal braces, escape them as `\\{...\\}`. If you meant to attach an attribute, use `.class` / `#id` / `key=\"value\"` syntax, e.g. `[text]{.class}`.",
+      "captures": [],
+      "notes": [],
+      "hints": []
+    },
+    "name": "Q-2-41/table-body-cell"
+  },
+  {
     "column": 17,
     "row": 0,
     "state": 2020,
