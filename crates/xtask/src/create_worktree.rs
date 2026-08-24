@@ -121,7 +121,7 @@ pub fn strand_branch(leaf: &str) -> String {
 pub struct Args {
     /// Braid strand ID, e.g. `bd-1d3e`. Reads `braid show <id>` for title and external_ref.
     #[arg(group = "mode")]
-    pub beads_id: Option<String>,
+    pub strand_id: Option<String>,
 
     /// GitHub issue number, e.g. `157`. Reads `gh issue view`.
     #[arg(long, group = "mode")]
@@ -616,7 +616,7 @@ pub fn run(args: Args) -> Result<()> {
     let base = args.base.clone().unwrap_or_else(|| "main".to_string());
 
     // Mode is enforced by clap::ArgGroup(required, single).
-    let plan = if let Some(id) = args.beads_id.as_deref() {
+    let plan = if let Some(id) = args.strand_id.as_deref() {
         plan_braid(id, args.slug.as_deref(), &base, &root)?
     } else if let Some(n) = args.issue {
         plan_issue(n, args.slug.as_deref(), &base, &root)?
@@ -632,7 +632,7 @@ pub fn run(args: Args) -> Result<()> {
     // warning, the user re-runs with `--base main` (or whatever
     // integration branch they meant).
     if !base_explicit
-        && let (Some(id), Some(parent)) = (args.beads_id.as_deref(), plan.parent_epic.as_ref())
+        && let (Some(id), Some(parent)) = (args.strand_id.as_deref(), plan.parent_epic.as_ref())
         && parent.status == "open"
     {
         eprintln!("{}", default_base_warning(id, parent));
@@ -1337,7 +1337,7 @@ mod tests {
     }
 
     #[test]
-    fn section_beads_with_github() {
+    fn section_braid_with_github() {
         let s = build_section(&SectionKind::Braid {
             id: "bd-1d3e".into(),
             title: "Fix X".into(),
@@ -1353,7 +1353,7 @@ mod tests {
     }
 
     #[test]
-    fn section_beads_without_github_omits_line() {
+    fn section_braid_without_github_omits_line() {
         let s = build_section(&SectionKind::Braid {
             id: "bd-zzzz".into(),
             title: "T".into(),

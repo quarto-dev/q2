@@ -62,7 +62,7 @@ pub(crate) fn current_worktree_root() -> Result<PathBuf> {
 /// Arguments for `cargo xtask switch-task`.
 pub struct Args {
     /// Braid strand ID to switch to (e.g. `bd-yxqt`).
-    pub beads_id: String,
+    pub strand_id: String,
     /// Integration branch to switch+pull to before creating the topic
     /// branch. Omit to branch off the current HEAD.
     pub from: Option<String>,
@@ -76,7 +76,7 @@ pub struct Args {
 pub fn run(args: Args) -> Result<()> {
     let root = current_worktree_root()?;
 
-    let meta = fetch_issue_metadata(&args.beads_id)?;
+    let meta = fetch_issue_metadata(&args.strand_id)?;
     let slug = match args.slug.as_deref() {
         Some(s) => {
             validate_slug(s)?;
@@ -84,7 +84,7 @@ pub fn run(args: Args) -> Result<()> {
         }
         None => derive_slug(&meta.title)?,
     };
-    let branch = strand_branch(&format!("{}-{}", args.beads_id, slug));
+    let branch = strand_branch(&format!("{}-{}", args.strand_id, slug));
 
     if let Some(from) = args.from.as_deref() {
         // Best-effort fetch so origin/<from> reflects the latest tip.
@@ -97,12 +97,12 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     if !args.no_claim {
-        claim_issue(&args.beads_id)?;
+        claim_issue(&args.strand_id)?;
     }
 
-    update_worktree_context(&root, &args.beads_id, &meta)?;
+    update_worktree_context(&root, &args.strand_id, &meta)?;
 
-    print_summary(&args.beads_id, &branch, args.from.as_deref());
+    print_summary(&args.strand_id, &branch, args.from.as_deref());
     Ok(())
 }
 

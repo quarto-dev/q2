@@ -109,7 +109,7 @@ enum Command {
     /// the braid strand `in_progress`.
     SwitchTask {
         /// Braid strand ID to switch to (e.g. `bd-yxqt`).
-        beads_id: String,
+        strand_id: String,
 
         /// Integration / epic branch to switch+pull before branching.
         /// Omit to branch off the current HEAD.
@@ -349,12 +349,12 @@ fn main() -> Result<()> {
         Command::CreateWorktree { args } => create_worktree::run(args),
         Command::BraidSnapshot {} => braid_snapshot::run(),
         Command::SwitchTask {
-            beads_id,
+            strand_id,
             from,
             slug,
             no_claim,
         } => switch_task::run(switch_task::Args {
-            beads_id,
+            strand_id,
             from,
             slug,
             no_claim,
