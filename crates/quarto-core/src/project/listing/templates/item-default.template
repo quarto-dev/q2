@@ -2,22 +2,38 @@
 
 $if(image-html)$
 ::: thumbnail
+$if(path)$
 [`$image-html$`{=html}]($path$){.no-external}
+$else$
+`$image-html$`{=html}
+$endif$
 :::
 $else$
 ::: thumbnail
+$if(path)$
 [`$image-placeholder-begin$<div class="listing-item-img-placeholder card-img-top">&nbsp;</div>$image-placeholder-end$`{=html}]($path$){.no-external}
+$else$
+`$image-placeholder-begin$<div class="listing-item-img-placeholder card-img-top">&nbsp;</div>$image-placeholder-end$`{=html}
+$endif$
 :::
 $endif$
 
 ::: body
 
 $if(title)$
+$if(path)$
 ### [$title$]($path$){.no-anchor .no-external .listing-title}
+$else$
+### $title$ {.no-anchor .listing-title}
+$endif$
 $endif$
 
 $if(subtitle)$
+$if(path)$
 [$subtitle$]($path$){.no-external .listing-subtitle}
+$else$
+[$subtitle$]{.listing-subtitle}
+$endif$
 $endif$
 
 $if(show.categories)$

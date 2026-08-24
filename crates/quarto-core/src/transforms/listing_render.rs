@@ -1609,4 +1609,41 @@ mod tests {
             "table listing must not emit per-item chips"
         );
     }
+
+    #[tokio::test]
+    async fn unlinked_record_item_renders_title_without_anchor() {
+        let mut item = make_item("Card", None);
+        item.origin = ItemOrigin::Record;
+        item.target = ItemTarget::None;
+        let resolved = vec![ResolvedListing {
+            listing: make_listing(ListingType::Default),
+            items: vec![item],
+        }];
+        let (ast, diags) = run_transform(empty_pandoc(), resolved).await;
+        assert!(diags.is_empty(), "{diags:?}");
+        let rendered = format!("{:?}", ast);
+        assert!(
+            rendered.contains("listing-title"),
+            "title heading present: {rendered}"
+        );
+        assert!(rendered.contains("Card"), "{rendered}");
+        assert!(
+            !rendered.contains("Link("),
+            "no Link inline without a target: {rendered}"
+        );
+    }
+
+    #[tokio::test]
+    async fn document_item_still_renders_title_as_link() {
+        let resolved = vec![ResolvedListing {
+            listing: make_listing(ListingType::Default),
+            items: vec![make_item("Doc", None)],
+        }];
+        let (ast, _) = run_transform(empty_pandoc(), resolved).await;
+        let rendered = format!("{:?}", ast);
+        assert!(
+            rendered.contains("Link("),
+            "document items keep their anchor: {rendered}"
+        );
+    }
 }

@@ -4,22 +4,38 @@
 
 $if(image-html)$
 ::: card-img-top
+$if(path)$
 [`$image-html$`{=html}]($path$){.no-external}
+$else$
+`$image-html$`{=html}
+$endif$
 :::
 $else$
 ::: card-img-top
+$if(path)$
 [`$image-placeholder-begin$<div class="listing-item-img-placeholder card-img-top">&nbsp;</div>$image-placeholder-end$`{=html}]($path$){.no-external}
+$else$
+`$image-placeholder-begin$<div class="listing-item-img-placeholder card-img-top">&nbsp;</div>$image-placeholder-end$`{=html}
+$endif$
 :::
 $endif$
 
 ::: {.card-body .post-contents}
 
 $if(title)$
+$if(path)$
 ##### [$title$]($path$){.no-anchor .no-external .card-title .listing-title}
+$else$
+##### $title$ {.no-anchor .card-title .listing-title}
+$endif$
 $endif$
 
 $if(subtitle)$
+$if(path)$
 [$subtitle$]($path$){.no-external .card-subtitle .listing-subtitle}
+$else$
+[$subtitle$]{.card-subtitle .listing-subtitle}
+$endif$
 $endif$
 
 $if(show.categories)$
@@ -40,7 +56,7 @@ $if(description)$
 $description-placeholder-begin$
 ```
 
-[$description$]($path$){.no-external}
+$if(path)$[$description$]($path$){.no-external}$else$$description$$endif$
 
 ```{=html}
 $description-placeholder-end$
