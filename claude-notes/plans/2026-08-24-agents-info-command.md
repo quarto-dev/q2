@@ -2,9 +2,10 @@
 
 **Strand:** bd-hwop1zii
 **Date:** 2026-08-24
-**Status:** Phases 1–3 complete; Phase 4 complete except the final verify
-run and strand closure. Implemented on branch
-`braid/bd-hwop1zii-docs-llms-embed`.
+**Status:** All four phases complete and committed (`1fbc2b93` on
+`braid/bd-hwop1zii-docs-llms-embed`). Full workspace suite and
+`cargo xtask verify --skip-hub-build` green; end-to-end transcript
+recorded below. Awaiting user review — not pushed, strand still open.
 
 ## Overview
 
@@ -278,11 +279,15 @@ of it — the "noise next to the WASM" premise holds.
       no HashMap/serialization concerns, `cargo fmt --check` clean, clippy
       clean (two warnings of mine fixed: `write_with_newline`,
       `map_unwrap_or`), `cargo xtask lint` clean, no TODOs, no secrets
-- [ ] End-to-end verification (protocol below), transcript recorded here
-- [ ] `cargo xtask verify --skip-hub-build` minimum; full `cargo xtask
-      verify` if anything under quarto-core moved (not currently expected)
-- [ ] Close bd-hwop1zii; file follow-up strands (`docs serve`/`open`, MCP
-      tools, `--json`) as discovered-from
+- [x] End-to-end verification (protocol below), transcript recorded here
+- [x] `cargo xtask verify --skip-hub-build` — all 14 steps passed. Nothing
+      under `quarto-core` moved, so the WASM leg is unaffected; the changed
+      crates are `quarto` (bin) and `xtask` only.
+- [x] File follow-up strands as `discovered-from` (bd-x248xpyh,
+      bd-b6cocsxw, bd-dn81ol95)
+- [x] Committed as `1fbc2b93` on `braid/bd-hwop1zii-docs-llms-embed`
+      (19 files, no snapshot files added or modified)
+- [ ] Close bd-hwop1zii (after user review / merge)
 
 ## End-to-end verification protocol (Phase 4 gate)
 
