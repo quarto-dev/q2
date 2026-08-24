@@ -305,6 +305,16 @@ pub fn build_feed_item(
     project_dir: &Path,
 ) -> FeedItem {
     let link = absolute_url(site_url, item.target.href().unwrap_or(""));
+    // Gated on the *target* (`output_href()` is `Some` for any item
+    // backed by a document, including `RecordOverDocument`), not on
+    // `item.origin` the way the page render's L7 placeholder gating
+    // is (`binding.rs`'s `placeholders = item.origin ==
+    // ItemOrigin::Document`). That's a deliberate divergence, not
+    // drift: a listing *page* honours what the author curated, so a
+    // `RecordOverDocument`'s own written description stays put. A
+    // feed's `Partial`/`Full` description is a promise of real
+    // content, so it substitutes the sibling document's rendered body
+    // even when a record's fields are layered over it.
     let description_element = match (feed_options.kind, item.target.output_href()) {
         // No rendered sibling to read: inline what the record itself
         // says, whatever the feed type (plan §D6a).

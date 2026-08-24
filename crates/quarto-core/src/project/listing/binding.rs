@@ -25,7 +25,7 @@ use quarto_pandoc_types::ConfigValue;
 
 use super::config::{GridItemAlign, ImageAlign, Listing, ListingCategoriesMode, ListingType};
 use super::helpers;
-use super::item::{ItemTarget, ListingItem};
+use super::item::{ItemOrigin, ItemTarget, ListingItem};
 use crate::dates::{DateStyle, format_date, parse_date};
 
 /// Build the full [`TemplateContext`] for one [`Listing`] +
@@ -374,9 +374,10 @@ fn build_item_map(
     //     iframePostProcessor reverse-maps to .qmd for in-app
     //     navigation (case 3 in iframePostProcessor.ts).
     //
-    // `outputHref` retains the rendered .html path for templates
-    // (e.g. L7's placeholder href, RSS feed item URLs) that need
-    // the post-render output href specifically.
+    // `outputHref` carries:
+    // - For ItemTarget::Document: the rendered .html output path (post-render).
+    // - For ItemTarget::Href: the literal author-written URL.
+    // - For ItemTarget::None: absent.
     let path: Option<String> = match &item.target {
         ItemTarget::Document { source_path, .. } => Some(host_relative_qmd(source_path, host_dir)),
         ItemTarget::Href(href) => Some(href.clone()),
@@ -405,6 +406,10 @@ fn build_item_map(
         "metadata-attrs".to_string(),
         TemplateValue::String(helpers::metadata_attrs(item, index)),
     );
+    // L7 placeholders only for document-origin items (plan §D6): a
+    // record's description/image are final strings, and the
+    // post-render substitution keys on the document's output href.
+    let placeholders = item.origin == ItemOrigin::Document;
     // Description envelope (L7 plan §"How the begin / end markers
     // reach the templates"). Both keys are always populated;
     // `$description-placeholder-begin$` and `-end$` flank the L1
@@ -412,11 +417,19 @@ fn build_item_map(
     // post-render step has a region to substitute.
     m.insert(
         "description-placeholder-begin".to_string(),
-        TemplateValue::String(helpers::description_placeholder_begin(item, listing)),
+        TemplateValue::String(if placeholders {
+            helpers::description_placeholder_begin(item, listing)
+        } else {
+            String::new()
+        }),
     );
     m.insert(
         "description-placeholder-end".to_string(),
-        TemplateValue::String(helpers::description_placeholder_end()),
+        TemplateValue::String(if placeholders {
+            helpers::description_placeholder_end()
+        } else {
+            String::new()
+        }),
     );
     // Image envelope. Always populated regardless of whether
     // `item.image` is set: the templates only reference these keys
@@ -427,22 +440,33 @@ fn build_item_map(
     // in the binding.
     m.insert(
         "image-placeholder-begin".to_string(),
-        TemplateValue::String(helpers::image_placeholder_begin(item, listing, index)),
+        TemplateValue::String(if placeholders {
+            helpers::image_placeholder_begin(item, listing, index)
+        } else {
+            String::new()
+        }),
     );
     m.insert(
         "image-placeholder-end".to_string(),
-        TemplateValue::String(helpers::image_placeholder_end()),
+        TemplateValue::String(if placeholders {
+            helpers::image_placeholder_end()
+        } else {
+            String::new()
+        }),
     );
     m.insert(
         "category-html".to_string(),
         TemplateValue::String(helpers::category_html(item)),
     );
 
-    // Free-form author fields.
+    // Custom fields: nested (today's `$item.extra.k$` convention) and
+    // flat (`$item.k$`, Q1 parity — plan §D2), curated names winning.
     if !item.extra.is_empty() {
         let mut extra = HashMap::new();
         for (k, v) in &item.extra {
-            extra.insert(k.clone(), config_value_to_template_value(v));
+            let tv = config_value_to_template_value(v);
+            m.entry(k.clone()).or_insert_with(|| tv.clone());
+            extra.insert(k.clone(), tv);
         }
         m.insert("extra".to_string(), TemplateValue::Map(extra));
     }
@@ -1393,6 +1417,81 @@ mod tests {
         assert_eq!(
             p.get("title"),
             Some(&TemplateValue::String("My Site".to_string()))
+        );
+    }
+
+    /// The first item's template map from a one-item listing context.
+    fn first_item_map(i: ListingItem) -> HashMap<String, TemplateValue> {
+        let ctx = build_listing_context(&listing(), &[i], "posts", &ConfigValue::default());
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!("items not a list")
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!("item not a map")
+        };
+        m.clone()
+    }
+
+    #[test]
+    fn extra_keys_are_bound_flat_and_nested_with_curated_winning() {
+        use quarto_source_map::SourceInfo;
+
+        let mut i = item("Real title");
+        i.extra.insert(
+            "link".to_string(),
+            ConfigValue::new_string("x.html", SourceInfo::for_test()),
+        );
+        i.extra.insert(
+            "title".to_string(),
+            ConfigValue::new_string("SHADOWED", SourceInfo::for_test()),
+        );
+        let m = first_item_map(i);
+        assert_eq!(
+            m.get("link"),
+            Some(&TemplateValue::String("x.html".to_string()))
+        );
+        assert_eq!(
+            m.get("title"),
+            Some(&TemplateValue::String("Real title".to_string())),
+            "curated wins"
+        );
+        let TemplateValue::Map(extra) = &m["extra"] else {
+            panic!()
+        };
+        assert_eq!(
+            extra.get("link"),
+            Some(&TemplateValue::String("x.html".to_string()))
+        );
+    }
+
+    #[test]
+    fn record_items_get_no_l7_placeholders_and_no_path() {
+        let mut i = item("Card");
+        i.origin = ItemOrigin::Record;
+        i.target = ItemTarget::None;
+        let m = first_item_map(i);
+        assert_eq!(
+            m.get("description-placeholder-begin"),
+            Some(&TemplateValue::String(String::new()))
+        );
+        assert_eq!(
+            m.get("image-placeholder-begin"),
+            Some(&TemplateValue::String(String::new()))
+        );
+        assert!(!m.contains_key("path"));
+        assert!(!m.contains_key("outputHref"));
+        assert!(!m.contains_key("filename"));
+    }
+
+    #[test]
+    fn record_over_document_keeps_path_but_no_placeholders() {
+        let mut i = item("Card");
+        i.origin = ItemOrigin::RecordOverDocument;
+        let m = first_item_map(i);
+        assert!(m.contains_key("path"));
+        assert_eq!(
+            m.get("description-placeholder-begin"),
+            Some(&TemplateValue::String(String::new()))
         );
     }
 }
