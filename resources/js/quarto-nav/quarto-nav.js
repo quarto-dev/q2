@@ -41,7 +41,8 @@
  * `position: sticky` + `--quarto-header-height` design. Keep it
  * self-contained.
  */
-window.document.addEventListener("DOMContentLoaded", function () {
+(function () {
+  function quartoNavMain() {
   function headerOffset() {
     // Measure the fixed header. `clientHeight` ignores the headroom
     // `translateY` transform, so the value is stable across pin/unpin
@@ -254,4 +255,16 @@ window.document.addEventListener("DOMContentLoaded", function () {
       }, 50);
     }
   });
-});
+  }
+
+  // Native pages load this via a plain <script src> in <head>, before
+  // DOMContentLoaded. The hub-client preview injects it from a
+  // dynamically-imported module that typically runs AFTER
+  // DOMContentLoaded — a listener registered then would never fire, so
+  // run immediately once the DOM is ready either way.
+  if (window.document.readyState === "loading") {
+    window.document.addEventListener("DOMContentLoaded", quartoNavMain);
+  } else {
+    quartoNavMain();
+  }
+})();

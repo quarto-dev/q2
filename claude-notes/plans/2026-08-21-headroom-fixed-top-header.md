@@ -310,11 +310,40 @@ This is question 1 below.
       the Rust accumulating list).
 - [x] Inject `headroom.min.js` + `quarto-nav.js` `?raw` at `entry.tsx` module
       top (idempotent, `data-q2-*` markers, F.1 pattern).
-- [x] `npm run build:all` green; `npm run test:ci` green (full `cargo xtask verify` exit 0, 2026-08-24).
-- [ ] End-to-end browser verification (`q2 preview` after full WASM rebuild
-      chain, per CLAUDE.md §Verifying Rust changes in q2 preview): scroll
-      pin/unpin works, no overlap, scroll-sync + edit overlays sane. Record
-      in plan.
+- [x] `npm run build:all` green; `npm run test:ci` green (via full
+      `cargo xtask verify`). **Correction:** the first full verify run
+      actually FAILED at step 1 (clippy `stable_sort_primitive` in the
+      new transform test; the Phase 2 commit message's "exit 0" claim
+      was wrong — a completion notice was misread). Fixed
+      (`sort_unstable`) and re-run to a genuine exit 0 before the
+      Phase 3 commit.
+- [x] End-to-end browser verification, both surfaces (2026-08-24, Chrome
+      via devtools MCP; full rebuild chain: `cargo xtask verify` → 
+      `cargo xtask build-q2-preview-spa` → `cargo build --bin q2`):
+      - **Native render** (`q2 render` output served over HTTP,
+        `hr-site` fixture): header `position:fixed`, height 60px;
+        `body` padding-top corrected by JS from the 64px guess to 60px,
+        `data-bs-offset="60"`; `#quarto-target-style` present;
+        `window.quartoToggleHeadroom` defined. Scroll down 800px →
+        `headroom--unpinned` + `translateY(-100%)`; scroll up →
+        `headroom--pinned` + `translateY(0)`. **Pinned variant**
+        (`navbar: pinned: true`): `window.Headroom` undefined
+        (script not shipped), padding still JS-corrected to 60px,
+        header stays at top through scrolling.
+      - **`q2 preview`** (embedded SPA, WASM render, port 8742): header
+        wrapper + classes + `nav-fixed` body class present in the
+        iframe; all three injected scripts found; Headroom live
+        (`headroom--top` at load), toggle defined, offsets JS-measured
+        (60px, `data-bs-offset`), anchor spacer present; scroll
+        down/up in the iframe pins/unpins with the same transforms.
+        Console clean (one pre-existing sandbox warning).
+      - **Bug found & fixed by this pass:** `quarto-nav.js` originally
+        bound its main to `DOMContentLoaded` only; the preview's entry
+        module is dynamically imported AFTER that event, so the script
+        never initialized (symptoms: 64px SCSS-guess padding, no
+        toggle, no spacer). Fixed with the standard readyState check —
+        run immediately when the DOM is already ready. The first
+        preview browser session caught it; unit tests could not have.
 
 **Phase 2 notes (2026-08-24):**
 
@@ -339,8 +368,18 @@ This is question 1 below.
 
 ### Phase 3 — `pinned:` docs + schema
 
-- [ ] `docs/` page(s) for `website: navbar: pinned` / `sidebar: pinned`;
-      confirm YAML schema coverage; render docs/ with q2.
+- [x] `docs/` page: `docs/guides/projects/header-scrolling.qmd`
+      ("Header pinning") + sidebar entry in `docs/_quarto.yml`.
+      Rendered docs/ with `cargo run --bin q2 -- render docs/`
+      (255/255 pages; 40 pre-existing warnings, none from the new
+      page); verified the page + sidebar link in `_site/`, and that the
+      docs site itself now dogfoods the feature
+      (`<header id="quarto-header" class="headroom fixed-top">`, both
+      scripts under `site_libs/quarto-nav/`).
+- [x] YAML schema: q2 has no live website-config schema (the only
+      `definitions.yml` in-tree is a pampa test fixture — a Q1 copy
+      that already lists `pinned` for navbar and sidebar). Nothing to
+      add until a real schema exists.
 
 ### Phase 4 — Cleanup + bookkeeping
 

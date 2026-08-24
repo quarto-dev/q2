@@ -378,7 +378,7 @@ mod tests {
             "js:clipboard",
             "js:code-copy-init",
         ];
-        keys.sort();
+        keys.sort_unstable();
         assert_eq!(
             keys,
             vec![
