@@ -18,6 +18,11 @@ lcov.info
 external-sites.tar.gz
 resources/basic-quarto-website-compiled/
 
+# smoke-all `type: website` fixtures render a `_site/` tree beside their
+# _quarto.yml that the runner does not clean up (it only removes the single
+# output file + <stem>_files/); keep those render artifacts out of git.
+crates/quarto/tests/smoke-all/**/_site/
+
 # Claude Code session-specific plan symlink
 claude-notes/plans/CURRENT.md
 node_modules/

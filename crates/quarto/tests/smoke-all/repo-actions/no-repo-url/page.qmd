@@ -1,0 +1,16 @@
+---
+title: No repo url
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      printsMessage:
+        level: WARN
+        regex: "Repository actions require a"
+      ensureHtmlElements:
+        - []
+        - ["div.toc-actions"]
+---
+
+Text.

@@ -1,0 +1,7 @@
+project:
+  type: website
+website:
+  title: Repo action tests
+  repo-url: https://github.com/example/docs
+  repo-branch: main
+  repo-actions: [edit, source, issue]

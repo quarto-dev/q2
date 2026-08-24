@@ -1,0 +1,15 @@
+---
+title: Unknown action
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      printsMessage:
+        level: WARN
+        regex: "Unknown repository action"
+      ensureHtmlElements:
+        - ["div.toc-actions a.toc-action"]
+---
+
+Text.

@@ -1,0 +1,29 @@
+---
+title: Repo actions
+format: html
+toc: true
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "nav#TOC div.toc-actions a.toc-action",
+            "nav#TOC div.toc-actions i.bi.bi-github",
+            "div.nav-footer-center div.toc-actions.d-sm-block.d-md-none",
+          ]
+      ensureFileRegexMatches:
+        - [
+            # Both placements, three actions each.
+            'href="https://github\.com/example/docs/edit/main/actions\.qmd"',
+            'href="https://github\.com/example/docs/blob/main/actions\.qmd"',
+            'href="https://github\.com/example/docs/issues/new"',
+            # Only the first link carries an icon (decision D-8).
+            '<i class="bi bi-github"></i>Edit this page',
+            '<i class="bi empty"></i>View source',
+          ]
+---
+
+## One
+
+Text.

@@ -1,0 +1,16 @@
+---
+title: Page level true
+format: html
+toc: false
+repo-actions: true
+_quarto:
+  tests:
+    html:
+      printsMessage:
+        level: INFO
+        regex: "Page-level `repo-actions: true` ignored"
+      ensureHtmlElements:
+        - ["div.nav-footer-center div.toc-actions"]
+---
+
+Text.
