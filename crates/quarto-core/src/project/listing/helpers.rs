@@ -93,6 +93,21 @@ pub(crate) fn is_external_src(src: &str) -> bool {
         || src.starts_with('/')
 }
 
+/// True for src values that name somewhere outside this machine:
+/// remote URLs, protocol-relative URLs, and `data:` URIs.
+///
+/// Narrower than [`is_external_src`] on purpose: a leading `/` is
+/// *external* for an image `src` but *project-root-relative* for a
+/// config-authored path like a listing record's `path:`
+/// (`claude-notes/designs/path-resolution-model.md`).
+pub(crate) fn is_remote_src(src: &str) -> bool {
+    let lower = src.to_ascii_lowercase();
+    lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("data:")
+        || src.starts_with("//")
+}
+
 /// Build the `data-*` attributes string used by `list.min.js` for
 /// per-item filter / sort / category tracking. Empty when the
 /// listing has no `metadata-attrs`-relevant fields configured.

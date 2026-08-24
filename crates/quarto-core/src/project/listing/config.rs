@@ -992,8 +992,8 @@ pub fn apply_type_defaults(l: &mut Listing) {
 
 /// Flatten every `contents:` glob entry across all listings declared
 /// on a host page's `meta.listing:` value, ignoring all other listing
-/// config. Inline-record entries are handled by the generate transform;
-/// they contribute nothing here.
+/// config. Inline-record entries with document paths become dependency
+/// edges (plan §D4). See [`record_path_as_glob`].
 ///
 /// Consumers resolve the returned entries with
 /// [`super::glob_resolve::resolve_content_globs`] — see that module
@@ -1009,8 +1009,43 @@ pub fn flatten_content_globs(meta: &ConfigValue) -> Vec<ListingContents> {
     listings
         .into_iter()
         .flat_map(|l| l.contents)
-        .filter(|c| matches!(c, ListingContents::Glob { .. }))
+        .filter_map(|c| match c {
+            glob @ ListingContents::Glob { .. } => Some(glob),
+            ListingContents::Inline(value) => record_path_as_glob(&value),
+        })
         .collect()
+}
+
+/// A record's `path:` to a project document is a dependency edge
+/// (plan §D4). Emitted as a literal pattern with the value's own
+/// provenance so the base-directory rule is the generate
+/// transform's. Glob-shaped paths are skipped rather than compiled.
+fn record_path_as_glob(value: &ConfigValue) -> Option<ListingContents> {
+    let path_value = value.get("path")?;
+    let raw = path_value.as_plain_text()?;
+    // `is_remote_src`, not `is_external_src`: a leading `/` is the
+    // project root and *is* a dependency (plan §D4). The resolver
+    // re-anchors it, exactly as it does for a `/`-anchored glob.
+    if super::helpers::is_remote_src(&raw)
+        || crate::glob::has_metacharacters(&raw)
+        || !is_markdown_document_path(&raw)
+    {
+        return None;
+    }
+    Some(ListingContents::Glob {
+        pattern: raw,
+        source: path_value.source_info.clone(),
+    })
+}
+
+/// Q1's `markdownExtensions` for record `path:` values, plus
+/// notebooks (a q2 project input).
+pub(crate) fn is_markdown_document_path(p: &str) -> bool {
+    let ext = std::path::Path::new(p.split(['?', '#']).next().unwrap_or(""))
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase());
+    matches!(ext.as_deref(), Some("qmd" | "md" | "rmd" | "ipynb"))
 }
 
 /// The value of `key` in `value`, if `value` is a map containing it.
@@ -1779,15 +1814,29 @@ listing:
         );
     }
 
-    /// Inline-record entries are dropped (L3 already surfaces Q-12-2
-    /// at render time; the dep graph has no glob to add).
+    /// A record's document `path:` is a dependency edge (plan §D4):
+    /// it is emitted as a literal pattern carrying the value's own
+    /// provenance, leading `/` included. Pathless, remote,
+    /// non-document and glob-shaped paths contribute nothing.
     #[test]
-    fn extract_globs_drops_inline_records() {
+    fn extract_globs_keeps_record_document_paths_only() {
         let meta = meta_with_listing(map(vec![(
             "contents",
-            arr(vec![map(vec![("title", s("foo"))]), s("*.qmd")]),
+            arr(vec![
+                map(vec![("title", s("pathless"))]),
+                map(vec![("path", s("download.qmd"))]),
+                map(vec![("path", s("/guide/install.qmd"))]),
+                map(vec![("path", s("https://example.com/x.qmd"))]),
+                map(vec![("path", s("report.pdf"))]),
+                map(vec![("path", s("posts/*.qmd"))]),
+                s("*.qmd"),
+            ]),
         )]));
-        assert_eq!(glob_patterns(&flatten_content_globs(&meta)), vec!["*.qmd"]);
+        assert_eq!(
+            glob_patterns(&flatten_content_globs(&meta)),
+            vec!["download.qmd", "/guide/install.qmd", "*.qmd"],
+            "a leading `/` is a project-root dependency, not a remote URL"
+        );
     }
 
     /// `listing: false` → no globs (parse_listings emits Q-12-6

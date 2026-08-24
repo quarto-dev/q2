@@ -24,7 +24,10 @@ own directory for front-matter patterns, the directory holding a
 `..` segments (for example `../posts/*.qmd`), but it may not
 climb *above* the project root. A pattern that does — say
 `../../*.qmd` written next to `_quarto.yml` — cannot refer to any
-project document, so it matches nothing and this warning fires.
+project document, so it matches nothing and this warning fires. The
+same rule applies to an inline `contents:` record's `path:` — it
+resolves against the directory of the file the record is written in,
+and this warning fires if it climbs above the project root too.
 
 ## Why this happens
 
@@ -38,7 +41,10 @@ Count the `..` segments against the location of the file the
 pattern is written in, and adjust the pattern so it stays within
 the project directory. Files outside the project cannot appear in
 a listing; if the content you want to list lives outside the
-project, move it into the project's directory tree.
+project, move it into the project's directory tree. For a record's
+`path:`, the same fix applies — recount its `..` segments against
+the record's declaring file, or anchor it at the project root with a
+leading `/` instead.
 
 ## Related
 

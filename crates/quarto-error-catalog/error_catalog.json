@@ -1070,6 +1070,13 @@
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-19",
     "since_version": "99.9.9"
   },
+  "Q-12-20": {
+    "subsystem": "listing",
+    "title": "Listing Record Path Names No Document",
+    "message_template": "An inline `contents:` record's `path:` has a document extension but names no document the project renders; the item keeps the link as written.",
+    "docs_url": "https://quarto.org/docs/errors/listing/Q-12-20",
+    "since_version": "99.9.9"
+  },
   "Q-12-21": {
     "subsystem": "listing",
     "title": "Listing Record Has No Title",
@@ -1082,6 +1089,13 @@
     "title": "Listing Record Key Looks Misspelled",
     "message_template": "A key in an inline `contents:` record is a near-miss of a listing field; it was kept as a custom field.",
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-22",
+    "since_version": "99.9.9"
+  },
+  "Q-12-23": {
+    "subsystem": "listing",
+    "title": "YAML-File Listing Contents Not Yet Supported",
+    "message_template": "A `contents:` entry names a YAML file. Quarto 2 does not yet read listing records from YAML files; the entry is skipped.",
+    "docs_url": "https://quarto.org/docs/errors/listing/Q-12-23",
     "since_version": "99.9.9"
   },
   "Q-13-1": {
