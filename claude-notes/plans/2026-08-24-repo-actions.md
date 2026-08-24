@@ -1375,7 +1375,7 @@ git commit -m "Add Q-13-11/12/13 for repo-action misconfiguration (bd-repo-actio
 - Consumes: `quarto_navigation::{RepoActionLabels, RepoActionWarning, RepoActionsConfig, repo_action_links}`, `quarto_navigation::render_html::repo_actions_to_html`, `quarto_config::resolve_website_value`, `crate::transforms::navigation_active::page_relative_source`, `crate::language::LanguageTerms`.
 - Produces: `pub struct RepoActionsRenderTransform` with `RepoActionsRenderTransform::new()`, writing `rendered.navigation.toc-actions` and `rendered.navigation.footer-actions`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create the module with only the test block, and **declare it in `mod.rs` in this same step** — add `mod repo_actions_render;` to `crates/quarto-core/src/transforms/mod.rs` now, not in Step 4. An undeclared file is never compiled, so without this Step 2 runs zero tests and exits 0 instead of failing. (The `pub use` for the transform still waits until Step 4, when the type exists.)
 
@@ -1601,12 +1601,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo nextest run -p quarto-core repo_actions_render`
 Expected: **FAIL to compile** — `RepoActionsRenderTransform` is not defined. If instead you see "0 tests run" and a green exit, the `mod repo_actions_render;` line from Step 1 is missing and nothing was compiled.
 
-- [ ] **Step 3: Implement the transform**
+- [x] **Step 3: Implement the transform**
 
 ```rust
 /*
@@ -1742,8 +1742,10 @@ impl AstTransform for RepoActionsRenderTransform {
             let location = ast
                 .meta
                 .get("repo-actions")
-                .map(|v| v.source_info.clone())
-                .unwrap_or_else(|| SourceInfo::generated(By::programmatic_config()));
+                .map_or_else(
+                    || SourceInfo::generated(By::programmatic_config()),
+                    |v| v.source_info.clone(),
+                );
             ctx.diagnostics.push(page_level_true_info(location));
         }
 
@@ -1767,8 +1769,10 @@ impl AstTransform for RepoActionsRenderTransform {
             let location = ast
                 .meta
                 .get_path(&["website", "repo-actions"])
-                .map(|v| v.source_info.clone())
-                .unwrap_or_else(|| SourceInfo::generated(By::programmatic_config()));
+                .map_or_else(
+                    || SourceInfo::generated(By::programmatic_config()),
+                    |v| v.source_info.clone(),
+                );
             ctx.diagnostics.push(match warning {
                 RepoActionWarning::NoRepoUrl => no_repo_url_warning(location),
                 RepoActionWarning::UnknownAction(name) => unknown_action_warning(&name, location),
@@ -1900,16 +1904,17 @@ fn page_level_true_info(location: SourceInfo) -> DiagnosticMessage {
 }
 ```
 
-- [ ] **Step 4: Export the transform**
+- [x] **Step 4: Export the transform**
 
 In `crates/quarto-core/src/transforms/mod.rs`, add `pub use repo_actions_render::RepoActionsRenderTransform;` in the existing alphabetical position. The `mod repo_actions_render;` line already went in at Step 1.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `cargo nextest run -p quarto-core repo_actions_render`
-Expected: PASS, 11 tests.
+Expected: PASS, 12 tests. (The count was 11 before `issue_url_alone_still_renders_without_any_repo_actions`
+was added to Step 1 — see the `issue-url` correction in the run body and in D-7.)
 
-- [ ] **Step 6: Gate and commit**
+- [x] **Step 6: Gate and commit**
 
 ```bash
 cargo clippy -p quarto-core --all-targets -- -D warnings
@@ -1919,7 +1924,12 @@ git commit -m "Resolve repo-action config into rendered markup (bd-repo-actions-
 
 ### Phase 3 gate
 
-- [ ] Run `cargo nextest run --workspace`. The transform is not yet in the pipeline, so **no rendered output changes** — the delta must be exactly the 11 new unit tests from Task 6 and nothing else. Any movement in an existing test at this phase means the module was wired up early.
+- [x] Run `cargo nextest run --workspace`. The transform is not yet in the pipeline, so **no rendered output changes** — the delta must be exactly the 12 new unit tests from Task 6 and nothing else. Any movement in an existing test at this phase means the module was wired up early.
+
+  **Result: 13170 passed, 199 skipped** against the Phase 2 gate's 13158/199 — **+12 passed, skipped unchanged,**
+  and zero failures. The delta is exactly Task 6's test module. (The "11" above was the pre-correction count;
+  `issue_url_alone_still_renders_without_any_repo_actions` makes 12 — same stale figure as Task 6 Step 5.)
+  No existing test moved, so nothing was wired into the pipeline early — that is Task 9's job.
 
 ---
 

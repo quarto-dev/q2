@@ -71,6 +71,7 @@ mod panel_tabset;
 mod panel_tabset_resolve;
 mod proof;
 mod reference_link_diagnostics;
+mod repo_actions_render;
 mod resource_collector;
 mod secondary_nav_render;
 // Fixed-header JS shipping (bd-ersobfbt). Native-only: the preview
@@ -145,6 +146,7 @@ pub use proof::ProofSugarTransform;
 #[cfg(not(target_arch = "wasm32"))]
 pub use quarto_nav_js::QuartoNavJsTransform;
 pub use reference_link_diagnostics::ReferenceLinkDiagnosticsTransform;
+pub use repo_actions_render::RepoActionsRenderTransform;
 pub use resource_collector::{ResourceCollectorTransform, collect_referenced_asset_urls};
 pub use secondary_nav_render::SecondaryNavRenderTransform;
 pub use sectionize::SectionizeTransform;
