@@ -1941,7 +1941,7 @@ git commit -m "Resolve repo-action config into rendered markup (bd-repo-actions-
 - Modify: `crates/quarto-core/src/template.rs:608-616` (`TOC_BLOCK_PARTIAL`), and the variable doc-comment block near line 222
 - Modify: `crates/quarto-core/src/transforms/sidebar_render.rs:195-212` (`toc_block_html`)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `#[cfg(test)] mod tests` in `crates/quarto-core/src/template.rs`, alongside the existing `#quarto-margin-sidebar` tests. The helpers are `render_full(body, meta)` (`template.rs:3031`), `meta_with_navigation(toc, margin_categories)` (`:3049`), and `dummy_source_info()` — there is **no** `render_full_template` and no `s()` in this module:
 
@@ -1996,12 +1996,12 @@ fn toc_block_html_twin_includes_repo_actions() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo nextest run -p quarto-core toc_block`
 Expected: FAIL — but only two of the three. `toc_block_emits_repo_actions_inside_the_nav` and `toc_block_html_twin_includes_repo_actions` fail because the actions text is absent. `toc_block_omits_repo_actions_when_unset` **passes already** (nothing in the tree emits `toc-actions`, and the SCSS is linked rather than inlined); it is a guard against the new conditional leaving a stray block behind, not a red-green test.
 
-- [ ] **Step 3: Add the variable to the partial**
+- [x] **Step 3: Add the variable to the partial**
 
 In `crates/quarto-core/src/template.rs`, change `TOC_BLOCK_PARTIAL` to:
 
@@ -2020,7 +2020,7 @@ $endif$
 
 Extend the doc comment above it to mention that `rendered.navigation.toc-actions` is written by `RepoActionsRenderTransform` and must be kept in sync with the Rust twin. Add `rendered.navigation.toc-actions` and `rendered.navigation.footer-actions` to the template-variable list near line 222, following the format of the `rendered.navigation.breadcrumbs` entry.
 
-- [ ] **Step 4: Add it to the Rust twin**
+- [x] **Step 4: Add it to the Rust twin**
 
 In `crates/quarto-core/src/transforms/sidebar_render.rs`, in `toc_block_html`, insert before the closing `</nav>`:
 
@@ -2036,12 +2036,12 @@ In `crates/quarto-core/src/transforms/sidebar_render.rs`, in `toc_block_html`, i
     html.push_str("</nav>\n");
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `cargo nextest run -p quarto-core toc_block`
 Expected: PASS, 3 tests.
 
-- [ ] **Step 6: Gate and commit**
+- [x] **Step 6: Gate and commit**
 
 ```bash
 cargo clippy -p quarto-core --all-targets -- -D warnings
@@ -2054,7 +2054,7 @@ git commit -m "Emit the TOC repo-actions copy from the toc-block partial and twi
 **Files:**
 - Modify: `crates/quarto-core/src/transforms/footer_render.rs:65-116`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `#[cfg(test)] mod tests` in `crates/quarto-core/src/transforms/footer_render.rs`, using the file's existing `run` helper:
 
@@ -2139,7 +2139,7 @@ async fn no_footer_and_no_actions_still_skips() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo nextest run -p quarto-core footer_render`
 Expected: FAIL — exactly two of the five fail: `footer_actions_are_appended_to_a_configured_footer` and `footer_is_synthesized_when_only_actions_exist`. The other three pass against the *unmodified* transform, and it is worth knowing why before you start:
@@ -2147,7 +2147,7 @@ Expected: FAIL — exactly two of the five fail: `footer_actions_are_appended_to
 - `page_footer_false_suppresses_the_actions_copy` and `no_footer_and_no_actions_still_skips` pass because the current code returns early in both situations.
 - `website_scoped_page_footer_false_also_suppresses_the_copy` passes **trivially** today — `navigation.footer` is absent, so the unmodified transform returns early for the right result by accident. It is a **regression guard, not a red-green test**: it goes red only if you add the synthesis branch *without* the website-aware re-check, which is precisely the mistake D-3 exists to prevent. If you want to see it fail, add the synthesis branch first and run it before adding the guard.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `crates/quarto-core/src/transforms/footer_render.rs`, keep the two existing early returns at the top of `transform` **unchanged and in place** — `is_feature_disabled(&ast.meta, "page-footer")` (`:66`) and the `rendered.navigation.footer` override check (`:70`). Then replace the block that reads `navigation.footer` — both the `let Some(footer_cv) = … else { return Ok(()) };` and the `let mut footer = PageFooter::from_config_value(footer_cv);` that follows it (`:76-80`) — with:
 
@@ -2196,12 +2196,12 @@ Add `use quarto_config::resolve_website_value;` to the imports.
 
 Update the module doc comment's "Skip conditions" list: `navigation.footer` absent **and** either no `footer-actions` or `page-footer: false` at either scope.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo nextest run -p quarto-core footer_render`
 Expected: PASS — the 5 new tests plus every pre-existing footer test.
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 cargo clippy -p quarto-core --all-targets -- -D warnings
@@ -2214,7 +2214,7 @@ git commit -m "Append repo actions to the footer, synthesizing one if needed (bd
 **Files:**
 - Modify: `crates/quarto-core/src/pipeline.rs:1364-1365` (**between `TocLocationTransform` and `NavbarRenderTransform`** — see Step 3; registering later than `SidebarRenderTransform` at :1366 silently breaks one of the four TOC placements), plus the numbered stage list in the doc comment at 1059-1071
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 The pipeline has an ordering test, `test_build_transform_pipeline_phase_ordering`. Add a companion in the same test module:
 
@@ -2261,12 +2261,12 @@ fn repo_actions_render_sits_between_its_producers_and_consumers() {
 
 Confirm `SidebarRenderTransform::name()` returns `"sidebar-render"` before relying on the literal.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo nextest run -p quarto-core repo_actions_render_sits_between`
 Expected: FAIL with "`repo-actions-render` must be in the html pipeline".
 
-- [ ] **Step 3: Register the transform**
+- [x] **Step 3: Register the transform**
 
 In `crates/quarto-core/src/pipeline.rs`, immediately **after** `pipeline.push(Box::new(TocLocationTransform::new()));` (`:1364`) and **before** `pipeline.push(Box::new(NavbarRenderTransform::new()));` (`:1365`):
 
@@ -2296,12 +2296,12 @@ In `crates/quarto-core/src/pipeline.rs`, immediately **after** `pipeline.push(Bo
 
 Add `RepoActionsRenderTransform` to the `use crate::transforms::{…}` list at the top of the file, and add a numbered entry to the stage list in the doc comment — **between `13. TocRenderTransform` and `14. NavbarRenderTransform`** (`pipeline.rs:1063-1064`), matching the new position. There is no `PageNavRenderTransform` entry in that list to anchor against.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo nextest run -p quarto-core pipeline`
 Expected: PASS, including `test_build_transform_pipeline_phase_ordering` — `RepoActionsRenderTransform` declares `TransformPhase::Navigation`, the same rank as its neighbours.
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 cargo clippy -p quarto-core --all-targets -- -D warnings
@@ -2312,7 +2312,27 @@ git commit -m "Register the repo-actions transform in the html pipeline (bd-repo
 ### Phase 4 gate
 
 
-- [ ] Run `cargo nextest run --workspace`. Expect **+9 passed** (3 from Task 7, 5 from Task 8, 1 from Task 9). This is the first phase where rendered output changes.
+- [x] Run `cargo nextest run --workspace`. Expect **+9 passed** (3 from Task 7, 5 from Task 8, 1 from Task 9). This is the first phase where rendered output changes.
+
+  **Result: 13179 passed, 199 skipped** against Phase 3's 13170/199 — **exactly +9, skipped unchanged, zero
+  failures.** `git status --short` was empty afterwards, so no `.snap` was regenerated and the
+  `phase5-single-doc-baseline` sha256 gate did not move. Zero movement in existing fixtures, as predicted.
+
+  **The feature was also confirmed live end-to-end at this boundary** (ahead of Task 12's formal record), on the
+  same `/tmp/q2-repro-repo-actions` project Task 0 used:
+
+  ```
+  $ q2 render && grep -o "Edit this page\\|View source\\|Report an issue" _site/index.html | sort | uniq -c
+     2 Edit this page
+     2 Report an issue
+     2 View source
+  $ grep -o 'class="toc-actions[^"]*"' _site/index.html
+  class="toc-actions"
+  class="toc-actions d-sm-block d-md-none"
+  ```
+
+  Six links where Task 0 recorded zero, in both placements, with the responsive classes on the footer copy only —
+  exactly Q1's shape. Output inspected by the orchestrator.
 
   **Expect zero movement in existing fixtures, and treat any as a defect rather than a snapshot to refresh.** Two facts make that a hard assertion rather than a hope: no test, fixture, or snapshot anywhere in the tree configures `repo-actions` or `repo-url` (so nothing existing can gain links), and Task 4's `render_footer_region` rewrite is byte-identical when `center_append` is `None` (so no existing footer can shift by a single character).
 
@@ -2804,10 +2824,15 @@ rm -rf _site
 - [ ] **Step 2: Count the links**
 
 ```bash
-grep -c "Edit this page\|View source\|Report an issue" _site/index.html
+# NOT `grep -c` — that counts matching *lines*, and the whole page body is one
+# line, so it reports 1 or 2 no matter how many links there are. Task 0's `-c`
+# was fine only because its expected answer was 0. Count matches, not lines:
+grep -o "Edit this page\|View source\|Report an issue" _site/index.html | wc -l
+grep -o "Edit this page\|View source\|Report an issue" _site/index.html | sort | uniq -c
 ```
 
-Expected: **6** (three actions × two placements). Task 0 recorded `0`.
+Expected: **6** total (three actions × two placements), and `2` of each of the
+three labels in the `uniq -c` breakdown. Task 0 recorded `0`.
 
 - [ ] **Step 3: Compare the emitted blocks against Q1's**
 
@@ -2987,7 +3012,7 @@ braid close bd-repo-actions-missing-99ezd2fe --reason "repo-actions render in bo
 ### After implementation (Task 12)
 
 - Invocation: _(fill in)_
-- Link count: _(fill in — expect 6)_
+- Link count: _(fill in — expect 6 total, 2 of each label)_
 - Emitted TOC block: _(paste)_
 - Emitted footer block: _(paste)_
 - Output inspected: _(yes/no + who)_

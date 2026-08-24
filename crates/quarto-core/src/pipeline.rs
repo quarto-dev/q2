@@ -78,11 +78,12 @@ use crate::transforms::{
     FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
     MermaidRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
     NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
-    ReferenceLinkDiagnosticsTransform, ResourceCollectorTransform, SectionizeTransform,
-    ShortcodeResolveTransform, SidebarGenerateTransform, SidebarRenderTransform,
-    TableBootstrapClassTransform, TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform,
-    TocGenerateTransform, TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
-    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
+    SectionizeTransform, ShortcodeResolveTransform, SidebarGenerateTransform,
+    SidebarRenderTransform, TableBootstrapClassTransform, TheoremSugarTransform,
+    TitleBannerTransform, TitleBlockTransform, TocGenerateTransform, TocLocationTransform,
+    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
+    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -1061,6 +1062,9 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 /// 11. `SidebarGenerateTransform` - Resolve `website.sidebar:` into `navigation.sidebar`
 /// 12. `FooterGenerateTransform` - Resolve `page-footer:` YAML into `navigation.footer`
 /// 13. `TocRenderTransform` - Render TOC to HTML for template insertion
+/// 13a. `RepoActionsRenderTransform` - Render repository action links
+///     (source/edit/issue) for the TOC and footer slots
+///     (bd-repo-actions-missing-99ezd2fe)
 /// 14. `NavbarRenderTransform` - Render navbar to HTML for template insertion
 /// 15. `SidebarRenderTransform` - Render sidebar to HTML (w/ .qmd→.html rewrite)
 /// 15a. `BreadcrumbsRenderTransform` - Derive the page's breadcrumb trail from
@@ -1362,6 +1366,27 @@ pub fn build_transform_pipeline(
     // `toc-in-sidebar` directive to merge the TOC into
     // `nav#quarto-sidebar` for website pages).
     pipeline.push(Box::new(TocLocationTransform::new()));
+    // Repository action links (bd-repo-actions-missing-99ezd2fe).
+    // Ordering is load-bearing in both directions.
+    //
+    // AFTER `TocRenderTransform` (:1358): the TOC copy is emitted only
+    // when `rendered.navigation.toc` is non-empty, and Q-13-13 is
+    // gated on the same flag.
+    //
+    // BEFORE `SidebarRenderTransform` (:1366): for the website-left
+    // placement the TOC's `<nav>` is built in Rust, by `toc_block_html`
+    // — called from `SidebarRenderTransform`, its only caller. Running
+    // after it would leave that one placement with no actions while the
+    // three template-emitted placements worked, a failure no test using
+    // the default `toc-location: right` can see.
+    //
+    // BEFORE `footer_render_stage` (:1396): `FooterRenderTransform`
+    // consumes `rendered.navigation.footer-actions`.
+    //
+    // Not gated on format: revealjs's template includes neither the
+    // `toc-block` partial nor the html footer stage, so both slots are
+    // inert there.
+    pipeline.push(Box::new(RepoActionsRenderTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
     pipeline.push(Box::new(SidebarRenderTransform::new()));
     // Breadcrumbs derive from the resolved `navigation.sidebar`
@@ -3731,6 +3756,43 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn repo_actions_render_sits_between_its_producers_and_consumers() {
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "html".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        let pos = |want: &str| {
+            names
+                .iter()
+                .position(|n| *n == want)
+                .unwrap_or_else(|| panic!("`{want}` must be in the html pipeline; got {names:?}"))
+        };
+        let actions = pos("repo-actions-render");
+
+        assert!(
+            pos("toc-render") < actions,
+            "repo actions read rendered.navigation.toc to decide placement"
+        );
+        // The one that is easy to get wrong: `toc_block_html` runs inside
+        // SidebarRenderTransform, so the website-left placement reads
+        // `toc-actions` during that transform, not at template time.
+        assert!(
+            actions < pos("sidebar-render"),
+            "sidebar-render builds the website-left TOC nav in Rust and must see toc-actions"
+        );
+        assert!(
+            actions < pos("footer-render"),
+            "footer-render consumes rendered.navigation.footer-actions"
+        );
     }
 
     #[test]
