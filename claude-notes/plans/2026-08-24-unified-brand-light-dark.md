@@ -211,9 +211,12 @@ deltas from the original sketch are marked ⚠.)
       (plus the `rendered.theme.dark-is-default` meta channel and the
       template/navbar consumers reading it with pure fallback).
 - [x] Full workspace: `cargo build --workspace` ✓, `cargo nextest run
-      --workspace` ✓ (13,165 pass), `cargo xtask verify` (full — in progress;
-      two early failures were a clippy nit and rustfmt in a new test file,
-      both fixed).
+      --workspace` ✓ (13,165 pass). `cargo xtask verify`: steps 1–10 green
+      (incl. hub-client build:all/WASM and test:ci); step 11 fails only on
+      the KNOWN pre-existing bd-s36g9dav katex test (reproduced on a clean
+      baseline via stash); the remaining legs (preview-runtime tests, hub
+      MCP builds+tests, q2-preview-spa build) run individually — all green.
+      Coverage: split.rs 100 %, quarto-brand 91 % of functions.
 
 ### Phase 3 — end-to-end verification + docs + bookkeeping
 
@@ -229,7 +232,11 @@ deltas from the original sketch are marked ⚠.)
       `#d0d0ff` in `styles-dark.css`. Palette limitation callout stays true.
       The "directly in the document metadata" example remains blocked by the
       unrelated GH #581 (inline front-matter brand), tracked separately.
-- [ ] Close bd-unified-brand-split-ep49amad; comment on GH #580.
+- [x] Implementation committed on `braid/bd-unified-brand-split-ep49amad`
+      (`f92c85ff6`); strand commented. Closing the strand (plus superseded
+      bd-v5z8w) and commenting on GH #580 deferred until the branch is
+      pushed/merged — both are outward-facing states that should follow the
+      user's review.
 
 ## Out of scope / follow-ups
 
