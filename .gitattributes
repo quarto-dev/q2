@@ -1,7 +1,3 @@
-
-# Use bd merge for beads JSONL files
-.beads/issues.jsonl merge=beads
-
 # Byte-offset fixtures: the annotated-qmd example JSONs record byte offsets
 # into these .qmd sources (and their line_breaks), so a CRLF checkout would
 # shift every offset. Pin the whole directory, not just the .qmd sources: the

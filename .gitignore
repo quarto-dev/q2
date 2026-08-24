@@ -1,8 +1,6 @@
 .DS_Store
 target
 
-# Beads ignore rules managed by .beads/.gitignore (created by br init)
-
 external-sources/
 !external-sources/commonmark-spec/spec.txt
 
@@ -46,6 +44,11 @@ crates/wasm-quarto-hub-client/pkg/
 
 # Per-session local context (managed by `cargo xtask create-worktree` for worktrees)
 CLAUDE.local.md
+
+# Legacy beads tracker — pulling its removal deletes .beads/.gitignore, leaving
+# any local-only leftovers (beads.db, .br_history/, locks) unignored on machines
+# that ran `br` before the braid migration. Keeps them out of `git add -A`.
+/.beads/
 
 # braid issue tracker — .braid.toml holds the skein doc id, a read/write
 # bearer token. NEVER commit it. The committed, non-secret `.braid-project`
