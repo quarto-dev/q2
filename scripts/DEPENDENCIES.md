@@ -92,12 +92,6 @@ dnf install jq            # Fedora
 
 These are pre-installed on macOS/Linux.
 
-## beads-to-graphviz.py
-
-### Required
-
-See `README-beads-graphviz.md` for details.
-
 ## Checking All Dependencies
 
 Run this to check all dependencies at once:

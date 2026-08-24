@@ -237,14 +237,6 @@ LEGITIMATE MISSING CODES (HIGH PRIORITY)
 
 Run this before using any scripts to ensure dependencies are met.
 
-## Beads/Issue Tracking
-
-### beads-to-graphviz.py, beads-to-graphviz.sh
-
-**Purpose:** Visualize beads issue dependencies as graphs.
-
-See: `README-beads-graphviz.md` for details.
-
 ## Contributing New Scripts
 
 When adding new scripts to this directory:
