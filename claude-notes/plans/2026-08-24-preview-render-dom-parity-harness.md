@@ -179,6 +179,7 @@ must mirror that placement.
 |---|---|
 | Strip attributes `data-loc`, `data-sid` | Preview-only source tracking. The writer emits them only when `include_source_locations` is on (`html.rs` doc block ~L743-748) — off for `q2 render`; the preview AST is written with `include_inline_locations: true` (`PreviewAstOutput.ast_json`, `pipeline.rs:195`) and React forwards them via `dataLocProps`. |
 | Replace the children of `span.math` with one opaque text node `⟨opaque⟩` | `math-js` (excluded from preview) leaves TeX in `\(…\)` delimiters for MathJax; React `inlines/Math.tsx:24` emits KaTeX HTML. Divergent by design; the `<span>` and its classes still compare. **Today `Math.tsx` emits no class at all** (bd-tmb2u5yu), so on the preview side the selector matches nothing and the class diverges — no fixture with math can opt in until that strand closes. The rule is written for the fixed state on purpose. |
+| **Unwrap any `<div>` that has no attributes left after the strip rule, on both sides** (added by the Task 0.2 spike) | React cannot inject raw HTML without a host element, so `blocks/RawBlock.tsx:44` wraps every `RawBlock(format: "html")` in a `<div>` (`dangerouslySetInnerHTML`) that the writer (`html.rs`, `Block::RawBlock`) never emits — most visibly the code-copy button. Must be symmetric: a preview-only variant would false-positive on a `Div` block with an empty `Attr` (render `<div>` vs preview `<div data-loc=…>`); `title-block/simple-default.qmd` has two such divs on both sides. **Accepted cost:** a missing/extra attribute-less `<div>` is invisible to the runner (such a div matches no id/class selector; the render side's `ensureHtmlElements` assertions still cover `div.quarto-title-meta > div`-style structure). The alternative — excluding every fixture with a code block — would gut the corpus. Ordering: after the attribute strip (the wrapper carries `data-loc`), before `normalize()` and the whitespace pass. |
 | **Fail** if `data-hl-spans` is present on either side | Consumed attribute — the writer (`write_code_container_attr`, `html.rs:539`; the "reserved" comment at `:517`) and `blocks/CodeBlock.tsx` both decode it into `<span class="hl-…">` and must not forward it. Leakage is a bug (bd-nxslt); the harness must not normalise it away. |
 | Sort attributes by name | Serialisation order is not semantic. |
 | **Do not** sort class tokens; **do** collapse whitespace inside `class` | Class *order* is part of the mirroring contract (`sourceCode` prepend, bd-y1fs3). |
@@ -248,8 +249,8 @@ sibling's 120 s hang-detection timeout, `vitest.wasm.config.ts`).
 ## Checklist
 
 ### Phase 0 — Groundwork + spike
-- [ ] 0.1 Extract `hub-client/src/test-utils/smokeAllFixtures.ts` from `smokeAll.wasm.test.ts` (pure refactor, identical counts)
-- [ ] 0.2 Throwaway spike over 4 fixtures using the extracted helpers; research note with divergence classes + initial allowlist
+- [x] 0.1 Extract `hub-client/src/test-utils/smokeAllFixtures.ts` from `smokeAll.wasm.test.ts` (pure refactor, identical counts)
+- [x] 0.2 Throwaway spike over 4 fixtures using the extracted helpers; research note with divergence classes + initial allowlist
 
 ### Phase 1 — `domParity.ts`
 - [ ] 1.1 `canonicalize` — shape, attribute sorting, text/whitespace rules, `<pre>` verbatim, text-node merging
@@ -314,7 +315,7 @@ sees.
   `smokeAll.wasm.test.ts` — they are that runner's assertion model.
   `readTestsBlock` is the small shared accessor both runners use.
 
-- [ ] **Step 1: Fresh WASM, then record the baseline**
+- [x] **Step 1: Fresh WASM, then record the baseline**
 
 ```bash
 cd hub-client && npm run build:wasm
@@ -322,7 +323,7 @@ cd hub-client && npm run test:wasm 2>&1 | tee /private/tmp/claude-502/-Users-gor
 ```
 Record the `N passed, M skipped, 0 failed` line — the refactor must reproduce it exactly.
 
-- [ ] **Step 2: Create `smokeAllFixtures.ts`**
+- [x] **Step 2: Create `smokeAllFixtures.ts`**
 
 Move the listed items. `__dirname`-relative paths: `SMOKE_ALL_DIR` was
 `resolve(__dirname, '../../../crates/quarto/tests/smoke-all')` from
@@ -393,7 +394,7 @@ export function readTestsBlock(
 `populateVfs` and `buildUserGrammarsHandle` take `wasm: WasmModule` as
 their first parameter instead of closing over a module-level `let wasm`.
 
-- [ ] **Step 3: Rewire `smokeAll.wasm.test.ts`**
+- [x] **Step 3: Rewire `smokeAll.wasm.test.ts`**
 
 Delete the moved definitions; add
 `import { SMOKE_ALL_DIR, loadSmokeWasm, discoverTestFiles, readFrontmatter, readTestsBlock, parseTwoArraySpec, shouldSkip, populateVfs, buildUserGrammarsHandle, type WasmModule, type RunConfig } from '../test-utils/smokeAllFixtures';`.
@@ -414,7 +415,7 @@ Call sites: `populateVfs(wasm, testFile)`, `buildUserGrammarsHandle(wasm, projec
 Do **not** add a `parity` case yet — this task is behaviour-preserving;
 Task 2.2 does that.
 
-- [ ] **Step 4: Verify identical results**
+- [x] **Step 4: Verify identical results**
 
 ```bash
 cd hub-client && npm run test:wasm 2>&1 | tee /private/tmp/claude-502/-Users-gordon-src-q2/6f5c0c8f-a359-437a-87d6-879b0e289c0e/scratchpad/wasm-after.log; grep -E "Smoke-all WASM results|Tests " /private/tmp/claude-502/-Users-gordon-src-q2/6f5c0c8f-a359-437a-87d6-879b0e289c0e/scratchpad/wasm-after.log
@@ -424,7 +425,7 @@ Expected: the `passed/skipped/failed` line is byte-identical to Step 1;
 `typecheck` clean (it proves nothing about the moved file — that is the
 point: the app project must not have grown a Node import).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add hub-client/src/test-utils/smokeAllFixtures.ts hub-client/src/services/smokeAll.wasm.test.ts
@@ -455,7 +456,7 @@ Fixtures: `markdown/heading-auto-id.qmd`, `highlighting/01-builtin-python.qmd`,
 exists, so this exercises the project branch on both sides),
 `title-block/simple-default.qmd`.
 
-- [ ] **Step 1: Widen the include glob** (positional file arguments only
+- [x] **Step 1: Widen the include glob** (positional file arguments only
   *filter within* `include`; a `.tsx` outside the glob is "no test files
   found")
 
@@ -463,7 +464,7 @@ exists, so this exercises the project branch on both sides),
       include: ['src/**/*.wasm.test.{ts,tsx}'],
 ```
 
-- [ ] **Step 2: Write the spike file**
+- [x] **Step 2: Write the spike file**
 
 ```tsx
 // @vitest-environment jsdom
@@ -538,7 +539,7 @@ describe('parity spike', () => {
 });
 ```
 
-- [ ] **Step 3: Run the spike**
+- [x] **Step 3: Run the spike**
 
 ```bash
 cd hub-client && npx vitest run --config vitest.wasm.config.ts src/services/paritySpike.wasm.test.tsx
@@ -548,7 +549,7 @@ Expected: the test passes (it only dumps) and eight files appear under
 `hub-client/test-results/parity-spike/`. If it fails, that is a Q1–Q3
 answer — record what and how it was worked around; that changes Task 3.1.
 
-- [ ] **Step 4: Inspect and diff each pair**
+- [x] **Step 4: Inspect and diff each pair**
 
 ```bash
 cd hub-client/test-results/parity-spike
@@ -564,7 +565,7 @@ Read every diff. Classify each hunk as one of: **(a)** serialiser noise the
 yet in the table (needs a new rule with a reason); **(c)** a real bug (React
 or writer — bd-tmb2u5yu is a known (c) if a fixture has math).
 
-- [ ] **Step 5: Write the research note**
+- [x] **Step 5: Write the research note**
 
 `claude-notes/research/2026-08-24-preview-render-parity-spike.md` with:
 the exact command run; answers to Q1–Q4; a table
@@ -572,7 +573,7 @@ the exact command run; answers to Q1–Q4; a table
 snippets for every (b) and (c); the amended rules table if any (b) was
 found; and the initial allowlist (fixtures whose only diffs are (a)).
 
-- [ ] **Step 6: Delete the spike, commit the note + the glob change**
+- [x] **Step 6: Delete the spike, commit the note + the glob change**
 
 ```bash
 rm hub-client/src/services/paritySpike.wasm.test.tsx
@@ -604,6 +605,7 @@ the package `tsconfig.json`, so nothing here ships in `dist/`.
     stripAttrs: ReadonlySet<string>;
     forbidAttrs: ReadonlySet<string>;
     opaqueSelectors: readonly string[];
+    unwrapTags: ReadonlySet<string>;                 // added after the Task 0.2 spike
   }
   export const PARITY_RULES: ParityRules;            // empty until Task 1.2
   export const OPAQUE_MARKER = '⟨opaque⟩';
@@ -720,6 +722,13 @@ export interface ParityRules {
    * but have their children replaced by a single OPAQUE_MARKER line.
    */
   opaqueSelectors: readonly string[];
+  /**
+   * Tag names whose elements are replaced by their children when no
+   * attribute survives `stripAttrs`. Applied on the clone before text
+   * nodes are merged, so the unwrapped children take part in the
+   * whitespace pass as siblings of the wrapper's neighbours.
+   */
+  unwrapTags: ReadonlySet<string>;
 }
 
 export const OPAQUE_MARKER = '⟨opaque⟩';
@@ -732,6 +741,7 @@ export const PARITY_RULES: ParityRules = {
   stripAttrs: new Set<string>(),
   forbidAttrs: new Set<string>(),
   opaqueSelectors: [],
+  unwrapTags: new Set<string>(),
 };
 
 /**
@@ -802,13 +812,35 @@ function walk(node: Node, depth: number, rules: ParityRules, out: string[], inPr
   for (const child of Array.from(el.childNodes)) walk(child, depth + 1, rules, out, childInPre);
 }
 
+/** True when every attribute on `el` is in `rules.stripAttrs`. */
+function hasNoSurvivingAttrs(el: Element, rules: ParityRules): boolean {
+  return Array.from(el.attributes).every((a) => rules.stripAttrs.has(a.name));
+}
+
+/**
+ * Replace every `rules.unwrapTags` element that has no surviving
+ * attributes by its children (document order, so nested wrappers unwrap
+ * too). Mutates `root`, which must be the private clone.
+ */
+function unwrapBareElements(root: Element, rules: ParityRules): void {
+  for (const tag of rules.unwrapTags) {
+    for (const el of Array.from(root.querySelectorAll(tag))) {
+      if (hasNoSurvivingAttrs(el, rules)) el.replaceWith(...Array.from(el.childNodes));
+    }
+  }
+}
+
 /**
  * Canonical, line-oriented rendering of `el` and its subtree. Works on a
- * clone so the caller's DOM is untouched (adjacent text nodes are merged
- * with `normalize()` first — React emits one text node per Str/Space).
+ * clone so the caller's DOM is untouched. Order on the clone: unwrap bare
+ * wrapper elements (rules.unwrapTags, judged after the strip list) →
+ * merge adjacent text nodes with `normalize()` (React emits one text
+ * node per Str/Space) → walk (strip/forbid/sort attributes, opaque
+ * subtrees, whitespace).
  */
 export function canonicalize(el: Element, rules: ParityRules = PARITY_RULES): string {
   const clone = el.cloneNode(true) as Element;
+  unwrapBareElements(clone, rules);
   clone.normalize();
   const out: string[] = [];
   walk(clone, 0, rules, out, false);
@@ -870,6 +902,23 @@ describe('PARITY_RULES', () => {
       ParityRuleViolation,
     );
   });
+
+  it("unwraps React's attribute-less RawBlock <div> wrapper (data-loc does not count)", () => {
+    // preview: RawBlock.tsx host element carrying only data-loc; render: the raw HTML inline.
+    const preview = canonicalize(
+      el('<main><div data-loc="f:1:1-2:1"><button class="code-copy-button">c</button></div> <p>x</p></main>'),
+    );
+    const render = canonicalize(el('<main><button class="code-copy-button">c</button>\n<p>x</p></main>'));
+    expect(preview).toBe(render);
+    expect(preview).not.toContain('<div');
+  });
+
+  it('keeps a <div> that has any surviving attribute, and unwraps nested bare divs', () => {
+    expect(canonicalize(el('<div class="k"><p>x</p></div>'))).toBe(['<div class="k">', '  <p>', '    "x"'].join('\n'));
+    expect(canonicalize(el('<main><div><div><p>x</p></div></div></main>'))).toBe(
+      canonicalize(el('<main><p>x</p></main>')),
+    );
+  });
 });
 ```
 
@@ -878,7 +927,7 @@ describe('PARITY_RULES', () => {
 ```bash
 cd ts-packages/preview-renderer && npx vitest run src/test-utils/domParity.test.ts
 ```
-Expected: the four new tests FAIL (attributes present / no opaque marker / no throw).
+Expected: the six new tests FAIL (attributes present / no opaque marker / no throw / `<div` still present).
 
 - [ ] **Step 3: Populate the rules**
 
@@ -919,6 +968,19 @@ export const PARITY_RULES: ParityRules = {
     // close before any fixture containing math can opt in.
     'span.math',
   ],
+  unwrapTags: new Set<string>([
+    // React cannot inject raw HTML without a host element:
+    // q2-preview/blocks/RawBlock.tsx wraps every RawBlock(format:"html")
+    // in a <div dangerouslySetInnerHTML> (carrying only data-loc) that the
+    // native writer (crates/pampa/src/writers/html.rs, Block::RawBlock)
+    // never emits — most visibly the code-copy button. Symmetric on
+    // purpose: a Div block with an empty Attr is a bare <div> on BOTH
+    // sides, so a preview-only unwrap would false-positive. Accepted
+    // cost: a missing/extra bare <div> is invisible to the runner. Found
+    // by the Task 0.2 spike
+    // (claude-notes/research/2026-08-24-preview-render-parity-spike.md).
+    'div',
+  ]),
 };
 ```
 
@@ -927,7 +989,7 @@ export const PARITY_RULES: ParityRules = {
 ```bash
 cd ts-packages/preview-renderer && npx vitest run src/test-utils/domParity.test.ts
 ```
-Expected: 13 passed.
+Expected: 15 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -1043,8 +1105,8 @@ export function compareParity(
 cd ts-packages/preview-renderer && npx vitest run src/test-utils/domParity.test.ts
 cd ts-packages/preview-renderer && npm test && npm run test:integration
 ```
-Expected: 16 passed in the new file; the package suites green with the same
-counts as before plus 16.
+Expected: 18 passed in the new file; the package suites green with the same
+counts as before plus 18.
 
 - [ ] **Step 5: Commit**
 
@@ -1247,9 +1309,11 @@ git commit -m "Ignore the parity key in the WASM and Playwright smoke-all parser
 
 **Files:**
 - Create: `hub-client/src/services/smokeAllParity.wasm.test.tsx`
-- Modify: the first opt-in candidate from the Task 0.2 note (expected:
-  `crates/quarto/tests/smoke-all/markdown/heading-auto-id.qmd`) — add
-  `parity: true` under `_quarto.tests.html`
+- Modify: the first opt-in candidate from the Task 0.2 note:
+  `crates/quarto/tests/smoke-all/title-block/simple-default.qmd` (byte-identical
+  under the rules even without the unwrap rule) — add `parity: true` under
+  `_quarto.tests.html`. (`markdown/heading-auto-id.qmd`, the pre-spike guess,
+  is blocked by c3 + c4 — see § Findings.)
 
 The runner and its first fixture land together so no commit on the branch
 is red.
@@ -1483,7 +1547,7 @@ _quarto:
 ```
 
 ```bash
-cd hub-client && SMOKE_FILTER=heading-auto-id npm run test:wasm
+cd hub-client && SMOKE_FILTER=simple-default npm run test:wasm
 ```
 Expected: `Parity results: 1 compared, 0 failed, 1 opted in`; self-check passes.
 
@@ -1496,16 +1560,17 @@ next candidate from the note; record the divergence for Task 4.1.
 - [ ] **Step 4: Commit (green)**
 
 ```bash
-git add hub-client/src/services/smokeAllParity.wasm.test.tsx crates/quarto/tests/smoke-all/markdown/heading-auto-id.qmd
+git add hub-client/src/services/smokeAllParity.wasm.test.tsx crates/quarto/tests/smoke-all/title-block/simple-default.qmd
 git commit -m "Add preview/render DOM parity runner over opted-in smoke-all fixtures"
 ```
 
 ### Task 3.2: Opt in the remaining green fixtures
 
 **Files:**
-- Modify: each remaining opt-in candidate from the Task 0.2 note. Expected
-  (amend from the note): `highlighting/01-builtin-python.qmd`,
-  `appendix/footnotes-heading.qmd`, `title-block/simple-default.qmd`.
+- Modify: each remaining opt-in candidate from the Task 0.2 note — only
+  `highlighting/01-builtin-python.qmd` (green under the amended rules).
+  `appendix/footnotes-heading.qmd` (c1, c2) and `markdown/heading-auto-id.qmd`
+  (c3, c4) stay out until their strands close — see § Findings.
 
 - [ ] **Step 1: Opt in one at a time, same loop as Task 3.1 Step 3**
 
@@ -1536,7 +1601,13 @@ git commit -m "Opt further smoke-all fixtures into preview/render DOM parity"
 **Files:** none (braid). bd-tmb2u5yu (`Math.tsx` classes) is already filed.
 
 For each further (c)-class divergence recorded in the Task 0.2 note or found
-in Phase 3, create one strand. These are out-of-plan bugs (they are
+in Phase 3, create one strand. The spike found three new ones (c1–c3 in
+`claude-notes/research/2026-08-24-preview-render-parity-spike.md`; c4 is
+bd-tmb2u5yu): c1 `inlines/Link.tsx` drops kv attributes outside a
+`data-*`/`rel`/`target` allowlist (loses `role="doc-noteref"`/`doc-backlink`);
+c2 `blocks/OrderedList.tsx` emits no `type="1"` for `Decimal` (the writer and
+Pandoc do); c3 `inlines/Strikeout.tsx` renders `<s>` where the writer (and
+Pandoc) render `<del>`. These are out-of-plan bugs (they are
 *findings* of this plan, not work items of it):
 
 ```bash
@@ -1605,6 +1676,19 @@ git commit -m "Document the preview/render DOM parity runner and harness-first w
 - [ ] Report; **do not push** without explicit approval (CLAUDE.md).
 
 ---
+
+## Findings
+
+Real divergences the harness (spike + runner) surfaced. Out-of-plan bugs,
+one strand each (label `preview-parity`); ids filled in by Task 4.1.
+Details and verbatim snippets: `claude-notes/research/2026-08-24-preview-render-parity-spike.md`.
+
+| # | Symptom | Fixture | Strand |
+|---|---|---|---|
+| c1 | `Link.tsx` drops `role=` (and every kv attr outside `data-*`/`rel`/`target`) | `appendix/footnotes-heading.qmd` | _pending_ |
+| c2 | `OrderedList.tsx` omits `type="1"` for `Decimal` | `appendix/footnotes-heading.qmd` | _pending_ |
+| c3 | `Strikeout.tsx` renders `<s>`, writer `<del>` | `markdown/heading-auto-id.qmd` | _pending_ |
+| c4 | `Math.tsx` emits no `math inline|display` class | `markdown/heading-auto-id.qmd` | bd-tmb2u5yu |
 
 ## Follow-ups (not in this plan)
 
