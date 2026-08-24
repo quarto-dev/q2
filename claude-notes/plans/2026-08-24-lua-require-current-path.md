@@ -130,19 +130,43 @@ Implementation:
 
 ## Phase 4 — verification and wrap-up
 
-- [ ] WASM smoke coverage per `.claude/rules/wasm.md`: add a
+- [x] WASM smoke coverage per `.claude/rules/wasm.md`: add a
       `crates/pampa/tests/wasm_lua.rs` case exercising require-then-
       resolve_path under the `/project/` VFS prefix (shortcode and filter
       environments both instantiate the scoped require there).
-- [ ] `cargo build --workspace` && `cargo nextest run --workspace`.
-- [ ] Full `cargo xtask verify` (pampa is in wasm-quarto-hub-client's
+      *(`scoped_require_and_resolve_path_wasm`; ran locally on the real
+      wasm32-unknown-unknown target — needs homebrew LLVM clang, Apple
+      clang rejects `-fwasm-exceptions` — 8 passed, 0 failed.)*
+- [x] `cargo build --workspace` && `cargo nextest run --workspace`.
+      *(Green at every phase boundary; final counts 13258 passed.)*
+- [x] Full `cargo xtask verify` (pampa is in wasm-quarto-hub-client's
       closure — the hub/WASM leg is affected; `--skip-hub-build` is not
-      enough for the final gate).
-- [ ] End-to-end per repo policy: `cargo run --bin q2 -- render` on the two
+      enough for the final gate). *(Passed clean 2026-08-24. First run
+      failed on preview-renderer's KaTeX `.katex-tag` assertion — stale
+      local node_modules (katex 0.17 installed vs 0.18.1 in the lockfile),
+      pure-TS test, unrelated to this branch; fixed by `npm install` from
+      the repo root. Incidental lockfile `peer:` churn reverted.)*
+- [x] End-to-end per repo policy: `cargo run --bin q2 -- render` on the two
       new fixtures; inspect the emitted HTML; record invocation + output
-      snippet here.
-- [ ] Close bd-sr0nipl7, bd-9uqdoy0e, bd-9xa0yui7 with reasons; comment on
-      GH #587/#588 (Carlos posts or approves wording).
+      snippet here. *(Verified 2026-08-24, output inspected:*
+
+      ```
+      $ cargo run --bin q2 -- render crates/quarto/tests/smoke-all/extensions/contract-resolve-path/test.qmd
+      $ grep -o "rp-top=[^<]*" .../contract-resolve-path/test.html
+      rp-top=OK;rp-require=SAME;rp-dofile=SAME
+
+      $ cargo run --bin q2 -- render crates/quarto/tests/smoke-all/extensions/contract-filter-require/test.qmd
+      $ grep -o "fr-require=[^<]*" .../contract-filter-require/test.html
+      fr-require=OK;fr-abs=OK;fr-resolve=OK
+      ```
+
+      *All three #588 rows agree through the real render path, and the
+      #587 filter loads its module via both require forms.)*
+- [x] Strand bookkeeping: bd-sr0nipl7, bd-9uqdoy0e, bd-9xa0yui7 moved to
+      `in_review` (close at PR merge, matching repo practice — e.g.
+      bd-8b0af414). GH #587/#588 comment wording drafted for Carlos in the
+      session summary; posting awaits his approval, as does pushing the
+      branch / opening the PR.
 
 ## Design decisions already settled
 
