@@ -386,12 +386,21 @@ This is question 1 below.
 - [x] Rewrite stale iframe-reinit rationale: `pipeline.rs:1372-1383`,
       `bootstrap_js.rs:47-56`, `clipboard_js.rs:41-51`,
       `secondary_nav_render.rs:35-49`.
-- [ ] Update header-is-static docs: `template.rs:616-666` partial doc,
-      `title_banner.rs` module doc if stale.
-- [ ] Stale template.rs line refs in `PreviewDocument.tsx` comments.
-- [ ] Close bd-2yd37vuk (with the Phase 2 commit); braid comments on
-      bd-ersobfbt at each phase boundary.
-- [ ] Full `cargo xtask verify` (WASM leg affected) before hand-off.
+- [x] Update header-is-static docs: `template.rs` partial doc rewritten
+      (Phase 1). `title_banner.rs` checked — already current (mentions
+      the wrapper as ported, no static-header claim).
+- [x] Stale template.rs line refs: the navbar-slot comment (the one
+      this strand invalidated) rewritten to symbolic references.
+      Pre-existing numeric refs in chromeSlots/PreviewDocument that
+      drifted before this strand left as-is (generic drift, separate
+      concern).
+- [x] bd-2yd37vuk: fixed by Phase 2 (the preview header wrapper
+      exists); braid comment left on the strand. **Close pending
+      Carlos's OK** (per the ask-before-closing convention). Braid
+      comments on bd-ersobfbt at each phase boundary: done.
+- [x] Full `cargo xtask verify` before hand-off: two genuine `exit=0`
+      runs (after the clippy fix, and again after the quarto-nav.js
+      readyState fix — the last change to shipped bytes).
 
 ## Resolved decisions (Carlos, 2026-08-24)
 
