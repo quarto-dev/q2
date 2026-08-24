@@ -10,7 +10,10 @@
 use quarto_brand::Brand;
 
 fn brand(yaml: &str) -> Brand {
-    Brand::from_yaml_str(yaml).expect("parse")
+    quarto_brand::UnifiedBrand::from_yaml_str(yaml)
+        .expect("parse")
+        .split()
+        .light
 }
 
 #[test]

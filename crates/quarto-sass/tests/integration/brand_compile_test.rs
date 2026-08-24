@@ -23,7 +23,10 @@ fn load_brand(rel: &str) -> Brand {
     let path = fixtures_dir().join(rel);
     let yaml =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-    Brand::from_yaml_str(&yaml).unwrap_or_else(|e| panic!("parse: {e}"))
+    quarto_brand::UnifiedBrand::from_yaml_str(&yaml)
+        .unwrap_or_else(|e| panic!("parse: {e}"))
+        .split()
+        .light
 }
 
 /// Concatenate all layers into a single SCSS string in the same order

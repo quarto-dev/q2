@@ -4,6 +4,7 @@
 pub mod brand_compile_test;
 pub mod brand_config_test;
 pub mod brand_layer_test;
+pub mod brand_light_dark_test;
 pub mod compile_all_themes_test;
 pub mod custom_theme_test;
 pub mod embedded_compile_test;

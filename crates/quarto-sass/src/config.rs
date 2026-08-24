@@ -28,7 +28,7 @@
 
 use std::path::{Path, PathBuf};
 
-use quarto_brand::{Brand, BrandRef, ResolvedBrand};
+use quarto_brand::{BrandRef, ResolvedBrand};
 use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::SourceInfo;
 use quarto_system_runtime::SystemRuntime;
@@ -121,6 +121,17 @@ pub struct ThemeConfig {
     /// darkness (`theme: darkly` + `a11y` → `a11y-dark`). `None` →
     /// the default palette.
     pub highlight_style: Option<HighlightStyle>,
+
+    /// The dark-resolved highlight palette held in reserve when NO
+    /// dark variant exists at config-parse time (the scalar name
+    /// resolved with `dark = true`, or the dropped `dark:` half of a
+    /// `highlight-style:` pair). [`ThemeConfig::resolve_variants`]
+    /// moves it onto a dark variant it synthesizes from unified-brand
+    /// content, so `highlight-style: a11y` + a brand with `dark:`
+    /// values still yields `a11y-dark` in the dark compile. Unused
+    /// when a dark variant was declared in config (that variant got
+    /// its palette directly in `parse_highlight_style`).
+    pub deferred_dark_highlight: Option<HighlightStyle>,
 }
 
 /// The parsed `dark:` half of a `theme: {light: …, dark: …}` pair
@@ -186,26 +197,34 @@ pub struct HighlightStyle {
     pub location: Option<SourceInfo>,
 }
 
-/// Resolved form of [`ThemeConfig`] with the brand file loaded and
-/// parsed.
+/// The fully resolved theme configuration: the config (with any
+/// content-synthesized dark variant attached) plus each variant's
+/// half of the split brand.
 ///
-/// Produced by [`ThemeConfig::resolve`]. Carries everything the SCSS
-/// pipeline needs to compile the document's CSS, including the typed
-/// `Brand` value when the configuration requests one.
-#[derive(Debug, Clone, Default)]
-pub struct ResolvedThemeConfig {
-    pub themes: Vec<ThemeSpec>,
-    pub minified: bool,
-    pub suppress_bootstrap: bool,
-    pub brand: Option<Brand>,
-    /// Directory the brand file was loaded from (for resolving
-    /// relative `@font-face` URLs). `None` when brand was inline.
-    pub brand_dir: Option<PathBuf>,
-    /// The dark variant, carried through unchanged from
-    /// [`ThemeConfig::dark`]. (The brand is resolved once and shared
-    /// by both variants until the brand light/dark seam lands —
-    /// bd-ld-c-brand-seam-wef8ww3n.)
-    pub dark: Option<DarkThemeConfig>,
+/// Produced by [`ThemeConfig::resolve_variants`] — the single place
+/// brand I/O happens. The unified brand file is read and parsed
+/// once, split into light/dark halves
+/// ([`quarto_brand::UnifiedBrand::split`]), and each half handed to
+/// its variant; when the brand *content* enables dark mode (some
+/// value carries a `dark:` side — Q1's `enablesDarkMode`) and no dark
+/// variant was declared in config, one is synthesized here
+/// (bd-unified-brand-split-ep49amad).
+#[derive(Debug, Clone)]
+pub struct ResolvedVariants {
+    /// The theme configuration, including a dark variant synthesized
+    /// from unified-brand content when applicable. Use
+    /// [`ThemeConfig::dark_variant`] on it to project the dark
+    /// compile's config, exactly as with a config-declared pair.
+    pub config: ThemeConfig,
+    /// The light variant's brand (the split's light half), with the
+    /// directory it was read from. `None` when no brand is configured
+    /// (or `theme: none` suppressed it).
+    pub light_brand: Option<ResolvedBrand>,
+    /// The dark variant's brand (the split's dark half — of the same
+    /// file when the dark variant shares the light `brand_ref`, or of
+    /// its own file in the two-file `brand: {light:, dark:}` form).
+    /// `None` when there is no dark variant or it has no brand.
+    pub dark_brand: Option<ResolvedBrand>,
 }
 
 impl ThemeConfig {
@@ -221,6 +240,7 @@ impl ThemeConfig {
             brand_ref: None,
             dark: None,
             highlight_style: None,
+            deferred_dark_highlight: None,
         }
     }
 
@@ -238,6 +258,7 @@ impl ThemeConfig {
             brand_ref: None,
             dark: None,
             highlight_style: None,
+            deferred_dark_highlight: None,
         }
     }
 
@@ -433,6 +454,7 @@ impl ThemeConfig {
                 brand_ref: None,
                 dark: None,
                 highlight_style: None,
+                deferred_dark_highlight: None,
             });
         }
         let located = extract_theme_specs(value)?;
@@ -449,66 +471,90 @@ impl ThemeConfig {
             brand_ref: None,
             dark: None,
             highlight_style: None,
+            deferred_dark_highlight: None,
         })
     }
 
-    /// Resolve any [`BrandRef`] in this config by reading the brand
-    /// file (if it's a path) and parsing it into a typed [`Brand`].
+    /// Resolve every [`BrandRef`] in this config — the single place
+    /// brand I/O happens — and attach any dark variant the brand
+    /// *content* calls for.
+    ///
+    /// Each referenced brand is read once, parsed as a
+    /// [`quarto_brand::UnifiedBrand`] (values may be plain strings or
+    /// `{light:, dark:}` pairs), and split; the light variant gets
+    /// the light half, the dark variant the dark half. When the split
+    /// reports `enables_dark_mode` (Q1's `enablesDarkMode`: some value
+    /// carries an explicit `dark:` side) and no dark variant was
+    /// declared in config, a dark variant is synthesized from the
+    /// light theme list — it then flows through dual compilation,
+    /// link emission, and the toggle exactly like a `theme:`-declared
+    /// pair (bd-unified-brand-split-ep49amad, GH #580).
     ///
     /// `base_dir` is the directory relative paths in [`BrandRef::Path`]
     /// are resolved against (typically the project root). The
     /// `runtime` provides cross-platform file access — native
     /// `std::fs` on the CLI, the VFS on WASM.
-    pub fn resolve(
-        self,
+    pub fn resolve_variants(
+        mut self,
         runtime: &dyn SystemRuntime,
         base_dir: &Path,
-    ) -> Result<ResolvedThemeConfig, SassError> {
-        let (brand, brand_dir) = match self.brand_ref {
-            None => (None, None),
-            Some(BrandRef::Path(rel_path)) => {
-                let full_path = if rel_path.is_absolute() {
-                    rel_path.clone()
-                } else {
-                    base_dir.join(&rel_path)
-                };
-                let bytes = runtime.file_read(&full_path).map_err(|e| {
-                    SassError::Io(std::io::Error::other(format!(
-                        "reading brand file {}: {e}",
-                        full_path.display()
-                    )))
-                })?;
-                let yaml =
-                    std::str::from_utf8(&bytes).map_err(|e| SassError::InvalidThemeConfig {
-                        message: format!(
-                            "brand file {} is not valid UTF-8: {e}",
-                            full_path.display()
-                        ),
-                        location: None,
-                    })?;
-                let brand = Brand::from_yaml_str(yaml).map_err(brand_err)?;
-                let dir = full_path
-                    .parent()
-                    .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-                (Some(brand), Some(dir))
+    ) -> Result<ResolvedVariants, SassError> {
+        let light_split = match &self.brand_ref {
+            None => None,
+            Some(brand_ref) => Some(load_split_brand(brand_ref, runtime, base_dir)?),
+        };
+
+        // Content-driven dark-mode enablement: synthesize the dark
+        // variant the way the config-time path does for an explicit
+        // `brand: {…, dark: …}` pair (`from_config_value`), cloning
+        // the light theme list (brand token already injected there).
+        // A unified brand has no ordering signal, so light stays the
+        // author default. The highlight palette comes from the
+        // reserve slot `parse_highlight_style` filled (`a11y` →
+        // `a11y-dark`; a pair's `dark:` value verbatim).
+        if let Some((split, _)) = &light_split
+            && split.enables_dark_mode
+            && self.dark.is_none()
+            && !self.suppress_bootstrap
+        {
+            self.dark = Some(DarkThemeConfig {
+                themes: self.themes.clone(),
+                theme_locations: self.theme_locations.clone(),
+                suppress_bootstrap: false,
+                is_default: false,
+                key_location: None,
+                highlight_style: self.deferred_dark_highlight.clone(),
+                brand_ref: self.brand_ref.clone(),
+            });
+        }
+
+        let light_brand = light_split
+            .as_ref()
+            .map(|(split, dir)| ResolvedBrand::new(split.light.clone(), dir.clone()));
+
+        let dark_brand = match self.dark.as_ref().and_then(|d| d.brand_ref.as_ref()) {
+            None => None,
+            Some(dark_ref) if Some(dark_ref) == self.brand_ref.as_ref() => {
+                // Same file as the light variant (single-file brand,
+                // or per-layer fallback): reuse the split — one read,
+                // one parse.
+                light_split
+                    .as_ref()
+                    .map(|(split, dir)| ResolvedBrand::new(split.dark.clone(), dir.clone()))
             }
-            Some(BrandRef::Inline(value)) => {
-                let brand: Brand =
-                    serde_yaml::from_value(*value).map_err(|e| SassError::InvalidThemeConfig {
-                        message: format!("inline brand block: {e}"),
-                        location: None,
-                    })?;
-                (Some(brand), None)
+            Some(dark_ref) => {
+                // Two-file form: the dark variant's own file
+                // contributes its dark half (for a plain single-mode
+                // file the halves are identical).
+                let (split, dir) = load_split_brand(dark_ref, runtime, base_dir)?;
+                Some(ResolvedBrand::new(split.dark, dir))
             }
         };
 
-        Ok(ResolvedThemeConfig {
-            themes: self.themes,
-            minified: self.minified,
-            suppress_bootstrap: self.suppress_bootstrap,
-            brand,
-            brand_dir,
-            dark: self.dark,
+        Ok(ResolvedVariants {
+            config: self,
+            light_brand,
+            dark_brand,
         })
     }
 
@@ -531,6 +577,7 @@ impl ThemeConfig {
             brand_ref: d.brand_ref.clone(),
             dark: None,
             highlight_style: d.highlight_style.clone(),
+            deferred_dark_highlight: None,
         })
     }
 
@@ -577,27 +624,60 @@ pub fn resolve_brand(
     base_dir: &Path,
 ) -> Result<Option<ResolvedBrand>, SassError> {
     // Single-variant consumers (reveal, favicon fallback) use the
-    // LIGHT brand; per-variant selection is the HTML dual-compile
-    // path's concern (bd-0pic6 phase C).
+    // LIGHT half; per-variant selection is the HTML dual-compile
+    // path's concern (bd-0pic6 phase C). Logos pass through the split
+    // intact, so logo consumers see the full light/dark logo pairs.
     let Some(brand_ref) = extract_brand_refs(config.get("brand"))?.light else {
         return Ok(None);
     };
-    // Reuse ThemeConfig's brand resolution (path/inline → typed Brand).
-    let resolved = ThemeConfig {
-        themes: Vec::new(),
-        theme_locations: Vec::new(),
-        minified: true,
-        suppress_bootstrap: false,
-        title_block_layer: true,
-        brand_ref: Some(brand_ref),
-        dark: None,
-        highlight_style: None,
-    }
-    .resolve(runtime, base_dir)?;
+    let (split, dir) = load_split_brand(&brand_ref, runtime, base_dir)?;
+    Ok(Some(ResolvedBrand::new(split.light, dir)))
+}
 
-    Ok(resolved
-        .brand
-        .map(|brand| ResolvedBrand::new(brand, resolved.brand_dir)))
+/// Read and parse one [`BrandRef`] into a split brand plus the
+/// directory it was read from (`None` for inline blocks).
+///
+/// The parse form is [`quarto_brand::UnifiedBrand`] — color values may
+/// be plain strings or `{light:, dark:}` pairs — which is immediately
+/// split into single-mode halves. This is the only place a brand is
+/// deserialized; every consumer works with a half of the split.
+fn load_split_brand(
+    brand_ref: &BrandRef,
+    runtime: &dyn SystemRuntime,
+    base_dir: &Path,
+) -> Result<(quarto_brand::SplitBrand, Option<PathBuf>), SassError> {
+    match brand_ref {
+        BrandRef::Path(rel_path) => {
+            let full_path = if rel_path.is_absolute() {
+                rel_path.clone()
+            } else {
+                base_dir.join(rel_path)
+            };
+            let bytes = runtime.file_read(&full_path).map_err(|e| {
+                SassError::Io(std::io::Error::other(format!(
+                    "reading brand file {}: {e}",
+                    full_path.display()
+                )))
+            })?;
+            let yaml = std::str::from_utf8(&bytes).map_err(|e| SassError::InvalidThemeConfig {
+                message: format!("brand file {} is not valid UTF-8: {e}", full_path.display()),
+                location: None,
+            })?;
+            let brand = quarto_brand::UnifiedBrand::from_yaml_str(yaml).map_err(brand_err)?;
+            let dir = full_path
+                .parent()
+                .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+            Ok((brand.split(), Some(dir)))
+        }
+        BrandRef::Inline(value) => {
+            let brand: quarto_brand::UnifiedBrand = serde_yaml::from_value((**value).clone())
+                .map_err(|e| SassError::InvalidThemeConfig {
+                    message: format!("inline brand block: {e}"),
+                    location: None,
+                })?;
+            Ok((brand.split(), None))
+        }
+    }
 }
 
 /// Resolve a `_brand.yml` (from the `brand:` key) into SCSS layers, independent
@@ -914,12 +994,18 @@ fn parse_highlight_style(config: &ConfigValue, result: &mut ThemeConfig) -> Resu
                 });
             };
             // A dark highlight palette needs a dark theme variant to
-            // ride on; without one it has no compile to affect.
+            // ride on. Without one it is held in reserve: a dark
+            // variant synthesized later from unified-brand content
+            // (`resolve_variants`) picks it up from
+            // `deferred_dark_highlight`.
+            let hs = HighlightStyle {
+                name: resolve_adaptive_highlight(&name, true),
+                location: Some(dark_value.source_info.clone()),
+            };
             if let Some(dark_half) = result.dark.as_mut() {
-                dark_half.highlight_style = Some(HighlightStyle {
-                    name: resolve_adaptive_highlight(&name, true),
-                    location: Some(dark_value.source_info.clone()),
-                });
+                dark_half.highlight_style = Some(hs);
+            } else {
+                result.deferred_dark_highlight = Some(hs);
             }
         }
         return Ok(());
@@ -937,11 +1023,16 @@ fn parse_highlight_style(config: &ConfigValue, result: &mut ThemeConfig) -> Resu
         name: resolve_adaptive_highlight(&name, light_is_dark),
         location: Some(value.source_info.clone()),
     });
+    let dark_hs = HighlightStyle {
+        name: resolve_adaptive_highlight(&name, true),
+        location: Some(value.source_info.clone()),
+    };
     if let Some(dark_half) = result.dark.as_mut() {
-        dark_half.highlight_style = Some(HighlightStyle {
-            name: resolve_adaptive_highlight(&name, true),
-            location: Some(value.source_info.clone()),
-        });
+        dark_half.highlight_style = Some(dark_hs);
+    } else {
+        // Held in reserve for a dark variant synthesized from
+        // unified-brand content (`resolve_variants`).
+        result.deferred_dark_highlight = Some(dark_hs);
     }
     Ok(())
 }
@@ -2380,9 +2471,13 @@ mod tests {
             ThemeConfig::from_config_value(&config_with_theme_value(theme_value)).unwrap();
         let runtime = quarto_system_runtime::NativeRuntime::new();
         let resolved = theme_config
-            .resolve(&runtime, Path::new("."))
+            .resolve_variants(&runtime, Path::new("."))
             .expect("resolve without brand does no I/O");
-        let dark = resolved.dark.as_ref().expect("dark half carried through");
+        let dark = resolved
+            .config
+            .dark
+            .as_ref()
+            .expect("dark half carried through");
         assert_eq!(dark.themes.len(), 1);
         assert!(dark.themes[0].is_builtin());
     }

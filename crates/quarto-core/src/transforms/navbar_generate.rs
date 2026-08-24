@@ -85,8 +85,21 @@ impl AstTransform for NavbarGenerateTransform {
         // `formatDarkMode(format) !== undefined` navbar/sidebar
         // darkToggle. Parse errors mean the theme stage will fail the
         // render anyway; treat as "no toggle" here.
-        navbar.dark_mode_toggle =
-            quarto_sass::ThemeConfig::from_config_value(&ast.meta).is_ok_and(|c| c.dark.is_some());
+        // The pair decision recorded by CompileThemeCssStage
+        // (`rendered.theme.dark-is-default`) is the source of truth —
+        // it includes dark variants synthesized from unified-brand
+        // content, which the config re-parse below cannot see. The
+        // re-derivation stays as a fallback for pipelines that skip
+        // the theme stage.
+        let recorded_pair = ast
+            .meta
+            .get("rendered")
+            .and_then(|v| v.get("theme"))
+            .and_then(|v| v.get("dark-is-default"))
+            .is_some();
+        navbar.dark_mode_toggle = recorded_pair
+            || quarto_sass::ThemeConfig::from_config_value(&ast.meta)
+                .is_ok_and(|c| c.dark.is_some());
 
         // bd-qor9a — resolve each href against the YAML file it was
         // authored in. Frontmatter-rooted hrefs become project-root-

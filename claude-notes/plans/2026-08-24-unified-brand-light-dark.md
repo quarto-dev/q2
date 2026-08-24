@@ -84,115 +84,151 @@ point where the parsed brand is available.
 ## Design
 
 Follow Q1's shape: **parse unified, split early, keep every downstream
-consumer single-mode.**
+consumer single-mode.** (Refined 2026-08-24 after reading all consumers;
+deltas from the original sketch are marked ⚠.)
 
-1. **Type surgery (`quarto-brand`).** New untagged value type:
+1. **Type surgery (`quarto-brand`).** Make the brand types generic over the
+   color-value type, with a default that keeps every existing consumer
+   compiling unchanged:
 
    ```rust
-   #[derive(Debug, Clone, Deserialize, Serialize)]
-   #[serde(untagged, deny_unknown_fields)]
+   pub struct Brand<V = String> { ... }          // BrandColor<V>, BrandTypography<V>,
+   pub type UnifiedBrand = Brand<BrandColorValue>; // BrandTypographyOptions<V> likewise
+
+   #[serde(untagged)]
    pub enum BrandColorValue {
        Single(String),
-       LightDark { light: Option<String>, dark: Option<String> },
-   }
+       LightDark(BrandColorLightDark),           // { light: Option<String>, dark: Option<String> },
+   }                                             // deny_unknown_fields on the inner struct
    ```
 
-   - The 13 named slots in `BrandColor` become `Option<BrandColorValue>`.
-   - `palette` stays `BTreeMap<String, String>` (documented limitation,
-     matches Q1's schema).
-   - `BrandTypographyOptions.color` / `background_color` become
-     `Option<BrandColorValue>`.
-   - `Brand::has_dark_mode()` — port of `brandHasDarkMode` (colors,
-     typography colors, logos).
-   - `Brand::split() -> SplitBrand { light: Brand, dark: Brand }` — port of
-     `splitUnifiedBrand` semantics (string → both; missing half → slot
-     omitted in that half; logos via existing `LogoEntry::LightDark`).
-     Post-split brands hold only `Single` values.
-   - Single-mode accessors (`named()`, the typography layer, `resolve_color`)
-     read the `Single` variant; a `LightDark` reaching them is a logic error
-     (they only ever see split brands). Keep the accessor signatures
-     returning `Option<&str>` so `brand_layer.rs` / `resolve.rs` change
-     minimally.
+   - ⚠ Generic-with-default instead of one type holding enum slots: consumers
+     keep `Brand` (= `Brand<String>`) and get a *compile-time* guarantee that
+     split brands contain only plain strings; `resolve_color`, `named()`,
+     `named_colors()`, and the SCSS layer are only defined on `Brand<String>`.
+     Parsing (`from_yaml_str`, inline `serde_yaml::from_value`) produces
+     `UnifiedBrand` only, so every construction site is forced through the
+     split. Manual `Default` impls avoid the spurious `V: Default` bound.
+   - The 13 named slots in `BrandColor<V>` become `Option<V>`; `palette`
+     stays `BTreeMap<String, String>` (documented limitation, matches Q1's
+     schema). `BrandTypographyOptions<V>::color` / `background_color` become
+     `Option<V>`.
+   - `UnifiedBrand::has_dark_mode()` — port of `brandHasDarkMode`: true iff
+     some named color, typography color/background-color, or logo entry
+     carries a `dark:` key.
+   - `UnifiedBrand::split() -> SplitBrand { light: Brand, dark: Brand,
+     enables_dark_mode: bool }` — port of `splitUnifiedBrand` semantics
+     (string → both halves; `{light: X}` only → slot omitted from the dark
+     half, no fallback; palette/meta/defaults/fonts shared).
+   - ⚠ **Logos are carried through unsplit** (divergence from Q1's
+     `splitLogo`): q2's logo consumers (favicon bd-97yc, navbar image
+     bd-hp3tx) run once per document and need both sides to emit light/dark
+     markup — `LogoEntry::LightDark` already models that. Logo dark halves
+     still count for `has_dark_mode` (Q1 parity).
 
-2. **Split + dark-synthesis seam (`quarto-sass` / stage).** Restructure brand
-   resolution so the brand file is **read and parsed once**, split, and each
-   variant handed its half:
+2. **Split + dark-synthesis seam (`quarto-sass`).**
 
-   - New entry point on `ThemeConfig` (working name
-     `resolve_variants(runtime, base_dir)`) that:
-     1. resolves the light `brand_ref` → unified `Brand`;
-     2. splits it → light/dark halves;
-     3. if the brand `has_dark_mode()` and `self.dark.is_none()`, synthesizes
-        the dark theme variant (same construction as the existing config-time
-        synthesis at config.rs:348 — clone light themes, inject brand token,
-        `is_default: false` since a unified brand has no `dark_first`
-        ordering signal);
-     4. returns per-variant resolved configs for the stage to compile.
-   - The existing config-time synthesis for the **two-file** form stays where
-     it is (it needs no file contents); the new seam only adds the
-     content-driven case. `from_config_value` stays pure.
-   - `compile_theme_css.rs` switches from its two `resolve()` calls to the
-     new entry point. Because the stage is shared, WASM/live-recompile gets
-     the behavior for free.
-   - **Two-file form + unified values** (a file named by
-     `brand: {light: f1, dark: f2}` that itself uses `{light:, dark:}`
-     values): Q1 rejects this (those files validate against the closed
-     single-brand schema). Recommendation: split each file and keep the
-     matching half (light file → light half), which is strictly more
-     permissive than Q1 and avoids a second type family; note the divergence
-     in the docs audit (bd-qnylgu69). — **Open decision, flag at review.**
+   - ⚠ `parse_highlight_style` gains a side product: when no dark variant
+     exists at config time, the dark-applicable highlight name (the pair's
+     `dark:` value, or the scalar resolved with `dark = true`) is stashed in
+     a new `ThemeConfig::deferred_dark_highlight` field instead of being
+     dropped. This keeps `from_config_value` pure while letting a
+     later-synthesized dark variant get the right palette (e.g.
+     `highlight-style: a11y` → `a11y-dark`).
+   - New `ThemeConfig::resolve_variants(self, runtime, base_dir) ->
+     Result<ResolvedVariants, SassError>`:
+     1. resolves the light `brand_ref` → `UnifiedBrand` → `split()`;
+     2. if `enables_dark_mode && self.dark.is_none() && !suppress_bootstrap`,
+        synthesizes the `DarkThemeConfig` (clone light themes — brand token
+        already injected — `is_default: false`, `highlight_style:
+        deferred_dark_highlight`, `brand_ref` = light ref);
+     3. resolves the dark variant's brand: same ref as light → reuse the
+        split's dark half (single file read); different ref (two-file form)
+        → read + split that file and take its **dark** half;
+     4. returns `ResolvedVariants { config /* with synthesized dark */,
+        light_brand: Option<ResolvedBrand>, dark_brand: Option<ResolvedBrand> }`.
+   - The existing config-time synthesis for the two-file form stays where it
+     is. `ThemeConfig::resolve` / `ResolvedThemeConfig` are subsumed by
+     `resolve_variants` and get removed/privatized once callers migrate.
+   - `resolve_brand` (favicon/site-level helper) and `resolve_brand_layers`
+     parse unified + split and use the **light** half — logo behavior
+     unchanged since logos pass through the split intact.
+   - Two-file form + unified values inside a file: split and take the
+     matching half (light file → light half). More permissive than Q1
+     (which rejects); noted for the docs audit (bd-qnylgu69).
 
-3. **No caching changes.** Each variant still feeds `variant_css` a resolved
-   single-mode brand; fingerprints already incorporate the brand content the
+3. **Decision flow (`quarto-core`).** ⚠ THREE consumers independently
+   re-derive "does a dark variant exist / which is default" from config:
+   `CompileThemeCssStage`, `render_with_compiled_template`
+   (template.rs:837 — color-scheme meta + color-mode script), and
+   `navbar_generate.rs:88` (dark-mode toggle). Content-driven enablement
+   breaks the two pure re-derivations. Fix: the stage — which runs at
+   position 11, before `AstTransformsStage` (13, navbar) and
+   `ApplyTemplateStage` (17) — records the decision in doc metadata as
+   `rendered.theme.dark-is-default: bool` (precedent:
+   `rendered.includes.*`). Both downstream consumers read that key first
+   and fall back to the current pure derivation when absent (direct-call
+   and unit-test contexts where the stage never ran → behavior unchanged).
+
+4. **No caching changes.** Each variant still feeds `variant_css` a resolved
+   single-mode brand; fingerprints already incorporate brand content the
    same way they do today.
 
 ## Work items
 
 ### Phase 0 — tests first (TDD)
 
-- [ ] `quarto-brand` unit tests: parse `BrandColorValue` map form for named
+- [x] `quarto-brand` unit tests: parse `BrandColorValue` map form for named
       colors and typography `color`/`background-color`; reject unknown keys
       inside the pair; palette map value still errors.
-- [ ] `quarto-brand` unit tests: `split()` semantics (string → both halves;
+- [x] `quarto-brand` unit tests: `split()` semantics (string → both halves;
       light-only → dark half omits slot; typography colors specialize;
       logos); `has_dark_mode()` (true only when a `dark:` key exists
       somewhere; false for all-plain-string brands).
-- [ ] `quarto-sass` config tests: unified brand with dark values + no
+- [x] `quarto-sass` config tests: unified brand with dark values + no
       `theme:` dark half → dark variant synthesized (brand token injected,
       `is_default: false`); unified brand with no dark values → no dark
       variant; unified brand + explicit `theme: {light:, dark:}` → theme's
       `is_default` wins.
-- [ ] End-to-end test (through `render_document_to_file`-level helper, per
+- [x] End-to-end test (through `render_document_to_file`-level helper, per
       CLAUDE.md): fixture = issue #580's `_brand.yml` + `index.qmd`; assert
       `styles.css` has the light value and `styles-dark.css` the dark value,
       and the toggle/link pair is emitted. Also the typography case
       (`typography.headings.color: {light:, dark:}`).
-- [ ] Run all new tests, verify they fail for the expected reason.
+- [x] Run all new tests, verify they fail for the expected reason.
 
 ### Phase 1 — quarto-brand type surgery
 
-- [ ] `BrandColorValue` enum + field type changes + accessors.
-- [ ] `Brand::has_dark_mode()`, `Brand::split()`.
-- [ ] Update `brand_layer.rs` / `resolve.rs` call sites to the single-mode
+- [x] `BrandColorValue` enum + field type changes + accessors.
+- [x] `Brand::has_dark_mode()`, `Brand::split()` (new `split.rs`).
+- [x] Update `brand_layer.rs` / `resolve.rs` call sites to the single-mode
       accessors; quarto-brand + quarto-sass tests green.
 
 ### Phase 2 — pipeline wiring
 
-- [ ] `ThemeConfig::resolve_variants` (read once, split, synthesize dark).
-- [ ] Switch `compile_theme_css.rs` to it; remove the per-variant re-read.
-- [ ] Full workspace: `cargo build --workspace`, `cargo nextest run
-      --workspace`, `cargo xtask verify` (full — quarto-core/pampa are in the
-      WASM closure).
+- [x] `ThemeConfig::resolve_variants` (read once, split, synthesize dark).
+- [x] Switch `compile_theme_css.rs` to it; remove the per-variant re-read
+      (plus the `rendered.theme.dark-is-default` meta channel and the
+      template/navbar consumers reading it with pure fallback).
+- [x] Full workspace: `cargo build --workspace` ✓, `cargo nextest run
+      --workspace` ✓ (13,165 pass), `cargo xtask verify` (full — in progress;
+      two early failures were a clippy nit and rustfmt in a new test file,
+      both fixed).
 
 ### Phase 3 — end-to-end verification + docs + bookkeeping
 
-- [ ] `cargo run --bin q2 -- render` on the #580 repro; inspect
-      `styles.css` / `styles-dark.css`; record invocation + output snippet
-      here.
-- [ ] Verify the two controls still behave (plain string; two-file form).
-- [ ] Check `docs/guides/authoring/brand.qmd` §"Light and Dark Colors" now
-      matches reality (it should — the docs were written for this feature);
-      note the palette limitation stays.
+- [x] `cargo run --bin q2 -- render` on the #580 repro; inspected
+      `styles.css` / `styles-dark.css`; recorded in the Phase 1–2 log below.
+- [x] Verify the two controls still behave (plain string; two-file form) —
+      covered by `unified_brand_all_plain_stays_single_variant` (e2e),
+      `two_file_brand_resolves_each_variants_file` (sass), and the whole
+      pre-existing `theme_light_dark` suite (26/26 green).
+- [x] Check `docs/guides/authoring/brand.qmd` §"Light and Dark Colors" now
+      matches reality: rendered the section's exact `_brand.yml` example —
+      light headings color lands in `styles.css` (as minified `#114`), dark
+      `#d0d0ff` in `styles-dark.css`. Palette limitation callout stays true.
+      The "directly in the document metadata" example remains blocked by the
+      unrelated GH #581 (inline front-matter brand), tracked separately.
 - [ ] Close bd-unified-brand-split-ep49amad; comment on GH #580.
 
 ## Out of scope / follow-ups
@@ -210,3 +246,43 @@ consumer single-mode.**
   schema agree).
 - bd-v5z8w is superseded by phase C + this strand (its own comment already
   suggests closing it in favor of bd-unified-brand-split-ep49amad).
+
+## Phase 0 log (2026-08-24)
+
+- Tests written: `crates/quarto-brand/tests/integration/light_dark_test.rs` (20 tests),
+  `crates/quarto-sass/tests/integration/brand_light_dark_test.rs` (11 tests),
+  4 e2e tests appended to `crates/quarto-core/tests/integration/brand_render.rs`.
+- Failure verified: the 3 feature e2e tests fail with exactly the GH #580 error
+  (`color.background: invalid type: map, expected a string at line 3 column 5`);
+  the all-plain control passes. quarto-brand / quarto-sass test binaries fail to
+  compile on the missing `UnifiedBrand` / `resolve_variants` API, as expected
+  for type-surgery TDD.
+
+## Phase 1–2 log (2026-08-24)
+
+- **quarto-brand**: `Brand<V = String>` generic (`UnifiedBrand = Brand<BrandColorValue>`);
+  explicit `#[serde(bound(...))]` needed on the four generic structs (serde's
+  syntactic inference otherwise demands `V: Default` for `#[serde(default)]`
+  fields); manual `Default` impls; new `split.rs` with `SplitBrand`,
+  `has_dark_mode`, callback-macro field lists shared with `types.rs`.
+  All parse entry points now produce `UnifiedBrand`; existing tests migrated
+  to `.split().light`. 70/70 tests pass (20 new).
+- **quarto-sass**: `resolve()`/`ResolvedThemeConfig` replaced by
+  `resolve_variants()`/`ResolvedVariants{config, light_brand, dark_brand}`;
+  `load_split_brand` is the single brand-deserialization point;
+  `deferred_dark_highlight` reserve slot on `ThemeConfig` filled by
+  `parse_highlight_style` when no dark variant exists at parse time.
+  277/277 tests pass (11 new). One test expectation fixed during TDD:
+  `github` is itself adaptive, so a pair's `dark: github` correctly resolves
+  to `github-dark` — the non-adaptive verbatim case now uses `dracula`.
+- **quarto-core**: stage reads brand once via `resolve_variants`; records
+  `rendered.theme.dark-is-default` in doc meta after storing a variant pair;
+  `render_with_compiled_template` and `navbar_generate` read that key first,
+  keeping their pure config derivation as fallback for stage-less pipelines.
+- **Full workspace**: 13,165 tests pass.
+- **Real-binary e2e** (per CLAUDE.md): `cargo run --bin q2 -- render index.qmd`
+  on the exact #580 fixture → `styles.css` has `--bs-body-bg: #b22222`,
+  `styles-dark.css` has `--bs-body-bg: #22b222`; HTML carries
+  `quarto-color-scheme` + `quarto-color-alternate` + `quarto-color-scheme-extra`
+  links, `<meta name="color-scheme" content="light">`, and
+  `data-author-prefers-dark="false"`. Output inspected directly.

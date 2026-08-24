@@ -17,7 +17,10 @@ fn load_fixture(rel_path: &str) -> Brand {
     let path = fixtures_dir().join(rel_path);
     let yaml =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-    Brand::from_yaml_str(&yaml).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()))
+    quarto_brand::UnifiedBrand::from_yaml_str(&yaml)
+        .unwrap_or_else(|e| panic!("parse {}: {e}", path.display()))
+        .split()
+        .light
 }
 
 #[test]
@@ -107,7 +110,8 @@ fn parse_nested_brand() {
 #[test]
 fn unknown_top_level_key_is_rejected() {
     let yaml = "color:\n  primary: red\nnot_a_real_key: oops\n";
-    let err = Brand::from_yaml_str(yaml).expect_err("should reject unknown key");
+    let err =
+        quarto_brand::UnifiedBrand::from_yaml_str(yaml).expect_err("should reject unknown key");
     let msg = err.to_string();
     assert!(
         msg.contains("not_a_real_key") || msg.contains("unknown field"),

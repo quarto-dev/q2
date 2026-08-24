@@ -833,11 +833,27 @@ pub fn render_with_compiled_template(
     //
     // Only the full template references these variables; setting them
     // elsewhere is inert.
-    let dark_theme_default = if let Ok(theme_config) =
+    //
+    // The pair decision is read from `rendered.theme.dark-is-default`
+    // — recorded by `CompileThemeCssStage`, the single source of
+    // truth. That includes dark variants synthesized from
+    // unified-brand *content* (bd-unified-brand-split-ep49amad),
+    // which a pure config re-parse here cannot see. The config
+    // re-derivation remains only as a fallback for callers that never
+    // ran the theme stage (unit tests, direct template rendering).
+    let recorded_dark_default = meta
+        .get("rendered")
+        .and_then(|v| v.get("theme"))
+        .and_then(|v| v.get("dark-is-default"))
+        .and_then(|v| v.as_bool());
+    let derived_dark_default = || {
         quarto_sass::ThemeConfig::from_config_value(meta)
-        && let Some(dark) = &theme_config.dark
+            .ok()
+            .and_then(|c| c.dark.map(|d| d.is_default))
+    };
+    let dark_theme_default = if let Some(author_prefers_dark) =
+        recorded_dark_default.or_else(derived_dark_default)
     {
-        let author_prefers_dark = dark.is_default;
         let respect = meta
             .get("respect-user-color-scheme")
             .and_then(|v| v.as_bool())

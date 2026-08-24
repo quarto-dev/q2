@@ -163,13 +163,13 @@ fn resolve_no_brand_produces_resolved_with_brand_none() {
     let config = flattened_config(vec![("theme", scalar_string("cosmo"))]);
     let theme_config = ThemeConfig::from_config_value(&config).unwrap();
     let resolved = theme_config
-        .resolve(
+        .resolve_variants(
             &quarto_system_runtime::NativeRuntime::new(),
             std::path::Path::new("/tmp"),
         )
         .expect("resolve");
-    assert!(resolved.brand.is_none());
-    assert_eq!(resolved.themes.len(), 1);
+    assert!(resolved.light_brand.is_none());
+    assert_eq!(resolved.config.themes.len(), 1);
 }
 
 #[test]
@@ -189,12 +189,12 @@ fn resolve_inline_brand_parses_typed_brand() {
     let config = flattened_config(vec![("brand", brand_value)]);
     let theme_config = ThemeConfig::from_config_value(&config).unwrap();
     let resolved = theme_config
-        .resolve(
+        .resolve_variants(
             &quarto_system_runtime::NativeRuntime::new(),
             std::path::Path::new("/tmp"),
         )
         .expect("resolve");
-    let brand = resolved.brand.expect("resolved brand");
+    let brand = resolved.light_brand.expect("resolved brand").brand;
     let color = brand.color.expect("color");
     assert_eq!(color.primary.as_deref(), Some("#abc"));
 }
@@ -209,9 +209,9 @@ fn resolve_path_brand_reads_from_runtime() {
     let config = flattened_config(vec![("brand", scalar_string("_brand.yml"))]);
     let theme_config = ThemeConfig::from_config_value(&config).unwrap();
     let resolved = theme_config
-        .resolve(&quarto_system_runtime::NativeRuntime::new(), dir.path())
+        .resolve_variants(&quarto_system_runtime::NativeRuntime::new(), dir.path())
         .expect("resolve");
-    let brand = resolved.brand.expect("brand");
+    let brand = resolved.light_brand.expect("brand").brand;
     let color = brand.color.expect("color");
     assert_eq!(color.primary.as_deref(), Some("#def"));
 }

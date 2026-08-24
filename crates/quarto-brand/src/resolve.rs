@@ -100,13 +100,13 @@ fn ordered_chain(seen: &HashSet<String>, repeat: &str) -> String {
 
 // ── typography ──────────────────────────────────────────────────────
 
-impl Brand {
+impl<V> Brand<V> {
     /// Lookup a font slot by name. Returns the options for `base`,
     /// `headings`, `link`, `monospace`, `monospace-inline`, or
     /// `monospace-block`. For `monospace-{inline,block}` see
     /// [`effective_monospace_inline`] / [`effective_monospace_block`]
     /// which apply Q1's merge-with-generic-monospace semantics.
-    pub fn font_slot(&self, name: &str) -> Option<&BrandTypographyOptions> {
+    pub fn font_slot(&self, name: &str) -> Option<&BrandTypographyOptions<V>> {
         let t = self.typography.as_ref()?;
         match name {
             "base" => t.base.as_ref(),
@@ -127,7 +127,10 @@ impl Brand {
     /// Effective `monospace-inline` options: a merge of `monospace`
     /// (as defaults) with `monospace-inline` (overriding) — matching
     /// Q1's `{ ...monospace, ...monospaceInline }` spread.
-    pub fn effective_monospace_inline(&self) -> Option<BrandTypographyOptions> {
+    pub fn effective_monospace_inline(&self) -> Option<BrandTypographyOptions<V>>
+    where
+        V: Clone,
+    {
         merge_mono(
             self.font_slot("monospace"),
             self.font_slot("monospace-inline"),
@@ -136,7 +139,10 @@ impl Brand {
 
     /// Effective `monospace-block` options: a merge of `monospace`
     /// (as defaults) with `monospace-block` (overriding).
-    pub fn effective_monospace_block(&self) -> Option<BrandTypographyOptions> {
+    pub fn effective_monospace_block(&self) -> Option<BrandTypographyOptions<V>>
+    where
+        V: Clone,
+    {
         merge_mono(
             self.font_slot("monospace"),
             self.font_slot("monospace-block"),
@@ -146,10 +152,10 @@ impl Brand {
 
 /// Merge two optional font-options objects with the second winning
 /// per-field (Q1's spread semantics).
-fn merge_mono(
-    base: Option<&BrandTypographyOptions>,
-    over: Option<&BrandTypographyOptions>,
-) -> Option<BrandTypographyOptions> {
+fn merge_mono<V: Clone>(
+    base: Option<&BrandTypographyOptions<V>>,
+    over: Option<&BrandTypographyOptions<V>>,
+) -> Option<BrandTypographyOptions<V>> {
     match (base, over) {
         (None, None) => None,
         (Some(b), None) => Some(b.clone()),
@@ -172,7 +178,7 @@ fn merge_mono(
 
 // ── logo ────────────────────────────────────────────────────────────
 
-impl Brand {
+impl<V> Brand<V> {
     /// Lookup a logo by size keyword: `small`, `medium`, or `large`.
     pub fn logo(&self, name: &str) -> Option<&LogoEntry> {
         let l = self.logo.as_ref()?;
