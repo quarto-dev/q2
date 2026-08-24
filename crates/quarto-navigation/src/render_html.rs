@@ -99,10 +99,14 @@ pub fn navbar_to_html(
             crate::navbar::TogglePosition::Left => "navbar-toggler",
             crate::navbar::TogglePosition::Right => "navbar-toggler ms-auto",
         };
+        // `onclick` freezes headroom while the collapse menu is open, so
+        // the header can't scroll away from under it (Q1 `navtoggle.ejs:3`,
+        // bd-ersobfbt). Guarded: inert when headroom.min.js isn't shipped.
         html.push_str(&format!(
             "    <button class=\"{}\" type=\"button\" data-bs-toggle=\"collapse\" \
              data-bs-target=\"#navbarCollapse\" aria-controls=\"navbarCollapse\" \
-             aria-expanded=\"false\" aria-label=\"Toggle navigation\">\n      \
+             aria-expanded=\"false\" aria-label=\"Toggle navigation\" \
+             onclick=\"if (window.quartoToggleHeadroom) {{ window.quartoToggleHeadroom(); }}\">\n      \
              <span class=\"navbar-toggler-icon\"></span>\n    </button>\n",
             toggler_classes
         ));
@@ -285,16 +289,14 @@ pub enum SecondaryNavContent<'a> {
 /// navigation bar (bd-26bf3j1y). Hidden at `lg`+ by SCSS.
 ///
 /// Ported from Q1 `nav-before-body.ejs:64-93`, checked against the
-/// rendered output of a Q1 site rather than the template alone. Three
-/// deliberate differences, each recorded in the plan:
+/// rendered output of a Q1 site rather than the template alone. Two
+/// deliberate differences, each recorded in the plan (the third — no
+/// `quartoToggleHeadroom` onclick hooks — was closed by bd-ersobfbt,
+/// which ships headroom):
 ///
 /// - **No search button.** Q1's calls `window.quartoOpenSearch()`
 ///   unguarded; q2 has no search yet (bd-6cme), so the button would
 ///   throw on click.
-/// - **No `onclick="…quartoToggleHeadroom…"` hooks.** Headroom is
-///   deferred to bd-ersobfbt. Q1 guards the call, so omitting it is
-///   safe; emitting a handler for a function that does not exist is not
-///   useful.
 /// - **`role="navigation"` only.** Q1's template sets both
 ///   `role="navigation"` and `role="link"` on the same anchor; its own
 ///   DOM postprocessor drops the duplicate, so one attribute is
@@ -308,10 +310,14 @@ pub enum SecondaryNavContent<'a> {
 pub fn secondary_nav_to_html(content: SecondaryNavContent<'_>, toggle_label: &str) -> String {
     let label = escape_attr(toggle_label);
     // Shared by the button and the click-anywhere link: both open the
-    // same Bootstrap collapse target.
+    // same Bootstrap collapse target, and both freeze headroom while the
+    // sidebar drawer is open so the header can't slide away from under
+    // it (Q1 `nav-before-body.ejs:66-84`, bd-ersobfbt). The `onclick` is
+    // guarded — inert when headroom.min.js isn't shipped (`pinned:`).
     let collapse_attrs = format!(
         "data-bs-toggle=\"collapse\" data-bs-target=\".quarto-sidebar-collapse-item\" \
-         aria-controls=\"quarto-sidebar\" aria-expanded=\"false\" aria-label=\"{label}\""
+         aria-controls=\"quarto-sidebar\" aria-expanded=\"false\" aria-label=\"{label}\" \
+         onclick=\"if (window.quartoToggleHeadroom) {{ window.quartoToggleHeadroom(); }}\""
     );
 
     let mut html = String::from("<nav class=\"quarto-secondary-nav\">\n");
@@ -2957,17 +2963,53 @@ mod secondary_nav_tests {
         );
     }
 
-    /// Decision 2 defers headroom to bd-ersobfbt, so the inline
-    /// `quartoToggleHeadroom` hooks Q1 emits are not ported yet.
+    /// bd-ersobfbt: the sidebar-toggle affordances freeze headroom while
+    /// the collapse is open, so the header can't slide away from under an
+    /// open menu. Q1 emits the same guarded inline hook on the toggle
+    /// button and the full-width link (`nav-before-body.ejs:66-84`); the
+    /// guard means the markup stays inert when headroom.min.js isn't
+    /// shipped (`pinned: true`).
+    const HEADROOM_ONCLICK: &str =
+        "onclick=\"if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }\"";
+
     #[test]
-    fn secondary_nav_omits_headroom_hooks() {
-        let html = secondary_nav_to_html(
+    fn secondary_nav_carries_headroom_hooks() {
+        let breadcrumbs = secondary_nav_to_html(
             SecondaryNavContent::Breadcrumbs("<nav></nav>"),
             "Toggle sidebar navigation",
         );
+        assert_eq!(
+            breadcrumbs.matches(HEADROOM_ONCLICK).count(),
+            2,
+            "toggle button AND flex-grow link must both freeze headroom; got: {breadcrumbs}"
+        );
+
+        let title = ConfigValue::new_string("My Page", SourceInfo::for_test());
+        let collapsed = secondary_nav_to_html(
+            SecondaryNavContent::CollapsedTitle(&title),
+            "Toggle sidebar navigation",
+        );
+        assert_eq!(
+            collapsed.matches(HEADROOM_ONCLICK).count(),
+            2,
+            "toggle button AND title link must both freeze headroom; got: {collapsed}"
+        );
+    }
+
+    /// bd-ersobfbt: Q1's navbar hamburger carries the same guarded hook
+    /// (`navtoggle.ejs:3`) — an open navbar menu must pin the header too.
+    #[test]
+    fn navbar_toggler_carries_headroom_hook() {
+        let navbar = Navbar::with_defaults(); // collapse: true per Q1 semantics
+        let html = navbar_to_html(&navbar, None, "index.html");
+        let toggler_start = html.find("navbar-toggler").expect("toggler rendered");
+        let toggler_tag_end = html[toggler_start..]
+            .find('>')
+            .map(|i| i + toggler_start)
+            .unwrap();
         assert!(
-            !html.contains("quartoToggleHeadroom"),
-            "headroom is deferred to bd-ersobfbt; got: {html}"
+            html[..toggler_tag_end].contains("quartoToggleHeadroom"),
+            "navbar toggler must carry the guarded headroom hook; got: {html}"
         );
     }
 

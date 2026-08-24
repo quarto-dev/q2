@@ -454,8 +454,9 @@ nav.sidebar.sidebar-navigation:not(.rollup) {
 // pieces (the large `@media print` block further down); these fill the rest,
 // each against live Q2 DOM: `<nav id="TOC">` (template.rs:211), `#quarto-sidebar`
 // (sidebar_render), `<figcaption>` (figures), and the `.page-columns .content`
-// grid element. TS's `.fixed-top { position: relative }` (L757-759) is NOT
-// ported — Q2 emits no `.fixed-top` navbar element.
+// grid element. TS's `.fixed-top { position: relative }` (L757-759) is
+// ported in the fixed-top header block further down (bd-ersobfbt) — Q2
+// emits `.fixed-top` on `#quarto-header` since that strand.
 @media print {
   :root {
     font-size: 11pt;
@@ -3069,6 +3070,72 @@ footer.footer .nav-footer,
   padding-left: 1em;
   padding-right: 1em;
 }
+
+// ---------------------------------------------------------------------------
+// BEGIN fixed-top header (bd-ersobfbt; slated for replacement by bd-pt1wxeq2)
+// ---------------------------------------------------------------------------
+// `#quarto-header` is `class="headroom fixed-top"` (template.rs
+// QUARTO_HEADER_PARTIAL). Bootstrap's own `.fixed-top` rule takes it
+// out of flow; everything in this block compensates for that or drives
+// the scroll-away behavior. The runtime half lives in
+// `resources/js/quarto-nav/quarto-nav.js` (offset measurement) and
+// `resources/js/headroom/headroom.min.js` (pin/unpin class toggling);
+// the pairing is guarded by quarto-sass's
+// `test_fixed_top_header_compensation_rules`.
+
+// Scroll-away transition + transforms. Ported from Q1
+// quarto-nav.scss:100-114. Q1 also lists `.headroom-target` in the
+// first selector group; q2 has no producer for that class (the Q1
+// sidebar-rollup toggle is unported), so it is deliberately dropped.
+header.headroom {
+  will-change: transform;
+  transition: all 200ms linear;
+}
+
+header.headroom--pinned {
+  transform: translateY(0%);
+}
+
+header.headroom--unpinned {
+  transform: translateY(-100%);
+}
+
+// Immediately set the top offset if a fixed top header is present.
+// This prevents a 'flash / jerk' when the page loads: it is only the
+// render-time GUESS (per-theme map in `navbar-default-offset()`,
+// 64px fallback) — quarto-nav.js measures the real header height and
+// overwrites this with an inline style ~250ms after load. Ported from
+// Q1 quarto-nav.scss:820-824. The `nav-fixed` body class is composed
+// in template.rs (and mirrored by PreviewDocument.tsx) only when a
+// navbar is rendered.
+body.nav-fixed {
+  padding-top: navbar-default-offset($theme-name);
+}
+
+// Suppresses the `.sidebar { transition: top 200ms }` while
+// quarto-nav.js applies a non-animated offset update (initial load,
+// resize). Ported from Q1 quarto-nav.scss:727-732; also used by Q1's
+// dark-mode toggle machinery, so keep the semantics if that gets
+// ported.
+.notransition {
+  -webkit-transition: none !important;
+  -moz-transition: none !important;
+  -o-transition: none !important;
+  transition: none !important;
+}
+
+// Print: a fixed header would overlap every page; make it flow.
+// Ported from Q1 _quarto-rules.scss:757-759 (deliberately unported
+// until q2 emitted a `.fixed-top` element — see the print-rules note
+// earlier in this file).
+@media print {
+  .fixed-top {
+    position: relative;
+  }
+}
+// ---------------------------------------------------------------------------
+// END fixed-top header (bd-ersobfbt)
+// ---------------------------------------------------------------------------
 
 body .nav-footer {
   @if variable-exists(footer-border) and $footer-border {

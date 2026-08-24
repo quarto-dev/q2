@@ -1385,6 +1385,15 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(
         crate::transforms::SecondaryNavRenderTransform::new(),
     ));
+    // Fixed-header JS (quarto-nav.js + headroom.min.js, bd-ersobfbt).
+    // MUST come after NavbarRenderTransform and SecondaryNavRenderTransform:
+    // its predicate reads the `rendered.navigation.{navbar,secondary-nav}`
+    // keys those transforms write — the same signal the template's header
+    // gate uses. Native-only: the preview excludes ApplyTemplateStage (no
+    // `<script>` emission) and instead injects the same vendored files at
+    // entry.tsx module top (Phase F.1 pattern).
+    #[cfg(not(target_arch = "wasm32"))]
+    pipeline.push(Box::new(crate::transforms::QuartoNavJsTransform::new()));
     pipeline.push(Box::new(PageNavRenderTransform::new()));
     // Footer *generation* (above) is format-agnostic; footer *rendering* is
     // format-specific — html emits page-footer chrome, revealjs emits a
@@ -3442,6 +3451,46 @@ mod tests {
             "secondary-nav-render must be registered in the Navigation phase; \
              pipeline was: {:?}",
             pipeline.iter().map(|t| t.name()).collect::<Vec<_>>()
+        );
+    }
+
+    /// bd-ersobfbt: quarto-nav-js must be registered in the Navigation
+    /// phase AFTER navbar-render and secondary-nav-render — its predicate
+    /// reads the `rendered.navigation.*` keys they write. Same pin
+    /// rationale as `test_secondary_nav_registered_in_navigation_phase`.
+    #[test]
+    fn test_quarto_nav_js_registered_after_nav_renders() {
+        use crate::transform::TransformPhase;
+
+        let runtime = make_test_runtime();
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        let pos = |n: &str| names.iter().position(|x| *x == n);
+
+        let nav_js = pos("quarto-nav-js").expect("quarto-nav-js registered");
+        let nav_js_phase = pipeline
+            .iter()
+            .find(|t| t.name() == "quarto-nav-js")
+            .map(|t| t.phase());
+        assert_eq!(
+            nav_js_phase,
+            Some(TransformPhase::Navigation),
+            "quarto-nav-js must be in the Navigation phase; pipeline: {names:?}"
+        );
+        let navbar = pos("navbar-render").expect("navbar-render registered");
+        let secondary = pos("secondary-nav-render").expect("secondary-nav-render registered");
+        assert!(
+            nav_js > navbar && nav_js > secondary,
+            "quarto-nav-js must run after navbar-render ({navbar}) and \
+             secondary-nav-render ({secondary}), got {nav_js}; pipeline: {names:?}"
         );
     }
 

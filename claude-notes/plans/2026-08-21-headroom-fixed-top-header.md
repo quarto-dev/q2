@@ -216,25 +216,25 @@ This is question 1 below.
 
 ### Phase 0 — Tests first (TDD; each written, run, and confirmed failing before its implementation lands)
 
-- [ ] N1 `template.rs` partial tests: header emits `class="headroom fixed-top"`;
+- [x] N1 `template.rs` partial tests: header emits `class="headroom fixed-top"`;
       banner mode composes `class="headroom fixed-top quarto-banner"` (flips the
       exact-string pin at `template.rs:2610`).
-- [ ] N2 `template.rs` body-class tests (accumulating list, decision 7b):
+- [x] N2 `template.rs` body-class tests (accumulating list, decision 7b):
       rendered navbar present → `nav-fixed` appended after the structural
       class; navbar+sidebar → `nav-sidebar floating nav-fixed quarto-light`;
       no navbar → unchanged; user-supplied `body-classes` still wins whole.
-- [ ] N3 `render_html.rs`: navbar toggler + secondary-nav toggle + secondary-nav
+- [x] N3 `render_html.rs`: navbar toggler + secondary-nav toggle + secondary-nav
       title link carry `onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }"`
       (flips the absence pin at `render_html.rs:2961-2969`).
-- [ ] N4 `transforms/quarto_nav_js.rs` unit tests: website+navbar → both
+- [x] N4 `transforms/quarto_nav_js.rs` unit tests: website+navbar → both
       artifacts (`js:quarto-nav:headroom`, `js:quarto-nav:nav`); `pinned: true`
       navbar → headroom omitted, nav kept; any pinned sidebar → same; no
       navbar/sidebar → nothing; non-website → nothing.
-- [ ] N5 `quarto-sass` compile tests: `body.nav-fixed` gets non-zero
+- [x] N5 `quarto-sass` compile tests: `body.nav-fixed` gets non-zero
       `padding-top`; `header.headroom--unpinned` has `transform:translateY(-100%)`;
       print block gains `.fixed-top{position:relative}` (updates the deliberate-
       absence comment at `compile.rs:1002-1007`).
-- [ ] N6 `quarto-core` integration test (website fixture, real ProjectPipeline):
+- [x] N6 `quarto-core` integration test (website fixture, real ProjectPipeline):
       header classes present, `body.nav-fixed` present, both `<script>` tags
       under `site_libs/`, headroom script absent under `pinned: true`.
 - [ ] P1 preview vitest: `PreviewDocument` wraps navbar (+ secondary nav) in a
@@ -245,32 +245,58 @@ This is question 1 below.
 
 ### Phase 1 — Native render
 
-- [ ] Vendor `resources/js/headroom/headroom.min.js` (v0.12.0, from
+- [x] Vendor `resources/js/headroom/headroom.min.js` (v0.12.0, from
       `old-docs/_site/site_libs/quarto-nav/`; version-contract note in
       `resources/js/README.md`).
-- [ ] Write `resources/js/quarto-nav/quarto-nav.js` — ~60-line port of Q1's
+- [x] Write `resources/js/quarto-nav/quarto-nav.js` — ~60-line port of Q1's
       header machinery (headerOffset, updateDocumentOffset, Headroom init +
       `quartoToggleHeadroom`, hashchange compensation, ResizeObserver, 250ms
       initial measure). Documented deviations: no `.headroom-target`
       (no q2 producer), no footer/dashboard offsets, no `quarto-hrChanged`
       (no consumer). DOMContentLoaded-guarded so script order is irrelevant.
-- [ ] `QuartoNavJsTransform` (`transforms/quarto_nav_js.rs`,
+- [x] `QuartoNavJsTransform` (`transforms/quarto_nav_js.rs`,
       `cfg(not(wasm32))`, Navigation phase, `ProjectKind::Website` gate,
       reads `navigation.navbar`/`navigation.sidebar` + `pinned`); register in
       `pipeline.rs`; registration test.
-- [ ] Template: add `headroom fixed-top` to `QUARTO_HEADER_PARTIAL`; refactor
+- [x] Template: add `headroom fixed-top` to `QUARTO_HEADER_PARTIAL`; refactor
       the body-class merge (`template.rs:903-924`) into an accumulating list
       with `nav-fixed` pushed when `rendered.navigation.navbar` is non-empty.
-- [ ] `render_html.rs`: the three guarded `onclick` hooks.
-- [ ] SCSS: one fenced block "fixed-top header (bd-ersobfbt; replaced by
+- [x] `render_html.rs`: the three guarded `onclick` hooks.
+- [x] SCSS: one fenced block "fixed-top header (bd-ersobfbt; replaced by
       bd-pt1wxeq2)" — headroom transition/transform rules, `body.nav-fixed`
       padding, `.notransition`, print `.fixed-top{position:relative}`;
       `navbar-default-offset()` map in `_bootstrap-functions.scss`.
-- [ ] Re-run snapshots/goldens; **measure and report churn to Carlos**
+- [x] Re-run snapshots/goldens; **measure and report churn to Carlos**
       (count + summary + surprises), incl.
       `phase5-single-doc-baseline/expected_hashes.txt`.
-- [ ] End-to-end verification: `cargo run --bin q2 -- render` a website
+- [x] End-to-end verification: `cargo run --bin q2 -- render` a website
       fixture; inspect output HTML (record invocation + snippet in plan).
+
+**Phase 0+1 completion notes (2026-08-24):**
+
+- TDD confirmed for every leg: N1/N2 (4 red), N3 (2 red), N4 (7 red on
+  stubs), N5 (red verified by stashing the SCSS), N6 (3 red on wrong
+  path assumption, then corrected to `site_libs/`). All green after
+  implementation; full workspace run: **13003 passed / 0 failed**.
+- **Snapshot/baseline churn (report for Carlos): 0 `.snap` files
+  changed; 1 baseline hash updated** —
+  `phase5-single-doc-baseline/expected_hashes.txt` `doc_files/styles.css`
+  (the new SCSS block; note appended in the file). `doc.html` hash
+  UNCHANGED — the strand is byte-neutral for single-doc renders (no
+  navbar → no header, no `nav-fixed`, no scripts). No other snapshot
+  or golden moved, including the body-class golden tests, which pass
+  unmodified: the accumulating-list refactor is behavior-identical
+  when no navbar is rendered.
+- End-to-end (per CLAUDE.md): `cargo run --bin q2 -- render <scratch>/hr-site`
+  (2-page navbar website). Inspected `_site/index.html`:
+  `<header id="quarto-header" class="headroom fixed-top">`,
+  `<body class="fullcontent nav-fixed quarto-light">`, script tags in
+  order `site_libs/quarto/bootstrap.bundle.min.js` →
+  `site_libs/quarto-nav/headroom.min.js` →
+  `site_libs/quarto-nav/quarto-nav.js`, toggler carries the guarded
+  onclick, and compiled CSS contains `body.nav-fixed{padding-top:64px}`.
+  Files verified on disk under `_site/site_libs/quarto-nav/`.
+  Browser-level scroll behavior is verified in Phase 2's browser pass.
 
 ### Phase 2 — Preview
 
