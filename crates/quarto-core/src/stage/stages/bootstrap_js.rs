@@ -46,13 +46,17 @@
 //!
 //! ## WASM exclusion
 //!
-//! This module is gated `#[cfg(not(target_arch = "wasm32"))]`. The hub-
-//! client preview reinitializes its iframe on every render tick, which
-//! blows away any state held by Bootstrap components (open modals,
-//! expanded collapses, active tabs). Until the hub-client has a non-iframe
-//! renderer, shipping Bootstrap JS to the browser would be at best
-//! useless and at worst confusing. The cfg gate also keeps the 80KB
-//! payload out of the WASM bundle.
+//! This module is gated `#[cfg(not(target_arch = "wasm32"))]`, but NOT
+//! for the reason it originally was. The preview iframe is persistent
+//! (it re-renders its body via React on each `UPDATE_AST` and never
+//! reloads — `Q2PreviewIframe.tsx`), and it DOES run Bootstrap JS:
+//! Phase F.1 (bd-kw93.14) injects the same vendored bundle at
+//! `ts-packages/preview-renderer/src/q2-preview/entry.tsx` module top.
+//! The gate stays because the q2-preview pipeline excludes
+//! `ApplyTemplateStage`, so a `js:*` artifact registered under WASM
+//! would never become a `<script>` tag — chrome JS is iframe-template
+//! responsibility there, not document-render responsibility — and the
+//! cfg keeps the 80KB payload out of the WASM bundle.
 
 use std::path::PathBuf;
 

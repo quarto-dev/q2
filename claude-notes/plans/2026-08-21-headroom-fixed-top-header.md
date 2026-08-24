@@ -237,10 +237,10 @@ This is question 1 below.
 - [x] N6 `quarto-core` integration test (website fixture, real ProjectPipeline):
       header classes present, `body.nav-fixed` present, both `<script>` tags
       under `site_libs/`, headroom script absent under `pinned: true`.
-- [ ] P1 preview vitest: `PreviewDocument` wraps navbar (+ secondary nav) in a
+- [x] P1 preview vitest: `PreviewDocument` wraps navbar (+ secondary nav) in a
       React-owned `<header id="quarto-header">` matching `template.rs`
       conditions; `document.body` gains `nav-fixed` when navbar HTML present.
-- [ ] P2 preview vitest: header element identity is stable across an
+- [x] P2 preview vitest: header element identity is stable across an
       `UPDATE_AST` re-post (Headroom's binding survives chrome churn).
 
 ### Phase 1 — Native render
@@ -300,21 +300,42 @@ This is question 1 below.
 
 ### Phase 2 — Preview
 
-- [ ] React-owned `<header id="quarto-header">` wrapper in
+- [x] React-owned `<header id="quarto-header">` wrapper in
       `PreviewDocument.tsx` (conditions mirror `template.rs:274-278`;
       `headroom fixed-top` + banner class; closes bd-2yd37vuk).
-- [ ] Lift `cfg(not(wasm32))` on `SecondaryNavRenderTransform`
+- [x] Lift `cfg(not(wasm32))` on `SecondaryNavRenderTransform`
       (`pipeline.rs:1373-1379`); add `SecondaryNavSlot` to chromeSlots +
       PreviewDocument; update the transform's module docs.
-- [ ] `nav-fixed` in `PreviewDocument.tsx` body-class computation (mirror of
+- [x] `nav-fixed` in `PreviewDocument.tsx` body-class computation (mirror of
       the Rust accumulating list).
-- [ ] Inject `headroom.min.js` + `quarto-nav.js` `?raw` at `entry.tsx` module
+- [x] Inject `headroom.min.js` + `quarto-nav.js` `?raw` at `entry.tsx` module
       top (idempotent, `data-q2-*` markers, F.1 pattern).
-- [ ] `npm run build:all` green; `npm run test:ci` green.
+- [x] `npm run build:all` green; `npm run test:ci` green (full `cargo xtask verify` exit 0, 2026-08-24).
 - [ ] End-to-end browser verification (`q2 preview` after full WASM rebuild
       chain, per CLAUDE.md §Verifying Rust changes in q2 preview): scroll
       pin/unpin works, no overlap, scroll-sync + edit overlays sane. Record
       in plan.
+
+**Phase 2 notes (2026-08-24):**
+
+- TDD: 7 red (header wrapper / nav-fixed / DOM stability) + 2 red
+  (pinned attribute) before implementation; 13/13 green after. Full
+  preview-renderer suites: 549 unit + 592 integration, all green.
+- **Design addition — `pinned:` honored in preview** (goes beyond the
+  original decision): the preview bundle always contains headroom, so
+  instead of accepting a behavior divergence, `PreviewDocument` tags a
+  pinned site's header `data-headroom-pinned` (reading the same
+  `navigation.{navbar,sidebar}.pinned` keys as the native `decide()`)
+  and `quarto-nav.js` declines to bind Headroom to a tagged header.
+- **quarto-nav.js q2 extension over Q1**: init is keyed off the header
+  *element* with teardown/re-init via a body MutationObserver, because
+  the preview mounts `#quarto-header` after DOMContentLoaded and can
+  replace it on config edits. Documented in the file header. Uses
+  headroom's `destroy()` (present in v0.12.0, verified).
+- Secondary nav now renders in preview via `SecondaryNavSlot`
+  (wasm gate lifted); Phase 4's stale-rationale rewrites in
+  `pipeline.rs`, `secondary_nav_render.rs`, `bootstrap_js.rs`,
+  `clipboard_js.rs`, `chromeSlots.tsx` done alongside.
 
 ### Phase 3 — `pinned:` docs + schema
 
@@ -323,7 +344,7 @@ This is question 1 below.
 
 ### Phase 4 — Cleanup + bookkeeping
 
-- [ ] Rewrite stale iframe-reinit rationale: `pipeline.rs:1372-1383`,
+- [x] Rewrite stale iframe-reinit rationale: `pipeline.rs:1372-1383`,
       `bootstrap_js.rs:47-56`, `clipboard_js.rs:41-51`,
       `secondary_nav_render.rs:35-49`.
 - [ ] Update header-is-static docs: `template.rs:616-666` partial doc,

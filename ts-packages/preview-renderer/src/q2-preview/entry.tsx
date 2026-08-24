@@ -46,14 +46,36 @@ import 'katex/dist/katex.min.css';
 // `?raw` is typed via `src/global.d.ts` (Vite's `?raw` suffix
 // returns a string at build time).
 import bootstrapJsSrc from '../../../../resources/js/bootstrap/bootstrap.bundle.min.js?raw';
+// bd-ersobfbt: the fixed scroll-away header's runtime, same vendored
+// files the native render ships as `js:quarto-nav:*` artifacts
+// (`transforms/quarto_nav_js.rs`) — native and preview must load the
+// same bytes. headroom.min.js defines `window.Headroom`; quarto-nav.js
+// measures `#quarto-header` and manages body/sidebar offsets. Both are
+// DOMContentLoaded-guarded, and quarto-nav.js additionally watches for
+// the header element itself (React mounts it after the first
+// UPDATE_AST, and a `_quarto.yml` edit can replace it) — see the
+// "q2 EXTENSION" note in that file. Injection order mirrors the native
+// sorted-key order: bootstrap, headroom, quarto-nav.
+//
+// `pinned:` in preview: this bundle always contains headroom (there is
+// no per-project build), so PreviewDocument tags a pinned site's header
+// with `data-headroom-pinned` and quarto-nav.js declines to bind
+// Headroom to a tagged header — same observable behavior as the native
+// opt-out.
+import headroomJsSrc from '../../../../resources/js/headroom/headroom.min.js?raw';
+import quartoNavJsSrc from '../../../../resources/js/quarto-nav/quarto-nav.js?raw';
 
 (() => {
-    const existing = document.head.querySelector('script[data-q2-bootstrap]');
-    if (existing) return;
-    const tag = document.createElement('script');
-    tag.setAttribute('data-q2-bootstrap', '1');
-    tag.textContent = bootstrapJsSrc;
-    document.head.appendChild(tag);
+    const inject = (marker: string, src: string) => {
+        if (document.head.querySelector(`script[${marker}]`)) return;
+        const tag = document.createElement('script');
+        tag.setAttribute(marker, '1');
+        tag.textContent = src;
+        document.head.appendChild(tag);
+    };
+    inject('data-q2-bootstrap', bootstrapJsSrc);
+    inject('data-q2-headroom', headroomJsSrc);
+    inject('data-q2-quarto-nav', quartoNavJsSrc);
 })();
 
 import {

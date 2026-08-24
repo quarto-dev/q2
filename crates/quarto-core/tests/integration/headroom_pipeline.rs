@@ -233,7 +233,9 @@ fn pinned_navbar_omits_headroom_script_only() {
         "pinned must NOT ship the scroll-away script; got:\n{html}"
     );
     assert!(
-        !site_root.join("site_libs/quarto-nav/headroom.min.js").exists(),
+        !site_root
+            .join("site_libs/quarto-nav/headroom.min.js")
+            .exists(),
         "pinned must not write headroom.min.js to disk"
     );
 }

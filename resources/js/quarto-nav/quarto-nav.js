@@ -26,6 +26,17 @@
  * - no `quarto-hrChanged` CustomEvent — no consumer;
  * - no announcement-bar registration — feature not ported.
  *
+ * One deliberate q2 EXTENSION over Q1: init is keyed off the header
+ * *element*, re-checked via a MutationObserver on `document.body`. Q1
+ * can bind once at DOMContentLoaded because its header is static
+ * server markup; in the hub-client preview the same file is injected
+ * into a persistent iframe where React mounts `#quarto-header` only
+ * after the first UPDATE_AST arrives — and may unmount/remount it when
+ * a `_quarto.yml` edit adds or removes the navbar. `initForHeader`
+ * tears down the previous Headroom/observer and rebinds whenever the
+ * header's element identity changes. On native pages the observer
+ * fires rarely and the identity check is a single querySelector.
+ *
  * NOTE (bd-pt1wxeq2): this whole file is slated to be replaced by a
  * `position: sticky` + `--quarto-header-height` design. Keep it
  * self-contained.
@@ -110,41 +121,111 @@ window.document.addEventListener("DOMContentLoaded", function () {
     updateDocumentOffset(true);
   }
 
-  // Initialize headroom (scroll-away header). Guarded: when
-  // headroom.min.js is not shipped (`pinned: true`), the header stays
-  // fixed and only the offset management above runs.
-  const header = window.document.querySelector("#quarto-header");
-  if (header && window.Headroom) {
-    const headroom = new window.Headroom(header, {
-      tolerance: 5,
-      onPin: function () {
-        const sidebars = window.document.querySelectorAll(".sidebar");
-        sidebars.forEach((sidebar) => {
-          sidebar.classList.remove("sidebar-unpinned");
-        });
-        updateDocumentOffsetWithAnimation();
-      },
-      onUnpin: function () {
-        const sidebars = window.document.querySelectorAll(".sidebar");
-        sidebars.forEach((sidebar) => {
-          sidebar.classList.add("sidebar-unpinned");
-        });
-        updateDocumentOffsetWithAnimation();
-      },
-    });
-    headroom.init();
+  // --- header binding -----------------------------------------------------
+  // State for the currently-bound header element (see the q2-extension
+  // note in the file header).
+  let currentHeader = null;
+  let headroom = null;
+  let resizeObserver = null;
 
-    let frozen = false;
-    window.quartoToggleHeadroom = function () {
-      if (frozen) {
-        headroom.unfreeze();
-        frozen = false;
-      } else {
-        headroom.freeze();
-        frozen = true;
-      }
-    };
+  function teardown() {
+    if (headroom) {
+      headroom.destroy();
+      headroom = null;
+      delete window.quartoToggleHeadroom;
+    }
+    if (resizeObserver) {
+      resizeObserver.disconnect();
+      resizeObserver = null;
+    }
   }
+
+  function initForHeader(header) {
+    if (header === currentHeader) {
+      return;
+    }
+    teardown();
+    currentHeader = header;
+    if (!header) {
+      // Header removed (e.g. preview edit dropped the navbar): reset
+      // the offsets so the page reclaims the padding.
+      updateDocumentOffsetWithoutAnimation();
+      return;
+    }
+
+    // Initialize headroom (scroll-away header). Guarded twice: when
+    // headroom.min.js is not shipped (native `pinned: true`), and when
+    // the header is tagged `data-headroom-pinned` (the hub-client
+    // preview's pinned analogue — its bundle always contains headroom,
+    // so PreviewDocument tags the header instead). Either way the
+    // header stays fixed and only the offset management runs.
+    if (window.Headroom && !header.hasAttribute("data-headroom-pinned")) {
+      headroom = new window.Headroom(header, {
+        tolerance: 5,
+        onPin: function () {
+          const sidebars = window.document.querySelectorAll(".sidebar");
+          sidebars.forEach((sidebar) => {
+            sidebar.classList.remove("sidebar-unpinned");
+          });
+          updateDocumentOffsetWithAnimation();
+        },
+        onUnpin: function () {
+          const sidebars = window.document.querySelectorAll(".sidebar");
+          sidebars.forEach((sidebar) => {
+            sidebar.classList.add("sidebar-unpinned");
+          });
+          updateDocumentOffsetWithAnimation();
+        },
+      });
+      headroom.init();
+
+      let frozen = false;
+      window.quartoToggleHeadroom = function () {
+        if (!headroom) {
+          return;
+        }
+        if (frozen) {
+          headroom.unfreeze();
+          frozen = false;
+        } else {
+          headroom.freeze();
+          frozen = true;
+        }
+      };
+    }
+
+    // Re-measure whenever the header's size changes (banner mode, wrap
+    // on narrow viewports, fonts loading, collapse menus opening, …).
+    if (window.ResizeObserver) {
+      resizeObserver = new window.ResizeObserver(() => {
+        setTimeout(updateDocumentOffsetWithoutAnimation, 0);
+      });
+      resizeObserver.observe(header, {
+        attributes: true,
+        childList: true,
+        characterData: true,
+      });
+    }
+
+    // Initial measurement, after layout settles (Q1's 250ms).
+    setTimeout(updateDocumentOffsetWithoutAnimation, 250);
+  }
+
+  initForHeader(window.document.querySelector("#quarto-header"));
+
+  // Track header element identity: in the hub-client preview the header
+  // mounts after DOMContentLoaded and can be replaced by edits. Cheap
+  // on native pages (one querySelector per mutation batch).
+  const headerWatcher = new MutationObserver(() => {
+    const header = window.document.querySelector("#quarto-header");
+    if (header !== currentHeader) {
+      initForHeader(header);
+    }
+  });
+  headerWatcher.observe(window.document.body, {
+    childList: true,
+    subtree: true,
+  });
 
   // Non-smooth-scroll hash navigation lands under the fixed header;
   // compensate. (Smooth scrolling is handled by the CSS spacer above.)
@@ -160,29 +241,17 @@ window.document.addEventListener("DOMContentLoaded", function () {
     false
   );
 
-  // Re-measure whenever the header's size changes (banner mode, wrap on
-  // narrow viewports, fonts loading, …).
-  const headerEl = window.document.querySelector("header.fixed-top");
-  if (headerEl && window.ResizeObserver) {
-    const observer = new window.ResizeObserver(() => {
-      setTimeout(updateDocumentOffsetWithoutAnimation, 0);
-    });
-    observer.observe(headerEl, {
-      attributes: true,
-      childList: true,
-      characterData: true,
-    });
-  } else {
-    let resizeTimer = null;
-    window.addEventListener("resize", function () {
-      if (resizeTimer === null) {
-        resizeTimer = setTimeout(function () {
-          resizeTimer = null;
-          updateDocumentOffsetWithoutAnimation();
-        }, 50);
-      }
-    });
-  }
-  // Initial measurement, after layout settles.
-  setTimeout(updateDocumentOffsetWithoutAnimation, 250);
+  // Viewport-resize fallback re-measure (the per-header ResizeObserver
+  // covers header-content changes; this covers wrap-on-resize when
+  // ResizeObserver is unavailable, and viewport-height changes that
+  // affect the sidebar max-height math).
+  let resizeTimer = null;
+  window.addEventListener("resize", function () {
+    if (resizeTimer === null) {
+      resizeTimer = setTimeout(function () {
+        resizeTimer = null;
+        updateDocumentOffsetWithoutAnimation();
+      }, 50);
+    }
+  });
 });
