@@ -4811,6 +4811,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "clap",
+ "include_dir",
  "inquire",
  "open",
  "openssl-sys",

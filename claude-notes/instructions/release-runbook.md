@@ -16,8 +16,9 @@ A GitHub Release at tag `vX.Y.Z` with, for five platforms
 `windows_amd64`):
 
 - `q2-<version>-<platform>.tar.gz` (`.zip` on Windows) — just the `q2`
-  binary; the hub MCP server, preview SPA, and trace viewer are all
-  embedded in it via `include_dir!`.
+  binary; the hub MCP server, preview SPA, trace viewer, and the docs
+  site's llms.txt mirror (`q2 docs llms`) are all embedded in it via
+  `include_dir!`.
 - `q2-<version>-<platform>.tar.gz.sha256` — checksum.
 - `q2-<version>-<platform>.tar.gz.minisig` — Ed25519 signature
   (Unix only; the Windows `.zip` is checksum-only, matching `install.ps1`).
@@ -148,14 +149,26 @@ gh run watch <run-id> --repo quarto-dev/q2     # or watch in the Actions UI
 ```
 
 Job graph: `preflight` → `web-payloads` (WASM → preview SPA + trace
-viewer, built once) → `build` matrix (5 platforms, each builds the
-per-target MCP bundle then the binary, then a **verify gate**) →
-`release` (combines checksums, signs every `.tar.gz`, publishes).
+viewer + the `q2 docs llms` docs embed, built once) → `build` matrix
+(5 platforms, each builds the per-target MCP bundle then the binary,
+then a **verify gate**) → `release` (combines checksums, signs every
+`.tar.gz`, publishes).
 
 The per-target verify gate is the anti-stale-embed guard: it fails the
 leg unless `q2 mcp --launcher-info` reports a real (non-placeholder)
-bundle, all three hub defaults as `bundled`, and a keyring addon for
-each platform in that leg's `KEYRING_PLATFORMS`.
+bundle, all three hub defaults as `bundled`, a keyring addon for each
+platform in that leg's `KEYRING_PLATFORMS`, and `q2 docs llms
+--embed-info` reports `source: real` at exactly this tag's commit. A
+`(dirty)` marker on that commit is a **warning**, not a failure — the
+docs still came from this commit, but something modified tracked files
+during the `web-payloads` job and is worth a look.
+
+The docs embed is staged in `web-payloads` (`cargo xtask
+build-agents-docs`), not per-leg: it is target-independent, and a
+cross-compiled leg could not run the `q2` that renders the docs
+anyway. Its `commit:` is captured *before* the render, so it records
+the sources the docs were built from rather than the render's own
+byproducts.
 
 ### 5. If a leg fails: fix, merge, re-tag
 

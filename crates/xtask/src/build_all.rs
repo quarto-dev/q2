@@ -13,10 +13,18 @@
 //! 6. Build the hub MCP bundle (q2-mcp embed artifact; bd-81cfshmw)
 //! 7. Build the engine-host-deno bundle (quarto-core embed artifact; Plan 1b)
 //! 8. Build the Rust workspace (`cargo build --workspace`)
+//! 9. Stage the docs embed for `q2 docs llms` and re-embed it into the
+//!    `q2` binary (bd-hwop1zii)
 //!
 //! Both SPAs (trace-viewer + q2-preview-spa) must build *before* the
 //! Rust workspace because `quarto-trace-server` and `quarto-preview`
 //! embed their respective `dist/` directories via `include_dir!`.
+//!
+//! The docs embed is the one artifact that must come *after* the Rust
+//! build instead: staging it renders `docs/` with the freshly built
+//! `q2`, so the binary has to exist first. That is why step 9 ends with
+//! a second, narrower `cargo build --bin q2` — the run that actually
+//! embeds the staged tree.
 
 use anyhow::{Context, Result, bail};
 use std::path::Path;
@@ -42,6 +50,10 @@ pub struct BuildAllConfig {
     pub skip_q2_preview_spa_build: bool,
     /// Skip the final `cargo build --workspace` step.
     pub skip_rust_build: bool,
+    /// Skip staging + embedding the docs for `q2 docs llms`. Implied by
+    /// `skip_rust_build` (staging needs a built `q2`, and the embed
+    /// needs a rebuild to take effect).
+    pub skip_agents_docs: bool,
     /// Pass `--release` to `cargo build`.
     pub release: bool,
 }
@@ -75,6 +87,10 @@ pub fn run(config: &BuildAllConfig) -> Result<()> {
             !config.skip_engine_host_bundle && engine_host_exists(&project_root),
         ),
         ("Rust workspace build", !config.skip_rust_build),
+        (
+            "docs embed for `q2 docs llms`",
+            !config.skip_agents_docs && !config.skip_rust_build,
+        ),
     ];
 
     let enabled_count = steps.iter().filter(|(_, enabled)| *enabled).count();
@@ -210,6 +226,32 @@ pub fn run(config: &BuildAllConfig) -> Result<()> {
         }
         run_command("cargo", &args, &project_root, None, "Rust build failed")?;
         println!("✓ Rust build complete");
+    }
+
+    // Step: docs embed for `q2 docs llms` (bd-hwop1zii). Unlike every
+    // other embed artifact this one runs *after* the Rust build — it
+    // renders `docs/` with the `q2` that build just produced — so it
+    // ends with a second `cargo build --bin q2` that embeds the result.
+    if !config.skip_agents_docs && !config.skip_rust_build {
+        step_idx += 1;
+        banner(
+            step_idx,
+            total,
+            "Staging + embedding docs for `q2 docs llms`",
+        );
+        crate::build_agents_docs::run()?;
+        let mut args: Vec<&str> = vec!["build", "--bin", "q2"];
+        if config.release {
+            args.push("--release");
+        }
+        run_command(
+            "cargo",
+            &args,
+            &project_root,
+            None,
+            "q2 docs re-embed build failed",
+        )?;
+        println!("✓ docs embed complete");
     }
 
     println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

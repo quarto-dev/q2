@@ -5,3 +5,8 @@
 # the example projects for `.embed-example-iframe` embeds (bd-z1smhvuo).
 # Regenerate it; never commit it.
 /examples/
+# Engine cell output (figures etc.) written next to a computational page on
+# every render. No `*_files/` directory here has ever been tracked; leaving
+# them unignored made each docs render report a dirty tree, which
+# `cargo xtask build-agents-docs` then recorded as the embed's provenance.
+**/*_files/

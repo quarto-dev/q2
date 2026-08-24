@@ -1,0 +1,108 @@
+---
+title: "Embedded documentation for AI agents"
+description: "Read the Quarto 2 documentation straight from the q2 binary, with no network access, using `q2 docs llms`."
+---
+
+## Overview
+
+Every `q2` binary carries a markdown copy of this documentation site
+inside it. AI coding agents — and any tool that prefers plain text to
+rendered HTML — can read it directly from the command line, offline:
+
+```bash
+q2 docs llms
+```
+
+That prints an index of every documentation page, in the
+[llms.txt](https://llmstxt.org) format. The index is small enough to
+paste into a prompt; each entry names a page you can then fetch on
+demand.
+
+The docs are the ones this site was built from, so an agent reading
+them is reading documentation for **the version of Quarto it is
+actually running** — not whatever it remembers, and not a newer or
+older website.
+
+::: {.callout-tip}
+## Point your agent here
+
+If you use an AI coding assistant, telling it once that
+`q2 docs llms` exists is usually enough. Many agents will then
+discover the pages they need without further help.
+:::
+
+## Fetching a page
+
+Each entry in the index is an href. Pass one to fetch that page's
+markdown:
+
+```bash
+q2 docs llms guides/authoring/figures.md
+```
+
+Paths are forgiving: the `.qmd` and `.html` spellings of a page work
+too, as does leaving the extension off entirely, and naming a
+directory gets you its index page.
+
+```bash
+q2 docs llms guides/authoring/figures      # same page
+q2 docs llms guides/authoring              # the section's index
+```
+
+If a path doesn't match anything, `q2` suggests near matches and exits
+with an error rather than printing nothing.
+
+## Listing every page
+
+```bash
+q2 docs llms --list
+```
+
+prints one line per page — the href, a tab, and the page title — which
+is the convenient form for scripts and for agents that want to search
+titles before fetching:
+
+```
+guides/authoring/figures.md	Figures
+guides/authoring/tables.md	Tables
+guides/projects/llms-txt.md	llms.txt: a markdown mirror for AI tools
+```
+
+## The whole corpus at once
+
+```bash
+q2 docs llms --full
+```
+
+concatenates every page into a single stream. It is far too large for
+most models to read in one prompt — expect several hundred kilobytes —
+but it is the right input for building a search index, a vector store,
+or any other downstream tool that wants everything at once.
+
+## Which docs are embedded?
+
+```bash
+q2 docs llms --embed-info
+```
+
+reports where the embedded snapshot came from:
+
+```
+source: real
+commit: e3b3d7d4aae422274a7f3ff1c781019c24bfbb07
+pages: 255
+```
+
+Released binaries always carry the documentation built from that
+release's source. A `q2` you built yourself may report
+`source: placeholder`, meaning no documentation was embedded; the
+command tells you how to build and embed it.
+
+## Related
+
+- [llms.txt: a markdown mirror for AI tools](projects/llms-txt.qmd)
+  publishes the same kind of markdown mirror for **your own**
+  website. `q2 docs llms` is that feature turned on Quarto's own
+  documentation and shipped inside the binary.
+- `q2 agents-info` is an alias for `q2 docs llms` — the two are
+  interchangeable.

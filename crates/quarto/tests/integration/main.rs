@@ -8,6 +8,7 @@ pub mod coalesced_diagnostics;
 pub mod conditional_content_cli;
 pub mod create;
 pub mod diagnostic_render_panic_boundary;
+pub mod docs_llms_cli;
 pub mod engine_diagnostics_cli;
 pub mod extension_config_spans;
 pub mod founding_crash_config_span_e2e;

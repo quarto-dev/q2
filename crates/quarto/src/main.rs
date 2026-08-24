@@ -698,6 +698,79 @@ enum Commands {
         #[arg(long, env = "QUARTO_HUB_ADDITIONAL_AUDIENCES", value_delimiter = ',')]
         additional_audiences: Vec<String>,
     },
+
+    /// Documentation embedded in this binary
+    ///
+    /// A namespace, not a command: `q2 docs` alone prints this help.
+    /// `q2 docs llms` serves the machine-readable (llms.txt) mirror of
+    /// the Quarto 2 documentation site for AI agents and tooling.
+    // Bare `q2 docs` shows the namespace help rather than a terse
+    // missing-subcommand error — it must never dump document content.
+    #[command(arg_required_else_help = true)]
+    Docs {
+        #[command(subcommand)]
+        command: DocsCommands,
+    },
+
+    /// Alias for `q2 docs llms`: embedded docs for AI agents
+    #[command(name = "agents-info")]
+    AgentsInfo(DocsLlmsArgs),
+}
+
+/// Subcommands under `q2 docs` — documentation embedded in the binary
+/// (bd-hwop1zii). `llms` is the machine-readable surface; the namespace
+/// deliberately leaves room for a future human-facing offline-docs
+/// mechanism (e.g. `docs serve`).
+#[derive(clap::Subcommand)]
+enum DocsCommands {
+    /// Machine-readable documentation (llms.txt) for AI agents
+    ///
+    /// With no arguments, prints the llms.txt index of the embedded
+    /// Quarto 2 documentation; each listed href can be fetched with
+    /// `q2 docs llms <href>`.
+    Llms(DocsLlmsArgs),
+}
+
+/// Arguments shared by `q2 docs llms` and its `q2 agents-info` alias.
+/// The four modes are mutually exclusive; bare invocation prints the
+/// llms.txt index.
+#[derive(clap::Args)]
+struct DocsLlmsArgs {
+    /// Documentation page to print, as an href from the index or
+    /// `--list` (e.g. `guides/authoring/figures.md`). The `.qmd` and
+    /// `.html` spellings, and extensionless paths, work too
+    href: Option<String>,
+
+    /// Print every page in one stream (llms-full.txt)
+    #[arg(long, conflicts_with_all = ["href", "list", "embed_info"])]
+    full: bool,
+
+    /// List every embedded page, one `href<TAB>title` per line
+    #[arg(long, conflicts_with_all = ["href", "embed_info"])]
+    list: bool,
+
+    /// Report provenance of the embedded docs snapshot (source commit,
+    /// page count)
+    #[arg(long = "embed-info", conflicts_with = "href")]
+    embed_info: bool,
+}
+
+impl DocsLlmsArgs {
+    fn mode(self) -> commands::docs_llms::Mode {
+        use commands::docs_llms::Mode;
+        // clap enforces mutual exclusion; the order here is arbitrary.
+        if self.full {
+            Mode::Full
+        } else if self.list {
+            Mode::List
+        } else if self.embed_info {
+            Mode::EmbedInfo
+        } else if let Some(href) = self.href {
+            Mode::Page(href)
+        } else {
+            Mode::Index
+        }
+    }
 }
 
 /// Subcommands under `quarto call` — the Q1-parity `call` group.
@@ -855,6 +928,82 @@ mod cli_parse_tests {
         match cli.command {
             cmd @ Commands::Preview { .. } => cmd,
             _ => panic!("expected a Preview command from {args:?}"),
+        }
+    }
+
+    /// Extract the `DocsLlmsArgs` from either the canonical `docs llms`
+    /// spelling or the top-level `agents-info` alias (bd-hwop1zii).
+    fn parse_docs_llms(args: &[&str]) -> super::DocsLlmsArgs {
+        let cli = try_parse(args).expect("args should parse");
+        match cli.command {
+            Commands::Docs {
+                command: super::DocsCommands::Llms(a),
+            } => a,
+            Commands::AgentsInfo(a) => a,
+            _ => panic!("expected docs llms / agents-info from {args:?}"),
+        }
+    }
+
+    #[test]
+    fn docs_llms_and_agents_info_parse_identically() {
+        for tail in [
+            &[][..],
+            &["--list"],
+            &["--full"],
+            &["--embed-info"],
+            &["guides/authoring/figures.md"],
+        ] {
+            let canonical: Vec<&str> = ["docs", "llms"]
+                .iter()
+                .copied()
+                .chain(tail.iter().copied())
+                .collect();
+            let alias: Vec<&str> = std::iter::once("agents-info")
+                .chain(tail.iter().copied())
+                .collect();
+            let c = parse_docs_llms(&canonical);
+            let a = parse_docs_llms(&alias);
+            assert_eq!(
+                (c.href, c.full, c.list, c.embed_info),
+                (a.href, a.full, a.list, a.embed_info),
+                "alias must parse identically to canonical for tail {tail:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn bare_docs_shows_help_not_content() {
+        let err = match try_parse(&["docs"]) {
+            Ok(_) => panic!("bare `q2 docs` must not parse into a runnable command"),
+            Err(e) => e,
+        };
+        assert_eq!(
+            err.kind(),
+            clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand,
+            "bare `q2 docs` must display the namespace help"
+        );
+    }
+
+    #[test]
+    fn docs_llms_modes_are_mutually_exclusive() {
+        for args in [
+            &["docs", "llms", "--full", "--list"][..],
+            &["docs", "llms", "--full", "--embed-info"],
+            &["docs", "llms", "--list", "--embed-info"],
+            &["docs", "llms", "--full", "x.md"],
+            &["docs", "llms", "--list", "x.md"],
+            &["docs", "llms", "--embed-info", "x.md"],
+            &["agents-info", "--full", "--list"],
+        ] {
+            let err = match try_parse(args) {
+                Ok(_) => panic!("conflicting modes must not parse: {args:?}"),
+                Err(e) => e,
+            };
+            assert_eq!(
+                err.kind(),
+                clap::error::ErrorKind::ArgumentConflict,
+                "args: {args:?}"
+            );
         }
     }
 
@@ -1300,6 +1449,10 @@ fn main() -> Result<()> {
             compact,
             profile,
         }),
+        Commands::Docs { command } => match command {
+            DocsCommands::Llms(args) => commands::docs_llms::execute(args.mode()),
+        },
+        Commands::AgentsInfo(args) => commands::docs_llms::execute(args.mode()),
         Commands::Mcp { args } => commands::mcp::run(&args),
 
         Commands::ProvideHub {

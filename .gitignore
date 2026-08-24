@@ -75,3 +75,7 @@ resources/extension-build/deno.lock
 
 # Posit Assistant per-machine settings
 .posit/assistant/settings.json
+
+# `q2 docs llms` staged embed (cargo xtask build-agents-docs) — generated
+# from docs/_site; never commit it (bd-hwop1zii).
+agents-docs-dist/
