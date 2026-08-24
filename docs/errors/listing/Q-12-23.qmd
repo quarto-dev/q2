@@ -1,0 +1,61 @@
+---
+title: "YAML-File Listing Contents Not Yet Supported"
+description: "A `contents:` entry names a YAML file. Quarto 2 does not yet read listing records from YAML files; the entry is skipped."
+code: Q-12-23
+subsystem: listing
+status: stub
+since: "99.9.9"
+categories:
+  - listing
+---
+
+# `Q-12-23` — YAML-File Listing Contents Not Yet Supported
+
+> A `contents:` entry names a YAML file. Quarto 2 does not yet read
+> listing records from YAML files; the entry is skipped.
+
+## What this means
+
+Quarto 1 accepts a third kind of `contents:` entry alongside globs
+and inline records: a path to a `.yml`/`.yaml` file holding a list of
+listing records, read from disk at render time.
+
+```yaml
+# Q1 — not yet supported in Quarto 2
+listing:
+  contents:
+    - items.yml
+    - posts/*.qmd
+```
+
+Quarto 2 does not read listing records from YAML files yet. The
+entry is skipped — it contributes no items — while the rest of
+`contents:` (globs and inline records) resolves normally.
+
+## Why this happens
+
+The project was migrated from Quarto 1, or copied a `contents:` list
+that pointed at a YAML file of records.
+
+## How to fix
+
+Move the records inline under `contents:` — each top-level YAML
+sequence entry becomes one record:
+
+```yaml
+listing:
+  contents:
+    - title: Get started
+      path: download.qmd
+    - title: Learn more
+      path: guide.qmd
+    - posts/*.qmd
+```
+
+Support for reading `contents:` from an external YAML file is
+planned for a later release.
+
+## Related
+
+- `Q-12-19` — a `contents:` glob pattern matched nothing.
+- `Q-12-21` — a record has neither `title:` nor `path:`.

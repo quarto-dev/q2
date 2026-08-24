@@ -837,6 +837,26 @@ mod tests {
         assert_eq!(deps.len(), 2);
     }
 
+    /// A record `path:` arrives on the profile as a literal
+    /// pattern; it must become an edge and put the host in
+    /// `force_render` like any glob.
+    #[test]
+    fn record_path_literal_becomes_edge_and_forces_render() {
+        let profiles = vec![
+            listing_host("index.qmd", &["download.qmd"]),
+            plain_doc("download.qmd"),
+            plain_doc("other.qmd"),
+        ];
+        let index = ProjectIndex::new(profiles);
+        let mut diags = Vec::new();
+        let g = ProjectDependencyGraph::build(&index, &ConfigValue::default(), &mut diags);
+        let deps = g.edges.get(Path::new("index.qmd")).expect("edge set");
+        assert!(deps.contains(Path::new("download.qmd")));
+        assert!(!deps.contains(Path::new("other.qmd")));
+        assert_eq!(deps.len(), 1);
+        assert!(g.force_render.contains(Path::new("index.qmd")));
+    }
+
     /// Test #15 — explicit `posts/**/*.qmd` pattern (root host, so
     /// the resolved form is unchanged) matches recursively; sibling
     /// `outside.qmd` does not match.

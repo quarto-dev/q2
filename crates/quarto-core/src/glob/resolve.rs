@@ -92,6 +92,32 @@ pub struct GlobResolution {
     pub escaped: Vec<EscapedGlob>,
     /// Patterns that failed to compile.
     pub invalid: Vec<InvalidGlob>,
+    /// Per-input-entry outcome, same order and length as the `raws`
+    /// iterator passed to [`resolve_patterns`]: `Some(i)` when that
+    /// entry became `globs[i]`/`sources[i]`, `None` when it was
+    /// dropped into [`Self::escaped`] or [`Self::invalid`] instead.
+    ///
+    /// This is the structural answer to "which declared entry did
+    /// this resolved (or dropped) pattern come from" — a caller that
+    /// needs to interleave its own declared-order sequence with
+    /// `globs`/`escaped`/`invalid` (e.g. a listing item source that
+    /// isn't a glob at all) should index through this rather than
+    /// re-pairing entries by matching raw text or `SourceInfo`: raw
+    /// text can repeat with different provenance (the same pattern
+    /// escaping from one declaring file and resolving fine from
+    /// another), and `SourceInfo` can be a shared constant in
+    /// programmatic/test construction (`SourceInfo::for_test()`,
+    /// `By::programmatic_config()`) — either reconstruction can
+    /// silently mispair (bd-listing-inline-contents-tyy446ze task 5
+    /// round 2).
+    pub entry_index: Vec<Option<usize>>,
+    /// True when [`inject_default_positive`] prepended a synthesized
+    /// positive pattern — `contents:` held only negations, so
+    /// `globs[0]`/`sources[0]` has no corresponding `raws` entry and
+    /// no slot in [`Self::entry_index`]. The synthesized pattern
+    /// stands for the caller's implicit "everything" and is defined
+    /// to precede every declared entry.
+    pub injected_default_positive: bool,
 }
 
 impl GlobResolution {
@@ -140,8 +166,10 @@ pub fn resolve_patterns(
     options: &GlobOptions,
 ) -> GlobResolution {
     let mut out = GlobResolution::default();
+    let mut raw_count = 0usize;
 
     for entry in raws {
+        raw_count += 1;
         let (negated, pattern) = split_negation(&entry.raw);
         let base_dir = ctx.base_dir_for(&entry.source);
 
@@ -150,6 +178,7 @@ pub fn resolve_patterns(
                 raw: entry.raw.clone(),
                 source: entry.source.clone(),
             });
+            out.entry_index.push(None);
             continue;
         };
 
@@ -166,12 +195,27 @@ pub fn resolve_patterns(
                 message: err.message,
                 source: entry.source.clone(),
             });
+            out.entry_index.push(None);
             continue;
         }
 
+        out.entry_index.push(Some(out.globs.len()));
         out.globs.push(candidate);
         out.sources.push(entry.source.clone());
     }
+
+    // Every raw entry must land in exactly one entry_index slot
+    // (Some(i) if it resolved, None if it was dropped to escaped/
+    // invalid). A drop path added later that forgets to push would
+    // desync entry_index from the raws it claims to index, which
+    // would silently misorder any listing that interleaves it with
+    // non-glob entries (bd-listing-inline-contents-tyy446ze task 5
+    // round 2) — with no local test failure to catch it.
+    debug_assert_eq!(
+        out.entry_index.len(),
+        raw_count,
+        "entry_index must have exactly one slot per raw entry"
+    );
 
     inject_default_positive(&mut out, ctx, options);
     out
@@ -200,6 +244,15 @@ fn inject_default_positive(
             0,
             SourceInfo::generated(quarto_source_map::By::programmatic_config()),
         );
+        // Every existing `entry_index` slot now points one further
+        // into `globs`/`sources`; the synthesized entry itself gets
+        // no slot (it has no corresponding `raws` entry) —
+        // `injected_default_positive` is how a caller learns it
+        // exists at all.
+        for idx in out.entry_index.iter_mut().flatten() {
+            *idx += 1;
+        }
+        out.injected_default_positive = true;
     }
 }
 
@@ -364,6 +417,42 @@ mod tests {
                 GlobPattern::negated("sub/posts/draft.qmd"),
             ]
         );
+    }
+
+    // ── entry_index invariant (bd-listing-inline-contents-tyy446ze task 5 round 2) ──
+
+    #[test]
+    fn entry_index_maps_each_raw_entry_to_its_slot_or_none() {
+        let project = Path::new("/proj");
+        let r = resolve_patterns(
+            [
+                raw("a.qmd"),          // -> globs[0]
+                raw("!b.qmd"),         // -> globs[1]
+                raw("../escapes.qmd"), // escaped -> None
+                raw("a**b.qmd"),       // invalid -> None
+                raw("c.qmd"),          // -> globs[2]
+            ],
+            &ctx(project, ""),
+            &GlobOptions::default(),
+        );
+        assert_eq!(r.entry_index, vec![Some(0), Some(1), None, None, Some(2)]);
+        assert!(!r.injected_default_positive);
+    }
+
+    #[test]
+    fn entry_index_shifts_when_default_positive_is_injected() {
+        let project = Path::new("/proj");
+        let r = resolve_patterns(
+            [raw("!p2.qmd"), raw("!p3.qmd")],
+            &ctx(project, "sub"),
+            &GlobOptions::LISTING,
+        );
+        // The synthesized default positive is inserted at globs[0],
+        // shifting both raw entries' slots by one; it has no
+        // entry_index slot of its own.
+        assert_eq!(r.entry_index, vec![Some(1), Some(2)]);
+        assert!(r.injected_default_positive);
+        assert_eq!(r.globs.len(), 3);
     }
 
     #[test]

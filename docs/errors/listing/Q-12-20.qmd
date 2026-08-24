@@ -1,0 +1,72 @@
+---
+title: "Listing Record Path Names No Document"
+description: "An inline `contents:` record's `path:` has a document extension but names no document the project renders; the item keeps the link as written."
+code: Q-12-20
+subsystem: listing
+status: stub
+since: "99.9.9"
+categories:
+  - listing
+---
+
+# `Q-12-20` — Listing Record Path Names No Document
+
+> An inline `contents:` record's `path:` has a document extension but
+> names no document the project renders; the item keeps the link as
+> written.
+
+## What this means
+
+An inline `contents:` record's `path:` can name a project document,
+in which case the record's fields overlay that document's hydrated
+item (its title, description, date, and so on fill in whatever the
+record doesn't set):
+
+```yaml
+listing:
+  contents:
+    - title: Get started
+      path: download.qmd
+```
+
+This warning fires when `path:` looks like it should name a document
+— it has a Markdown/notebook extension (`.qmd`, `.md`, `.Rmd`,
+`.ipynb`) — but resolves to no document the project actually renders.
+The item still gets built, using only the record's own fields, and
+the link is emitted exactly as written; it may point nowhere.
+
+## Why this happens
+
+- **A typo** in the path or file name.
+- **The wrong directory.** `path:` resolves against the directory of
+  the file the *listing* is written in, not the project root — a
+  path written assuming project-root-relative resolution can miss.
+- **The file exists but is excluded from rendering** — for example
+  by `project.render`, or because its name or directory starts with
+  `_` or `.`. Such a file is not a document `Q-12-20` can link to,
+  even though it exists on disk.
+
+## How to fix
+
+- Correct the path. If the resolved path in the diagnostic names a
+  same-named document elsewhere in the project, the message
+  suggests it.
+- Anchor the path at the project root with a leading `/` if it was
+  written assuming a different base directory:
+
+  ```yaml
+  listing:
+    contents:
+      - title: Get started
+        path: /docs/download.qmd
+  ```
+
+- If the record was never meant to link anywhere — just a card with
+  its own title, description, and custom fields — drop `path:`
+  entirely.
+
+## Related
+
+- `Q-12-17` — a record `path:` (or a `contents:` glob) resolves
+  outside the project directory.
+- `Q-12-21` — a record has neither `title:` nor `path:`.
