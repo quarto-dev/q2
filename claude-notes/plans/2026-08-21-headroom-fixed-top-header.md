@@ -3,7 +3,7 @@
 **Date:** 2026-08-21
 **Braid:** bd-ersobfbt
 **Branch:** `main` @ `587721bb` (investigated in the main checkout; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design aligned 2026-08-24 (all 8 questions resolved by Carlos). Awaiting implementation go-ahead + branch decision.
 
 Reference material collected during the investigation:
 `claude-notes/plans/headroom-fixed-top-investigation/q1-headroom-reference.md`
@@ -247,14 +247,14 @@ Skeleton only — contents wait on the design discussion.
   secondary-nav toggle and title link. SCSS: port `quarto-nav.scss:1-33`,
   `100-114`, `727-732`, `820-824`, and the print `.fixed-top` rule (and
   delete the `_bootstrap-rules.scss:457` note).
-- **Phase 2 — Preview.** Add the `<header id="quarto-header">` wrapper to
-  `PreviewDocument.tsx` (mirroring `template.rs:274-277` conditions, incl.
-  `.quarto-banner`); lift the `cfg(not(wasm32))` on
-  `SecondaryNavRenderTransform` and add a `SecondaryNavSlot` (or decide to
-  keep it native-only — question 4); inject headroom + quarto-nav `?raw` in
-  `entry.tsx` next to Bootstrap *or* mount `Headroom` from a `useEffect`
-  keyed on the header element (question 3); verify scroll-sync and edit
-  overlays under a fixed header end-to-end in a browser.
+- **Phase 2 — Preview.** Add the React-owned `<header id="quarto-header">`
+  wrapper to `PreviewDocument.tsx` (mirroring `template.rs:274-277`
+  conditions, incl. `.quarto-banner`; closes bd-2yd37vuk); lift the
+  `cfg(not(wasm32))` on `SecondaryNavRenderTransform` and add a
+  `SecondaryNavSlot` (decision 4); inject headroom + quarto-nav `?raw` in
+  `entry.tsx` next to Bootstrap (decision 2); no edit-mode special-casing
+  (decision 3); verify scroll-sync and edit overlays under a fixed header
+  end-to-end in a browser.
 - **Phase 3 — `pinned:` docs + schema.** `docs/` user-facing page for
   `website: navbar: pinned` / `sidebar: pinned` (the fields already parse);
   confirm the YAML schema lists them.
@@ -265,58 +265,60 @@ Skeleton only — contents wait on the design discussion.
   is wrong). Update `title_banner.rs` / `template.rs` docs that describe the
   header as static. Link bd-e7b7 as related and comment on its description.
 
-## Open design questions for the user
+## Resolved decisions (Carlos, 2026-08-24)
 
-1. **Layout mechanism.** Port Q1's fixed header + JS body-padding machinery
-   verbatim (Option A — exact DOM/CSS parity, inherits the theme-offset
-   guess and load-time jump), or re-express as `position: sticky` + a
-   `--quarto-header-height` custom property (Option B — no layout JS, no
-   flash, but no `body.nav-fixed` / `fixed-top` contract)? I lean A for
-   *this* strand and would file B as a follow-up design strand.
-2. **One `quarto-nav.js` for both surfaces?** For the preview, inject the
-   same vendored `quarto-nav.js` + `headroom.min.js` `?raw` at module top
-   (F.1 precedent, zero divergence, but imperative DOM writes inside a
-   React tree) — or construct `Headroom` from a React effect on a
-   React-owned `<header>` and re-implement the offset writes as effects
-   (`codeCopy.ts` precedent, React-idiomatic, two implementations to keep in
-   sync)? I lean the former for the same reason as Q1: parity first.
-3. **Headroom in *edit* mode.** Should the header scroll away while the
-   user is editing in the hub-client / `q2 preview`, or should preview
-   freeze headroom (`headroom.freeze()`) and only show the fixed header?
-   Q1 has no such mode; this is a q2-only UX call. Default in the plan:
-   identical to render (no special-casing) unless you say otherwise.
-4. **Secondary nav in preview.** The `cfg(not(wasm32))` gate on
-   `SecondaryNavRenderTransform` was justified by the iframe-reinit premise
-   that no longer holds. Lift it in this strand (the toggle needs Bootstrap
-   collapse, which the preview already has) or keep it as its own strand?
-   Lifting it is small and gives the `onclick` hooks something to attach to
-   in preview; keeping it out keeps this strand's preview diff to the
-   header wrapper + headroom.
-5. **`pinned:` in scope?** The fields already parse. Wiring them is ~10
-   lines in the stage predicate plus docs. Ship here, or file separately?
-   I'd ship here — it is the only opt-out from scroll-away, and Q1 users
-   expect it.
-6. **Theme offset table.** ~~Port verbatim or fallback-only?~~ **Resolved
-   2026-08-21 (Carlos): port the 13-theme `navbar-default-offset` map
-   verbatim.** It is Q1's per-Bootswatch pre-JS padding guess; porting it
-   avoids load-time-jump surprises for migrating users on the themes we
-   vendor. Host: `resources/scss/bootstrap/_bootstrap-functions.scss`,
-   keyed on the existing `$theme-name` (`_bootstrap-variables.scss:2`).
-   May not survive a future layout redesign (Option B); fine.
-7. **How does `nav-fixed` reach `<body>`?** `template.rs:911-915` replaces
-   rather than appends, and `SidebarRenderTransform` only writes
-   `body-classes` when a sidebar exists. Options: (a) a new
-   `rendered.navigation.nav-fixed` flag the template (and
-   `PreviewDocument.tsx`) composes in; (b) refactor the merge into an
-   accumulating class list (cleanest, touches the golden body-class tests
-   in `tests/integration/toc_location.rs:196-312` and `template.rs:2294-2389`);
-   (c) have `NavbarRenderTransform` append to the existing key. I lean (b).
-8. **Preview chrome re-render vs the Headroom instance.** `chromeSlots.tsx:13-18`:
-   a `_quarto.yml` edit replaces the injected navbar HTML wholesale. If the
-   `<header>` wrapper is **React-owned** (outside the `dangerouslySetInnerHTML`
-   host), the element Headroom binds to persists and only its children
-   churn — no re-init needed. Confirm that's acceptable, vs. a React
-   scroll-direction hook that toggles the classes itself (no library).
+1. **Layout mechanism: Option A** (Q1-verbatim fixed header + JS offset
+   machinery) *for this strand*, to decompose the work cleanly — **but the
+   Option B redesign (bd-pt1wxeq2, filed) will likely start right away,
+   possibly before this strand's PR merges.** Structure everything for the
+   swap (see §Structuring for the Option B swap).
+2. **One `quarto-nav.js` for both surfaces.** Inject the same vendored
+   `quarto-nav.js` + `headroom.min.js` `?raw` at `entry.tsx` module top
+   (F.1 precedent). No React re-implementation.
+3. **No edit-mode special-casing.** Preview behaves identically to render;
+   experience actual problems before guessing at a freeze policy.
+4. **Lift the `cfg(not(wasm32))`** on `SecondaryNavRenderTransform` in this
+   strand; add the preview slot for it. The `onclick` hooks then have a
+   target in preview too.
+5. **`pinned:` ships here** (stage predicate + docs).
+6. **Port the 13-theme `navbar-default-offset` map verbatim** into
+   `_bootstrap-functions.scss`, keyed on the existing `$theme-name`.
+   Avoids load-jump surprises for migrating users on vendored Bootswatch
+   themes; may not survive Option B, and that's fine.
+7. **`nav-fixed` via option (b): refactor the body-class merge into an
+   accumulating class list** (`template.rs:911-915` and the
+   `PreviewDocument.tsx:101-119` mirror). Touches the golden body-class
+   tests. **Commitment: measure and report to Carlos the snapshot/baseline
+   churn this causes** (count + summary + surprising diffs, per the
+   CLAUDE.md snapshot policy).
+8. **React-owned `<header>` wrapper in preview is acceptable** — the
+   element Headroom binds to persists across chrome HTML re-injection;
+   only its children churn. No re-init machinery.
+
+## Structuring for the Option B swap (bd-pt1wxeq2)
+
+Decision 1's context: B starts soon after (maybe before) this merges, so A
+must be cheap to unwind. Concretely:
+
+- **One JS file.** The entire offset machinery lives in the single vendored
+  `resources/js/quarto-nav/quarto-nav.js` (~60-line port, not the 325-line
+  Q1 file). B deletes/replaces one file; `headroom.min.js` survives B
+  unchanged (the scroll-away classes work on sticky too).
+- **One compose point for body classes.** The accumulating class list
+  (decision 7) is the only place `nav-fixed` is added — native and preview
+  read the same `rendered.navigation.*` keys. B removes one `push`.
+- **One delimited SCSS block.** All ported rules (headroom transforms,
+  `body.nav-fixed`, `navbar-default-offset`, `.notransition`, print
+  `.fixed-top`) go in a single clearly-fenced "fixed-top header (bd-ersobfbt,
+  replaced by bd-pt1wxeq2)" section of `_bootstrap-rules.scss` /
+  `_bootstrap-functions.scss`.
+- **Centralized parity pins.** The tests that pin `fixed-top` /
+  `nav-fixed` / body padding live together (one module per surface) and are
+  named so B's author can find and flip them wholesale, the way this strand
+  flips bd-26bf3j1y's absence pins.
+- **The stage/predicate survives B.** `HeadroomJsStage`'s predicate
+  (website + navbar/sidebar, `pinned:` opt-out) is mechanism-independent;
+  B only changes *which* files it ships.
 
 ## Risks / tradeoffs (draft)
 
@@ -368,3 +370,5 @@ Skeleton only — contents wait on the design discussion.
 
 - **bd-2yd37vuk** — preview lacks the `#quarto-header` wrapper that
   bd-26bf3j1y added to the native template — `discovered-from` this strand.
+- **bd-pt1wxeq2** — Option B (sticky + `--quarto-header-height`) redesign,
+  blocked by this strand. Filed 2026-08-24 when decision 1 resolved.
