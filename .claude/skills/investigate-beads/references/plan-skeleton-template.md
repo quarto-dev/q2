@@ -6,7 +6,7 @@ Copy the body below into `claude-notes/plans/YYYY-MM-DD-<slug>.md` and fill it i
 # <Issue title> (bd-XXXX)
 
 **Date:** YYYY-MM-DD
-**Beads:** bd-XXXX
+**Braid:** bd-XXXX
 **Worktree:** `.worktrees/<id>-<slug>` (branch `braid/<id>-<slug>`, based on `main` @ `<short-sha>`)
 **Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 

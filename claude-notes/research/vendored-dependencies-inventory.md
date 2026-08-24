@@ -82,8 +82,8 @@ should run, in order:
 When discovery turns up a candidate **not** in this inventory:
 1. Add an entry below using the template at the bottom of the file.
 2. Note the addition in the survey plan's TL;DR.
-3. If it has no clear update mechanism, file a beads issue (label
-   `deps,vendored`, priority `3`) tracking the gap.
+3. If it has no clear update mechanism, file a braid strand (labels
+   `deps`, `vendored`, priority `3`) tracking the gap.
 
 ### When discovery turns up *dead* scaffolding
 
@@ -238,7 +238,7 @@ Each entry uses the following fields:
   (`cargo run --bin q2 -- render <fixture>.Rmd`).
 - **License:** GPL (matches quarto-cli's R-side licensing).
 - **Current version:** track by quarto-cli git SHA at copy time;
-  not currently recorded — **inventory gap**, see beads issue at
+  not currently recorded — **inventory gap**, see braid strand at
   the bottom of this file.
 - **Last reviewed:** 2026-05-04.
 
@@ -356,7 +356,7 @@ audit's first pass:
   implies vendoring by layout. Renaming or restructuring is out of
   scope for this audit but worth noting.
 
-These cleanups are filed as a follow-up beads issue (see *Inventory
+These cleanups are filed as a follow-up braid strand (see *Inventory
 gaps*).
 
 ### I. quarto-system-runtime JS bundles
@@ -436,7 +436,7 @@ gaps*).
 
 ---
 
-## Inventory gaps (file as beads issues)
+## Inventory gaps (file as braid strands)
 
 The following entries above lack a recorded upstream version /
 SHA, which makes "are we behind?" decisions guesswork:
@@ -453,7 +453,8 @@ SHA, which makes "are we behind?" decisions guesswork:
 
 When the cargo-upgrade skill runs and hits any of these, it should
 record "version unknown" in the survey plan and (if not already
-filed) open a beads issue under label `deps,vendored,inventory-gap`
+filed) open a braid strand under labels `deps`, `vendored`,
+`inventory-gap`
 to capture the missing SHA on next refresh.
 
 ---

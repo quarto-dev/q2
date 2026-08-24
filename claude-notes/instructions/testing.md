@@ -5,7 +5,7 @@
 - If writing tests is taking a lot of time, decompose the writing of tests into subtasks. Good tests are important!
 - Precise tests are good tests. **bad**: testing for the presence of a field in an object. **good** testing if the value of the field is correct.
 - When choosing hex colors for CSS test assertions (`ensureCssRegexMatches`), use **non-condensable** 6-digit hex values. CSS minifiers shorten `#RRGGBB` to `#RGB` when each pair is a repeated digit (e.g., `#cc5500` → `#c50`). Break at least one pair to prevent this: `#cc5501` instead of `#cc5500`.
-- Do not write tests that expect known-bad inputs. Instead, add a failing test, and create a beads task to handle the problem.
+- Do not write tests that expect known-bad inputs. Instead, add a failing test, and create a braid strand to handle the problem.
 
 ## Native vs WASM Lua Testing
 

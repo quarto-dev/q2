@@ -18,7 +18,7 @@ Does **not** implement the fix or finalize the design. Produces enough context t
 User says any of:
 - "investigate bd-XXXX" / "let's look at bd-XXXX"
 - "what would it take to work on bd-XXXX"
-- pastes a beads ID and asks for context / scoping
+- pastes a strand ID and asks for context / scoping
 
 **Do not** use for:
 - Strands you've already scoped (just edit on `main` or an existing branch)

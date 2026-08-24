@@ -70,7 +70,7 @@ When adding tests, prioritize:
 
 ## Code Quality
 
-- [ ] No TODO comments without beads issue IDs
+- [ ] No TODO comments without braid strand IDs
 - [ ] `cargo fmt` has been run on changed files
 - [ ] `cargo clippy` passes (or warnings explained)
 - [ ] No over-engineering: only changes directly requested or clearly necessary

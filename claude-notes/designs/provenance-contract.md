@@ -98,7 +98,7 @@ as the reference:
    `is_atomic_kind` (line 570). Default: **no**. Yes only if the
    round-trip rule is "treat the entire subtree as one
    non-user-editable unit" (see §7). Document the decision in the
-   beads issue.
+   braid strand.
 3. **Fix the site.** Replace the `SourceInfo::default()` at the
    producer with
    `SourceInfo::Generated { by: By::callout(), from: smallvec![] }`

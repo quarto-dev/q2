@@ -9,7 +9,7 @@ Copy the body below into `claude-notes/issue-reports/<N>/triage.md` and fill it 
 - **Reporter**: @<login> (<name>), <date>
 - **Triage date**: <today>
 - **Worktree**: `.worktrees/issue-<N>` (branch `issue-<N>`, based on `main` @ `<short-sha>`)
-- **Beads issue**: bd-XXXX (or "none — see Outcome")
+- **Braid strand**: bd-XXXX (or "none — see Outcome")
 - **Scope**: which part(s) of the issue this triage covers, and which it explicitly excludes.
 
 ## Summary

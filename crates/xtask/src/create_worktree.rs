@@ -239,7 +239,7 @@ pub fn build_section(kind: &SectionKind) -> String {
                 "**Braid:** _none yet \u{2014} run `braid search {number}` to find an existing strand, or `braid create` to file one, then replace this line with the bd- id._\n"
             ));
             s.push_str("**Plan:** _none yet \u{2014} replace this with `claude-notes/plans/YYYY-MM-DD-<name>.md` once you create the plan file._\n");
-            s.push_str("**Skill:** `/triage` continues the investigation; file a beads issue once concrete work surfaces.\n");
+            s.push_str("**Skill:** `/triage` continues the investigation; file a braid strand once concrete work surfaces.\n");
             s
         }
         SectionKind::Upgrade { date } => {
@@ -610,7 +610,7 @@ pub fn run(args: Args) -> Result<()> {
 
     // `args.base.is_none()` means the user didn't pass `--base`; we
     // fall back to `main` (the pre-bd-ojtq behaviour) but remember
-    // *that* we fell back, so beads mode can warn when a parent epic
+    // *that* we fell back, so braid mode can warn when a parent epic
     // is open.
     let base_explicit = args.base.is_some();
     let base = args.base.clone().unwrap_or_else(|| "main".to_string());

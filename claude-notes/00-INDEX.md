@@ -4,9 +4,9 @@
 
 This directory contains notes about the Kyoto project - exploring a Rust port of Quarto CLI.
 
-We track work in Beads instead of Markdown. Run `br quickstart` to see how. Keep using markdown files to provide information to the user, but use Beads to track your own work, project dependencies, etc.
+We track work in braid instead of Markdown. Run `braid agents-info` to see how. Keep using markdown files to provide information to the user, but use braid to track your own work, project dependencies, etc.
 
-**Note:** `br` is non-invasive and never executes git commands. After `br sync --flush-only`, you must manually run `git add .beads/ && git commit`.
+**Note:** `braid` is non-invasive and never executes git commands. The skein is a synced CRDT — there is nothing to commit after issue work.
 
 ## Project Overview
 
@@ -254,4 +254,3 @@ Detailed notes from design sessions:
 - External sources are in `/Users/cscheid/repos/github/cscheid/kyoto/external-sources/`
 - Current focus is **planning and understanding**, not yet writing production code
 - When drawing diagrams, always use graphviz, never, *ever* use mermaidjs.
-- Use q- as the prefix for Beads issues.

@@ -4,7 +4,7 @@
 
 ## General
 
-- Try hard to avoid "TODO" comments in the code base. If are running low on context and you do have to add it, make sure there's a beads task (even if low-priority) to track the TODO, and add the issue id to the TODO line.
+- Try hard to avoid "TODO" comments in the code base. If are running low on context and you do have to add it, make sure there's a braid strand (even if low-priority) to track the TODO, and add the strand id to the TODO line.
 
 ## Rust: HashMap and Determinism
 
