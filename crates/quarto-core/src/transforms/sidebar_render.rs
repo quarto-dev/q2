@@ -207,6 +207,14 @@ fn toc_block_html(meta: &ConfigValue) -> Option<String> {
         html.push_str(&format!("<h2 id=\"toc-title\">{title}</h2>\n"));
     }
     html.push_str(&toc);
+    if let Some(actions) = meta
+        .get_path(&["rendered", "navigation", "toc-actions"])
+        .and_then(|v| v.as_plain_text())
+        .filter(|s| !s.is_empty())
+    {
+        html.push_str(&actions);
+        html.push('\n');
+    }
     html.push_str("</nav>\n");
     Some(html)
 }
@@ -347,6 +355,22 @@ mod tests {
 
     fn b(x: bool) -> ConfigValue {
         ConfigValue::new_bool(x, SourceInfo::for_test())
+    }
+
+    #[test]
+    fn toc_block_html_twin_includes_repo_actions() {
+        let mut meta = config_map(vec![]);
+        meta.insert_path(&["rendered", "navigation", "toc"], s("<ul><li>x</li></ul>"));
+        meta.insert_path(
+            &["rendered", "navigation", "toc-actions"],
+            s("<div class=\"toc-actions\">ACTIONS</div>"),
+        );
+        let html = toc_block_html(&meta).expect("toc block");
+        assert!(html.contains("ACTIONS"));
+        assert!(
+            html.find("ACTIONS").unwrap() < html.find("</nav>").unwrap(),
+            "actions must precede the closing nav tag"
+        );
     }
 
     fn make_profile(source: &str, output_href: &str, title: &str) -> DocumentProfile {

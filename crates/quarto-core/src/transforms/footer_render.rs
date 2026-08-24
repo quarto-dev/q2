@@ -20,8 +20,12 @@
 //!
 //! - `page-footer: false` (affirmative disable).
 //! - `rendered.navigation.footer` already populated (user override).
-//! - `navigation.footer` absent.
+//! - `navigation.footer` absent, and either no `footer-actions` copy
+//!   to host or `page-footer: false` at either scope (top-level or
+//!   `website.page-footer`) — see [`FooterRenderTransform::transform`]
+//!   for the footer-synthesis and website-scope re-check.
 
+use quarto_config::resolve_website_value;
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_navigation::{
     FooterRegion, NavigationItem, PageFooter, render_html::page_footer_to_html,
@@ -74,11 +78,43 @@ impl AstTransform for FooterRenderTransform {
             return Ok(());
         }
 
-        let Some(footer_cv) = ast.meta.get_path(&["navigation", "footer"]) else {
-            return Ok(());
-        };
+        // The repo-actions copy that belongs inside
+        // `.nav-footer-center` (bd-repo-actions-missing-99ezd2fe).
+        let actions_html = ast
+            .meta
+            .get_path(&["rendered", "navigation", "footer-actions"])
+            .and_then(|v| v.as_plain_text())
+            .filter(|s| !s.is_empty());
 
-        let mut footer = PageFooter::from_config_value(footer_cv);
+        let mut footer = match ast.meta.get_path(&["navigation", "footer"]) {
+            Some(footer_cv) => PageFooter::from_config_value(footer_cv),
+            None => {
+                // Q1 `handleRepoLinks` builds the whole
+                // `<footer><div.nav-footer><div.nav-footer-center>`
+                // chain when none exists, purely to host the
+                // small-screen actions copy. With nothing to host,
+                // there is still no footer.
+                if actions_html.is_none() {
+                    return Ok(());
+                }
+                // Decision D-3. An absent `navigation.footer` has two
+                // very different causes: nothing was configured, or
+                // `page-footer: false` was — and `resolve_page_footer`
+                // erases the difference by returning `None` for both
+                // (`quarto-navigation/src/footer.rs:246-250`). The
+                // top-level gate above cannot see the website-scoped
+                // spelling, so re-check it here through the
+                // website-aware helper. Without this, the one config
+                // that explicitly asked for no footer gets one.
+                if resolve_website_value(&ast.meta, "page-footer").and_then(|v| v.as_bool())
+                    == Some(false)
+                {
+                    return Ok(());
+                }
+                PageFooter::default()
+            }
+        };
+        footer.center_append = actions_html;
 
         // Rewrite hrefs in each Items region, and Link/Image targets
         // inside Text regions' parsed markdown
@@ -695,6 +731,103 @@ mod tests {
             .unwrap();
         assert!(html.contains("href=\"about.qmd\""));
         assert!(diags.is_empty());
+    }
+
+    // --- Phase 4 repo-actions footer copy + synthesis --------------
+
+    #[tokio::test]
+    async fn footer_actions_are_appended_to_a_configured_footer() {
+        // Same starting point as the existing `renders_footer_html`
+        // test (`footer_render.rs:386-392`): a configured footer whose
+        // center region already holds text.
+        let footer = PageFooter {
+            center: FooterRegion::Text(s("Copyright 2026")),
+            ..PageFooter::default()
+        };
+        let mut meta = ConfigValue::default();
+        meta.insert_path(&["navigation", "footer"], footer.to_config_value());
+        meta.insert_path(
+            &["rendered", "navigation", "footer-actions"],
+            s("<div class=\"toc-actions d-sm-block d-md-none\">ACTIONS</div>"),
+        );
+        let (meta, _) = run(meta).await;
+        let html = meta
+            .get_path(&["rendered", "navigation", "footer"])
+            .and_then(|v| v.as_plain_text())
+            .unwrap();
+        let center = html
+            .split("<div class=\"nav-footer-center\">")
+            .nth(1)
+            .unwrap();
+        assert!(center.contains("ACTIONS"));
+    }
+
+    /// Q1 synthesizes the whole footer chain purely to host the
+    /// small-screen copy (decision D-2).
+    #[tokio::test]
+    async fn footer_is_synthesized_when_only_actions_exist() {
+        let mut meta = config_map(vec![]);
+        meta.insert_path(
+            &["rendered", "navigation", "footer-actions"],
+            s("<div class=\"toc-actions\">ACTIONS</div>"),
+        );
+        let (meta, _) = run(meta).await;
+        let html = meta
+            .get_path(&["rendered", "navigation", "footer"])
+            .and_then(|v| v.as_plain_text())
+            .unwrap();
+        assert!(html.contains("<footer class=\"footer\""));
+        assert!(html.contains(
+            "<div class=\"nav-footer-center\"><div class=\"toc-actions\">ACTIONS</div></div>"
+        ));
+    }
+
+    /// Decision D-3: deliberate divergence — Q1 synthesizes a footer even
+    /// with `page-footer: false`. Top-level scope.
+    #[tokio::test]
+    async fn page_footer_false_suppresses_the_actions_copy() {
+        let mut meta = config_map(vec![("page-footer", b(false))]);
+        meta.insert_path(
+            &["rendered", "navigation", "footer-actions"],
+            s("<div class=\"toc-actions\">ACTIONS</div>"),
+        );
+        let (meta, _) = run(meta).await;
+        assert!(
+            meta.get_path(&["rendered", "navigation", "footer"])
+                .is_none()
+        );
+    }
+
+    /// The scope that the obvious implementation gets wrong (D-3).
+    /// `is_feature_disabled` reads the top level only, and website-scoped
+    /// `page-footer: false` reaches this transform as an *absent*
+    /// `navigation.footer` — indistinguishable from "no footer configured"
+    /// unless the synthesis branch checks the website scope itself.
+    #[tokio::test]
+    async fn website_scoped_page_footer_false_also_suppresses_the_copy() {
+        let mut meta = config_map(vec![(
+            "website",
+            config_map(vec![("page-footer", b(false))]),
+        )]);
+        meta.insert_path(
+            &["rendered", "navigation", "footer-actions"],
+            s("<div class=\"toc-actions\">ACTIONS</div>"),
+        );
+        let (meta, _) = run(meta).await;
+        assert!(
+            meta.get_path(&["rendered", "navigation", "footer"])
+                .is_none(),
+            "website.page-footer: false must not synthesize a footer"
+        );
+    }
+
+    #[tokio::test]
+    async fn no_footer_and_no_actions_still_skips() {
+        let (meta, _) = run(config_map(vec![])).await;
+        assert!(
+            meta.get_path(&["rendered", "navigation", "footer"])
+                .is_none()
+        );
     }
 
     /// bd-swpy regression — footer item hrefs relativize to the

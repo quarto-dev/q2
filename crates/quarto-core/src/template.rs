@@ -222,6 +222,12 @@ $endfor$
 /// - `$rendered.navigation.breadcrumbs$` - Rendered breadcrumb trail (consumed
 ///   by the title-block partial, not the page template — set only when a
 ///   sidebar trail with >1 crumbs exists and `bread-crumbs` isn't false)
+/// - `$rendered.navigation.toc-actions$` - Rendered repo-actions links
+///   ("Edit this page" / "View source" / "Report an issue") for the TOC
+///   slot, written by `RepoActionsRenderTransform`. Consumed by
+///   `TOC_BLOCK_PARTIAL` and its Rust twin `toc_block_html`.
+/// - `$rendered.navigation.footer-actions$` - Rendered repo-actions links
+///   for the page-footer slot, written by `RepoActionsRenderTransform`.
 /// - `$rendered.navigation.page_navigation$` - Rendered prev/next page-nav strip
 /// - `$rendered.navigation.footer$` - Rendered page-footer HTML (if page-footer: set)
 const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
@@ -605,11 +611,20 @@ pub const TITLE_META_AUTHOR_PARTIAL: &str = r##"$if(it.url)$<a href="$it.url$">$
 /// by `SidebarRenderTransform`, whose Rust-side twin of this markup is
 /// `toc_block_html` in `transforms/sidebar_render.rs` — keep the two
 /// in sync.
+///
+/// `$rendered.navigation.toc-actions$` (the "Edit this page" / "View
+/// source" / "Report an issue" links) is written by
+/// `RepoActionsRenderTransform` and appears inside the nav, after the
+/// TOC entries. It must be kept in sync with the Rust twin
+/// (`toc_block_html`).
 pub const TOC_BLOCK_PARTIAL: &str = r#"<nav id="TOC" role="doc-toc" class="toc-active">
 $if(rendered.navigation.toc-title)$
 <h2 id="toc-title">$rendered.navigation.toc-title$</h2>
 $endif$
 $rendered.navigation.toc$
+$if(rendered.navigation.toc-actions)$
+$rendered.navigation.toc-actions$
+$endif$
 </nav>
 "#;
 
@@ -3364,6 +3379,35 @@ mod tests {
             !html.contains(r#"<div id="quarto-margin-sidebar""#),
             "sidebar must be absent when neither toc nor categories are set; got: {html}"
         );
+    }
+
+    #[test]
+    fn toc_block_emits_repo_actions_inside_the_nav() {
+        let mut meta = meta_with_navigation(Some("<ul><li>x</li></ul>"), None);
+        meta.insert_path(
+            &["rendered", "navigation", "toc-actions"],
+            ConfigValue::new_string(
+                "<div class=\"toc-actions\">ACTIONS</div>",
+                dummy_source_info(),
+            ),
+        );
+        let html = render_full("<p>body</p>", &meta);
+        let nav_open = html.find("<nav id=\"TOC\"").expect("nav");
+        let nav_close = html[nav_open..].find("</nav>").expect("nav close") + nav_open;
+        let actions = html.find("ACTIONS").expect("actions");
+        assert!(
+            nav_open < actions && actions < nav_close,
+            "the actions block must sit inside nav#TOC"
+        );
+    }
+
+    /// The conditional must not leave a stray block when unset.
+    #[test]
+    fn toc_block_omits_repo_actions_when_unset() {
+        let meta = meta_with_navigation(Some("<ul><li>x</li></ul>"), None);
+        let html = render_full("<p>body</p>", &meta);
+        assert!(html.contains("<nav id=\"TOC\""));
+        assert!(!html.contains("toc-actions"));
     }
 
     // === Rich-Markdown title-block fields (bd-5706gcrq) ===
