@@ -294,13 +294,19 @@ Silent divergence is the core complaint, so failures must be loud:
 
 ### Phase 4 — wrap-up
 
-- [ ] End-to-end verification per CLAUDE.md: exact invocation + observed
-      output snippet recorded here.
-- [ ] `cargo xtask verify` (full, WASM leg affected) + `cargo xtask lint`.
-- [ ] Docs: document `render-components` preview behavior under `docs/`
-      if/where the feature is user-documented (check first — it may still
-      be experimental/undocumented; if so, skip and note).
-- [ ] Update bd-ue80chl0 (comment + close), comment on GH #402.
+- [x] End-to-end verification per CLAUDE.md: recorded under Phase 2/3
+      (playwright drives the real `target/debug/q2 preview` binary; DOM
+      inspected in Chromium; project + single-file modes; live `.tsx`
+      edits).
+- [x] `cargo xtask verify` (full, WASM leg affected) — PASSED
+      2026-08-25 (13,426 Rust tests; hub-client, preview-renderer, SPA
+      and all ts-package suites; hub-client `build:all` incl. WASM; SPA
+      build; exit 0). `cargo xtask lint` — clean.
+- [x] Docs: checked — `render-components` is not documented anywhere
+      under `docs/` (still EXPERIMENTAL, per the transpiler header), so
+      there is no user-facing page to update. Skipped per plan.
+- [ ] Update bd-ue80chl0 (comment with PR link; close on merge),
+      PR body carries `Fixes #402`.
 
 ## Open questions for review
 
