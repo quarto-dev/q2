@@ -5215,6 +5215,7 @@ dependencies = [
  "quarto-config",
  "quarto-pandoc-types",
  "quarto-source-map",
+ "quarto-util",
  "yaml-rust2",
 ]
 

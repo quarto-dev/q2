@@ -1,0 +1,16 @@
+project:
+  type: website
+website:
+  title: Scheme hrefs
+  navbar:
+    left:
+      - text: Home
+        href: index.qmd
+      - text: Deep page
+        href: sub/page.qmd
+      - text: JS
+        href: "javascript:void(0);"
+      - text: Mail
+        href: "mailto:someone@example.com"
+      - text: Custom scheme
+        href: "positron://settings/positron.notebook.enabled"

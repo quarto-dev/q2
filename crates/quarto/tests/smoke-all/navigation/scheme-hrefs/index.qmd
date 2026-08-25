@@ -1,0 +1,32 @@
+---
+title: Scheme hrefs (top level)
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - [
+            # Body links: any URI scheme passes through byte-for-byte.
+            'href="positron://settings/positron\.notebook\.enabled"',
+            'href="vscode://schemas/settings"',
+            'href="https://example\.com/settings/x"',
+            'href="mailto:someone@example\.com"',
+            # Navbar items likewise.
+            'href="javascript:void\(0\);"',
+          ]
+        - [
+            # bd-scheme-href-path-normalized-w5zya82r symptom 1:
+            # `//` must not collapse to `/`.
+            'positron:/settings',
+            'vscode:/schemas',
+          ]
+---
+
+Every link below must reach the rendered HTML byte-for-byte
+(bd-scheme-href-path-normalized-w5zya82r).
+
+- [positron settings](positron://settings/positron.notebook.enabled)
+- [vscode settings](vscode://schemas/settings)
+- [https](https://example.com/settings/x)
+- [mailto](mailto:someone@example.com)

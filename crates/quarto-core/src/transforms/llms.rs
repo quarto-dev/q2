@@ -885,13 +885,7 @@ fn retarget_href(href: &str, cx: &ViewContext) -> String {
         return href.to_string();
     };
     // External / non-path targets pass through.
-    if href.is_empty()
-        || href.starts_with('#')
-        || href.starts_with("//")
-        || href.contains("://")
-        || href.starts_with("mailto:")
-        || href.starts_with("data:")
-    {
+    if href.is_empty() || href.starts_with('#') || quarto_util::is_external_url(href) {
         return href.to_string();
     }
     let (path, fragment) = match href.split_once('#') {
@@ -1202,6 +1196,15 @@ mod tests {
             "https://example.com/x.html"
         );
         assert_eq!(retarget_href("#local", &cx), "#local");
+        // Any scheme is external (bd-scheme-href-path-normalized-w5zya82r).
+        assert_eq!(
+            retarget_href("javascript:void(0);", &cx),
+            "javascript:void(0);"
+        );
+        assert_eq!(
+            retarget_href("positron://settings/about.html", &cx),
+            "positron://settings/about.html"
+        );
         assert_eq!(retarget_href("data.csv", &cx), "data.csv");
         // Unknown page keeps .html.
         assert_eq!(retarget_href("missing.html", &cx), "missing.html");

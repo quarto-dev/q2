@@ -125,18 +125,11 @@ fn collect_member_paths(entries: &[SidebarEntry]) -> Vec<PathBuf> {
 }
 
 /// Cheap classifier: a sidebar entry's `href` that *isn't* a
-/// project page. Mirrors the rule used by
-/// [`crate::transforms::navigation_href::is_external`] but
-/// duplicated here so this helper has zero non-project-internal
-/// dependencies.
+/// project page — any URI scheme or `//host` form (same rule as
+/// [`crate::transforms::navigation_href::is_external`]), or a
+/// fragment-only anchor.
 fn is_external_or_anchor(href: &str) -> bool {
-    href.starts_with("http://")
-        || href.starts_with("https://")
-        || href.starts_with("mailto:")
-        || href.starts_with("tel:")
-        || href.starts_with("ftp://")
-        || href.starts_with("//")
-        || href.starts_with('#')
+    quarto_util::is_external_url(href) || href.starts_with('#')
 }
 
 #[cfg(test)]
@@ -339,6 +332,28 @@ mod tests {
         let resolved = resolve_sidebar_membership(&meta, &index, &mut diags);
 
         // External URL is dropped from membership; only project pages remain.
+        assert_eq!(resolved[0].members, vec![PathBuf::from("a.qmd")]);
+    }
+
+    /// bd-scheme-href-path-normalized-w5zya82r — any scheme is external,
+    /// not just the allowlisted few.
+    #[test]
+    fn any_scheme_href_excluded() {
+        let mut meta = ConfigValue::default();
+        let sidebar = config_map(vec![(
+            "contents",
+            arr(vec![
+                s("a.qmd"),
+                s("javascript:void(0);"),
+                s("positron://settings/x"),
+            ]),
+        )]);
+        meta.insert_path(&["website", "sidebar"], sidebar);
+
+        let index = make_index_with(&["a.qmd"]);
+        let mut diags = Vec::new();
+        let resolved = resolve_sidebar_membership(&meta, &index, &mut diags);
+
         assert_eq!(resolved[0].members, vec![PathBuf::from("a.qmd")]);
     }
 

@@ -222,20 +222,18 @@ pub fn resolve_href_for_html(
 
 /// Classify an href as external (not project-relative).
 ///
-/// Matches Quarto 1's cheap heuristic: anything with a recognizable
-/// scheme, plus protocol-relative `//host/…` which bypasses the
-/// project entirely.
+/// Any href carrying an RFC-3986 scheme (`https:`, `mailto:`, `data:`,
+/// `positron:`, `javascript:`, …), plus protocol-relative `//host/…`
+/// which bypasses the project entirely. Delegates to
+/// [`quarto_util::is_external_url`], the workspace's one scheme
+/// classifier, rather than keeping a prefix allowlist: any scheme an
+/// allowlist omits falls through to path normalization, which collapses
+/// `//` to `/` and, on a nested page, prepends `../` per level
+/// (bd-scheme-href-path-normalized-w5zya82r — the same class earlier
+/// hit `data:`, bd-root-relative-paths-design-fc5pvkcv). Quarto 1's
+/// equivalent is `/^\w+:/`.
 pub fn is_external(href: &str) -> bool {
-    href.starts_with("http://")
-        || href.starts_with("https://")
-        || href.starts_with("mailto:")
-        || href.starts_with("tel:")
-        || href.starts_with("ftp://")
-        || href.starts_with("//")
-        // data: URIs are URL-shaped, not path-shaped — running one
-        // through path normalization would mangle it into a relative
-        // URL (bd-root-relative-paths-design-fc5pvkcv).
-        || href.starts_with("data:")
+    quarto_util::is_external_url(href)
 }
 
 /// Pass-1 / static counterpart to [`resolve_doc_relative_href`].
@@ -1358,6 +1356,27 @@ mod tests {
         assert!(!is_external("#fragment"));
     }
 
+    /// bd-scheme-href-path-normalized-w5zya82r — *any* RFC-3986 scheme
+    /// is external, not just the seven that used to be allowlisted. A
+    /// scheme href run through path normalization loses its `//`
+    /// (`positron://x` → `positron:/x`) and, on a nested page, gains
+    /// `../` per level.
+    #[test]
+    fn is_external_recognizes_any_scheme() {
+        assert!(is_external("positron://settings/positron.notebook.enabled"));
+        assert!(is_external("vscode://schemas/settings"));
+        assert!(is_external("javascript:void(0);"));
+        assert!(is_external("ms-settings:display"));
+        assert!(is_external("x-custom+v1.0:payload"));
+        // A colon past the first path segment, or after `#` / `?`, is
+        // not a scheme delimiter.
+        assert!(!is_external("docs/a:b.qmd"));
+        assert!(!is_external("page.qmd#sec:intro"));
+        assert!(!is_external("page.qmd?k=a:b"));
+        // A Windows drive letter is a path, not a one-letter scheme.
+        assert!(!is_external("C:\\docs\\page.qmd"));
+    }
+
     // ---- Phase 6: `resolve_to_project_root` (path normalization) ----
     //
     // Tests 8-15 from the Phase 6 sub-plan. Body-content link hrefs
@@ -1477,6 +1496,32 @@ mod tests {
             ),
             "https://example.com"
         );
+        assert!(diags.is_empty());
+    }
+
+    /// bd-scheme-href-path-normalized-w5zya82r symptom 1 — a body link
+    /// with a non-http scheme keeps its `//` on a nested page.
+    #[test]
+    fn body_href_custom_scheme_keeps_double_slash() {
+        let mut diags = Vec::new();
+        let idx = ProjectIndex::new(vec![profile("docs/page.qmd", "docs/page.html")]);
+        let r = website_resolver("docs/page.html");
+        for href in [
+            "positron://settings/positron.notebook.enabled",
+            "vscode://schemas/settings",
+        ] {
+            assert_eq!(
+                resolve_doc_relative_href(
+                    href,
+                    "docs/page.qmd",
+                    Some(&r),
+                    Some(&idx),
+                    None,
+                    &mut diags
+                ),
+                href
+            );
+        }
         assert!(diags.is_empty());
     }
 
@@ -1895,6 +1940,27 @@ mod tests {
         assert!(diags.is_empty());
     }
 
+    /// bd-scheme-href-path-normalized-w5zya82r symptom 2 — a nav href
+    /// with a non-http scheme on a depth-1 page must not be relativized
+    /// to `../javascript:void(0);`, and (symptom 1) must keep its `//`.
+    #[test]
+    fn nav_href_with_custom_scheme_passes_through_at_depth() {
+        let idx = ProjectIndex::new(vec![profile("about.qmd", "about.html")]);
+        let r = website_resolver("docs/api.html");
+        let mut diags = Vec::new();
+        for href in [
+            "javascript:void(0);",
+            "positron://settings/positron.notebook.enabled",
+            "vscode://schemas/settings",
+        ] {
+            assert_eq!(
+                resolve_href_for_html(href, Some(&r), Some(&idx), surf(), None, &mut diags),
+                href
+            );
+        }
+        assert!(diags.is_empty());
+    }
+
     /// bd-swpy test 2 — depth-2 page links to a target one
     /// directory deep. Output walks up two levels then descends.
     #[test]
@@ -2018,6 +2084,17 @@ mod tests {
         assert_eq!(
             resolve_static_resource_href("#sec", "index.qmd", Some(&r)),
             "#sec"
+        );
+    }
+
+    /// bd-scheme-href-path-normalized-w5zya82r — static-resource hrefs
+    /// with a non-http scheme pass through on a nested page.
+    #[test]
+    fn static_href_custom_scheme_passes_through() {
+        let r = website_resolver("docs/page.html");
+        assert_eq!(
+            resolve_static_resource_href("positron://settings/x", "docs/page.qmd", Some(&r)),
+            "positron://settings/x"
         );
     }
 

@@ -330,7 +330,7 @@ fn escape_attr(s: &str) -> String {
 ///
 /// Returns the URL to embed in the host page's `<img src=...>`.
 fn resolve_preview_url(host_path: &Path, sibling_abs: &Path, preview_src: &str) -> String {
-    if is_absolute_url(preview_src) {
+    if quarto_util::is_external_url(preview_src) {
         return preview_src.to_string();
     }
     let host_dir = host_path.parent().unwrap_or(Path::new(""));
@@ -358,14 +358,6 @@ fn resolve_preview_url(host_path: &Path, sibling_abs: &Path, preview_src: &str) 
                 .join("/")
         },
     )
-}
-
-fn is_absolute_url(s: &str) -> bool {
-    s.starts_with("http://")
-        || s.starts_with("https://")
-        || s.starts_with("data:")
-        || s.starts_with("//")
-        || s.starts_with("mailto:")
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -430,6 +422,22 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tempfile::TempDir;
+
+    /// bd-scheme-href-path-normalized-w5zya82r — a preview `src` with
+    /// any scheme is already absolute and passes through untouched.
+    #[test]
+    fn resolve_preview_url_passes_any_scheme_through() {
+        let host = Path::new("/site/index.html");
+        let sibling = Path::new("/site/posts/foo.html");
+        for src in [
+            "positron://settings/x",
+            "vscode://schemas/settings",
+            "data:image/png;base64,AAAA",
+            "https://example.com/x.png",
+        ] {
+            assert_eq!(resolve_preview_url(host, sibling, src), src);
+        }
+    }
 
     /// Build a minimal ProjectContext rooted in a tempdir.
     fn make_project(output_dir: &Path) -> ProjectContext {

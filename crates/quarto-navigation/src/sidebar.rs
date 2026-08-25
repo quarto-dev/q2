@@ -1001,16 +1001,11 @@ fn collect_section_text_conflicts(
     }
 }
 
-/// External-URL classifier. Local copy here so `quarto-navigation`
-/// stays free of a `quarto-core` dep; semantics match
-/// `quarto-core::transforms::navigation_href::is_external`.
+/// External-URL classifier: any URI scheme or `//host` form. Same
+/// rule as `quarto-core::transforms::navigation_href::is_external`,
+/// via the shared `quarto_util` implementation.
 fn is_external_href(href: &str) -> bool {
-    href.starts_with("http://")
-        || href.starts_with("https://")
-        || href.starts_with("mailto:")
-        || href.starts_with("tel:")
-        || href.starts_with("ftp://")
-        || href.starts_with("//")
+    quarto_util::is_external_url(href)
 }
 
 #[cfg(test)]
@@ -1994,6 +1989,29 @@ mod tests {
             flat.len(),
             1,
             "external link should be excluded; got {:?}",
+            flat
+        );
+        assert_eq!(item_href(&flat[0]), Some("about.qmd"));
+    }
+
+    /// bd-scheme-href-path-normalized-w5zya82r — any scheme is external,
+    /// not just the allowlisted few: a `javascript:` or custom-scheme
+    /// link must not become a prev/next target.
+    #[test]
+    fn flatten_excludes_any_scheme_href() {
+        let cv = map(vec![(
+            "contents",
+            arr(vec![
+                s("about.qmd"),
+                s("javascript:void(0);"),
+                s("positron://settings/x"),
+            ]),
+        )]);
+        let flat = flatten_yaml(cv);
+        assert_eq!(
+            flat.len(),
+            1,
+            "scheme hrefs should be excluded; got {:?}",
             flat
         );
         assert_eq!(item_href(&flat[0]), Some("about.qmd"));
