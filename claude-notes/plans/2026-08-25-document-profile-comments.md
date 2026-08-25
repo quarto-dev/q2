@@ -256,15 +256,23 @@ profile field exists.
 - [x] Workspace green (13399); `npm run build:wasm` compiles the
       wasm-side changes cleanly; clippy clean.
 
-### Phase 3 — hub-client badge (first consumer)
+### Phase 3 — hub-client badge (first consumer) — **done 2026-08-25**
 
-- [ ] Thread the summary from the render result to `Editor` (callback
-      alongside `onDiagnosticsChange`) and into `ReplayDrawer`.
-- [ ] Badge/pill on `CommentsModeToggle` showing the active page's
-      outstanding-comment count (hidden at 0). Vitest coverage for the
-      toggle rendering with/without count.
-- [ ] `npm run build:all` + `npm run test:ci` from hub-client.
-- [ ] `hub-client/changelog.md` two-commit dance.
+- [x] Threading: `ReactPreview` reports `RenderResponse.comments` via
+      a new `onCommentsChange` prop after each successful
+      preview-pipeline render (wire-absent → `[]`; parse-only formats
+      and failures preserve last-good, matching the AST/fingerprint
+      semantics) → `PreviewRouter` passthrough → `Editor` keeps
+      `outstandingCommentCount` state → `ReplayDrawer.commentsCount`.
+- [x] Badge: one `comments-toggle-badge` pill on the
+      `CommentsModeToggle` group (both drawer states), hidden at 0,
+      with singular/plural aria-label. TDD:
+      `ReplayDrawer.commentsBadge.test.tsx` (4 tests) verified
+      failing first.
+- [x] `npm run build:all` (strict tsc -b) ✓; `npm run test` 1005 ✓;
+      `npm run test:ci` / `test:wasm` 133 ✓ against the rebuilt WASM.
+- [ ] `hub-client/changelog.md` two-commit dance (second commit needs
+      the first's hash).
 
 ### Phase 4 — verification & wrap-up
 
