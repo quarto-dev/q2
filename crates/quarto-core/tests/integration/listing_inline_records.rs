@@ -3,8 +3,9 @@
  * Copyright (c) 2026 Posit, PBC
  *
  * End-to-end tests for inline `contents:` records
- * (bd-listing-inline-contents-tyy446ze). Mirrors the fixtures in
- * `claude-notes/plans/listing-inline-contents-investigation/`.
+ * (bd-listing-inline-contents-tyy446ze). Mirrors the manual repro fixtures
+ * tabulated in `claude-notes/plans/2026-08-24-listing-inline-contents.md`
+ * (see its "Investigation record" section).
  */
 
 use std::path::PathBuf;

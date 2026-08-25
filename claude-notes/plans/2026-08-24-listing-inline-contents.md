@@ -132,7 +132,7 @@ compiler enumerate the sites inside each.
 
 **Pre-flight** at `596ceb572`: `cargo xtask verify --skip-hub-build --skip-hub-tests` green — 13130 passed / 199 skipped. (A first run failed 2/601 grammar tests from a stale compiled tree-sitter grammar in this worktree; `tree-sitter generate && tree-sitter build` fixed it.)
 
-**Repro at HEAD** — fixtures in `claude-notes/plans/listing-inline-contents-investigation/` (see its README), `target/debug/q2 render` inside each, `_site/index.html` inspected:
+**Repro at HEAD** — four throwaway single-page website projects, each using the built-in `type: default` listing so custom templates are not a variable; they live in the local-only `q2-positron-docs` repro repo (`llms-info/repros/listing-inline-contents/`), not in this tree. `target/debug/q2 render` inside each, `_site/index.html` inspected:
 
 | Fixture | Q-12-2 | items | rendered |
 |---|---|---|---|
@@ -2181,8 +2181,9 @@ git commit -m "Render unlinked listing items without an anchor in the built-in t
  * Copyright (c) 2026 Posit, PBC
  *
  * End-to-end tests for inline `contents:` records
- * (bd-listing-inline-contents-tyy446ze). Mirrors the fixtures in
- * `claude-notes/plans/listing-inline-contents-investigation/`.
+ * (bd-listing-inline-contents-tyy446ze). Mirrors the manual repro fixtures
+ * tabulated in `claude-notes/plans/2026-08-24-listing-inline-contents.md`
+ * (see its "Investigation record" section).
  */
 
 // … helpers copied from listing_glob_resolution.rs: canonical, write,
@@ -2433,12 +2434,14 @@ Expected: `exit=0`, all 14 steps ✓. (Inspect with grep; do not pipe nextest th
 
 ```bash
 cargo build --bin q2
+Q2ROOT=$(pwd)
+REPROS=~/src/q2-positron-docs/llms-info/repros/listing-inline-contents
 for f in control repro mixed linkonly; do
-  echo "== $f"; (cd claude-notes/plans/listing-inline-contents-investigation/$f && ../../../../target/debug/q2 render 2>&1 | grep -E "Q-12|Rendered"; grep -o 'listing-title[^>]*>[^<]*' _site/index.html)
+  echo "== $f"; (cd "$REPROS/$f" && "$Q2ROOT/target/debug/q2" render 2>&1 | grep -E "Q-12|Rendered"; grep -o 'listing-title[^>]*>[^<]*' _site/index.html)
 done
 ```
 
-Expected: control unchanged (2 items, 0 warnings); repro 2 items titled from YAML, `href="download.html"`/`features.html`, **0 warnings**; mixed 2 items; linkonly 2 items with no `<a` around the titles, 0 warnings. Paste the observed output into §"End-to-end record" and delete the generated `_site`/`.quarto` dirs (the investigation `.gitignore` covers them).
+Expected: control unchanged (2 items, 0 warnings); repro 2 items titled from YAML, `href="download.html"`/`features.html`, **0 warnings**; mixed 2 items; linkonly 2 items with no `<a` around the titles, 0 warnings. Paste the observed output into §"End-to-end record" and delete the generated `_site`/`.quarto` dirs afterwards.
 
 - [x] **Step 4: Positron smoke (local-only repo, best effort)** — `cd /Users/gordon/src/q2-positron-docs/docs-quarto-2 && <repo>/target/debug/q2 render 2>&1 | grep -c "Q-12-2"` should print `0`; the welcome grid containers should now carry items (card markup still raw EJS until bd-oywyaouf). Record the count; if the repo is absent, say so.
 
@@ -2472,9 +2475,9 @@ is empty); it is the same stale-compiled-grammar symptom recorded in
 601/601. Nothing tracked changed. **The grammar artifact in a worktree goes stale
 on its own and will do this again** — check it before blaming a branch.
 
-**Real-binary check** — `target/debug/q2 render` in each fixture under
-`claude-notes/plans/listing-inline-contents-investigation/`, `_site/index.html`
-inspected, generated output deleted afterwards:
+**Real-binary check** — `target/debug/q2 render` in each of the four repro
+fixtures described in §"Investigation record", `_site/index.html` inspected,
+generated output deleted afterwards:
 
 | Fixture | Q-12 diagnostics | items | rendered |
 |---|---|---|---|

@@ -1,4 +1,0 @@
----
-title: "Download stub"
----
-Stub page.
