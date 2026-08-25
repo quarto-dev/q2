@@ -18,7 +18,7 @@ import {
 import { vfsAddFile, isWasmReady, clearCapture } from '@quarto/preview-runtime';
 import { PreviewStatusBar } from './render/PreviewStatusBar';
 import { hasExecutableCells } from '../services/executableCells';
-import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
+import type { Diagnostic, RenderComment } from '@quarto/preview-renderer/types/diagnostic';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
 import { registerQmdLanguage } from './quartoTheme';
 import { processFileForUpload } from '../services/resourceService';
@@ -279,6 +279,11 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // three-way toggle in the replay bar, threaded into the q2-preview
   // iframe where CommentBlock consumes it.
   const [commentsMode, setCommentsMode] = useState<'expand' | 'show' | 'hide'>('show');
+  // Outstanding editorial comments on the active page (bd-0rsk07il,
+  // GH #445), reported by ReactPreview from the render pipeline's
+  // DocumentProfile summary. Drives the count badge on the
+  // comments-mode toggle in the replay bar.
+  const [outstandingCommentCount, setOutstandingCommentCount] = useState(0);
   // `useAttribution` (inside ReactPreview) reports whether it's
   // mid-build via `onAttributionGeneratingChange`; the flag drives
   // the rotating-gradient border on the Attribution pill so a slow
@@ -394,6 +399,13 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Callback for when preview updates diagnostics
   const handleDiagnosticsChange = useCallback((newDiagnostics: Diagnostic[]) => {
     setDiagnostics(newDiagnostics);
+  }, []);
+
+  // Callback for when a preview render reports the active page's
+  // outstanding comments (bd-0rsk07il). Only the count is kept —
+  // the badge is the sole consumer today.
+  const handleCommentsChange = useCallback((comments: RenderComment[]) => {
+    setOutstandingCommentCount(comments.length);
   }, []);
 
   // Callback for when preview WASM status changes
@@ -1149,6 +1161,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onFileChange={handlePreviewFileChange}
             onOpenNewFileDialog={handlePreviewOpenNewFileDialog}
             onDiagnosticsChange={handleDiagnosticsChange}
+            onCommentsChange={handleCommentsChange}
             onWasmStatusChange={handleWasmStatusChange}
             onRegisterScrollToLine={handleRegisterScrollToLine}
             onRegisterSetScrollRatio={handleRegisterSetScrollRatio}
@@ -1178,6 +1191,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           onAttributionChange={setAttributionOn}
           commentsMode={commentsMode}
           onCommentsModeChange={setCommentsMode}
+          commentsCount={outstandingCommentCount}
           attributionGenerating={attributionGenerating}
           attributionDisabled={
             currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'

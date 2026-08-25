@@ -714,6 +714,10 @@ pub async fn run_pipeline(
     // pipeline returns. Pre-pipeline callers don't write
     // `ctx.format_options`, so the overwrite is safe.
     ctx.format_options = stage_ctx.format_options;
+    // Bridge the document profile stashed by `UnwrapProfileStage`
+    // (bd-0rsk07il) so response builders can read it after a full
+    // render. `None` for pipelines that stop before the unwrap stage.
+    ctx.document_profile = stage_ctx.document_profile;
 
     result
         .map_err(|e| match e {

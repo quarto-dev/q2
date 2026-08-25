@@ -49,6 +49,13 @@ interface Props {
    */
   commentsMode?: CommentsMode;
   onCommentsModeChange?: (next: CommentsMode) => void;
+  /**
+   * Number of outstanding editorial comments on the active page
+   * (bd-0rsk07il, GH #445), from the render pipeline's
+   * `DocumentProfile` comment summary. Renders one count badge on
+   * the comments toggle group; hidden when 0 or absent.
+   */
+  commentsCount?: number;
 }
 
 type CommentsMode = 'expand' | 'show' | 'hide';
@@ -61,9 +68,12 @@ type CommentsMode = 'expand' | 'show' | 'hide';
 function CommentsModeToggle({
   mode,
   onChange,
+  count,
 }: {
   mode: CommentsMode;
   onChange: (next: CommentsMode) => void;
+  /** Outstanding-comment count; badge hidden when 0 or absent. */
+  count?: number;
 }) {
   // Speech-bubble outline shared by the show/hide icons; the expand
   // icon is the same bubble with a taller body.
@@ -118,6 +128,15 @@ function CommentsModeToggle({
           <line x1="1" y1="9" x2="11" y2="1" stroke="currentColor" strokeWidth="1.5" />
         </svg>
       </button>
+      {count !== undefined && count > 0 && (
+        <span
+          className="comments-toggle-badge"
+          aria-label={`${count} outstanding comment${count === 1 ? '' : 's'}`}
+          title={`${count} outstanding comment${count === 1 ? '' : 's'}`}
+        >
+          {count}
+        </span>
+      )}
     </div>
   );
 }
@@ -203,6 +222,7 @@ export default function ReplayDrawer({
   attributionDisabled,
   commentsMode,
   onCommentsModeChange,
+  commentsCount,
 }: Props) {
   const showAttributionToggle =
     attributionOn !== undefined && onAttributionChange !== undefined;
@@ -320,7 +340,7 @@ export default function ReplayDrawer({
           />
         )}
         {showCommentsToggle && (
-          <CommentsModeToggle mode={commentsMode!} onChange={onCommentsModeChange!} />
+          <CommentsModeToggle mode={commentsMode!} onChange={onCommentsModeChange!} count={commentsCount} />
         )}
       </div>
     );
@@ -386,7 +406,7 @@ export default function ReplayDrawer({
           />
         )}
         {showCommentsToggle && (
-          <CommentsModeToggle mode={commentsMode!} onChange={onCommentsModeChange!} />
+          <CommentsModeToggle mode={commentsMode!} onChange={onCommentsModeChange!} count={commentsCount} />
         )}
       </div>
 

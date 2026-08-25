@@ -185,6 +185,21 @@ pub struct StageContext {
     /// re-running the resolver.
     pub engine_resolution: Option<EngineResolution>,
 
+    /// This document's Pass-1 [`DocumentProfile`], stashed by
+    /// `UnwrapProfileStage` as it hands the AST back to downstream
+    /// stages (bd-0rsk07il). `None` until that stage runs — and for
+    /// Pass-1 head pipelines, which stop at the `AtProfile` bundle
+    /// and never reach the unwrap (the orchestrator holds the profile
+    /// itself there).
+    ///
+    /// `run_pipeline` bridges it back to
+    /// `RenderContext::document_profile`, where response builders
+    /// (the WASM `RenderResponse` comment summary; future native
+    /// consumers) read it without re-parsing the document.
+    ///
+    /// [`DocumentProfile`]: crate::document_profile::DocumentProfile
+    pub document_profile: Option<crate::document_profile::DocumentProfile>,
+
     /// Engine registry for this render — carried from `project.registry`.
     /// Shared via Arc so clones across pipeline stages are cheap.
     ///
@@ -330,6 +345,7 @@ impl StageContext {
             resource_copies: Vec::new(),
             project_index: None,
             engine_resolution: None,
+            document_profile: None,
             registry,
             claimed_engine_name: None,
             resource_resolver: None,

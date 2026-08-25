@@ -1042,3 +1042,64 @@ fn render_to_preview_ast_renderer_with_attribution_surfaces_keys() {
         snippet(json),
     );
 }
+
+/// bd-0rsk07il Phase 2: the active page's Pass-2 output carries its
+/// `DocumentProfile`, so the WASM response builder can surface the
+/// comment summary (and other profile data) without re-parsing.
+/// HTML-renderer flavor.
+#[test]
+fn active_page_profile_comments_on_html_output() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\nwebsite:\n  title: Test\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nProse [>> one ] here.\n\nMore [>> two ]{author=\"Alice\"} text.\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let output = render_active_page(&project_dir, &active);
+
+    let profile = output
+        .document_profile
+        .as_ref()
+        .expect("active-page output must carry the document profile");
+    let texts: Vec<&str> = profile.comments.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(texts, vec!["one", "two"]);
+    assert_eq!(profile.comments[1].author.as_deref(), Some("Alice"));
+    assert_eq!(profile.title.as_deref(), Some("Home"));
+}
+
+/// Same as [`active_page_profile_comments_on_html_output`] but through
+/// `RenderToPreviewAstRenderer` — the hub-client q2-preview path the
+/// comment badge actually consumes.
+#[test]
+fn active_page_profile_comments_on_preview_output() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: website\nwebsite:\n  title: Test\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nProse [>> one ] here.\n\nMore [>> two ]{author=\"Alice\"} text.\n",
+    );
+
+    let active = canonical(&project_dir.join("index.qmd"));
+    let output = render_active_page_preview(&project_dir, &active);
+    assert!(output.payload.as_ast_json().is_some());
+
+    let profile = output
+        .document_profile
+        .as_ref()
+        .expect("q2-preview active-page output must carry the document profile");
+    let texts: Vec<&str> = profile.comments.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(texts, vec!["one", "two"]);
+    assert_eq!(profile.comments[1].author.as_deref(), Some("Alice"));
+}

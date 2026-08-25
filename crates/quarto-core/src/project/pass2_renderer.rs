@@ -641,6 +641,16 @@ pub struct WasmPassTwoOutput {
     /// website-merge and default-project-flush paths. `None` if
     /// no theme artifact was produced.
     pub theme_fingerprint: Option<String>,
+    /// The active page's Pass-1 [`DocumentProfile`], taken from the
+    /// per-page `RenderContext` after the render (where `run_pipeline`
+    /// bridged it from the `UnwrapProfileStage` stash; bd-0rsk07il).
+    /// The WASM response builder reads the comment summary (and any
+    /// other profile data) from here. `None` only if the pipeline
+    /// stopped before the unwrap stage — not the case for either
+    /// Pass-2 renderer.
+    ///
+    /// [`DocumentProfile`]: crate::document_profile::DocumentProfile
+    pub document_profile: Option<crate::document_profile::DocumentProfile>,
 }
 
 impl WasmPassTwoOutput {
@@ -905,6 +915,7 @@ impl Pass2Renderer for RenderToHtmlRenderer {
             payload: Pass2Payload::Html(render_output.html),
             diagnostics: render_output.diagnostics,
             source_context: render_output.source_context,
+            document_profile: ctx.document_profile,
             page_artifacts: ctx.artifacts,
             theme_fingerprint,
         })
@@ -1189,6 +1200,7 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
             payload: Pass2Payload::AstJson(preview_output.ast_json),
             diagnostics: preview_output.diagnostics,
             source_context: preview_output.source_context,
+            document_profile: ctx.document_profile,
             page_artifacts: ctx.artifacts,
             theme_fingerprint,
         })

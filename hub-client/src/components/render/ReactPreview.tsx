@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
-import type { Diagnostic, PreviewNodeEditPayload } from '@quarto/preview-renderer/types/diagnostic';
+import type { Diagnostic, PreviewNodeEditPayload, RenderComment } from '@quarto/preview-renderer/types/diagnostic';
 import type { ActorIdentity, CaptureRef } from '@quarto/preview-runtime';
 import {
   parseQmdToAstWithAttribution,
@@ -91,6 +91,15 @@ interface PreviewProps {
   onFileChange: (file: FileEntry, anchor?: string) => void;
   onOpenNewFileDialog: (initialFilename: string) => void;
   onDiagnosticsChange: (diagnostics: Diagnostic[]) => void;
+  /**
+   * Reports the active page's outstanding editorial comments
+   * (bd-0rsk07il, GH #445) after each successful preview-pipeline
+   * render, from `RenderResponse.comments` (absent on the wire means
+   * zero — an empty array is reported). Not called for parse-only
+   * formats (q2-debug), which never compute the summary, nor on
+   * render failures (last-good count is preserved, matching the AST).
+   */
+  onCommentsChange?: (comments: RenderComment[]) => void;
   onAstChange?: (astJson: string | null) => void;
   currentSlideIndex?: number;
   onSlideChange?: (slideIndex: number) => void;
@@ -163,6 +172,14 @@ type RenderResult = {
    * transient errors (see `setThemeFingerprint` call site).
    */
   themeFingerprint?: string | null;
+  /**
+   * Outstanding editorial comments on the active page from the
+   * document's Pass-1 profile (bd-0rsk07il). Present exactly when the
+   * render went through the preview pipeline (RenderResponse carries
+   * the summary; wire-absent means zero, mapped to `[]` here). Omitted
+   * for parse-only formats, where the count is unknown.
+   */
+  comments?: RenderComment[];
 } | {
   success: false;
   error: string;
@@ -293,6 +310,7 @@ async function doRender(
         untransformedAstJson: result.untransformed_ast_json,
         diagnostics: allDiagnostics,
         themeFingerprint,
+        comments: result.comments ?? [],
       };
     } else {
       const errorMsg =
@@ -459,6 +477,7 @@ export default function ReactPreview({
   onFileChange,
   onOpenNewFileDialog,
   onDiagnosticsChange,
+  onCommentsChange,
   onAstChange,
   currentSlideIndex,
   onSlideChange,
@@ -718,6 +737,12 @@ export default function ReactPreview({
       if (result.themeFingerprint !== undefined) {
         setThemeFingerprint(result.themeFingerprint);
       }
+      // Outstanding-comment count for the toolbar badge. Only
+      // preview-pipeline renders carry the field; failures and
+      // parse-only formats leave the last-good count in place.
+      if (result.comments !== undefined) {
+        onCommentsChange?.(result.comments);
+      }
       // Notify parent of AST change
       onAstChange?.(result.astJson);
     } else {
@@ -734,7 +759,7 @@ export default function ReactPreview({
         setPreviewState('ERROR_FROM_GOOD');
       }
     }
-  }, [scrollSyncEnabled, onDiagnosticsChange, onAstChange, format, attributionPayload, captureBytes]);
+  }, [scrollSyncEnabled, onDiagnosticsChange, onCommentsChange, onAstChange, format, attributionPayload, captureBytes]);
 
   // Immediate render update (no debounce)
   const updatePreview = useCallback((newContent: string, documentPath?: string) => {

@@ -422,3 +422,23 @@
     animation: none;
   }
 }
+
+/* Outstanding-comments count badge on the comments-mode toggle
+   (bd-0rsk07il, GH #445). One badge for the whole group; hidden at
+   zero (the element is simply not rendered). Reuses the view-toggle
+   palette so it reads as part of the control. */
+.comments-toggle-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  background: var(--view-toggle-active-bg);
+  color: var(--view-toggle-active-text);
+}

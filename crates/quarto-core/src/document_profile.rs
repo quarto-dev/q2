@@ -111,7 +111,17 @@ use thiserror::Error;
 ///   `resolve_engines_pass1`. `None` means the document could not be
 ///   resolved load-free at index time — advisory, not an error; Pass-2
 ///   always re-resolves via the full loading resolver regardless.
-pub const DOCUMENT_PROFILE_VERSION: u32 = 12;
+/// - `13`: `bd-0rsk07il` (GH #445). Adds `comments:
+///   Vec<ProfileComment>` — every editorial comment (`[>> … ]` /
+///   `[…]{.quarto-edit-comment}`) in the document body, in source
+///   order, each carrying its plain-text projection, source span,
+///   in-band `author=`/`date=` attributes (typed), and remaining
+///   attr kvs. Strictly additive in serialized shape
+///   (`#[serde(default)]`), but bumped anyway: a cached v12 profile
+///   would deserialize cleanly and silently report "no comments" for
+///   a document that has them — the semantic misread the version
+///   check exists to prevent.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 13;
 
 /// Reduced, serializable form of [`crate::engine::EngineResolution`] for the
 /// profile (names only — configs stay in merged metadata; Plan 6 decision 6).
@@ -440,6 +450,124 @@ pub struct ProfileAuthor {
     pub affiliations: Vec<ProfileAffiliation>,
 }
 
+/// One editorial comment found in the document body (v13,
+/// bd-0rsk07il / GH #445).
+///
+/// A comment is authored as `[>> comment text ]` (optionally with an
+/// attribute block) or equivalently `[…]{.quarto-edit-comment}`; the
+/// qmd reader normalizes both to an `Inline::Span` whose classes
+/// contain `quarto-edit-comment`. Comments in included files count
+/// toward the including document (the checkpoint sees the
+/// post-include AST), consistent with `outline`.
+///
+/// "Outstanding" is presence: resolving a comment deletes it from
+/// the source, so every entry here is an open comment.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProfileComment {
+    /// Plain-text projection of the comment's content
+    /// (`pampa::writers::plaintext::inlines_to_string`).
+    pub text: String,
+
+    /// Source span of the mark, for jump-to-comment, gutter markers,
+    /// and joining with out-of-band authorship (e.g. the hub's
+    /// attribution overlay).
+    pub source: quarto_source_map::SourceInfo,
+
+    /// In-band author, from the mark's `author=` attribute
+    /// (`[>> text ]{author="…"}`). `None` when unstamped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+
+    /// In-band timestamp, from the mark's `date=` attribute. Kept as
+    /// the raw string; the stamping convention is ISO 8601 UTC.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+
+    /// Remaining attr kvs (anything other than `author`/`date`), in
+    /// authored order, so future conventions need no shape change.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<(String, String)>,
+}
+
+/// Transport form of a [`ProfileComment`] for JSON consumers that
+/// cannot resolve a [`SourceInfo`] themselves (the WASM
+/// `RenderResponse`, future CLI `--json` reports).
+///
+/// Line and column numbers are **1-based** to match Monaco — the same
+/// convention as `quarto_error_reporting::JsonDiagnostic`. `file` is
+/// the source file the mark maps back to, which for a comment inside
+/// an `{{< include >}}` is the *included* file, not the host — a
+/// consumer offering jump-to-comment in the host buffer must check it.
+///
+/// [`SourceInfo`]: quarto_source_map::SourceInfo
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct JsonComment {
+    /// Plain-text comment content.
+    pub text: String,
+    /// In-band author (`author=` attribute), when stamped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    /// In-band timestamp (`date=` attribute), when stamped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    /// Remaining attr kvs, authored order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<(String, String)>,
+    /// Path of the source file the mark's span maps to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_line: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_column: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_line: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_column: Option<u32>,
+}
+
+impl ProfileComment {
+    /// Resolve this comment's span against `ctx` and produce the
+    /// transport form. Position fields are `None` when the span
+    /// cannot be mapped (synthetic sources); the textual fields are
+    /// always populated.
+    ///
+    /// The end-position fallback mirrors
+    /// `quarto_error_reporting::diagnostic_to_json`: try the span
+    /// length, then length − 1, then reuse the start.
+    pub fn to_json(&self, ctx: &quarto_source_map::SourceContext) -> JsonComment {
+        let start = self.source.map_offset(0, ctx);
+        let end = self
+            .source
+            .map_offset(self.source.length(), ctx)
+            .or_else(|| {
+                if self.source.length() > 0 {
+                    self.source.map_offset(self.source.length() - 1, ctx)
+                } else {
+                    None
+                }
+            })
+            .or_else(|| start.clone());
+
+        let file = start
+            .as_ref()
+            .and_then(|s| ctx.get_file(s.file_id))
+            .map(|f| f.path.clone());
+
+        JsonComment {
+            text: self.text.clone(),
+            author: self.author.clone(),
+            date: self.date.clone(),
+            attributes: self.attributes.clone(),
+            file,
+            start_line: start.as_ref().map(|s| (s.location.row + 1) as u32),
+            start_column: start.as_ref().map(|s| (s.location.column + 1) as u32),
+            end_line: end.as_ref().map(|e| (e.location.row + 1) as u32),
+            end_column: end.as_ref().map(|e| (e.location.column + 1) as u32),
+        }
+    }
+}
+
 /// One affiliation attached to a [`ProfileAuthor`].
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProfileAffiliation {
@@ -749,6 +877,16 @@ pub struct DocumentProfile {
     /// Added v12 (Plan 6 Phase 5).
     #[serde(default)]
     pub engine_resolution: Option<ProfileEngineResolution>,
+
+    /// Every editorial comment in the document body, in source order.
+    /// See [`ProfileComment`]. Consumers wanting a count use
+    /// `comments.len()` — there is deliberately no separate count
+    /// field to keep in sync.
+    ///
+    /// Default empty; serializer omits empty lists. Added v13
+    /// (bd-0rsk07il, GH #445).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<ProfileComment>,
 }
 
 /// Helper for `#[serde(skip_serializing_if = ...)]` on plain bool
@@ -811,6 +949,7 @@ impl Default for DocumentProfile {
             listing_item: ListingItemInfo::default(),
             listing_content_globs: Vec::new(),
             engine_resolution: None,
+            comments: Vec::new(),
         }
     }
 }
@@ -892,6 +1031,7 @@ impl DocumentProfile {
             // (needs the registry + AST, not available to this pure
             // metadata-only extractor) — mirrors the `includes` field.
             engine_resolution: None,
+            comments: extract_comments(&ast.blocks),
         }
     }
 
@@ -1146,6 +1286,198 @@ fn strip_numbers(entries: &mut Vec<TocEntry>) {
     for entry in entries.iter_mut() {
         entry.number = None;
         strip_numbers(&mut entry.children);
+    }
+}
+
+/// Collect every editorial comment in the document body, in source
+/// (walk) order — see [`ProfileComment`].
+///
+/// At the checkpoint a comment is an `Inline::Span` whose classes
+/// contain `quarto-edit-comment`: the qmd reader's postprocess
+/// rewrites `Inline::EditComment` parse nodes into that span form
+/// (both `[>> … ]` and `[…]{.quarto-edit-comment}` normalize to it).
+/// A defensive `EditComment` arm keeps the walk correct for any AST
+/// that reaches extraction pre-postprocess.
+///
+/// The traversal mirrors `LinkResolutionStage`'s: every block and
+/// inline container is entered (list items, table cells, captions,
+/// footnotes, custom-node slots, …). A comment itself is a leaf — its
+/// content is the comment text, not further-scanned document body.
+fn extract_comments(blocks: &[quarto_pandoc_types::block::Block]) -> Vec<ProfileComment> {
+    let mut collector = CommentCollector { seen: Vec::new() };
+    for block in blocks {
+        collector.visit_block(block);
+    }
+    collector.seen
+}
+
+/// Marker class the qmd reader stamps on comment spans.
+const EDIT_COMMENT_CLASS: &str = "quarto-edit-comment";
+
+struct CommentCollector {
+    seen: Vec<ProfileComment>,
+}
+
+impl CommentCollector {
+    fn record(
+        &mut self,
+        attr: &quarto_pandoc_types::attr::Attr,
+        content: &quarto_pandoc_types::Inlines,
+        source: &quarto_source_map::SourceInfo,
+    ) {
+        let (_, _, kvs) = attr;
+        let mut author = None;
+        let mut date = None;
+        let mut attributes = Vec::new();
+        for (k, v) in kvs.iter() {
+            match k.as_str() {
+                "author" => author = Some(v.clone()),
+                "date" => date = Some(v.clone()),
+                _ => attributes.push((k.clone(), v.clone())),
+            }
+        }
+        self.seen.push(ProfileComment {
+            text: pampa::writers::plaintext::inlines_to_string(content).0,
+            source: source.clone(),
+            author,
+            date,
+            attributes,
+        });
+    }
+
+    fn visit_block(&mut self, block: &quarto_pandoc_types::block::Block) {
+        use quarto_pandoc_types::block::Block;
+        match block {
+            Block::Plain(p) => self.visit_inlines(&p.content),
+            Block::Paragraph(p) => self.visit_inlines(&p.content),
+            Block::LineBlock(lb) => {
+                for line in lb.content.iter() {
+                    self.visit_inlines(line);
+                }
+            }
+            Block::BlockQuote(bq) => self.visit_blocks(&bq.content),
+            Block::OrderedList(ol) => {
+                for item in ol.content.iter() {
+                    self.visit_blocks(item);
+                }
+            }
+            Block::BulletList(bl) => {
+                for item in bl.content.iter() {
+                    self.visit_blocks(item);
+                }
+            }
+            Block::DefinitionList(dl) => {
+                for (term, defs) in dl.content.iter() {
+                    self.visit_inlines(term);
+                    for def in defs.iter() {
+                        self.visit_blocks(def);
+                    }
+                }
+            }
+            Block::Header(h) => self.visit_inlines(&h.content),
+            Block::Div(d) => self.visit_blocks(&d.content),
+            Block::Figure(f) => self.visit_blocks(&f.content),
+            Block::Table(t) => {
+                if let Some(short) = t.caption.short.as_ref() {
+                    self.visit_inlines(short);
+                }
+                if let Some(long) = t.caption.long.as_ref() {
+                    self.visit_blocks(long);
+                }
+                for row in t.head.rows.iter().chain(t.foot.rows.iter()) {
+                    for cell in row.cells.iter() {
+                        self.visit_blocks(&cell.content);
+                    }
+                }
+                for body in t.bodies.iter() {
+                    for row in body.body.iter() {
+                        for cell in row.cells.iter() {
+                            self.visit_blocks(&cell.content);
+                        }
+                    }
+                }
+            }
+            Block::CaptionBlock(cb) => self.visit_inlines(&cb.content),
+            Block::Custom(c) => {
+                for (_name, slot) in c.slots.iter() {
+                    self.visit_slot(slot);
+                }
+            }
+            Block::CodeBlock(_)
+            | Block::RawBlock(_)
+            | Block::HorizontalRule(_)
+            | Block::BlockMetadata(_)
+            | Block::NoteDefinitionPara(_)
+            | Block::NoteDefinitionFencedBlock(_) => {}
+        }
+    }
+
+    fn visit_blocks(&mut self, blocks: &[quarto_pandoc_types::block::Block]) {
+        for b in blocks {
+            self.visit_block(b);
+        }
+    }
+
+    fn visit_inlines(&mut self, inlines: &quarto_pandoc_types::Inlines) {
+        for inline in inlines.iter() {
+            self.visit_inline(inline);
+        }
+    }
+
+    fn visit_inline(&mut self, inline: &quarto_pandoc_types::inline::Inline) {
+        use quarto_pandoc_types::inline::Inline;
+        match inline {
+            Inline::Span(s) => {
+                if s.attr.1.iter().any(|c| c == EDIT_COMMENT_CLASS) {
+                    self.record(&s.attr, &s.content, &s.source_info);
+                } else {
+                    self.visit_inlines(&s.content);
+                }
+            }
+            // Pre-postprocess parse form; postprocess rewrites this
+            // into the span form above before the checkpoint.
+            Inline::EditComment(e) => self.record(&e.attr, &e.content, &e.source_info),
+            Inline::Link(l) => self.visit_inlines(&l.content),
+            Inline::Image(i) => self.visit_inlines(&i.content),
+            Inline::Emph(e) => self.visit_inlines(&e.content),
+            Inline::Underline(u) => self.visit_inlines(&u.content),
+            Inline::Strong(s) => self.visit_inlines(&s.content),
+            Inline::Strikeout(s) => self.visit_inlines(&s.content),
+            Inline::Superscript(s) => self.visit_inlines(&s.content),
+            Inline::Subscript(s) => self.visit_inlines(&s.content),
+            Inline::SmallCaps(s) => self.visit_inlines(&s.content),
+            Inline::Quoted(q) => self.visit_inlines(&q.content),
+            Inline::Insert(i) => self.visit_inlines(&i.content),
+            Inline::Delete(d) => self.visit_inlines(&d.content),
+            Inline::Highlight(h) => self.visit_inlines(&h.content),
+            Inline::Note(n) => self.visit_blocks(&n.content),
+            Inline::Custom(c) => {
+                for (_name, slot) in c.slots.iter() {
+                    self.visit_slot(slot);
+                }
+            }
+            Inline::Str(_)
+            | Inline::Cite(_)
+            | Inline::Code(_)
+            | Inline::Space(_)
+            | Inline::SoftBreak(_)
+            | Inline::LineBreak(_)
+            | Inline::Math(_)
+            | Inline::RawInline(_)
+            | Inline::Shortcode(_)
+            | Inline::NoteReference(_)
+            | Inline::Attr(_) => {}
+        }
+    }
+
+    fn visit_slot(&mut self, slot: &quarto_pandoc_types::custom::Slot) {
+        use quarto_pandoc_types::custom::Slot;
+        match slot {
+            Slot::Block(b) => self.visit_block(b),
+            Slot::Blocks(bs) => self.visit_blocks(bs),
+            Slot::Inline(i) => self.visit_inline(i),
+            Slot::Inlines(is) => self.visit_inlines(is),
+        }
     }
 }
 
@@ -1988,8 +2320,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_12() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 12);
+    fn document_profile_version_is_13() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 13);
     }
 
     /// A v3 profile (the pre-listings shape) must be rejected by
@@ -2347,6 +2679,152 @@ Body.
             !info.extra.contains_key("path"),
             "excepted keys are the caller's"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Comments (bd-0rsk07il, GH #445, v13). At the checkpoint a comment
+    // is an `Inline::Span` whose classes contain `quarto-edit-comment`
+    // (the reader's postprocess rewrites `Inline::EditComment` into that
+    // form; both `[>> … ]` and `[…]{.quarto-edit-comment}` normalize to
+    // it).
+    // ------------------------------------------------------------------
+
+    fn extract_from(qmd: &str) -> DocumentProfile {
+        let ast = parse_qmd(qmd);
+        DocumentProfile::extract(&ast, Path::new("c.qmd"), "c.html", "html")
+    }
+
+    #[test]
+    fn profile_extract_no_comments_field_empty_and_omitted() {
+        let profile = extract_from("---\ntitle: T\n---\n\nNo comments here.\n");
+        assert!(profile.comments.is_empty());
+        let json = profile.to_json().expect("serialize");
+        assert!(
+            !json.contains("\"comments\""),
+            "empty comments list must be omitted from serialized profiles"
+        );
+    }
+
+    #[test]
+    fn profile_extract_comment_in_paragraph() {
+        let qmd = "---\ntitle: T\n---\n\nSome prose [>> fix this ] and more.\n";
+        let profile = extract_from(qmd);
+        assert_eq!(profile.comments.len(), 1);
+        let c = &profile.comments[0];
+        assert_eq!(c.text, "fix this");
+        assert_eq!(c.author, None);
+        assert_eq!(c.date, None);
+        assert!(c.attributes.is_empty());
+        // The span points back into the source at the mark.
+        let covered = &qmd[c.source.start_offset()..c.source.end_offset()];
+        assert!(
+            covered.contains("fix this"),
+            "source span must cover the mark, got {covered:?}"
+        );
+    }
+
+    #[test]
+    fn profile_extract_comments_across_block_kinds_in_source_order() {
+        let qmd = "\
+---
+title: T
+---
+
+# Head [>> one ]
+
+> Quoted [>> two ]
+
+- item [>> three ]
+
+::: {.some-div}
+Inside *emph [>> four ] tail*.
+:::
+
+::: {.quarto-edit-comment-container}
+```python
+x = 1
+```
+
+[>> five ]
+:::
+";
+        let profile = extract_from(qmd);
+        let texts: Vec<&str> = profile.comments.iter().map(|c| c.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            vec!["one", "two", "three", "four", "five"],
+            "every container kind is walked, in source order"
+        );
+    }
+
+    #[test]
+    fn profile_extract_comment_author_date_attrs() {
+        // Decorated syntax with attrs, and the equivalent explicit
+        // span form — both normalize to the same shape.
+        let qmd = "---\ntitle: T\n---\n\n\
+[>> attributed ]{author=\"Alice Example\" date=\"2026-08-25T12:00:00Z\" priority=\"high\"}\n\n\
+[span form]{.quarto-edit-comment author=\"Bob\"}\n";
+        let profile = extract_from(qmd);
+        assert_eq!(profile.comments.len(), 2);
+
+        let a = &profile.comments[0];
+        assert_eq!(a.text, "attributed");
+        assert_eq!(a.author.as_deref(), Some("Alice Example"));
+        assert_eq!(a.date.as_deref(), Some("2026-08-25T12:00:00Z"));
+        assert_eq!(
+            a.attributes,
+            vec![("priority".to_string(), "high".to_string())],
+            "author/date are typed fields; other kvs pass through"
+        );
+
+        let b = &profile.comments[1];
+        assert_eq!(b.text, "span form");
+        assert_eq!(b.author.as_deref(), Some("Bob"));
+        assert_eq!(b.date, None);
+        assert!(b.attributes.is_empty());
+    }
+
+    #[test]
+    fn profile_comment_to_json_positions_and_fields() {
+        // Transport form for the WASM RenderResponse: 1-based
+        // line/column (Monaco convention, matching JsonDiagnostic)
+        // resolved against the render's SourceContext, plus the file
+        // the mark maps to (relevant when the comment came from an
+        // included file).
+        let qmd = "---\ntitle: T\n---\n\nProse [>> fix this ]{author=\"A\"} end.\n";
+        let profile = extract_from(qmd);
+        assert_eq!(profile.comments.len(), 1);
+
+        let mut sm_ctx = quarto_source_map::SourceContext::new();
+        sm_ctx.add_file("test.qmd".to_string(), Some(qmd.to_string()));
+
+        let json = profile.comments[0].to_json(&sm_ctx);
+        assert_eq!(json.text, "fix this");
+        assert_eq!(json.author.as_deref(), Some("A"));
+        assert_eq!(json.date, None);
+        assert_eq!(json.file.as_deref(), Some("test.qmd"));
+        assert_eq!(json.start_line, Some(5), "mark sits on line 5, 1-based");
+        assert!(json.start_column.is_some());
+        assert_eq!(json.end_line, Some(5));
+
+        let wire = serde_json::to_string(&json).expect("serialize");
+        assert!(wire.contains("\"start_line\":5"), "snake_case keys: {wire}");
+        assert!(
+            !wire.contains("\"date\""),
+            "absent optionals are omitted: {wire}"
+        );
+    }
+
+    #[test]
+    fn profile_comments_roundtrip_json() {
+        let profile =
+            extract_from("---\ntitle: T\n---\n\nProse [>> keep me ]{author=\"A\"} here.\n");
+        assert_eq!(profile.comments.len(), 1);
+        let json = profile.to_json().expect("serialize");
+        let restored = DocumentProfile::from_json(&json).expect("deserialize");
+        assert_eq!(profile, restored);
+        assert_eq!(restored.comments[0].text, "keep me");
+        assert_eq!(restored.comments[0].author.as_deref(), Some("A"));
     }
 
     #[test]
