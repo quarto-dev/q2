@@ -1359,7 +1359,12 @@ git commit -m "Add Q-13-11/12/13 for repo-action misconfiguration (bd-repo-actio
   `-12.html` and `-13.html` were produced with the expected `<title>`s ("Repository actions require a repo-url",
   "Unknown repository action", "Page-level repo-actions: true ignored"), real body content, and working
   cross-links to their siblings. (A bare `q2 render docs/` fails in a fresh worktree on the gitignored,
-  generated `docs/examples` resource — run `cargo xtask stage-doc-examples` first.)
+  generated `docs/examples` resource. **`cargo xtask stage-doc-examples` does not fix this in a worktree** —
+  it resolves its output root through `create_worktree::repo_root` (`stage_doc_examples.rs:33`), which uses
+  `git rev-parse --path-format=absolute --git-common-dir`; in a worktree that always points at the *main*
+  repo, so the command reports success while staging into `../../docs/examples/` and never populating the
+  worktree's own. Copy the main repo's already-staged `docs/examples/` across to render docs here. Filed as
+  a follow-up strand.)
 
 ---
 
@@ -2900,7 +2905,7 @@ git commit -m "Record end-to-end verification for repo actions (bd-repo-actions-
 
 There is **no `docs/websites/` directory.** `docs/` contains `about.qmd`, `authoring/`, `errors/`, `guides/`, `index.qmd`, `presentations/`. Website-project features live in `docs/guides/projects/`, which already holds the sibling-feature precedent from the breadcrumbs port.
 
-- [ ] **Step 1: Read the sibling page and match its shape**
+- [x] **Step 1: Read the sibling page and match its shape**
 
 ```bash
 cat docs/guides/projects/breadcrumbs.qmd
@@ -2909,22 +2914,22 @@ ls docs/guides/projects/
 
 `breadcrumbs.qmd` came from the same MVP-exclusion list via the same kind of strand, so its structure, depth, and tone are the target. Document usage, not internals (CLAUDE.md): the `repo-url`, `repo-branch`, `repo-subdir`, `issue-url`, `repo-actions`, `repo-link-target`, `repo-link-rel` keys; that the links appear at the foot of the TOC and again in the page footer; that `repo-actions: false` works per page; that `repo-actions: true` does not (link to `Q-13-13`).
 
-- [ ] **Step 1b: Add the sidebar entry**
+- [x] **Step 1b: Add the sidebar entry**
 
 In `docs/_quarto.yml`, add `- guides/projects/repo-actions.qmd` to the `guides/projects` list, after `breadcrumbs.qmd`.
 
 **This list is maintained by hand and no lint rule covers it** — `error-docs-sidebar-unlisted` polices only `errors/`. A page omitted here still renders but is unreachable by navigation, which is exactly how the errors sidebar drifted to 153 of 211 pages before a rule was written for it.
 
-- [ ] **Step 2: Note the two known limitations**
+- [x] **Step 2: Note the two known limitations**
 
 Non-GitHub hosts get GitHub-shaped `edit` / `source` URLs, and notebook `edit` links exist only on GitHub. Both are Q1 parity; link the follow-up strand from Task 15 once it exists.
 
-- [ ] **Step 3: Render the docs site to check the page builds**
+- [x] **Step 3: Render the docs site to check the page builds**
 
 Run: `cargo run --bin q2 -- render docs/`
 **Never** use the system `quarto` binary — the docs site is built with Quarto 2 (CLAUDE.md).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/
@@ -2936,7 +2941,7 @@ git commit -m "Document website repo-actions (bd-repo-actions-missing-99ezd2fe)"
 **Files:**
 - Modify: `claude-notes/designs/path-resolution-model.md` — the **`### Conforming`** table (header at 138-140), appended after the `URL-space emitters` row at line 147
 
-- [ ] **Step 1: Add the row**
+- [x] **Step 1: Add the row**
 
 Add a row recording the third exit this feature introduces — a consumer that takes the pivot form (project-root-relative, forward slashes) and emits an **absolute external URL**, resolving through neither `page_url_for` nor a filesystem read:
 
@@ -2948,7 +2953,7 @@ The table's columns are **`Site | Keys | Mechanism`** — the middle column name
 
 It belongs under `### Conforming`, not under `### VIOLATIONS`: the consumer takes the documented pivot form and never joins a config string onto a base it picked itself. Read the surrounding rows before writing it.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add claude-notes/designs/path-resolution-model.md
@@ -2959,7 +2964,7 @@ git commit -m "Record the external-URL exit in the path-resolution inventory (bd
 
 **Files:** none (braid only — nothing to commit)
 
-- [ ] **Step 1: Create the strand**
+- [x] **Step 1: Create the strand**
 
 ```bash
 braid create "repo-actions assume GitHub URL shapes on every host" \
@@ -2972,17 +2977,20 @@ Ported as-is in bd-repo-actions-missing-99ezd2fe for Q1 parity; this strand cove
 Upstream: quarto-dev/quarto-cli#5301 (open, 2023-04-25), with #7155 and #12138 closed as duplicates. None of those reporters mention notebooks."
 ```
 
-- [ ] **Step 2: Note nothing is committed** — braid stores strands in the synced skein, not in git.
+- [x] **Step 2: Note nothing is committed** — braid stores strands in the synced skein, not in git.
 
 ### Phase 6 gate
 
-- [ ] Run `cargo nextest run --workspace`. This phase touches only `docs/`, a design note, and the braid skein, so the delta must be **zero**. A non-zero delta means a docs change reached compiled code — most likely an `error_catalog.json` edit that belonged in Phase 2.
+- [x] Run `cargo nextest run --workspace`. This phase touches only `docs/`, a design note, and the braid skein, so the delta must be **zero**.
+
+  **Result: 13191 passed, 199 skipped** — identical to the Phase 5 gate. Zero delta, as required.
+ A non-zero delta means a docs change reached compiled code — most likely an `error_catalog.json` edit that belonged in Phase 2.
 
 ### Task 16: Reconcile and close
 
-- [ ] **Step 1: Re-read this plan and verify every checkbox against reality.** Do not trust stale checkmarks — confirm each landed. Correct any that are wrong.
+- [x] **Step 1: Re-read this plan and verify every checkbox against reality.** Do not trust stale checkmarks — confirm each landed. Correct any that are wrong.
 
-- [ ] **Step 2: Full verification**
+- [x] **Step 2: Full verification**
 
 ```bash
 cargo xtask verify
@@ -2991,9 +2999,36 @@ cargo xtask lint
 
 **Full `verify`, not `--skip-hub-build`.** The skip flag is appropriate only when nothing WASM-facing changed; this plan touches `quarto-core` and `quarto-navigation`, both of which `wasm-quarto-hub-client` depends on, and the WASM target builds separately from `cargo build --workspace`. `cargo xtask lint` is not optional either — Task 5 adds three error codes, and both `error-docs-page-missing` and `error-docs-sidebar-unlisted` are repo-level rules that only this command runs.
 
-- [ ] **Step 3: Final workspace run and delta report**
+- [x] **Step 3: Final workspace run and delta report**
 
 Run `cargo nextest run --workspace`; report the pass/skip delta against the Task 0 baseline and account for every test added.
+
+**Full verification result — both green.**
+
+- `cargo xtask verify` (full, *not* `--skip-hub-build`): **all 14 steps passed**, including the WASM leg and
+  the hub-client build/test steps that `cargo build --workspace` cannot cover. Exit 0.
+- `cargo xtask lint`: `All checks passed! (1045 files checked)` — covers `error-docs-page-missing` and
+  `error-docs-sidebar-unlisted` for the three new `Q-13-*` codes, and `metadata-as-str` for the transform.
+
+**Final workspace delta against the Task 0 baseline.** Baseline was **13130 passed, 199 skipped**; final is
+**13191 passed, 199 skipped** — **+61 passed, skipped unchanged, zero failures.** Every added test accounted for:
+
+| Source | Tests | Running total |
+| --- | ---: | ---: |
+| Task 2 — `repo_action_links()` unit tests | +19 | 13149 |
+| Task 2 fix round — `none_still_leaves_the_issue_url_link` | +1 | 13150 |
+| Task 3 — `repo_actions_to_html()` unit tests | +5 | 13155 |
+| Task 4 — `PageFooter::center_append` unit tests | +3 | 13158 |
+| Task 6 — `RepoActionsRenderTransform` unit tests | +12 | 13170 |
+| Task 7 — TOC partial + Rust twin | +3 | 13173 |
+| Task 8 — footer copy and synthesis | +5 | 13178 |
+| Task 9 — pipeline ordering | +1 | 13179 |
+| Task 10 — `ProjectPipeline` integration tests | +12 | 13191 |
+| Task 11 — smoke-all fixtures | +0 | 13191 |
+
+Task 11 adds 0 nextest cases by design: the four fixtures are discovered *inside* the single aggregate
+`smoke_all` test, which passes. Task 5 (catalog + docs) and Tasks 13-15 (docs, design note, braid strand) add
+no tests, and their phase gates each confirmed a zero delta.
 
 - [ ] **Step 4: Commit the reconciled plan, then ask for permission to push.** Never push without it.
 

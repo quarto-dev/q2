@@ -545,6 +545,41 @@ mod tests {
         assert!(footer.contains("https://github.com/page/local/blob/main/index.qmd"));
     }
 
+    /// Decision D-7 / M5: `repo-actions: edit` (a bare scalar, not an
+    /// array) is schema-legal and resolves to a one-element action
+    /// list, matching Q1's `websiteConfigActions`
+    /// (`website-config.ts:271-292`).
+    #[tokio::test]
+    async fn scalar_repo_actions_resolves_to_a_single_action() {
+        let meta = website(vec![
+            ("repo-url", s("https://github.com/e/d")),
+            ("repo-actions", s("edit")),
+        ]);
+        let (meta, diags) = run(meta, "index.qmd").await;
+        let footer = meta
+            .get_path(&["rendered", "navigation", "footer-actions"])
+            .and_then(|v| v.as_plain_text())
+            .expect("scalar repo-actions still produces a footer copy");
+        assert!(footer.contains("/edit/"));
+        assert!(diags.is_empty());
+    }
+
+    /// Decision D-7 / M5: the scalar spelling `repo-actions: none`
+    /// clears the list, same as an empty array would.
+    #[tokio::test]
+    async fn scalar_repo_actions_none_clears_the_list() {
+        let meta = website(vec![
+            ("repo-url", s("https://github.com/e/d")),
+            ("repo-actions", s("none")),
+        ]);
+        let (meta, diags) = run(meta, "index.qmd").await;
+        assert!(
+            meta.get_path(&["rendered", "navigation", "footer-actions"])
+                .is_none()
+        );
+        assert!(diags.is_empty());
+    }
+
     #[tokio::test]
     async fn existing_slot_is_not_overwritten() {
         let mut meta = website(vec![

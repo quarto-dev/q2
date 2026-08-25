@@ -1,0 +1,113 @@
+---
+title: Repository actions
+---
+
+## Overview
+
+When a website's source lives in a public repository, Quarto can add
+links that send readers straight to it — to edit the current page, to
+view its source, or to file an issue:
+
+```yaml
+website:
+  repo-url: https://github.com/owner/repo
+  repo-actions: [edit, source, issue]
+```
+
+On a page with a table of contents, the links render twice: at the
+foot of the TOC, and again in the page footer, where responsive
+classes keep them visible on narrow viewports where the TOC is
+hidden. On a page with no table of contents, they render once, in
+the footer.
+
+## Configuration
+
+`repo-actions` is a list drawn from:
+
+| action | link |
+|---|---|
+| `edit` | "Edit this page" — opens the source file in the host's web editor |
+| `source` | "View source" — opens the source file for reading |
+| `issue` | "Report an issue" — opens the issue tracker |
+
+Use `none` to clear the list. An unrecognized entry is skipped and
+reported ([`Q-13-12`](/errors/navigation/Q-13-12.qmd)); the remaining
+actions still render. Setting `repo-actions: none` does not remove the
+"Report an issue" link if `issue-url` is configured — that link is
+controlled by `issue-url` on its own, independent of the action list.
+
+`repo-actions` requires `repo-url` — without it, Quarto has no base
+to build `edit` and `source` links from, and no default target for
+`issue`. Setting `repo-actions` with no `repo-url` (and no
+`issue-url`) reports [`Q-13-11`](/errors/navigation/Q-13-11.qmd) and
+renders no links.
+
+A few supporting keys, set alongside `repo-url`:
+
+```yaml
+website:
+  repo-url: https://github.com/owner/repo
+  repo-actions: [edit, source, issue]
+  repo-branch: main
+  repo-subdir: docs
+  issue-url: https://github.com/owner/repo/issues/new
+  repo-link-target: _blank
+  repo-link-rel: noopener
+```
+
+- `repo-branch` — the branch the `edit` and `source` links point at.
+  Defaults to `main`.
+- `repo-subdir` — set this when the website's project lives in a
+  subdirectory of its repository, so that source paths resolve
+  correctly.
+- `issue-url` — a custom issue tracker URL, used in place of the
+  repository's default `/issues/new`. Setting `issue-url` adds a
+  "Report an issue" link even if `issue` is not in `repo-actions`.
+- `repo-link-target` / `repo-link-rel` — become `target=` and `rel=`
+  attributes on the generated anchors.
+
+All of these can be overridden per page in front matter — but
+`repo-actions` itself cannot. In front matter, `repo-actions` is only
+the `false` switch described below.
+
+## Turning actions off for one page
+
+Set `repo-actions: false` in a page's front matter to suppress the
+links on that page only:
+
+```yaml
+---
+title: My Page
+repo-actions: false
+---
+```
+
+## Interaction with `page-footer`
+
+Setting `page-footer: false` — at the site or page level — suppresses
+the page footer entirely, and with it the footer copy of the repo
+action links. This is a deliberate divergence from Quarto 1, where the
+footer copy is not tied to `page-footer`. On a page with a table of
+contents, the TOC copy is unaffected and the links still appear there;
+on a page with no table of contents, `page-footer: false` removes the
+links from the page altogether, since the footer was their only
+placement.
+
+## Known limitations
+
+**Page-level `repo-actions: true` is not supported.** In Quarto 1,
+setting `repo-actions: true` in front matter never turned the
+actions on by itself — the action list always came from the site's
+`website.repo-actions` — it only requested a different *placement*
+(the right margin) on a page with no table of contents. Quarto 2
+does not implement that placement: the value is ignored and reported
+as [`Q-13-13`](/errors/navigation/Q-13-13.qmd) (severity `info`). Nothing
+is lost but the position — the links still render in the footer at
+every width.
+
+**`.ipynb` pages get no "Edit this page" link outside GitHub.** For
+notebook source files, an edit link only works on `github.com`,
+where Quarto rewrites it to `github.dev` so the notebook opens in an
+editor rather than as rendered JSON. On any other host the edit link
+is omitted for `.ipynb` pages — "View source" and "Report an issue"
+are unaffected. This matches Quarto 1's behavior.
