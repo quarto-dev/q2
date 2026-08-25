@@ -1,0 +1,86 @@
+---
+title: "Custom Listing Template Is Not a Doctemplate"
+description: "A `type: custom` listing template has no doctemplate directives or still contains Quarto 1 EJS markup, so Quarto 2 skipped the listing rather than copy the file into the page."
+code: Q-12-24
+subsystem: listing
+status: complete
+since: "99.9.9"
+categories:
+  - listing
+---
+
+# `Q-12-24` — Custom Listing Template Is Not a Doctemplate
+
+> A `type: custom` listing template has no doctemplate directives or
+> still contains Quarto 1 EJS markup, so Quarto 2 skipped the listing
+> rather than copy the file into the page.
+
+## What this means
+
+Quarto 2 renders custom listings with **doctemplates** — the same
+`$variable$` / `$if(…)$` / `$for(…)$` syntax Pandoc templates use.
+The template you named in `template:` compiled, but either
+
+- it contains **no directives at all** — every byte is literal text, so
+  rendering it would just paste the file into your page, or
+- it contains `<% … %>` — **Quarto 1 EJS** markup, which Quarto 2 does
+  not execute. Left in place, it would appear verbatim to readers (and
+  link checkers would report `href="<%= item.link %>"`).
+
+Rather than publish the raw file, Quarto 2 emits this warning and
+leaves the listing out of the page.
+
+## Why this happens
+
+- **A Quarto 1 custom listing template carried over unchanged.** Q1
+  listing templates are EJS (`welcome-card.ejs`, `item.ejs.md`).
+  Quarto 2 does not run EJS; see also [`Q-12-9`](Q-12-9.qmd), which
+  fires on the `.ejs` / `.ejs.md` extension at configuration time.
+- **A partially ported template** — some `<%= … %>` expressions were
+  rewritten to `$…$`, others were missed.
+- **A static file named by mistake** — `template:` points at a plain
+  markdown or HTML file with nothing to interpolate.
+
+## How to fix
+
+Rewrite the template as a doctemplate. The common mappings:
+
+| Quarto 1 (EJS)                          | Quarto 2 (doctemplate)              |
+| ---------------------------------------- | ------------------------------------ |
+| `<%= item.title %>`                     | `$it.title$` (inside `$for(items)$`) |
+| `<% for (const item of items) { %> … <% } %>` | `$for(items)$ … $endfor$`     |
+| `<% if (item.image) { %> … <% } %>`     | `$if(it.image)$ … $endif$`          |
+| `<%= item.myfield %>` (custom field)    | `$it.myfield$` or `$it.extra.myfield$` |
+| JavaScript expressions                  | Pre-compute the value into a listing field |
+
+Before:
+
+```
+<div class="cards">
+<% for (const item of items) { %>
+  <a href="<%= item.link %>"><%= item.title %></a>
+<% } %>
+</div>
+```
+
+After:
+
+```
+::: {.cards}
+$for(items)$
+[$it.title$]($it.path$)
+$endfor$
+:::
+```
+
+The [Listings guide](/guides/projects/listings.qmd#custom-templates)
+documents the values a template can read and a complete card example.
+
+## Related
+
+- [`Q-12-9`](Q-12-9.qmd) — `template:` has a Quarto 1 `.ejs` /
+  `.ejs.md` extension (configuration-time warning for the same
+  migration).
+- [`Q-12-10`](Q-12-10.qmd) — the template failed to compile, or its
+  output failed to re-parse as markdown.
+- [`Q-12-8`](Q-12-8.qmd) — the template file could not be read.

@@ -28,6 +28,9 @@
 //! `SourceContext` is discarded and any diagnostics from the
 //! re-parse are collapsed into a single `Q-12-10` warning on the
 //! host page. Full source-info threading is tracked by `bd-0jyl`.
+//! `Q-12-24` fires when a custom template compiled to pure literal
+//! text or still contains EJS `<% … %>` markup; the listing is
+//! skipped.
 //!
 //! TODO(bd-0fd0): Today the resolved listings travel from generate
 //! to render via the typed `RenderContext::resolved_listings`
@@ -37,7 +40,9 @@
 use std::path::{Path, PathBuf};
 
 use hashlink::LinkedHashMap;
-use quarto_doctemplate::{PartialResolver, Template, TemplateContext, project_listing_resolver};
+use quarto_doctemplate::{
+    PartialResolver, Template, TemplateContext, TemplateNode, project_listing_resolver,
+};
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Div};
@@ -185,14 +190,15 @@ fn render_one(
     // collisions with files in the user's CWD are impossible.
     let markdown = match r.listing.kind {
         ListingType::Custom => match load_custom_template(r, host_input, diags) {
-            Some(custom) => compile_and_render(
+            Some(custom) => compile_template(
                 &r.listing.id,
                 &custom.source,
                 &custom.template_path,
                 &custom.resolver,
-                &template_ctx,
                 diags,
-            ),
+            )
+            .filter(|t| custom_template_is_templated(&r.listing.id, &custom, t, diags))
+            .and_then(|t| render_template(&r.listing.id, &t, &template_ctx, diags)),
             // No usable custom template — fall back to default. The
             // appropriate Q-12-* diagnostic was already emitted by
             // `load_custom_template`.
@@ -447,19 +453,17 @@ fn render_builtin(
     )
 }
 
-/// Compile a doctemplate source and render it against `template_ctx`.
-/// Compile / render / diagnostic-channel errors all surface as
-/// `Q-12-10` and return `None`; the caller skips the listing.
-fn compile_and_render<R: PartialResolver>(
+/// Compile a doctemplate source. Compile errors surface as `Q-12-10`
+/// and return `None`; the caller skips the listing.
+fn compile_template<R: PartialResolver>(
     listing_id: &str,
     source: &str,
     template_path: &Path,
     resolver: &R,
-    template_ctx: &TemplateContext,
     diags: &mut Vec<DiagnosticMessage>,
-) -> Option<String> {
-    let template = match Template::compile_with_resolver(source, template_path, resolver, 0) {
-        Ok(t) => t,
+) -> Option<Template> {
+    match Template::compile_with_resolver(source, template_path, resolver, 0) {
+        Ok(t) => Some(t),
         Err(e) => {
             push_diag(
                 diags,
@@ -469,9 +473,20 @@ fn compile_and_render<R: PartialResolver>(
                      Listing skipped."
                 ),
             );
-            return None;
+            None
         }
-    };
+    }
+}
+
+/// Render a compiled template against `template_ctx`. Render /
+/// diagnostic-channel errors surface as `Q-12-10` and return `None`;
+/// the caller skips the listing.
+fn render_template(
+    listing_id: &str,
+    template: &Template,
+    template_ctx: &TemplateContext,
+    diags: &mut Vec<DiagnosticMessage>,
+) -> Option<String> {
     let (rendered, render_diags) = template.render_with_diagnostics(template_ctx);
     let markdown = match rendered {
         Ok(s) => s,
@@ -497,6 +512,66 @@ fn compile_and_render<R: PartialResolver>(
         );
     }
     Some(markdown)
+}
+
+/// Compile a doctemplate source and render it against `template_ctx`.
+/// Used by the built-ins; the custom path inserts
+/// [`custom_template_is_templated`] between the two halves.
+fn compile_and_render<R: PartialResolver>(
+    listing_id: &str,
+    source: &str,
+    template_path: &Path,
+    resolver: &R,
+    template_ctx: &TemplateContext,
+    diags: &mut Vec<DiagnosticMessage>,
+) -> Option<String> {
+    let template = compile_template(listing_id, source, template_path, resolver, diags)?;
+    render_template(listing_id, &template, template_ctx, diags)
+}
+
+/// `Q-12-24` guard (bd-custom-template-not-templated-e5t6m0i0): a
+/// custom template that compiled but contains no doctemplate
+/// directive at all — every top-level node is a `Literal` — would be
+/// spliced into the page unchanged, and a template that still holds
+/// Quarto 1 EJS `<% … %>` markup would leak it. The doctemplate
+/// grammar's only special character is `$`, so both cases compile
+/// "successfully"; this is the check the compiler cannot make.
+///
+/// Comments (`$-- …`) count as directives: they prove the author
+/// wrote doctemplate syntax. Returns `false` (after emitting the
+/// diagnostic) when the listing must be skipped.
+fn custom_template_is_templated(
+    listing_id: &str,
+    custom: &LoadedCustomTemplate,
+    template: &Template,
+    diags: &mut Vec<DiagnosticMessage>,
+) -> bool {
+    let has_directives = template
+        .nodes()
+        .iter()
+        .any(|n| !matches!(n, TemplateNode::Literal(_)));
+    let has_ejs_markup = custom.source.contains("<%");
+    if has_directives && !has_ejs_markup {
+        return true;
+    }
+    let why = if has_ejs_markup {
+        "contains `<% … %>` markup, which is Quarto 1 EJS syntax; \
+         Quarto 2 does not evaluate EJS"
+    } else {
+        "contains no doctemplate directives (`$var$`, `$for(…)$`, `$if(…)$`), \
+         so it would be copied into the page unchanged"
+    };
+    push_diag(
+        diags,
+        "Q-12-24",
+        format!(
+            "Listing `{listing_id}`: template `{}` {why}. Quarto 2 custom listing \
+             templates use doctemplate syntax; see the Listings guide, “Custom \
+             templates”. Listing skipped.",
+            custom.template_path.display()
+        ),
+    );
+    false
 }
 
 #[cfg(test)]
@@ -1216,40 +1291,161 @@ mod tests {
         );
     }
 
-    // L8 / bd-rqgx test #14:
-    // A `.ejs.md` template (genuine EJS syntax) emits Q-12-9 at
-    // parse-time (covered separately) and Q-12-10 at compile-time
-    // here. The listing falls back via the compile-error path
-    // (skip), not via the default-fallback path.
-    //
-    // (The parse-time Q-12-9 emitter lives in
-    // `project/listing/config.rs` and is exercised by config tests;
-    // L8 only verifies the runtime side: load + compile-fail.)
+    // bd-custom-template-not-templated-e5t6m0i0 test #1:
+    // A `$`-free template wrapped in a raw-HTML block compiles as a
+    // single literal and re-parses cleanly, so before the fix it was
+    // spliced into the page verbatim with no diagnostic at all.
     #[tokio::test]
-    async fn custom_template_with_ejs_md_extension_attempts_load_and_fails_compile() {
+    async fn custom_template_without_directives_emits_q_12_24_and_skips_listing() {
+        let (_tmp, root, host) = custom_template_project(
+            "welcome-card.ejs",
+            "```{=html}\n\
+             <div class=\"untemplated-marker\">\n\
+             <% for (const item of items) { %>\n\
+             <a href=\"<%= item.link %>\"><%= item.title %></a>\n\
+             <% } %>\n\
+             </div>\n\
+             ```\n",
+        );
+        let listing = make_custom_listing("welcome-card.ejs");
+        let items = vec![make_item("a", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, diags) = run_transform_at(empty_pandoc(), resolved, &root, &host).await;
+        let q1224 = diags
+            .iter()
+            .find(|d| d.code.as_deref() == Some("Q-12-24"))
+            .unwrap_or_else(|| panic!("expected Q-12-24; got: {diags:?}"));
+        assert!(
+            q1224.title.contains("welcome-card.ejs") && q1224.title.contains("Quarto 1 EJS"),
+            "message must name the template and say EJS; got: {}",
+            q1224.title
+        );
+        assert!(
+            diags.iter().all(|d| d.code.as_deref() != Some("Q-12-10")),
+            "no compile/re-parse diagnostic expected; got: {diags:?}"
+        );
+        let serialized = format!("{:?}", ast);
+        assert!(
+            !serialized.contains("untemplated-marker") && !serialized.contains("<%"),
+            "expected the raw template NOT to be spliced; got: {serialized}"
+        );
+        assert!(
+            !serialized.contains("quarto-listing-default"),
+            "expected skip, not default fallback; got: {serialized}"
+        );
+    }
+
+    // test #2: a template with no `<%` and no `$` at all — plain
+    // static markdown — is also untemplated.
+    #[tokio::test]
+    async fn custom_template_plain_static_text_emits_q_12_24() {
+        let (_tmp, root, host) = custom_template_project(
+            "static.template",
+            "::: {.static-marker}\nNothing here varies.\n:::\n",
+        );
+        let listing = make_custom_listing("static.template");
+        let items = vec![make_item("a", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, diags) = run_transform_at(empty_pandoc(), resolved, &root, &host).await;
+        let q1224 = diags
+            .iter()
+            .find(|d| d.code.as_deref() == Some("Q-12-24"))
+            .unwrap_or_else(|| panic!("expected Q-12-24; got: {diags:?}"));
+        assert!(
+            q1224.title.contains("contains no doctemplate directives"),
+            "got: {}",
+            q1224.title
+        );
+        assert!(!format!("{:?}", ast).contains("static-marker"));
+    }
+
+    // test #3: a half-ported template — real `$` directives plus
+    // leftover EJS — warns too (the sniff catches what the AST check
+    // cannot) and is skipped.
+    #[tokio::test]
+    async fn custom_template_half_ported_with_ejs_markup_emits_q_12_24() {
+        let (_tmp, root, host) = custom_template_project(
+            "half.template",
+            "::: {.half-ported-marker}\n$for(items)$\n- <%= item.title %> / $it.title$\n$endfor$\n:::\n",
+        );
+        let listing = make_custom_listing("half.template");
+        let items = vec![make_item("a", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, diags) = run_transform_at(empty_pandoc(), resolved, &root, &host).await;
+        let q1224 = diags
+            .iter()
+            .find(|d| d.code.as_deref() == Some("Q-12-24"))
+            .unwrap_or_else(|| panic!("expected Q-12-24; got: {diags:?}"));
+        assert!(q1224.title.contains("Quarto 1 EJS"), "got: {}", q1224.title);
+        assert!(!format!("{:?}", ast).contains("half-ported-marker"));
+    }
+
+    // test #4: a template whose only directive is a comment still
+    // counts as a doctemplate (decision 3) — no Q-12-24, rendered.
+    #[tokio::test]
+    async fn custom_template_with_only_a_comment_directive_is_not_flagged() {
+        let (_tmp, root, host) = custom_template_project(
+            "commented.template",
+            "$-- deliberately static\n::: {.commented-marker}\nStatic body.\n:::\n",
+        );
+        let listing = make_custom_listing("commented.template");
+        let items = vec![make_item("a", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, diags) = run_transform_at(empty_pandoc(), resolved, &root, &host).await;
+        assert!(
+            diags.iter().all(|d| d.code.as_deref() != Some("Q-12-24")),
+            "comment-only template must not be flagged; got: {diags:?}"
+        );
+        assert!(format!("{:?}", ast).contains("commented-marker"));
+    }
+
+    // test #5: a normal directive-bearing template is untouched by
+    // the new check (regression guard for the refactor).
+    #[tokio::test]
+    async fn custom_template_with_directives_is_not_flagged() {
+        let (_tmp, root, host) = custom_template_project(
+            "cards.template",
+            "::: {.cards-marker}\n$for(items)$\n- $it.title$\n$endfor$\n:::\n",
+        );
+        let listing = make_custom_listing("cards.template");
+        let items = vec![make_item("Hello", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, diags) = run_transform_at(empty_pandoc(), resolved, &root, &host).await;
+        assert!(
+            diags.iter().all(|d| d.code.as_deref() != Some("Q-12-24")),
+            "got: {diags:?}"
+        );
+        let serialized = format!("{:?}", ast);
+        assert!(serialized.contains("cards-marker") && serialized.contains("Hello"));
+    }
+
+    // L8 / bd-rqgx test #14, revised for
+    // bd-custom-template-not-templated-e5t6m0i0:
+    // A `.ejs.md` template (genuine EJS syntax) emits Q-12-9 at
+    // parse-time (covered in config.rs) and, at render time, Q-12-24:
+    // the EJS contains no `$`, so it *compiles* as one literal — the
+    // untemplated check, not a compile error, is what catches it.
+    // The listing is skipped.
+    #[tokio::test]
+    async fn custom_template_with_ejs_md_extension_emits_q_12_24_and_skips_listing() {
         let (_tmp, root, host) = custom_template_project(
             "legacy.ejs.md",
-            // EJS-style markup — `<%= … %>` is not valid
-            // doctemplate syntax. The doctemplate parser will reject
-            // it with a `Q-10-*` error which the listing render path
-            // surfaces as Q-12-10.
             "<ul>\n<% items.forEach(function(item) { %>\n  \
              <li><%= item.title %></li>\n<% }); %>\n</ul>\n",
         );
-        let mut listing = make_custom_listing("legacy.ejs.md");
-        listing.template = Some(PathBuf::from("legacy.ejs.md"));
+        let listing = make_custom_listing("legacy.ejs.md");
         let items = vec![make_item("a", Some("2026-01-01"))];
         let resolved = vec![ResolvedListing { listing, items }];
-        let (_ast, diags) = run_transform_at(empty_pandoc(), resolved, &root, &host).await;
-        // We expect a compile error (Q-12-10). The .ejs.md text is
-        // not valid doctemplate syntax; whether the parser emits
-        // exactly Q-10-N here is a doctemplate concern. What L8
-        // promises: a compile-or-render failure surfaces as Q-12-10
-        // and the listing is skipped.
+        let (ast, diags) = run_transform_at(empty_pandoc(), resolved, &root, &host).await;
         assert!(
-            diags.iter().any(|d| d.code.as_deref() == Some("Q-12-10")),
-            "expected Q-12-10 from EJS-syntax compile error; got: {diags:?}"
+            diags.iter().any(|d| d.code.as_deref() == Some("Q-12-24")),
+            "expected Q-12-24; got: {diags:?}"
         );
+        assert!(
+            diags.iter().all(|d| d.code.as_deref() != Some("Q-12-10")),
+            "the check runs before render/re-parse, so no Q-12-10; got: {diags:?}"
+        );
+        assert!(!format!("{:?}", ast).contains("<%"));
     }
 
     // L8 / bd-rqgx test #15:
