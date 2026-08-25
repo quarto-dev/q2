@@ -55,7 +55,7 @@
 - Consumes: `quarto_doctemplate::{Template, TemplateNode}` (both re-exported at the crate root; `Template::nodes(&self) -> &[TemplateNode]` is public), `LoadedCustomTemplate { source, template_path, resolver }`, `push_diag`.
 - Produces: `fn compile_template<R: PartialResolver>(listing_id: &str, source: &str, template_path: &Path, resolver: &R, diags: &mut Vec<DiagnosticMessage>) -> Option<Template>`, `fn render_template(listing_id: &str, template: &Template, template_ctx: &TemplateContext, diags: &mut Vec<DiagnosticMessage>) -> Option<String>`, `fn custom_template_is_templated(listing_id: &str, custom: &LoadedCustomTemplate, template: &Template, diags: &mut Vec<DiagnosticMessage>) -> bool`. Task 3's e2e test relies on the code string `"Q-12-24"` and on the skipped listing leaving no `<%` in the output.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to the `tests` module of `listing_render.rs`, next to the other `custom_template_*` tests (they use the existing helpers `custom_template_project`, `make_custom_listing`, `make_item`, `run_transform_at`, `empty_pandoc`):
 
@@ -222,12 +222,12 @@ Then **replace** the existing test `custom_template_with_ejs_md_extension_attemp
     }
 ```
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `cargo nextest run -p quarto-core custom_template_`
 Expected: the five new tests and the revised `.ejs.md` test FAIL (`expected Q-12-24; got: []` or a Q-12-10 where none is expected); the other `custom_template_*` tests still pass.
 
-- [ ] **Step 3: Implement — split `compile_and_render`, add the check**
+- [x] **Step 3: Implement — split `compile_and_render`, add the check**
 
 In `listing_render.rs`, add `TemplateNode` to the `quarto_doctemplate` import, then replace `compile_and_render` with:
 
@@ -376,7 +376,7 @@ Then change the `ListingType::Custom` arm in `render_one` to:
 
 Also update the module-level doc comment near the top of `listing_render.rs` (the `//! … Q-12-10` paragraph around `:29`) with one sentence: "`Q-12-24` fires when a custom template compiled to pure literal text or still contains EJS `<% … %>` markup; the listing is skipped."
 
-- [ ] **Step 4: Add the catalog entry, docs page, and sidebar entry**
+- [x] **Step 4: Add the catalog entry, docs page, and sidebar entry**
 
 In `crates/quarto-error-catalog/error_catalog.json`, after the `"Q-12-23"` object, add (keep the file's existing key ordering/indentation; run `jq . crates/quarto-error-catalog/error_catalog.json > /dev/null` afterwards to confirm it still parses):
 
@@ -483,7 +483,7 @@ documents the values a template can read and a complete card example.
 
 In `docs/_quarto.yml`, add `            - errors/listing/Q-12-24.qmd` on the line immediately after `            - errors/listing/Q-12-23.qmd` (same indentation).
 
-- [ ] **Step 5: Run the tests and lint; verify they pass**
+- [x] **Step 5: Run the tests and lint; verify they pass**
 
 Run: `cargo nextest run -p quarto-core custom_template_`
 Expected: all `custom_template_*` tests PASS, including the five new ones and the revised `.ejs.md` test.
@@ -497,7 +497,7 @@ Expected: no `error-docs-page-missing` / `error-docs-sidebar-unlisted` violation
 Run: `cargo nextest run -p quarto-core`
 Expected: all pass (no other test asserted the verbatim-splice behaviour).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/quarto-core/src/transforms/listing_render.rs crates/quarto-error-catalog/error_catalog.json docs/errors/listing/Q-12-24.qmd docs/_quarto.yml
@@ -524,7 +524,7 @@ listing (same path as a Q-12-10 compile error)."
 - Consumes: `push_diag(diagnostics, code, message, &entry.value)` in `config.rs`; test helpers `parse`, `map`, `s` in the `config.rs` tests module.
 - Produces: the code string `"Q-12-9"` now fires for any `template:` value ending in `.ejs` or `.ejs.md`. Task 3's e2e test asserts Q-12-9 appears for `welcome-card.ejs`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In the `config.rs` tests module, directly after `template_ejs_md_extension_emits_q_12_9`, add:
 
@@ -563,12 +563,12 @@ In the `config.rs` tests module, directly after `template_ejs_md_extension_emits
     }
 ```
 
-- [ ] **Step 2: Run the tests and verify the first one fails**
+- [x] **Step 2: Run the tests and verify the first one fails**
 
 Run: `cargo nextest run -p quarto-core template_ejs_extension_emits_q_12_9 template_doctemplate_extension_does_not_emit_q_12_9 template_ejs_md_extension_emits_q_12_9`
 Expected: `template_ejs_extension_emits_q_12_9` FAILS (`expected Q-12-9, got: []`); the other two pass.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In the `"template"` arm of `config.rs`, replace the `if path.ends_with(".ejs.md") { … }` block with:
 
@@ -673,7 +673,7 @@ see `Q-12-24` next.
 - [`Q-12-7`](Q-12-7.qmd) — `template:` set without `type: custom`.
 ````
 
-- [ ] **Step 4: Run the tests and lint; verify they pass**
+- [x] **Step 4: Run the tests and lint; verify they pass**
 
 Run: `cargo nextest run -p quarto-core template_ejs template_doctemplate q_12_7`
 Expected: all PASS — including `q_12_7_underlines_the_template_key_not_a_sibling` (its fixture uses `../template.ejs` and now also emits Q-12-9, but it selects Q-12-7 by code) and the `template_set_with_non_custom_type_emits_q_12_7`-style test that asserts `diags.len() == 1` (its fixture is `custom.template`, so no Q-12-9). If any test in `config.rs` asserts an exact diagnostic count with a `.ejs` fixture, change the fixture name to `.template` and note it in the report.
@@ -687,7 +687,7 @@ Expected: clean.
 Run: `cargo nextest run -p quarto-core`
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/quarto-core/src/project/listing/config.rs crates/quarto-error-catalog/error_catalog.json docs/errors/listing/Q-12-9.qmd
@@ -711,7 +711,7 @@ the docs page, which claimed Q2 listing templates are EJS."
 - Consumes: `"Q-12-24"` and `"Q-12-9"` from Tasks 1–2; `quarto_core::project::orchestrator::{ProjectPipeline, project_type_for}`, `quarto_core::render_to_file::{RenderToFileOptions, RenderToFileResult}`, `quarto_system_runtime::{NativeRuntime, SystemRuntime}` — the same driving shape as `listing_inline_records.rs`.
 - Produces: nothing downstream.
 
-- [ ] **Step 1: Write the failing test file**
+- [x] **Step 1: Write the failing test file**
 
 Create `crates/quarto-core/tests/integration/listing_custom_template_diagnostics.rs`:
 
@@ -885,14 +885,14 @@ fn doctemplate_custom_template_renders_cards_without_diagnostics() {
 
 Register it in `crates/quarto-core/tests/integration/main.rs` as `pub mod listing_custom_template_diagnostics;` in alphabetical position (before `pub mod listing_glob_resolution;`).
 
-- [ ] **Step 2: Run the tests and verify they pass (and that the guard is real)**
+- [x] **Step 2: Run the tests and verify they pass (and that the guard is real)**
 
 Run: `cargo nextest run -p quarto-core --test integration listing_custom_template_diagnostics`
 Expected: both PASS on top of Tasks 1–2.
 
 Then confirm the first test actually guards the bug: temporarily stash Task 1's `listing_render.rs` (`git stash push crates/quarto-core/src/transforms/listing_render.rs`), re-run the same command, and confirm `ejs_custom_template_warns_and_is_not_spliced_into_the_page` FAILS with `raw EJS must not be spliced`; then `git stash pop`. Record both outputs in the report.
 
-- [ ] **Step 3: Gate and commit**
+- [x] **Step 3: Gate and commit**
 
 Run: `cargo clippy -p quarto-core --all-targets -- -D warnings` — clean.
 Run: `cargo nextest run -p quarto-core` — all pass.
@@ -917,7 +917,7 @@ git commit -m "listing: e2e test — an EJS custom template warns (Q-12-9, Q-12-
 - Consumes: the binding names in Global Constraints; the built-in templates at `crates/quarto-core/src/project/listing/templates/*.template` as the reference the docs point to.
 - Produces: the anchor `#custom-templates` on the Listings guide, which the Q-12-9 / Q-12-24 pages (Tasks 1–2) and the diagnostic messages already reference.
 
-- [ ] **Step 1: Fix the `$item.key$` sentence in `### Records`**
+- [x] **Step 1: Fix the `$item.key$` sentence in `### Records`**
 
 In `docs/guides/projects/listings.qmd`, change
 
@@ -931,7 +931,7 @@ to
 custom template can read as `$it.key$` (also `$it.extra.key$`) — which
 ```
 
-- [ ] **Step 2: Append the Custom templates section**
+- [x] **Step 2: Append the Custom templates section**
 
 Append to the end of `docs/guides/projects/listings.qmd`:
 
@@ -1036,7 +1036,7 @@ Give the ported file a neutral extension such as `.template` so the
 `.ejs` warning stops firing.
 ````
 
-- [ ] **Step 3: Correct the EJS wording on the four other pages**
+- [x] **Step 3: Correct the EJS wording on the four other pages**
 
 - `docs/errors/listing/Q-12-10.qmd` line 20: replace `template (a built-in or a custom EJS file) over the listing's` with `template (a built-in or a custom doctemplate) over the listing's`.
 - `docs/errors/listing/Q-12-7.qmd` line 20: replace `(typically an EJS or Handlebars file)` with `(a doctemplate — see the [Listings guide](/guides/projects/listings.qmd#custom-templates))`. Re-read the sentence so it still parses.
@@ -1045,7 +1045,7 @@ Give the ported file a neutral extension such as `.template` so the
 
 Then `grep -rn -i "ejs" docs/errors/listing/` and confirm every remaining hit is a deliberate "Quarto 1 EJS" reference (Q-12-9, Q-12-24, Q-12-8's related line).
 
-- [ ] **Step 4: Render the docs with Quarto 2 and inspect**
+- [x] **Step 4: Render the docs with Quarto 2 and inspect**
 
 Run (from the worktree root): `cargo run --bin q2 -- render docs/ 2>&1 | grep -i "error\|Q-" ; echo "exit=${PIPESTATUS[0]}"`
 Expected: exit 0; no new diagnostics attributable to the edited pages.
@@ -1061,7 +1061,7 @@ Expected: clean.
 
 (If `docs/_site` is not the output directory, check `docs/_quarto.yml` for `output-dir` and adjust the paths.) Do not commit rendered output.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/guides/projects/listings.qmd docs/errors/listing/Q-12-10.qmd docs/errors/listing/Q-12-7.qmd docs/errors/listing/Q-12-8.qmd docs/errors/listing/Q-12-14.qmd
@@ -1072,10 +1072,21 @@ git commit -m "docs: custom listing templates are doctemplates — add the Listi
 
 ## Controller verification (after all tasks)
 
-- [ ] `cargo nextest run --workspace` — report the delta against the live baseline (13380 passed / 199 skipped at `05b6fd75c`): expect +9 passed (5 new + 1 revised unit test in `listing_render.rs` count as +5 net, 2 in `config.rs`, 2 integration), 0 new skips.
-- [ ] `cargo xtask verify --skip-hub-build --skip-hub-tests` (Rust-only change; `listing_render.rs` is in `quarto-core`, which the WASM client depends on, so also run the full `cargo xtask verify` before asking to push).
-- [ ] **End-to-end through the binary** on the strand's repro: `cd /Users/gordon/src/q2-positron-docs/llms-info/repros/ejs-template-dumped && rm -rf _site && <worktree>/target/debug/q2 render . --to html`; expect `Q-12-9` and `Q-12-24` in the log for `repro.qmd`, `grep -c '<%' _site/repro.html` → `0`, and `_site/control.html` unchanged (cards, `href="item-one.html"`). Record the invocation and output here.
-- [ ] Reconcile this checklist against what landed; commit the plan.
+- [x] `cargo nextest run --workspace` before the final-review fix wave (Rust final; pre-squash history is kept on the local `history/` snapshot ref): **13389 passed (1 leaky), 199 skipped** vs the live baseline 13380 / 199 at `05b6fd75c` → **+9 passed, +0 skipped**, accounted for exactly: Task 1 +5 net in `listing_render.rs` (5 new, 1 revised), Task 2 +2 in `config.rs`, Task 3 +2 integration. The leaky test is `quarto-hub::integration session_auth::logout_clear_cookie_not_overridden_by_reissue` — a crate this branch does not touch; pre-existing. A second run after the fix-wave rename (`cf3506c3b`) is recorded below.
+- [x] `cargo xtask verify` — **full**, hub/WASM leg included (`quarto-core` is in the WASM client's closure): all steps passed before the fix wave (Rust build/tests, tree-sitter, ts-packages 604+77+137 tests, hub-client build + 251 tests). Log: scratchpad `verify-full.log`.
+- [x] **End-to-end through the binary** (output inspected). Invocation, in `/Users/gordon/src/q2-positron-docs/llms-info/repros/ejs-template-dumped`:
+  ```
+  rm -rf _site && <worktree>/target/debug/q2 render . --to html
+  ```
+  Observed:
+  ```
+  Warning: [Q-12-9] `welcome-card.ejs` has a Quarto 1 EJS template extension (`.ejs` / `.ejs.md`); Quarto 2 listing templates use doctemplate syntax — see the Listings guide, “Custom templates”.
+  Warning [Q-12-24]: Listing `guide-sections`: template `…/welcome-card.ejs` contains `<% … %>` markup, which is Quarto 1 EJS syntax; Quarto 2 does not evaluate EJS. … Listing skipped.
+  Rendered 4 of 4 files to …/_site — 2 warnings
+  ```
+  `grep -c '<%' _site/repro.html` → **0** (was 9 on 0.27.0); `<div id="guide-sections">` is empty (skipped); `_site/control.html` still has `custom-card-grid`, "First Item", "Second Item", `href="item-one.html"`. Exit 0.
+- [x] Final whole-branch review (opus): no Critical; Important #3/#4 (two docs inaccuracies) + minors #5–#8 fixed in one wave (now folded into the docs commit); #10 (absolute `template:` path vs path-resolution contract, pre-existing) filed as **bd-o1meelim** (related bd-oejuizi9); the `<%` escape-hatch / partial-sniff gap filed as **bd-owflmojl**. Deferred minors (T1 edge tests, T1 test-module size, T1 table dashes, T2 `.EJS` case) stay deferred.
+- [x] Reconcile this checklist against what landed; commit the plan.
 - [ ] Ask Gordon before pushing.
 
 ## Investigation context (from the 2026-08-25 investigation; kept as the argued root cause)
@@ -1089,6 +1100,8 @@ git commit -m "docs: custom listing templates are doctemplates — add the Listi
 5. **Re-parse** — `listing_render.rs:222-265`. Bare EJS trips the qmd parser → Q-12-10 "re-parse failed" (what the old test at `:1229` was really observing). Wrapped in ```` ```{=html} ````, the re-parse is clean. Silence.
 
 Silence boundary: *no bare `$`* **and** *re-parses cleanly*. The better the template, the likelier the silence.
+
+> Note (final review, 2026-08-25): the *unit* fixture in `listing_render.rs` (raw-HTML-wrapped EJS) did emit a Q-12-10 re-parse warning pre-fix ("HTML element converted to raw HTML"), so it was not fully silent; the *project-level* repro (Task 3's integration test and the Positron fixture) was. The integration test, not the unit test, carries the silence evidence.
 
 ### Docs were wrong in the same direction
 

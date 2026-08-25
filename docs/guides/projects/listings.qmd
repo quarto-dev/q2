@@ -37,7 +37,7 @@ A record's `title`, `subtitle`, `description`, `author`, `date`,
 `date-modified`, `image`, `image-alt`, `categories`, `order`, `path`,
 `reading-time-minutes` and `word-count` (and other fields besides) are the
 same fields a document supplies. Any other key becomes a custom field a
-custom template can read as `$item.key$` (also `$item.extra.key$`) — which
+custom template can read as `$it.key$` (also `$it.extra.key$`) — which
 also makes a misspelled field name easy to miss, since it's kept rather
 than rejected; watch for [`Q-12-22`](/errors/listing/Q-12-22.qmd) if an
 item is missing a field you thought you set. A record needs a `title:` or
@@ -78,3 +78,106 @@ placed all records after all glob matches.)
 YAML files in `contents:` (Quarto 1's `contents: items.yml`) are skipped
 with a warning ([`Q-12-23`](/errors/listing/Q-12-23.qmd)); move the
 records inline.
+
+## Custom templates
+
+Beyond the built-in `default`, `grid` and `table` layouts, a listing can
+render through a template you write:
+
+```yaml
+listing:
+  id: cards
+  type: custom
+  template: card.template
+  contents: "guides/*.qmd"
+```
+
+`template:` resolves relative to the page that declares the listing.
+Quarto 2 custom listing templates are **doctemplates** — the
+`$variable$` syntax Pandoc templates use — not the EJS templates of
+Quarto 1. A doctemplate cannot run code; it interpolates values,
+branches on them and loops over them. The output is markdown, parsed
+back into the page, so raw HTML goes in a ```` ```{=html} ```` block just as
+it would in a `.qmd` file.
+
+### Syntax
+
+| Directive | Meaning |
+| --- | --- |
+| `$listing.id$`, `$it.title$` | Interpolate a value; dotted paths walk into maps. |
+| `$for(items)$ … $endfor$` | Loop. Inside the body the current item is `$it$` (also `$items$`). |
+| `$sep$` | Inside a loop: emitted between items, not after the last. |
+| `$if(it.image)$ … $else$ … $endif$` | Branch on truthiness (empty strings and missing keys are false). |
+| `$it:item-default()$` | Apply a partial to a value — here the built-in `item-default` partial, or a same-named `.template` file next to your template file. |
+| `$-- text` | Comment; not rendered. |
+| `$$` | A literal dollar sign — on its own this is still literal text and does not make a file a template. |
+
+A template that contains none of these is not a template: Quarto 2
+warns ([`Q-12-24`](/errors/listing/Q-12-24.qmd)) and skips the listing
+rather than paste the file into the page.
+
+### Values a template can read
+
+- **`listing.*`** — the listing's own configuration: `id`, `type`,
+  `fields`, `field-links`, `table-header` (a pre-rendered markdown
+  header row for the `table` layout), `sort-ui`, `filter-ui`,
+  `page-size`, `grid-columns`, `template-params` (anything under
+  `template-params:` in the YAML, passed through for your template's
+  own options).
+- **`items`** — one entry per item, each with `title`, `subtitle`,
+  `description`, `author`, `date`, `date-modified`, `image`,
+  `image-alt`, `categories`, `path` (the link target, already
+  page-relative), `filename`, `reading-time`, `reading-time-minutes`,
+  `word-count`, `order`, plus `image-html` and `category-html`
+  pre-rendered snippets. Custom fields from an inline record or from
+  a document's `listing-item.extra` are readable directly
+  (`$it.icon$`) and under `$it.extra.icon$`.
+- **`project.*`** — `site-url` and `title` from the website
+  configuration.
+
+These are the most useful values; the built-in templates show the rest.
+
+The built-in layouts are themselves doctemplates and make the best
+reference: `listing-default.template`, `listing-grid.template`,
+`listing-table.template` and the `item-default` partial live under
+[`crates/quarto-core/src/project/listing/templates/`](https://github.com/quarto-dev/q2/tree/main/crates/quarto-core/src/project/listing/templates)
+in the Quarto 2 repository.
+
+### Example: a card grid
+
+`card.template`:
+
+```
+::: {.custom-card-grid}
+$for(items)$
+::: {.custom-card}
+### [$it.title$]($it.path$)
+
+$if(it.description)$
+$it.description$
+$endif$
+:::
+
+$endfor$
+:::
+```
+
+Style `.custom-card-grid` and `.custom-card` in your site's CSS.
+
+### Migrating a Quarto 1 template
+
+Quarto 1 listing templates were EJS (`.ejs` / `.ejs.md`). Quarto 2 does
+not run EJS — a carried-over template warns with
+[`Q-12-9`](/errors/listing/Q-12-9.qmd) at the extension and
+[`Q-12-24`](/errors/listing/Q-12-24.qmd) at the contents. Rewrite it:
+
+| Quarto 1 (EJS) | Quarto 2 (doctemplate) |
+| --- | --- |
+| `<%= item.title %>` | `$it.title$` |
+| `<% for (const item of items) { %> … <% } %>` | `$for(items)$ … $endfor$` |
+| `<% if (item.image) { %> … <% } else { %> … <% } %>` | `$if(it.image)$ … $else$ … $endif$` |
+| `<%= item.myfield %>` | `$it.myfield$` |
+| `<%= items.length %>`, string manipulation, `process.env` | No expressions: pre-compute the value into a listing field or a record key, or drop the branch. |
+
+Give the ported file a neutral extension such as `.template` so the
+`.ejs` warning stops firing.

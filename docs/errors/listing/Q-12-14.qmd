@@ -17,7 +17,7 @@ categories:
 ## What this means
 
 A listing of `type: custom` needs a `template:` value pointing
-at the EJS file that renders each item. With no `template:`,
+at the doctemplate that renders the items. With no `template:`,
 there is nothing custom about the listing — Quarto falls back
 to the `default` built-in template and emits this warning so
 the author knows the configuration is incomplete.
@@ -38,7 +38,7 @@ Either supply a `template:` path:
 ```yaml
 listing:
   type: custom
-  template: my-template.ejs
+  template: my-template.template
 ```
 
 or change `type:` to one of the built-in types (`default`,

@@ -31,7 +31,7 @@ the custom template would have produced.
 
 Common causes:
 
-- **A typo in the path** (`template: my-listng.ejs`).
+- **A typo in the path** (`template: my-listng.template`).
 - **The file moved or was renamed** but the `template:` value
   was not updated.
 - **A path relative to the wrong base.** `template:` is
@@ -49,4 +49,4 @@ resolved against the wrong base directory.
 
 - `Q-12-14` — `type: custom` without any `template:` path.
 - `Q-12-7` — `template:` set without `type: custom`.
-- `Q-12-9` — `template:` points at a deprecated `.ejs.md` file.
+- `Q-12-9` — `template:` has a Quarto 1 `.ejs` / `.ejs.md` extension.

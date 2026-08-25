@@ -17,7 +17,7 @@ categories:
 ## What this means
 
 A listing renders in two steps. First, Quarto runs the listing
-template (a built-in or a custom EJS file) over the listing's
+template (a built-in or a custom doctemplate) over the listing's
 items and produces a string of markdown. Then it parses that
 markdown back into an AST so the result can be spliced into the
 host document.

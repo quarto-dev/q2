@@ -3,7 +3,7 @@ title: "Quarto 1 EJS Listing Template Extension"
 description: "A listing `template:` ends in `.ejs` or `.ejs.md` — the Quarto 1 EJS convention. Quarto 2 does not run EJS; custom listing templates are doctemplates."
 code: Q-12-9
 subsystem: listing
-status: complete
+status: stub
 since: "99.9.9"
 categories:
   - listing

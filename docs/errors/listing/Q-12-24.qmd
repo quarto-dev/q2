@@ -3,7 +3,7 @@ title: "Custom Listing Template Is Not a Doctemplate"
 description: "A `type: custom` listing template has no doctemplate directives or still contains Quarto 1 EJS markup, so Quarto 2 skipped the listing rather than copy the file into the page."
 code: Q-12-24
 subsystem: listing
-status: complete
+status: stub
 since: "99.9.9"
 categories:
   - listing

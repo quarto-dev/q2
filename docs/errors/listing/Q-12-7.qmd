@@ -17,7 +17,7 @@ categories:
 ## What this means
 
 A listing's `template:` key points at a custom template file
-(typically an EJS or Handlebars file) that Quarto uses to render
+(a doctemplate — see the [Listings guide](/guides/projects/listings.qmd#custom-templates)) that Quarto uses to render
 each item. The key only has an effect when `type: custom` —
 otherwise the listing uses one of the four built-in templates
 (`default`, `grid`, `table`, ...) and there is no point at which
