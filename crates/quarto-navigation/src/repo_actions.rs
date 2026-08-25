@@ -133,14 +133,21 @@ pub fn repo_action_links(
     };
 
     // Q1 `handleRepoLinks`: an explicit `issue-url` forces an issue
-    // link even when the author did not list `issue`. This push is
-    // deliberately unconditional and runs *after* the D-7 `none` clear
-    // above, so it outranks `none`: `none` + `issue-url` still yields
-    // one issue link. Q1 does the same — `websiteConfigActions`
-    // returns `[]` for `none`, and `handleRepoLinks` pushes `issue`
-    // immediately afterwards with no guard against an emptied list
-    // (`website-navigation.ts:661-670`).
-    if cfg.issue_url.is_some() && !actions.iter().any(|a| a == "issue") {
+    // link even when the author did not list `issue`
+    // (`website-navigation.ts:661-670`). We keep that convenience for
+    // the case it was meant for — `issue-url` set with no action list
+    // of its own — but **not** over an explicit `none`.
+    //
+    // Q1 pushes unconditionally, so `none` + `issue-url` renders an
+    // issue link there. That is the same statement-ordering accident
+    // as D-8: `websiteConfigActions` returns `[]` and the push runs
+    // next with no guard. Deliberate divergence — D-7 already decided
+    // `none` means "clear" rather than warning as Q1 does, and honouring
+    // `issue-url` right afterwards would contradict that in the same
+    // breath. `none` states intent ("no repo action links"); `issue-url`
+    // states a location, not a request to render.
+    let cleared_by_none = cfg.actions.iter().any(|a| a == "none");
+    if !cleared_by_none && cfg.issue_url.is_some() && !actions.iter().any(|a| a == "issue") {
         actions.push("issue".to_string());
     }
 
@@ -184,11 +191,19 @@ pub fn repo_action_links(
     let branch = &cfg.branch;
 
     let mut links = Vec::new();
-    for (i, action) in actions.iter().enumerate() {
-        // Decision D-8: Q1 keys the icon to the index in the
-        // *unfiltered* action list, so a dropped first action leaves
-        // every surviving link icon-less. Replicated deliberately.
-        let icon = if i == 0 {
+    for action in actions.iter() {
+        // Only the first link carries a host icon; the rest get the
+        // empty spacer. Keyed to the first *surviving* link rather than
+        // to the index in the unfiltered list.
+        //
+        // Q1 does the latter — `actions.map((a, i) => …i === 0…)
+        // .filter(non-null)` (`website-navigation.ts:834-880`) — so
+        // when its first action is dropped (a notebook on a non-GitHub
+        // host, see below) *no* surviving link carries an icon at all.
+        // That is an ordering accident between `map` and `filter`, not
+        // a design choice, and it is invisible in every case except
+        // that one. Deliberate divergence.
+        let icon = if links.is_empty() {
             Some(first_icon.to_string())
         } else {
             None
@@ -393,15 +408,18 @@ mod tests {
         assert_eq!(links[0].icon.as_deref(), Some("git"));
     }
 
-    /// Decision D-8 — Q1 keys the icon to the *pre-filter* index, so a
-    /// dropped first action leaves every surviving link icon-less.
+    /// Decision D-8 — the icon goes to the first *surviving* link, not
+    /// to the pre-filter index as Q1 does.
     #[test]
-    fn dropped_first_action_leaves_no_icon_anywhere() {
+    fn dropped_first_action_still_leaves_an_icon_on_the_survivor() {
         let mut c = cfg(&["edit", "source"]);
         c.repo_url = Some("https://gitlab.com/example/docs".to_string());
         let (links, _) = repo_action_links(&c, "demo.ipynb", &RepoActionLabels::default());
         assert_eq!(links.len(), 1);
-        assert_eq!(links[0].icon, None);
+        // `edit` was dropped (notebook, non-GitHub host). Q1 would key
+        // the icon to the dropped entry's index and leave this link
+        // icon-less; we key it to the first surviving link instead.
+        assert_eq!(links[0].icon.as_deref(), Some("git"));
     }
 
     /// Decision D-7 — divergence from Q1, which warns on `[none]`.
@@ -422,10 +440,26 @@ mod tests {
     /// `none` and `handleRepoLinks` pushes `issue` immediately afterwards
     /// (`website-navigation.ts:661-670`).
     #[test]
-    fn none_still_leaves_the_issue_url_link() {
+    fn none_clears_the_list_even_when_issue_url_is_set() {
         let c = RepoActionsConfig {
             issue_url: Some("https://example.com/file-a-bug".to_string()),
             ..cfg(&["edit", "none", "source"])
+        };
+        let (links, warns) = repo_action_links(&c, "a.qmd", &RepoActionLabels::default());
+        // Q1 renders one issue link here, because its unconditional
+        // `issue` push runs straight after the list is emptied. We
+        // treat `none` as the author's stated intent and honour it.
+        assert!(links.is_empty());
+        assert!(warns.is_empty());
+    }
+
+    /// The `issue-url` convenience still applies where it was meant to:
+    /// an `issue-url` with no action list of its own yields one link.
+    #[test]
+    fn issue_url_alone_still_forces_an_issue_link() {
+        let c = RepoActionsConfig {
+            issue_url: Some("https://example.com/file-a-bug".to_string()),
+            ..cfg(&[])
         };
         let (links, warns) = repo_action_links(&c, "a.qmd", &RepoActionLabels::default());
         assert_eq!(links.len(), 1);

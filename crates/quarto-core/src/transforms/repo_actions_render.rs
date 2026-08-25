@@ -218,7 +218,12 @@ fn resolve_actions(cv: Option<&ConfigValue>) -> Vec<String> {
         return items.iter().filter_map(|i| i.as_plain_text()).collect();
     }
     match cv.as_plain_text() {
-        Some(s) if s == "none" => Vec::new(),
+        // `none` is passed through as a literal rather than collapsed to
+        // an empty list here. Clearing is `repo_action_links`'s job (D-7),
+        // and it must be able to *see* the `none` to know the author asked
+        // for silence — that is what stops a configured `issue-url` from
+        // re-adding an issue link. Collapsing here would hide the intent
+        // and make the scalar spelling behave differently from `[none]`.
         Some(s) => vec![s],
         None => Vec::new(),
     }
@@ -571,6 +576,42 @@ mod tests {
         let meta = website(vec![
             ("repo-url", s("https://github.com/e/d")),
             ("repo-actions", s("none")),
+        ]);
+        let (meta, diags) = run(meta, "index.qmd").await;
+        assert!(
+            meta.get_path(&["rendered", "navigation", "footer-actions"])
+                .is_none()
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// Decision D-7: `none` outranks the `issue-url` convenience, and it
+    /// must do so identically for both spellings. The scalar form used to
+    /// diverge here: `resolve_actions` collapsed it to an empty list, so
+    /// `repo_action_links` never saw the `none` and re-added the issue
+    /// link, while `[none]` suppressed it.
+    #[tokio::test]
+    async fn scalar_none_suppresses_the_issue_url_link() {
+        let meta = website(vec![
+            ("repo-url", s("https://github.com/e/d")),
+            ("repo-actions", s("none")),
+            ("issue-url", s("https://example.com/file-a-bug")),
+        ]);
+        let (meta, diags) = run(meta, "index.qmd").await;
+        assert!(
+            meta.get_path(&["rendered", "navigation", "footer-actions"])
+                .is_none()
+        );
+        assert!(diags.is_empty());
+    }
+
+    /// The array spelling must agree with the scalar one above.
+    #[tokio::test]
+    async fn array_none_suppresses_the_issue_url_link() {
+        let meta = website(vec![
+            ("repo-url", s("https://github.com/e/d")),
+            ("repo-actions", arr(vec![s("none")])),
+            ("issue-url", s("https://example.com/file-a-bug")),
         ]);
         let (meta, diags) = run(meta, "index.qmd").await;
         assert!(

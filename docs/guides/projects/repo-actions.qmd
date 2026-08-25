@@ -32,9 +32,10 @@ the footer.
 
 Use `none` to clear the list. An unrecognized entry is skipped and
 reported ([`Q-13-12`](/errors/navigation/Q-13-12.qmd)); the remaining
-actions still render. Setting `repo-actions: none` does not remove the
-"Report an issue" link if `issue-url` is configured — that link is
-controlled by `issue-url` on its own, independent of the action list.
+actions still render. `none` clears the list completely: if you also set
+`issue-url`, its "Report an issue" link is cleared too, because `none`
+says you want no repository action links on the page. Setting `issue-url`
+*without* a `repo-actions` list still gives you the one issue link.
 
 `repo-actions` requires `repo-url` — without it, Quarto has no base
 to build `edit` and `source` links from, and no default target for
