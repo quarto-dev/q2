@@ -1,0 +1,5 @@
+project:
+  type: default
+brand:
+  color:
+    background: "#b22222"

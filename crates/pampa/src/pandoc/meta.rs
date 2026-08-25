@@ -818,6 +818,100 @@ mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // `brand:` subtree is plain YAML (bd-vk4olgv6, GH #581).
+    //
+    // Brand values are machine-facing configuration, defined by the
+    // brand-yml spec as plain YAML and consumed identically from
+    // `_brand.yml`, `_quarto.yml`, and front matter. The markdown
+    // default either failed the render (inline block → Q-14-1 in
+    // quarto-sass), warned spuriously (`brand: _brand.yml` → Q-1-20
+    // on the underscore), or silently rewrote values that parse as
+    // markdown.
+    // ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn brand_inline_block_leaves_stay_plain_yaml() {
+        let (result, diags) = convert_doc_meta("brand:\n  color:\n    background: \"#b22222\"\n");
+        let bg = result
+            .get("brand")
+            .and_then(|b| b.get("color"))
+            .and_then(|c| c.get("background"))
+            .expect("brand.color.background");
+        assert!(
+            matches!(
+                &bg.value,
+                ConfigValueKind::Scalar { yaml: Yaml::String(s), .. } if s == "#b22222"
+            ),
+            "brand leaves must stay Scalar, never PandocInlines; got {:?}",
+            bg.value
+        );
+        assert!(diags.is_empty(), "got {:?}", diags);
+    }
+
+    #[test]
+    fn brand_path_string_is_plain_with_no_warning() {
+        // The leading underscore of `_brand.yml` used to be read as an
+        // unclosed emphasis mark → spurious Q-1-20.
+        let (result, diags) = convert_doc_meta("brand: _brand.yml\n");
+        let brand = result.get("brand").expect("brand");
+        assert!(
+            matches!(
+                &brand.value,
+                ConfigValueKind::Scalar { yaml: Yaml::String(s), .. } if s == "_brand.yml"
+            ),
+            "got {:?}",
+            brand.value
+        );
+        assert!(
+            diags.is_empty(),
+            "no Q-1-20 markdown-parse warning for a brand path; got {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn brand_meta_value_with_markdown_chars_survives_verbatim() {
+        // A value that *succeeds* as markdown used to be silently
+        // rewritten (emphasis markers consumed). Bytes must survive.
+        let (result, diags) = convert_doc_meta("brand:\n  meta:\n    name: \"Acme *Corp*\"\n");
+        let name = result
+            .get("brand")
+            .and_then(|b| b.get("meta"))
+            .and_then(|m| m.get("name"))
+            .expect("brand.meta.name");
+        assert!(
+            matches!(
+                &name.value,
+                ConfigValueKind::Scalar { yaml: Yaml::String(s), .. } if s == "Acme *Corp*"
+            ),
+            "asterisks must survive verbatim; got {:?}",
+            name.value
+        );
+        assert!(diags.is_empty(), "got {:?}", diags);
+    }
+
+    #[test]
+    fn brand_explicit_md_tag_overrides_annotation() {
+        // The documented escape hatch: an author who wants a brand
+        // meta value treated as markdown tags it `!md`; explicit tags
+        // beat the annotation.
+        let (result, _) = convert_doc_meta("brand:\n  meta:\n    name: !md \"Acme *Corp*\"\n");
+        let name = result
+            .get("brand")
+            .and_then(|b| b.get("meta"))
+            .and_then(|m| m.get("name"))
+            .expect("brand.meta.name");
+        assert!(
+            matches!(
+                &name.value,
+                ConfigValueKind::PandocInlines(_) | ConfigValueKind::PandocBlocks(_)
+            ),
+            "!md must still parse as markdown under brand; got {:?}",
+            name.value
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Lone-figure unwrap in config strings
     // (bd-page-footer-image-items-stmpikgo).
     //

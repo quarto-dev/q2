@@ -120,6 +120,28 @@ brand:
 ---
 ```
 
+### Brand values are plain YAML
+
+Unlike most document metadata, values under `brand:` are never treated as
+markdown. Whether a brand lives in `_brand.yml`, in `_quarto.yml`, or in a
+document header, every value is read as plain YAML, exactly as written — a
+color like `"#b22222"`, a file name like `_brand.yml`, or a name containing
+`*` or `_` needs no escaping and no `!str` tag.
+
+If you do want a value under `brand.meta` to be processed as markdown, tag it
+explicitly with `!md`:
+
+```{.yaml filename="document.qmd"}
+---
+brand:
+  meta:
+    name: !md "Acme *Corp*"
+---
+```
+
+Brand-aware tools (such as the theme compiler) see the plain text of an `!md`
+value — in this example, `Acme Corp`.
+
 ### Document and Project Brand Configuration
 
 This section covers how to configure brand settings for individual documents and projects. If you're looking to adopt a brand that's maintained externally---such as a shared organizational brand---see [Sharing brands across projects](#sharing-brands-across-projects).

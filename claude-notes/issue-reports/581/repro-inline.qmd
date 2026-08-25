@@ -1,0 +1,8 @@
+---
+format: html
+brand:
+  color:
+    background: "#b22222"
+---
+
+Hello.
