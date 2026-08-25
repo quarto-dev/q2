@@ -229,18 +229,32 @@ profile field exists.
 - [x] `cargo nextest run --workspace`: 13395 passed. Clippy clean on
       quarto-core.
 
-### Phase 2 — WASM / response surface (TDD where testable natively)
+### Phase 2 — WASM / response surface — **done 2026-08-25**
 
-- [ ] Determine profile retention point for the single-doc branch
-      (StageContext artifact vs. plumbing the AtProfile bundle);
-      implement the smallest one.
-- [ ] Add `comments` summary to `RenderResponse`, populated in both
-      project-active-page and single-doc branches (q2-preview and
-      html formats alike).
-- [ ] Native-side test of the summary JSON shape where feasible;
-      the WASM leg itself is covered by `cargo xtask verify`.
-- [ ] TS types for the response field
-      (hub-client render service / preview-renderer as applicable).
+- [x] Retention point: `UnwrapProfileStage` now **moves** the profile
+      onto `StageContext.document_profile` instead of discarding it
+      (zero-copy; runs after `LinkResolutionStage`, so the stash is
+      complete). `run_pipeline` bridges it to
+      `RenderContext.document_profile`; both Pass-2 renderers copy it
+      onto `WasmPassTwoOutput.document_profile` (mirroring
+      `theme_fingerprint`). Verified the q2-preview pipeline keeps
+      both checkpoint stages (`Q2_PREVIEW_STAGE_EXCLUDED` excludes
+      only math-js / render-html-body / apply-template).
+- [x] `RenderResponse.comments: Option<Vec<JsonComment>>` populated in
+      both single-doc and project-active branches (all five
+      construction sites); `None` ≡ zero for consumers.
+- [x] `JsonComment` transport type + `ProfileComment::to_json` live in
+      quarto-core (natively testable; 1-based Monaco positions, end
+      fallback mirroring `diagnostic_to_json`, `file` field for
+      include-mapped comments). TDD: 4 new tests verified failing
+      first (`render_qmd_to_html_bridges_document_profile_to_ctx`,
+      `active_page_profile_comments_on_{html,preview}_output`,
+      `profile_comment_to_json_positions_and_fields`).
+- [x] TS types: `RenderComment` + `RenderResponse.comments` in
+      `ts-packages/preview-renderer/src/types/diagnostic.ts` — the
+      single definition preview-runtime and hub-client both import.
+- [x] Workspace green (13399); `npm run build:wasm` compiles the
+      wasm-side changes cleanly; clippy clean.
 
 ### Phase 3 — hub-client badge (first consumer)
 

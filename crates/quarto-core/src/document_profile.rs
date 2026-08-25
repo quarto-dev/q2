@@ -489,6 +489,85 @@ pub struct ProfileComment {
     pub attributes: Vec<(String, String)>,
 }
 
+/// Transport form of a [`ProfileComment`] for JSON consumers that
+/// cannot resolve a [`SourceInfo`] themselves (the WASM
+/// `RenderResponse`, future CLI `--json` reports).
+///
+/// Line and column numbers are **1-based** to match Monaco — the same
+/// convention as `quarto_error_reporting::JsonDiagnostic`. `file` is
+/// the source file the mark maps back to, which for a comment inside
+/// an `{{< include >}}` is the *included* file, not the host — a
+/// consumer offering jump-to-comment in the host buffer must check it.
+///
+/// [`SourceInfo`]: quarto_source_map::SourceInfo
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct JsonComment {
+    /// Plain-text comment content.
+    pub text: String,
+    /// In-band author (`author=` attribute), when stamped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    /// In-band timestamp (`date=` attribute), when stamped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    /// Remaining attr kvs, authored order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<(String, String)>,
+    /// Path of the source file the mark's span maps to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_line: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_column: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_line: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_column: Option<u32>,
+}
+
+impl ProfileComment {
+    /// Resolve this comment's span against `ctx` and produce the
+    /// transport form. Position fields are `None` when the span
+    /// cannot be mapped (synthetic sources); the textual fields are
+    /// always populated.
+    ///
+    /// The end-position fallback mirrors
+    /// `quarto_error_reporting::diagnostic_to_json`: try the span
+    /// length, then length − 1, then reuse the start.
+    pub fn to_json(&self, ctx: &quarto_source_map::SourceContext) -> JsonComment {
+        let start = self.source.map_offset(0, ctx);
+        let end = self
+            .source
+            .map_offset(self.source.length(), ctx)
+            .or_else(|| {
+                if self.source.length() > 0 {
+                    self.source.map_offset(self.source.length() - 1, ctx)
+                } else {
+                    None
+                }
+            })
+            .or_else(|| start.clone());
+
+        let file = start
+            .as_ref()
+            .and_then(|s| ctx.get_file(s.file_id))
+            .map(|f| f.path.clone());
+
+        JsonComment {
+            text: self.text.clone(),
+            author: self.author.clone(),
+            date: self.date.clone(),
+            attributes: self.attributes.clone(),
+            file,
+            start_line: start.as_ref().map(|s| (s.location.row + 1) as u32),
+            start_column: start.as_ref().map(|s| (s.location.column + 1) as u32),
+            end_line: end.as_ref().map(|e| (e.location.row + 1) as u32),
+            end_column: end.as_ref().map(|e| (e.location.column + 1) as u32),
+        }
+    }
+}
+
 /// One affiliation attached to a [`ProfileAuthor`].
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProfileAffiliation {
@@ -2703,6 +2782,37 @@ x = 1
         assert_eq!(b.author.as_deref(), Some("Bob"));
         assert_eq!(b.date, None);
         assert!(b.attributes.is_empty());
+    }
+
+    #[test]
+    fn profile_comment_to_json_positions_and_fields() {
+        // Transport form for the WASM RenderResponse: 1-based
+        // line/column (Monaco convention, matching JsonDiagnostic)
+        // resolved against the render's SourceContext, plus the file
+        // the mark maps to (relevant when the comment came from an
+        // included file).
+        let qmd = "---\ntitle: T\n---\n\nProse [>> fix this ]{author=\"A\"} end.\n";
+        let profile = extract_from(qmd);
+        assert_eq!(profile.comments.len(), 1);
+
+        let mut sm_ctx = quarto_source_map::SourceContext::new();
+        sm_ctx.add_file("test.qmd".to_string(), Some(qmd.to_string()));
+
+        let json = profile.comments[0].to_json(&sm_ctx);
+        assert_eq!(json.text, "fix this");
+        assert_eq!(json.author.as_deref(), Some("A"));
+        assert_eq!(json.date, None);
+        assert_eq!(json.file.as_deref(), Some("test.qmd"));
+        assert_eq!(json.start_line, Some(5), "mark sits on line 5, 1-based");
+        assert!(json.start_column.is_some());
+        assert_eq!(json.end_line, Some(5));
+
+        let wire = serde_json::to_string(&json).expect("serialize");
+        assert!(wire.contains("\"start_line\":5"), "snake_case keys: {wire}");
+        assert!(
+            !wire.contains("\"date\""),
+            "absent optionals are omitted: {wire}"
+        );
     }
 
     #[test]

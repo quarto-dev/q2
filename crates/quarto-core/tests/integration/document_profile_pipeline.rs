@@ -701,3 +701,55 @@ async fn pipeline_clone_and_resume_listing_item_visible_in_profile() {
     assert_eq!(li.word_count, Some(9));
     assert_eq!(li.reading_time_minutes, Some(1));
 }
+
+/// bd-0rsk07il Phase 2: the profile extracted at the checkpoint is
+/// stashed on `StageContext` by `DocumentProfileStage` and bridged
+/// back to the caller's `RenderContext` by `run_pipeline`, so
+/// response builders (the WASM `RenderResponse`, future native
+/// consumers) can read it after a full render without re-parsing.
+#[tokio::test]
+async fn render_qmd_to_html_bridges_document_profile_to_ctx() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let dir = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf());
+    let qmd = b"---\ntitle: Bridged\n---\n\nProse [>> needs work ] here.\n";
+    let qmd_path = dir.join("doc.qmd");
+    std::fs::write(&qmd_path, qmd).expect("write fixture");
+
+    let project = ProjectContext {
+        dir: dir.clone(),
+        config: ProjectConfig::default(),
+        is_single_file: true,
+        files: vec![DocumentInfo::from_path(qmd_path.clone())],
+        output_dir: dir.clone(),
+
+        ..Default::default()
+    };
+    let doc = DocumentInfo::from_path(qmd_path.clone());
+    let format = Format::html();
+    let binaries = quarto_core::render::BinaryDependencies::new();
+    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+    let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+        Arc::new(quarto_system_runtime::NativeRuntime::new());
+
+    let output = render_qmd_to_html(
+        qmd,
+        &qmd_path.to_string_lossy(),
+        &mut ctx,
+        &HtmlRenderConfig::default(),
+        runtime,
+    )
+    .await
+    .expect("render succeeds");
+    assert!(!output.html.is_empty());
+
+    let profile = ctx
+        .document_profile
+        .as_ref()
+        .expect("RenderContext must carry the bridged document profile");
+    assert_eq!(profile.title.as_deref(), Some("Bridged"));
+    let texts: Vec<&str> = profile.comments.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(texts, vec!["needs work"]);
+}

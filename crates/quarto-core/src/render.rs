@@ -406,6 +406,19 @@ pub struct RenderContext<'a> {
     /// by writing into `stage_ctx.registry`, mirroring how
     /// `project_index` and `resource_resolver` are threaded.
     pub engine_registry_override: Option<Arc<crate::engine::EngineRegistry>>,
+
+    /// The document's Pass-1 [`DocumentProfile`], bridged back from
+    /// `StageContext::document_profile` by `run_pipeline` after the
+    /// pipeline finishes (bd-0rsk07il). `None` before a render, and
+    /// for pipelines that stop before `UnwrapProfileStage` (which is
+    /// the stage that stashes it).
+    ///
+    /// Read by response builders — the WASM `RenderResponse` comment
+    /// summary today; any native consumer that wants the profile of a
+    /// document it just rendered without re-parsing.
+    ///
+    /// [`DocumentProfile`]: crate::document_profile::DocumentProfile
+    pub document_profile: Option<crate::document_profile::DocumentProfile>,
 }
 
 /// Options for rendering
@@ -456,6 +469,7 @@ impl<'a> RenderContext<'a> {
             attribution_data: None,
             format_options: FormatOptions::default(),
             engine_registry_override: None,
+            document_profile: None,
         }
     }
 

@@ -638,6 +638,31 @@ struct RenderResponse {
     /// errors, single-doc renders without a `theme:` YAML key).
     #[serde(skip_serializing_if = "Option::is_none")]
     theme_fingerprint: Option<String>,
+    /// Editorial-comment summary for the active page (bd-0rsk07il,
+    /// GH #445): every outstanding comment from the page's Pass-1
+    /// `DocumentProfile`, in source order, with 1-based Monaco
+    /// positions (see `quarto_core::document_profile::JsonComment`).
+    /// The hub-client comment-toggle badge reads `comments.length`.
+    /// `None` when the document has no comments and on error
+    /// responses.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    comments: Option<Vec<quarto_core::document_profile::JsonComment>>,
+}
+
+/// Build the `RenderResponse.comments` summary from a document
+/// profile: the transport form of each comment, or `None` when the
+/// profile is absent (pipeline stopped early) or has no comments
+/// (keeps the wire payload compact — consumers treat absent as
+/// zero).
+fn comments_to_json(
+    profile: Option<&quarto_core::document_profile::DocumentProfile>,
+    ctx: &SourceContext,
+) -> Option<Vec<quarto_core::document_profile::JsonComment>> {
+    let profile = profile?;
+    if profile.comments.is_empty() {
+        return None;
+    }
+    Some(profile.comments.iter().map(|c| c.to_json(ctx)).collect())
 }
 
 /// Create a minimal project context for WASM rendering.
@@ -1554,6 +1579,9 @@ async fn render_single_doc_to_response(
 
     let warnings = diagnostics_to_json(&diagnostics, &source_context);
     let theme_fingerprint = extract_theme_fingerprint(&ctx.artifacts);
+    // bd-0rsk07il: the profile was bridged onto the RenderContext by
+    // `run_pipeline` (via the `UnwrapProfileStage` stash).
+    let comments = comments_to_json(ctx.document_profile.as_ref(), &source_context);
     serde_json::to_string(&RenderResponse {
         success: true,
         error: None,
@@ -1569,6 +1597,7 @@ async fn render_single_doc_to_response(
         },
         pass1_failures: None,
         theme_fingerprint,
+        comments,
     })
     .unwrap()
 }
@@ -1795,6 +1824,14 @@ async fn render_project_active_page_to_response(
     // and default-project-flush paths.
     let theme_fingerprint_from_output = active_output.theme_fingerprint.clone();
 
+    // bd-0rsk07il: the active page's profile travels on the Pass-2
+    // output (captured from the per-page RenderContext by the
+    // renderer); its comment summary rides the response.
+    let comments = comments_to_json(
+        active_output.document_profile.as_ref(),
+        &active_output.source_context,
+    );
+
     // Pass-1 failures for non-active-page files (bd-rqba). The
     // active page's own Pass-1 failure shortcuts above via
     // `pass_failure_response`, so anything reaching this branch
@@ -1856,6 +1893,7 @@ async fn render_project_active_page_to_response(
             Some(pass1_failures)
         },
         theme_fingerprint: theme_fingerprint_from_output,
+        comments,
     })
     .unwrap()
 }
@@ -1898,6 +1936,7 @@ fn error_response(msg: impl Into<String>) -> String {
         warnings: None,
         pass1_failures: None,
         theme_fingerprint: None,
+        comments: None,
     })
     .unwrap()
 }
@@ -1923,6 +1962,7 @@ fn render_error_response(e: QuartoError) -> String {
         warnings: None,
         pass1_failures: None,
         theme_fingerprint: None,
+        comments: None,
     })
     .unwrap()
 }
@@ -1961,6 +2001,7 @@ fn pass_failure_response(
         warnings: None,
         pass1_failures: None,
         theme_fingerprint: None,
+        comments: None,
     })
     .unwrap()
 }
