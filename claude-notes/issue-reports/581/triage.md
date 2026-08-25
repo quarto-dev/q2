@@ -119,6 +119,33 @@ fix below eliminates this too.
   inlines and still gets the (correct) Q-14-1 rejection.
 - **Does `format.*.brand` need an entry?** No consumer reads it (see
   Localization); per the table's "small and boring" rule, skip it.
+- **Should any field under `brand:` be excluded from the subtree rule —
+  specifically `brand.meta`?** No — checked against the brand-yml spec
+  (https://posit-dev.github.io/brand-yml/, per-field page
+  `brand/meta.html`, 2026-08-25). `meta` is the spec's loose corner: "Both
+  `name` and `link` are optional fields, and you can add additional fields
+  as needed for your specific use case", and its example carries
+  `description: |` prose and `founded: 1952`. But the spec defines **no
+  markdown semantics anywhere** — `description: |` is a YAML block scalar,
+  and every other consumer of a `_brand.yml` file (Quarto 1, Python, R
+  tooling) reads it as plain YAML. Three reasons `meta` stays inside the
+  PlainString subtree: (1) parity with the file form and with `_quarto.yml`
+  is this issue's expected behavior, and both give literal strings for meta
+  leaves; (2) excluding `meta` would leave its front-matter leaves as
+  `PandocInlines`, which `config_value_to_yaml_value` rejects — the exact
+  Q-14-1 crash, relocated into `meta`; (3) if Quarto ever renders
+  `meta.description` as markdown, the right seam is the transform-time
+  `MARKDOWN_CONFIG_PATHS` re-parse, which consumes `Scalar(String)` — so
+  load-time PlainString is a precondition for that future, not an obstacle.
+  An author who genuinely wants markdown in a custom meta field can still
+  write `!md` (explicit tags beat annotations).
+  Checking this surfaced a separate pre-existing gap: q2's `BrandMeta`
+  (`crates/quarto-brand/src/types.rs:104-112`) is
+  `#[serde(deny_unknown_fields)]` with only `name` + `link`, so the spec's
+  own `meta.description`/`founded` example fails to deserialize even via
+  `_quarto.yml` ("unknown field `description`, expected `name` or `link`" —
+  reproduced, fixture `exp-meta/`). Filed as bd-8q5o86r1
+  (discovered-from bd-vk4olgv6); orthogonal to this fix.
 - **Was pre-flight verify green?** Effectively yes: one test failed in the full
   13k run — `quarto-core engine::ts_engine::tests::test_race_free_instance_exclusive`
   — and passed immediately in isolation (0.3s). Flaky under sibling-checkout
@@ -168,7 +195,8 @@ Phase 3 — verification:
 ## Outcome / recommended next step
 
 Filed **bd-vk4olgv6** (bug, p1) with the fix scope above. Discovered work:
-**bd-xxpbo8cf** (flaky `test_race_free_instance_exclusive` under load).
+**bd-xxpbo8cf** (flaky `test_race_free_instance_exclusive` under load) and
+**bd-8q5o86r1** (`BrandMeta` rejects spec-legal extra meta fields).
 Fix can proceed on this branch (`issue-581`) as a follow-up commit.
 
 ## Verification commands used
@@ -189,6 +217,8 @@ grep -rlo 'b22222' <render outputs>                                            #
 ## Cross-references
 
 - bd-vk4olgv6 — this bug; bd-xxpbo8cf — flaky test discovered during pre-flight
+- bd-8q5o86r1 — `BrandMeta` deny_unknown_fields vs spec's open `meta` (discovered)
+- brand-yml spec: https://posit-dev.github.io/brand-yml/ (meta: `brand/meta.html`)
 - bd-v7ixzsp5 / GH #456, #457 — the annotation table this fix extends
 - bd-y89ihf0i — the `as_str()` vs `as_plain_text()` audit (same PandocInlines class, consumer side)
 - GH #580 — per-colour light/dark (closed; test at `brand_render.rs:204`)

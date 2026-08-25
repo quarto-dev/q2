@@ -1,0 +1,10 @@
+project:
+  type: default
+brand:
+  meta:
+    name: Acme
+    description: |
+      Acme Corporation is a leading provider of innovative solutions.
+    founded: 1952
+  color:
+    background: "#b22222"
