@@ -271,8 +271,9 @@ profile field exists.
       failing first.
 - [x] `npm run build:all` (strict tsc -b) ✓; `npm run test` 1005 ✓;
       `npm run test:ci` / `test:wasm` 133 ✓ against the rebuilt WASM.
-- [ ] `hub-client/changelog.md` two-commit dance (second commit needs
-      the first's hash).
+- [x] `hub-client/changelog.md` two-commit dance: entry for
+      `d124b72f` committed as `58c7afe1` (changelog render gate
+      passed).
 
 ### Phase 4 — verification & wrap-up
 
