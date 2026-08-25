@@ -239,24 +239,36 @@ Silent divergence is the core complaint, so failures must be loud:
 
 ### Phase 1 — shared extraction (no behavior change)
 
-- [ ] Add `@babel/standalone` dep to `ts-packages/preview-renderer`;
+- [x] Add `@babel/standalone` dep to `ts-packages/preview-renderer`;
       move `tsxTranspiler.ts` there; hub-client re-imports (delete its copy).
-- [ ] New `utils/renderComponents.ts` + unit tests; refactor hub-client's
-      `componentPathsKey` memo to use it.
-- [ ] Verify: hub-client `npm run build:all` + `test:ci`; confirm the
-      iframe bundles (hub-client + SPA `q2-preview.html` chunk) did NOT
-      grow (babel must not leak into iframe entry graphs).
+      (commit `1809256e6`)
+- [x] New `utils/renderComponents.ts` + unit tests; refactor hub-client's
+      `componentPathsKey` memo to use it. (commit `1809256e6`)
+- [ ] Verify: hub-client `npm run build:all` + `test:ci` (deferred to the
+      Phase 4 full verification); SPA-side chunk check done in Phase 2:
+      iframe chunk did NOT grow (see measurement below).
 
 ### Phase 2 — SPA parent half (project mode)
 
-- [ ] Iframe re-render-after-load fix in `entry.tsx` + test (RED→GREEN).
-- [ ] `q2-preview-spa/src/customComponents.ts` + integration tests
-      (RED→GREEN).
-- [ ] Wire into `PreviewApp.tsx` (state + effect + prop + overlay warnings).
+- [x] Iframe re-render-after-load fix in `entry.tsx` + test (RED→GREEN):
+      cached `lastAstPayload`, repaint after `LOAD_CUSTOM_COMPONENTS`;
+      boot-order LOAD (no prior AST) does not render.
+- [x] `q2-preview-spa/src/customComponents.ts` + unit tests (RED→GREEN):
+      `extractComponentPathsKey` (stable effect key) +
+      `buildCustomComponentsCode` (lazy transpiler import, warnings for
+      missing file / transpile error).
+- [x] Wire into `PreviewApp.tsx` (RED→GREEN, 5 integration tests):
+      `tsxTick` (only `.tsx` touches re-transpile — Q1), stable
+      `EMPTY_CUSTOM_COMPONENTS` identity, warnings merged into
+      `render.warnings` (Q3), `customComponentsCode` prop.
 - [ ] e2e spec on the existing fixture; full rebuild chain
       (`npm run build:wasm` → `cargo xtask build-q2-preview-spa` →
       `cargo build --bin q2`) and run it.
-- [ ] Measure and record the actual dist/binary growth in this plan.
+- [x] Measure and record the actual dist growth. **Measured 2026-08-25:**
+      babel lazy chunk `tsxTranspiler-*.js` = 2.9 MB raw / 664 KB gz;
+      SPA `dist/` 45 MB → 49 MB; iframe chunk `q2-preview-*.js`
+      unchanged at 1148 KB (babel did not leak into the iframe graph);
+      `main-*.js` 68 KB → 72 KB (wiring + shared meta walk only).
 
 ### Phase 3 — single-file mode
 
