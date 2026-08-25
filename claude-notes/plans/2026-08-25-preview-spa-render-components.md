@@ -280,10 +280,17 @@ Silent divergence is the core complaint, so failures must be loud:
 
 ### Phase 3 — single-file mode
 
-- [ ] Rust test for `resolve_single_file_deps` picking up
-      `render-components` TSX (RED).
-- [ ] Implement meta read + text-dep append (GREEN).
-- [ ] Single-file e2e (or integration) proof.
+- [x] Rust test for `resolve_single_file_deps` picking up
+      `render-components` TSX (RED first; also a drops-test for
+      missing / `../`-escaping / non-`.tsx` entries).
+- [x] Implement meta read + text-dep append (GREEN; entries resolve
+      deck-dir-relative, leading `/` = synthetic project root; land in
+      the text-dep channel → synced as text + enrolled in the
+      closure-scoped watcher via `all_files()`).
+- [x] Single-file e2e proof: new `[single-file]` test in
+      `render-components.spec.ts` (harness gained a `targetFile`
+      option) — overrides fire under `q2 preview index.qmd` AND a disk
+      `.tsx` edit live-repaints (watcher enrollment). 3/3 e2e green.
 
 ### Phase 4 — wrap-up
 

@@ -52,18 +52,44 @@ async function readMarkers(page: Page) {
 
 let server: PreviewServerHandle;
 
-test.beforeEach(async () => {
-  server = await startPreviewServer({
-    fixtureFiles: [
-      { path: '_quarto.yml', content: quartoYml },
-      { path: 'index.qmd', content: qmdContent },
-      { path: 'overrides.tsx', content: tsxContent },
-    ],
-  });
-});
-
 test.afterEach(async () => {
   await server?.stop();
+});
+
+/** Wait until the given selector appears in the inner iframe document. */
+async function waitForInnerSelector(page: Page, selector: string) {
+  await page.waitForFunction(
+    (sel) => {
+      const innerDoc = document.querySelector('iframe')?.contentDocument;
+      return (innerDoc?.querySelectorAll(sel).length ?? 0) > 0;
+    },
+    selector,
+    { timeout: 30_000 },
+  );
+}
+
+test.beforeEach(async ({}, testInfo) => {
+  if (testInfo.title.includes('[single-file]')) {
+    // Single-file mode: `q2 preview index.qmd` — no `_quarto.yml`, the
+    // deck's directory becomes the synthetic project root, and the
+    // `.tsx` reaches the VFS only through `resolve_single_file_deps`'s
+    // render-components closure (Phase 3).
+    server = await startPreviewServer({
+      fixtureFiles: [
+        { path: 'index.qmd', content: qmdContent },
+        { path: 'overrides.tsx', content: tsxContent },
+      ],
+      targetFile: 'index.qmd',
+    });
+  } else {
+    server = await startPreviewServer({
+      fixtureFiles: [
+        { path: '_quarto.yml', content: quartoYml },
+        { path: 'index.qmd', content: qmdContent },
+        { path: 'overrides.tsx', content: tsxContent },
+      ],
+    });
+  }
 });
 
 test('user render-components overrides shadow the built-ins', async ({ page }) => {
@@ -121,4 +147,24 @@ test('editing the .tsx on disk live-repaints with the new component', async ({ p
   const markers = await readMarkers(page);
   expect(markers.myParaV2).toBeGreaterThan(0);
   expect(markers.myPara).toBe(0);
+});
+
+test('[single-file] overrides load and a .tsx edit live-repaints', async ({ page }) => {
+  await page.goto(server.url);
+
+  // Phase 3 core claim: in single-file mode the `.tsx` reaches the VFS
+  // via the render-components closure, so both overrides fire.
+  await waitForInnerSelector(page, 'p.my-para');
+  await waitForInnerSelector(page, 'div.my-callout');
+  expect((await readMarkers(page)).builtinCallout).toBe(0);
+
+  // Watcher-enrollment claim: the closure also enrolls the `.tsx` in
+  // the (non-recursive, closure-scoped) single-file watcher, so a disk
+  // edit re-syncs, re-transpiles, and repaints.
+  await writeFile(
+    path.join(server.projectDir, 'overrides.tsx'),
+    tsxContent.replace(`className: 'my-para'`, `className: 'my-para-v2'`),
+  );
+  await waitForInnerSelector(page, 'p.my-para-v2');
+  expect((await readMarkers(page)).myPara).toBe(0);
 });

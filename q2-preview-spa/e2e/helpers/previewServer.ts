@@ -179,6 +179,15 @@ export interface StartOptions {
    */
   allowEdit?: boolean;
   /**
+   * GH #402 / bd-ue80chl0: launch in SINGLE-FILE mode — the spawned
+   * command targets `<projectDir>/<targetFile>` (a file path) instead
+   * of the project directory, exercising the CLI's single-file branch
+   * (`resolve_single_file_deps` closure, non-recursive watcher).
+   * Relative to the temp project dir; the file must be among
+   * `fixtureFiles` / the copied dir.
+   */
+  targetFile?: string;
+  /**
    * Extra environment variables to inject into the spawned `q2 preview`
    * process, merged over `process.env` (and the default `RUST_LOG`). Used by
    * the julia leg (PC6, bd-h4rhohhy) to point the server at an isolated
@@ -253,7 +262,9 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
       '--data-dir',
       dataDir,
       ...(opts.allowEdit ? ['--allow-edit'] : []),
-      projectDir,
+      // Single-file mode targets one file inside the temp project;
+      // project mode targets the directory (the default).
+      opts.targetFile ? path.join(projectDir, opts.targetFile) : projectDir,
     ],
     {
       stdio: ['ignore', 'pipe', 'pipe'],
