@@ -55,7 +55,9 @@ vi.mock('@quarto/preview-renderer/iframe/Q2PreviewIframe', () => ({
   },
 }));
 
-vi.mock('../../services/tsxTranspiler', () => ({
+// tsxTranspiler moved to @quarto/preview-renderer/utils/ in GH #402
+// Phase 1 (shared with the q2-preview SPA). Mock the new location.
+vi.mock('@quarto/preview-renderer/utils/tsxTranspiler', () => ({
   transpileTSX: (code: string) => `JS:${code}`,
 }));
 

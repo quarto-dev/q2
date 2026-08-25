@@ -5,8 +5,9 @@ import { Q2DebugIframe } from './q2-debug/Q2DebugIframe';
 import { Q2PreviewIframe, type Q2PreviewIframeHandle } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { Q2SandboxedPreviewIframe } from './q2-sandboxed-preview/Q2SandboxedPreviewIframe';
 import { SlideAst } from './ReactAstSlideRenderer';
-import { transpileTSX } from '../../services/tsxTranspiler';
+import { transpileTSX } from '@quarto/preview-renderer/utils/tsxTranspiler';
 import { resolveComponentPath } from '@quarto/preview-renderer/utils/componentPath';
+import { extractRenderComponentPaths } from '@quarto/preview-renderer/utils/renderComponents';
 import type { PandocAST } from '@quarto/preview-renderer/framework';
 
 // Simple error boundary to catch errors in custom components
@@ -206,21 +207,11 @@ function ReactRenderer({
       return '';
     }
 
-    const ast = JSON.parse(astJson);
-    // Walk the MetaList → MetaInlines → Str(c) chain. Entries that
-    // don't resolve to a non-empty string are dropped: this includes
-    // (a) `render-components:\n  -` mid-typing, where the bullet has
-    // no value and parses to `null`, and (b) an empty MetaInlines
-    // (the user typed the path-string-open delimiter but no content
-    // yet). Without this filter, `resolveComponentPath(undefined …)`
-    // throws inside this useMemo and the iframe-host page goes blank
-    // with no upstream ErrorBoundary to catch it.
-    const rawPaths: unknown[] =
-      ast?.meta?.['render-components']?.c?.map?.((o: any) => o?.c?.[0]?.c) ??
-      [];
-    const componentPaths = rawPaths.filter(
-      (p): p is string => typeof p === 'string' && p.length > 0,
-    );
+    // Shared MetaList → MetaInlines → Str(c) walk (GH #402 Phase 1).
+    // Drops mid-typing entries (null bullet, empty MetaInlines) so
+    // `resolveComponentPath(undefined …)` can never throw inside this
+    // useMemo and blank the iframe-host page.
+    const componentPaths = extractRenderComponentPaths(JSON.parse(astJson));
 
     return JSON.stringify(componentPaths);
   }, [format, astJson]);
