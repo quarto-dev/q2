@@ -3,15 +3,20 @@
 //!
 //! Steps:
 //!
-//! 1. Render `docs/` in place with `q2` (via `cargo run --bin q2`),
+//! 1. Stage the embedded example projects into `docs/examples/` (the
+//!    `stage-doc-examples` xtask). `docs/_quarto.yml` declares that
+//!    gitignored tree as a project resource and `q2 render` fails hard on
+//!    a missing declared resource, so on a fresh checkout (the release
+//!    workflow) the docs render cannot even start without this.
+//! 2. Render `docs/` in place with `q2` (via `cargo run --bin q2`),
 //!    exactly like CI's docs build. The render's llms-txt pass writes
 //!    `docs/_site/llms.txt`, `docs/_site/llms-full.txt`, one `.md`
 //!    companion per page, and the ledger
 //!    `docs/.quarto/llms-manifest.json`.
-//! 2. Copy the ledger-listed artifacts (and only those — a
+//! 3. Copy the ledger-listed artifacts (and only those — a
 //!    user-authored resource `.md` in `_site/` is not ours to embed)
 //!    into a fresh `agents-docs-dist/` at the workspace root.
-//! 3. Write `agents-docs-dist/embed-info.json` recording the staging
+//! 4. Write `agents-docs-dist/embed-info.json` recording the staging
 //!    checkout's git commit + dirty flag, for `q2 docs llms
 //!    --embed-info`.
 //!
@@ -35,6 +40,17 @@ pub fn run() -> Result<()> {
     // status` would report a clean checkout as dirty. What we want to
     // record is the state of the sources the docs were built from.
     let info = embed_info(&root)?;
+
+    // `docs/_quarto.yml` declares the gitignored `docs/examples/` tree as
+    // a project resource, and `q2 render` refuses to run when a declared
+    // resource is missing. Stage it first so this works on a fresh
+    // checkout (the release workflow's `web-payloads` job), not only on a
+    // dev machine that happened to run `stage-doc-examples` at some point.
+    // Ordered after `embed_info` on purpose: staging renders the example
+    // projects in place, which would otherwise make the provenance read
+    // as dirty.
+    println!("━━━ Staging docs/examples/ (embedded example projects) ━━━");
+    crate::stage_doc_examples::run()?;
 
     println!("━━━ Rendering docs/ (llms.txt artifacts) ━━━");
     render_docs(&root)?;

@@ -293,6 +293,26 @@ still matches.
   and `install.sh` parse `${output##* }`. `q2 --version` prints
   `q2 (quarto 2) X.Y.Z`; anything appended to that string must keep the
   version last (guarded by `crates/quarto/tests/integration/version_cli.rs`).
+- **The docs embed needs `docs/examples/` staged, and only the xtask does it.**
+  `docs/_quarto.yml` declares the gitignored `docs/examples/` tree (output of
+  `cargo xtask stage-doc-examples`) as a project resource, and `q2 render`
+  fails hard on a missing declared resource. A dev checkout usually has the
+  tree lying around from some earlier run, so `cargo xtask build-agents-docs`
+  passes locally and nobody notices; the release runner is a fresh clone. The
+  first v0.27.0 run (32809606624) died in `web-payloads` on exactly this —
+  the docs-embed step was new in that release (bd-hwop1zii landed after
+  v0.26.0) and had never run on a clean checkout. `build-agents-docs` now
+  stages the examples itself before rendering; if you ever move that render
+  elsewhere, carry the staging with it. To reproduce the fresh-clone
+  condition locally: `mv docs/examples /tmp/` and rerun the xtask.
+  The same run then exposed a second fresh-machine assumption: the docs
+  render must not need an *optional runtime*. `docs/guides/authoring/figures.qmd`
+  shows cells with Quarto 1's ```` ```{{python}} ```` escape, and the engine
+  resolver was treating those as real `{python}` cells — fine on a laptop
+  with Jupyter, a hard "runtime is not available" error on the runner
+  (bd-3tq5u8vm, fixed in `engine_cell_lang`). If the docs render ever
+  fails only on CI, check the runner for a runtime it lacks before
+  installing one: the docs should render with nothing but `q2`.
 - **Pin the embedded TS-extension-build jsr specifiers before shipping.**
   `resources/extension-build/deno.json` (the shipped tier-4 config `q2
   build-ts-extension` embeds via `include_str!` for installed binaries —
