@@ -995,8 +995,8 @@
   },
   "Q-12-9": {
     "subsystem": "listing",
-    "title": "Deprecated .ejs.md Template Extension",
-    "message_template": "The `.ejs.md` template extension is a Q1 idiom and is not supported by Q2 doctemplate. See the Q1 → Q2 migration guide.",
+    "title": "Quarto 1 EJS Listing Template Extension",
+    "message_template": "The `.ejs` / `.ejs.md` extensions mark a Quarto 1 EJS listing template. Quarto 2 does not run EJS; custom listing templates use doctemplate syntax. See the Listings guide, “Custom templates”.",
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-9",
     "since_version": "99.9.9"
   },
