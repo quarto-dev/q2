@@ -1,0 +1,7 @@
+project:
+  type: default
+brand:
+  meta:
+    name: !md "Acme *Corp*"
+  color:
+    background: "#b22222"

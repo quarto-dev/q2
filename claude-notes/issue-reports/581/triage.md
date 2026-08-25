@@ -116,7 +116,10 @@ fix below eliminates this too.
   consulted for *untagged* scalars in both contexts; in ProjectConfig context
   `PlainString` is a no-op. Explicit tags (`!md`, `!str`, …) take earlier
   branches and still win — an author writing `!md` inside `brand:` still gets
-  inlines and still gets the (correct) Q-14-1 rejection.
+  inlines. (An earlier draft of this triage said those inlines then hit a
+  "correct" Q-14-1 rejection in the walker; that is superseded — per the
+  user's approval condition, the walker now learns the plain-text
+  projection for `!md` values. See the scope addition in the fix plan.)
 - **Does `format.*.brand` need an entry?** No consumer reads it (see
   Localization); per the table's "small and boring" rule, skip it.
 - **Should any field under `brand:` be excluded from the subtree rule —
@@ -179,6 +182,25 @@ fix below eliminates this too.
 
 ## Fix plan (TDD)
 
+**Scope addition (user-requested, 2026-08-25):** the user approves the
+subtree-PlainString proposal **on the condition that `!md` works** as the
+documented escape hatch for authors who want markdown in a `brand.meta`
+value, and asks that the q2 brand docs reference it. Verified: the tag
+beats the annotation at *load* time by construction (the annotation
+consult lives in the untagged branch, `meta.rs:407`; explicit tags take
+earlier branches at `:369-381`) — but today an `!md` value anywhere under
+`brand:` still **kills the render** at the strict walker, even in
+`_quarto.yml`, even on a known field (reproduced: fixture `exp-md-tag/`,
+`meta.name: !md "Acme *Corp*"` → Q-14-1). So the plan gains a walker
+change and a docs task, below. Projection semantics: the Brand object
+receives the **plain-text projection** of an `!md` value
+(`as_plain_text`, markup consumed); the merged metadata tree retains the
+rich inlines for q2-internal metadata consumers. The untagged path
+(annotation) remains byte-preserving. Note: `!md` on a *custom* meta
+field only fully materializes once bd-8q5o86r1 lifts `BrandMeta`'s
+`deny_unknown_fields`; `!md` on known fields (e.g. `meta.name`) works
+as soon as this fix lands.
+
 Phase 1 — tests first, verify each fails before implementing:
 
 1. `crates/pampa/src/pandoc/meta_annotations.rs` unit tests: a subtree pattern
@@ -198,6 +220,14 @@ Phase 1 — tests first, verify each fails before implementing:
    - `brand: _brand.yml` front matter renders with no Q-1-20 (assert on the
      render result's collected diagnostics; if the harness doesn't expose
      them, capture warnings via the non-quiet path).
+4. Tag-override tests (the user's approval condition):
+   - pampa: `!md`-tagged string under `brand.meta` yields `PandocInlines`
+     in **both** contexts (tag beats annotation); `!str` yields `Scalar`.
+   - quarto-sass unit test: a brand config whose `meta.name` leaf is
+     `PandocInlines` (as `!md` produces) resolves without Q-14-1, and the
+     deserialized Brand carries the plain-text projection.
+   - e2e (the `exp-md-tag/` fixture shape): `meta.name: !md "Acme *Corp*"`
+     in `_quarto.yml` renders successfully — fails today, must pass after.
 
 Phase 2 — implementation:
 
@@ -208,13 +238,28 @@ Phase 2 — implementation:
 5. Add the entry `(&["brand", "**"], Interpretation::PlainString)`, with a
    comment citing GH #581 / bd-vk4olgv6.
 6. Update the module docs' path-semantics section for `**`.
+7. Walker tolerance for explicit `!md`
+   (`crates/quarto-sass/src/config.rs:864`, `config_value_to_yaml_value`):
+   map `PandocInlines` to `serde_yaml::Value::String(<as_plain_text>)`
+   instead of erroring — after step 5 the only way inlines reach a brand
+   block is an explicit `!md`, so this honors the author's tag with the
+   plain-text projection rather than failing the render. Keep the error
+   for `PandocBlocks` (multi-block markdown has no sensible scalar
+   projection; `as_plain_text` doesn't cover it), with the message
+   extended to say single-paragraph `!md` or a plain string is expected.
+8. Docs (`docs/guides/authoring/brand.qmd`): state that `brand:` values
+   are plain YAML — never markdown-parsed, matching the brand-yml spec
+   and standalone `_brand.yml` files, so `!str` is never needed — and
+   that `!md` is available when a `meta` value should be treated as
+   markdown by Quarto's metadata machinery (noting the Brand object sees
+   its plain text). Per repo rules, docs are usage-facing: no internals.
 
 Phase 3 — verification:
 
-7. `cargo nextest run --workspace` (pampa change can affect downstream crates).
-8. `cargo xtask verify` — **full**, not `--skip-hub-build`: pampa is in the
+9. `cargo nextest run --workspace` (pampa change can affect downstream crates).
+10. `cargo xtask verify` — **full**, not `--skip-hub-build`: pampa is in the
    hub-client WASM closure.
-9. End-to-end through the real binary: re-run the three repro commands above;
+11. End-to-end through the real binary: re-run the three repro commands above;
    (a) must render with the color in the theme CSS, (b) must be warning-free,
    (c) must stay unchanged. Inspect outputs, record in the session summary.
 
