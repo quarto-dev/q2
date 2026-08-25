@@ -358,21 +358,44 @@ pub fn secondary_nav_to_html(content: SecondaryNavContent<'_>, toggle_label: &st
 }
 
 pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
-    sidebar_to_html_with_appended(sidebar, home_url, None)
+    sidebar_to_html_with_options(
+        sidebar,
+        &SidebarRenderOptions {
+            home_url,
+            appended_html: None,
+            has_navbar: false,
+        },
+    )
 }
 
-/// [`sidebar_to_html`] with an extra HTML fragment appended inside the
-/// `nav#quarto-sidebar` element, after the menu.
+/// Page-context options for [`sidebar_to_html_with_options`].
 ///
-/// This is the seam for `toc-location: left` on website pages
-/// (bd-e2kpwy7n): quarto-core's `SidebarRenderTransform` passes the
-/// rendered `nav#TOC` block here so it lands after the nav items —
-/// Q1's `sidebar.ejs` merge order (items first, TOC target last).
-pub fn sidebar_to_html_with_appended(
-    sidebar: &Sidebar,
-    home_url: &str,
-    appended_html: Option<&str>,
-) -> String {
+/// The Rust twin of the param bag `nav-before-body.ejs` hands to Q1's
+/// `sidebar.ejs` partial (`{ sidebar, sidebarStyle, navbar, toc,
+/// language, draftMode }`) — page context the sidebar renderer needs
+/// beyond the `Sidebar` data itself is passed as named fields here
+/// rather than accumulating positional parameters.
+pub struct SidebarRenderOptions<'a> {
+    /// Page-relative URL of the site root, used for the sidebar
+    /// title's home link.
+    pub home_url: &'a str,
+    /// Extra HTML fragment appended inside the `nav#quarto-sidebar`
+    /// element, after the menu — the seam for `toc-location: left`
+    /// (bd-e2kpwy7n): quarto-core's `SidebarRenderTransform` passes
+    /// the rendered `nav#TOC` block here so it lands after the nav
+    /// items, matching Q1's `sidebar.ejs` merge order (items first,
+    /// TOC target last).
+    pub appended_html: Option<&'a str>,
+    /// Whether the page also renders a navbar. Carried for a future
+    /// gate (Q1 suppresses the sidebar title when `navbar` is
+    /// truthy); currently unread.
+    pub has_navbar: bool,
+}
+
+/// [`sidebar_to_html`] with page context passed via [`SidebarRenderOptions`].
+pub fn sidebar_to_html_with_options(sidebar: &Sidebar, opts: &SidebarRenderOptions) -> String {
+    let home_url = opts.home_url;
+    let appended_html = opts.appended_html;
     let mut html = String::new();
 
     let style_class = match sidebar.style {
