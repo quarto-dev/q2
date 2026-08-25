@@ -1,6 +1,14 @@
 import { transform } from '@babel/standalone';
 
 // EXPERIMENTAL functionality for custom render components
+//
+// Moved from `hub-client/src/services/tsxTranspiler.ts` (GH #402 /
+// bd-ue80chl0 Phase 1) so hub-client and the q2-preview SPA share one
+// transpiler. hub-client imports this module statically; the SPA imports
+// it dynamically (`await import(...)`) so `@babel/standalone` lands in a
+// lazy chunk that documents without `render-components:` never load.
+// Nothing in the iframe entry graph may import this module — it would
+// pull babel into the iframe bundle.
 
 /**
  * Transpile TSX code to JavaScript

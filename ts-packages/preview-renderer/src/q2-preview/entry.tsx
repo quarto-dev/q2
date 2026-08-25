@@ -150,6 +150,12 @@ import { PreviewRoot } from './PreviewRoot';
 let root: ReturnType<typeof createRoot> | null = null;
 let customRegistry: Record<string, React.ComponentType<any>> = {};
 let componentsLoading = false;
+// Last UPDATE_AST payload, cached so a LOAD_CUSTOM_COMPONENTS that
+// arrives with no accompanying AST change (a `.tsx` edit re-transpiled
+// by the parent) can repaint the current document with the rebuilt
+// registry (GH #402 / bd-ue80chl0). Null until the first UPDATE_AST —
+// the boot-order LOAD (posted before the first AST) must not render.
+let lastAstPayload: UpdateAstPayload | null = null;
 
 // Slide-navigation bridge (bd-mwbsdmel). `RevealDeck`'s `RevealNavSync`
 // registers an imperative `goTo` here (and clears it on unmount); the
@@ -245,7 +251,15 @@ window.addEventListener('message', async (event) => {
         componentsLoading = true;
         await loadCustomComponents(event.data.componentsCode);
         componentsLoading = false;
+        // Repaint the current document so the rebuilt registry takes
+        // effect immediately. Without this, a component (re)load only
+        // showed up on the next UPDATE_AST — a live `.tsx` edit that
+        // doesn't change the AST would repaint nothing.
+        if (lastAstPayload) {
+            updateAst(lastAstPayload);
+        }
     } else if (event.data.type === 'UPDATE_AST') {
+        lastAstPayload = event.data.payload;
         if (componentsLoading) {
             await new Promise((resolve) => {
                 const check = setInterval(() => {

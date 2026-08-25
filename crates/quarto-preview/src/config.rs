@@ -225,8 +225,11 @@ pub fn resolve_project_resource_files(
 /// *inside* them.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct SingleFileDeps {
-    /// Included `.qmd` files (project-root-relative). Synced as **text**, kept
-    /// out of `qmd_files` so they are invisible VFS-only dependencies.
+    /// Text dependencies (project-root-relative), synced as **text** without
+    /// surfacing in the render list: included `.qmd` files, plus declared
+    /// `render-components:` `.tsx` overrides (GH #402 / bd-ue80chl0). The
+    /// field name predates the `.tsx` addition; both ride the same
+    /// `single_file_text_deps` channel into discovery's `text_dep_files`.
     pub qmd_files: Vec<std::path::PathBuf>,
     /// Referenced image assets (project-root-relative). Synced as **binary**.
     pub binary_files: Vec<std::path::PathBuf>,
@@ -407,6 +410,51 @@ pub fn resolve_single_file_deps(
         }
     }
 
+    // `render-components:` TSX overrides (GH #402 / bd-ue80chl0 Phase 3).
+    // Project-mode preview syncs `.tsx` via hub discovery's dir walk;
+    // single-file mode has no walk, so the declared entries must join the
+    // closure here or the SPA's parent half has nothing to read — exactly
+    // the silent hub-client/CLI divergence GH #402 is about. Entries
+    // resolve like the TS side's `resolveComponentPath`: relative to the
+    // declaring document's directory; a leading `/` means the (synthetic,
+    // deck-dir) project root, never the filesystem root — see
+    // `claude-notes/designs/path-resolution-model.md`. Missing, escaping,
+    // and non-`.tsx` entries are dropped fail-soft: the SPA surfaces a
+    // missing component as a render warning; the closure just declines to
+    // sync it. They land in `qmd_files` (the text-dep channel) so they
+    // sync as text AND enroll in the watcher (`all_files()`), matching
+    // project mode's live `.tsx` editing.
+    if let Some(arr) = doc
+        .ast
+        .meta
+        .get("render-components")
+        .and_then(|v| v.as_array())
+    {
+        for entry in arr {
+            let Some(raw) = entry.as_plain_text() else {
+                continue;
+            };
+            let is_tsx = Path::new(&raw)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("tsx"));
+            if !is_tsx {
+                continue;
+            }
+            let joined = match raw.strip_prefix('/') {
+                Some(rest) => project_root.join(rest),
+                None => project_root.join(deck_dir).join(&raw),
+            };
+            let Ok(canon) = joined.canonicalize() else {
+                continue;
+            };
+            if let Some(rel) = to_in_tree_rel(canon)
+                && seen_qmd.insert(rel.clone())
+            {
+                qmd_files.push(rel);
+            }
+        }
+    }
+
     qmd_files.sort();
     binary_files.sort();
     SingleFileDeps {
@@ -565,6 +613,69 @@ mod tests {
         assert_eq!(
             deps.qmd_files,
             vec![std::path::PathBuf::from("sub/part.qmd")]
+        );
+    }
+
+    /// `render-components:` TSX entries are part of the single-file closure
+    /// (GH #402 / bd-ue80chl0 Phase 3): they sync as **text** deps so the
+    /// SPA's parent half can read + transpile them, and they enroll in the
+    /// watcher. Relative entries anchor at the deck dir; a leading `/` means
+    /// the (synthetic, deck-dir) project root — never the filesystem root
+    /// (path-resolution contract, `path-resolution-model.md`).
+    #[test]
+    fn single_file_deps_render_components_tsx() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        std::fs::create_dir(root.join("components")).unwrap();
+        std::fs::write(root.join("overrides.tsx"), "export const Para = 1;\n").unwrap();
+        std::fs::write(
+            root.join("components/extra.tsx"),
+            "export const Callout = 1;\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("main.qmd"),
+            "---\ntitle: T\nrender-components:\n  - overrides.tsx\n  - /components/extra.tsx\n---\n\n# Hi\n",
+        )
+        .unwrap();
+
+        let deps = resolve_single_file_deps(root, std::path::Path::new("main.qmd"), native_arc());
+        assert_eq!(
+            deps.qmd_files,
+            vec![
+                std::path::PathBuf::from("components/extra.tsx"),
+                std::path::PathBuf::from("overrides.tsx"),
+            ],
+            "render-components TSX must sync as text deps (sorted); got {:?}",
+            deps.qmd_files,
+        );
+    }
+
+    /// Missing, escaping (`../`), and non-`.tsx` `render-components` entries
+    /// are dropped without error — same fail-soft posture as includes/images.
+    /// The parent half reports the missing file as a render warning; the
+    /// closure just declines to sync it.
+    #[test]
+    fn single_file_deps_render_components_drops_missing_escaping_and_non_tsx() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        // A real file OUTSIDE the deck dir that must NOT be pulled in.
+        std::fs::write(root.join("secret.tsx"), "export const X = 1;\n").unwrap();
+        let deck_dir = root.join("deck");
+        std::fs::create_dir(&deck_dir).unwrap();
+        std::fs::write(deck_dir.join("notes.txt"), "not a component\n").unwrap();
+        std::fs::write(
+            deck_dir.join("main.qmd"),
+            "---\ntitle: T\nrender-components:\n  - missing.tsx\n  - ../secret.tsx\n  - notes.txt\n---\n\n# Hi\n",
+        )
+        .unwrap();
+
+        let deps =
+            resolve_single_file_deps(&deck_dir, std::path::Path::new("main.qmd"), native_arc());
+        assert!(
+            deps.qmd_files.is_empty(),
+            "missing/escaping/non-tsx entries must all be dropped; got {:?}",
+            deps.qmd_files,
         );
     }
 

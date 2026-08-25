@@ -59,6 +59,12 @@ import { extractMetaString } from '@quarto/preview-renderer/framework';
 import type { Diagnostic, Pass1Failure, PreviewNodeEditPayload } from '@quarto/preview-renderer/types/diagnostic';
 import type { CaptureRef, FileEntry } from '@quarto/quarto-automerge-schema';
 import { bootWithRetry, superviseReconnect } from './bootController';
+import {
+  buildCustomComponentsCode,
+  extractComponentPathsKey,
+  EMPTY_CUSTOM_COMPONENTS,
+  type CustomComponentsResult,
+} from './customComponents';
 import { BootLoadingScreen } from './components/BootLoadingScreen';
 import { ForceRefreshButton } from './components/ForceRefreshButton';
 import { PreviewDiagnosticsOverlay } from './components/PreviewDiagnosticsOverlay';
@@ -184,6 +190,24 @@ interface PreviewAppState {
   serverDiagnostics: Diagnostic[];
   /** Bumps on every onFileContent callback so the render effect re-fires. */
   contentTick: number;
+  /**
+   * GH #402 / bd-ue80chl0: bumps only when a `.tsx` file changes.
+   * Dedicated tick so the custom-components effect re-transpiles on
+   * component edits without riding `contentTick` (which bumps on every
+   * `.qmd` keystroke — the plan's Q1 decision: per-keystroke babel runs
+   * must not accumulate).
+   */
+  tsxTick: number;
+  /**
+   * GH #402 / bd-ue80chl0: transpiled `render-components` overrides for
+   * the active document (+ any compile warnings, merged into the
+   * render-warnings overlay lane per the plan's Q3 decision). Stays the
+   * referentially-stable `EMPTY_CUSTOM_COMPONENTS` for documents
+   * without the key, so the iframe's `customComponentsCode` prop never
+   * churns and `LOAD_CUSTOM_COMPONENTS` is never re-posted on ordinary
+   * edits.
+   */
+  customComponents: CustomComponentsResult;
   /**
    * Whether this preview session may edit documents (bd-ov4gqk3m).
    * Fetched once at boot from `GET /api/preview/config`; mirrors the
@@ -370,6 +394,8 @@ function buildInitialState(): PreviewAppState {
     render: EMPTY_RENDER_STATUS,
     serverDiagnostics: [],
     contentTick: 0,
+    tsxTick: 0,
+    customComponents: EMPTY_CUSTOM_COMPONENTS,
     captures: {},
     allowEdit: false,
     nestingCursor: typeof window !== 'undefined'
@@ -745,7 +771,15 @@ export default function PreviewApp() {
               if (!shouldRerenderForTextChange(path, s.activeFile, s.deps)) {
                 return s;
               }
-              return { ...s, contentTick: s.contentTick + 1 };
+              // GH #402: `.tsx` touches additionally bump tsxTick so the
+              // custom-components effect re-transpiles. Ordinary source
+              // edits only bump contentTick (Q1 cadence decision).
+              const isTsx = path.toLowerCase().endsWith('.tsx');
+              return {
+                ...s,
+                contentTick: s.contentTick + 1,
+                tsxTick: isTsx ? s.tsxTick + 1 : s.tsxTick,
+              };
             });
           },
           // Phase D.3 (bd-kw93.9): binary docs (images, SVGs,
@@ -1032,6 +1066,61 @@ export default function PreviewApp() {
     };
   }, [state.activeFile, state.contentTick]);
 
+  // GH #402 / bd-ue80chl0: stable key for the active document's
+  // `render-components` path list, derived from the rendered AST meta.
+  // One JSON.parse per successful render (same cost the tab-title
+  // effect already pays); string-stable across edits that don't touch
+  // the list.
+  const componentPathsKey = useMemo(
+    () => extractComponentPathsKey(state.astJson),
+    [state.astJson],
+  );
+
+  // GH #402 / bd-ue80chl0: build the transpiled custom-components map
+  // for the iframe. Re-runs only when the path list changes, the active
+  // document changes, or a `.tsx` file was touched (tsxTick) — NOT on
+  // every contentTick (Q1 cadence decision). The shared transpiler
+  // (babel) is lazy-loaded inside buildCustomComponentsCode, so
+  // documents without the key never fetch it.
+  useEffect(() => {
+    if (!state.activeFile) return;
+    if (!componentPathsKey) {
+      // Identity-guarded reset so the common no-components path never
+      // churns state (and the iframe prop keeps its stable identity).
+      setState((s) =>
+        s.customComponents === EMPTY_CUSTOM_COMPONENTS
+          ? s
+          : { ...s, customComponents: EMPTY_CUSTOM_COMPONENTS },
+      );
+      return;
+    }
+    let cancelled = false;
+    const activePath = state.activeFile;
+    void (async () => {
+      try {
+        const result = await buildCustomComponentsCode(
+          componentPathsKey,
+          activePath,
+          getFileContent,
+        );
+        if (cancelled) return;
+        setState((s) =>
+          s.activeFile === activePath ? { ...s, customComponents: result } : s,
+        );
+      } catch (e) {
+        // Unexpected (per-component failures are captured as warnings
+        // inside the builder) — e.g. the lazy transpiler chunk failed
+        // to load. Log and leave the previous components in place.
+        console.error(
+          `custom-components build threw for ${activePath}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [componentPathsKey, state.activeFile, state.tsxTick]);
+
   // Render the active page whenever it (or its content) changes.
   useEffect(() => {
     if (!state.activeFile) return;
@@ -1202,7 +1291,22 @@ export default function PreviewApp() {
   // status + server-diagnostics feed. Both feeds share the same
   // overlay; the overlay decides how to lay them out via `severity`
   // and `serverDiagnostics` props.
-  const overlayInputs = computeOverlayInputs(state.render, state.serverDiagnostics);
+  //
+  // GH #402 (Q3 decision): custom-component compile warnings (missing
+  // file, transpile error) are part of "rendering" and merge into the
+  // render-warnings lane. Kept in their own state slot so a subsequent
+  // successful render doesn't wipe them (and vice versa).
+  const renderStatusWithComponentWarnings =
+    state.customComponents.warnings.length === 0
+      ? state.render
+      : {
+          ...state.render,
+          warnings: [...state.render.warnings, ...state.customComponents.warnings],
+        };
+  const overlayInputs = computeOverlayInputs(
+    renderStatusWithComponentWarnings,
+    state.serverDiagnostics,
+  );
 
   if (state.boot === 'error' && state.error) {
     return (
@@ -1288,6 +1392,9 @@ export default function PreviewApp() {
         // Rich-text editor (bd-sjb4pzx8): on by default; `?richText=0` opts out.
         richText={state.richText}
         nestedEditBuffers={nestedEditBuffers}
+        // GH #402 / bd-ue80chl0: transpiled render-components overrides.
+        // Stable `{}` identity for documents without the key.
+        customComponentsCode={state.customComponents.code}
       />
       {showStaleOverlay && (
         <StaleCaptureOverlay

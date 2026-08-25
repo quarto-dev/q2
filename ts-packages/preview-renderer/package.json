@@ -65,6 +65,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@babel/standalone": "^7.29.2",
     "@quarto/preview-runtime": "*",
     "@quarto/quarto-automerge-schema": "*",
     "@revealjs/react": "0.2.0",
