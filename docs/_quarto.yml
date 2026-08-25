@@ -211,6 +211,7 @@ website:
             - errors/listing/Q-12-21.qmd
             - errors/listing/Q-12-22.qmd
             - errors/listing/Q-12-23.qmd
+            - errors/listing/Q-12-24.qmd
         - section: "xml"
           contents:
             - errors/xml/Q-9-1.qmd

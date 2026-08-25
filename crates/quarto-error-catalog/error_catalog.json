@@ -1098,6 +1098,13 @@
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-23",
     "since_version": "99.9.9"
   },
+  "Q-12-24": {
+    "subsystem": "listing",
+    "title": "Custom Listing Template Is Not a Doctemplate",
+    "message_template": "A `type: custom` listing template contains no doctemplate directives, or contains Quarto 1 EJS `<% … %>` markup. Quarto 2 listing templates use doctemplate syntax; the listing is skipped.",
+    "docs_url": "https://quarto.org/docs/errors/listing/Q-12-24",
+    "since_version": "99.9.9"
+  },
   "Q-13-1": {
     "subsystem": "navigation",
     "title": "Sidebar references missing document",
