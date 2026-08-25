@@ -28,6 +28,7 @@
 //! `SourceContext` is discarded and any diagnostics from the
 //! re-parse are collapsed into a single `Q-12-10` warning on the
 //! host page. Full source-info threading is tracked by `bd-0jyl`.
+//!
 //! `Q-12-24` fires when a custom template compiled to pure literal
 //! text or still contains EJS `<% … %>` markup; the listing is
 //! skipped.
@@ -197,7 +198,7 @@ fn render_one(
                 &custom.resolver,
                 diags,
             )
-            .filter(|t| custom_template_is_templated(&r.listing.id, &custom, t, diags))
+            .filter(|t| check_custom_template_is_templated(&r.listing.id, &custom, t, diags))
             .and_then(|t| render_template(&r.listing.id, &t, &template_ctx, diags)),
             // No usable custom template — fall back to default. The
             // appropriate Q-12-* diagnostic was already emitted by
@@ -516,7 +517,7 @@ fn render_template(
 
 /// Compile a doctemplate source and render it against `template_ctx`.
 /// Used by the built-ins; the custom path inserts
-/// [`custom_template_is_templated`] between the two halves.
+/// [`check_custom_template_is_templated`] between the two halves.
 fn compile_and_render<R: PartialResolver>(
     listing_id: &str,
     source: &str,
@@ -540,7 +541,7 @@ fn compile_and_render<R: PartialResolver>(
 /// Comments (`$-- …`) count as directives: they prove the author
 /// wrote doctemplate syntax. Returns `false` (after emitting the
 /// diagnostic) when the listing must be skipped.
-fn custom_template_is_templated(
+fn check_custom_template_is_templated(
     listing_id: &str,
     custom: &LoadedCustomTemplate,
     template: &Template,
