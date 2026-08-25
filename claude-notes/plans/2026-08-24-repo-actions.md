@@ -104,16 +104,28 @@ Each of these was settled deliberately. Do not silently revisit them; if one loo
 
 - **D-7 — `none` anywhere in the list clears it (deliberate divergence).** Q1 only special-cases `none` in the *string* form; `repo-actions: [none]` reaches Q1's `default:` branch and warns "Unknown repo action 'none'". But `[none]` is schema-legal (`definitions.yml:705` declares `maybeArrayOf: enum [none, edit, source, issue]`), and warning on schema-legal input is bad behavior. q2 treats `none` as clearing the list wherever it appears. Task 2 tests this.
 
-  **`none` clears the author's list; it does not suppress `issue-url`.** The
-  `issue-url` append is unconditional in Q1 — `handleRepoLinks` calls
-  `websiteConfigActions` (which returns `[]` for a scalar `none`) and then
-  immediately does `if (issueUrl && !repoActions.includes("issue")) push("issue")`
-  (`website-navigation.ts:661-670`). So `none` + `issue-url` renders exactly one
-  "Report an issue" link in both Q1 and q2. D-7's scope is "do not warn on
-  schema-legal `none`", not "suppress the `issue-url` convenience". Task 2 tests
-  the combination so the ordering is a stated contract rather than an accident.
+  **`none` clears the list outright — it also suppresses `issue-url`'s forced
+  link (revised 2026-08-25, deliberate divergence).** Q1 pushes `issue` onto the
+  action list unconditionally whenever `issue-url` is set, immediately after
+  `websiteConfigActions` has returned `[]` for `none`
+  (`website-navigation.ts:661-670`), so Q1 renders one issue link for
+  `none` + `issue-url`. That is the same statement-ordering accident as D-8, not
+  a design choice. Replicating it would contradict this very decision in the
+  same breath: D-7 already holds that `none` states the author's intent rather
+  than being something to warn about. `none` says "no repo action links";
+  `issue-url` says *where* the tracker is, not *whether* to render a link to it.
+  So `none` wins.
 
-- **D-8 — Icons are keyed to the pre-filter index (Q1 quirk, replicated).** Q1 does `actions.map((action, i) => …icon: i === 0 ? firstIcon : undefined).filter(non-null)`, so if `actions[0]` is `edit` and it gets dropped (notebook on a non-GitHub host), *no* surviving link carries an icon. Replicate exactly and comment; Task 2 tests it.
+  The `issue-url` convenience still applies where it was meant to: `issue-url`
+  set with **no** action list of its own still yields one issue link. That case
+  is unambiguous — `issue-url` has exactly one consumer in the tree, so setting
+  it and nothing else does mean "give me the issue link". Both halves are tested
+  (`none_clears_the_list_even_when_issue_url_is_set`,
+  `issue_url_alone_still_forces_an_issue_link`).
+
+- **D-8 — Icons go to the first *surviving* link (revised 2026-08-25, deliberate divergence).** Q1 does `actions.map((action, i) => …icon: i === 0 ? firstIcon : undefined).filter(non-null)`, so if `actions[0]` is `edit` and it gets dropped (notebook on a non-GitHub host), *no* surviving link carries an icon — every one gets the empty spacer. That is an ordering accident between `map` and `filter`, not a design choice: there is no reader who benefits from an icon-less action list, and the case is invisible in every other configuration. q2 keys the icon to the first link that actually survives. Task 2 tests it (`dropped_first_action_still_leaves_an_icon_on_the_survivor`).
+
+  *Originally* this plan replicated the Q1 behaviour on parity grounds. Revised after review: the branch already diverges deliberately where Q1's behaviour is a bug (D-3, D-7), and this is also a bug, just a cosmetic one. Byte-identity with Q1 on the reference repro is unaffected — that project has no notebook pages.
 
 - **D-9 — Link text is not HTML-escaped.** Q1 assigns `a.innerHTML = link.text`. q2's own `toc_block_html` interpolates the `toc-title` term unescaped too (`sidebar_render.rs:207`). Match both. URLs and class attributes **are** escaped via `escape_attr`.
 
@@ -473,15 +485,15 @@ mod tests {
         assert_eq!(links[0].icon.as_deref(), Some("git"));
     }
 
-    /// Decision D-8 — Q1 keys the icon to the *pre-filter* index, so a
-    /// dropped first action leaves every surviving link icon-less.
+    /// Decision D-8 — the icon goes to the first *surviving* link, not
+    /// to the pre-filter index as Q1 does.
     #[test]
-    fn dropped_first_action_leaves_no_icon_anywhere() {
+    fn dropped_first_action_still_leaves_an_icon_on_the_survivor() {
         let mut c = cfg(&["edit", "source"]);
         c.repo_url = Some("https://gitlab.com/example/docs".to_string());
         let (links, _) = repo_action_links(&c, "demo.ipynb", &RepoActionLabels::default());
         assert_eq!(links.len(), 1);
-        assert_eq!(links[0].icon, None);
+        assert_eq!(links[0].icon.as_deref(), Some("git"));
     }
 
     /// Decision D-7 — divergence from Q1, which warns on `[none]`.
@@ -610,8 +622,10 @@ pub fn repo_action_links(
     };
 
     // Q1 `handleRepoLinks`: an explicit `issue-url` forces an issue
-    // link even when the author did not list `issue`.
-    if cfg.issue_url.is_some() && !actions.iter().any(|a| a == "issue") {
+    // link even when the author did not list `issue`. Kept for the case
+    // it was meant for, but NOT over an explicit `none` — see D-7.
+    let cleared_by_none = cfg.actions.iter().any(|a| a == "none");
+    if !cleared_by_none && cfg.issue_url.is_some() && !actions.iter().any(|a| a == "issue") {
         actions.push("issue".to_string());
     }
 
@@ -655,11 +669,12 @@ pub fn repo_action_links(
     let branch = &cfg.branch;
 
     let mut links = Vec::new();
-    for (i, action) in actions.iter().enumerate() {
-        // Decision D-8: Q1 keys the icon to the index in the
-        // *unfiltered* action list, so a dropped first action leaves
-        // every surviving link icon-less. Replicated deliberately.
-        let icon = if i == 0 { Some(first_icon.to_string()) } else { None };
+    for action in actions.iter() {
+        // Decision D-8: the icon goes to the first *surviving* link.
+        // Q1 keys it to the index in the unfiltered list, so a dropped
+        // first action leaves every survivor icon-less — a map/filter
+        // ordering accident we deliberately do not replicate.
+        let icon = if links.is_empty() { Some(first_icon.to_string()) } else { None };
 
         let link = match action.as_str() {
             "edit" => {
