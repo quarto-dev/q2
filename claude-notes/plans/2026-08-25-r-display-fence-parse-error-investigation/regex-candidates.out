@@ -1,0 +1,58 @@
+--- repro
+    current="`r\n# if you're a pak person (we are!)\npa"
+    knitr=none
+    proposed=none
+--- nospace
+    current="`r\n# if you're a pak person (we are!)\npa"
+    knitr=none
+    proposed=none
+--- attr-fence
+    current="`r\n# if you're a pak person (we are!)\npa"
+    knitr=none
+    proposed=none
+--- yaml-title
+    current='`r blocks"\n---\n\nAn executable cell, so t'
+    knitr='`r blocks"\n---\n\nAn executable cell, so t'
+    proposed=none
+--- control
+    current=none
+    knitr=none
+    proposed=none
+--- workaround
+    current=none
+    knitr=none
+    proposed=none
+
+--- inline-R sanity (must still match) ---
+'The answer is `r 1+1`.'
+     current  : ['`r 1+1`']
+     knitr    : ['`r 1+1`']
+     proposed : [' `r 1+1`']
+'`r x` at start'
+     current  : ['`r x`']
+     knitr    : ['`r x`']
+     proposed : ['`r x`']
+'a `r  x + 1  `.'
+     current  : ['`r  x + 1  `']
+     knitr    : ['`r  x + 1  `']
+     proposed : [' `r  x + 1  `']
+'text `r#c` hash'
+     current  : []
+     knitr    : ['`r#c`']
+     proposed : [' `r#c`']
+'```r\nbody\n```'
+     current  : ['`r\nbody\n`']
+     knitr    : []
+     proposed : []
+'````r\nbody with ` tick\n````'
+     current  : ['`r\nbody with `']
+     knitr    : []
+     proposed : []
+'title: "```r blocks"'
+     current  : []
+     knitr    : []
+     proposed : []
+'Backtick prefix ``r x`'
+     current  : ['`r x`']
+     knitr    : ['`r x`']
+     proposed : []
