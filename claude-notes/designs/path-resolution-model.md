@@ -32,8 +32,14 @@ Quarto 2 interprets a path written in source (`.qmd` front matter,
    the #455 discussion). It is never an OS-absolute filesystem path. What
    "resolve" then means depends on the space (next section).
 
-Carve-outs rule 2 must not swallow: protocol-relative `//host/x` URLs,
-`data:` URIs, full URLs (all classified external before any path handling);
+Carve-outs rule 2 must not swallow: anything with an RFC-3986 scheme
+(`https:`, `data:`, `mailto:`, `positron:`, `javascript:`, …) or the
+protocol-relative `//host/x` form — all classified external before any
+path handling. **`quarto_util::is_external_url` is the sole classifier;
+never write a prefix list** (`starts_with("http://") || …`). Every such
+list drifts to a different subset and the schemes it omits get
+path-normalized — `//` collapsed, `../` prepended
+(bd-scheme-href-path-normalized-w5zya82r replaced seven of them);
 WASM VFS `/project/...` paths (a filesystem-space *internal* convention,
 never authored config); genuinely OS-absolute *input-file* paths where a key
 documents that it accepts them (checked with `quarto_util::is_rooted`, not
