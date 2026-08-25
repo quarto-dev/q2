@@ -261,9 +261,17 @@ Silent divergence is the core complaint, so failures must be loud:
       `tsxTick` (only `.tsx` touches re-transpile — Q1), stable
       `EMPTY_CUSTOM_COMPONENTS` identity, warnings merged into
       `render.warnings` (Q3), `customComponentsCode` prop.
-- [ ] e2e spec on the existing fixture; full rebuild chain
+- [x] e2e spec on the existing fixture; full rebuild chain
       (`npm run build:wasm` → `cargo xtask build-q2-preview-spa` →
-      `cargo build --bin q2`) and run it.
+      `cargo build --bin q2`) and run it. **End-to-end record
+      (2026-08-25):** `npx playwright test render-components.spec.ts`
+      drives the freshly-built `target/debug/q2 preview` against the
+      `with-render-components` fixture in real Chromium; observed
+      `p.my-para` and `div.my-callout` present, built-in `div.callout`
+      absent, and a disk edit of `overrides.tsx` (class renamed to
+      `my-para-v2`) live-repainted the preview with the new class and
+      zero `p.my-para` remnants. 2 passed. Existing
+      `basic-preview.spec.ts` (4 tests) still green.
 - [x] Measure and record the actual dist growth. **Measured 2026-08-25:**
       babel lazy chunk `tsxTranspiler-*.js` = 2.9 MB raw / 664 KB gz;
       SPA `dist/` 45 MB → 49 MB; iframe chunk `q2-preview-*.js`
