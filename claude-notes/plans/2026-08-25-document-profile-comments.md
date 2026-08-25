@@ -275,20 +275,47 @@ profile field exists.
       `d124b72f` committed as `58c7afe1` (changelog render gate
       passed).
 
-### Phase 4 — verification & wrap-up
+### Phase 4 — verification & wrap-up — **done 2026-08-25**
 
-- [ ] Full `cargo xtask verify` (WASM leg affected — quarto-core
-      change).
-- [ ] End-to-end: real browser session against local hub
-      (`npm run local-prod` or dev server), a fixture doc with
-      comments; observe the badge count, add a comment, watch it
-      increment; record invocation + observation per CLAUDE.md's
-      end-to-end policy.
-- [ ] File follow-up strands, linked `discovered-from:bd-0rsk07il`:
-      in-band author/date stamping in the hub add-comment path (D5
-      write side); project-wide summary map for sidebar badges (D4
-      deferral); any of the use-case list the user wants tracked.
-- [ ] Close bd-0rsk07il; comment on GH #445.
+- [x] Full `cargo xtask verify`: every leg green **except** one
+      pre-existing failure in the ts-packages leg —
+      `preview-renderer custom-components.integration.test.tsx >
+      Equation > appends \tag{N}` (`.katex-tag` missing) fails
+      identically on `main` (3dd9acfd); unrelated to this branch
+      (equation rendering untouched). Filed as **bd-kn7ln981** (p1,
+      the GH #250 failure class). All legs this branch touches pass:
+      workspace build + 13399 tests, WASM build, hub-client
+      build:all + unit (1005) + wasm-tier (133).
+- [x] End-to-end (real browser, `npm run local-prod`, fresh project
+      `comment-badge-e2e`, `format: q2-preview`), all observed via
+      Chrome DevTools automation:
+      1. Doc with 2 `[>> … ]` marks → toggle badge shows **2**
+         (aria-label "2 outstanding comments").
+      2. Edit adds a third mark → badge **3**.
+      3. Add a comment through the bubble UI input → source gains
+         `[>> added from the bubble UI]`, badge **4**.
+      4. Click the bubble's ✓ resolve → mark deleted from source,
+         badge **3**.
+      Gotcha worth remembering: the PWA service worker served a
+      stale bundle at first — unregister + cache clear + hard
+      reload before concluding anything about local-prod behavior.
+      Note: the default-project fixture renders through the HTML
+      iframe path where no badge consumer exists (by design —
+      comment chrome is q2-preview's); the badge activates with
+      `format: q2-preview`.
+- [x] Follow-up strands filed, linked `discovered-from:bd-0rsk07il`:
+      **bd-juei440d** (D5 write side: stamp author/date in hub
+      add-comment path), **bd-lh3lgb20** (D4 deferral: project-wide
+      summary map for sidebar badges), **bd-kn7ln981** (pre-existing
+      red test found during verify). Remaining use-case ideas (CLI
+      report, publish gate, MCP tool, search facet, gutter markers,
+      notifications) intentionally left unfiled pending user
+      interest.
+- [x] Close bd-0rsk07il (implementation complete on branch
+      `braid/bd-0rsk07il-document-profile-comments`; merge + push
+      await user approval).
+- [ ] Comment on GH #445 — **not done**: posting publicly needs
+      explicit approval, and the commits are unpushed. Ask the user.
 
 ## Resolved decisions (plan review, 2026-08-25)
 
