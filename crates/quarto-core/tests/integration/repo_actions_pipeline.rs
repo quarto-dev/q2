@@ -42,6 +42,15 @@ fn read(path: &std::path::Path) -> String {
 /// `project-relative output href → rendered HTML` (href, not stem —
 /// breadcrumb fixtures have several `index.html` at different depths).
 fn render_project(fixture: impl FnOnce(&std::path::Path)) -> Vec<(String, String)> {
+    render_project_to_site(fixture).1
+}
+
+/// As `render_project`, but also hands back the `_site` root so a test
+/// can inspect the non-HTML artifacts (`site_libs/**`, notably the
+/// compiled theme CSS).
+fn render_project_to_site(
+    fixture: impl FnOnce(&std::path::Path),
+) -> (PathBuf, Vec<(String, String)>) {
     let temp = TempDir::new().unwrap();
     let project_dir = canonical(temp.path());
     fixture(&project_dir);
@@ -73,7 +82,7 @@ fn render_project(fixture: impl FnOnce(&std::path::Path)) -> Vec<(String, String
     std::mem::forget(temp); // keep files alive for inspection
 
     let site_root = project_dir.join("_site");
-    summary
+    let outputs = summary
         .outputs
         .iter()
         .map(|out| {
@@ -85,7 +94,8 @@ fn render_project(fixture: impl FnOnce(&std::path::Path)) -> Vec<(String, String
                 .replace('\\', "/");
             (href, read(&out.output_path))
         })
-        .collect()
+        .collect();
+    (site_root, outputs)
 }
 
 fn find_html<'a>(outputs: &'a [(String, String)], href: &str) -> &'a str {
@@ -363,4 +373,175 @@ fn no_repo_actions_configured_changes_nothing() {
     let html = find_html(&outputs, "index.html");
     assert!(!html.contains("toc-actions"));
     assert!(!html.contains("<footer class=\"footer\""));
+}
+
+// ---------------------------------------------------------------------------
+// Footer styling (bd-repo-actions-footer-unstyled-80xtt35y)
+//
+// The markup half of repo-actions shipped complete, but the page-footer
+// copy inherited no CSS: q2 scoped every `.toc-actions` rule under
+// `.sidebar`, so the footer links rendered as a browser-default bulleted
+// list instead of Q1's centred flex row. The rules live in Q1 at
+// `src/resources/projects/website/navigation/quarto-nav.scss:770-798`.
+// ---------------------------------------------------------------------------
+
+/// Concatenate every `.css` file the render dropped under `_site`.
+fn site_css(site_root: &std::path::Path) -> String {
+    fn walk(dir: &std::path::Path, out: &mut String) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|e| e == "css") {
+                out.push_str(&read(&path));
+                out.push('\n');
+            }
+        }
+    }
+    let mut out = String::new();
+    walk(site_root, &mut out);
+    assert!(!out.is_empty(), "render emitted no CSS at all");
+    out
+}
+
+/// Declaration blocks of every rule whose selector list mentions
+/// `.nav-footer` *and* `toc-action`. The emitted CSS is minified, so we
+/// match on structure (`selector{decls}`) rather than on formatting.
+fn footer_action_rules(css: &str) -> Vec<(String, String)> {
+    let mut rules = Vec::new();
+    let mut rest = css;
+    while let Some(open) = rest.find('{') {
+        let selector = rest[..open].rsplit('}').next().unwrap_or("").trim();
+        let Some(close) = rest[open..].find('}') else {
+            break;
+        };
+        let decls = &rest[open + 1..open + close];
+        if selector.contains(".nav-footer") && selector.contains("toc-action") {
+            rules.push((selector.to_string(), decls.to_string()));
+        }
+        rest = &rest[open + close..];
+    }
+    rules
+}
+
+#[test]
+fn footer_repo_actions_ship_their_css() {
+    let (site_root, outputs) = render_project_to_site(|dir| {
+        fixture(dir, "  repo-actions: [edit, source, issue]\n", "");
+    });
+
+    // Precondition: the markup is there. If this fires, the test is
+    // measuring the wrong thing.
+    let html = find_html(&outputs, "index.html");
+    assert!(
+        html.contains("toc-actions d-sm-block d-md-none"),
+        "fixture should emit the footer copy of the actions"
+    );
+
+    let css = site_css(&site_root);
+    let rules = footer_action_rules(&css);
+    assert!(
+        !rules.is_empty(),
+        "no `.nav-footer … toc-action…` rule reached the rendered CSS — the \
+         footer links fall back to a bulleted list (bd-repo-actions-footer-unstyled)"
+    );
+
+    let find = |needle: &str| -> Option<&(String, String)> {
+        rules.iter().find(|(sel, _)| sel.contains(needle))
+    };
+
+    // The two declarations that produce the visible symptom: without
+    // them the `<ul>` is a bulleted block, not a horizontal row.
+    let ul = find("toc-actions ul").expect("a rule scoped to `.nav-footer .toc-actions ul`");
+    assert!(
+        ul.1.contains("display:flex"),
+        "`{}` must set display:flex, got `{{{}}}`",
+        ul.0,
+        ul.1
+    );
+    assert!(
+        ul.1.contains("list-style:none"),
+        "`{}` must set list-style:none, got `{{{}}}`",
+        ul.0,
+        ul.1
+    );
+
+    // The `auto` margin pair is what centres the row.
+    let first = find(":first-child").expect("a `:first-child` rule centring the row");
+    assert!(
+        first.1.contains("margin-left:auto"),
+        "`{}` must set margin-left:auto, got `{{{}}}`",
+        first.0,
+        first.1
+    );
+    let last = find(":last-child").expect("a `:last-child` rule centring the row");
+    assert!(
+        last.1.contains("margin-right:auto"),
+        "`{}` must set margin-right:auto, got `{{{}}}`",
+        last.0,
+        last.1
+    );
+
+    // Inter-item spacing, the icon gap, and the trailing-item reset.
+    let li = find("toc-actions ul li").expect("a rule spacing the `li`s");
+    assert!(
+        li.1.contains("padding-right:1.5em"),
+        "`{}` must set padding-right:1.5em, got `{{{}}}`",
+        li.0,
+        li.1
+    );
+    assert!(
+        find("i.bi").is_some_and(|(_, d)| d.contains("padding-right:.4em")),
+        "the footer `i.bi` icon gap is missing; rules: {:?}",
+        rules.iter().map(|(s, _)| s).collect::<Vec<_>>()
+    );
+    assert!(
+        find("li:last-of-type").is_some_and(|(_, d)| d.contains("padding-right:0")),
+        "the last item's padding reset is missing; rules: {:?}",
+        rules.iter().map(|(s, _)| s).collect::<Vec<_>>()
+    );
+
+    // Link underlines off, and the block's own vertical padding.
+    assert!(
+        find("toc-actions a").is_some_and(|(_, d)| d.contains("text-decoration:none")),
+        "footer action links must not be underlined; rules: {:?}",
+        rules.iter().map(|(s, _)| s).collect::<Vec<_>>()
+    );
+    let block = rules
+        .iter()
+        .find(|(sel, _)| sel.trim_end().ends_with(".toc-actions"))
+        .expect("a rule on `.nav-footer .toc-actions` itself");
+    assert!(
+        block.1.contains("padding-top:.5em") && block.1.contains("padding-bottom:.5em"),
+        "`{}` must carry the 0.5em vertical padding, got `{{{}}}`",
+        block.0,
+        block.1
+    );
+}
+
+/// The sidebar and footer `.toc-actions` treatments are deliberately
+/// different in kind — a vertical themed list vs. a centred flex row.
+/// Adding the footer rules must not disturb the sidebar ones.
+#[test]
+fn footer_css_does_not_disturb_the_sidebar_rules() {
+    let (site_root, _) = render_project_to_site(|dir| {
+        fixture(dir, "  repo-actions: [edit, source, issue]\n", "");
+    });
+    let css = site_css(&site_root);
+
+    assert!(
+        css.contains(".sidebar .toc-actions"),
+        "the sidebar `.toc-actions` rules must still be present"
+    );
+    for (selector, decls) in footer_action_rules(&css) {
+        assert!(
+            !selector.contains(".sidebar"),
+            "footer rule `{}` must not also target the sidebar (`{{{}}}`)",
+            selector,
+            decls
+        );
+    }
 }
