@@ -1,0 +1,267 @@
+# DocumentProfile: comment summary for downstream tooling (GH #445)
+
+**Strand:** bd-0rsk07il
+**GH issue:** https://github.com/quarto-dev/q2/issues/445
+**Status:** plan draft — awaiting review; do not execute until approved.
+
+## Overview
+
+Editorial comments are `[>> comment text ]` marks in qmd source, parsed
+into `Inline::EditComment` nodes (`crates/quarto-pandoc-types/src/inline.rs:325`:
+`attr: Attr`, `content: Inlines`, `source_info`, `attr_source`). In the
+q2-preview AST JSON they surface as `Span`s with class
+`quarto-edit-comment`, which
+`ts-packages/preview-renderer/src/q2-preview/custom/CommentBlock.tsx`
+extracts and renders as per-block bubbles. The comment display mode
+toggle (expand / show / hide) lives in
+`hub-client/src/components/ReplayDrawer.tsx` (`CommentsModeToggle`).
+
+GH #445 asks: teach Quarto 2's Pass-1 processing (the
+`DocumentProfile`) to summarize the comments present in a document, so
+UI that wants "are there comments? how many?" doesn't have to process
+the whole document — and so *other* documents' comment states are
+knowable without rendering them (Pass-1 profiles exist for every
+project file).
+
+**First consumer:** hub-client's comment-mode toggle gets a badge/pill
+with the count of outstanding comments on the active page.
+
+## Facts established during investigation
+
+- The profile checkpoint (`DocumentProfileStage`, between
+  `MetadataMergeStage` and `PreEngineSugaringStage`) sees the AST
+  **after include expansion** and **before any AST mutation** —
+  `EditComment` nodes are parse products, so they are all present at
+  the checkpoint. Comments inside included files count toward the
+  including document (consistent with how `outline` works).
+- Comments attached to code blocks are stored by the hub UI as `[>> ]`
+  paragraphs inside a wrapper Div (`quarto-edit-comment-container`) —
+  still ordinary `EditComment` inlines, so a plain AST walk finds them.
+- Comments carry **no author/date today**: `CommentBlock.tsx`'s
+  `addComment` writes a bare span (empty attr). Author dots in the UI
+  come from the automerge **attribution overlay**, not from source.
+  `EditComment.attr` (id/classes/kvs) exists and round-trips through
+  the qmd writer (`write_editcomment`), so author/date *could* be
+  persisted later without a parser change.
+- "Outstanding" = present in source. The ✓ resolve button deletes the
+  comment from the source; there is no resolved-but-kept state.
+- The WASM render path (`render_page_in_project*` in
+  `crates/wasm-quarto-hub-client/src/lib.rs`) runs Pass-1 over every
+  project file and returns a `RenderResponse` JSON to hub-client. The
+  response has no profile-derived fields today.
+- `LinkResolutionStage`
+  (`crates/quarto-core/src/stage/stages/link_resolution.rs`) already
+  implements the manual block/inline walk pattern (it matches
+  `Inline::EditComment` explicitly); the comment scan follows the same
+  pattern.
+
+## Design decisions (proposed — please review)
+
+### D1. Profile field: entries, not just a count
+
+```rust
+/// One editorial comment found in the document body.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProfileComment {
+    /// Plain-text projection of the comment's content
+    /// (`pampa::writers::plaintext::inlines_to_string`).
+    pub text: String,
+    /// Source span of the mark, for jump-to-comment / gutter markers.
+    pub source: quarto_source_map::SourceInfo,
+    /// In-band author, from the mark's `author=` attribute
+    /// (`[>> text ]{author="…"}`). `None` when unstamped — all
+    /// hub-authored comments today.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    /// In-band timestamp, from the mark's `date=` attribute. Kept as
+    /// the raw string (same policy as `DocumentProfile::date`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    /// Remaining attr kvs passthrough (anything other than
+    /// `author`/`date`), so future conventions need no shape change.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<(String, String)>,
+}
+
+/// On DocumentProfile:
+#[serde(default, skip_serializing_if = "Vec::is_empty")]
+pub comments: Vec<ProfileComment>,
+```
+
+Count is `comments.len()` — no separate count field to keep in sync.
+Carrying entries (text + span) rather than a bare count is what makes
+the follow-on use cases (jump-to-comment, tooltips, MCP listing,
+search) possible without another version bump. Comments are short;
+profile size impact is negligible.
+
+Rejected alternative: `comment_count: u32` only. Cheaper, but every
+listed use case beyond the badge would immediately need a second bump.
+
+### D2. Version bump 12 → 13
+
+Strictly, a `#[serde(default)]` field is additive (cf. `order`, added
+without a bump). But profiles are **cached** (Phase-8 incremental
+rebuilds): a cached v12 profile would deserialize cleanly and report
+"no comments" for a document that has them — a silent semantic misread,
+exactly what the version-bump rule exists for. Bump, and add the v13
+entry to the version-history doc comment and the contract doc.
+
+### D3. Extraction in pure `DocumentProfile::extract`
+
+A `count_comments(blocks)`-style walk (module-private, mirroring
+`extract_outline`) over the body: recurse through block/inline
+containers collecting `Inline::EditComment`. No stage side-channel
+needed — comments are in the AST the extractor already receives.
+Walk must cover comments nested inside other inlines (Emph, Span,
+etc.) and inside container blocks (Div, BlockQuote, lists, tables,
+figure captions) — reuse the traversal shape of
+`LinkResolutionStage`.
+
+Deliberately **not** included: comments in YAML front matter (not a
+thing), comments in non-body metadata inlines. Document order =
+source order (walk order).
+
+### D4. Surfacing to hub-client: active-page summary on `RenderResponse`
+
+Add to `RenderResponse` (wasm lib.rs):
+
+```rust
+#[serde(skip_serializing_if = "Option::is_none")]
+comments: Option<JsonCommentsSummary>,  // { count, entries: [{ text, line?, ... }] }
+```
+
+populated on both the project-active-page branch (from the Pass-1
+profile of the active page) and the single-doc branch (the profile is
+produced mid-pipeline; Phase 2 resolves the cleanest retention point —
+likely stashing the extracted profile, or just its comment vec, on
+`StageContext` the way other cross-stage artifacts travel).
+Hub-client threads it from the render result through `ReactPreview` up
+to `Editor` via a callback (same pattern as `onDiagnosticsChange`),
+into `ReplayDrawer`.
+
+**Deferred (follow-up strand, filed at execution time):** a
+project-wide `path → comment summary` map in the response, for
+file-sidebar per-file badges. Pass-1 already computes everything;
+this is pure surface area, but it doubles the response-plumbing scope
+and the first consumer doesn't need it.
+
+### D5. Authorship: interpret in-band attrs now; stamp them as follow-up
+
+The issue mentions authors and last-comment-date. Hub-authored marks
+carry neither today (authorship comes from the attribution overlay),
+but **authorship should have an in-band representation in the qmd
+itself** — a comment's author shouldn't be recoverable only through
+automerge history. So:
+
+- **In scope here (read side):** the profile *interprets* `author=`
+  and `date=` attributes on comment marks as first-class
+  `ProfileComment` fields (D1). The convention
+  `[>> text ]{author="…" date="…"}` is thereby defined and honored by
+  Pass-1 from day one, and "last comment date" becomes derivable the
+  moment marks are stamped.
+- **Follow-up strand (write side):** teach the hub add-comment path
+  (`CommentBlock.tsx` `addComment`) to stamp `author=`/`date=` from
+  the session identity when writing the span, plus how the bubbles
+  display in-band authors vs. attribution-derived ones (in-band should
+  win when present). Filed at execution time, linked to this strand —
+  it's a hub-client product/UX change with its own review surface
+  (source noise, identity naming), and the badge doesn't depend on it.
+- The attribution-overlay join stays available for unstamped legacy
+  comments; the profile's `source` span is the join key.
+
+## Other use cases this unlocks (for discussion)
+
+- **File-sidebar badges**: per-file outstanding-comment counts across
+  the project, from the Pass-1 index — no rendering of inactive files.
+  (The deferred half of D4.)
+- **CLI report**: `q2 comments` (or `q2 inspect`) listing outstanding
+  comments across a project with file:line — review-round tooling.
+- **Publish/render gate**: warn (or `--fail-on-comments`) when
+  rendering/publishing a document that still has outstanding comments,
+  analogous in spirit to `draft`.
+- **MCP surface**: a quarto-hub-mcp tool listing outstanding comments
+  so agents can run "address every open comment" triage loops.
+- **Hub search**: comment text as a searchable facet
+  (`hub-client/src/services/search/` already consumes profile data
+  for titles).
+- **Editor affordances**: gutter/scrollbar comment markers in Monaco
+  from the profile's source spans, without an extra parse.
+- **Notifications/presence**: "N new comments since you last looked" —
+  client-side diff of successive profile summaries.
+
+None of these are in scope here; each would be its own strand once the
+profile field exists.
+
+## Phases and work items
+
+### Phase 1 — Rust core (TDD)
+
+- [ ] Tests first (`document_profile.rs` unit tests +
+      integration test through the pipeline): document with no
+      comments → empty vec (and field omitted in JSON); comments in
+      paragraphs / headers / nested inlines / inside Divs & lists /
+      code-block container Divs; comment in an included file counts
+      toward the host; text projection; source spans present;
+      `author=`/`date=` attrs promoted to typed fields; other kvs
+      passed through. Verify they fail.
+- [ ] Add `ProfileComment`, the `comments` field, and the extraction
+      walk to `crates/quarto-core/src/document_profile.rs`.
+- [ ] Bump `DOCUMENT_PROFILE_VERSION` to 13; version-history doc
+      comment; update `claude-notes/designs/document-profile-contract.md`
+      (field guarantee row + change log).
+- [ ] `cargo nextest run --workspace`.
+
+### Phase 2 — WASM / response surface (TDD where testable natively)
+
+- [ ] Determine profile retention point for the single-doc branch
+      (StageContext artifact vs. plumbing the AtProfile bundle);
+      implement the smallest one.
+- [ ] Add `comments` summary to `RenderResponse`, populated in both
+      project-active-page and single-doc branches (q2-preview and
+      html formats alike).
+- [ ] Native-side test of the summary JSON shape where feasible;
+      the WASM leg itself is covered by `cargo xtask verify`.
+- [ ] TS types for the response field
+      (hub-client render service / preview-renderer as applicable).
+
+### Phase 3 — hub-client badge (first consumer)
+
+- [ ] Thread the summary from the render result to `Editor` (callback
+      alongside `onDiagnosticsChange`) and into `ReplayDrawer`.
+- [ ] Badge/pill on `CommentsModeToggle` showing the active page's
+      outstanding-comment count (hidden at 0). Vitest coverage for the
+      toggle rendering with/without count.
+- [ ] `npm run build:all` + `npm run test:ci` from hub-client.
+- [ ] `hub-client/changelog.md` two-commit dance.
+
+### Phase 4 — verification & wrap-up
+
+- [ ] Full `cargo xtask verify` (WASM leg affected — quarto-core
+      change).
+- [ ] End-to-end: real browser session against local hub
+      (`npm run local-prod` or dev server), a fixture doc with
+      comments; observe the badge count, add a comment, watch it
+      increment; record invocation + observation per CLAUDE.md's
+      end-to-end policy.
+- [ ] File follow-up strands, linked `discovered-from:bd-0rsk07il`:
+      in-band author/date stamping in the hub add-comment path (D5
+      write side); project-wide summary map for sidebar badges (D4
+      deferral); any of the use-case list the user wants tracked.
+- [ ] Close bd-0rsk07il; comment on GH #445.
+
+## Open questions for plan review
+
+1. **D1 scope** — entries + spans (proposed) vs. bare count? Any
+   privacy/size concern with comment text living in cached profiles on
+   disk (native incremental-rebuild cache)?
+2. **D4 deferral** — is active-page-only right for the first cut, or
+   should the project-wide map ship now to unblock sidebar badges in
+   the same overhaul?
+3. **Badge placement** — the count on all three toggle buttons' shared
+   pill, or only on the "show"/"expand" buttons? (Pure UI; can also be
+   settled at implementation time with a screenshot.)
+4. **In-band author convention (D5)** — attribute names `author=` /
+   `date=` OK? Date format (recommend RFC 3339 / ISO 8601 UTC)?
+   What identity string does the hub stamp (display name vs. stable
+   user id)? Should the write-side stamping land in this strand's
+   Phase 3 instead of a follow-up, given the overhaul is imminent?
