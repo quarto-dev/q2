@@ -420,3 +420,121 @@ fn unified_brand_enables_navbar_toggle() {
         "navbar must carry the dark-mode toggle when brand content enables dark mode"
     );
 }
+
+// ── GH #581: front-matter brand (bd-vk4olgv6) ───────────────────────
+
+/// The exact reproduction from GH #581: an inline `brand:` block in a
+/// single-file document's front matter. Front-matter strings default
+/// to markdown (`PandocInlines`), which the brand walker rejects with
+/// Q-14-1 — the block must instead stay plain YAML and render exactly
+/// as it does from `_quarto.yml`.
+#[test]
+fn front_matter_inline_brand_block_renders() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("index.qmd"),
+        "---\nformat: html\nbrand:\n  color:\n    background: \"#b22222\"\n---\n\nHello.\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("index.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("an inline brand block in front matter must render (GH #581)");
+
+    let css = read_css(&result.resources_dir);
+    assert!(
+        css.contains("#b22222"),
+        "front-matter brand background must reach the theme CSS"
+    );
+}
+
+/// GH #581, second half: `brand: _brand.yml` in front matter renders
+/// but used to emit a spurious Q-1-20 warning (the leading underscore
+/// read as an unclosed emphasis mark). The path is machine-facing —
+/// no markdown parse, no warning.
+#[test]
+fn front_matter_brand_file_renders_without_markdown_warning() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("_brand.yml"),
+        "color:\n  background: \"#b22222\"\n",
+    );
+    write(
+        &root.join("index.qmd"),
+        "---\nformat: html\nbrand: _brand.yml\n---\n\nHello.\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("index.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("brand file named from front matter must render");
+
+    let css = read_css(&result.resources_dir);
+    assert!(css.contains("#b22222"), "brand must be applied");
+    let q_1_20: Vec<_> = result
+        .render_output
+        .diagnostics
+        .iter()
+        .filter(|d| d.code.as_deref() == Some("Q-1-20"))
+        .collect();
+    assert!(
+        q_1_20.is_empty(),
+        "no markdown-parse warning for the brand path; got {q_1_20:?}"
+    );
+}
+
+/// The `!md` escape hatch (user-approved scope of bd-vk4olgv6): an
+/// explicitly tagged markdown value under `brand.meta` beats the
+/// plain-YAML annotation at load time, and the brand walker projects
+/// it to plain text instead of failing the render with Q-14-1.
+#[test]
+fn front_matter_md_tagged_brand_meta_value_renders() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    write(
+        &root.join("index.qmd"),
+        concat!(
+            "---\n",
+            "format: html\n",
+            "brand:\n",
+            "  meta:\n",
+            "    name: !md \"Acme *Corp*\"\n",
+            "  color:\n",
+            "    background: \"#b22222\"\n",
+            "---\n",
+            "\n",
+            "Hello.\n",
+        ),
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &root.join("index.qmd"),
+        "html",
+        &RenderToFileOptions {
+            quiet: true,
+            ..Default::default()
+        },
+        runtime,
+    )
+    .expect("!md-tagged brand.meta value must not fail the render");
+
+    let css = read_css(&result.resources_dir);
+    assert!(css.contains("#b22222"), "brand must still be applied");
+}

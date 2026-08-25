@@ -46,6 +46,12 @@
 //!   (`format.*.listing.contents` covers per-format nesting).
 //!   Matching is exact-length, never a suffix match, so a user's
 //!   unrelated `my.listing.contents` key is not captured.
+//! - A trailing `**` matches the node at the preceding prefix and
+//!   its whole subtree (zero or more further segments): `brand.**`
+//!   covers `brand` itself (the path-string form) and every leaf of
+//!   an inline block, at any depth. Use it for keys whose entire
+//!   value is machine-facing; explicit tags still win inside the
+//!   subtree.
 //!
 //! ## See also: the *other* key-path table, and when to pick which
 //!
@@ -86,6 +92,13 @@ const ANNOTATIONS: &[(&[&str], Interpretation)] = &[
         &["format", "*", "listing", "contents"],
         Interpretation::Glob,
     ),
+    // Brand values are machine-facing configuration defined by the
+    // brand-yml spec as plain YAML; the same block must mean the same
+    // thing in `_brand.yml`, `_quarto.yml`, and front matter
+    // (bd-vk4olgv6, GH #581). The subtree form covers the
+    // `brand: _brand.yml` path string and every inline-block leaf —
+    // including custom fields under `meta`, which the spec allows.
+    (&["brand", "**"], Interpretation::PlainString),
 ];
 
 /// Interpretation annotated for the value at `path`, if any.
@@ -94,14 +107,27 @@ const ANNOTATIONS: &[(&[&str], Interpretation)] = &[
 pub(crate) fn annotated_interpretation(path: &[String]) -> Option<Interpretation> {
     ANNOTATIONS
         .iter()
-        .find(|(pattern, _)| {
-            pattern.len() == path.len()
-                && pattern
-                    .iter()
-                    .zip(path.iter())
-                    .all(|(p, seg)| *p == "*" || *p == seg.as_str())
-        })
+        .find(|(pattern, _)| pattern_matches(pattern, path))
         .map(|(_, interp)| *interp)
+}
+
+/// Whether `pattern` matches `path`. `*` matches exactly one segment.
+/// A trailing `**` matches the node at the preceding prefix *and* any
+/// of its descendants (zero or more further segments); it is only
+/// meaningful as the final pattern element. Patterns without `**`
+/// match exact-length only — never a suffix or prefix.
+fn pattern_matches(pattern: &[&str], path: &[String]) -> bool {
+    let (min_len, exact) = match pattern.split_last() {
+        Some((&"**", prefix)) => (prefix.len(), false),
+        _ => (pattern.len(), true),
+    };
+    if path.len() < min_len || (exact && path.len() != min_len) {
+        return false;
+    }
+    pattern[..min_len]
+        .iter()
+        .zip(path.iter())
+        .all(|(p, seg)| *p == "*" || *p == seg.as_str())
 }
 
 #[cfg(test)]
@@ -152,5 +178,52 @@ mod tests {
     fn unrelated_paths_do_not_match() {
         assert_eq!(annotated_interpretation(&path(&["title"])), None);
         assert_eq!(annotated_interpretation(&path(&[])), None);
+    }
+
+    // ── brand subtree (bd-vk4olgv6, GH #581) ─────────────────────
+
+    #[test]
+    fn brand_subtree_matches_root_and_descendants() {
+        // `["brand", "**"]` covers the `brand` node itself (the
+        // `brand: _brand.yml` path form) and every descendant leaf
+        // (inline block values), at any depth — including custom
+        // fields under `meta`, which the brand-yml spec allows.
+        for p in [
+            &["brand"][..],
+            &["brand", "color", "background"][..],
+            &["brand", "light"][..],
+            &["brand", "meta", "name"][..],
+            &["brand", "meta", "some-unknown-program", "notice"][..],
+        ] {
+            assert_eq!(
+                annotated_interpretation(&path(p)),
+                Some(Interpretation::PlainString),
+                "path {p:?} must be plain YAML, never markdown"
+            );
+        }
+    }
+
+    #[test]
+    fn brand_subtree_no_false_positives() {
+        // Subtree matching is anchored at the metadata root: user
+        // keys that merely contain or resemble `brand` are not
+        // captured.
+        assert_eq!(annotated_interpretation(&path(&["my", "brand"])), None);
+        assert_eq!(annotated_interpretation(&path(&["brandx"])), None);
+        assert_eq!(
+            annotated_interpretation(&path(&["format", "html", "brand"])),
+            None,
+            "no consumer reads format.*.brand; keep the table minimal"
+        );
+    }
+
+    #[test]
+    fn exact_length_entries_unaffected_by_subtree_support() {
+        // The pre-existing exact-length semantics must not loosen:
+        // `listing.contents` still refuses descendants.
+        assert_eq!(
+            annotated_interpretation(&path(&["listing", "contents", "title"])),
+            None
+        );
     }
 }

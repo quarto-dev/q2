@@ -263,6 +263,47 @@ Phase 3 — verification:
    (a) must render with the color in the theme CSS, (b) must be warning-free,
    (c) must stay unchanged. Inspect outputs, record in the session summary.
 
+## Implementation record (2026-08-25, same branch)
+
+All plan items implemented in TDD order — every new test was run and observed
+failing for the predicted reason before the corresponding change:
+
+- [x] `meta_annotations.rs`: subtree tests (`brand`, descendants, custom
+      `meta` fields; no false positives; exact-length entries unchanged) —
+      failed with `None`, pass after.
+- [x] `meta.rs`: `brand_inline_block_leaves_stay_plain_yaml`,
+      `brand_path_string_is_plain_with_no_warning`,
+      `brand_meta_value_with_markdown_chars_survives_verbatim` (the failure
+      output showed the live mangling: `Acme *Corp*` → `Emph`),
+      `brand_explicit_md_tag_overrides_annotation`.
+- [x] `quarto-sass`: `inline_brand_md_tagged_leaf_projects_to_plain_text` —
+      failed at extraction, passes with the walker projection.
+- [x] `brand_render.rs` e2e: `front_matter_inline_brand_block_renders`,
+      `front_matter_brand_file_renders_without_markdown_warning` (asserts no
+      Q-1-20 in `render_output.diagnostics`),
+      `front_matter_md_tagged_brand_meta_value_renders`.
+- [x] Implementation: `**` subtree matching + `(&["brand", "**"],
+      PlainString)` entry + module-doc update in `meta_annotations.rs`;
+      `PandocInlines` → plain-text projection (PandocBlocks keeps a
+      clearer error) in `config_value_to_yaml_value`.
+- [x] Docs: `docs/guides/authoring/brand.qmd` — new "Brand values are plain
+      YAML" section documenting the semantics and the `!md` escape hatch.
+- [x] E2e through the real binary (`target/debug/q2` at the fix commit):
+      repro-inline renders and `repro-inline_files/styles.css` contains
+      `b22222`; repro-file renders with **zero** warnings (exit 0, no
+      Q-1-20 in output — inspected); control-project unchanged; exp-md-tag
+      (`meta.name: !md "Acme *Corp*"`) renders. exp-meta still fails on
+      `unknown field description` — expected, that is bd-8q5o86r1.
+- [x] `cargo nextest run --workspace`: 13398 passed, 199 skipped.
+- [x] `cargo xtask lint`: clean.
+- [x] Full `cargo xtask verify` (WASM leg included — pampa is in the
+      hub-client closure): all 14 steps passed.
+- [x] Docs page renders (`q2 render docs/guides/authoring/brand.qmd`; the
+      project-level "Declared resource docs/examples" error is the known
+      fresh-worktree staging gap bd-u7kdy6fy, unrelated) and the built HTML
+      contains the new section with the highlighted `!md` example —
+      inspected.
+
 ## Outcome / recommended next step
 
 Filed **bd-vk4olgv6** (bug, p1) with the fix scope above. Discovered work:

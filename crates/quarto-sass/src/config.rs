@@ -861,9 +861,21 @@ fn config_value_to_yaml_value(value: &ConfigValue) -> Result<serde_yaml::Value, 
             }
             serde_yaml::Value::Mapping(map)
         }
-        ConfigValueKind::PandocInlines(_) | ConfigValueKind::PandocBlocks(_) => {
+        ConfigValueKind::PandocInlines(_) => {
+            // Only reachable via an explicit `!md` tag: untagged
+            // strings under `brand:` stay `Scalar` thanks to the
+            // brand-subtree annotation in pampa's `meta_annotations`
+            // (bd-vk4olgv6). Honor the author's tag with the
+            // plain-text projection rather than failing the render;
+            // the merged metadata tree keeps the rich inlines for
+            // metadata-level consumers.
+            serde_yaml::Value::String(value.as_plain_text().unwrap_or_default())
+        }
+        ConfigValueKind::PandocBlocks(_) => {
             return Err(SassError::InvalidThemeConfig {
-                message: "brand block must be plain YAML, not Pandoc inlines/blocks".to_string(),
+                message: "brand values must be plain YAML; multi-block `!md` markdown has no \
+                          scalar projection — use single-paragraph markdown or a plain string"
+                    .to_string(),
                 location: Some(value.source_info.clone()),
             });
         }
@@ -2576,5 +2588,63 @@ mod tests {
             ThemeConfig::from_config_value(&config_with_theme_value(theme_value)).unwrap();
         assert_eq!(theme_config.themes.len(), 1);
         assert!(theme_config.themes[0].is_builtin());
+    }
+
+    // === `!md`-tagged leaves inside an inline brand block (bd-vk4olgv6) ===
+
+    #[test]
+    fn inline_brand_md_tagged_leaf_projects_to_plain_text() {
+        use quarto_pandoc_types::inline::{Inline, Space, Str};
+
+        // Simulate `brand.meta.name: !md "Acme Corp"`: the explicit
+        // tag yields PandocInlines even though the brand-subtree
+        // annotation keeps *untagged* values plain (GH #581). The
+        // walker must not fail the render; the Brand copy receives
+        // the plain-text projection while the merged metadata keeps
+        // the rich inlines.
+        let name_value = ConfigValue::new_inlines(
+            vec![
+                Inline::Str(Str {
+                    text: "Acme".to_string(),
+                    source_info: SourceInfo::for_test(),
+                }),
+                Inline::Space(Space {
+                    source_info: SourceInfo::for_test(),
+                }),
+                Inline::Str(Str {
+                    text: "Corp".to_string(),
+                    source_info: SourceInfo::for_test(),
+                }),
+            ],
+            SourceInfo::for_test(),
+        );
+        let brand_value = map_value(vec![
+            map_entry("meta", map_value(vec![map_entry("name", name_value)])),
+            map_entry(
+                "color",
+                map_value(vec![map_entry("background", scalar_value("#b22222"))]),
+            ),
+        ]);
+
+        let brand_ref = extract_single_brand_ref(&brand_value)
+            .expect("an !md-tagged leaf must not fail brand extraction");
+        let BrandRef::Inline(yaml) = brand_ref else {
+            panic!("expected an inline brand block");
+        };
+        assert_eq!(
+            yaml["meta"]["name"],
+            serde_yaml::Value::String("Acme Corp".to_string()),
+            "inlines leaf must project to its plain text"
+        );
+
+        let brand: quarto_brand::UnifiedBrand =
+            serde_yaml::from_value((*yaml).clone()).expect("projected block must deserialize");
+        assert_eq!(
+            brand.meta.and_then(|m| m.name).and_then(|n| match n {
+                quarto_brand::BrandMetaName::Short(s) => Some(s),
+                quarto_brand::BrandMetaName::Detailed { full, short } => full.or(short),
+            }),
+            Some("Acme Corp".to_string())
+        );
     }
 }
