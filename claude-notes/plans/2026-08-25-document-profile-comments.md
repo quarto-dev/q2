@@ -2,7 +2,8 @@
 
 **Strand:** bd-0rsk07il
 **GH issue:** https://github.com/quarto-dev/q2/issues/445
-**Status:** plan draft — awaiting review; do not execute until approved.
+**Status:** reviewed 2026-08-25 (open questions resolved — see
+§"Resolved decisions"); awaiting explicit go-ahead to execute.
 
 ## Overview
 
@@ -249,19 +250,28 @@ profile field exists.
       deferral); any of the use-case list the user wants tracked.
 - [ ] Close bd-0rsk07il; comment on GH #445.
 
-## Open questions for plan review
+## Resolved decisions (plan review, 2026-08-25)
 
-1. **D1 scope** — entries + spans (proposed) vs. bare count? Any
-   privacy/size concern with comment text living in cached profiles on
-   disk (native incremental-rebuild cache)?
-2. **D4 deferral** — is active-page-only right for the first cut, or
-   should the project-wide map ship now to unblock sidebar badges in
-   the same overhaul?
-3. **Badge placement** — the count on all three toggle buttons' shared
-   pill, or only on the "show"/"expand" buttons? (Pure UI; can also be
-   settled at implementation time with a screenshot.)
-4. **In-band author convention (D5)** — attribute names `author=` /
-   `date=` OK? Date format (recommend RFC 3339 / ISO 8601 UTC)?
-   What identity string does the hub stamp (display name vs. stable
-   user id)? Should the write-side stamping land in this strand's
-   Phase 3 instead of a follow-up, given the overhaul is imminent?
+1. **D1 scope — entries + spans, confirmed.** Size: cache bloat is
+   expected to be dominated by non-text input, not comment text.
+   Privacy: the profile adds no information not already present in the
+   document itself, so no *new* exposure; existing safeguards apply.
+   Verified in-tree: the native profile cache lives at
+   `<project>/.quarto/cache/`
+   (`crates/quarto-core/src/project/profile_cache.rs`, via
+   `NativeRuntime::with_cache_dir`), and `q2 create`'s git scaffolding
+   ensures `/.quarto/` is in `.gitignore`
+   (`crates/quarto/src/commands/create/project.rs:151-153`). Projects
+   assembled by hand without that ignore entry could commit cached
+   profiles — but the source document carrying the same text is
+   committed regardless, so this changes nothing.
+2. **D4 — active-page-only for the first cut, confirmed.** The
+   project-wide `path → summary` map stays a follow-up strand.
+3. **Badge placement — single location** (one badge for the toggle
+   group, not one per button). Final design to be iterated on a
+   working version; implementation uses best judgment for the first
+   screenshot.
+4. **D5 convention — confirmed:** `author=` / `date=` attribute
+   names; `date` is ISO 8601 UTC; the hub stamps the **display name**
+   as the identity string for now (expected to be tweaked once seen in
+   action). Write-side stamping is a **follow-up strand**, not Phase 3.
