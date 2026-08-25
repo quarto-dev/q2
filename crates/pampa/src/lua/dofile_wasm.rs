@@ -8,9 +8,10 @@
  * Rust implementations backed by SystemRuntime.
  *
  * These overrides handle file I/O only. They do NOT modify the script-dir
- * stack — path resolution during execution uses whatever script dir was
- * set by the caller (filter.rs or shortcode.rs), matching native Lua and
- * Pandoc/TS Quarto behavior.
+ * stack — loaders never do; see THE CONTRACT in the script-dir-stack
+ * section of quarto_api.rs (#112, GH #588). Path resolution during
+ * execution uses whatever script dir was set by the caller (filter.rs or
+ * shortcode.rs), matching native Lua and Pandoc/TS Quarto behavior.
  */
 
 use std::path::Path;

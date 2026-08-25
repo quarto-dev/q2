@@ -158,10 +158,16 @@ pub fn create_filter_environment(
     let mediabag = create_shared_mediabag();
 
     // Register pandoc namespace with constructors (also registers quarto namespace)
-    register_pandoc_namespace(&lua, runtime, mediabag)?;
+    register_pandoc_namespace(&lua, runtime.clone(), mediabag)?;
 
     // Register quarto.json, quarto.log, quarto.utils
     register_quarto_api(&lua)?;
+
+    // Script-dir-aware `require` so filter scripts can load sibling modules
+    // (Q1 parity, GH #587) — same loader the shortcode environment installs.
+    // On native the stock `require` remains the fallback for anything not
+    // found relative to the script dirs.
+    super::quarto_api::register_scoped_require(&lua, runtime.clone())?;
 
     // Register quarto.attribution.{lookup, lookup_range, identities}.
     // When `attribution` is `None`, registers no-op stubs:

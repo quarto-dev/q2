@@ -122,6 +122,94 @@ end
 }
 
 // ============================================================================
+// Scoped require + resolve_path contract on WASM (GH #587 / GH #588)
+// ============================================================================
+
+/// A filter loads a sibling module with the scoped `require` through the
+/// VFS, and `quarto.utils.resolve_path` inside that module resolves against
+/// the extension root under the `/project/` prefix — the script-dir
+/// contract (quarto_api.rs) on the WASM path.
+#[wasm_bindgen_test]
+async fn scoped_require_and_resolve_path_wasm() {
+    use pampa::lua::apply_lua_filters;
+    use pampa::lua::runtime::{VirtualFileSystem, WasmRuntime};
+    use pampa::pandoc::{ASTContext, Block, Inline, Pandoc, Paragraph, Str};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    let mut vfs = VirtualFileSystem::new();
+    vfs.add_file(
+        std::path::Path::new("/project/_extensions/fr/_modules/greet.lua"),
+        br#"
+return {
+  greeting = "greet-module-loaded",
+  resolved = quarto.utils.resolve_path("_modules/greet.lua"),
+}
+"#
+        .to_vec(),
+    );
+    vfs.add_file(
+        std::path::Path::new("/project/_extensions/fr/fr.lua"),
+        br#"
+local top = quarto.utils.resolve_path("_modules/greet.lua")
+local mod = require("_modules/greet")
+local verdict
+if top == "/project/_extensions/fr/_modules/greet.lua"
+    and mod.resolved == top
+    and mod.greeting == "greet-module-loaded" then
+  verdict = "REQUIRE-RESOLVE-OK"
+else
+  verdict = "MISMATCH:" .. tostring(top) .. "|" .. tostring(mod.resolved)
+end
+
+function Str(elem)
+    return pandoc.Str(verdict)
+end
+"#
+        .to_vec(),
+    );
+
+    let runtime: Arc<dyn pampa::lua::runtime::SystemRuntime> = Arc::new(WasmRuntime::with_vfs(vfs));
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(Paragraph {
+            content: vec![Inline::Str(Str {
+                text: "hello".to_string(),
+                source_info: quarto_source_map::SourceInfo::for_test(),
+            })],
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        })],
+    };
+    let context = ASTContext::new();
+
+    let output = apply_lua_filters(
+        pandoc,
+        context,
+        &[PathBuf::from("/project/_extensions/fr/fr.lua")],
+        "html",
+        runtime,
+        None,
+    )
+    .await
+    .expect("filter execution failed");
+
+    assert!(
+        output.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        output.diagnostics
+    );
+
+    match &output.pandoc.blocks[0] {
+        Block::Paragraph(p) => match &p.content[0] {
+            Inline::Str(s) => assert_eq!(s.text, "REQUIRE-RESOLVE-OK"),
+            other => panic!("Expected Str, got {other:?}"),
+        },
+        other => panic!("Expected Paragraph, got {other:?}"),
+    }
+}
+
+// ============================================================================
 // Doc-level handlers (function Meta / function Pandoc) on WASM
 // ============================================================================
 
