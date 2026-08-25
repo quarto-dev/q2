@@ -194,6 +194,7 @@ fn strip_title_block_header(html: &str) -> String {
 /// - All other paths are resolved against `sibling_dir`
 ///   (forward-slashed; empty = output-dir root).
 fn rewrite_relative_urls(html: &str, site_url: &str, sibling_dir: &str) -> String {
+    use quarto_util::is_external_url;
     use regex::{Captures, RegexBuilder};
     let base = site_url.trim_end_matches('/');
 
@@ -241,21 +242,6 @@ fn rewrite_relative_urls(html: &str, site_url: &str, sibling_dir: &str) -> Strin
             format!(r#"<{}{}src="{}"{}>"#, tag, pre, rewrite_url(url), post)
         })
         .into_owned()
-}
-
-/// True if `s` is already an absolute reference. Includes the
-/// scheme-relative `//host/path` form and the common pseudo-
-/// schemes (`mailto:`, `javascript:`, `data:`) that should pass
-/// through unchanged.
-fn is_external_url(s: &str) -> bool {
-    s.starts_with("http://")
-        || s.starts_with("https://")
-        || s.starts_with("//")
-        || s.starts_with("mailto:")
-        || s.starts_with("javascript:")
-        || s.starts_with("data:")
-        || s.starts_with("tel:")
-        || s.starts_with("ftp://")
 }
 
 /// Collapse `..` / `.` segments in a forward-slash path. Naive
@@ -455,6 +441,25 @@ mod tests {
         assert!(
             out.contains(r#"href="mailto:hi@example.com""#),
             "mailto must pass through; got: {}",
+            out
+        );
+    }
+
+    /// bd-scheme-href-path-normalized-w5zya82r — any scheme passes
+    /// through, not just the allowlisted few.
+    #[test]
+    fn extract_full_contents_passes_any_scheme_through() {
+        let html = r#"<html><body><main class="content"><p><a href="positron://settings/x">p</a> <a href="vscode://schemas/settings">v</a></p></main></body></html>"#;
+        let out = extract_full_contents(html, "https://example.com", "posts/foo.html")
+            .expect("main.content found");
+        assert!(
+            out.contains(r#"href="positron://settings/x""#),
+            "custom scheme must pass through; got: {}",
+            out
+        );
+        assert!(
+            out.contains(r#"href="vscode://schemas/settings""#),
+            "custom scheme must pass through; got: {}",
             out
         );
     }

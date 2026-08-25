@@ -66,30 +66,78 @@ gets its own regression test written first.
 
 ### Phase 1 — failing tests (TDD)
 
-- [ ] `navigation_href.rs` `is_external_classification`: add `positron://…`, `vscode://…`, `javascript:void(0);`, `tel:`-style scheme without `//`, and negatives (`docs/a:b.qmd`, `page.qmd#sec:x`, `C:\x`) — run, confirm fails
-- [ ] `navigation_href.rs`: `resolve_href_for_html` at depth one passes `javascript:void(0);` and `positron://settings/x` through unchanged (symptom 2 + 1 for nav)
-- [ ] `navigation_href.rs`: `resolve_doc_relative_href` passes `positron://settings/x` unchanged (symptom 1 for body links)
-- [ ] `quarto-navigation/src/sidebar.rs`: `flatten_for_page_nav` skips a `javascript:void(0);` link
-- [ ] `sidebar_membership.rs`: a `positron://` entry is not a member path
-- [ ] `llms_post_render.rs` / `llms.rs`: `javascript:void(0);` passes through / resolves to nothing
-- [ ] `substitute.rs` / `reader_ext.rs`: `positron://x` treated as absolute
-- [ ] Smoke-all fixture `crates/quarto/tests/smoke-all/navigation/scheme-hrefs/` (navbar with `javascript:`, `mailto:`, `positron://` items; `index.qmd` + `sub/page.qmd` + body links) — `ensureFileRegexMatches` on intact `positron://` and absent `positron:/s`, `\.\./javascript:` — run, confirm fails
+- [x] `navigation_href.rs` `is_external_classification`: add `positron://…`, `vscode://…`, `javascript:void(0);`, `tel:`-style scheme without `//`, and negatives (`docs/a:b.qmd`, `page.qmd#sec:x`, `C:\x`) — run, confirm fails
+- [x] `navigation_href.rs`: `resolve_href_for_html` at depth one passes `javascript:void(0);` and `positron://settings/x` through unchanged (symptom 2 + 1 for nav)
+- [x] `navigation_href.rs`: `resolve_doc_relative_href` passes `positron://settings/x` unchanged (symptom 1 for body links)
+- [x] `quarto-navigation/src/sidebar.rs`: `flatten_for_page_nav` skips a `javascript:void(0);` link
+- [x] `sidebar_membership.rs`: a `positron://` entry is not a member path
+- [x] `llms_post_render.rs` / `llms.rs`: `javascript:void(0);` passes through / resolves to nothing
+- [x] `substitute.rs` / `reader_ext.rs`: `positron://x` treated as absolute
+- [x] Smoke-all fixture `crates/quarto/tests/smoke-all/navigation/scheme-hrefs/` (navbar with `javascript:`, `mailto:`, `positron://` items; `index.qmd` + `sub/page.qmd` + body links) — `ensureFileRegexMatches` on intact `positron://` and absent `positron:/s`, `\.\./javascript:` — run, confirm fails
 
 ### Phase 2 — fix
 
-- [ ] Replace the body of `navigation_href::is_external` with `quarto_util::is_external_url`; rewrite doc comment (drop the false "matches Q1's cheap heuristic"; cite this strand + the class)
-- [ ] #2 `sidebar_membership.rs` → `is_external_url(href) || href.starts_with('#')`
-- [ ] #3 `quarto-navigation` → add `quarto-util` dep, use `is_external_url`
-- [ ] #4, #5 llms → `is_external_url`
-- [ ] #6, #7 listing → `is_external_url` (drop the local shadowing copy in `reader_ext.rs`)
-- [ ] All Phase 1 tests pass; `cargo clippy -p quarto-core -p quarto-navigation -p quarto --all-targets -- -D warnings`
+- [x] Replace the body of `navigation_href::is_external` with `quarto_util::is_external_url`; rewrite doc comment (drop the false "matches Q1's cheap heuristic"; cite this strand + the class)
+- [x] #2 `sidebar_membership.rs` → `is_external_url(href) || href.starts_with('#')`
+- [x] #3 `quarto-navigation` → add `quarto-util` dep, use `is_external_url`
+- [x] #4, #5 llms → `is_external_url`
+- [x] #6, #7 listing → `is_external_url` (drop the local shadowing copy in `reader_ext.rs`)
+- [x] All Phase 1 tests pass; `cargo clippy -p quarto-core -p quarto-navigation -p quarto --all-targets -- -D warnings`
 
 ### Phase 3 — verification
 
-- [ ] `cargo nextest run --workspace` — report delta vs pre-flight baseline
-- [ ] End-to-end: `cargo run --bin q2 -- render` on both external repro projects; inspect `_site/index.html` and `_site/sub/page.html`; record snippets below
-- [ ] Reconcile this checklist; commit
+- [x] `cargo nextest run --workspace` — 13377 run / 13377 passed / 199 skipped / 0 failed; +10 unit tests vs `main` (all new here), fixture adds pages to the single `smoke_all` test
+- [x] End-to-end: `cargo run --bin q2 -- render` on both external repro projects; inspect `_site/index.html` and `_site/sub/page.html`; record snippets below
+- [x] Reconcile this checklist; commit
+
+## Notes from execution
+
+- **TDD red run:** 7 of the 10 new unit tests failed before the fix
+  (`is_external_recognizes_any_scheme`,
+  `nav_href_with_custom_scheme_passes_through_at_depth` — actual
+  `"../javascript:void(0);"`, `static_href_custom_scheme_passes_through`,
+  `flatten_excludes_any_scheme_href`, `any_scheme_href_excluded`,
+  `resolve_preview_url_passes_any_scheme_through`,
+  `extract_full_contents_passes_any_scheme_through`) plus both pages of
+  the smoke-all fixture. The two llms tests (#4, #5) passed before the
+  fix as predicted — those sites were `contains("://")`-tolerant; they
+  are unified for consistency and their tests pin the behaviour.
+  `body_href_custom_scheme_keeps_double_slash` initially passed because
+  it passed `index: None`, which short-circuits to verbatim; it now
+  passes an index and failed red before the fix.
+- **Smoke-all runner vs `q2 render`:** the smoke-all runner renders
+  `sub/page.qmd` *without* nav-href relativization (no `../index.html`
+  in its output, and no `../javascript:` either), so symptom 2 is only
+  observable through the real binary. The fixture therefore asserts
+  symptom 1 (and the absence of `../<scheme>` as a guard); symptom 2 is
+  pinned by the unit test. Whether the runner *should* relativize like
+  `q2 render` is a separate question, not pursued here.
 
 ## End-to-end record
 
-(filled in at Phase 3)
+Invocation (from the worktree root, after the fix):
+
+```
+cargo run -q --bin q2 -- render crates/quarto/tests/smoke-all/navigation/scheme-hrefs
+cargo run -q --bin q2 -- render /Users/gordon/src/q2-positron-docs/llms-info/repros/custom-scheme-slash-collapsed
+cargo run -q --bin q2 -- render /Users/gordon/src/q2-positron-docs/llms-info/repros/nav-scheme-href-relativized
+```
+
+Observed hrefs (`grep -o 'href="[^"]*"'`, minus css/js), **inspected**:
+
+```
+nav-scheme-href-relativized/_site/index.html          before fix                      after fix
+  JS navbar item                                       javascript:void(0);            javascript:void(0);
+  Custom-scheme navbar item                            positron:/settings/...         positron://settings/positron.notebook.enabled
+nav-scheme-href-relativized/_site/sub/page.html
+  JS navbar item                                       ../javascript:void(0);         javascript:void(0);
+  Custom-scheme navbar item                            ../positron:/settings/...      positron://settings/positron.notebook.enabled
+  Home (real page link, still relativized)             ../index.html                  ../index.html
+custom-scheme-slash-collapsed/_site/index.html (body links)
+  positron                                             positron:/settings/...         positron://settings/positron.notebook.enabled
+  vscode                                               vscode:/schemas/settings       vscode://schemas/settings
+  https / mailto controls                              unchanged                      unchanged
+```
+
+After the fix every scheme href on every page is byte-identical to the
+Q1 baseline in `_site-q1/`.

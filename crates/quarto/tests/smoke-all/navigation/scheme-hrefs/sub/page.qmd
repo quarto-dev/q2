@@ -1,0 +1,26 @@
+---
+title: Scheme hrefs (one level deep)
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - [
+            # Navbar items with a scheme are emitted unchanged at depth.
+            'href="javascript:void\(0\);"',
+            'href="mailto:someone@example\.com"',
+            'href="positron://settings/positron\.notebook\.enabled"',
+          ]
+        - [
+            # bd-scheme-href-path-normalized-w5zya82r symptom 2: nav
+            # hrefs with a scheme must not gain `../` per level ...
+            '\.\./javascript:',
+            '\.\./mailto:',
+            '\.\./positron:',
+            # ... and (symptom 1) must keep their `//`.
+            'positron:/settings',
+          ]
+---
+
+A page one directory deep; the navbar above is what's under test.

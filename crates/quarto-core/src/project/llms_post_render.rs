@@ -592,12 +592,7 @@ fn collect_nav_items(
 /// (`about.qmd`) or output href (`about.html`) — to its profile.
 /// External URLs and anchors resolve to nothing.
 fn resolve_href<'i>(href: &str, index: &'i ProjectIndex) -> Option<&'i DocumentProfile> {
-    if href.is_empty()
-        || href.starts_with('#')
-        || href.starts_with("//")
-        || href.contains("://")
-        || href.starts_with("mailto:")
-    {
+    if href.is_empty() || href.starts_with('#') || quarto_util::is_external_url(href) {
         return None;
     }
     let clean = href.strip_prefix('/').unwrap_or(href);
@@ -647,4 +642,38 @@ fn assemble_llms_full(
         out.push('\n');
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn index_with(source: &str, href: &str) -> ProjectIndex {
+        ProjectIndex::new(vec![DocumentProfile {
+            source_path: PathBuf::from(source),
+            output_href: href.to_string(),
+            format_id: "html".to_string(),
+            ..Default::default()
+        }])
+    }
+
+    /// Any scheme is external and resolves to nothing — not just the
+    /// allowlisted few (bd-scheme-href-path-normalized-w5zya82r).
+    #[test]
+    fn resolve_href_any_scheme_is_external() {
+        let index = index_with("about.qmd", "about.html");
+        assert!(resolve_href("about.qmd", &index).is_some());
+        assert!(resolve_href("about.html#sec", &index).is_some());
+        for href in [
+            "https://example.com/about.html",
+            "mailto:someone@example.com",
+            "javascript:void(0);",
+            "positron://settings/about.html",
+            "//cdn.example.com/about.html",
+            "#sec",
+            "",
+        ] {
+            assert!(resolve_href(href, &index).is_none(), "{href}");
+        }
+    }
 }

@@ -10,6 +10,7 @@ description = "Document-model types for Quarto navigation (navbar, page footer, 
 quarto-config.workspace = true
 quarto-pandoc-types.workspace = true
 quarto-source-map.workspace = true
+quarto-util.workspace = true
 yaml-rust2.workspace = true
 
 [lints]
