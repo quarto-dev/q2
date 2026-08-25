@@ -515,12 +515,20 @@ fn parse_one_listing(
             "template" => {
                 template_source = Some(&entry.value);
                 if let Some(path) = entry.value.as_plain_text() {
-                    if path.ends_with(".ejs.md") {
+                    // Q1 listing templates are EJS and ship under both
+                    // spellings (`sidebar.ejs`, `item-default.ejs.md`).
+                    // The extension is only a naming convention — the
+                    // content check is Q-12-24 in listing_render.rs —
+                    // but it catches the Q1 → Q2 carry-over at config
+                    // time, before anything renders.
+                    if path.ends_with(".ejs") || path.ends_with(".ejs.md") {
                         push_diag(
                             diagnostics,
                             "Q-12-9",
                             format!(
-                                "`{}` uses the deprecated `.ejs.md` extension; see the Q1 → Q2 listing template migration guide.",
+                                "`{}` has a Quarto 1 EJS template extension (`.ejs` / `.ejs.md`); \
+                                 Quarto 2 listing templates use doctemplate syntax — see the \
+                                 Listings guide, \u{201c}Custom templates\u{201d}.",
                                 path
                             ),
                             &entry.value,
@@ -1720,6 +1728,39 @@ listing:
             diags.iter().any(|d| d.code.as_deref() == Some("Q-12-9")),
             "expected Q-12-9, got: {:?}",
             diags
+        );
+    }
+
+    // bd-custom-template-not-templated-e5t6m0i0: plain `.ejs` — the
+    // more common Q1 spelling, and the one the Positron site uses —
+    // must warn too. Q-12-9 used to test only `.ejs.md`.
+    #[test]
+    fn template_ejs_extension_emits_q_12_9() {
+        let (_listings, diags) = parse(map(vec![
+            ("type", s("custom")),
+            ("template", s("welcome-card.ejs")),
+        ]));
+        let q129 = diags
+            .iter()
+            .find(|d| d.code.as_deref() == Some("Q-12-9"))
+            .unwrap_or_else(|| panic!("expected Q-12-9, got: {diags:?}"));
+        assert!(
+            q129.title.contains("Quarto 1 EJS") && q129.title.contains("welcome-card.ejs"),
+            "message must say Quarto 1 EJS and name the file; got: {}",
+            q129.title
+        );
+    }
+
+    // A doctemplate-named template must not trip the extension check.
+    #[test]
+    fn template_doctemplate_extension_does_not_emit_q_12_9() {
+        let (_listings, diags) = parse(map(vec![
+            ("type", s("custom")),
+            ("template", s("cards.template")),
+        ]));
+        assert!(
+            diags.iter().all(|d| d.code.as_deref() != Some("Q-12-9")),
+            "got: {diags:?}"
         );
     }
 

@@ -1,43 +1,62 @@
 ---
-title: "Deprecated .ejs.md Template Extension"
-description: "A listing template uses the deprecated `.ejs.md` extension; rename it to `.ejs`."
+title: "Quarto 1 EJS Listing Template Extension"
+description: "A listing `template:` ends in `.ejs` or `.ejs.md` — the Quarto 1 EJS convention. Quarto 2 does not run EJS; custom listing templates are doctemplates."
 code: Q-12-9
 subsystem: listing
-status: stub
+status: complete
 since: "99.9.9"
 categories:
   - listing
 ---
 
-# `Q-12-9` — Deprecated `.ejs.md` Template Extension
+# `Q-12-9` — Quarto 1 EJS Listing Template Extension
 
-> A listing template uses the deprecated `.ejs.md` extension;
-> rename it to `.ejs`.
+> A listing `template:` ends in `.ejs` or `.ejs.md` — the Quarto 1
+> EJS convention. Quarto 2 does not run EJS; custom listing templates
+> are doctemplates.
 
 ## What this means
 
-Quarto 1 supported `.ejs.md` as an extension for custom listing
-templates — an EJS template whose output was post-processed as
-markdown. Quarto 2 simplifies the model: templates are EJS, full
-stop. The file should end in `.ejs`.
+Quarto 1 custom listing templates were **EJS** — embedded JavaScript
+(`<% for (const item of items) { %>`, `<%= item.title %>`) — under
+either a `.ejs` or a `.ejs.md` extension. Quarto 2 deliberately does
+not embed a JavaScript runtime: custom listing templates are
+**doctemplates**, the `$variable$` / `$if(…)$` / `$for(…)$` syntax
+Pandoc templates use, so a template can never execute code.
 
-The listing still renders, but the deprecated extension will
-stop being recognized in a future Quarto 2 release. The warning
-fires now so the migration can happen incrementally.
+The extension alone is only a naming convention, so this warning fires
+at configuration time as an early hint. If the file really is EJS, the
+render-time check [`Q-12-24`](Q-12-24.qmd) also fires and the listing
+is skipped rather than pasted into the page.
 
 ## Why this happens
 
-The listing configuration was carried over from a Quarto 1
-project (or copied from a Quarto 1 example) without renaming the
-template file.
+The listing configuration was carried over from a Quarto 1 project (or
+copied from a Quarto 1 example) together with its EJS template.
 
 ## How to fix
 
-Rename the file from `something.ejs.md` to `something.ejs`,
-and update the `template:` value to match. The Q1 → Q2 listing
-template migration guide describes the small set of other
-changes you may need at the same time.
+Port the template to doctemplate syntax and give it a neutral
+extension such as `.template`:
+
+```yaml
+listing:
+  type: custom
+  template: welcome-card.template   # was welcome-card.ejs
+```
+
+`<%= item.title %>` becomes `$it.title$` inside `$for(items)$ …
+$endfor$`; `<% if (item.image) { %>` becomes `$if(it.image)$`. The
+[Listings guide](/guides/projects/listings.qmd#custom-templates)
+lists the values a template can read and shows a complete card
+template; [`Q-12-24`](Q-12-24.qmd) has a fuller mapping table.
+
+If you only renamed the file without porting its contents, you will
+see `Q-12-24` next.
 
 ## Related
 
-- `Q-12-8` — `template:` file missing entirely.
+- [`Q-12-24`](Q-12-24.qmd) — the template's *contents* are not a
+  doctemplate (no directives, or EJS markup present).
+- [`Q-12-8`](Q-12-8.qmd) — `template:` file missing entirely.
+- [`Q-12-7`](Q-12-7.qmd) — `template:` set without `type: custom`.
