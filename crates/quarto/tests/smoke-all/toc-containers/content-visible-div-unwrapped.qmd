@@ -6,6 +6,7 @@ format:
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureHtmlElements:
         - ["nav#TOC a[data-scroll-target=\"#outer\"]",

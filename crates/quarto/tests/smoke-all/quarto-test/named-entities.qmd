@@ -4,6 +4,7 @@ format: html
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureFileRegexMatches:
         - ["Named: A &gt; B &lt; C &amp; D", "Nbsp: F G", "Copy: © H", "Multi: x ≂̸ y", "Numeric: A &gt; B"]

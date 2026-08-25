@@ -6,6 +6,7 @@ filters:
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureFileRegexMatches:
         # The filter produces `hl-error` and `hl-warning` spans around

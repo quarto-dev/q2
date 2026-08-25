@@ -13,6 +13,7 @@ title-block-banner: true
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureHtmlElements:
         - [

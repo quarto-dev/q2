@@ -10,6 +10,7 @@ date: "2026-07-01"
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureHtmlElements:
         - [

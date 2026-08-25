@@ -4,6 +4,7 @@ format: html
 _quarto:
   tests:
     html:
+      dom-parity: true
       ensureFileRegexMatches:
         - ["value-from-environment-file", "local-override-wins"]
         - ["\\?env:", "base-value-should-lose"]

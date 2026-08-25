@@ -11,6 +11,7 @@ title-block-banner-color: "#111111"
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureHtmlElements:
         - [

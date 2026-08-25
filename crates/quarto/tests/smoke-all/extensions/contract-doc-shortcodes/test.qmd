@@ -6,6 +6,7 @@ shortcodes:
 _quarto:
   tests:
     html:
+      dom-parity: true
       ensureFileRegexMatches:
         # `strong[^>]*>` not `strong>`: the hub preview renders with
         # `source-location: full`, which puts data-sid/data-loc on the opening

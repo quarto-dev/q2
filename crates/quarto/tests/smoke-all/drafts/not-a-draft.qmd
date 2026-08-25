@@ -4,6 +4,7 @@ format: html
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       # A page with no `draft` key must be untouched: no banner, and no
       # `quarto:status` meta tag either. The positive selector keeps this

@@ -2,6 +2,7 @@
 _quarto:
   tests:
     html:
+      dom-parity: true
       ensureFileRegexMatches:
         - ["PROD-VISIBLE", "BETA-VISIBLE", "Production Title"]
         - ["PROD-HIDDEN", "when-profile"]

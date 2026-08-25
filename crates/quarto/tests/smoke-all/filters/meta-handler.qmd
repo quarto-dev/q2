@@ -6,6 +6,7 @@ filters:
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureHtmlElements:
         - ["p.subtitle"]

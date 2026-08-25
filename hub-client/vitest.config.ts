@@ -27,7 +27,7 @@ export default mergeConfig(
       exclude: [
         'src/**/*.integration.test.ts',
         'src/**/*.integration.test.tsx',
-        'src/**/*.wasm.test.ts',
+        'src/**/*.wasm.test.{ts,tsx}',
       ],
       // Pass even when no test files are found
       passWithNoTests: true,

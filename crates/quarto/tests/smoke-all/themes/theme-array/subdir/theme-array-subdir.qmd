@@ -8,6 +8,7 @@ format:
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureCssRegexMatches:
         - ["#170229", "smoke-test-subdir-rule", "#def456"]

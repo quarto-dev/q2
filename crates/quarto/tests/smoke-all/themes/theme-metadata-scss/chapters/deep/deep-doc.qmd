@@ -3,6 +3,7 @@ title: Metadata Theme with Custom SCSS (Deeper Subdir)
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureCssRegexMatches:
         - ["#170229", "metadata-scss-marker", "#d4e5f6"]

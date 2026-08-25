@@ -5,6 +5,7 @@ format: html
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       # `draft: false` must behave exactly like an absent key. This is a
       # distinct case from not-a-draft.qmd: a truthiness bug that keyed

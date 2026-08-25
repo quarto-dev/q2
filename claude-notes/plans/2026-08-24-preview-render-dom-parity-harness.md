@@ -24,7 +24,7 @@ with `prefer_preview_format: true` → pipeline stopped before
 `<Ast registry={previewRegistry}>` under jsdom, and compares the canonical form
 of `main#quarto-document-content` from both sides. Canonicalisation is a small
 pure module with an explicit, reasoned normalisation table. Fixtures opt in
-with `parity: true` under a format entry of the existing `_quarto: tests:` DSL.
+with `dom-dom-parity: true` under a format entry of the existing `_quarto: tests:` DSL.
 
 **Tech Stack:** vitest 4 (jsdom env via docblock, hub-client
 `vitest.wasm.config.ts`), `wasm-quarto-hub-client`, `@testing-library/react`,
@@ -48,7 +48,7 @@ there is no separate spec document.
 - **HTML article body only.** Comparison root is `main#quarto-document-content`.
   revealjs, tabsets, engine fixtures, math *content*, and hub-client-only
   chrome are non-goals (§ Non-goals).
-- **Curated allowlist, not xfail.** Only fixtures with `parity: true` are
+- **Curated allowlist, not xfail.** Only fixtures with `dom-dom-parity: true` are
   compared; an opted-in fixture that diverges fails the suite. There is no
   expected-failure mechanism — fix the divergence or don't opt in. (Accepted
   cost: a fixture that *finds* a bug carries no regression guard until the
@@ -168,9 +168,9 @@ must mirror that placement.
 | `hub-client/src/test-utils/smokeAllFixtures.ts` | Fixture discovery, front-matter reading, `_quarto.tests` block access, skip logic, project-root discovery, VFS population, user-grammar handle, WASM loader — **extracted** from `smokeAll.wasm.test.ts`, which then imports it. Under `test-utils/` so its Node-builtin imports stay out of the app tsconfig. |
 | `hub-client/src/services/smokeAllParity.wasm.test.tsx` | The runner: per opted-in fixture, render both ways, mount, compare, report. Plus the "harness catches an injected divergence" self-test. `.tsx` because it mounts JSX. |
 | `hub-client/vitest.wasm.config.ts` | `include` widened to `*.wasm.test.{ts,tsx}`. |
-| `crates/quarto-test/src/spec.rs` | Accept `parity` key into `TestSpec.parity: bool` (runner ignores it). |
-| `hub-client/src/services/smokeAll.wasm.test.ts`, `hub-client/e2e/helpers/smokeAllDiscovery.ts` | Accept and ignore `parity`. |
-| Opted-in fixtures under `crates/quarto/tests/smoke-all/` | `parity: true` added under `html:`. |
+| `crates/quarto-test/src/spec.rs` | Accept `dom-parity` key into `TestSpec.dom_parity: bool` (runner ignores it). |
+| `hub-client/src/services/smokeAll.wasm.test.ts`, `hub-client/e2e/helpers/smokeAllDiscovery.ts` | Accept and ignore `dom-parity`. |
+| Opted-in fixtures under `crates/quarto/tests/smoke-all/` | `dom-dom-parity: true` added under `html:`. |
 | `claude-notes/instructions/testing.md`, `.claude/skills/preview-render-parity/SKILL.md` | Document the fourth runner and the harness-first workflow. |
 
 ### Normalisation rules (`PARITY_RULES` + the canonical serialiser)
@@ -257,9 +257,9 @@ sibling's 120 s hang-detection timeout, `vitest.wasm.config.ts`).
 - [x] 1.2 `PARITY_RULES` — strip list, opaque `span.math`, forbidden `data-hl-spans`
 - [x] 1.3 `extractParityRoot` + `compareParity`
 
-### Phase 2 — `parity:` DSL key
-- [x] 2.1 Rust `quarto-test`: parse into `TestSpec.parity`, runner ignores
-- [x] 2.2 Both TS parsers (WASM sibling, Playwright discovery) ignore `parity`; Phase-2 boundary workspace nextest
+### Phase 2 — `dom-parity:` DSL key
+- [x] 2.1 Rust `quarto-test`: parse into `TestSpec.dom_parity`, runner ignores
+- [x] 2.2 Both TS parsers (WASM sibling, Playwright discovery) ignore `dom-parity`; Phase-2 boundary workspace nextest
 
 ### Phase 3 — Runner
 - [x] 3.1 `smokeAllParity.wasm.test.tsx` + first opt-in in one green commit
@@ -412,7 +412,7 @@ function parseTestSpecs(metadata: Record<string, unknown>, options: ParseOptions
 ```
 
 Call sites: `populateVfs(wasm, testFile)`, `buildUserGrammarsHandle(wasm, projectFiles)`.
-Do **not** add a `parity` case yet — this task is behaviour-preserving;
+Do **not** add a `dom-parity` case yet — this task is behaviour-preserving;
 Task 2.2 does that.
 
 - [x] **Step 4: Verify identical results**
@@ -1117,7 +1117,7 @@ git commit -m "Add parity root extraction and comparison"
 
 ---
 
-## Phase 2 — `parity:` DSL key
+## Phase 2 — `dom-parity:` DSL key
 
 ### Task 2.1: Rust `quarto-test` accepts `parity`
 
@@ -1129,7 +1129,7 @@ git commit -m "Add parity root extraction and comparison"
 
 **Interfaces:**
 - Consumes: `parse_test_specs(metadata: &Value, input_path: &Path) -> Result<(Option<RunConfig>, Vec<TestSpec>)>` (`spec.rs:139`) — note it returns a **tuple**.
-- Produces: `TestSpec.parity: bool` — `true` when the fixture opts into the
+- Produces: `TestSpec.dom_parity: bool` — `true` when the fixture opts into the
   preview↔render DOM parity runner. The native runner ignores it; the field
   exists so the DSL stays a single grammar across all four runners.
 
@@ -1144,14 +1144,14 @@ git commit -m "Add parity root extraction and comparison"
               tests:
                 html:
                   noErrors: true
-                  parity: true
+                  dom-parity: true
             "#,
         )
         .unwrap();
 
         let (_run, specs) = parse_test_specs(&yaml, std::path::Path::new("test.qmd")).unwrap();
         let html = specs.iter().find(|s| s.format == "html").expect("html spec");
-        assert!(html.parity, "parity: true must be recorded");
+        assert!(html.dom_parity, "dom-parity: true must be recorded");
         // Only noErrors produced an assertion; parity is not one.
         assert_eq!(html.assertions.len(), 1);
     }
@@ -1168,14 +1168,14 @@ git commit -m "Add parity root extraction and comparison"
         )
         .unwrap();
         let (_run, specs) = parse_test_specs(&yaml, std::path::Path::new("test.qmd")).unwrap();
-        assert!(!specs[0].parity);
+        assert!(!specs[0].dom_parity);
 
         let bad: Value = serde_yaml::from_str(
             r#"
             _quarto:
               tests:
                 html:
-                  parity: "yes"
+                  dom-parity: "yes"
             "#,
         )
         .unwrap();
@@ -1183,7 +1183,7 @@ git commit -m "Add parity root extraction and comparison"
             "{:#}",
             parse_test_specs(&bad, std::path::Path::new("test.qmd")).unwrap_err()
         );
-        assert!(err.contains("parity must be a boolean"), "got: {err}");
+        assert!(err.contains("dom-parity must be a boolean"), "got: {err}");
     }
 ```
 
@@ -1199,26 +1199,26 @@ Expected: compile error — no field `parity` on `TestSpec`.
 In `TestSpec` add:
 
 ```rust
-    /// `parity: true` — opt this format into the preview ↔ render DOM
+    /// `dom-dom-parity: true` — opt this format into the preview ↔ render DOM
     /// parity runner (`hub-client/src/services/smokeAllParity.wasm.test.tsx`).
     /// The native runner ignores it; the field exists so all four
     /// smoke-all runners share one DSL grammar. Plan:
     /// claude-notes/plans/2026-08-24-preview-render-dom-parity-harness.md
-    pub parity: bool,
+    pub dom_parity: bool,
 ```
 
-In `parse_format_spec`, add `let mut parity = false;` beside
+In `parse_format_spec`, add `let mut dom_parity = false;` beside
 `check_warnings`, a match arm before `other =>`:
 
 ```rust
-                "parity" => {
-                    parity = assertion_value
+                "dom-parity" => {
+                    dom_parity = assertion_value
                         .as_bool()
-                        .context("parity must be a boolean")?;
+                        .context("dom-parity must be a boolean")?;
                 }
 ```
 
-and `parity,` in the `Ok(TestSpec { … })` constructor at `:259`.
+and `dom_parity,` in the `Ok(TestSpec { … })` constructor at `:259`.
 
 - [x] **Step 4: Run to verify pass**
 
@@ -1236,7 +1236,7 @@ git add crates/quarto-test/src/spec.rs
 git commit -m "Accept a parity key in the smoke-all test DSL (native runner ignores it)"
 ```
 
-### Task 2.2: Both TS parsers ignore `parity`; Phase-2 boundary
+### Task 2.2: Both TS parsers ignore `dom-parity`; Phase-2 boundary
 
 **Files:**
 - Modify: `hub-client/src/services/smokeAll.wasm.test.ts` — `parseFormatSpec`,
@@ -1245,7 +1245,7 @@ git commit -m "Accept a parity key in the smoke-all test DSL (native runner igno
 - Modify: `hub-client/e2e/helpers/smokeAllDiscovery.ts:234-240` (the
   `fileExists` no-op group + `default: throw`)
 
-Both parsers hard-error on unknown keys, so a fixture with `parity: true`
+Both parsers hard-error on unknown keys, so a fixture with `dom-dom-parity: true`
 would break the WASM sweep and the Playwright sweep until this lands.
 
 - [x] **Step 1: Check for an existing unit test of either parser**
@@ -1257,8 +1257,8 @@ ls hub-client/e2e/helpers/*.test.ts 2>/dev/null; grep -rln "smokeAllDiscovery" h
 If a test file for `smokeAllDiscovery` exists, add there and watch it fail:
 
 ```ts
-it('accepts parity: true as a non-assertion', () => {
-  const { formatSpecs } = parseTestSpecs({ _quarto: { tests: { html: { noErrors: true, parity: true } } } });
+it('accepts dom-parity: true as a non-assertion', () => {
+  const { formatSpecs } = parseTestSpecs({ _quarto: { tests: { html: { noErrors: true, dom-parity: true } } } });
   expect(formatSpecs[0].assertions.map((a) => a.type)).toEqual(['noErrors']);
 });
 ```
@@ -1269,7 +1269,7 @@ plus `npx playwright test --config=playwright.smoke-all.config.ts e2e/smoke-all.
 - [x] **Step 2: Implement — same three lines in both files**
 
 ```ts
-        case 'parity':
+        case 'dom-parity':
           // Opt-in flag for the preview <-> render DOM parity runner
           // (hub-client/src/services/smokeAllParity.wasm.test.tsx). Not an
           // assertion here.
@@ -1311,7 +1311,7 @@ git commit -m "Ignore the parity key in the WASM and Playwright smoke-all parser
 - Create: `hub-client/src/services/smokeAllParity.wasm.test.tsx`
 - Modify: the first opt-in candidate from the Task 0.2 note:
   `crates/quarto/tests/smoke-all/title-block/simple-default.qmd` (byte-identical
-  under the rules even without the unwrap rule) — add `parity: true` under
+  under the rules even without the unwrap rule) — add `dom-dom-parity: true` under
   `_quarto.tests.html`. (`markdown/heading-auto-id.qmd`, the pre-spike guess,
   is blocked by c3 + c4 — see § Findings.)
 
@@ -1340,7 +1340,7 @@ is red.
  * Preview <-> render DOM parity runner (fourth smoke-all runner).
  *
  * For every smoke-all fixture whose `_quarto.tests.html` carries
- * `parity: true`, render it twice through the same WASM module:
+ * `dom-dom-parity: true`, render it twice through the same WASM module:
  *   - `render_page_in_project`   -> native HTML writer -> full page HTML
  *   - `render_page_for_preview`  -> the same Rust function with
  *                                   `prefer_preview_format: true`: pipeline
@@ -1462,7 +1462,7 @@ async function optedInFixtures(): Promise<string[]> {
   for (const f of files) {
     const block = readTestsBlock(readFrontmatter(await readFile(f, 'utf-8')));
     if (!block || shouldSkip(block.run)) continue;
-    if (block.formats['html']?.['parity'] === true) out.push(f);
+    if (block.formats['html']?.['dom-parity'] === true) out.push(f);
   }
   return out;
 }
@@ -1500,7 +1500,7 @@ describe('smoke-all preview <-> render DOM parity', () => {
     }
 
     console.log(`\nParity results: ${compared} compared, ${failures.length} failed, ${fixtures.length} opted in`);
-    expect(fixtures.length, 'at least one fixture must opt in (parity: true)').toBeGreaterThan(0);
+    expect(fixtures.length, 'at least one fixture must opt in (dom-parity: true)').toBeGreaterThan(0);
     expect(failures, `${failures.length} parity failure(s):\n${failures.join('\n\n')}`).toHaveLength(0);
   });
 
@@ -1543,7 +1543,7 @@ _quarto:
   tests:
     html:
       noErrors: true
-      parity: true
+      dom-parity: true
 ```
 
 ```bash
@@ -1625,7 +1625,7 @@ preview: <canonical snippet>
 Native writer: crates/pampa/src/writers/html.rs:<line>
 React: ts-packages/preview-renderer/src/q2-preview/<component>.tsx
 
-Fix should end with \`parity: true\` on the fixture.
+Fix should end with \`dom-parity: true\` on the fixture.
 EOF
 )" --json
 ```
@@ -1643,17 +1643,17 @@ EOF
   - add `### 4. Preview ↔ render DOM parity (WASM + jsdom)` after runner 3:
     command (`cd hub-client && npm run test:wasm`, `SMOKE_FILTER=` works),
     what it compares (`main#quarto-document-content`, read-only mount),
-    how to opt in (`parity: true` under `html:`), the no-xfail policy,
+    how to opt in (`dom-dom-parity: true` under `html:`), the no-xfail policy,
     where artifacts land (`hub-client/test-results/parity/`), and that
     fixtures with math wait on bd-tmb2u5yu;
-  - add `parity` to the DSL reference (search `ensureCssRegexMatches` for the list).
+  - add `dom-parity` to the DSL reference (search `ensureCssRegexMatches` for the list).
 - Modify: `.claude/skills/preview-render-parity/SKILL.md`:
   - in "Diagnosis workflow" insert a step 0: *reproduce with the harness
     first* — write a minimal fixture under `smoke-all/q2-preview/` (or opt in
     an existing one), run `SMOKE_FILTER=<name> npm run test:wasm`, read
     `test-results/parity/…`; go to Chrome only for computed-style symptoms;
   - in "TDD workflow", the regression test for a parity fix is the fixture's
-    `parity: true` opt-in when the fixture can be made minimal;
+    `dom-dom-parity: true` opt-in when the fixture can be made minimal;
   - replace the integration-branch guidance (lines ~140, 224, 228:
     `feature/q2-preview-command`, parent epic bd-kw93): bd-kw93 is closed and
     the branch merged via PR #214 (`git log --grep "q2 preview command"` on
@@ -1696,6 +1696,51 @@ Details and verbatim snippets: `claude-notes/research/2026-08-24-preview-render-
 | c2 | `OrderedList.tsx` omits `type="1"` for `Decimal` | `appendix/footnotes-heading.qmd` | bd-q88zinyv |
 | c3 | `Strikeout.tsx` renders `<s>`, writer `<del>` | `markdown/heading-auto-id.qmd` | bd-qzwlhrlv |
 | c4 | `Math.tsx` emits no `math inline|display` class | `markdown/heading-auto-id.qmd` | bd-tmb2u5yu |
+| s1 | Crossref floats not rendered as `div.quarto-float > figure.quarto-float-*` (figures and tables) | `includes/crossref/crossref.qmd`, `localization/lang-es-crossref.qmd`, `localization/language-inline-override.qmd` | bd-d96axq4a |
+| s2 | Localized UI strings not applied (callout title, theorem "Proof") | `localization/lang-es-callout.qmd`, `localization/lang-es-theorem.qmd` | bd-hamxar01 |
+| s3 | Callout drops `title=` / `data-appearance=` | `quarto-test/callout-title-attribute.qmd`, `quarto-test/callouts-matrix.qmd` | bd-p2cd2ssg |
+| s4 | Callout body heading sectionized on render, not on preview | `toc-containers/callout-body-heading-not-in-toc.qmd` | bd-bg0jze2i |
+| s5 | Inline `<code>` forwards `data-hl-spans` (forbid rule trips) | `highlighting/02-inline-code.qmd` | bd-bda2mbnl |
+| s6 | Included list item wrapped in `<p>` on preview | `includes/nested/nested.qmd` | bd-nrywksil |
+
+All of the above are children of the epic **bd-j3764r9a** "React <-> HTML DOM
+parity (q2 preview vs q2 render)", alongside **bd-xa4vv9tt** (this branch's
+harness work; close on merge), **bd-00iveh46** (`data-filename` dropped from
+`<pre>`, `includes/in-code-fence`), and four earlier-filed strands that are
+specifically about preview/render parity and were promoted to children:
+bd-e3m3rkik (mermaid chrome), bd-47afd5ro (tabsets), bd-2yd37vuk
+(`#quarto-header`), bd-tqijrhsu (toc-location). bd-1tl09 (native code-block
+decorations epic) is `related` only — it does not cover the React mirror.
+
+## Addendum (2026-08-24, after the plan closed)
+
+Full write-up: **`claude-notes/research/2026-08-24-preview-render-parity-survey.md`**
+(survey method and results, rename, bulk opt-in, strand/epic map, harness
+limitations). Summary:
+
+- [x] **Rename the DSL key `parity` → `dom-parity`** everywhere it is a key,
+  field (`TestSpec.dom_parity`), case label, assertion message or doc
+  reference (commit `d750318b7`). File names and the `PARITY_RULES` /
+  `compareParity` / `smokeAllParity` identifiers keep their names.
+- [x] **Whole-corpus survey + bulk opt-in.** A throwaway sweep of all 164
+  fixtures (`hub-client/test-results/parity-survey/`, gitignored, not
+  committed) found **106 byte-identical, 18 mismatching, 29 unreachable
+  (their `_quarto.tests` key is `q2-preview` or an extension format, not
+  `html`), 5 other** (2 intentional — `shouldError`, `run.skip`; 1
+  survey-environment artefact; 1 harness limitation — `theme: none` has no
+  `<main>`; 1 real bug — inline `Code.tsx` forwards `data-hl-spans`). The
+  106 minus the engine fixture `includes/code-cell/code-cell.qmd` were opted
+  in (commit `04bd3c2cf`): **`Parity results: 105 compared, 0 failed, 105
+  opted in`**, ~16.5 s of the sweep's 120 s hang-detection budget. 15 of
+  those fixtures have a `format: html:` block ahead of `_quarto: tests:
+  html:`; the opt-in script had to scope to the `_quarto → tests → html`
+  chain (the first attempt mis-inserted under `format:` and showed up as
+  `90 compared`).
+
+The mismatch → strand map and the harness limitations the survey exposed
+(`dom-parity` only read under `html:`; minimal-template docs have no `<main>`;
+`#main` excludes the page frame) are in the research note above — recorded
+there as notes, deliberately not as strands.
 
 ## Follow-ups (not in this plan)
 
@@ -1704,10 +1749,10 @@ Details and verbatim snippets: `claude-notes/research/2026-08-24-preview-render-
   `.reveal .slides` root selector and a `render_page_in_project` vs
   `RevealDeck` mount.
 - Widen the allowlist as parity strands close: each closing PR should end
-  with `parity: true` on the fixture that reproduced it.
+  with `dom-dom-parity: true` on the fixture that reproduced it.
 - Reconsider the mount configuration once edit chrome stabilises: comparing
   a `PreviewRoot` mount would need strip rules for `data-block-pool-id`,
   `tabIndex`, comment anchors, and asset blob URLs.
 - A lint (`cargo xtask lint`) that a fixture under `smoke-all/q2-preview/`
-  without `parity: true` must cite a reason — only once the allowlist is
+  without `dom-dom-parity: true` must cite a reason — only once the allowlist is
   large enough that omissions are the exception.
