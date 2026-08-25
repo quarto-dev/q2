@@ -6,6 +6,7 @@ filters:
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureFileRegexMatches:
         - ["hl-severity-err\">&lt;err&gt;</span>",

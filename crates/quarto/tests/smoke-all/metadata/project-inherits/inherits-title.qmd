@@ -3,6 +3,7 @@ format: html
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureFileRegexMatches:
         - ["<title>Project Title From Config</title>", "Project Author"]

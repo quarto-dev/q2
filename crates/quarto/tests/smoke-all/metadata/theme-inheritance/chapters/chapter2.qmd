@@ -5,6 +5,7 @@ theme: cosmo
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureCssRegexMatches:
         - ["--bs-primary:.*#2780e3"]

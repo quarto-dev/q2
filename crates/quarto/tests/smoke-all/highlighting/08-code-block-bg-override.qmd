@@ -9,6 +9,7 @@ code-block-color: "#e0e1e2"
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrorsOrWarnings: true
       ensureCssRegexMatches:
         # The document metadata wins over github-light's translated

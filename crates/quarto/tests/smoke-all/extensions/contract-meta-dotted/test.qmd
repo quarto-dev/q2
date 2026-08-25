@@ -12,6 +12,7 @@ authors:
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureFileRegexMatches:
         - ["META\\[top-val\\]", "META\\[deep-val\\]", "META-NIL", "CHAIN\\[deep-val\\]", "BOOL\\[false\\]", "META\\[Grace\\]"]

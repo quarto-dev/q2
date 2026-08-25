@@ -6,6 +6,7 @@ shortcode-passthrough:
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureFileRegexMatches:
         - ["\\{\\{&lt; hugoref foo &gt;\\}\\}"]

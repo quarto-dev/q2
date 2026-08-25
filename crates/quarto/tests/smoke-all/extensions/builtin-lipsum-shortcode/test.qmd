@@ -4,6 +4,7 @@ format: html
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureFileRegexMatches:
         - ["Lorem ipsum dolor sit amet"]

@@ -3,6 +3,7 @@ title: Metadata Relative SCSS Path (Deeper Subdir)
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureCssRegexMatches:
         - ["#170229", "metadata-relpath-marker", "#cc5501"]

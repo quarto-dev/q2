@@ -5,6 +5,7 @@ format: html
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       # Quarto 1 parity (bd-draft-banner-missing-hgx1gkqm). Q1 emits
       # `<div id="quarto-draft-alert" class="alert alert-warning">

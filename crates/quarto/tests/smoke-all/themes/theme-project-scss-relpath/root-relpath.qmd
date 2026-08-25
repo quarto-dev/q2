@@ -3,6 +3,7 @@ title: Project Relative SCSS Path (Root)
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureCssRegexMatches:
         - ["#170229", "project-relpath-marker", "#aabb12"]

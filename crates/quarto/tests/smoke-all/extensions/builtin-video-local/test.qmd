@@ -4,6 +4,7 @@ format: html
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureFileRegexMatches:
         - ["video-js\\.css", "video\\.min\\.js", "quarto-video", "video-js vjs-default-skin"]

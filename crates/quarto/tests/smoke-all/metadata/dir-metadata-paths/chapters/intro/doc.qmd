@@ -4,6 +4,7 @@ format: html
 _quarto:
   tests:
     html:
+      dom-parity: true
       ensureHtmlElements:
         # The CSS link should point to the adjusted path
         # From chapters/intro/, the path to shared/styles.css

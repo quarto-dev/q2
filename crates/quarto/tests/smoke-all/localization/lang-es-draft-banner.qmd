@@ -6,6 +6,7 @@ format: html
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       # The banner label comes from the `draft` language term, not an
       # English literal (bd-draft-banner-missing-hgx1gkqm). Quarto 1 uses

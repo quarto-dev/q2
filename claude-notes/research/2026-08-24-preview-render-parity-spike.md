@@ -424,7 +424,9 @@ of diffs:
 
 Four, all (c), none previously tracked except the last. Filed by the plan's
 Task 4.1 (label `preview-parity`): 1 → bd-294mbrcx, 2 → bd-q88zinyv,
-3 → bd-qzwlhrlv, 4 → bd-tmb2u5yu (pre-existing).
+3 → bd-qzwlhrlv, 4 → bd-tmb2u5yu (pre-existing). All are children of the
+parity epic bd-j3764r9a; the later whole-corpus survey added six more
+(bd-d96axq4a, bd-hamxar01, bd-p2cd2ssg, bd-bg0jze2i, bd-bda2mbnl, bd-nrywksil).
 
 1. Preview `Link` drops non-allowlisted kv attributes (`role`, `aria-*`, …) —
    `inlines/Link.tsx:10-12` vs `html.rs:520-529`.

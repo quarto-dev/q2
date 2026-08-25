@@ -6,6 +6,7 @@ title: "No Mermaid, No Script"
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureHtmlElements:
         - []

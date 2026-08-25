@@ -11,6 +11,7 @@ highlight-style:
 _quarto:
   tests:
     html:
+      dom-parity: true
       # The whole point: both palette names are Q1 built-ins that the
       # .theme translator now ships, so the render is warning-free
       # (regression guard for the Q-14-5 fallback both names used to

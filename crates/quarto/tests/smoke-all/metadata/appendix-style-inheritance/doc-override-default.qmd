@@ -5,6 +5,7 @@ format: html
 _quarto:
   tests:
     html:
+      dom-parity: true
       noErrors: true
       ensureHtmlElements:
         - ["div#quarto-appendix.default", "section#quarto-reuse"]
