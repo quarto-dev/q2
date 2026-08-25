@@ -20,9 +20,13 @@ Quarto 1 emits all of these unchanged (its classifier is `/^\w+:/`,
 ## Investigation findings
 
 The strand names one predicate, `navigation_href::is_external`. The tree
-actually carries **seven** hand-rolled copies of the same allowlist, each a
-slightly different subset (some have `data:`, one has `javascript:`, two use
-`contains("://")`):
+actually carries **seven** hand-rolled copies of the same allowlist on the
+*href* side, each a slightly different subset (some have `data:`, one has
+`javascript:`, two use `contains("://")`). (Five more copies gate image /
+font *`src`* values — `listing/helpers.rs`, `feed/binding.rs`,
+`resource_collector.rs`, `brand_layer.rs`, `project/mod.rs`; scoped out
+here as low runtime risk and tracked in bd-pa394mk7, linked to bd-oejuizi9 per the
+path-resolution contract.)
 
 | # | Site | Consumers | Same defect? |
 |---|------|-----------|--------------|
@@ -111,7 +115,16 @@ gets its own regression test written first.
   observable through the real binary. The fixture therefore asserts
   symptom 1 (and the absence of `../<scheme>` as a guard); symptom 2 is
   pinned by the unit test. Whether the runner *should* relativize like
-  `q2 render` is a separate question, not pursued here.
+  `q2 render` is a separate question — filed as bd-sqa9h5ne.
+- **Code review** (post-commit, blank-slate reviewer): no Critical or
+  logic issues. Acted on: filed bd-pa394mk7 (src-side sweep) and bd-sqa9h5ne (runner
+  divergence); reworded the contract's carve-out in
+  `claude-notes/designs/path-resolution-model.md` to name
+  `quarto_util::is_external_url` as the sole classifier instead of
+  enumerating schemes; corrected the fixture comment that overstated what
+  the `../<scheme>` guards pin. Declined: trimming the `is_external` doc
+  comment (it already defers to `quarto_util`'s docs for the rule; the
+  bug-class sentence is the part worth keeping at the seam).
 
 ## End-to-end record
 

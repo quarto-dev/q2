@@ -13,12 +13,15 @@ _quarto:
             'href="positron://settings/positron\.notebook\.enabled"',
           ]
         - [
-            # bd-scheme-href-path-normalized-w5zya82r symptom 2: nav
-            # hrefs with a scheme must not gain `../` per level ...
+            # Guard only: the smoke-all runner does not relativize nav
+            # hrefs on nested pages (bd-sqa9h5ne), so these cannot fail here.
+            # Symptom 2 (`../javascript:void(0);` under `q2 render`) is
+            # pinned by the unit test
+            # nav_href_with_custom_scheme_passes_through_at_depth.
             '\.\./javascript:',
             '\.\./mailto:',
             '\.\./positron:',
-            # ... and (symptom 1) must keep their `//`.
+            # Symptom 1: the `//` must survive at depth too.
             'positron:/settings',
           ]
 ---
