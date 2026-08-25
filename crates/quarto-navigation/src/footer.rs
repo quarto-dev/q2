@@ -157,6 +157,14 @@ pub struct PageFooter {
     /// `FooterRenderTransform` from the repo-actions transform's
     /// output, mirroring Q1's DOM append into `.nav-footer-center`
     /// (`website-navigation.ts:698`).
+    ///
+    /// Also not serialized: `to_config_value` does not emit this
+    /// field, so `from_config_value(footer.to_config_value())` does
+    /// not round-trip it — the field is silently dropped. This is
+    /// intentional given the above (it is populated post-parse and
+    /// consumed immediately by `page_footer_to_html`), but it means
+    /// this field must never be relied on to survive a
+    /// serialize/deserialize round trip.
     pub center_append: Option<String>,
 }
 
