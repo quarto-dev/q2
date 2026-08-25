@@ -139,6 +139,32 @@ fix below eliminates this too.
   load-time PlainString is a precondition for that future, not an obstacle.
   An author who genuinely wants markdown in a custom meta field can still
   write `!md` (explicit tags beat annotations).
+  **Follow-up question (user): custom fields under `meta` are unknown
+  content — under Pandoc-inherited metadata semantics, shouldn't they be
+  markdown rather than raw strings? Basis for choosing raw strings,
+  verified against Quarto 1** (`external-sources/quarto-cli/src/project/project-shared.ts`,
+  `resolveBrand` / the `fileName !== undefined` branch, ~lines 669-718):
+  Q1 supports inline brand blocks in front matter and reads them via
+  `project.fileMetadata(fileName)` — its own js-yaml front-matter read —
+  then hands the raw object to `new Brand(...)` / `splitUnifiedBrand(...)`.
+  Pandoc's markdown metadata treatment is **not** in that path: in Q1, a
+  custom `meta` leaf like `notice: This is [a link](https://example.com)`
+  reaches the Brand object as the literal string. Pandoc-style markdown
+  semantics apply to metadata that flows into the rendered document
+  (template interpolation); brand is consumed pre-Pandoc as machine
+  config, and no consumer (Q1 or q2) renders `meta` fields into documents
+  — they are passthrough data for other programs. Mechanically, q2 has no
+  lossless channel for `PandocInlines` through the brand pipeline either:
+  the deserialization target is plain data, so markdown interpretation of
+  an unknown leaf can only error (today's Q-14-1) or be flattened back to
+  a mangled string. A raw string is the one representation that preserves
+  the author's bytes for an unknown downstream consumer, which can parse
+  markdown itself if it wants to — exactly as it would when reading a
+  standalone `_brand.yml`. This *is* a policy choice, not a forced move:
+  if `meta` custom fields were ever deemed document-facing prose, the
+  Pandoc-consistent alternative would be to scope the annotation to the
+  typed keys only — but that would today re-crash on `meta` and diverge
+  from both the file form and Q1.
   Checking this surfaced a separate pre-existing gap: q2's `BrandMeta`
   (`crates/quarto-brand/src/types.rs:104-112`) is
   `#[serde(deny_unknown_fields)]` with only `name` + `link`, so the spec's
