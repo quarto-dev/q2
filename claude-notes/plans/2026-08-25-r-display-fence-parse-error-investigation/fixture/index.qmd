@@ -1,0 +1,15 @@
+---
+title: "Display fence next to an executable cell"
+---
+
+```{r}
+1 + 1
+```
+
+A display block, written the way Pandoc and Quarto 1 accept it:
+
+``` r
+pak::pak(c("usethis", "cli"))
+```
+
+Text after the block.
