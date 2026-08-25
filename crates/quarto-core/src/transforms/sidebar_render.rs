@@ -47,7 +47,10 @@
 //!   body-classes output is left alone (user override).
 
 use quarto_error_reporting::DiagnosticMessage;
-use quarto_navigation::{Sidebar, SidebarEntry, render_html::sidebar_to_html_with_appended};
+use quarto_navigation::{
+    Sidebar, SidebarEntry,
+    render_html::{SidebarRenderOptions, sidebar_to_html_with_options},
+};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::{By, SourceInfo};
@@ -175,7 +178,14 @@ impl AstTransform for SidebarRenderTransform {
             .resource_resolver
             .as_ref()
             .map_or_else(|| "./".to_string(), |r| r.page_url_for_site_root_dir());
-        let html = sidebar_to_html_with_appended(&sidebar, &home_url, toc_block.as_deref());
+        let html = sidebar_to_html_with_options(
+            &sidebar,
+            &SidebarRenderOptions {
+                home_url: &home_url,
+                appended_html: toc_block.as_deref(),
+                has_navbar: false,
+            },
+        );
 
         ast.meta.insert_path(
             &["rendered", "navigation", "sidebar"],
@@ -251,7 +261,14 @@ fn synthesize_toc_sidebar(ast: &mut Pandoc, ctx: &mut RenderContext, toc_block: 
         .resource_resolver
         .as_ref()
         .map_or_else(|| "./".to_string(), |r| r.page_url_for_site_root_dir());
-    let html = sidebar_to_html_with_appended(&sidebar, &home_url, Some(toc_block));
+    let html = sidebar_to_html_with_options(
+        &sidebar,
+        &SidebarRenderOptions {
+            home_url: &home_url,
+            appended_html: Some(toc_block),
+            has_navbar: false,
+        },
+    );
     ast.meta.insert_path(
         &["rendered", "navigation", "sidebar"],
         ConfigValue::new_string(&html, SourceInfo::generated(By::programmatic_config())),
