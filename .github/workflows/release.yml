@@ -202,6 +202,9 @@ jobs:
       # `q2` that renders the docs anyway. `build-agents-docs` builds a
       # host `q2` itself (via `cargo run --bin q2`); a debug binary is
       # fine, it only has to render.
+      # The xtask also stages `docs/examples/` (a gitignored resource the
+      # docs declare) first — on this fresh checkout nothing else does,
+      # and `q2 render docs` fails hard without it (v0.27.0 attempt 1).
       - name: Stage docs embed (q2 docs llms)
         run: cargo xtask build-agents-docs
 
