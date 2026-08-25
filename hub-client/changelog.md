@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-25
+
+- [`d124b72f`](https://github.com/quarto-dev/q2/commits/d124b72f): The comment-display toggle in the bottom bar now shows a count badge with the number of outstanding comments on the current document, so you can see at a glance whether a page has open comments without scanning it.
+
 ### 2026-08-22
 
 - [`0de96cd7a`](https://github.com/quarto-dev/q2/commits/0de96cd7a): Clicking in either preview pane now lines the source editor up with what you clicked: the first line of that block's source sits at the same height on screen as the block itself, so the two panes read side by side. Previously the q2-preview did nothing at all when you clicked a block, and the HTML preview scrolled your line to the middle of the editor. Selecting text that came from an included file also no longer moves your cursor to an unrelated line of the file you are editing.
