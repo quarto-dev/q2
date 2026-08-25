@@ -2,7 +2,9 @@
 
 **Status:** Active (Phase 0 of the website epic, `bd-0tr6` / `bd-f3jc`;
 extended in Phase 8 sub-phase 8.0, `bd-fegm` + `bd-r82e`).
-**Version tag:** `DOCUMENT_PROFILE_VERSION = 7`
+**Version tag:** `DOCUMENT_PROFILE_VERSION = 13` (see the Change log
+for per-version deltas; the authoritative history is the doc comment
+on the constant in `document_profile.rs`)
 **Type:** `quarto_core::document_profile::DocumentProfile`
 **Stage:** `quarto_core::stage::stages::DocumentProfileStage` (name
 `"document-profile"`) + `UnwrapProfileStage` (`"unwrap-profile"`),
@@ -67,6 +69,7 @@ produced.
 | `listing_content_globs` | `Vec<crate::glob::GlobPattern>` expanded from the host page's `listing.*.contents:` declarations (`bd-xbnf`, listings L6). Flattened across all listings on the page. The dependency-graph builder expands these against `ProjectIndex` at graph-build time (host-relative first, project-relative fallback — matches L3's render-time rule) to add forward edges from each listing host to its content files; hosts with non-empty entries are also added to the graph's `force_render` set so Mode B (`quarto render posts/foo.qmd`) pulls in listing hosts when any of their content files is targeted. Since bd-listing-inline-contents-tyy446ze the entries also include the literal `path:` of each inline `contents:` record that names a project document, so editing that document re-renders the host. Resolution is **not** cached on the profile (the per-doc cache cannot represent dependency on the full project source set safely). Field type and `DOCUMENT_PROFILE_VERSION` unchanged. Default empty. |
 | `listing_item` | `ListingItemInfo` advertising per-document data for listings consumers (`bd-n8a4`). **Scoped feature surface — listings only**; non-listing consumers must use the corresponding top-level fields (`title`, `description`, `image`, …). Author-supplied values populate during `DocumentProfile::extract`; `ListingItemInfoStage` (`bd-izqh`, L1, landed) auto-fills holes pre-checkpoint for `description` (full first paragraph), `image` (first inline image's URL), `word_count` (Q1-parity tokenization, footnote text excluded), `reading_time_minutes` (`ceil(word_count / 200)`), and `date_modified` (filesystem mtime via `SystemRuntime::path_metadata` formatted as `YYYY-MM-DD` UTC). Author values always win — the stage strictly fills holes. The nested `extra: BTreeMap<String, ConfigValue>` is the **only** open-shape field in the profile and is forbidden to non-listing consumers — see §"Scoped feature surfaces". Default empty (`ListingItemInfo::is_empty()`). |
 | `engine_resolution` | `Option<ProfileEngineResolution>` (`engine-resolution.md` §9.1). `Some` only when the document's engine resolution is provably load-free at Pass-1 — the needs-no-load predicate in `engine-resolution.md` §3.3 (P1–P4) — and is then **complete**: `sequence` is the resolved engine names in run order, `ownership` is the language→engine map in insertion order. `None` means resolution fell through to Pass-2's existing (non-profiled) resolution — **not an error**; most documents may show `None` until every engine a project uses is static or tabled (`engine-resolution.md` §3.3, §12). Names only, no `ConfigValue` blobs. Default `None`. |
+| `comments` | `Vec<ProfileComment>` — every editorial comment (`[>> … ]` / `[…]{.quarto-edit-comment}`) in the document body, in source order (v13, bd-0rsk07il / GH #445). Each entry: `text` (plain-text projection of the comment content), `source` (the mark's span, for jump-to-comment and joining with out-of-band authorship such as the hub attribution overlay), typed `author` / `date` from the mark's in-band `author=` / `date=` attributes (`None` when unstamped — the stamping convention is ISO 8601 UTC dates and display-name identity), and `attributes` (remaining kvs, authored order). Comments in included files count toward the including document. "Outstanding" = present: resolving deletes the mark from source. Count is `comments.len()`; there is deliberately no separate count field. Default empty. |
 
 ## Non-guarantees (explicit)
 
@@ -534,3 +537,27 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   `DocumentProfileError::VersionMismatch` and silently regenerated,
   identical to every prior bump.
   Plan: `claude-notes/plans/2026-06-29-plan6-pass1-engine-resolution.md`.
+
+- **2026-08-25 — v13 (bd-0rsk07il, GH #445, editorial comments).**
+  Adds `comments: Vec<ProfileComment>` — every editorial comment in
+  the document body, in source order. Each entry carries the
+  plain-text projection of the comment's content, the mark's source
+  span, in-band `author=` / `date=` attributes promoted to typed
+  fields, and the remaining attr kvs as an ordered passthrough list.
+  Comments are `[>> … ]` / `[…]{.quarto-edit-comment}` marks; the qmd
+  reader normalizes both to a `Span` whose classes contain
+  `quarto-edit-comment`, which is what the extraction walk keys on.
+  Comments in included files count toward the including document
+  (checkpoint sees the post-include AST, same as `outline`).
+  "Outstanding" is presence — resolving a comment deletes it from
+  source.
+
+  The serialized shape is strictly additive (`#[serde(default)]`,
+  omitted when empty), but the version is bumped anyway: a cached v12
+  profile would deserialize cleanly and silently report "no comments"
+  for a document that has them — precisely the semantic misread the
+  version check exists to prevent. v12 cache entries are rejected and
+  regenerated as with every prior bump. First consumer: hub-client's
+  comment-toggle badge (outstanding-comment count for the active
+  page). Plan:
+  `claude-notes/plans/2026-08-25-document-profile-comments.md`.

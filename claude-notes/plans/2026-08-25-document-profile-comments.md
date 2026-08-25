@@ -29,6 +29,18 @@ with the count of outstanding comments on the active page.
 
 ## Facts established during investigation
 
+- **Representation at the checkpoint (execution finding, 2026-08-25):**
+  the qmd reader's postprocess step rewrites every `Inline::EditComment`
+  into an `Inline::Span` whose classes start with `quarto-edit-comment`
+  (id and kvs preserved, content trimmed —
+  `crates/pampa/src/pandoc/treesitter_utils/postprocess.rs`,
+  `.with_edit_comment`). The qmd writer maps that span form back to
+  `[>> …]` decorated syntax only when it has no id/kvs and exactly the
+  one class (`write_span`, `crates/pampa/src/writers/qmd.rs:1954`);
+  otherwise it writes `[…]{.quarto-edit-comment …}` — which re-parses
+  to the same span shape. So the **class-based span is the canonical
+  AST form**; the extractor keys on the class (with a defensive
+  `Inline::EditComment` arm since the type still exists pre-postprocess).
 - The profile checkpoint (`DocumentProfileStage`, between
   `MetadataMergeStage` and `PreEngineSugaringStage`) sees the AST
   **after include expansion** and **before any AST mutation** —
@@ -195,22 +207,27 @@ profile field exists.
 
 ## Phases and work items
 
-### Phase 1 — Rust core (TDD)
+### Phase 1 — Rust core (TDD) — **done 2026-08-25**
 
-- [ ] Tests first (`document_profile.rs` unit tests +
-      integration test through the pipeline): document with no
-      comments → empty vec (and field omitted in JSON); comments in
-      paragraphs / headers / nested inlines / inside Divs & lists /
-      code-block container Divs; comment in an included file counts
-      toward the host; text projection; source spans present;
-      `author=`/`date=` attrs promoted to typed fields; other kvs
-      passed through. Verify they fail.
-- [ ] Add `ProfileComment`, the `comments` field, and the extraction
-      walk to `crates/quarto-core/src/document_profile.rs`.
-- [ ] Bump `DOCUMENT_PROFILE_VERSION` to 13; version-history doc
-      comment; update `claude-notes/designs/document-profile-contract.md`
-      (field guarantee row + change log).
-- [ ] `cargo nextest run --workspace`.
+- [x] Tests first: 5 unit tests in `document_profile.rs` (empty +
+      JSON omission; paragraph comment w/ span-slices-source check;
+      all container kinds in source order; author/date/kv attrs both
+      syntaxes; JSON round-trip) + 1 pipeline integration test
+      (`profile_sees_comments_from_included_file` in
+      `document_profile_pipeline.rs`). Verified failing first
+      (E0609 on the missing field).
+- [x] `ProfileComment` + `comments` field + `CommentCollector` walk
+      (mirrors `LinkResolutionStage`'s traversal; comment spans are
+      leaves). Execution finding recorded in §Facts: at the checkpoint
+      comments are `Span`s with class `quarto-edit-comment` (reader
+      postprocess rewrites `EditComment`), so the walk keys on the
+      class with a defensive `EditComment` arm.
+- [x] `DOCUMENT_PROFILE_VERSION` 12 → 13 (+ history comment); contract
+      doc updated (header version tag, guarantees row, change log).
+      Cache invalidation is automatic — the version is in the
+      cache-key hash domain (`project/cache_key.rs`).
+- [x] `cargo nextest run --workspace`: 13395 passed. Clippy clean on
+      quarto-core.
 
 ### Phase 2 — WASM / response surface (TDD where testable natively)
 

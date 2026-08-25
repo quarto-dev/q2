@@ -429,6 +429,50 @@ async fn profile_outline_ids_deduped_across_includes() {
 }
 
 #[tokio::test]
+async fn profile_sees_comments_from_included_file() {
+    // bd-0rsk07il (GH #445): comments in an included file count toward
+    // the including document — IncludeExpansion runs before the
+    // DocumentProfile checkpoint, so the comment scan sees the
+    // post-include AST. Also pins source order across the splice
+    // boundary (parent comment before the include, child comment,
+    // parent comment after).
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let project_dir = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf());
+
+    let child_path = project_dir.join("child.qmd");
+    std::fs::write(&child_path, "Child body [>> child note ] here.\n").expect("write child");
+
+    let parent_path = project_dir.join("parent.qmd");
+    let parent_content: &[u8] = b"---\ntitle: Parent\n---\n\n\
+        Before [>> parent first ] text.\n\n\
+        {{< include child.qmd >}}\n\n\
+        After [>> parent last ]{author=\"Alice\"} text.\n";
+
+    let bundle = run_head_pipeline_in_dir(&project_dir, &parent_path, parent_content).await;
+
+    let texts: Vec<&str> = bundle
+        .profile
+        .comments
+        .iter()
+        .map(|c| c.text.as_str())
+        .collect();
+    assert_eq!(
+        texts,
+        vec!["parent first", "child note", "parent last"],
+        "comments from included files count toward the host, in source \
+         order (bd-0rsk07il); got: {texts:?}"
+    );
+    assert_eq!(
+        bundle.profile.comments[2].author.as_deref(),
+        Some("Alice"),
+        "in-band author attribute survives the pipeline path"
+    );
+}
+
+#[tokio::test]
 async fn profile_records_direct_include_in_includes_field() {
     // bd-r82e: a parent that pulls in `{{< include child.qmd >}}`
     // should land an `IncludeEntry` in `profile.includes` so the
