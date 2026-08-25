@@ -75,7 +75,12 @@ use quarto_pandoc_types::{Block, Blocks, CodeBlock, Div, Pandoc};
 /// braces are preserved by the pampa parser into the CodeBlock's
 /// class list, which is what we match against. Plain language tags
 /// (` ```r `) — used for syntax highlighting only — don't have the
-/// braces and aren't matched.
+/// braces and aren't matched. Neither is a *doubled*-brace opener
+/// (` ```{{python}} `, Quarto 1's "show, don't run" escape): pampa keeps
+/// that class verbatim, warns Q-2-50, and the block is documented to
+/// render as literal code (bd-escaped-executable-fence-uuvv37pk) — so
+/// it must not resolve to an engine either, or a page that merely
+/// *shows* a cell demands a Jupyter runtime (bd-3tq5u8vm).
 ///
 /// Returns the language token (without braces) when matched.
 pub fn engine_cell_lang(block: &Block) -> Option<&str> {
@@ -84,6 +89,10 @@ pub fn engine_cell_lang(block: &Block) -> Option<&str> {
     };
     for class in attr.1.iter() {
         if let Some(stripped) = class.strip_prefix('{').and_then(|s| s.strip_suffix('}')) {
+            // `{{lang}}` strips to `{lang}` — still braced, so not a cell.
+            if stripped.contains(['{', '}']) {
+                continue;
+            }
             return Some(stripped);
         }
     }
@@ -1051,6 +1060,26 @@ mod tests {
         let block = Block::CodeBlock(CodeBlock {
             attr,
             text: "x <- 1".to_string(),
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(engine_cell_lang(&block), None);
+    }
+
+    #[test]
+    fn doubled_brace_display_fence_is_not_an_engine_cell() {
+        // ```{{python}} — Quarto 1's display escape — reaches us with the
+        // class `{{python}}` intact (pampa warns Q-2-50 and renders it as
+        // literal code). Stripping one brace layer must not turn it into
+        // an engine cell for `{python}` (bd-3tq5u8vm).
+        let attr = (
+            String::new(),
+            vec!["{{python}}".to_string()],
+            LinkedHashMap::new(),
+        );
+        let block = Block::CodeBlock(CodeBlock {
+            attr,
+            text: "import matplotlib.pyplot as plt".to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         });

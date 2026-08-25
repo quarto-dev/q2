@@ -3559,4 +3559,39 @@ mod tests {
         )]);
         assert_same(&tabled_meta, &python_ast, &tabled_registry, None);
     }
+
+    /// A doubled-brace fence (Quarto 1's "display, don't run" escape) is
+    /// NOT an engine cell in Q2: pampa keeps the class as `{{python}}`, warns
+    /// Q-2-50, and the block renders as literal code
+    /// (bd-escaped-executable-fence-uuvv37pk). The resolver must agree, or a
+    /// docs page that merely *shows* a cell drags jupyter into the sequence
+    /// and fails hard wherever Jupyter is absent (bd-3tq5u8vm).
+    #[test]
+    fn test_doubled_brace_display_fence_is_not_computational() {
+        let registry = mock_registry(vec![mock_knitr(), mock_jupyter()]);
+        let display_cell = Block::CodeBlock(CodeBlock {
+            attr: (
+                String::new(),
+                vec!["{{python}}".to_string()],
+                LinkedHashMap::new(),
+            ),
+            text: "#| label: fig-line-plot\nimport matplotlib.pyplot as plt".to_string(),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let ast = ast_with_blocks(vec![display_cell]);
+        let meta = empty_meta();
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        assert!(
+            res.sequence.is_empty(),
+            "a {{{{python}}}} display fence must resolve to no engines; got {:?}",
+            res.sequence
+                .iter()
+                .map(|e| e.name.as_str())
+                .collect::<Vec<_>>()
+        );
+        assert!(res.ownership.is_empty(), "got {:?}", res.ownership);
+    }
 }
