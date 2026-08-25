@@ -3235,6 +3235,50 @@ body .nav-footer {
   }
 }
 
+// Repo-actions, footer copy (bd-repo-actions-footer-unstyled-80xtt35y).
+// Ported verbatim from `quarto-nav.scss:770-802`; no SCSS variables are
+// involved, so nothing is lost in the port.
+//
+// This is deliberately NOT shared with the `.sidebar .toc-actions` rules
+// above (~line 1816): the two treatments differ in kind — the sidebar copy
+// is a themed vertical list, this one a centred horizontal row — so they
+// must not be unified. `display: flex` + `list-style: none` is what stops
+// the links rendering as a browser-default bulleted list; the
+// `:first-child`/`:last-child` `auto` margin pair centres the row.
+.nav-footer .toc-actions {
+  a,
+  a:hover {
+    text-decoration: none;
+  }
+
+  ul {
+    display: flex;
+    list-style: none;
+
+    :first-child {
+      margin-left: auto;
+    }
+    :last-child {
+      margin-right: auto;
+    }
+
+    li {
+      padding-right: 1.5em;
+
+      i.bi {
+        padding-right: 0.4em;
+      }
+    }
+
+    li:last-of-type {
+      padding-right: 0;
+    }
+  }
+
+  padding-bottom: 0.5em;
+  padding-top: 0.5em;
+}
+
 // Task lists (bd-obkvhlam). The HTML writer renders `- [ ]`/`- [x]` items as
 // `<ul class="task-list"><li><label><input type="checkbox" …/>…</label></li>`.
 // ported from _quarto-rules.scss:338-340

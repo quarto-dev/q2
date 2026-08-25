@@ -396,5 +396,19 @@
 # secondary nav, so the header partial emits nothing, no `nav-fixed`
 # body class is composed, and QuartoNavJsTransform ships no scripts —
 # the template/JS side of the strand is byte-neutral outside websites.
+# Re-captured 2026-08-25 (bd-repo-actions-footer-unstyled-80xtt35y):
+# styles.css hash updated because the footer copy of repo-actions gained the
+# eight rules it had been shipping without. `.nav-footer .toc-actions` (and its
+# `a`/`ul`/`li`/`i.bi`/`:first-child`/`:last-child`/`li:last-of-type` children)
+# was ported verbatim from Q1's `quarto-nav.scss:770-802` into the page-footer
+# section of `_bootstrap-rules.scss`. No SCSS variables are involved, so the
+# port is literal; the compiled rules are byte-for-byte identical to Q1's.
+# repo-actions' markup half shipped complete in 0.27.0
+# (bd-repo-actions-missing-99ezd2fe) but every `.toc-actions` rule q2 had was
+# scoped under `.sidebar`, so the footer links rendered as a browser-default
+# bulleted list instead of a centred flex row. The sidebar rules are untouched
+# and deliberately NOT unified with these — the two treatments differ in kind.
+# doc.html hash unchanged: CSS-only change, and a single-doc render has no
+# footer at all, so the new selectors match nothing in the fixture's body.
 doc.html a0540297514ad41734a23e91c9511134b1fa469281ec470339571ffd5d404494
-doc_files/styles.css 60291dc134c93743c6ac174f12324c07f3ad7d2fe7e060f8869541cf5583b8db
+doc_files/styles.css a184a29137e14e4b35c4c791156314888268503c3d313889e94177295f0c5c2d
