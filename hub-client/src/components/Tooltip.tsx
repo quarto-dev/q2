@@ -7,8 +7,9 @@
  * - Shows after a 400ms hover delay; immediately on keyboard focus
  * - Wired via `aria-describedby` on the wrapped element
  * - Escape dismisses; hides on pointer-leave and blur
- * - Flips below the anchor when it would overflow the viewport top,
- *   clamped horizontally inside the viewport
+ * - Sits below the anchor (the native title-tooltip position); flips
+ *   above only when it would overflow the viewport bottom, and clamps
+ *   horizontally inside the viewport
  * - Non-interactive content only — never put focusable elements inside
  *
  * The bubble renders in a portal on document.body with fixed positioning,
@@ -77,8 +78,8 @@ export default function Tooltip({ content, block, children }: TooltipProps) {
 
   // Measure the anchor (the wrapped child, not the wrapper span — a block
   // wrapper is display:contents and has no box) and place the bubble
-  // centered above it, flipping below and clamping horizontally at the
-  // viewport edges.
+  // centered below it — the native title-tooltip position — flipping
+  // above only at the viewport bottom and clamping horizontally.
   const updatePosition = useCallback(() => {
     const anchor = rootRef.current?.firstElementChild ?? rootRef.current;
     const tip = tipRef.current;
@@ -90,8 +91,8 @@ export default function Tooltip({ content, block, children }: TooltipProps) {
       VIEWPORT_MARGIN,
       Math.min(x, window.innerWidth - VIEWPORT_MARGIN - t.width),
     );
-    const fitsAbove = a.top - t.height - GAP >= VIEWPORT_MARGIN;
-    const y = fitsAbove ? a.top - t.height - GAP : a.bottom + GAP;
+    const fitsBelow = a.bottom + GAP + t.height <= window.innerHeight - VIEWPORT_MARGIN;
+    const y = fitsBelow ? a.bottom + GAP : a.top - t.height - GAP;
     setPos({ x, y });
   }, []);
 
