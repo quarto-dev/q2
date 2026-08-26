@@ -37,6 +37,8 @@ use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
 
+use std::collections::BTreeSet;
+
 use crate::Result;
 use crate::document_profile::DocumentProfile;
 use crate::glob::{
@@ -218,6 +220,12 @@ impl AstTransform for ListingGenerateTransform {
             // stay global — a `!` entry excludes a candidate no
             // matter where it appears in `contents:`.
             let mut ordered: Vec<((usize, u8), ListingItem)> = Vec::new();
+            // Which kinds of item this listing ended up with — the
+            // only consumer is the default-sort decision below
+            // (bd-listing-inline-records-order-eq8n2usm). Recorded
+            // during construction, like Q1's `sources` set, so that
+            // `include:`/`exclude:` filters cannot change it.
+            let mut sources: BTreeSet<ListingItemSource> = BTreeSet::new();
             if let Some(index) = ctx.project_index.as_deref() {
                 for profile in index.profiles() {
                     let candidate_path_str = path_to_forward_slashes(&profile.source_path);
@@ -238,6 +246,7 @@ impl AstTransform for ListingGenerateTransform {
                         }
                     }
                     if let Some(pattern_idx) = first_match {
+                        sources.insert(ListingItemSource::Document);
                         ordered.push(((pattern_idx, 1), hydrate_item(profile)));
                     }
                 }
@@ -306,7 +315,10 @@ impl AstTransform for ListingGenerateTransform {
                 let rec = parse_record(value, &mut diags);
                 let base_dir = base_ctx.base_dir_for(&rec.source);
                 let item = match rec.path.clone() {
-                    None => record_item(rec, ItemTarget::None, &base_dir),
+                    None => {
+                        sources.insert(ListingItemSource::Metadata);
+                        record_item(rec, ItemTarget::None, &base_dir)
+                    }
                     Some((raw, path_source)) => match resolve_record_path(
                         &raw,
                         &path_source,
@@ -318,9 +330,11 @@ impl AstTransform for ListingGenerateTransform {
                             if !item_visible(profile) {
                                 continue;
                             }
+                            sources.insert(ListingItemSource::MetadataDocument);
                             overlay_record(hydrate_item(profile), rec, &base_dir)
                         }
                         RecordPath::Href(href) => {
+                            sources.insert(ListingItemSource::Metadata);
                             record_item(rec, ItemTarget::Href(href), &base_dir)
                         }
                     },
@@ -360,7 +374,7 @@ impl AstTransform for ListingGenerateTransform {
                 // `apply_sort` treats as a no-op — declared
                 // `contents:` order flows through untouched.
                 apply_sort(&mut items, sort, &mut diags);
-            } else {
+            } else if sources.iter().any(|s| s.arms_default_sort()) {
                 // Default sort (Q1 parity): `order asc, title asc`,
                 // uniformly across listing types — Q1 applies its
                 // default whenever `title` is among the hydrated
@@ -368,6 +382,13 @@ impl AstTransform for ListingGenerateTransform {
                 // (table included). Items without `order:` sort
                 // after curated ones, in title order
                 // (bd-listing-declared-order-3ixcvc4o).
+                //
+                // Withheld when no item source arms it — see
+                // `ListingItemSource::arms_default_sort`. A listing
+                // built purely from inline records then keeps the
+                // order the author wrote, which is what `ordered`
+                // already holds
+                // (bd-listing-inline-records-order-eq8n2usm).
                 use crate::project::listing::config::{ListingSort, SortDirection};
                 let default_sort = vec![
                     ListingSort {
@@ -411,6 +432,56 @@ impl AstTransform for ListingGenerateTransform {
         ctx.resolved_listings = resolved;
         ctx.diagnostics = diags;
         Ok(())
+    }
+}
+
+/// Where a listing item came from.
+///
+/// Mirrors Q1's `ListingItemSource`
+/// (`src/project/types/website/listing/website-listing-read.ts`), and
+/// exists for exactly one reason: to decide whether a listing that
+/// declared no `sort:` gets the default one. Nothing else branches on
+/// it, so it deliberately does not travel on `ListingItem`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ListingItemSource {
+    /// A project document matched by a `contents:` glob — Q1's
+    /// `ListingItemSource.document`.
+    Document,
+    /// An inline record whose `path:` resolved to a project document —
+    /// Q1's `metadataDocument` upgrade (`website-listing-read.ts:1044`).
+    MetadataDocument,
+    /// An inline record not backed by a project document: no `path:`,
+    /// an external URL, a non-markdown path, or a path naming nothing
+    /// the project renders — Q1's plain `metadata`
+    /// (`website-listing-read.ts:1008`).
+    Metadata,
+}
+
+impl ListingItemSource {
+    /// Whether an item from this source arms the default
+    /// `order asc, title asc` sort for its listing.
+    ///
+    /// Q1 applies that default only when the listing's sources include
+    /// `document` or `metadataDocument`
+    /// (`website-listing-read.ts:645-648`); a metadata-only listing is
+    /// returned untouched (`:286-288`), so the order the author wrote
+    /// in `contents:` survives. q2 applied the default unconditionally
+    /// and silently alphabetised hand-curated card lists — records have
+    /// no front matter, hence no `order:`, so every item tied on the
+    /// primary key and fell through to `title asc`
+    /// (bd-listing-inline-records-order-eq8n2usm).
+    ///
+    /// **The `match` is exhaustive on purpose — no wildcard arm.** The
+    /// bug above was not a coding error in either the record path or
+    /// the sort path; it was the *interaction* between a newly added
+    /// item source and a pre-existing default, which no phase of
+    /// either plan owned. A new source variant should not compile
+    /// until someone answers this question for it.
+    fn arms_default_sort(self) -> bool {
+        match self {
+            Self::Document | Self::MetadataDocument => true,
+            Self::Metadata => false,
+        }
     }
 }
 
@@ -1224,6 +1295,135 @@ mod tests {
         .await;
         assert!(diags.is_empty(), "{diags:?}");
         assert_eq!(titles(&resolved), vec!["First record", "A", "Last record"]);
+    }
+
+    // bd-listing-inline-records-order-eq8n2usm. Q1 applies its default
+    // `order asc, title asc` sort only when a listing's item sources
+    // include `document` or `metadataDocument`
+    // (`website-listing-read.ts:645-648`). A listing built purely from
+    // inline records has neither — every record is plain `metadata` —
+    // so Q1 leaves `items` untouched and declared YAML order survives.
+    // q2 applied the default unconditionally, and since a record has no
+    // front matter it has no `order`, so every item tied on the primary
+    // key and fell through to `title asc`: the author's curated order
+    // was silently alphabetised.
+    #[tokio::test]
+    async fn all_record_listing_keeps_declared_order_under_default_sort() {
+        let (resolved, diags) = run_transform(
+            contents_listing(vec![
+                map(vec![("title", s("Zulu"))]),
+                map(vec![("title", s("Alpha"))]),
+                map(vec![("title", s("Mike"))]),
+            ]),
+            "index.qmd",
+            vec![make_profile("index.qmd", "index.html", "Home")],
+        )
+        .await;
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(titles(&resolved), vec!["Zulu", "Alpha", "Mike"]);
+    }
+
+    // The withholding is keyed on item *sources*, not on the absence of
+    // globs: a record whose `path:` resolves to a project document is
+    // Q1's `metadataDocument` (`website-listing-read.ts:1044`), which
+    // does qualify. So one such record re-arms the default sort for the
+    // whole listing — including the path-less records beside it.
+    #[tokio::test]
+    async fn record_path_to_a_document_re_arms_the_default_sort() {
+        let (resolved, diags) = run_transform(
+            contents_listing(vec![
+                map(vec![("title", s("Zulu"))]),
+                map(vec![("title", s("Alpha")), ("path", s("posts/a.qmd"))]),
+                map(vec![("title", s("Mike"))]),
+            ]),
+            "index.qmd",
+            vec![
+                make_profile("index.qmd", "index.html", "Home"),
+                make_profile("posts/a.qmd", "posts/a.html", "A"),
+            ],
+        )
+        .await;
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(titles(&resolved), vec!["Alpha", "Mike", "Zulu"]);
+    }
+
+    // A record `path:` that is NOT a markdown document stays Q1's plain
+    // `metadata` (it never reaches the `metadataDocument` upgrade), so
+    // it must not re-arm the sort. Same for an external URL.
+    #[tokio::test]
+    async fn record_href_paths_do_not_re_arm_the_default_sort() {
+        let (resolved, diags) = run_transform(
+            contents_listing(vec![
+                map(vec![("title", s("Zulu")), ("path", s("assets/z.pdf"))]),
+                map(vec![
+                    ("title", s("Alpha")),
+                    ("path", s("https://example.com/a")),
+                ]),
+                map(vec![("title", s("Mike"))]),
+            ]),
+            "index.qmd",
+            vec![make_profile("index.qmd", "index.html", "Home")],
+        )
+        .await;
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(titles(&resolved), vec!["Zulu", "Alpha", "Mike"]);
+    }
+
+    // A glob item is Q1's `document` source, so a mixed listing keeps
+    // the default sort — records alphabetise among the glob's documents
+    // exactly as in Q1. This is the deliberate limit of the fix: it
+    // restores Q1 parity, it does not extend declared-position ordering
+    // past what Q1 does.
+    #[tokio::test]
+    async fn mixed_record_and_glob_listing_still_gets_the_default_sort() {
+        let (resolved, diags) = run_transform(
+            contents_listing(vec![
+                map(vec![("title", s("Zulu"))]),
+                s("posts/*.qmd"),
+                map(vec![("title", s("Alpha"))]),
+            ]),
+            "index.qmd",
+            vec![
+                make_profile("index.qmd", "index.html", "Home"),
+                make_profile("posts/a.qmd", "posts/a.html", "Post One"),
+                make_profile("posts/b.qmd", "posts/b.html", "Post Two"),
+            ],
+        )
+        .await;
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(
+            titles(&resolved),
+            vec!["Alpha", "Post One", "Post Two", "Zulu"]
+        );
+    }
+
+    // Withholding the *default* sort must not withhold an *explicit*
+    // one: Q1's condition is `!listingHydrated.sort`, so an author who
+    // writes `sort:` on an all-records listing still gets it applied.
+    #[tokio::test]
+    async fn explicit_sort_still_applies_to_an_all_record_listing() {
+        let (resolved, diags) = run_transform(
+            map(vec![(
+                "listing",
+                map(vec![
+                    ("id", s("l")),
+                    ("sort", arr(vec![s("title asc")])),
+                    (
+                        "contents",
+                        arr(vec![
+                            map(vec![("title", s("Zulu"))]),
+                            map(vec![("title", s("Alpha"))]),
+                            map(vec![("title", s("Mike"))]),
+                        ]),
+                    ),
+                ]),
+            )]),
+            "index.qmd",
+            vec![make_profile("index.qmd", "index.html", "Home")],
+        )
+        .await;
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(titles(&resolved), vec!["Alpha", "Mike", "Zulu"]);
     }
 
     #[tokio::test]

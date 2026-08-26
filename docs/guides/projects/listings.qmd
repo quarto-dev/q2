@@ -61,9 +61,27 @@ and keeps the link as written, and warns
 ### Order
 
 Items are sorted by the listing's `sort:`. **With no `sort:` key, the
-default is `order asc, title asc`** — since records usually carry neither
-an `order:` nor a `date:`, this alphabetizes a hand-curated `contents:`
-list by title. To keep a curated list in the order you wrote it, set
+default is `order asc, title asc`** — but that default applies only to a
+listing that contains at least one *document*: an item matched by a
+`contents:` glob, or a record whose `path:` names a document the project
+renders.
+
+A listing built entirely from records — the usual shape of a
+hand-curated card list — gets no default sort, and its items appear in
+the order you wrote them:
+
+```yaml
+listing:
+  contents:
+    - title: "Get started"     # renders first
+    - title: "Explore features"
+    - title: "Advanced usage"
+```
+
+Add one glob, or one record whose `path:` points at a page in the
+project, and the default sort applies to the whole listing again —
+alphabetizing the records along with it, since records carry no `order:`
+of their own. To keep such a list in the order you wrote it, set
 `sort: false`, or give each record an explicit `order:`.
 
 With `sort: false`, items appear in the order of the `contents:` entries
