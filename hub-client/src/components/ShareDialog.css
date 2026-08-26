@@ -53,7 +53,7 @@
 
 .url-field input {
   color: var(--editor-text-muted);
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   cursor: text;
 }

@@ -94,7 +94,7 @@
 }
 
 .header-doc .file-path {
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--editor-text-dim);
   min-width: 0;
