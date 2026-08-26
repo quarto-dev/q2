@@ -117,8 +117,12 @@
 }
 
 .file-preview .file-name-input:focus {
-  outline: none;
   border-color: var(--dialog-tab-active);
+}
+
+.file-preview .file-name-input:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .file-preview .file-name-input:disabled {

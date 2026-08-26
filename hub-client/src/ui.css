@@ -228,7 +228,7 @@
   justify-content: space-between;
 }
 
-.qh-menu-hint { font-size: 10.5px; color: var(--text-muted); }
+.qh-menu-hint { font-size: 10.5px; color: var(--menu-hint-text); }
 
 .qh-menu-subtext {
   font-size: 11px;
@@ -341,6 +341,13 @@
 
 .qh-input:focus { border-color: var(--border-focus); }
 .qh-input.focus-accent:focus { border-color: var(--posit-teal); }
+
+/* WCAG 2.4.7: border-color alone is too subtle a focus indicator —
+   keyboard focus gets the token ring. */
+.qh-input:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
 
 .qh-input:disabled { opacity: 0.5; cursor: default; }
 
@@ -481,4 +488,19 @@ select.qh-input { appearance: auto; }
   gap: 12px;
   padding: 16px 20px;
   border-top: 1px solid var(--dialog-border);
+}
+
+/* Forced colors (Windows High Contrast): the platform strips backgrounds
+   and box shadows, so surfaces that rely on them for their boundary get
+   system-color borders here. (.qh-btn/.qh-input keep boundaries via the
+   UA's forced button/input borders; .qh-menu already has a hairline
+   border, forced to CanvasText.) */
+@media (forced-colors: active) {
+  .qh-icon-btn {
+    border: 1px solid ButtonBorder;
+  }
+
+  .qh-dialog {
+    border: 1px solid CanvasText;
+  }
 }

@@ -108,7 +108,8 @@ input[type='text'] {
 }
 
 input[type='text']:focus {
-  outline: none;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
   border-color: var(--color-accent);
 }
 
@@ -128,7 +129,8 @@ select {
 }
 
 select:focus {
-  outline: none;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
   border-color: var(--color-accent);
 }
 

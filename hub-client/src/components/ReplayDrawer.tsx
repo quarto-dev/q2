@@ -489,6 +489,7 @@ export default function ReplayDrawer({
             onMouseLeave={handleScrubberMouseLeave}
             className="replay-waveform__input"
             role="slider"
+            aria-label="Replay position"
           />
           {scrubberTooltip && (
             <div

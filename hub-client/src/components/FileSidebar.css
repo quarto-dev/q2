@@ -184,10 +184,9 @@
 }
 
 /* WCAG 2.4.7: keep a visible focus indicator — the base style already
-   has an accent border, so focus adds an offset outline in the same
-   accent to stay distinguishable. */
-.rename-input:focus {
-  outline: 2px solid var(--sidebar-active-accent);
+   has an accent border, so keyboard focus adds the token ring. */
+.rename-input:focus-visible {
+  outline: var(--focus-ring);
   outline-offset: 1px;
 }
 

@@ -1,21 +1,4 @@
 {
-  "no-outline-none-without-focus-visible": {
-    "components/NewFileDialog.css": [
-      "*"
-    ],
-    "components/ProjectSelector.css": [
-      "*"
-    ],
-    "components/ProjectSetSetup.css": [
-      "*"
-    ],
-    "components/ReplayDrawer.css": [
-      "*"
-    ],
-    "debug/debug.css": [
-      "*"
-    ]
-  },
   "no-physical-box-props": {
     "App.css": [
       "right: 16px;"

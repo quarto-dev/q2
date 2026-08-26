@@ -29,3 +29,10 @@
   max-width: 300px;
   pointer-events: none;
 }
+
+/* Forced colors: the shadow is stripped — keep a system-color border. */
+@media (forced-colors: active) {
+  .qh-tooltip {
+    border: 1px solid CanvasText;
+  }
+}

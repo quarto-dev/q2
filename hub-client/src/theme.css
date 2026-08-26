@@ -246,6 +246,8 @@
   --context-menu-hover: var(--input-bg-alpha);
   --context-menu-shadow: rgba(0, 0, 0, 0.12);
   --context-menu-danger: var(--posit-red);
+  /* Shortcut hints: --text-muted meets 4.5:1 on --bg-modal in light. */
+  --menu-hint-text: var(--text-muted);
   --context-menu-danger-bg: var(--error-bg-subtle);
 
   /* Outline panel symbol colors */
@@ -394,6 +396,9 @@
   --context-menu-border: var(--border-color);
   --context-menu-hover: var(--input-bg-alpha);
   --context-menu-shadow: rgba(0, 0, 0, 0.3);
+  /* Shortcut hints: --text-muted is only 3.6:1 on --bg-modal in dark
+     (fails WCAG 1.4.3); --text-secondary is 5.6:1. */
+  --menu-hint-text: var(--text-secondary);
   --context-menu-danger: var(--posit-red);
   --context-menu-danger-bg: var(--error-bg-subtle);
 
