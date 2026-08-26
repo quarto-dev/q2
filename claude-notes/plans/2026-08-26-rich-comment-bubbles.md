@@ -310,8 +310,11 @@ policy).
       `defaultPrevented === true`, `window.open('https://example.com/',
       '_blank', 'noopener,noreferrer')` called, inline comment input
       NOT opened.
-- [ ] Phase 5: close bd-y66gbfs4 (hub-client changelog entry;
-      live-site pickup again needs a hub deploy)
+- [ ] Phase 5: close bd-y66gbfs4 after merge (changelog entry
+      committed as 1976f2aa2; live-site pickup again needs a hub
+      deploy). Implementation commit: ca959a674.
+      `cargo xtask verify` passed (all steps); tree clean.
+      Push/PR awaiting approval.
 
 ## Open questions for review
 
