@@ -16,6 +16,7 @@ import Tooltip from '../Tooltip';
 import html2canvas from 'html2canvas';
 import { projectFolderName } from '@quarto/quarto-sync-client';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
+import { tabs } from '../../strings';
 import './ProjectTab.css';
 
 interface ProjectTabProps {
@@ -60,7 +61,7 @@ export default function ProjectTab({ project, onExportZip }: ProjectTabProps) {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Export failed';
+      const message = err instanceof Error ? err.message : tabs.project.errorExport;
       setExportError(message);
       setTimeout(() => setExportError(null), 5000);
     } finally {
@@ -76,7 +77,7 @@ export default function ProjectTab({ project, onExportZip }: ProjectTabProps) {
       const previewPane = document.querySelector('.preview-pane') as HTMLElement;
 
       if (!previewPane) {
-        alert('Preview pane not found');
+        alert(tabs.project.errorNoPreview);
         return;
       }
 
@@ -102,37 +103,37 @@ export default function ProjectTab({ project, onExportZip }: ProjectTabProps) {
       }, 'image/png');
     } catch (error) {
       console.error('Failed to capture screenshot:', error);
-      alert('Failed to capture screenshot. Please try again.');
+      alert(tabs.project.errorScreenshot);
     } finally {
       setIsCapturing(false);
     }
   }, []);
 
   // Display truncated doc ID (remove automerge: prefix, show first 8 chars)
-  const truncatedDocId = project.indexDocId.replace(/^automerge:/, '').slice(0, 12) + '...';
+  const truncatedDocId = project.indexDocId.replace(/^automerge:/, '').slice(0, 12) + '…';
 
   return (
     <div className="project-tab">
       <div className="project-tab-section">
-        <label className="section-label">Project Name</label>
+        <label className="section-label">{tabs.project.nameLabel}</label>
         <div className="project-name">{project.description}</div>
       </div>
 
       <div className="project-tab-section">
-        <label className="section-label">Index Document ID</label>
-        <Tooltip content={`Click to copy: ${project.indexDocId}`}>
+        <label className="section-label">{tabs.project.docIdLabel}</label>
+        <Tooltip content={tabs.project.copyDocIdTooltip(project.indexDocId)}>
           <button
             className="doc-id-button"
             onClick={handleCopyDocId}
           >
           <span className="doc-id-value">{truncatedDocId}</span>
-          <span className="copy-indicator">{copied ? 'Copied!' : 'Copy'}</span>
+          <span className="copy-indicator">{copied ? tabs.project.copied : tabs.project.copy}</span>
           </button>
         </Tooltip>
       </div>
 
       <div className="project-tab-section">
-        <label className="section-label">Sync Server</label>
+        <label className="section-label">{tabs.project.syncServerLabel}</label>
         <div className="sync-server">{project.syncServer}</div>
       </div>
 
@@ -142,7 +143,7 @@ export default function ProjectTab({ project, onExportZip }: ProjectTabProps) {
           onClick={handleExportZip}
           disabled={exporting}
         >
-          {exporting ? 'Exporting...' : 'Export ZIP'}
+          {exporting ? tabs.project.exportingZip : tabs.project.exportZip}
         </button>
         {exportError && (
           <div className="export-error">{exportError}</div>
@@ -152,7 +153,7 @@ export default function ProjectTab({ project, onExportZip }: ProjectTabProps) {
           onClick={handleScreenshot}
           disabled={isCapturing}
         >
-          {isCapturing ? 'Capturing...' : '📸 Screenshot Preview'}
+          {isCapturing ? tabs.project.capturingScreenshot : tabs.project.screenshot}
         </button>
       </div>
     </div>

@@ -9,6 +9,7 @@
 
 import { useState, useCallback } from 'react';
 import Tooltip from './Tooltip';
+import { outline } from '../strings';
 import type { Symbol, SymbolKind } from '@quarto/preview-renderer/types/intelligence';
 import type { ThumbnailMap } from '../hooks/useSectionThumbnails';
 import './OutlinePanel.css';
@@ -102,13 +103,13 @@ function SymbolTree({
                     e.stopPropagation();
                     onToggleSymbol(symbolId);
                   }}
-                  aria-label={isCollapsed ? `Expand ${symbol.name}` : `Collapse ${symbol.name}`}
+                  aria-label={isCollapsed ? outline.expand(symbol.name) : outline.collapse(symbol.name)}
                   aria-expanded={!isCollapsed}
                 >
                   {isCollapsed ? '▶' : '▼'}
                 </button>
               )}
-              <Tooltip content={`Go to ${symbol.name}`}>
+              <Tooltip content={outline.goTo(symbol.name)}>
                 <button
                   className="outline-button"
                   onClick={() => onSymbolClick(symbol)}
@@ -123,7 +124,7 @@ function SymbolTree({
               {thumbnail && (
                 <img
                   src={thumbnail}
-                  alt={`Thumbnail for ${symbol.name}`}
+                  alt={outline.thumbnailAlt(symbol.name)}
                   className="outline-thumbnail"
                   style={{
                     width: '128px',
@@ -190,7 +191,7 @@ export default function OutlinePanel({
   if (loading && symbols.length === 0) {
     return (
       <div className="outline-panel">
-        <div className="outline-loading">Loading outline</div>
+        <div className="outline-loading">{outline.loading}</div>
       </div>
     );
   }
@@ -206,7 +207,7 @@ export default function OutlinePanel({
   if (symbols.length === 0) {
     return (
       <div className="outline-panel">
-        <div className="outline-empty">No outline available</div>
+        <div className="outline-empty">{outline.empty}</div>
       </div>
     );
   }

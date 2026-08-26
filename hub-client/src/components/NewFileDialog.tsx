@@ -10,6 +10,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { discoverTemplates, type ProjectTemplate } from '../services/templateService';
 import ModalDialog from './ModalDialog';
+import { common, dialogs } from '../strings';
 import './NewFileDialog.css';
 
 export interface NewFileDialogProps {
@@ -84,13 +85,13 @@ export default function NewFileDialog({
   const validateFilename = useCallback(
     (name: string): string | null => {
       if (!name.trim()) {
-        return 'Filename is required';
+        return dialogs.newFile.errorRequired;
       }
       if (/[<>:"|?*\\]/.test(name)) {
-        return 'Filename contains invalid characters';
+        return dialogs.newFile.errorInvalidChars;
       }
       if (existingPaths.includes(name)) {
-        return 'A file with this name already exists';
+        return dialogs.newFile.errorExists;
       }
       return null;
     },
@@ -122,7 +123,7 @@ export default function NewFileDialog({
 
   return (
     <ModalDialog
-      title="New file"
+      title={dialogs.newFile.title}
       className="new-file-dialog"
       onClose={onClose}
       onKeyDown={handleKeyDown}
@@ -131,7 +132,7 @@ export default function NewFileDialog({
           <div className="text-file-form">
             {templates.length > 0 && (
               <div className="template-selector">
-                <label htmlFor="template">Template:</label>
+                <label htmlFor="template">{dialogs.newFile.templateLabel}</label>
                 <select
                   id="template"
                   className="qh-input focus-accent"
@@ -142,7 +143,7 @@ export default function NewFileDialog({
                   }}
                   disabled={loadingTemplates}
                 >
-                  <option value="">Blank file</option>
+                  <option value="">{dialogs.newFile.blank}</option>
                   {templates.map((t) => (
                     <option key={t.path} value={t.path}>
                       {t.displayName}
@@ -152,7 +153,7 @@ export default function NewFileDialog({
               </div>
             )}
             <div className="filename-input">
-              <label htmlFor="filename">Filename:</label>
+              <label htmlFor="filename">{dialogs.newFile.filenameLabel}</label>
               <input
                 ref={filenameInputRef}
                 id="filename"
@@ -163,7 +164,7 @@ export default function NewFileDialog({
                   setFilename(e.target.value);
                   setError(null);
                 }}
-                placeholder="e.g., chapter1.qmd"
+                placeholder={dialogs.newFile.filenamePlaceholder}
               />
             </div>
             {error && <div className="qh-error inline">{error}</div>}
@@ -172,14 +173,14 @@ export default function NewFileDialog({
 
         <div className="dialog-actions">
           <button className="qh-btn outline" onClick={onClose}>
-            Cancel
+            {common.cancel}
           </button>
           <button
             className="qh-btn primary"
             onClick={handleCreateTextFile}
             disabled={!filename.trim()}
           >
-            Create
+            {common.create}
           </button>
         </div>
     </ModalDialog>

@@ -250,7 +250,7 @@ test('tab order: header buttons, search, one tree stop, then the next section', 
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'New file' })).toBeFocused();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Upload asset' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Add asset' })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(
     page.getByRole('button', { name: 'Open printable version in a new tab' }),

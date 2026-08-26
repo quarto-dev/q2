@@ -5,6 +5,7 @@ import type { ActorIdentity } from '@quarto/preview-runtime';
 import { getActorId } from '@quarto/preview-runtime';
 import { CommentsExpandIcon, CommentsShowIcon, CommentsHideIcon } from './icons';
 import Tooltip from './Tooltip';
+import { replay } from '../strings';
 import './ReplayDrawer.css';
 import './ViewToggleControl.css';
 
@@ -278,7 +279,7 @@ export default function ReplayDrawer({
     const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const index = Math.round(fraction * (state.historyLength - 1));
     const ts = controls.getTimestampAtIndex(index);
-    const text = ts !== null ? formatFullTimestamp(ts) : `Change ${index + 1}`;
+    const text = ts !== null ? formatFullTimestamp(ts) : replay.changeTooltip(index + 1);
     // Position relative to the scrubber container
     const left = e.clientX - (scrubberRef.current?.getBoundingClientRect().left ?? rect.left);
     setScrubberTooltip({ left, text });
@@ -320,7 +321,7 @@ export default function ReplayDrawer({
           disabled={disabled}
         >
           <span className="replay-drawer__chevron">&#x25B6;</span>
-          <span>Replay</span>
+          <span>{replay.title}</span>
         </button>
         {showAttributionToggle && (
           <AttributionToggle
@@ -353,16 +354,16 @@ export default function ReplayDrawer({
           type="button"
           className="replay-drawer__toggle"
           onClick={controls.exit}
-          aria-label="Collapse replay"
+          aria-label={replay.collapse}
         >
           <span className="replay-drawer__chevron">&#x25BC;</span>
-          <span>Replay</span>
+          <span>{replay.title}</span>
         </button>
 
         <button
           className="replay-drawer__handle"
           onClick={controls.exit}
-          aria-label="Close replay"
+          aria-label={replay.close}
         >
           <span className="replay-drawer__handle-bar" />
         </button>
@@ -406,14 +407,14 @@ export default function ReplayDrawer({
           <button
             className="replay-drawer__btn"
             onClick={controls.seekToStart}
-            aria-label="Skip to start"
+            aria-label={replay.skipToStart}
           >
             &#x23EE;
           </button>
           <button
             className="replay-drawer__btn"
             onClick={controls.stepBackward}
-            aria-label="Step backward"
+            aria-label={replay.stepBackward}
           >
             &#x25C1;
           </button>
@@ -421,7 +422,7 @@ export default function ReplayDrawer({
             <button
               className="replay-drawer__btn replay-drawer__btn--play"
               onClick={controls.pause}
-              aria-label="Pause"
+              aria-label={replay.pause}
             >
               &#x23F8;
             </button>
@@ -429,7 +430,7 @@ export default function ReplayDrawer({
             <button
               className="replay-drawer__btn replay-drawer__btn--play"
               onClick={controls.play}
-              aria-label="Play"
+              aria-label={replay.play}
             >
               &#x25B6;
             </button>
@@ -437,21 +438,21 @@ export default function ReplayDrawer({
           <button
             className="replay-drawer__btn"
             onClick={controls.stepForward}
-            aria-label="Step forward"
+            aria-label={replay.stepForward}
           >
             &#x25B7;
           </button>
           <button
             className="replay-drawer__btn"
             onClick={controls.seekToEnd}
-            aria-label="Skip to end"
+            aria-label={replay.skipToEnd}
           >
             &#x23ED;
           </button>
           <button
             className="replay-drawer__btn replay-drawer__btn--speed"
             onClick={controls.cycleSpeed}
-            aria-label="Playback speed"
+            aria-label={replay.playbackSpeed}
           >
             {state.playbackSpeed}x
           </button>
@@ -489,7 +490,7 @@ export default function ReplayDrawer({
             onMouseLeave={handleScrubberMouseLeave}
             className="replay-waveform__input"
             role="slider"
-            aria-label="Replay position"
+            aria-label={replay.position}
           />
           {scrubberTooltip && (
             <div
@@ -505,7 +506,7 @@ export default function ReplayDrawer({
           className="replay-drawer__btn replay-drawer__btn--apply"
           onClick={controls.apply}
         >
-          Restore
+          {replay.restore}
         </button>
       </div>
     </div>

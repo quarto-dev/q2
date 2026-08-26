@@ -16,6 +16,7 @@
 
 import { useEffect, useId, useRef } from 'react';
 import type { HTMLAttributes, KeyboardEvent, ReactNode } from 'react';
+import { common } from '../strings';
 
 export interface ModalDialogProps {
   /** Visible title; also the dialog's accessible name. */
@@ -112,7 +113,7 @@ export default function ModalDialog({
       >
         <div className="dialog-header">
           <h2 id={titleId}>{title}</h2>
-          <button className="close-btn" onClick={onClose} aria-label="Close">
+          <button className="close-btn" onClick={onClose} aria-label={common.close}>
             &times;
           </button>
         </div>

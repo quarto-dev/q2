@@ -22,6 +22,7 @@ import { openPrintableDocument } from '../services/printableDocument';
 import { FilePlusIcon, UploadIcon, PrintIcon, MoreIcon } from './icons';
 import { Menu, MenuItem } from './Menu';
 import Tooltip from './Tooltip';
+import { common, fileSidebar } from '../strings';
 import './FileSidebar.css';
 
 export interface FileSidebarProps {
@@ -527,7 +528,7 @@ export default function FileSidebar({
   const handleDelete = useCallback(
     (file: FileEntry) => {
       closeContextMenu();
-      if (onDeleteFile && window.confirm(`Delete ${file.path}?`)) {
+      if (onDeleteFile && window.confirm(fileSidebar.confirmDelete(file.path))) {
         onDeleteFile(file);
       }
     },
@@ -599,9 +600,7 @@ export default function FileSidebar({
     const lastSlash = file.path.lastIndexOf('/');
     const parentFolderPath = lastSlash >= 0 ? file.path.slice(0, lastSlash) : '';
 
-    const rowTip = onOpenInNewTab
-      ? `${file.path} — Ctrl/Cmd+click to open in new tab`
-      : file.path;
+    const rowTip = fileSidebar.rowTooltip(file.path, !!onOpenInNewTab);
     return (
       <Tooltip block content={rowTip}>
       <div
@@ -647,7 +646,7 @@ export default function FileSidebar({
             // Not a tab stop: the tree is one tab stop (roving tabindex)
             // and keyboard users open this menu with Shift+F10 on the row.
             tabIndex={-1}
-            aria-label={`Actions for ${fileName}`}
+            aria-label={fileSidebar.actionsFor(fileName)}
             aria-haspopup="menu"
             aria-expanded={contextMenu.visible && contextMenu.file?.path === file.path}
             onClick={(e) => {
@@ -727,7 +726,7 @@ export default function FileSidebar({
     if (searchResults.length === 0) {
       return (
         <div className="empty-state">
-          <p>No matches</p>
+          <p>{fileSidebar.noMatches}</p>
         </div>
       );
     }
@@ -783,31 +782,31 @@ export default function FileSidebar({
       onDrop={handleDrop}
     >
       <div className="sidebar-header">
-        <Tooltip content="New file">
+        <Tooltip content={fileSidebar.newFile}>
           <button
             className="qh-btn small outline new-file-btn"
             onClick={onNewFile}
-            aria-label="New file"
+            aria-label={fileSidebar.newFile}
           >
             <FilePlusIcon />
           </button>
         </Tooltip>
-        <Tooltip content="Upload asset">
+        <Tooltip content={fileSidebar.addAsset}>
           <button
             className="qh-btn small outline upload-asset-btn"
             onClick={handleUploadClick}
-            aria-label="Upload asset"
+            aria-label={fileSidebar.addAsset}
           >
             <UploadIcon />
           </button>
         </Tooltip>
         {canOpenPrintable && (
-          <Tooltip content="Open a printable version in a new tab (use the browser's Print to save as PDF)">
+          <Tooltip content={fileSidebar.printableTooltip}>
             <button
               className="qh-btn small outline print-file-btn"
               onClick={handleOpenPrintable}
               disabled={isPreparingPrintable}
-              aria-label="Open printable version in a new tab"
+              aria-label={fileSidebar.printableLabel}
             >
               {isPreparingPrintable ? '…' : <PrintIcon />}
             </button>
@@ -820,7 +819,7 @@ export default function FileSidebar({
           <button
             className="sidebar-printable-error-dismiss"
             onClick={() => setPrintableError(null)}
-            aria-label="Dismiss"
+            aria-label={common.dismiss}
           >
             ✕
           </button>
@@ -833,7 +832,7 @@ export default function FileSidebar({
             ref={searchInputRef}
             type="search"
             className="sidebar-search-input"
-            placeholder="Search files…"
+            placeholder={fileSidebar.searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -846,14 +845,14 @@ export default function FileSidebar({
                 setSearchQuery('');
               }
             }}
-            aria-label="Search files"
+            aria-label={fileSidebar.searchLabel}
           />
           {isSearching && (
-            <Tooltip content="Clear search">
+            <Tooltip content={fileSidebar.clearSearch}>
               <button
                 className="sidebar-search-clear"
                 onClick={() => setSearchQuery('')}
-                aria-label="Clear search"
+                aria-label={fileSidebar.clearSearch}
               >
                 ✕
               </button>
@@ -868,15 +867,15 @@ export default function FileSidebar({
       <div
         className="file-list"
         role={isSearching ? 'listbox' : 'tree'}
-        aria-label={isSearching ? 'Search results' : 'Files'}
+        aria-label={isSearching ? fileSidebar.resultsLabel : fileSidebar.treeLabel}
         onKeyDown={handleNavKeyDown}
       >
         {isSearching ? (
           renderSearchResults()
         ) : files.length === 0 ? (
           <div className="empty-state">
-            <p>No files yet</p>
-            <p className="hint">Drop files here or click + to create</p>
+            <p>{fileSidebar.emptyTitle}</p>
+            <p className="hint">{fileSidebar.emptyHint}</p>
           </div>
         ) : (
           renderTreeNode(fileTree)
@@ -887,7 +886,7 @@ export default function FileSidebar({
         <div className="drop-overlay">
           <div className="drop-message">
             <span className="drop-icon">📥</span>
-            <span>Drop files to upload</span>
+            <span>{fileSidebar.dropOverlay}</span>
           </div>
         </div>
       )}
@@ -901,26 +900,26 @@ export default function FileSidebar({
           fixed={{ x: contextMenu.x, y: contextMenu.y }}
           onClose={() => closeContextMenu()}
           triggerRef={{ current: contextMenu.trigger ?? null }}
-          aria-label={`Actions for ${contextMenu.file.path}`}
+          aria-label={fileSidebar.actionsFor(contextMenu.file.path)}
         >
           {onOpenInNewTab && (
             <MenuItem onSelect={() => handleOpenInNewTab(contextMenu.file!)}>
-              Open in New Tab
+              {fileSidebar.menuOpenInNewTab}
             </MenuItem>
           )}
           {onCopyLink && (
             <MenuItem onSelect={() => handleCopyLink(contextMenu.file!)}>
-              Copy Link
+              {fileSidebar.menuCopyLink}
             </MenuItem>
           )}
           {onRenameFile && (
             <MenuItem onSelect={() => startRename(contextMenu.file!)}>
-              Rename
+              {fileSidebar.menuRename}
             </MenuItem>
           )}
           {onDeleteFile && (
             <MenuItem danger onSelect={() => handleDelete(contextMenu.file!)}>
-              Delete
+              {fileSidebar.menuDelete}
             </MenuItem>
           )}
         </Menu>

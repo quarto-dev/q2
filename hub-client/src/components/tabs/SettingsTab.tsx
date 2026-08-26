@@ -13,6 +13,7 @@
 
 import './SettingsTab.css';
 import { usePreference } from '../../hooks/usePreference';
+import { tabs } from '../../strings';
 
 interface SettingsTabProps {
   scrollSyncEnabled: boolean;
@@ -36,9 +37,9 @@ export default function SettingsTab({
             checked={scrollSyncEnabled}
             onChange={(e) => onScrollSyncChange(e.target.checked)}
           />
-          <span className="setting-name">Scroll sync</span>
+          <span className="setting-name">{tabs.settings.scrollSync}</span>
           <span className="setting-description">
-            Sync scroll position between editor and preview
+            {tabs.settings.scrollSyncDescription}
           </span>
         </label>
         <label className="setting-toggle">
@@ -47,9 +48,9 @@ export default function SettingsTab({
             checked={errorOverlayCollapsed}
             onChange={(e) => setErrorOverlayCollapsed(e.target.checked)}
           />
-          <span className="setting-name">Collapse error overlay</span>
+          <span className="setting-name">{tabs.settings.collapseErrorOverlay}</span>
           <span className="setting-description">
-            Show errors as a small indicator instead of expanded panel
+            {tabs.settings.collapseErrorOverlayDescription}
           </span>
         </label>
         <label className="setting-toggle">
@@ -58,9 +59,9 @@ export default function SettingsTab({
             checked={unlockNestingCursor}
             onChange={(e) => setUnlockNestingCursor(e.target.checked)}
           />
-          <span className="setting-name">Nesting cursor</span>
+          <span className="setting-name">{tabs.settings.nestingCursor}</span>
           <span className="setting-description">
-            Descend into nested list/quote blocks; edit each level cleanly.
+            {tabs.settings.nestingCursorDescription}
           </span>
         </label>
         <label className="setting-toggle">
@@ -69,10 +70,9 @@ export default function SettingsTab({
             checked={richText}
             onChange={(e) => setRichText(e.target.checked)}
           />
-          <span className="setting-name">Rich-text editor</span>
+          <span className="setting-name">{tabs.settings.richText}</span>
           <span className="setting-description">
-            Edit paragraphs and headings as formatted text (WYSIWYG) instead of
-            raw markdown. Other blocks still use the plain text editor.
+            {tabs.settings.richTextDescription}
           </span>
         </label>
       </div>

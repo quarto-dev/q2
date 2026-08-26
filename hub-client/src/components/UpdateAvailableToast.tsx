@@ -15,6 +15,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { pwaPrompt } from '../pwaPrompt';
 import type { PwaPromptStore } from '../pwaPrompt';
+import { common, notifications } from '../strings';
 import './notifications.css';
 
 export default function UpdateAvailableToast({
@@ -29,18 +30,18 @@ export default function UpdateAvailableToast({
 
   return (
     <div className="update-available-toast" role="status">
-      <span>A new version is available.</span>
+      <span>{notifications.updateAvailable}</span>
       <button
         type="button"
         className="qh-btn primary"
         onClick={() => window.location.reload()}
       >
-        Reload
+        {notifications.reload}
       </button>
       <button
         type="button"
         className="update-available-toast-dismiss"
-        aria-label="Dismiss"
+        aria-label={common.dismiss}
         onClick={() => setDismissed(true)}
       >
         ×

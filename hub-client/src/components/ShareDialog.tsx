@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import ModalDialog from './ModalDialog';
+import { common, dialogs } from '../strings';
 import './ShareDialog.css';
 
 export interface ShareDialogProps {
@@ -85,7 +86,7 @@ export default function ShareDialog({
 
   return (
     <ModalDialog
-      title="Share Project"
+      title={dialogs.share.title}
       className="share-dialog"
       onClose={onClose}
       onKeyDown={handleKeyDown}
@@ -94,15 +95,15 @@ export default function ShareDialog({
           <div className="warning-box">
             <span className="warning-icon">&#9888;</span>
             <p>
-              <strong>Anyone with this link can access and edit this project permanently.</strong>
+              <strong>{dialogs.share.warning}</strong>
             </p>
             <p className="warning-detail">
-              Only share with people you trust. This link cannot be revoked.
+              {dialogs.share.warningDetail}
             </p>
           </div>
 
           <div className="url-field">
-            <label htmlFor="shareable-url">Shareable Link:</label>
+            <label htmlFor="shareable-url">{dialogs.share.linkLabel}</label>
             <input
               ref={urlInputRef}
               id="shareable-url"
@@ -117,13 +118,13 @@ export default function ShareDialog({
 
         <div className="dialog-actions">
           <button className="qh-btn outline" onClick={onClose}>
-            Cancel
+            {common.cancel}
           </button>
           <button
             className={`qh-btn primary copy-btn ${copied ? 'copied' : ''}`}
             onClick={handleCopyLink}
           >
-            {copied ? 'Copied!' : 'Copy Link'}
+            {copied ? dialogs.share.copied : dialogs.share.copyLink}
           </button>
         </div>
     </ModalDialog>
