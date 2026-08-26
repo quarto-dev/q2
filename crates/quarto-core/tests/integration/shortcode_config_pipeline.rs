@@ -199,10 +199,48 @@ fn website_title_shortcode_substitutes_in_navbar_brand() {
 
 // === website.sidebar.title ================================================
 
+/// Sidebar-only fixture (no navbar), for `sidebar_title_shortcode_substitutes`.
+///
+/// `full_fixture` declares both a navbar and `sidebar.title`, but a
+/// forthcoming fix (bd-sidebar-title-with-navbar-82wxow6m) suppresses
+/// the rendered sidebar title whenever the page also has a navbar
+/// (matching Q1's `sidebar.ejs`, which gates the title on `!navbar`).
+/// Reusing `full_fixture` here would make this test start failing once
+/// that gate lands, even though shortcode substitution in the sidebar
+/// title is unaffected by the navbar's presence. This fixture omits
+/// `navbar:` entirely (same shape as `sidebar_only_fixture` in
+/// `headroom_pipeline.rs:133`) so the assertion stays valid on both
+/// sides of that change. Do not re-merge this into `full_fixture`.
+fn sidebar_only_fixture(project_dir: &std::path::Path) {
+    write(
+        &project_dir.join("_quarto.yml"),
+        r#"project:
+  type: website
+  output-dir: _site
+
+version: "9.9.9"
+
+website:
+  title: "My Site"
+  sidebar:
+    title: "Side {{< meta version >}}"
+    contents:
+      - index.qmd
+
+format:
+  html: default
+"#,
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nBody.\n",
+    );
+}
+
 /// The sidebar title substitutes shortcodes.
 #[test]
 fn sidebar_title_shortcode_substitutes() {
-    let (_dir, outputs) = render_project(full_fixture);
+    let (_dir, outputs) = render_project(sidebar_only_fixture);
     let html = find_html(&outputs, "index");
 
     assert!(
