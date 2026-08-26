@@ -1,0 +1,44 @@
+{
+  "dialog-new-asset|dark": {
+    "color-contrast": 1
+  },
+  "dialog-new-asset|light": {
+    "color-contrast": 4
+  },
+  "dialog-share|dark": {
+    "color-contrast": 1
+  },
+  "dialog-share|light": {
+    "color-contrast": 2
+  },
+  "minimal-header|dark": {
+    "color-contrast": 1
+  },
+  "minimal-header|light": {
+    "color-contrast": 1
+  },
+  "notifications|dark": {
+    "color-contrast": 1
+  },
+  "notifications|light": {
+    "color-contrast": 1
+  },
+  "projects-home|dark": {
+    "color-contrast": 4
+  },
+  "projects-home|light": {
+    "color-contrast": 4
+  },
+  "setup-fresh|dark": {
+    "color-contrast": 1
+  },
+  "setup-migration|dark": {
+    "color-contrast": 2
+  },
+  "sidebar-sections|dark": {
+    "color-contrast": 10
+  },
+  "sidebar-sections|light": {
+    "color-contrast": 10
+  }
+}
