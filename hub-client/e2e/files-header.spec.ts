@@ -2,10 +2,12 @@
  * E2E: Files header action row (bd-qhn2raky).
  *
  * The New/Upload buttons — and the conditional Print button — are
- * icon-only buttons that share the header row at equal width and fill it,
+ * icon-only buttons that share one compact, left-aligned header row,
  * whether two or three are present. Guards the regression where three
  * text buttons wrapped Upload onto a second row at the default 220px
- * sidebar width.
+ * sidebar width. (The buttons grew to fill the row until the Phase 1
+ * sidebar cleanup made them compact; the row-wrap guard is the
+ * behavior that still matters.)
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -29,37 +31,38 @@ async function openEditor(page: Page, title: string, content: string) {
   await expect(page.locator('.new-file-btn')).toBeVisible({ timeout: 30000 });
 }
 
-async function expectSingleFullRow(page: Page, selectors: string[]) {
+async function expectSingleCompactRow(page: Page, selectors: string[]) {
   const boxes = [];
   for (const sel of selectors) {
     const btn = page.locator(sel);
     await expect(btn).toBeVisible();
     boxes.push((await btn.boundingBox())!);
   }
-  // All on one row, equal width and height, in the given left-to-right order.
+  // All on one row (no wrapping), equal width and height, in the given
+  // left-to-right order.
   for (let i = 1; i < boxes.length; i++) {
     expect(Math.abs(boxes[i].y - boxes[0].y)).toBeLessThan(1);
     expect(Math.abs(boxes[i].width - boxes[0].width)).toBeLessThan(1);
     expect(Math.abs(boxes[i].height - boxes[0].height)).toBeLessThan(1);
     expect(boxes[i].x).toBeGreaterThan(boxes[i - 1].x);
   }
-  // Together they fill the row: 24px horizontal padding + 6px gaps.
+  // Compact and left-aligned: the first button starts at the header's
+  // 12px padding edge.
   const headerBox = (await page.locator('.sidebar-header').boundingBox())!;
-  const totalWidth = boxes.reduce((sum, b) => sum + b.width, 0);
-  expect(totalWidth).toBeCloseTo(headerBox.width - 24 - 6 * (boxes.length - 1), 0);
+  expect(Math.abs(boxes[0].x - headerBox.x - 12)).toBeLessThan(1);
 }
 
 test.describe('Files header action row', () => {
   test.setTimeout(90_000);
 
-  test('New and Upload fill the row at equal width', async ({ page }) => {
+  test('New and Upload share one compact row', async ({ page }) => {
     await openEditor(page, 'Two Button Row', '---\ntitle: Two Button Row\n---\n\nHello.\n');
 
     await expect(page.locator('.print-file-btn')).toHaveCount(0);
-    await expectSingleFullRow(page, ['.new-file-btn', '.upload-asset-btn']);
+    await expectSingleCompactRow(page, ['.new-file-btn', '.upload-asset-btn']);
   });
 
-  test('Print, New and Upload share one row at equal width', async ({ page }) => {
+  test('Print, New and Upload share one compact row', async ({ page }) => {
     await openEditor(
       page,
       'Three Button Row',
@@ -69,7 +72,7 @@ test.describe('Files header action row', () => {
     // Print appears once the format is detected as printable, and is
     // last in the row so the stable New/Upload pair doesn't shift.
     await expect(page.locator('.print-file-btn')).toBeVisible({ timeout: 30000 });
-    await expectSingleFullRow(page, [
+    await expectSingleCompactRow(page, [
       '.new-file-btn',
       '.upload-asset-btn',
       '.print-file-btn',

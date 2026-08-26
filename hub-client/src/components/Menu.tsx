@@ -322,6 +322,19 @@ export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
   const itemRef = useRef<HTMLButtonElement>(null);
   const itemId = useId();
 
+  // APG: activating the parent opens the submenu and focuses its first
+  // item. Open-only, never a toggle: hover may already have opened the
+  // submenu, and a toggling click would close it again under the pointer.
+  const openAndFocusFirst = () => {
+    setOpen(true);
+    requestAnimationFrame(() => {
+      const first = itemRef.current
+        ?.closest('[data-submenu-parent]')
+        ?.querySelector<HTMLElement>('.qh-submenu [role="menuitem"]');
+      first?.focus();
+    });
+  };
+
   return (
     <div
       className="qh-menu-item qh-submenu-parent"
@@ -346,20 +359,13 @@ export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
         className="qh-menu-item-inner"
         onClick={(e) => {
           e.stopPropagation();
-          setOpen((v) => !v);
+          openAndFocusFirst();
         }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowRight' && !open) {
             e.preventDefault();
             e.stopPropagation();
-            setOpen(true);
-            // APG: ArrowRight opens the submenu and focuses its first item.
-            requestAnimationFrame(() => {
-              const first = itemRef.current
-                ?.closest('[data-submenu-parent]')
-                ?.querySelector<HTMLElement>('.qh-submenu [role="menuitem"]');
-              first?.focus();
-            });
+            openAndFocusFirst();
           }
         }}
       >
