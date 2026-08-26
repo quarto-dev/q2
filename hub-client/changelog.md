@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-26
+
+- [`00e0617a`](https://github.com/quarto-dev/q2/commits/00e0617a): Comment bubbles now show the comment's full text — quoted words, emphasis, and inline code inside a comment were previously dropped from the bubble.
+
 ### 2026-08-25
 
 - [`d124b72f`](https://github.com/quarto-dev/q2/commits/d124b72f): The comment-display toggle in the bottom bar now shows a count badge with the number of outstanding comments on the current document, so you can see at a glance whether a page has open comments without scanning it.
