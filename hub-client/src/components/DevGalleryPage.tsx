@@ -13,6 +13,7 @@
 
 import React, { useState } from 'react';
 import { Menu, MenuItem, MenuDivider, MenuLabel, MenuSubmenu } from './Menu';
+import Tooltip from './Tooltip';
 import {
   FilePlusIcon,
   UploadIcon,
@@ -142,7 +143,8 @@ export default function DevGalleryPage() {
       style={{
         padding: 'var(--space-5)',
         maxWidth: 900,
-        background: 'var(--bg-primary, transparent)',
+        background: 'var(--page-bg)',
+        color: 'var(--text-primary)',
         minHeight: '100vh',
       }}
     >
@@ -199,6 +201,14 @@ export default function DevGalleryPage() {
 
       <Section title="Menu">
         <MenuDemo />
+      </Section>
+
+      <Section title="Tooltip">
+        <Row label="hover / focus">
+          <Tooltip content="Styled tooltip — 400ms on hover, instant on focus">
+            <button className="qh-btn outline">Hover or focus me</button>
+          </Tooltip>
+        </Row>
       </Section>
 
       <Section title="Form controls">

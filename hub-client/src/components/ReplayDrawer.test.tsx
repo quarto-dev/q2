@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import ReplayDrawer from './ReplayDrawer';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 
@@ -384,7 +384,7 @@ describe('ReplayDrawer', () => {
       expect(pill.getAttribute('aria-busy')).toBe('true');
     });
 
-    it('title text follows the on/off state when enabled', () => {
+    it('tooltip text follows the on/off state when enabled', () => {
       const { rerender } = render(
         <ReplayDrawer
           state={makeState()}
@@ -393,7 +393,10 @@ describe('ReplayDrawer', () => {
           onAttributionChange={vi.fn()}
         />,
       );
-      expect(screen.getByLabelText(/Authors/).getAttribute('title')).toBe('Show authors overlay');
+      const pill = screen.getByLabelText(/Authors/);
+      fireEvent.focus(pill);
+      expect(screen.getByRole('tooltip').textContent).toBe('Show authors overlay');
+      fireEvent.blur(pill);
 
       rerender(
         <ReplayDrawer
@@ -403,10 +406,11 @@ describe('ReplayDrawer', () => {
           onAttributionChange={vi.fn()}
         />,
       );
-      expect(screen.getByLabelText(/Authors/).getAttribute('title')).toBe('Hide authors overlay');
+      fireEvent.focus(screen.getByLabelText(/Authors/));
+      expect(screen.getByRole('tooltip').textContent).toBe('Hide authors overlay');
     });
 
-    it('renders disabled with an explanatory title when attributionDisabled is true', () => {
+    it('renders disabled with an explanatory tooltip when attributionDisabled is true', () => {
       render(
         <ReplayDrawer
           state={makeState()}
@@ -418,7 +422,13 @@ describe('ReplayDrawer', () => {
       );
       const pill = screen.getByLabelText(/unavailable/);
       expect((pill as HTMLButtonElement).disabled).toBe(true);
-      expect(pill.getAttribute('title')).toMatch(/not available for this format/);
+      // Disabled buttons swallow pointer events, so the tooltip's hover
+      // handlers live on its wrapper span. Hover shows after a 400ms delay.
+      vi.useFakeTimers();
+      fireEvent.mouseOver(pill.parentElement!);
+      act(() => vi.advanceTimersByTime(450));
+      expect(screen.getByRole('tooltip').textContent).toMatch(/not available for this format/);
+      vi.useRealTimers();
     });
 
     it('suppresses on/generating modifier classes while disabled', () => {

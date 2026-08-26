@@ -55,6 +55,9 @@
 .qh-btn {
   font-size: var(--text-base);
   font-weight: var(--font-weight-semibold);
+  /* Buttons don't inherit color (UA stylesheet) — the base must declare
+     it, or bare .qh-btn renders black-on-dark in the dark theme. */
+  color: var(--text-primary);
   padding: 8px 14px;
   border-radius: 7px;
   border: 1px solid transparent;

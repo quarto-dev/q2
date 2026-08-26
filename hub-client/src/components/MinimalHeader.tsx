@@ -7,6 +7,7 @@
 
 import ViewToggleControl from './ViewToggleControl';
 import { SwitchIcon, ShareIcon, PreviewIcon } from './icons';
+import Tooltip from './Tooltip';
 import './MinimalHeader.css';
 
 interface MinimalHeaderProps {
@@ -33,23 +34,25 @@ export default function MinimalHeader({
   return (
     <header className="minimal-header">
       <div className="header-left">
-        <button
-          className="qh-icon-btn boxed"
-          onClick={onChooseNewProject}
-          title="Switch project"
-          aria-label="Switch project"
-        >
-          <SwitchIcon />
-        </button>
-        {onShare && (
+        <Tooltip content="Switch project">
           <button
             className="qh-icon-btn boxed"
-            onClick={onShare}
-            title="Share this project"
-            aria-label="Share this project"
+            onClick={onChooseNewProject}
+            aria-label="Switch project"
           >
-            <ShareIcon />
+            <SwitchIcon />
           </button>
+        </Tooltip>
+        {onShare && (
+          <Tooltip content="Share this project">
+            <button
+              className="qh-icon-btn boxed"
+              onClick={onShare}
+              aria-label="Share this project"
+            >
+              <ShareIcon />
+            </button>
+          </Tooltip>
         )}
         <span className="header-divider" aria-hidden="true" />
         <div className="header-doc">
@@ -63,28 +66,33 @@ export default function MinimalHeader({
         </div>
       </div>
       <div className="header-right">
-        <div
-          className={`connection-indicator ${isOnline ? 'online' : 'offline'}`}
-          title={
+        <Tooltip
+          content={
             isOnline
-              ? 'Online'
+              ? 'Connected to the sync server'
               : 'Working offline. Changes are saved locally and will sync when connection is restored.'
           }
         >
-          <span className="connection-dot" />
-          <span className="connection-text">{isOnline ? 'Online' : 'Offline'}</span>
-        </div>
+          <div
+            className={`connection-indicator ${isOnline ? 'online' : 'offline'}`}
+            tabIndex={0}
+          >
+            <span className="connection-dot" aria-hidden="true" />
+            <span className="connection-text">{isOnline ? 'Online' : 'Offline'}</span>
+          </div>
+        </Tooltip>
         <ViewToggleControl />
         {onToggleFullscreenPreview && !isFullscreenPreview && (
-          <button
-            className="preview-btn"
-            onClick={onToggleFullscreenPreview}
-            title="Fullscreen preview"
-            aria-label="Fullscreen preview"
-          >
-            <PreviewIcon />
-            <span>Preview</span>
-          </button>
+          <Tooltip content="Fullscreen preview">
+            <button
+              className="preview-btn"
+              onClick={onToggleFullscreenPreview}
+              aria-label="Fullscreen preview"
+            >
+              <PreviewIcon />
+              <span>Preview</span>
+            </button>
+          </Tooltip>
         )}
       </div>
     </header>

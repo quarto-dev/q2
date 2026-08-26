@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
 
 afterEach(cleanup);
@@ -26,11 +26,12 @@ describe('EphemeralSessionBanner', () => {
     expect(banner.textContent).toContain("edits won't be saved to disk");
   });
 
-  it('hover text explains the cause and names the --allow-edit fix', () => {
+  it('tooltip explains the cause and names the --allow-edit fix', () => {
     render(<EphemeralSessionBanner />);
 
-    const { title } = screen.getByRole('status');
-    expect(title).toContain('never written');
-    expect(title).toContain('--allow-edit');
+    fireEvent.focus(screen.getByRole('status'));
+    const tip = screen.getByRole('tooltip');
+    expect(tip.textContent).toContain('never written');
+    expect(tip.textContent).toContain('--allow-edit');
   });
 });

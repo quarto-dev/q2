@@ -1,0 +1,38 @@
+/* Tooltip — token-styled, non-interactive (APG tooltip pattern).
+   Rendered above the anchor by default; .qh-tooltip-bottom is the
+   viewport-flipped variant. */
+
+.qh-tooltip-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Block-level anchors (file rows, cards) need the anchor to not disturb
+   flex/grid layout. */
+.qh-tooltip-anchor.qh-tooltip-anchor-block {
+  display: contents;
+}
+
+.qh-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  z-index: var(--z-toast);
+  padding: var(--space-1) var(--space-2);
+  background: var(--text-primary);
+  color: var(--bg-modal);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--leading-tight);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-2);
+  width: max-content;
+  max-width: 300px;
+  pointer-events: none;
+}
+
+.qh-tooltip-bottom {
+  bottom: auto;
+  top: calc(100% + 6px);
+}

@@ -21,6 +21,7 @@ import { buildSnippet, type SearchFiles, type SearchResult } from '../services/s
 import { openPrintableDocument } from '../services/printableDocument';
 import { FilePlusIcon, UploadIcon, PrintIcon, MoreIcon } from './icons';
 import { Menu, MenuItem } from './Menu';
+import Tooltip from './Tooltip';
 import './FileSidebar.css';
 
 export interface FileSidebarProps {
@@ -384,7 +385,11 @@ export default function FileSidebar({
     const lastSlash = file.path.lastIndexOf('/');
     const parentFolderPath = lastSlash >= 0 ? file.path.slice(0, lastSlash) : '';
 
+    const rowTip = onOpenInNewTab
+      ? `${file.path} — Ctrl/Cmd+click to open in new tab`
+      : file.path;
     return (
+      <Tooltip block content={rowTip}>
       <div
         key={file.path}
         className={`file-item qh-row-hover ${isActive ? 'active' : ''} ${isBinary ? 'binary' : ''}`}
@@ -395,11 +400,6 @@ export default function FileSidebar({
         draggable={isDraggable}
         onDragStart={
           isDraggable ? (e) => handleFileDragStart(e, file) : undefined
-        }
-        title={
-          onOpenInNewTab
-            ? `${file.path}\nCtrl/Cmd+click to open in new tab`
-            : file.path
         }
       >
         <span className="file-icon">{getFileIcon(file.path)}</span>
@@ -448,6 +448,7 @@ export default function FileSidebar({
           </button>
         )}
       </div>
+      </Tooltip>
     );
   };
 
@@ -507,7 +508,6 @@ export default function FileSidebar({
           key={result.path}
           className={`search-result qh-row-hover qh-active-accent-row ${isActive ? 'active' : ''}`}
           onClick={() => onSelectFile(file)}
-          title={result.path}
         >
           <div className="search-result-header">
             <span className="file-icon">{getFileIcon(result.path)}</span>
@@ -539,32 +539,35 @@ export default function FileSidebar({
       onDrop={handleDrop}
     >
       <div className="sidebar-header">
-        <button
-          className="qh-btn small outline new-file-btn"
-          onClick={onNewFile}
-          title="New file"
-          aria-label="New file"
-        >
-          <FilePlusIcon />
-        </button>
-        <button
-          className="qh-btn small outline upload-asset-btn"
-          onClick={handleUploadClick}
-          title="Upload asset"
-          aria-label="Upload asset"
-        >
-          <UploadIcon />
-        </button>
-        {canOpenPrintable && (
+        <Tooltip content="New file">
           <button
-            className="qh-btn small outline print-file-btn"
-            onClick={handleOpenPrintable}
-            disabled={isPreparingPrintable}
-            title="Open a printable version of this document in a new tab (use your browser's Print to save as PDF)"
-            aria-label="Open printable version in a new tab"
+            className="qh-btn small outline new-file-btn"
+            onClick={onNewFile}
+            aria-label="New file"
           >
-            {isPreparingPrintable ? '…' : <PrintIcon />}
+            <FilePlusIcon />
           </button>
+        </Tooltip>
+        <Tooltip content="Upload asset">
+          <button
+            className="qh-btn small outline upload-asset-btn"
+            onClick={handleUploadClick}
+            aria-label="Upload asset"
+          >
+            <UploadIcon />
+          </button>
+        </Tooltip>
+        {canOpenPrintable && (
+          <Tooltip content="Open a printable version in a new tab (use the browser's Print to save as PDF)">
+            <button
+              className="qh-btn small outline print-file-btn"
+              onClick={handleOpenPrintable}
+              disabled={isPreparingPrintable}
+              aria-label="Open printable version in a new tab"
+            >
+              {isPreparingPrintable ? '…' : <PrintIcon />}
+            </button>
+          </Tooltip>
         )}
       </div>
       {printableError && (
@@ -591,14 +594,15 @@ export default function FileSidebar({
             aria-label="Search files"
           />
           {isSearching && (
-            <button
-              className="sidebar-search-clear"
-              onClick={() => setSearchQuery('')}
-              title="Clear search"
-              aria-label="Clear search"
-            >
-              ✕
-            </button>
+            <Tooltip content="Clear search">
+              <button
+                className="sidebar-search-clear"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            </Tooltip>
           )}
         </div>
       )}

@@ -43,6 +43,7 @@ import {
 import ShareDialog from './ShareDialog';
 import { ForkIcon, PeekIcon, PeopleIcon, SortIcon } from './icons';
 import { Menu, MenuItem, MenuDivider, MenuLabel, MenuSubmenu } from './Menu';
+import Tooltip from './Tooltip';
 import { sortProjectItems, sortOrderLabel, type SortOrder } from '../utils/projectSort';
 import { buildProjectListExport, parseProjectListImport } from '../services/projectListExport';
 import type { Face } from '../utils/facepile';
@@ -1014,11 +1015,17 @@ export default function ProjectsHome({
     return (
       <span className={`qh-facepile ${size}`}>
         {shown.map((u, i) => (
-          <span key={`${u.initials}-${i}`} className="qh-face" style={{ backgroundColor: u.color }} title={u.name}>
-            {u.initials}
-          </span>
+          <Tooltip key={`${u.initials}-${i}`} content={u.name}>
+            <span className="qh-face" style={{ backgroundColor: u.color }}>
+              {u.initials}
+            </span>
+          </Tooltip>
         ))}
-        {extra > 0 && <span className="qh-face more" title={`${extra} more`}>+{extra}</span>}
+        {extra > 0 && (
+          <Tooltip content={`${extra} more`}>
+            <span className="qh-face more">+{extra}</span>
+          </Tooltip>
+        )}
       </span>
     );
   };
@@ -1038,7 +1045,7 @@ export default function ProjectsHome({
   // The shared APG menu primitive (components/Menu.tsx): arrow-key nav,
   // type-ahead, Escape with focus return, submenus.
   const renderProjectMenu = (item: ProjectItem) => (
-    <Menu onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label={`Actions for ${item.title}`}>
+    <Menu onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label={`Actions for ${item.description}`}>
       <MenuItem strong onSelect={() => { closeAllMenus(); handleOpen(item); }}>
         Open
       </MenuItem>
@@ -1261,7 +1268,9 @@ export default function ProjectsHome({
         <div className="qh-menu-divider" />
         <div className="qh-menu-label">INVITE BY LINK</div>
         <div className="qh-members-invite">
-          <span className="qh-invite-url mono" title={inviteUrl}>{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
+          <Tooltip block content={inviteUrl}>
+            <span className="qh-invite-url mono">{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
+          </Tooltip>
           <button
             className="qh-btn primary small-invite"
             onClick={() => copyToClipboard(inviteUrl, copyKey)}
@@ -1287,11 +1296,10 @@ export default function ProjectsHome({
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        setMoveSubmenuOpen(false);
         setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
       }}
     >
-      <button className="qh-card-body" onClick={() => handleOpen(item)} title={item.description}>
+      <button className="qh-card-body" onClick={() => handleOpen(item)}>
         <span className={`qh-card-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
           {item.description}
         </span>
@@ -1311,27 +1319,29 @@ export default function ProjectsHome({
         >
           <button
             className="qh-peek-btn"
-            title="Peek — see what's inside"
+            aria-label={`Peek — see what's inside ${item.description}`}
             onClick={(e) => { e.stopPropagation(); openPeekHover(item.indexDocId); }}
           >
             {peekIcon}
           </button>
           {peekFor === item.indexDocId && renderPeek(item)}
         </span>
-        <button
-          className="qh-fork-btn"
-          title={`Duplicate "${item.description}" (fork a fresh copy)`}
-          disabled={!!duplicatingId}
-          onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
-        >
-          {forkIcon}
-        </button>
+        <Tooltip content={`Duplicate "${item.description}" (fork a fresh copy)`}>
+          <button
+            className="qh-fork-btn"
+            aria-label={`Duplicate "${item.description}"`}
+            disabled={!!duplicatingId}
+            onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
+          >
+            {forkIcon}
+          </button>
+        </Tooltip>
         <button
           className="qh-card-menu-btn"
-          title="Project actions"
+          aria-label={`Actions for ${item.description}`}
+          aria-haspopup="menu"
           onClick={(e) => {
             e.stopPropagation();
-            setMoveSubmenuOpen(false);
             setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
           }}
         >
@@ -1369,11 +1379,13 @@ export default function ProjectsHome({
             const people = peopleOn(collection);
             const hasOthers = people.length > 1;
             return (
-              <button
-                className={`qh-collection-people ${hasOthers ? '' : 'private'}`}
-                title={hasOthers
+              <Tooltip
+                content={hasOthers
                   ? `${people.length} people seen on these projects — people & invite`
                   : 'Only you so far. Click to invite others.'}
+              >
+              <button
+                className={`qh-collection-people ${hasOthers ? '' : 'private'}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   setOpenMenu(null);
@@ -1383,21 +1395,25 @@ export default function ProjectsHome({
                 {hasOthers && <PeopleIcon />}
                 {renderFacepile(people, 'md', 3)}
               </button>
+              </Tooltip>
             );
           })()}
           <span className="qh-flex-spacer" />
           <span className="qh-collection-sort-anchor">
-            <button
-              className={`qh-icon-btn qh-collection-sort-btn ${collectionSort !== 'newest' ? 'active' : ''}`}
-              title={`Sort collection (${sortOrderLabel(collectionSort)})`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setMembersFor(null);
-                setOpenMenu(openMenu === sortMenuKey ? null : sortMenuKey);
-              }}
-            >
-              <SortIcon />
-            </button>
+            <Tooltip content={`Sort collection (${sortOrderLabel(collectionSort)})`}>
+              <button
+                className={`qh-icon-btn qh-collection-sort-btn ${collectionSort !== 'newest' ? 'active' : ''}`}
+                aria-label={`Sort collection (${sortOrderLabel(collectionSort)})`}
+                aria-haspopup="menu"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMembersFor(null);
+                  setOpenMenu(openMenu === sortMenuKey ? null : sortMenuKey);
+                }}
+              >
+                <SortIcon />
+              </button>
+            </Tooltip>
             {openMenu === sortMenuKey && (
               <Menu className="qh-menu-right" onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label="Sort collection">
                 {(['newest', 'oldest', 'name'] as SortOrder[]).map((o) => (
@@ -1416,17 +1432,20 @@ export default function ProjectsHome({
               </Menu>
             )}
           </span>
-          <button
-            className="qh-icon-btn"
-            title="Collection actions"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMembersFor(null);
-              setOpenMenu(openMenu === menuKey ? null : menuKey);
-            }}
-          >
-            ⋯
-          </button>
+          <Tooltip content="Collection actions">
+            <button
+              className="qh-icon-btn"
+              aria-label={`Actions for ${collection.name}`}
+              aria-haspopup="menu"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMembersFor(null);
+                setOpenMenu(openMenu === menuKey ? null : menuKey);
+              }}
+            >
+              ⋯
+            </button>
+          </Tooltip>
           {membersFor === collection.id && renderMembersPopover(collection)}
           {openMenu === menuKey && (
             <Menu className="qh-menu-right" onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label={`Actions for ${collection.name}`}>
@@ -1467,24 +1486,28 @@ export default function ProjectsHome({
         ) : (
           <div className="qh-collection-row">
             {page > 0 && (
-              <button
-                className="qh-pager"
-                title={collectionSort === 'newest' ? 'Newer projects' : collectionSort === 'oldest' ? 'Older projects' : 'Previous page'}
-                onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page - 1 }))}
-              >
-                ‹
-              </button>
+              <Tooltip content={collectionSort === 'newest' ? 'Newer projects' : collectionSort === 'oldest' ? 'Older projects' : 'Previous page'}>
+                <button
+                  className="qh-pager"
+                  aria-label="Previous page"
+                  onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page - 1 }))}
+                >
+                  ‹
+                </button>
+              </Tooltip>
             )}
             <div className="qh-card-grid">{pageItems.map(renderCard)}</div>
             {page < pageCount - 1 ? (
-              <button
-                className="qh-pager"
-                title={collectionSort === 'newest' ? 'Older projects' : collectionSort === 'oldest' ? 'Newer projects' : 'Next page'}
-                onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page + 1 }))}
-              >
-                ›
-                <span className="qh-pager-pos mono">{page + 1}/{pageCount}</span>
-              </button>
+              <Tooltip content={collectionSort === 'newest' ? 'Older projects' : collectionSort === 'oldest' ? 'Newer projects' : 'Next page'}>
+                <button
+                  className="qh-pager"
+                  aria-label="Next page"
+                  onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page + 1 }))}
+                >
+                  ›
+                  <span className="qh-pager-pos mono">{page + 1}/{pageCount}</span>
+                </button>
+              </Tooltip>
             ) : pageCount > 1 ? (
               <div className="qh-pager qh-pager-idle">
                 <span className="qh-pager-pos mono">{page + 1}/{pageCount}</span>
@@ -1545,7 +1568,7 @@ export default function ProjectsHome({
               className="qh-avatar"
               style={authPicture ? undefined : { backgroundColor: userSettings?.userColor ?? 'var(--posit-blue)' }}
               onClick={() => setAvatarMenuOpen((v) => !v)}
-              title={userSettings?.userName}
+              aria-label={userSettings?.userName ? `Account: ${userSettings.userName}` : 'Account'}
             >
               {authPicture ? (
                 <img src={authPicture} alt="" className="qh-avatar-img" referrerPolicy="no-referrer" />
@@ -1596,13 +1619,14 @@ export default function ProjectsHome({
                 <div className="qh-menu-label">CURSOR COLOR</div>
                 <div className="qh-swatches">
                   {COLOR_PALETTE.map((color) => (
-                    <button
-                      key={color}
-                      className={`qh-swatch ${userSettings.userColor === color ? 'selected' : ''}`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => handleColorChange(color)}
-                      title={color}
-                    />
+                    <Tooltip key={color} content={color}>
+                      <button
+                        className={`qh-swatch ${userSettings.userColor === color ? 'selected' : ''}`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => handleColorChange(color)}
+                        aria-label={`Cursor color ${color}`}
+                      />
+                    </Tooltip>
                   ))}
                 </div>
                 <div className="qh-menu-divider" />
@@ -1700,14 +1724,12 @@ export default function ProjectsHome({
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        setMoveSubmenuOpen(false);
                         setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
                       }}
                     >
                       <button
                         className={`qh-row-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}
                         onClick={() => handleOpen(item)}
-                        title={item.description}
                       >
                         {item.description}
                       </button>
@@ -1725,27 +1747,29 @@ export default function ProjectsHome({
                       >
                         <button
                           className="qh-icon-btn qh-peek-btn"
-                          title="Peek — see what's inside"
+                          aria-label={`Peek — see what's inside ${item.description}`}
                           onClick={(e) => { e.stopPropagation(); openPeekHover(item.indexDocId); }}
                         >
                           {peekIcon}
                         </button>
                         {peekFor === item.indexDocId && renderPeek(item)}
                       </span>
-                      <button
-                        className="qh-icon-btn qh-fork-btn"
-                        title={`Duplicate "${item.description}" (fork a fresh copy)`}
-                        disabled={!!duplicatingId}
-                        onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
-                      >
-                        {forkIcon}
-                      </button>
+                      <Tooltip content={`Duplicate "${item.description}" (fork a fresh copy)`}>
+                        <button
+                          className="qh-icon-btn qh-fork-btn"
+                          aria-label={`Duplicate "${item.description}"`}
+                          disabled={!!duplicatingId}
+                          onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
+                        >
+                          {forkIcon}
+                        </button>
+                      </Tooltip>
                       <button
                         className="qh-icon-btn qh-row-menu-btn"
-                        title="Project actions"
+                        aria-label={`Actions for ${item.description}`}
+                        aria-haspopup="menu"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setMoveSubmenuOpen(false);
                           setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
                         }}
                       >
@@ -2113,9 +2137,11 @@ export default function ProjectsHome({
       />
 
       <footer className="qh-footer">
-        <span className="mono" title={`Built: ${__BUILD_TIME__}\nCommit date: ${__GIT_COMMIT_DATE__}`}>
-          {__GIT_COMMIT_HASH__}
-        </span>
+        <Tooltip content={`Built: ${__BUILD_TIME__} · Commit date: ${__GIT_COMMIT_DATE__}`}>
+          <span className="mono" tabIndex={0}>
+            {__GIT_COMMIT_HASH__}
+          </span>
+        </Tooltip>
         <span className="qh-footer-note">collections UI exploration</span>
       </footer>
     </div>
