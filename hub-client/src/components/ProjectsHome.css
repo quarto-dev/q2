@@ -18,13 +18,8 @@
   font-family: var(--font-mono);
 }
 
-.qh-loading,
-.qh-connecting {
-  padding: 48px;
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
+/* .qh-loading / .qh-connecting live in ui.css (shared async-state
+   classes, Phase 3). */
 
 .qh-flex-spacer { flex: 1; }
 

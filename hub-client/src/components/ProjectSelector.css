@@ -147,11 +147,8 @@
   font-weight: 500;
 }
 
-.project-selector .loading {
-  color: var(--text-secondary);
-  text-align: center;
-  padding: 32px;
-}
+/* (.loading removed in Phase 3 — the shared LoadingIndicator /
+   .qh-loading from ui.css replaced it.) */
 
 .project-selector .empty {
   color: var(--text-muted);

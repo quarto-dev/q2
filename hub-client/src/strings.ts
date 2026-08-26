@@ -36,6 +36,10 @@ export const common = {
   save: 'Save',
   back: 'Back',
   loading: 'Loading…',
+  /** Recovery action on an error surface that can be re-attempted. */
+  retry: 'Try again',
+  /** Recovery action when the only retry is a full page reload. */
+  reload: 'Reload',
 } as const;
 
 /** MinimalHeader (editor shell top bar). */
@@ -102,7 +106,6 @@ export const sections = {
 export const notifications = {
   autoSaved: 'Auto-saved',
   updateAvailable: 'A new version is available.',
-  reload: 'Reload',
   ephemeralBanner: "Ephemeral session — edits won't be saved to disk",
   ephemeralTooltip:
     "Started without --allow-edit: edits sync live to everyone connected but are never written to the project's files. Restart the preview with --allow-edit to persist them.",

@@ -7,7 +7,7 @@
  */
 
 import type { PresenceState } from '../../services/presenceService';
-import { tabs } from '../../strings';
+import { common, tabs } from '../../strings';
 import './StatusTab.css';
 
 type WasmStatus = 'loading' | 'ready' | 'error';
@@ -18,6 +18,10 @@ interface StatusTabProps {
   userCount: number;
   remoteUsers: PresenceState[];
   isOnline: boolean;
+  /** Recovery action for a WASM boot failure; defaults to a page reload
+   *  (the renderer initializes at Editor mount, so a reload is the honest
+   *  in-place retry). */
+  onRetry?: () => void;
 }
 
 export default function StatusTab({
@@ -25,6 +29,7 @@ export default function StatusTab({
   wasmError,
   userCount,
   remoteUsers,
+  onRetry,
 }: StatusTabProps) {
   return (
     <div className="status-tab">
@@ -39,7 +44,16 @@ export default function StatusTab({
           </span>
         </div>
         {wasmStatus === 'error' && wasmError && (
-          <div className="status-error">{wasmError}</div>
+          <div className="status-error">
+            {wasmError}
+            <button
+              type="button"
+              className="qh-error-action"
+              onClick={onRetry ?? (() => window.location.reload())}
+            >
+              {common.reload}
+            </button>
+          </div>
         )}
       </div>
 

@@ -45,6 +45,8 @@ import { ForkIcon, PeekIcon, PeopleIcon, SortIcon } from './icons';
 import { Menu, MenuItem, MenuDivider, MenuLabel, MenuSubmenu } from './Menu';
 import Tooltip from './Tooltip';
 import ModalDialog from './ModalDialog';
+import LoadingIndicator from './Loading';
+import { common } from '../strings';
 import { sortProjectItems, sortOrderLabel, type SortOrder } from '../utils/projectSort';
 import { buildProjectListExport, parseProjectListImport } from '../services/projectListExport';
 import type { Face } from '../utils/facepile';
@@ -55,6 +57,9 @@ interface Props {
   onSelectProject: (project: ProjectEntry, filePathOverride?: string) => void;
   isConnecting?: boolean;
   error?: string | null;
+  /** Re-attempt a failed project open; renders a "Try again" recovery
+   *  action on the connection error banner. */
+  onRetry?: () => void;
   onProjectCreated?: (files: ProjectFile[], title: string, projectType: string, syncServer: string) => void;
   onSignOut?: () => void;
   authEmail?: string;
@@ -216,6 +221,7 @@ export default function ProjectsHome({
   onSelectProject,
   isConnecting,
   error: connectionError,
+  onRetry,
   onProjectCreated,
   onSignOut,
   authEmail,
@@ -248,6 +254,11 @@ export default function ProjectsHome({
   // Legacy IDB fallback (only when no project set is in play)
   const [legacyProjects, setLegacyProjects] = useState<ProjectEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  // A failed legacy load surfaces as an error state with retry (Phase 3)
+  // instead of silently falling through to the "No projects yet" empty
+  // copy. loadAttempt re-triggers the load effect.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const [search, setSearch] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
@@ -380,15 +391,27 @@ export default function ProjectsHome({
     (async () => {
       try {
         const entries = await projectStorage.listProjects();
-        if (!cancelled) setLegacyProjects(entries);
+        if (!cancelled) {
+          setLegacyProjects(entries);
+          setLoadError(null);
+        }
       } catch (err) {
         console.error('Failed to load projects:', err);
+        if (!cancelled) {
+          setLoadError(err instanceof Error ? err.message : String(err));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [useProjectSet]);
+  }, [useProjectSet, loadAttempt]);
+
+  const handleRetryLoad = () => {
+    setLoading(true);
+    setLoadError(null);
+    setLoadAttempt((n) => n + 1);
+  };
 
   useEffect(() => {
     userSettingsService.getUserIdentity().then(setUserSettings).catch((err) => {
@@ -1036,9 +1059,9 @@ export default function ProjectsHome({
   if (loading || projectSetConnecting) {
     return (
       <div className="projects-home">
-        <div className="qh-loading">
-          {projectSetConnecting ? 'Connecting to project set…' : 'Loading projects…'}
-        </div>
+        <LoadingIndicator
+          label={projectSetConnecting ? 'Connecting to project set…' : 'Loading projects…'}
+        />
       </div>
     );
   }
@@ -1660,12 +1683,29 @@ export default function ProjectsHome({
       </header>
 
       {(connectionError || formError) && !addDialogOpen && !newDialogChoice && (
-        <div className="qh-error">{connectionError || formError}</div>
+        <div className="qh-error">
+          {connectionError || formError}
+          {connectionError && onRetry && (
+            <button type="button" className="qh-error-action" onClick={onRetry}>
+              {common.retry}
+            </button>
+          )}
+        </div>
       )}
       {isConnecting && <div className="qh-connecting">Connecting to sync server…</div>}
 
       <main id="main-content" tabIndex={-1} className="qh-main">
-        {items.length === 0 && collections.every((c) => c.entries.length === 0) ? (
+        {loadError ? (
+          <div className="qh-empty-state">
+            <h2>Couldn't load your projects</h2>
+            <p>{loadError}</p>
+            <div className="qh-empty-actions">
+              <button className="qh-btn outline" onClick={handleRetryLoad}>
+                {common.retry}
+              </button>
+            </div>
+          </div>
+        ) : items.length === 0 && collections.every((c) => c.entries.length === 0) ? (
           <div className="qh-empty-state">
             <h2>No projects yet</h2>
             <p>Create your first Quarto project, or connect to one a collaborator shared.</p>

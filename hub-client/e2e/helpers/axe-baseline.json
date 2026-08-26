@@ -35,6 +35,18 @@
   "notifications|light": {
     "color-contrast": 1
   },
+  "projects-home-empty|dark": {
+    "color-contrast": 4
+  },
+  "projects-home-empty|light": {
+    "color-contrast": 3
+  },
+  "projects-home-error|dark": {
+    "color-contrast": 3
+  },
+  "projects-home-error|light": {
+    "color-contrast": 3
+  },
   "projects-home|dark": {
     "color-contrast": 3
   },
@@ -47,10 +59,28 @@
   "setup-migration|dark": {
     "color-contrast": 2
   },
+  "sidebar-empty|dark": {
+    "color-contrast": 10
+  },
+  "sidebar-empty|light": {
+    "color-contrast": 10
+  },
   "sidebar-sections|dark": {
     "color-contrast": 10
   },
   "sidebar-sections|light": {
     "color-contrast": 10
+  },
+  "status-tab-error|dark": {
+    "color-contrast": 6
+  },
+  "status-tab-error|light": {
+    "color-contrast": 6
+  },
+  "status-tab-loading|dark": {
+    "color-contrast": 3
+  },
+  "status-tab-loading|light": {
+    "color-contrast": 4
   }
 }

@@ -17,6 +17,7 @@ import { DEFAULT_SYNC_SERVER, buildProjectSetLinkUrl } from '../utils/routing';
 import { getCollectionPointers, getProjectSetPointer } from '../services/projectSetStorage';
 import { buildProjectListExport } from '../services/projectListExport';
 import ShareDialog from './ShareDialog';
+import LoadingIndicator from './Loading';
 import './ProjectSelector.css';
 
 interface Props {
@@ -542,7 +543,7 @@ export default function ProjectSelector({
   };
 
   if (loading) {
-    return <div className="project-selector"><div className="loading">Loading projects...</div></div>;
+    return <div className="project-selector"><LoadingIndicator label="Loading projects…" /></div>;
   }
 
   return (

@@ -17,6 +17,7 @@ import NewAssetDialog from './NewAssetDialog';
 import FileSidebar from './FileSidebar';
 import OutlinePanel from './OutlinePanel';
 import SidebarTabs from './SidebarTabs';
+import StatusTab from './tabs/StatusTab';
 import MinimalHeader from './MinimalHeader';
 import Toast from './Toast';
 import UpdateAvailableToast from './UpdateAvailableToast';
@@ -182,8 +183,8 @@ const fakeSearchFiles: SearchFiles = async (query) => {
  * selected file (aria-selected / active-row state) and records the last
  * action in an offscreen testid element for assertions.
  */
-function SidebarHarness() {
-  const [currentFile, setCurrentFile] = useState<FileEntry | null>(FAKE_FILES[0]);
+function SidebarHarness({ files = FAKE_FILES }: { files?: FileEntry[] }) {
+  const [currentFile, setCurrentFile] = useState<FileEntry | null>(files[0] ?? null);
   const [lastAction, setLastAction] = useState('none');
   return (
     <EditorChrome>
@@ -192,7 +193,7 @@ function SidebarHarness() {
           {(sectionId) =>
             sectionId === 'files' ? (
               <FileSidebar
-                files={FAKE_FILES}
+                files={files}
                 currentFile={currentFile}
                 onSelectFile={(f) => {
                   setCurrentFile(f);
@@ -223,6 +224,75 @@ function SidebarHarness() {
       {/* Offscreen action recorder for Playwright assertions. */}
       <div
         data-testid="sidebar-last-action"
+        style={{ position: 'fixed', left: -10000, top: 0 }}
+      >
+        {lastAction}
+      </div>
+    </EditorChrome>
+  );
+}
+
+/** Shared canned props for the ProjectsHome routes. */
+const fakeProjectsHomeProps = {
+  onSelectProject: () => {},
+  isConnecting: false,
+  error: null,
+  projectSetStatus: 'connected' as const,
+  projectSetEntries: FAKE_SET_ENTRIES,
+  collections: FAKE_COLLECTIONS,
+  onRemoveProjectFromSet: () => {},
+  onTouchProject: () => {},
+  onAddProjectToSet: () => {},
+  onRenameProject: () => {},
+  onUpdateProjectSummary: () => {},
+  onCreateCollection: async () => 'automerge:new-collection',
+  onUnsubscribeCollection: noop,
+  onRenameCollection: () => {},
+  onAddProjectToCollection: () => {},
+  onRemoveProjectFromCollection: () => {},
+  onMoveProjectBetweenCollections: () => {},
+};
+
+/**
+ * ProjectsHome with a pinned connection error and a working retry, wired
+ * to the offscreen action recorder so specs can assert the retry fires.
+ */
+function ProjectsHomeErrorHarness() {
+  const [lastAction, setLastAction] = useState('none');
+  return (
+    <>
+      <ProjectsHome
+        {...fakeProjectsHomeProps}
+        error="Could not reach the sync server."
+        onRetry={() => setLastAction('retry')}
+      />
+      <div
+        data-testid="async-last-action"
+        style={{ position: 'fixed', left: -10000, top: 0 }}
+      >
+        {lastAction}
+      </div>
+    </>
+  );
+}
+
+/** StatusTab with a pinned WASM boot error and a recorded retry. */
+function StatusTabErrorHarness() {
+  const [lastAction, setLastAction] = useState('none');
+  return (
+    <EditorChrome>
+      <div style={{ width: 280, height: '100%', overflowY: 'auto', borderRight: '1px solid var(--sidebar-border)', background: 'var(--sidebar-bg)' }}>
+        <StatusTab
+          wasmStatus="error"
+          wasmError="WebAssembly compilation failed: unexpected section id"
+          userCount={0}
+          remoteUsers={[]}
+          isOnline={true}
+          onRetry={() => setLastAction('reload')}
+        />
+      </div>
+      <div
+        data-testid="async-last-action"
         style={{ position: 'fixed', left: -10000, top: 0 }}
       >
         {lastAction}
@@ -292,27 +362,35 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
 
   gallery: () => <DevGalleryPage />,
 
-  'projects-home': () => (
+  'projects-home': () => <ProjectsHome {...fakeProjectsHomeProps} />,
+
+  /* ---- Phase 3 async-state routes (loading / error+retry / empty) ---- */
+
+  'projects-home-loading': () => (
     <ProjectsHome
-      onSelectProject={() => {}}
-      isConnecting={false}
-      error={null}
-      projectSetStatus="connected"
-      projectSetEntries={FAKE_SET_ENTRIES}
-      collections={FAKE_COLLECTIONS}
-      onRemoveProjectFromSet={() => {}}
-      onTouchProject={() => {}}
-      onAddProjectToSet={() => {}}
-      onRenameProject={() => {}}
-      onUpdateProjectSummary={() => {}}
-      onCreateCollection={async () => 'automerge:new-collection'}
-      onUnsubscribeCollection={noop}
-      onRenameCollection={() => {}}
-      onAddProjectToCollection={() => {}}
-      onRemoveProjectFromCollection={() => {}}
-      onMoveProjectBetweenCollections={() => {}}
+      {...fakeProjectsHomeProps}
+      projectSetStatus="connecting"
+      projectSetEntries={undefined}
+      collections={undefined}
     />
   ),
+  'projects-home-error': () => <ProjectsHomeErrorHarness />,
+  'projects-home-empty': () => (
+    <ProjectsHome
+      {...fakeProjectsHomeProps}
+      projectSetEntries={[]}
+      collections={[{ ...FAKE_COLLECTIONS[0], entries: [] }]}
+    />
+  ),
+  'sidebar-empty': () => <SidebarHarness files={[]} />,
+  'status-tab-loading': () => (
+    <EditorChrome>
+      <div style={{ width: 280, height: '100%', overflowY: 'auto', borderRight: '1px solid var(--sidebar-border)', background: 'var(--sidebar-bg)' }}>
+        <StatusTab wasmStatus="loading" wasmError={null} userCount={0} remoteUsers={[]} isOnline={true} />
+      </div>
+    </EditorChrome>
+  ),
+  'status-tab-error': () => <StatusTabErrorHarness />,
   'dialog-new-file': () => (
     <EditorChrome>
       <NewFileDialog

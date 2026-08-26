@@ -29,6 +29,10 @@ for (const { page, label } of SETUP_PAGES) {
         });
       }, theme);
 
+      // Deterministic screenshots via the app's global reduced-motion
+      // rule (ui.css, Phase 3) — same mechanism bootHarness uses.
+      await browserPage.emulateMedia({ reducedMotion: 'reduce' });
+
       await browserPage.goto(`/#/dev/${page}`);
 
       // Wait for the setup modal to be visible

@@ -36,7 +36,7 @@ export default function UpdateAvailableToast({
         className="qh-btn primary"
         onClick={() => window.location.reload()}
       >
-        {notifications.reload}
+        {common.reload}
       </button>
       <button
         type="button"

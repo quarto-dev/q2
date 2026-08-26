@@ -26,6 +26,10 @@ export default defineConfig({
     baseURL: 'http://localhost:5173',
     // Deterministic viewport for consistent screenshots
     viewport: { width: 1280, height: 720 },
+    // NOTE: the config-level `reducedMotion` option is silently ignored
+    // by Playwright 1.60's default context (verified: newContext honors
+    // it, project use does not), so reduced-motion emulation for
+    // deterministic screenshots lives in e2e/helpers/visual.ts instead.
   },
 
   projects: [

@@ -430,11 +430,8 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .replay-drawer__attribution--generating::before {
-    animation: none;
-  }
-}
+/* (No local prefers-reduced-motion block: the global rule in ui.css
+   collapses the attribution spin along with all other motion — Phase 3.) */
 
 /* Outstanding-comments count badge on the comments-mode toggle
    (bd-0rsk07il, GH #445). One badge for the whole group; hidden at

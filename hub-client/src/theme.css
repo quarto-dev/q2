@@ -169,7 +169,8 @@
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Motion — 100-200ms, ease-out entrances; animate transform/opacity
-     only. prefers-reduced-motion handling is global (Phase 3). */
+     only. prefers-reduced-motion handling is a global rule in ui.css
+     (collapses all durations); never add per-component overrides. */
   --duration-fast: 100ms;
   --duration-base: 200ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);

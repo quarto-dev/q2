@@ -863,11 +863,30 @@ export default function FileSidebar({
 
       {/* APG treeview (file tree) / listbox (search results): one tab
           stop via roving tabindex; arrows/Home/End/type-ahead navigate,
-          Enter activates, Shift+F10 opens the row's context menu. */}
+          Enter activates, Shift+F10 opens the row's context menu. An
+          empty tree/listbox carries no widget role — a role with zero
+          items violates aria-required-children; the empty state is plain
+          text. */}
       <div
         className="file-list"
-        role={isSearching ? 'listbox' : 'tree'}
-        aria-label={isSearching ? fileSidebar.resultsLabel : fileSidebar.treeLabel}
+        role={
+          isSearching
+            ? searchResults.length > 0
+              ? 'listbox'
+              : undefined
+            : files.length > 0
+              ? 'tree'
+              : undefined
+        }
+        aria-label={
+          isSearching
+            ? searchResults.length > 0
+              ? fileSidebar.resultsLabel
+              : undefined
+            : files.length > 0
+              ? fileSidebar.treeLabel
+              : undefined
+        }
         onKeyDown={handleNavKeyDown}
       >
         {isSearching ? (
