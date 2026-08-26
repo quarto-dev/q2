@@ -17,24 +17,14 @@
   gap: 6px;
 }
 
-/* Shared icon action button (switch / share / preview). */
-.minimal-header .icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 6px;
+/* Header icon actions (switch / share) use the shared .qh-icon-btn.boxed
+   system from ui.css; only the header-context colors are overridden here. */
+.minimal-header .qh-icon-btn {
   color: var(--editor-text-muted);
-  cursor: pointer;
-  flex-shrink: 0;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.minimal-header .icon-btn:hover {
+.minimal-header .qh-icon-btn:hover {
   background: var(--view-toggle-hover-bg);
   color: var(--editor-text);
 }

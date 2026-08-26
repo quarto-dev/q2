@@ -36,11 +36,25 @@
   border-inline-start-color: var(--sidebar-active-accent);
 }
 
-/* ---- buttons ---- */
+/* ---- buttons ----
+   One button system, two sizes:
+   - .qh-btn        default text button; variants: .primary .outline
+                    .danger .ghost-accent
+   - .qh-btn.small  compact text button
+   - .qh-icon-btn   icon-only button (inline-size fit); .boxed gives a
+                    fixed 28x28 target (header chrome)
+   - .qh-link       inline link-styled action
+   States are defined once on the base class (hover per variant,
+   disabled and focus-visible shared). Deliberately NOT part of this
+   system: .view-toggle-btn (a segmented-control member with an active
+   state, not a button look), .qh-pager (a vertical navigation strip),
+   and .minimal-header .preview-btn (the header's filled primary pill,
+   on header-specific tokens). Radii/paddings stay on their current
+   values until the Phase 5 grid-alignment pass. */
 
 .qh-btn {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
   padding: 8px 14px;
   border-radius: 7px;
   border: 1px solid transparent;
@@ -49,13 +63,19 @@
   white-space: nowrap;
 }
 
+.qh-btn:disabled { opacity: 0.5; cursor: default; }
+
+.qh-btn:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
 .qh-btn.primary {
   background: var(--posit-teal);
   color: var(--text-on-accent);
 }
 
 .qh-btn.primary:hover { filter: brightness(1.08); }
-.qh-btn.primary:disabled { opacity: 0.5; cursor: default; }
 
 .qh-btn.outline {
   border-color: var(--border-color);
@@ -63,7 +83,6 @@
 }
 
 .qh-btn.outline:hover { background: var(--input-bg-alpha); }
-.qh-btn.outline:disabled { opacity: 0.5; cursor: default; }
 
 .qh-btn.danger {
   background: var(--posit-red);
@@ -82,8 +101,8 @@
 .qh-btn.ghost-accent:hover { background: var(--posit-teal-alpha-08); }
 
 .qh-btn.small {
-  font-size: 12px;
-  font-weight: 400;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-normal);
   padding: 5px 11px;
   border-radius: 6px;
   color: var(--text-primary);
@@ -96,16 +115,19 @@
   border: none;
   padding: 0;
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--accent-secondary);
   cursor: pointer;
 }
 
 .qh-link:hover { text-decoration: underline; }
-.qh-link.muted { color: var(--text-secondary); font-weight: 400; }
+.qh-link.muted { color: var(--text-secondary); font-weight: var(--font-weight-normal); }
 .qh-link.danger { color: var(--error-text); }
 
 .qh-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   padding: 2px 8px;
@@ -117,6 +139,22 @@
 }
 
 .qh-icon-btn:hover { background: var(--input-bg-alpha); color: var(--text-primary); }
+.qh-icon-btn:disabled { opacity: 0.5; cursor: default; }
+
+.qh-icon-btn:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Fixed 28x28 target for header chrome (WCAG 2.5.8 floor is 24px). */
+.qh-icon-btn.boxed {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
 
 /* ---- menus ---- */
 

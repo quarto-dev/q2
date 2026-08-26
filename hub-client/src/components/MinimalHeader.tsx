@@ -34,7 +34,7 @@ export default function MinimalHeader({
     <header className="minimal-header">
       <div className="header-left">
         <button
-          className="icon-btn"
+          className="qh-icon-btn boxed"
           onClick={onChooseNewProject}
           title="Switch project"
           aria-label="Switch project"
@@ -43,7 +43,7 @@ export default function MinimalHeader({
         </button>
         {onShare && (
           <button
-            className="icon-btn"
+            className="qh-icon-btn boxed"
             onClick={onShare}
             title="Share this project"
             aria-label="Share this project"
