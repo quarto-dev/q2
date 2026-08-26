@@ -26,6 +26,8 @@ WASM rebuild is needed for a changelog-only edit.
 ### 2026-08-26
 
 - [`00e0617a`](https://github.com/quarto-dev/q2/commits/00e0617a): Comment bubbles now show the comment's full text — quoted words, emphasis, and inline code inside a comment were previously dropped from the bubble.
+- [`601d291c`](https://github.com/quarto-dev/q2/commits/601d291c): Failed loads now offer a working retry — a project list that fails to load or a project that fails to open shows "Try again", and a failed renderer boot offers Reload. Loading screens show a proper spinner instead of bare text.
+- [`92fdd7ba`](https://github.com/quarto-dev/q2/commits/92fdd7ba): The app now honors the system "reduce motion" accessibility setting, collapsing all transitions and animations throughout.
 - [`08db6bd3`](https://github.com/quarto-dev/q2/commits/08db6bd3): Copy cleanup across the app chrome: consistent sentence case ("Copy link", "Share project"), proper ellipsis characters, and one verb per concept — the sidebar's asset button is now "Add asset", matching the dialog it opens.
 - [`85428ab2`](https://github.com/quarto-dev/q2/commits/85428ab2): The About tab gains a Keyboard Shortcuts reference listing every shortcut in the app.
 - [`26b8848c`](https://github.com/quarto-dev/q2/commits/26b8848c): Every interactive control now shows a visible focus ring when navigated by keyboard, and Windows High Contrast mode keeps visible boundaries on buttons, menus, dialogs, and notifications.
