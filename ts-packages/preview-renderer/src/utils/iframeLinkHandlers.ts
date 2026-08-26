@@ -80,47 +80,7 @@ export function installLinkHandlers(
     if (!body) return;
 
     body.addEventListener('click', (ev) => {
-        const anchor = findAnchorAncestor(ev.target as Element | null);
-        if (!anchor) return;
-        const href = anchor.getAttribute('href');
-        if (!href) return;
-
-        if (href.startsWith('http://') || href.startsWith('https://')) {
-            ev.preventDefault();
-            window.open(href, '_blank', 'noopener,noreferrer');
-            return;
-        }
-
-        if (href.startsWith('#')) {
-            const parsed = parseLink(href);
-            if (parsed.anchor && opts.onQmdLinkClick) {
-                ev.preventDefault();
-                opts.onQmdLinkClick({ anchor: parsed.anchor });
-            }
-            return;
-        }
-
-        // Phase F.1: artifact-rooted .html hrefs land here after
-        // LinkRewriteTransform runs. Always intercept; route the
-        // .qmd candidate through onQmdLinkClick (PreviewApp's render
-        // attempt is what surfaces a missing-page error).
-        const artifact = parseArtifactHref(href, opts.projectFilePaths);
-        if (artifact && opts.onQmdLinkClick) {
-            ev.preventDefault();
-            opts.onQmdLinkClick({ path: artifact.sourceCandidate, anchor: artifact.anchor });
-            return;
-        }
-
-        const parsed = parseLink(href);
-        if (
-            parsed.path &&
-            (parsed.path.endsWith('.qmd') || parsed.path.endsWith('.md')) &&
-            opts.onQmdLinkClick
-        ) {
-            ev.preventDefault();
-            const resolved = resolveRelativePath(opts.currentFilePath, parsed.path);
-            opts.onQmdLinkClick({ path: resolved, anchor: parsed.anchor });
-        }
+        routeLinkClick(ev, opts);
     });
 
     doc.addEventListener('keydown', (ev) => {
@@ -129,6 +89,71 @@ export function installLinkHandlers(
             window.parent.postMessage({ type: 'hub-client-save' }, '*');
         }
     });
+}
+
+/**
+ * Route one click event through the link-handling policy (extracted
+ * from the delegated body listener above — bd-y66gbfs4). Exists as a
+ * standalone function so surfaces whose click handling deliberately
+ * stops propagation before `doc.body` (the comment bubble's chrome,
+ * which must keep its clicks away from the click-to-edit delegate)
+ * can still route `<a>` clicks through identical logic.
+ *
+ * Returns true when the click was handled (and default-prevented):
+ * external → new tab; `#frag` / `.qmd` / artifact-rooted `.html` →
+ * `opts.onQmdLinkClick`. Returns false for clicks with no `<a>`
+ * ancestor or with an unroutable href — callers decide what a
+ * fall-through means on their surface (the body listener: native
+ * behavior; the bubble: treat as a plain bubble click).
+ */
+export function routeLinkClick(
+    ev: MouseEvent,
+    opts: InstallLinkHandlersOptions,
+): boolean {
+    const anchor = findAnchorAncestor(ev.target as Element | null);
+    if (!anchor) return false;
+    const href = anchor.getAttribute('href');
+    if (!href) return false;
+
+    if (href.startsWith('http://') || href.startsWith('https://')) {
+        ev.preventDefault();
+        window.open(href, '_blank', 'noopener,noreferrer');
+        return true;
+    }
+
+    if (href.startsWith('#')) {
+        const parsed = parseLink(href);
+        if (parsed.anchor && opts.onQmdLinkClick) {
+            ev.preventDefault();
+            opts.onQmdLinkClick({ anchor: parsed.anchor });
+            return true;
+        }
+        return false;
+    }
+
+    // Phase F.1: artifact-rooted .html hrefs land here after
+    // LinkRewriteTransform runs. Always intercept; route the
+    // .qmd candidate through onQmdLinkClick (PreviewApp's render
+    // attempt is what surfaces a missing-page error).
+    const artifact = parseArtifactHref(href, opts.projectFilePaths);
+    if (artifact && opts.onQmdLinkClick) {
+        ev.preventDefault();
+        opts.onQmdLinkClick({ path: artifact.sourceCandidate, anchor: artifact.anchor });
+        return true;
+    }
+
+    const parsed = parseLink(href);
+    if (
+        parsed.path &&
+        (parsed.path.endsWith('.qmd') || parsed.path.endsWith('.md')) &&
+        opts.onQmdLinkClick
+    ) {
+        ev.preventDefault();
+        const resolved = resolveRelativePath(opts.currentFilePath, parsed.path);
+        opts.onQmdLinkClick({ path: resolved, anchor: parsed.anchor });
+        return true;
+    }
+    return false;
 }
 
 interface ParsedLink {
