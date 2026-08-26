@@ -113,7 +113,8 @@ pub use code_block_generate::{
 pub use code_block_render::CodeBlockRenderTransform;
 pub use conditional_content::ConditionalContentTransform;
 pub use config::{
-    AppendixStyle, ReferenceLocation, TitleBlockStyle, is_feature_disabled, resolve_website_bool,
+    AppendixStyle, ReferenceLocation, TitleBlockStyle, is_feature_disabled, page_has_navbar,
+    resolve_website_bool,
 };
 pub use config_markdown::{ConfigMarkdownTransform, apply_markdown_config_paths};
 pub use crossref_index::CrossrefIndexTransform;

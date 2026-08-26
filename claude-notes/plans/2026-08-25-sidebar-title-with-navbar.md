@@ -5,6 +5,38 @@
 **Base:** `origin/main` @ `c11aa0e4d` (rebased 2026-08-26; originally planned at `99e7db175`)
 **Worktree:** `.worktrees/workspace-3`
 
+## TL;DR
+
+**The change:** add `&& !opts.has_navbar` to one `if` in
+`crates/quarto-navigation/src/render_html.rs:410`, plus the plumbing to get
+that boolean into scope. Q1 gates the sidebar title on `!navbar`
+(`sidebar.ejs:51`); q2 ported the markup and dropped the condition.
+
+**The rule:** a sidebar's own `title:` renders only when the page has no
+navbar. Full stop.
+
+**Three things it is NOT** (each has already misled someone):
+- not about the sidebar logo — a logo under a navbar still emits
+  `sidebar-header` and still no title;
+- not about string duplication — different strings are still suppressed, and
+  the site that surfaced this has `navbar: title: false`;
+- not a bug in sidebar titles generally — they render fine with no navbar.
+
+**Not affected:** `- section:` labels inside `contents:` render normally. The
+sidebar keeps its whole structure and loses only the banner above it.
+
+**Why it matters:** 81 pages on the Positron docs (the sole remaining chrome
+difference vs Q1) and 259 of 266 pages on this repo's own docs site.
+
+**Sequencing that is load-bearing:** the two `docs/_quarto.yml` `title:`
+deletions travel in the *same commit* as the gate, never before it. Deleting
+them earlier substitutes `website.title` and makes 224 pages read `Quarto 2`.
+
+**Why the plan is long:** the reach above earns a paper trail. Most of the
+length is a blast-radius sweep (20 files, each cleared), a reversed ordering
+decision kept visible so it isn't re-reverted, and the negative findings
+above — not the work; the work itself is Phases 1–5.
+
 ## Overview
 
 When a Quarto website declares **both** a navbar and a titled sidebar, q2 renders
