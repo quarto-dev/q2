@@ -10,6 +10,7 @@
  */
 
 import Tooltip from './Tooltip';
+import './notifications.css';
 
 export default function EphemeralSessionBanner() {
   return (

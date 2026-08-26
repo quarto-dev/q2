@@ -15,7 +15,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { pwaPrompt } from '../pwaPrompt';
 import type { PwaPromptStore } from '../pwaPrompt';
-import './UpdateAvailableToast.css';
+import './notifications.css';
 
 export default function UpdateAvailableToast({
   prompt = pwaPrompt,
