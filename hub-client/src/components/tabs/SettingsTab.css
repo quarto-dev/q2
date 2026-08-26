@@ -33,6 +33,13 @@
   pointer-events: none;
 }
 
+/* The native checkbox is invisible; the focus ring lands on the custom
+   box so keyboard users can see focus (WCAG 2.4.7). */
+.setting-toggle input[type="checkbox"]:focus-visible + .setting-name::before {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
 .setting-name {
   font-size: 14px;
   font-weight: 500;

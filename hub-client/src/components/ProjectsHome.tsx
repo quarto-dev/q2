@@ -41,6 +41,10 @@ import {
   resolveSyncServerUrl,
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
+import { ForkIcon, PeekIcon, PeopleIcon, SortIcon } from './icons';
+import { Menu, MenuItem, MenuDivider, MenuLabel, MenuSubmenu } from './Menu';
+import Tooltip from './Tooltip';
+import ModalDialog from './ModalDialog';
 import { sortProjectItems, sortOrderLabel, type SortOrder } from '../utils/projectSort';
 import { buildProjectListExport, parseProjectListImport } from '../services/projectListExport';
 import type { Face } from '../utils/facepile';
@@ -132,23 +136,11 @@ function setPendingCollectionAssignment(title: string, collectionId: string): vo
   );
 }
 
-/** Fork glyph for the duplicate affordance (three nodes, branch lines). */
-const forkIcon = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle cx="6" cy="5" r="2.2" stroke="currentColor" strokeWidth="2" />
-    <circle cx="18" cy="5" r="2.2" stroke="currentColor" strokeWidth="2" />
-    <circle cx="12" cy="19" r="2.2" stroke="currentColor" strokeWidth="2" />
-    <path d="M6 7.5v1.5c0 1.7 1.3 3 3 3h6c1.7 0 3-1.3 3-3V7.5M12 12v4.5" stroke="currentColor" strokeWidth="2" />
-  </svg>
-);
+/** Fork glyph for the duplicate affordance. */
+const forkIcon = <ForkIcon />;
 
 /** Magnifying glass for the hover-to-peek affordance. */
-const peekIcon = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="2" />
-    <path d="M15.5 15.5L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-  </svg>
-);
+const peekIcon = <PeekIcon />;
 
 /** Base64-encode without blowing the arg-spread limit on large files. */
 function toBase64(bytes: Uint8Array): string {
@@ -263,7 +255,7 @@ export default function ProjectsHome({
   // Menus / popovers. openMenu identifies the ⋯ menu by project id or
   // `collection:<id>`; submenus and the peek popover are tracked separately.
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [moveSubmenuOpen, setMoveSubmenuOpen] = useState<false | 'move' | 'add'>(false);
+
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [peekFor, setPeekFor] = useState<string | null>(null);
@@ -463,7 +455,6 @@ export default function ProjectsHome({
 
   const closeAllMenus = useCallback(() => {
     setOpenMenu(null);
-    setMoveSubmenuOpen(false);
     setNewMenuOpen(false);
     setAvatarMenuOpen(false);
     setPeekFor(null);
@@ -1025,11 +1016,17 @@ export default function ProjectsHome({
     return (
       <span className={`qh-facepile ${size}`}>
         {shown.map((u, i) => (
-          <span key={`${u.initials}-${i}`} className="qh-face" style={{ backgroundColor: u.color }} title={u.name}>
-            {u.initials}
-          </span>
+          <Tooltip key={`${u.initials}-${i}`} content={u.name}>
+            <span className="qh-face" style={{ backgroundColor: u.color }}>
+              {u.initials}
+            </span>
+          </Tooltip>
         ))}
-        {extra > 0 && <span className="qh-face more" title={`${extra} more`}>+{extra}</span>}
+        {extra > 0 && (
+          <Tooltip content={`${extra} more`}>
+            <span className="qh-face more">+{extra}</span>
+          </Tooltip>
+        )}
       </span>
     );
   };
@@ -1046,117 +1043,89 @@ export default function ProjectsHome({
     );
   }
 
-  // Menus are plain groups of buttons, not ARIA menus: role="menu"
-  // would require menuitem children and the full menu keyboard pattern,
-  // which these action lists don't implement (WCAG 4.1.2).
+  // The shared APG menu primitive (components/Menu.tsx): arrow-key nav,
+  // type-ahead, Escape with focus return, submenus.
   const renderProjectMenu = (item: ProjectItem) => (
-    <div className="qh-menu">
-      <button className="qh-menu-item strong" onClick={() => { closeAllMenus(); handleOpen(item); }}>
+    <Menu onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label={`Actions for ${item.description}`}>
+      <MenuItem strong onSelect={() => { closeAllMenus(); handleOpen(item); }}>
         Open
-      </button>
-      <div className="qh-menu-item qh-submenu-parent">
-        <button
-          className="qh-menu-item-inner"
-          onClick={(e) => { e.stopPropagation(); setMoveSubmenuOpen((v) => v === 'move' ? false : 'move'); }}
-        >
-          Move to collection <span className="qh-submenu-arrow">▸</span>
-        </button>
-        {moveSubmenuOpen === 'move' && (
-          <div className="qh-menu qh-submenu">
-            {collections
-              .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
-              .map((collection) => (
-                <button
-                  key={collection.id}
-                  className="qh-menu-item"
-                  onClick={() => { requestMove(item.indexDocId, collection.id); closeAllMenus(); }}
-                >
-                  {collection.name}
-                </button>
-              ))}
-            {collectionOf(item.indexDocId) && (
-              <button
-                className="qh-menu-item"
-                onClick={() => { requestMove(item.indexDocId, null); closeAllMenus(); }}
-              >
-                No collection
-              </button>
-            )}
-            <button
-              className="qh-menu-item accent"
-              onClick={() => openNewCollection(item.indexDocId)}
+      </MenuItem>
+      <MenuSubmenu label="Move to collection">
+        {collections
+          .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
+          .map((collection) => (
+            <MenuItem
+              key={collection.id}
+              onSelect={() => { requestMove(item.indexDocId, collection.id); closeAllMenus(); }}
             >
-              ＋ New collection…
-            </button>
+              {collection.name}
+            </MenuItem>
+          ))}
+        {collectionOf(item.indexDocId) && (
+          <MenuItem onSelect={() => { requestMove(item.indexDocId, null); closeAllMenus(); }}>
+            No collection
+          </MenuItem>
+        )}
+        <MenuItem accent onSelect={() => openNewCollection(item.indexDocId)}>
+          ＋ New collection…
+        </MenuItem>
+      </MenuSubmenu>
+      <MenuSubmenu label="Add to collection">
+        {collections
+          .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
+          .map((collection) => (
+            <MenuItem
+              key={collection.id}
+              onSelect={() => { addToCollection(item.indexDocId, collection.id); closeAllMenus(); }}
+            >
+              {collection.name}
+            </MenuItem>
+          ))}
+        {collections.every((c) => c.projectIds.includes(item.indexDocId.replace(/^automerge:/, ''))) && (
+          <div className="qh-menu-item qh-menu-subtext" role="presentation" style={{ cursor: 'default' }}>
+            Already in every collection
           </div>
         )}
-      </div>
-      <div className="qh-menu-item qh-submenu-parent">
-        <button
-          className="qh-menu-item-inner"
-          onClick={(e) => { e.stopPropagation(); setMoveSubmenuOpen((v) => v === 'add' ? false : 'add'); }}
-        >
-          Add to collection <span className="qh-submenu-arrow">▸</span>
-        </button>
-        {moveSubmenuOpen === 'add' && (
-          <div className="qh-menu qh-submenu">
-            {collections
-              .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
-              .map((collection) => (
-                <button
-                  key={collection.id}
-                  className="qh-menu-item"
-                  onClick={() => { addToCollection(item.indexDocId, collection.id); closeAllMenus(); }}
-                >
-                  {collection.name}
-                </button>
-              ))}
-            {collections.every((c) => c.projectIds.includes(item.indexDocId.replace(/^automerge:/, ''))) && (
-              <div className="qh-menu-item qh-menu-subtext" style={{ cursor: 'default' }}>
-                Already in every collection
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      <button
-        className="qh-menu-item"
+      </MenuSubmenu>
+      <MenuItem
         disabled={!!duplicatingId}
-        onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
+        subtext="Fork a fresh copy — no history carried over"
+        onSelect={() => openDuplicateDialog(item)}
       >
         Duplicate
-        <span className="qh-menu-subtext">Fork a fresh copy — no history carried over</span>
-      </button>
-      <button
-        className="qh-menu-item"
-        onClick={() => copyToClipboard(
+      </MenuItem>
+      <MenuItem
+        keepOpen
+        onSelect={() => copyToClipboard(
           buildShareableUrl(item.indexDocId, item.syncServer, item.description, 'index.qmd'),
           item.indexDocId + ':share',
         )}
       >
         {copied === item.indexDocId + ':share' ? 'Link copied!' : 'Share link…'}
-      </button>
-      <button
-        className="qh-menu-item with-hint"
-        onClick={() => copyToClipboard(item.indexDocId.replace(/^automerge:/, ''), item.indexDocId + ':id')}
+      </MenuItem>
+      <MenuItem
+        keepOpen
+        hint={<span className="mono">{shortId(item.indexDocId)}</span>}
+        onSelect={() => copyToClipboard(item.indexDocId.replace(/^automerge:/, ''), item.indexDocId + ':id')}
       >
         {copied === item.indexDocId + ':id' ? 'ID copied!' : 'Copy project ID'}
-        <span className="qh-menu-hint mono">{shortId(item.indexDocId)}</span>
-      </button>
-      <button
-        className="qh-menu-item"
+      </MenuItem>
+      <MenuItem
         disabled={!!exportingId}
-        onClick={(e) => { e.stopPropagation(); handleDownloadZip(item); }}
+        onSelect={() => handleDownloadZip(item)}
       >
         {exportingId === item.indexDocId ? 'Preparing ZIP…' : 'Download as ZIP'}
-      </button>
-      <button className="qh-menu-item" onClick={() => startRename(item)}>Rename…</button>
-      <div className="qh-menu-divider" />
-      <button className="qh-menu-item danger" onClick={() => handleRemove(item)}>
+      </MenuItem>
+      <MenuItem onSelect={() => startRename(item)}>Rename…</MenuItem>
+      <MenuDivider />
+      <MenuItem
+        danger
+        subtext="Doesn't delete the project for others"
+        onSelect={() => handleRemove(item)}
+      >
         Remove from this device
-        <span className="qh-menu-subtext">Doesn't delete the project for others</span>
-      </button>
-    </div>
+      </MenuItem>
+    </Menu>
   );
 
   /** Refresh a peek summary via a short background connection. Contributors
@@ -1300,7 +1269,9 @@ export default function ProjectsHome({
         <div className="qh-menu-divider" />
         <div className="qh-menu-label">INVITE BY LINK</div>
         <div className="qh-members-invite">
-          <span className="qh-invite-url mono" title={inviteUrl}>{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
+          <Tooltip block content={inviteUrl}>
+            <span className="qh-invite-url mono">{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
+          </Tooltip>
           <button
             className="qh-btn primary small-invite"
             onClick={() => copyToClipboard(inviteUrl, copyKey)}
@@ -1326,11 +1297,10 @@ export default function ProjectsHome({
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        setMoveSubmenuOpen(false);
         setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
       }}
     >
-      <button className="qh-card-body" onClick={() => handleOpen(item)} title={item.description}>
+      <button className="qh-card-body" onClick={() => handleOpen(item)}>
         <span className={`qh-card-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
           {item.description}
         </span>
@@ -1350,27 +1320,29 @@ export default function ProjectsHome({
         >
           <button
             className="qh-peek-btn"
-            title="Peek — see what's inside"
+            aria-label={`Peek — see what's inside ${item.description}`}
             onClick={(e) => { e.stopPropagation(); openPeekHover(item.indexDocId); }}
           >
             {peekIcon}
           </button>
           {peekFor === item.indexDocId && renderPeek(item)}
         </span>
-        <button
-          className="qh-fork-btn"
-          title={`Duplicate "${item.description}" (fork a fresh copy)`}
-          disabled={!!duplicatingId}
-          onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
-        >
-          {forkIcon}
-        </button>
+        <Tooltip content={`Duplicate "${item.description}" (fork a fresh copy)`}>
+          <button
+            className="qh-fork-btn"
+            aria-label={`Duplicate "${item.description}"`}
+            disabled={!!duplicatingId}
+            onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
+          >
+            {forkIcon}
+          </button>
+        </Tooltip>
         <button
           className="qh-card-menu-btn"
-          title="Project actions"
+          aria-label={`Actions for ${item.description}`}
+          aria-haspopup="menu"
           onClick={(e) => {
             e.stopPropagation();
-            setMoveSubmenuOpen(false);
             setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
           }}
         >
@@ -1408,98 +1380,94 @@ export default function ProjectsHome({
             const people = peopleOn(collection);
             const hasOthers = people.length > 1;
             return (
-              <button
-                className={`qh-collection-people ${hasOthers ? '' : 'private'}`}
-                title={hasOthers
+              <Tooltip
+                content={hasOthers
                   ? `${people.length} people seen on these projects — people & invite`
                   : 'Only you so far. Click to invite others.'}
+              >
+              <button
+                className={`qh-collection-people ${hasOthers ? '' : 'private'}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   setOpenMenu(null);
                   setMembersFor(membersFor === collection.id ? null : collection.id);
                 }}
               >
-                {hasOthers && (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle cx="9" cy="8" r="3.4" stroke="currentColor" strokeWidth="2" />
-                    <path d="M3 19c0-3 2.7-4.8 6-4.8s6 1.8 6 4.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    <circle cx="17" cy="9" r="2.6" stroke="currentColor" strokeWidth="2" />
-                    <path d="M16.5 14.4c2.6.3 4.5 1.9 4.5 4.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                )}
+                {hasOthers && <PeopleIcon />}
                 {renderFacepile(people, 'md', 3)}
               </button>
+              </Tooltip>
             );
           })()}
           <span className="qh-flex-spacer" />
           <span className="qh-collection-sort-anchor">
-            <button
-              className={`qh-icon-btn qh-collection-sort-btn ${collectionSort !== 'newest' ? 'active' : ''}`}
-              title={`Sort collection (${sortOrderLabel(collectionSort)})`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setMembersFor(null);
-                setOpenMenu(openMenu === sortMenuKey ? null : sortMenuKey);
-              }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M7 4v14M7 18l-3.5-3.5M7 18l3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M17 20V6M17 6l-3.5 3.5M17 6l3.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
+            <Tooltip content={`Sort collection (${sortOrderLabel(collectionSort)})`}>
+              <button
+                className={`qh-icon-btn qh-collection-sort-btn ${collectionSort !== 'newest' ? 'active' : ''}`}
+                aria-label={`Sort collection (${sortOrderLabel(collectionSort)})`}
+                aria-haspopup="menu"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMembersFor(null);
+                  setOpenMenu(openMenu === sortMenuKey ? null : sortMenuKey);
+                }}
+              >
+                <SortIcon />
+              </button>
+            </Tooltip>
             {openMenu === sortMenuKey && (
-              <div className="qh-menu qh-menu-right">
+              <Menu className="qh-menu-right" onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label="Sort collection">
                 {(['newest', 'oldest', 'name'] as SortOrder[]).map((o) => (
-                  <button
+                  <MenuItem
                     key={o}
-                    className={`qh-menu-item ${collectionSort === o ? 'strong' : ''}`}
-                    onClick={() => {
+                    strong={collectionSort === o}
+                    onSelect={() => {
                       setCollectionSorts((s) => ({ ...s, [collection.id]: o }));
                       setCollectionPages((p) => ({ ...p, [collection.id]: 0 }));
                       setOpenMenu(null);
                     }}
                   >
                     {o === 'newest' ? 'Newest first' : o === 'oldest' ? 'Oldest first' : 'A to Z'}
-                  </button>
+                  </MenuItem>
                 ))}
-              </div>
+              </Menu>
             )}
           </span>
-          <button
-            className="qh-icon-btn"
-            title="Collection actions"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMembersFor(null);
-              setOpenMenu(openMenu === menuKey ? null : menuKey);
-            }}
-          >
-            ⋯
-          </button>
+          <Tooltip content="Collection actions">
+            <button
+              className="qh-icon-btn"
+              aria-label={`Actions for ${collection.name}`}
+              aria-haspopup="menu"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMembersFor(null);
+                setOpenMenu(openMenu === menuKey ? null : menuKey);
+              }}
+            >
+              ⋯
+            </button>
+          </Tooltip>
           {membersFor === collection.id && renderMembersPopover(collection)}
           {openMenu === menuKey && (
-            <div className="qh-menu qh-menu-right">
-              <button
-                className="qh-menu-item"
-                onClick={() => { setOpenMenu(null); setMembersFor(collection.id); }}
-              >
+            <Menu className="qh-menu-right" onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label={`Actions for ${collection.name}`}>
+              <MenuItem onSelect={() => { setOpenMenu(null); setMembersFor(collection.id); }}>
                 People &amp; invite…
-              </button>
-              <button
-                className="qh-menu-item"
-                onClick={() => {
+              </MenuItem>
+              <MenuItem
+                subtext="Renames it for everyone subscribed"
+                onSelect={() => {
                   setRenameCollectionTarget(collection);
                   setRenameCollectionValue(collection.name);
                   closeAllMenus();
                 }}
               >
                 Rename collection…
-                <span className="qh-menu-subtext">Renames it for everyone subscribed</span>
-              </button>
-              <div className="qh-menu-divider" />
-              <button
-                className="qh-menu-item danger"
-                onClick={() => {
+              </MenuItem>
+              <MenuDivider />
+              <MenuItem
+                danger
+                subtext="Removes it from your view only"
+                onSelect={() => {
                   closeAllMenus();
                   setConfirmState({
                     title: `Leave "${collection.name}"?`,
@@ -1510,9 +1478,8 @@ export default function ProjectsHome({
                 }}
               >
                 Leave collection
-                <span className="qh-menu-subtext">Removes it from your view only</span>
-              </button>
-            </div>
+              </MenuItem>
+            </Menu>
           )}
         </div>
         {collectionItems.length === 0 ? (
@@ -1520,24 +1487,28 @@ export default function ProjectsHome({
         ) : (
           <div className="qh-collection-row">
             {page > 0 && (
-              <button
-                className="qh-pager"
-                title={collectionSort === 'newest' ? 'Newer projects' : collectionSort === 'oldest' ? 'Older projects' : 'Previous page'}
-                onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page - 1 }))}
-              >
-                ‹
-              </button>
+              <Tooltip content={collectionSort === 'newest' ? 'Newer projects' : collectionSort === 'oldest' ? 'Older projects' : 'Previous page'}>
+                <button
+                  className="qh-pager"
+                  aria-label="Previous page"
+                  onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page - 1 }))}
+                >
+                  ‹
+                </button>
+              </Tooltip>
             )}
             <div className="qh-card-grid">{pageItems.map(renderCard)}</div>
             {page < pageCount - 1 ? (
-              <button
-                className="qh-pager"
-                title={collectionSort === 'newest' ? 'Older projects' : collectionSort === 'oldest' ? 'Newer projects' : 'Next page'}
-                onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page + 1 }))}
-              >
-                ›
-                <span className="qh-pager-pos mono">{page + 1}/{pageCount}</span>
-              </button>
+              <Tooltip content={collectionSort === 'newest' ? 'Older projects' : collectionSort === 'oldest' ? 'Newer projects' : 'Next page'}>
+                <button
+                  className="qh-pager"
+                  aria-label="Next page"
+                  onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page + 1 }))}
+                >
+                  ›
+                  <span className="qh-pager-pos mono">{page + 1}/{pageCount}</span>
+                </button>
+              </Tooltip>
             ) : pageCount > 1 ? (
               <div className="qh-pager qh-pager-idle">
                 <span className="qh-pager-pos mono">{page + 1}/{pageCount}</span>
@@ -1580,18 +1551,17 @@ export default function ProjectsHome({
               ＋ New ▾
             </button>
             {newMenuOpen && (
-              <div className="qh-menu qh-menu-right">
-                <div className="qh-menu-label">START FROM — QUARTO PROJECT TYPES</div>
+              <Menu className="qh-menu-right" onClose={() => setNewMenuOpen(false)} ignoreOutsideSelector=".qh-menu-anchor" aria-label="New project">
+                <MenuLabel>START FROM — QUARTO PROJECT TYPES</MenuLabel>
                 {(projectChoices.length > 0
                   ? projectChoices
                   : [{ id: 'default', name: 'Default', description: 'A minimal Quarto project' }]
                 ).map((choice) => (
-                  <button key={choice.id} className="qh-menu-item two-line" onClick={() => openNewDialog(choice)}>
-                    <span className="strong">{choice.name}</span>
-                    <span className="qh-menu-subtext">{choice.description}</span>
-                  </button>
+                  <MenuItem key={choice.id} strong subtext={choice.description} onSelect={() => openNewDialog(choice)}>
+                    {choice.name}
+                  </MenuItem>
                 ))}
-              </div>
+              </Menu>
             )}
           </div>
           <div className="qh-menu-anchor qh-avatar-anchor">
@@ -1599,7 +1569,7 @@ export default function ProjectsHome({
               className="qh-avatar"
               style={authPicture ? undefined : { backgroundColor: userSettings?.userColor ?? 'var(--posit-blue)' }}
               onClick={() => setAvatarMenuOpen((v) => !v)}
-              title={userSettings?.userName}
+              aria-label={userSettings?.userName ? `Account: ${userSettings.userName}` : 'Account'}
             >
               {authPicture ? (
                 <img src={authPicture} alt="" className="qh-avatar-img" referrerPolicy="no-referrer" />
@@ -1650,13 +1620,14 @@ export default function ProjectsHome({
                 <div className="qh-menu-label">CURSOR COLOR</div>
                 <div className="qh-swatches">
                   {COLOR_PALETTE.map((color) => (
-                    <button
-                      key={color}
-                      className={`qh-swatch ${userSettings.userColor === color ? 'selected' : ''}`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => handleColorChange(color)}
-                      title={color}
-                    />
+                    <Tooltip key={color} content={color}>
+                      <button
+                        className={`qh-swatch ${userSettings.userColor === color ? 'selected' : ''}`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => handleColorChange(color)}
+                        aria-label={`Cursor color ${color}`}
+                      />
+                    </Tooltip>
                   ))}
                 </div>
                 <div className="qh-menu-divider" />
@@ -1725,17 +1696,17 @@ export default function ProjectsHome({
                   Sort <span className="qh-caret">▾</span>
                 </button>
                 {sortMenuOpen && (
-                  <div className="qh-menu qh-menu-right">
+                  <Menu className="qh-menu-right" onClose={() => setSortMenuOpen(false)} ignoreOutsideSelector=".qh-menu-anchor" aria-label="Sort projects">
                     {(['newest', 'oldest', 'name'] as SortOrder[]).map((o) => (
-                      <button
+                      <MenuItem
                         key={o}
-                        className={`qh-menu-item ${sortOrder === o ? 'strong' : ''}`}
-                        onClick={() => { setSortOrder(o); setSortMenuOpen(false); }}
+                        strong={sortOrder === o}
+                        onSelect={() => { setSortOrder(o); setSortMenuOpen(false); }}
                       >
                         {o === 'newest' ? 'Newest first' : o === 'oldest' ? 'Oldest first' : 'A to Z'}
-                      </button>
+                      </MenuItem>
                     ))}
-                  </div>
+                  </Menu>
                 )}
               </div>
               {everythingElse.length === 0 ? (
@@ -1754,14 +1725,12 @@ export default function ProjectsHome({
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        setMoveSubmenuOpen(false);
                         setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
                       }}
                     >
                       <button
                         className={`qh-row-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}
                         onClick={() => handleOpen(item)}
-                        title={item.description}
                       >
                         {item.description}
                       </button>
@@ -1779,27 +1748,29 @@ export default function ProjectsHome({
                       >
                         <button
                           className="qh-icon-btn qh-peek-btn"
-                          title="Peek — see what's inside"
+                          aria-label={`Peek — see what's inside ${item.description}`}
                           onClick={(e) => { e.stopPropagation(); openPeekHover(item.indexDocId); }}
                         >
                           {peekIcon}
                         </button>
                         {peekFor === item.indexDocId && renderPeek(item)}
                       </span>
-                      <button
-                        className="qh-icon-btn qh-fork-btn"
-                        title={`Duplicate "${item.description}" (fork a fresh copy)`}
-                        disabled={!!duplicatingId}
-                        onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
-                      >
-                        {forkIcon}
-                      </button>
+                      <Tooltip content={`Duplicate "${item.description}" (fork a fresh copy)`}>
+                        <button
+                          className="qh-icon-btn qh-fork-btn"
+                          aria-label={`Duplicate "${item.description}"`}
+                          disabled={!!duplicatingId}
+                          onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
+                        >
+                          {forkIcon}
+                        </button>
+                      </Tooltip>
                       <button
                         className="qh-icon-btn qh-row-menu-btn"
-                        title="Project actions"
+                        aria-label={`Actions for ${item.description}`}
+                        aria-haspopup="menu"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setMoveSubmenuOpen(false);
                           setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
                         }}
                       >
@@ -1817,15 +1788,18 @@ export default function ProjectsHome({
 
       {/* Duplicate (fork) */}
       {duplicateFor && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => { if (!duplicatingId) setDuplicateFor(null); }}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-duplicate" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-duplicate">Duplicate "{duplicateFor.description}"</h2>
-            <p className="qh-dialog-hint">
-              A fresh copy of all {duplicateFor.summary ? `${duplicateFor.summary.fileCount} ` : ''}files — no
-              edit history carries over.
-            </p>
-            {formError && <div className="qh-error inline">{formError}</div>}
-            <form onSubmit={(e) => { e.preventDefault(); handleDuplicate(); }}>
+        <ModalDialog
+          title={`Duplicate "${duplicateFor.description}"`}
+          onClose={() => { if (!duplicatingId) setDuplicateFor(null); }}
+          className="qh-form-dialog"
+        >
+          <form onSubmit={(e) => { e.preventDefault(); handleDuplicate(); }}>
+            <div className="dialog-content">
+              <p className="qh-dialog-hint">
+                A fresh copy of all {duplicateFor.summary ? `${duplicateFor.summary.fileCount} ` : ''}files — no
+                edit history carries over.
+              </p>
+              {formError && <div className="qh-error inline">{formError}</div>}
               <label className="qh-field-label" htmlFor="qh-dup-name">Name</label>
               <input
                 id="qh-dup-name"
@@ -1847,28 +1821,31 @@ export default function ProjectsHome({
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <div className="qh-dialog-actions">
-                <button type="button" className="qh-btn outline" disabled={!!duplicatingId} onClick={() => setDuplicateFor(null)}>
-                  Cancel
-                </button>
-                <button type="submit" className="qh-btn primary" disabled={!!duplicatingId || !duplicateName.trim()}>
-                  {duplicatingId ? 'Duplicating…' : 'Duplicate'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="qh-btn outline" disabled={!!duplicatingId} onClick={() => setDuplicateFor(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="qh-btn primary" disabled={!!duplicatingId || !duplicateName.trim()}>
+                {duplicatingId ? 'Duplicating…' : 'Duplicate'}
+              </button>
+            </div>
+          </form>
+        </ModalDialog>
       )}
 
       {/* New collection */}
       {newCollectionDialog && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setNewCollectionDialog(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-new-collection" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-new-collection">New collection</h2>
-            {newCollectionDialog.forProject && (
-              <p className="qh-dialog-hint">The project will be moved onto it.</p>
-            )}
-            <form onSubmit={(e) => { e.preventDefault(); commitNewCollection(); }}>
+        <ModalDialog
+          title="New collection"
+          onClose={() => setNewCollectionDialog(null)}
+          className="qh-form-dialog"
+        >
+          <form onSubmit={(e) => { e.preventDefault(); commitNewCollection(); }}>
+            <div className="dialog-content">
+              {newCollectionDialog.forProject && (
+                <p className="qh-dialog-hint">The project will be moved onto it.</p>
+              )}
               <label className="qh-field-label" htmlFor="qh-new-collection-name">Name</label>
               <input
                 id="qh-new-collection-name"
@@ -1878,30 +1855,33 @@ export default function ProjectsHome({
                 placeholder="e.g. Board prep"
                 autoFocus
               />
-              <div className="qh-dialog-actions">
-                <button type="button" className="qh-btn outline" onClick={() => setNewCollectionDialog(null)}>Cancel</button>
-                <button type="submit" className="qh-btn primary" disabled={!newCollectionName.trim()}>Create</button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="qh-btn outline" onClick={() => setNewCollectionDialog(null)}>Cancel</button>
+              <button type="submit" className="qh-btn primary" disabled={!newCollectionName.trim()}>Create</button>
+            </div>
+          </form>
+        </ModalDialog>
       )}
 
       {/* Rename collection */}
       {renameCollectionTarget && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setRenameCollectionTarget(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-rename-collection" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-rename-collection">Rename collection</h2>
-            <p className="qh-dialog-hint">Renames it for everyone subscribed to it.</p>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (renameCollectionValue.trim()) {
-                  onRenameCollection?.(renameCollectionTarget.id, renameCollectionValue.trim());
-                }
-                setRenameCollectionTarget(null);
-              }}
-            >
+        <ModalDialog
+          title="Rename collection"
+          onClose={() => setRenameCollectionTarget(null)}
+          className="qh-form-dialog"
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (renameCollectionValue.trim()) {
+                onRenameCollection?.(renameCollectionTarget.id, renameCollectionValue.trim());
+              }
+              setRenameCollectionTarget(null);
+            }}
+          >
+            <div className="dialog-content">
+              <p className="qh-dialog-hint">Renames it for everyone subscribed to it.</p>
               <label className="qh-field-label" htmlFor="qh-rename-collection">Name</label>
               <input
                 id="qh-rename-collection"
@@ -1910,42 +1890,48 @@ export default function ProjectsHome({
                 onChange={(e) => setRenameCollectionValue(e.target.value)}
                 autoFocus
               />
-              <div className="qh-dialog-actions">
-                <button type="button" className="qh-btn outline" onClick={() => setRenameCollectionTarget(null)}>Cancel</button>
-                <button type="submit" className="qh-btn primary" disabled={!renameCollectionValue.trim()}>Rename</button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="qh-btn outline" onClick={() => setRenameCollectionTarget(null)}>Cancel</button>
+              <button type="submit" className="qh-btn primary" disabled={!renameCollectionValue.trim()}>Rename</button>
+            </div>
+          </form>
+        </ModalDialog>
       )}
 
       {/* Generic destructive confirmation */}
       {confirmState && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setConfirmState(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-confirm" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-confirm">{confirmState.title}</h2>
+        <ModalDialog
+          title={confirmState.title}
+          onClose={() => setConfirmState(null)}
+          className="qh-form-dialog"
+        >
+          <div className="dialog-content">
             <p className="qh-dialog-hint">{confirmState.body}</p>
-            <div className="qh-dialog-actions">
-              <button type="button" className="qh-btn outline" onClick={() => setConfirmState(null)} autoFocus>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="qh-btn danger"
-                onClick={() => { confirmState.action(); setConfirmState(null); }}
-              >
-                {confirmState.confirmLabel}
-              </button>
-            </div>
           </div>
-        </div>
+          <div className="dialog-actions">
+            <button type="button" className="qh-btn outline" onClick={() => setConfirmState(null)} autoFocus>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="qh-btn danger"
+              onClick={() => { confirmState.action(); setConfirmState(null); }}
+            >
+              {confirmState.confirmLabel}
+            </button>
+          </div>
+        </ModalDialog>
       )}
 
       {/* Shared-collection move warning */}
       {pendingMove && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setPendingMove(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-move" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-move">Move "{pendingMove.name}" out of {pendingMove.fromName}?</h2>
+        <ModalDialog
+          title={`Move "${pendingMove.name}" out of ${pendingMove.fromName}?`}
+          onClose={() => setPendingMove(null)}
+          className="qh-form-dialog"
+        >
+          <div className="dialog-content">
             <p className="qh-dialog-hint">
               Please note you're changing {pendingMove.othersCount === 1
                 ? "another person's"
@@ -1961,33 +1947,36 @@ export default function ProjectsHome({
               />
               Don't show this again
             </label>
-            <div className="qh-dialog-actions">
-              <button type="button" className="qh-btn outline" onClick={() => setPendingMove(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="qh-btn primary"
-                onClick={() => {
-                  if (moveWarnChecked) localStorage.setItem(MOVE_WARNING_KEY, '1');
-                  moveProject(pendingMove.indexDocId, pendingMove.target);
-                  setPendingMove(null);
-                }}
-                autoFocus
-              >
-                Move it
-              </button>
-            </div>
           </div>
-        </div>
+          <div className="dialog-actions">
+            <button type="button" className="qh-btn outline" onClick={() => setPendingMove(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="qh-btn primary"
+              onClick={() => {
+                if (moveWarnChecked) localStorage.setItem(MOVE_WARNING_KEY, '1');
+                moveProject(pendingMove.indexDocId, pendingMove.target);
+                setPendingMove(null);
+              }}
+              autoFocus
+            >
+              Move it
+            </button>
+          </div>
+        </ModalDialog>
       )}
 
       {/* Rename dialog */}
       {renameFor && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setRenameFor(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-rename-project" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-rename-project">Rename project</h2>
-            <form onSubmit={(e) => { e.preventDefault(); commitRename(); }}>
+        <ModalDialog
+          title="Rename project"
+          onClose={() => setRenameFor(null)}
+          className="qh-form-dialog"
+        >
+          <form onSubmit={(e) => { e.preventDefault(); commitRename(); }}>
+            <div className="dialog-content">
               <label className="qh-field-label" htmlFor="qh-rename">Name</label>
               <input
                 id="qh-rename"
@@ -1997,23 +1986,26 @@ export default function ProjectsHome({
                 placeholder="e.g. Lab retreat agenda"
                 autoFocus
               />
-              <div className="qh-dialog-actions">
-                <button type="button" className="qh-btn outline" onClick={() => setRenameFor(null)}>Cancel</button>
-                <button type="submit" className="qh-btn primary" disabled={!renameValue.trim()}>Rename</button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="qh-btn outline" onClick={() => setRenameFor(null)}>Cancel</button>
+              <button type="submit" className="qh-btn primary" disabled={!renameValue.trim()}>Rename</button>
+            </div>
+          </form>
+        </ModalDialog>
       )}
 
       {/* New project dialog */}
       {newDialogChoice && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setNewDialogChoice(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-new-choice" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-new-choice">New {newDialogChoice.name.toLowerCase()}</h2>
-            <p className="qh-dialog-hint">Starter files will be created for you</p>
-            {formError && <div className="qh-error inline">{formError}</div>}
-            <form onSubmit={handleCreate}>
+        <ModalDialog
+          title={`New ${newDialogChoice.name.toLowerCase()}`}
+          onClose={() => setNewDialogChoice(null)}
+          className="qh-form-dialog"
+        >
+          <form onSubmit={handleCreate}>
+            <div className="dialog-content">
+              <p className="qh-dialog-hint">Starter files will be created for you</p>
+              {formError && <div className="qh-error inline">{formError}</div>}
               <label className="qh-field-label" htmlFor="qh-new-name">Name</label>
               <input
                 id="qh-new-name"
@@ -2051,22 +2043,25 @@ export default function ProjectsHome({
                   <button type="button" className="qh-link" onClick={() => setShowServerField(true)}>Change…</button>
                 </div>
               )}
-              <div className="qh-dialog-actions">
-                <button type="button" className="qh-btn outline" onClick={() => setNewDialogChoice(null)}>Cancel</button>
-                <button type="submit" className="qh-btn primary" disabled={isCreating || !newTitle.trim()}>
-                  {isCreating ? 'Creating…' : 'Create'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="qh-btn outline" onClick={() => setNewDialogChoice(null)}>Cancel</button>
+              <button type="submit" className="qh-btn primary" disabled={isCreating || !newTitle.trim()}>
+                {isCreating ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </form>
+        </ModalDialog>
       )}
 
       {/* Connect / Import dialog */}
       {addDialogOpen && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setAddDialogOpen(false)}>
-          <div className="qh-dialog wide" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-add-existing" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-add-existing">Add an existing project</h2>
+        <ModalDialog
+          title="Add an existing project"
+          onClose={() => setAddDialogOpen(false)}
+          className="qh-form-dialog wide"
+        >
+          <div className="dialog-content">
             <div className="qh-tabs">
               <button
                 className={`qh-tab ${addTab === 'connect' ? 'active' : ''}`}
@@ -2119,7 +2114,7 @@ export default function ProjectsHome({
                   onChange={(e) => setConnectName(e.target.value)}
                   placeholder="e.g. Lab retreat agenda"
                 />
-                <div className="qh-dialog-actions">
+                <div className="dialog-actions">
                   <button type="button" className="qh-btn outline" onClick={() => setAddDialogOpen(false)}>Cancel</button>
                   <button type="submit" className="qh-btn primary" disabled={!connectInput.trim()}>Connect</button>
                 </div>
@@ -2148,7 +2143,7 @@ export default function ProjectsHome({
                   onChange={(e) => setImportTitle(e.target.value)}
                   placeholder="My imported project"
                 />
-                <div className="qh-dialog-actions">
+                <div className="dialog-actions">
                   <button type="button" className="qh-btn outline" onClick={() => setAddDialogOpen(false)}>Cancel</button>
                   <button type="submit" className="qh-btn primary" disabled={isImporting || !importFile}>
                     {isImporting ? 'Importing…' : 'Import'}
@@ -2157,7 +2152,7 @@ export default function ProjectsHome({
               </form>
             )}
           </div>
-        </div>
+        </ModalDialog>
       )}
 
       <ShareDialog
@@ -2167,9 +2162,11 @@ export default function ProjectsHome({
       />
 
       <footer className="qh-footer">
-        <span className="mono" title={`Built: ${__BUILD_TIME__}\nCommit date: ${__GIT_COMMIT_DATE__}`}>
-          {__GIT_COMMIT_HASH__}
-        </span>
+        <Tooltip content={`Built: ${__BUILD_TIME__} · Commit date: ${__GIT_COMMIT_DATE__}`}>
+          <span className="mono" tabIndex={0}>
+            {__GIT_COMMIT_HASH__}
+          </span>
+        </Tooltip>
         <span className="qh-footer-note">collections UI exploration</span>
       </footer>
     </div>

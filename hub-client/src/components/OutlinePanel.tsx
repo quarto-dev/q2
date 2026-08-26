@@ -8,6 +8,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import Tooltip from './Tooltip';
 import type { Symbol, SymbolKind } from '@quarto/preview-renderer/types/intelligence';
 import type { ThumbnailMap } from '../hooks/useSectionThumbnails';
 import './OutlinePanel.css';
@@ -106,17 +107,18 @@ function SymbolTree({
                   {isCollapsed ? '▶' : '▼'}
                 </button>
               )}
-              <button
-                className="outline-button"
-                onClick={() => onSymbolClick(symbol)}
-                title={`Go to ${symbol.name}`}
-              >
+              <Tooltip content={`Go to ${symbol.name}`}>
+                <button
+                  className="outline-button"
+                  onClick={() => onSymbolClick(symbol)}
+                >
                 <span className={`outline-icon ${className}`}>{icon}</span>
                 <span className="outline-name">{symbol.name}</span>
                 {symbol.detail && (
                   <span className="outline-detail">{symbol.detail}</span>
                 )}
-              </button>
+                </button>
+              </Tooltip>
               {thumbnail && (
                 <img
                   src={thumbnail}

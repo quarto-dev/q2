@@ -45,14 +45,30 @@ export default function ModalDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
 
   // Capture the element focused when the dialog opens and return focus
-  // to it when the dialog closes (unmounts).
+  // to it when the dialog closes (unmounts). The capture must happen
+  // during render, not in an effect: an autoFocus child takes focus
+  // during commit, before effects run, and would otherwise be captured
+  // as the restore target (and it's detached by unmount, so focus would
+  // be lost to <body>).
   const restoreFocusTo = useRef<Element | null>(null);
-  useEffect(() => {
+  if (restoreFocusTo.current === null && typeof document !== 'undefined') {
     restoreFocusTo.current = document.activeElement;
+  }
+  useEffect(() => {
+    const restoreTo = restoreFocusTo.current;
     return () => {
-      if (restoreFocusTo.current instanceof HTMLElement) {
-        restoreFocusTo.current.focus();
+      if (!(restoreTo instanceof HTMLElement) || !restoreTo.isConnected) {
+        return;
       }
+      // Defer past the commit: StrictMode's mount-time double-effect runs
+      // this cleanup while the dialog stays in the DOM (and the autoFocus
+      // child has just taken focus) — restoring there would steal focus
+      // straight back. A real unmount removes the dialog, so by microtask
+      // time the ref is detached and the restore fires only then.
+      queueMicrotask(() => {
+        if (dialogRef.current?.isConnected) return;
+        restoreTo.focus();
+      });
     };
   }, []);
 

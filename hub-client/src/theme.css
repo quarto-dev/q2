@@ -164,8 +164,8 @@
   --font-weight-bold: 700;
   --leading-tight: 1.25;
   --leading-base: 1.5;
-  /* The dominant monospace stack (4 of 10 use sites; the rest migrate in
-     Phase 1's monospace unification). */
+  /* The single monospace stack — all app surfaces migrated in Phase 1.
+     (src/debug/debug.css is a standalone page with its own local token.) */
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Motion — 100-200ms, ease-out entrances; animate transform/opacity

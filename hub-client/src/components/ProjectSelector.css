@@ -126,7 +126,7 @@
 
 .project-selector h2 {
   margin: 0 0 12px;
-  font-family: 'Source Code Pro', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
@@ -219,7 +219,7 @@
 
 .project-docid {
   color: var(--text-secondary);
-  font-family: 'Source Code Pro', monospace;
+  font-family: var(--font-mono);
   cursor: help;
 }
 
@@ -459,7 +459,7 @@
 
 .form-group label {
   display: block;
-  font-family: 'Source Code Pro', monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 500;
@@ -847,7 +847,7 @@
 
 .color-picker label {
   display: block;
-  font-family: 'Source Code Pro', monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 500;
@@ -890,7 +890,7 @@
 }
 
 .version-info .commit-hash {
-  font-family: 'Source Code Pro', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-secondary);
   background: var(--bg-card);
@@ -928,7 +928,7 @@
 }
 
 .project-set-id {
-  font-family: 'Source Code Pro', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
   background: var(--bg-input);

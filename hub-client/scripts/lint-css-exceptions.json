@@ -1,8 +1,5 @@
 {
   "no-outline-none-without-focus-visible": {
-    "components/FileSidebar.css": [
-      "*"
-    ],
     "components/NewFileDialog.css": [
       "*"
     ],
@@ -13,9 +10,6 @@
       "*"
     ],
     "components/ProjectSetSetup.css": [
-      "*"
-    ],
-    "components/ProjectsHome.css": [
       "*"
     ],
     "components/ReplayDrawer.css": [
@@ -43,8 +37,7 @@
       "border-left: 2px solid var(--sidebar-active-accent);",
       "margin-left: -2px;",
       "padding-left: 22px;",
-      "right: 4px;",
-      "text-align: left;"
+      "right: 4px;"
     ],
     "components/OutlinePanel.css": [
       "margin-left: 4px;",
@@ -97,12 +90,6 @@
     ],
     "components/SkipLink.css": [
       "left: 8px;"
-    ],
-    "components/Toast.css": [
-      "left: 50%;"
-    ],
-    "components/UpdateAvailableToast.css": [
-      "right: 20px;"
     ],
     "components/debug-inspector/DebugInspectorPanel.css": [
       "border-right: 1px solid var(--debug-surface-0);",

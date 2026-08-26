@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import Tooltip from './Tooltip';
 import type { CollectionsStatus } from '../hooks/useCollectionSets';
 import { CollectionConnectError } from '../services/collectionConnectError';
 import type { UserSettings } from '../services/storage/types';
@@ -142,13 +143,14 @@ export default function JoinCollectionLanding({
             </div>
             <div className="qh-swatches">
               {COLOR_PALETTE.map((c) => (
-                <button
-                  key={c}
-                  className={`qh-swatch ${color === c ? 'selected' : ''}`}
-                  style={{ backgroundColor: c }}
-                  onClick={() => setColor(c)}
-                  title={c}
-                />
+                <Tooltip key={c} content={c}>
+                  <button
+                    className={`qh-swatch ${color === c ? 'selected' : ''}`}
+                    style={{ backgroundColor: c }}
+                    onClick={() => setColor(c)}
+                    aria-label={`Cursor color ${c}`}
+                  />
+                </Tooltip>
               ))}
             </div>
           </div>

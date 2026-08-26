@@ -91,52 +91,66 @@ export async function bootHarness(
   await page.goto(`/#/dev/${route}`);
 
   // Wait for the app's boot to create the identity record, then pin it.
-  await page.waitForFunction(
-    () =>
-      new Promise<boolean>((resolve) => {
-        const req = indexedDB.open('quarto-hub');
-        req.onsuccess = () => {
-          const db = req.result;
-          if (!db.objectStoreNames.contains('userSettings')) {
-            db.close();
-            resolve(false);
-            return;
-          }
-          const tx = db.transaction('userSettings', 'readonly');
-          const get = tx.objectStore('userSettings').get('identity');
-          get.onsuccess = () => {
-            db.close();
-            resolve(!!get.result);
+  // The dev server can trigger a full-page reload mid-boot (vite re-
+  // optimizes dependencies on a cold cache — the CI environment), which
+  // destroys the execution context under either of these probes. Both
+  // are idempotent, so retry past the reload.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await page.waitForFunction(
+        () =>
+          new Promise<boolean>((resolve) => {
+            const req = indexedDB.open('quarto-hub');
+            req.onsuccess = () => {
+              const db = req.result;
+              if (!db.objectStoreNames.contains('userSettings')) {
+                db.close();
+                resolve(false);
+                return;
+              }
+              const tx = db.transaction('userSettings', 'readonly');
+              const get = tx.objectStore('userSettings').get('identity');
+              get.onsuccess = () => {
+                db.close();
+                resolve(!!get.result);
+              };
+              get.onerror = () => {
+                db.close();
+                resolve(false);
+              };
+            };
+            req.onerror = () => resolve(false);
+          }),
+        undefined,
+        { timeout: 15000 },
+      );
+      await page.evaluate((identity) => {
+        return new Promise<void>((resolve, reject) => {
+          const req = indexedDB.open('quarto-hub');
+          req.onsuccess = () => {
+            const db = req.result;
+            const tx = db.transaction('userSettings', 'readwrite');
+            tx.objectStore('userSettings').put(identity);
+            tx.oncomplete = () => {
+              db.close();
+              resolve();
+            };
+            tx.onerror = () => {
+              db.close();
+              reject(tx.error);
+            };
           };
-          get.onerror = () => {
-            db.close();
-            resolve(false);
-          };
-        };
-        req.onerror = () => resolve(false);
-      }),
-    undefined,
-    { timeout: 15000 },
-  );
-  await page.evaluate((identity) => {
-    return new Promise<void>((resolve, reject) => {
-      const req = indexedDB.open('quarto-hub');
-      req.onsuccess = () => {
-        const db = req.result;
-        const tx = db.transaction('userSettings', 'readwrite');
-        tx.objectStore('userSettings').put(identity);
-        tx.oncomplete = () => {
-          db.close();
-          resolve();
-        };
-        tx.onerror = () => {
-          db.close();
-          reject(tx.error);
-        };
-      };
-      req.onerror = () => reject(req.error);
-    });
-  }, FIXED_IDENTITY);
+          req.onerror = () => reject(req.error);
+        });
+      }, FIXED_IDENTITY);
+      break;
+    } catch (err) {
+      if (attempt >= 2 || !/Execution context was destroyed/.test(String(err))) {
+        throw err;
+      }
+      await page.waitForLoadState('load');
+    }
+  }
 
   await page.reload();
   await page.waitForSelector(selector, { timeout: 15000 });

@@ -1,4 +1,6 @@
 import { useViewMode } from './ViewModeContext';
+import { LayoutMarkupIcon, LayoutSplitIcon, LayoutPreviewIcon } from './icons';
+import Tooltip from './Tooltip';
 import './ViewToggleControl.css';
 
 /**
@@ -10,42 +12,36 @@ export default function ViewToggleControl() {
 
   return (
     <div className="view-toggle-control">
-      <button
-        className={`view-toggle-btn${viewMode === 'markup' ? ' active' : ''}`}
-        onClick={() => setViewMode('markup')}
-        title="Expand markup"
-        aria-label="Markup view"
-        aria-pressed={viewMode === 'markup'}
-      >
-        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true">
-          <rect x="0" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
-          <rect x="9" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
-        </svg>
-      </button>
-      <button
-        className={`view-toggle-btn${viewMode === 'both' ? ' active' : ''}`}
-        onClick={() => setViewMode('both')}
-        title="Split equally"
-        aria-label="Split view"
-        aria-pressed={viewMode === 'both'}
-      >
-        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true">
-          <rect x="0" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
-          <rect x="7" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
-        </svg>
-      </button>
-      <button
-        className={`view-toggle-btn${viewMode === 'preview' ? ' active' : ''}`}
-        onClick={() => setViewMode('preview')}
-        title="Expand preview"
-        aria-label="Preview view"
-        aria-pressed={viewMode === 'preview'}
-      >
-        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true">
-          <rect x="0" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
-          <rect x="5" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
-        </svg>
-      </button>
+      <Tooltip content="Expand markup">
+        <button
+          className={`view-toggle-btn${viewMode === 'markup' ? ' active' : ''}`}
+          onClick={() => setViewMode('markup')}
+          aria-label="Markup view"
+          aria-pressed={viewMode === 'markup'}
+        >
+          <LayoutMarkupIcon />
+        </button>
+      </Tooltip>
+      <Tooltip content="Split equally">
+        <button
+          className={`view-toggle-btn${viewMode === 'both' ? ' active' : ''}`}
+          onClick={() => setViewMode('both')}
+          aria-label="Split view"
+          aria-pressed={viewMode === 'both'}
+        >
+          <LayoutSplitIcon />
+        </button>
+      </Tooltip>
+      <Tooltip content="Expand preview">
+        <button
+          className={`view-toggle-btn${viewMode === 'preview' ? ' active' : ''}`}
+          onClick={() => setViewMode('preview')}
+          aria-label="Preview view"
+          aria-pressed={viewMode === 'preview'}
+        >
+          <LayoutPreviewIcon />
+        </button>
+      </Tooltip>
     </div>
   );
 }

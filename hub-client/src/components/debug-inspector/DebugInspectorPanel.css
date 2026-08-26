@@ -19,7 +19,7 @@
   color: var(--debug-text);
   border-top: 2px solid var(--debug-blue);
   box-shadow: 0 -4px 24px var(--alpha-black-45);
-  font-family: 'Source Code Pro', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 

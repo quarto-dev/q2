@@ -27,6 +27,9 @@ WASM rebuild is needed for a changelog-only edit.
 
 - [`ca959a67`](https://github.com/quarto-dev/q2/commits/ca959a67): Comment bubbles now render comments richly — emphasis, inline code, quotes, links (external links open in a new tab, document links navigate the preview), and images (clamped to the bubble). Content that has no sensible bubble form, like nested editorial marks, shows an explicit "unsupported content" chip instead of rendering incorrectly.
 - [`00e0617a`](https://github.com/quarto-dev/q2/commits/00e0617a): Comment bubbles now show the comment's full text — quoted words, emphasis, and inline code inside a comment were previously dropped from the bubble.
+- [`c740728a`](https://github.com/quarto-dev/q2/commits/c740728a): All project-list dialogs (new project, rename, duplicate, connect/import, and friends) now share the accessible dialog chrome: Escape closes, Tab stays inside the dialog, and focus returns to the button that opened it.
+- [`73d9cbe5`](https://github.com/quarto-dev/q2/commits/73d9cbe5): Tooltips are now styled and keyboard-accessible throughout — hover shows them after a short delay, keyboard focus shows them immediately, and Escape dismisses.
+- [`7e5de6fe`](https://github.com/quarto-dev/q2/commits/7e5de6fe): File rows in the sidebar gain a visible ⋯ actions button (on hover or keyboard focus), and all menus are now fully keyboard-operable: arrow keys, Home/End, type-ahead, submenus, and Escape.
 
 ### 2026-08-25
 

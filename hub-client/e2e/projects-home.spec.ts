@@ -68,11 +68,11 @@ async function moveProjectToCollection(
   collectionName: string,
 ): Promise<void> {
   const row = page.locator('.qh-row', { hasText: projectName });
-  await row.getByRole('button', { name: '⋯' }).click();
-  await page.getByRole('button', { name: /^Move to collection/ }).click();
+  await row.getByRole('button', { name: `Actions for ${projectName}` }).click();
+  await page.getByRole('menuitem', { name: /^Move to collection/ }).click();
   await page
     .locator('.qh-submenu')
-    .getByRole('button', { name: collectionName, exact: true })
+    .getByRole('menuitem', { name: collectionName, exact: true })
     .click();
   await expect(
     collectionSection(page, collectionName).locator('.qh-card', { hasText: projectName }),
@@ -116,7 +116,7 @@ test.describe('Collections projects home', () => {
     await section.locator('.qh-card', { hasText: 'Alpha Project' }).click({ button: 'right' });
     const menu = section.locator('.qh-card', { hasText: 'Alpha Project' }).locator('.qh-menu');
     await expect(menu).toBeVisible();
-    await expect(menu.getByRole('button', { name: 'Open', exact: true })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Open', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(menu).not.toBeVisible();
 
@@ -124,7 +124,7 @@ test.describe('Collections projects home', () => {
     // two projects were seeded milliseconds apart, so recency order between
     // them is not asserted — A-to-Z is the deterministic check.)
     await section.getByRole('button', { name: /^Sort collection/ }).click();
-    await section.getByRole('button', { name: 'A to Z', exact: true }).click();
+    await section.getByRole('menuitem', { name: 'A to Z', exact: true }).click();
     await expect(
       section.getByRole('button', { name: /^Sort collection \(A to Z\)/ }),
     ).toBeVisible();

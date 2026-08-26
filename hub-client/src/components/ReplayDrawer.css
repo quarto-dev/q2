@@ -116,7 +116,7 @@
 .replay-drawer__position {
   font-size: 11px;
   color: var(--editor-text-muted);
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-family: var(--font-mono);
 }
 
 .replay-drawer__actor {
@@ -125,7 +125,7 @@
   gap: 4px;
   font-size: 11px;
   color: var(--editor-text-dim);
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-family: var(--font-mono);
   border: 1px solid var(--replay-actor-border);
   border-radius: 3px;
   padding: 0 4px;
@@ -207,7 +207,7 @@
   width: auto;
   padding: 0 6px;
   font-size: 10px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-family: var(--font-mono);
   margin-left: 3px;
 }
 

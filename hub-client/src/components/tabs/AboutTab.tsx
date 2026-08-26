@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import Tooltip from '../Tooltip';
 import { renderContentToHtml, isWasmReady } from '@quarto/preview-runtime';
 import changelogMd from '../../../changelog.md?raw';
 import moreInfoMd from '../../../resources/more-info.md?raw';
@@ -166,12 +167,11 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
         <label className="section-label">Build Info</label>
         <div className="version-info">
           <span className="commit-label">commit</span>
-          <span
-            className="commit-hash"
-            title={`Built: ${__BUILD_TIME__}\nCommit date: ${__GIT_COMMIT_DATE__}`}
-          >
-            {__GIT_COMMIT_HASH__}
-          </span>
+          <Tooltip content={`Built: ${__BUILD_TIME__} · Commit date: ${__GIT_COMMIT_DATE__}`}>
+            <span className="commit-hash" tabIndex={0}>
+              {__GIT_COMMIT_HASH__}
+            </span>
+          </Tooltip>
         </div>
       </div>
 

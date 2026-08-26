@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import Tooltip from '../Tooltip';
 import html2canvas from 'html2canvas';
 import { projectFolderName } from '@quarto/quarto-sync-client';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
@@ -119,14 +120,15 @@ export default function ProjectTab({ project, onExportZip }: ProjectTabProps) {
 
       <div className="project-tab-section">
         <label className="section-label">Index Document ID</label>
-        <button
-          className="doc-id-button"
-          onClick={handleCopyDocId}
-          title={`Click to copy: ${project.indexDocId}`}
-        >
+        <Tooltip content={`Click to copy: ${project.indexDocId}`}>
+          <button
+            className="doc-id-button"
+            onClick={handleCopyDocId}
+          >
           <span className="doc-id-value">{truncatedDocId}</span>
           <span className="copy-indicator">{copied ? 'Copied!' : 'Copy'}</span>
-        </button>
+          </button>
+        </Tooltip>
       </div>
 
       <div className="project-tab-section">

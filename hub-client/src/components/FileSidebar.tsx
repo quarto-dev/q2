@@ -19,71 +19,10 @@ import {
 import { resolveDefaultDestination } from './fileUpload';
 import { buildSnippet, type SearchFiles, type SearchResult } from '../services/search';
 import { openPrintableDocument } from '../services/printableDocument';
+import { FilePlusIcon, UploadIcon, PrintIcon, MoreIcon } from './icons';
+import { Menu, MenuItem } from './Menu';
+import Tooltip from './Tooltip';
 import './FileSidebar.css';
-
-/** Document with a plus — "new file". Matches the MinimalHeader icon style. */
-function FilePlusIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-      <path d="M9 15h6" />
-      <path d="M12 12v6" />
-    </svg>
-  );
-}
-
-/** Arrow rising out of a tray — "upload". */
-function UploadIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
-  );
-}
-
-/** Printer — "open printable version". */
-function PrintIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polyline points="6 9 6 2 18 2 18 9" />
-      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-      <rect x="6" y="14" width="12" height="8" />
-    </svg>
-  );
-}
 
 export interface FileSidebarProps {
   files: FileEntry[];
@@ -126,6 +65,8 @@ interface ContextMenuState {
   x: number;
   y: number;
   file: FileEntry | null;
+  /** The kebab button that opened the menu (kebab-opened menus only). */
+  trigger?: HTMLElement | null;
 }
 
 /** Image extensions for drag-drop detection */
@@ -332,13 +273,6 @@ export default function FileSidebar({
     setContextMenu((prev) => ({ ...prev, visible: false }));
   }, []);
 
-  // Handle clicks outside context menu
-  const handleSidebarClick = useCallback(() => {
-    if (contextMenu.visible) {
-      closeContextMenu();
-    }
-  }, [contextMenu.visible, closeContextMenu]);
-
   // Rename handlers
   const startRename = useCallback((file: FileEntry) => {
     setRenamingFile(file);
@@ -451,7 +385,11 @@ export default function FileSidebar({
     const lastSlash = file.path.lastIndexOf('/');
     const parentFolderPath = lastSlash >= 0 ? file.path.slice(0, lastSlash) : '';
 
+    const rowTip = onOpenInNewTab
+      ? `${file.path} — Ctrl/Cmd+click to open in new tab`
+      : file.path;
     return (
+      <Tooltip block content={rowTip}>
       <div
         key={file.path}
         className={`file-item qh-row-hover ${isActive ? 'active' : ''} ${isBinary ? 'binary' : ''}`}
@@ -462,11 +400,6 @@ export default function FileSidebar({
         draggable={isDraggable}
         onDragStart={
           isDraggable ? (e) => handleFileDragStart(e, file) : undefined
-        }
-        title={
-          onOpenInNewTab
-            ? `${file.path}\nCtrl/Cmd+click to open in new tab`
-            : file.path
         }
       >
         <span className="file-icon">{getFileIcon(file.path)}</span>
@@ -483,7 +416,39 @@ export default function FileSidebar({
         ) : (
           <span className="file-name qh-truncate">{fileName}</span>
         )}
+        {!isRenaming && (onOpenInNewTab || onCopyLink || onRenameFile || onDeleteFile) && (
+          <button
+            type="button"
+            className="qh-icon-btn file-kebab"
+            aria-label={`Actions for ${fileName}`}
+            aria-haspopup="menu"
+            aria-expanded={contextMenu.visible && contextMenu.file?.path === file.path}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (contextMenu.visible && contextMenu.file?.path === file.path) {
+                closeContextMenu();
+                return;
+              }
+              const rect = e.currentTarget.getBoundingClientRect();
+              setContextMenu({
+                visible: true,
+                x: rect.left,
+                y: rect.bottom + 4,
+                file,
+                trigger: e.currentTarget,
+              });
+            }}
+            onContextMenu={(e) => {
+              // Menu key / right-click on the kebab opens the same menu.
+              e.stopPropagation();
+              handleContextMenu(e, file);
+            }}
+          >
+            <MoreIcon />
+          </button>
+        )}
       </div>
+      </Tooltip>
     );
   };
 
@@ -543,7 +508,6 @@ export default function FileSidebar({
           key={result.path}
           className={`search-result qh-row-hover qh-active-accent-row ${isActive ? 'active' : ''}`}
           onClick={() => onSelectFile(file)}
-          title={result.path}
         >
           <div className="search-result-header">
             <span className="file-icon">{getFileIcon(result.path)}</span>
@@ -573,35 +537,37 @@ export default function FileSidebar({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onClick={handleSidebarClick}
     >
       <div className="sidebar-header">
-        <button
-          className="qh-btn small outline new-file-btn"
-          onClick={onNewFile}
-          title="New file"
-          aria-label="New file"
-        >
-          <FilePlusIcon />
-        </button>
-        <button
-          className="qh-btn small outline upload-asset-btn"
-          onClick={handleUploadClick}
-          title="Upload asset"
-          aria-label="Upload asset"
-        >
-          <UploadIcon />
-        </button>
-        {canOpenPrintable && (
+        <Tooltip content="New file">
           <button
-            className="qh-btn small outline print-file-btn"
-            onClick={handleOpenPrintable}
-            disabled={isPreparingPrintable}
-            title="Open a printable version of this document in a new tab (use your browser's Print to save as PDF)"
-            aria-label="Open printable version in a new tab"
+            className="qh-btn small outline new-file-btn"
+            onClick={onNewFile}
+            aria-label="New file"
           >
-            {isPreparingPrintable ? '…' : <PrintIcon />}
+            <FilePlusIcon />
           </button>
+        </Tooltip>
+        <Tooltip content="Upload asset">
+          <button
+            className="qh-btn small outline upload-asset-btn"
+            onClick={handleUploadClick}
+            aria-label="Upload asset"
+          >
+            <UploadIcon />
+          </button>
+        </Tooltip>
+        {canOpenPrintable && (
+          <Tooltip content="Open a printable version in a new tab (use the browser's Print to save as PDF)">
+            <button
+              className="qh-btn small outline print-file-btn"
+              onClick={handleOpenPrintable}
+              disabled={isPreparingPrintable}
+              aria-label="Open printable version in a new tab"
+            >
+              {isPreparingPrintable ? '…' : <PrintIcon />}
+            </button>
+          </Tooltip>
         )}
       </div>
       {printableError && (
@@ -628,14 +594,15 @@ export default function FileSidebar({
             aria-label="Search files"
           />
           {isSearching && (
-            <button
-              className="sidebar-search-clear"
-              onClick={() => setSearchQuery('')}
-              title="Clear search"
-              aria-label="Clear search"
-            >
-              ✕
-            </button>
+            <Tooltip content="Clear search">
+              <button
+                className="sidebar-search-clear"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            </Tooltip>
           )}
         </div>
       )}
@@ -664,34 +631,36 @@ export default function FileSidebar({
 
       {/* Context Menu */}
       {contextMenu.visible && contextMenu.file && (
-        <div
-          className="context-menu"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
+        <Menu
+          // Key by file so re-opening for a different row remounts:
+          // first-item focus and the viewport flip are mount-time effects.
+          key={contextMenu.file.path}
+          fixed={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={() => closeContextMenu()}
+          triggerRef={{ current: contextMenu.trigger ?? null }}
+          aria-label={`Actions for ${contextMenu.file.path}`}
         >
           {onOpenInNewTab && (
-            <button onClick={() => handleOpenInNewTab(contextMenu.file!)}>
+            <MenuItem onSelect={() => handleOpenInNewTab(contextMenu.file!)}>
               Open in New Tab
-            </button>
+            </MenuItem>
           )}
           {onCopyLink && (
-            <button onClick={() => handleCopyLink(contextMenu.file!)}>
+            <MenuItem onSelect={() => handleCopyLink(contextMenu.file!)}>
               Copy Link
-            </button>
+            </MenuItem>
           )}
           {onRenameFile && (
-            <button onClick={() => startRename(contextMenu.file!)}>
+            <MenuItem onSelect={() => startRename(contextMenu.file!)}>
               Rename
-            </button>
+            </MenuItem>
           )}
           {onDeleteFile && (
-            <button
-              className="danger"
-              onClick={() => handleDelete(contextMenu.file!)}
-            >
+            <MenuItem danger onSelect={() => handleDelete(contextMenu.file!)}>
               Delete
-            </button>
+            </MenuItem>
           )}
-        </div>
+        </Menu>
       )}
     </div>
   );

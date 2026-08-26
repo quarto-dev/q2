@@ -22,7 +22,7 @@
 .diagnostic-item {
   padding: 4px 0;
   font-size: 13px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-family: var(--font-mono);
 }
 
 .diagnostic-item.diagnostic-error {
@@ -117,7 +117,7 @@
 }
 
 .current-file-indicator .file-path {
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--editor-text-dim);
 }
@@ -408,18 +408,6 @@
   flex-shrink: 0;
 }
 
-/* Ephemeral-session banner — `q2 preview --ui editor` without --allow-edit */
-.ephemeral-session-banner {
-  background: var(--warning-bg);
-  color: var(--warning-text);
-  border-bottom: 1px solid var(--warning-border);
-  padding: 4px 16px;
-  font-size: 12px;
-  text-align: center;
-  flex-shrink: 0;
-  cursor: help;
-}
-
 /* Replay mode banner — overlays bottom edge of header */
 .replay-mode-banner {
   position: absolute;
@@ -531,7 +519,7 @@
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.4;
   color: var(--error-overlay-text);
@@ -584,7 +572,7 @@
 }
 
 .preview-error-pass1-failure .diagnostic-source-file code {
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-family: var(--font-mono);
   background: var(--alpha-black-05);
   padding: 1px 4px;
   border-radius: 2px;

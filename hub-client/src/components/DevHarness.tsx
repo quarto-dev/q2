@@ -22,6 +22,7 @@ import Toast from './Toast';
 import UpdateAvailableToast from './UpdateAvailableToast';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
 import DevTokensPage from './DevTokensPage';
+import DevGalleryPage from './DevGalleryPage';
 import { ViewModeProvider } from './ViewModeContext';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
@@ -222,6 +223,8 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
   /* ---- Phase 0 baseline routes (characterization testing) ---- */
 
   tokens: () => <DevTokensPage />,
+
+  gallery: () => <DevGalleryPage />,
 
   'projects-home': () => (
     <ProjectsHome

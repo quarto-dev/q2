@@ -8,14 +8,16 @@
  * guest reads the host's value through the tunnel). The copy is fixed
  * — nothing here is interpolated from server data.
  */
+
+import Tooltip from './Tooltip';
+import './notifications.css';
+
 export default function EphemeralSessionBanner() {
   return (
-    <div
-      className="ephemeral-session-banner"
-      role="status"
-      title="Started without --allow-edit: edits sync live to everyone connected but are never written to the project's files. Restart the preview with --allow-edit to persist them."
-    >
-      Ephemeral session — edits won't be saved to disk
-    </div>
+    <Tooltip block content="Started without --allow-edit: edits sync live to everyone connected but are never written to the project's files. Restart the preview with --allow-edit to persist them.">
+      <div className="ephemeral-session-banner" role="status" tabIndex={0}>
+        Ephemeral session — edits won't be saved to disk
+      </div>
+    </Tooltip>
   );
 }

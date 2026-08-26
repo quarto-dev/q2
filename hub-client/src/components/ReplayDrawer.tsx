@@ -3,6 +3,8 @@ import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 import { actorColor } from '../utils/palette';
 import type { ActorIdentity } from '@quarto/preview-runtime';
 import { getActorId } from '@quarto/preview-runtime';
+import { CommentsExpandIcon, CommentsShowIcon, CommentsHideIcon } from './icons';
+import Tooltip from './Tooltip';
 import './ReplayDrawer.css';
 import './ViewToggleControl.css';
 
@@ -75,12 +77,6 @@ function CommentsModeToggle({
   /** Outstanding-comment count; badge hidden when 0 or absent. */
   count?: number;
 }) {
-  // Speech-bubble outline shared by the show/hide icons; the expand
-  // icon is the same bubble with a taller body.
-  const bubblePath =
-    'M1 0 h10 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 H5 L2 10 V7 H1 a1 1 0 0 1 -1 -1 V1 a1 1 0 0 1 1 -1 Z';
-  const tallBubblePath =
-    'M1 0 h10 a1 1 0 0 1 1 1 v6 a1 1 0 0 1 -1 1 H5 L2 10 V8 H1 a1 1 0 0 1 -1 -1 V1 a1 1 0 0 1 1 -1 Z';
   return (
     <div
       className="view-toggle-control"
@@ -88,51 +84,46 @@ function CommentsModeToggle({
       aria-label="Comment display mode"
       style={{ marginLeft: '6px' }}
     >
-      <button
-        className={`view-toggle-btn${mode === 'expand' ? ' active' : ''}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onChange('expand');
-        }}
-        title="Expand all comments"
-        aria-label="Expand comments"
-      >
-        <svg width="12" height="10" viewBox="0 0 12 10">
-          <path d={tallBubblePath} fill="currentColor" />
-        </svg>
-      </button>
-      <button
-        className={`view-toggle-btn${mode === 'show' ? ' active' : ''}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onChange('show');
-        }}
-        title="Show comment bubbles"
-        aria-label="Show comments"
-      >
-        <svg width="12" height="10" viewBox="0 0 12 10">
-          <path d={bubblePath} fill="currentColor" />
-        </svg>
-      </button>
-      <button
-        className={`view-toggle-btn${mode === 'hide' ? ' active' : ''}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onChange('hide');
-        }}
-        title="Hide comment bubbles"
-        aria-label="Hide comments"
-      >
-        <svg width="12" height="10" viewBox="0 0 12 10">
-          <path d={bubblePath} fill="currentColor" opacity="0.25" />
-          <line x1="1" y1="9" x2="11" y2="1" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-      </button>
+      <Tooltip content="Expand all comments">
+        <button
+          className={`view-toggle-btn${mode === 'expand' ? ' active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onChange('expand');
+          }}
+          aria-label="Expand comments"
+        >
+          <CommentsExpandIcon />
+        </button>
+      </Tooltip>
+      <Tooltip content="Show comment bubbles">
+        <button
+          className={`view-toggle-btn${mode === 'show' ? ' active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onChange('show');
+          }}
+          aria-label="Show comments"
+        >
+          <CommentsShowIcon />
+        </button>
+      </Tooltip>
+      <Tooltip content="Hide comment bubbles">
+        <button
+          className={`view-toggle-btn${mode === 'hide' ? ' active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onChange('hide');
+          }}
+          aria-label="Hide comments"
+        >
+          <CommentsHideIcon />
+        </button>
+      </Tooltip>
       {count !== undefined && count > 0 && (
         <span
           className="comments-toggle-badge"
           aria-label={`${count} outstanding comment${count === 1 ? '' : 's'}`}
-          title={`${count} outstanding comment${count === 1 ? '' : 's'}`}
         >
           {count}
         </span>
@@ -165,22 +156,23 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
     ? 'Authors overlay unavailable for this format'
     : `Authors overlay ${attributionOn ? 'on' : 'off'}`;
   return (
-    <button
-      type="button"
-      className={classes}
-      onClick={(e) => {
-        e.stopPropagation();
-        onAttributionChange(!attributionOn);
-      }}
-      disabled={disabled}
-      aria-pressed={disabled ? undefined : attributionOn}
-      aria-label={ariaLabel}
-      aria-busy={generating && !disabled || undefined}
-      title={titleText}
-    >
-      <span className="replay-drawer__attribution-dot" />
-      <span className="replay-drawer__attribution-label">Authors</span>
-    </button>
+    <Tooltip content={titleText}>
+      <button
+        type="button"
+        className={classes}
+        onClick={(e) => {
+          e.stopPropagation();
+          onAttributionChange(!attributionOn);
+        }}
+        disabled={disabled}
+        aria-pressed={disabled ? undefined : attributionOn}
+        aria-label={ariaLabel}
+        aria-busy={generating && !disabled || undefined}
+      >
+        <span className="replay-drawer__attribution-dot" />
+        <span className="replay-drawer__attribution-label">Authors</span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -326,7 +318,6 @@ export default function ReplayDrawer({
           className="replay-drawer__toggle"
           onClick={disabled ? undefined : controls.enter}
           disabled={disabled}
-          title={disabled ? 'Replay is not available for binary files' : undefined}
         >
           <span className="replay-drawer__chevron">&#x25B6;</span>
           <span>Replay</span>
