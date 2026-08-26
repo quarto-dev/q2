@@ -57,21 +57,30 @@ export default function SidebarTabs({ children, disabled }: SidebarTabsProps) {
     <div className={`sidebar-sections${disabled ? ' sidebar-sections--disabled' : ''}`}>
       {SECTIONS.map((section) => {
         const isExpanded = expandedSections.has(section.id);
+        const headerId = `sidebar-section-header-${section.id}`;
+        const contentId = `sidebar-section-content-${section.id}`;
         return (
           <div
             key={section.id}
             className={`sidebar-section ${isExpanded ? 'expanded' : 'collapsed'}`}
           >
             <button
+              id={headerId}
               className="section-header"
               onClick={() => toggleSection(section.id)}
               aria-expanded={isExpanded}
+              aria-controls={contentId}
             >
               <span className="section-chevron">{isExpanded ? '▼' : '▶'}</span>
               <span className="section-label">{section.label}</span>
             </button>
             {isExpanded && (
-              <div className="section-content">
+              <div
+                className="section-content"
+                role="region"
+                id={contentId}
+                aria-labelledby={headerId}
+              >
                 {children(section.id)}
               </div>
             )}

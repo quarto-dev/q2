@@ -102,7 +102,8 @@ function SymbolTree({
                     e.stopPropagation();
                     onToggleSymbol(symbolId);
                   }}
-                  aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+                  aria-label={isCollapsed ? `Expand ${symbol.name}` : `Collapse ${symbol.name}`}
+                  aria-expanded={!isCollapsed}
                 >
                   {isCollapsed ? '▶' : '▼'}
                 </button>

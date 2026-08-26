@@ -103,6 +103,16 @@
   opacity: 0.85;
 }
 
+/* Keyboard focus on tree/result rows (roving tabindex; APG
+   treeview/listbox). Inset outline so the ring isn't clipped by the
+   scroll container. */
+.file-item:focus-visible,
+.folder-header:focus-visible,
+.search-result:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-offset));
+}
+
 .file-icon {
   font-size: 14px;
   flex-shrink: 0;
@@ -222,6 +232,7 @@
 }
 
 .file-item:hover .file-kebab,
+.file-item:focus-within .file-kebab,
 .file-item .file-kebab:focus-visible,
 .file-item .file-kebab[aria-expanded="true"] {
   opacity: 1;

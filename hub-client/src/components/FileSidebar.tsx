@@ -65,8 +65,19 @@ interface ContextMenuState {
   x: number;
   y: number;
   file: FileEntry | null;
-  /** The kebab button that opened the menu (kebab-opened menus only). */
+  /** The element that opened the menu (kebab button, or the tree row
+   *  itself for Shift+F10) — focus returns here when the menu closes. */
   trigger?: HTMLElement | null;
+}
+
+/** A row of the flattened, currently-visible tree (or of the search
+ *  results): the unit of keyboard navigation. */
+interface NavItem {
+  path: string;
+  name: string;
+  type: 'folder' | 'file';
+  parent: string | null;
+  file?: FileEntry;
 }
 
 /** Image extensions for drag-drop detection */
@@ -133,6 +144,11 @@ export default function FileSidebar({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     new Set()
   );
+  // Roving-tabindex focus for the file tree / search results (APG
+  // treeview/listbox): exactly one row is tabbable at a time.
+  const [focusedPath, setFocusedPath] = useState<string | null>(null);
+  const typeAheadRef = useRef({ buffer: '', timer: 0 });
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
@@ -218,6 +234,204 @@ export default function FileSidebar({
       );
     }
   }, [currentFile?.path]);
+
+  // Flatten the visible tree (expanded folders only) into keyboard-
+  // navigation order — the same order the rows render in.
+  const visibleItems = useMemo(() => {
+    const out: NavItem[] = [];
+    const walk = (node: FileTreeNode, parent: string | null) => {
+      for (const child of node.children) {
+        out.push({
+          path: child.path,
+          name: child.name,
+          type: child.type,
+          parent,
+          file: child.file,
+        });
+        if (child.type === 'folder' && expandedFolders.has(child.path)) {
+          walk(child, child.path);
+        }
+      }
+    };
+    walk(fileTree, null);
+    return out;
+  }, [fileTree, expandedFolders]);
+
+  // Search mode navigates the flat result list with the same keys.
+  const navItems: NavItem[] = useMemo(() => {
+    if (!isSearching) return visibleItems;
+    return searchResults.flatMap((result) => {
+      const file = filesByPath.get(result.path);
+      if (!file) return [];
+      return [
+        {
+          path: result.path,
+          name: result.path.split('/').pop() || result.path,
+          type: 'file' as const,
+          parent: null,
+          file,
+        },
+      ];
+    });
+  }, [isSearching, visibleItems, searchResults, filesByPath]);
+
+  // The roving tab stop: the focused row when it's visible, else the
+  // active file, else the first row.
+  const tabbablePath = useMemo(() => {
+    if (navItems.length === 0) return null;
+    if (focusedPath && navItems.some((i) => i.path === focusedPath)) {
+      return focusedPath;
+    }
+    if (currentFile && navItems.some((i) => i.path === currentFile.path)) {
+      return currentFile.path;
+    }
+    return navItems[0].path;
+  }, [focusedPath, navItems, currentFile]);
+
+  const focusNavItem = useCallback((path: string) => {
+    setFocusedPath(path);
+    sidebarRef.current
+      ?.querySelector<HTMLElement>(`[data-tree-path="${CSS.escape(path)}"]`)
+      ?.focus();
+  }, []);
+
+  const activateNavItem = useCallback(
+    (item: NavItem) => {
+      if (item.type === 'folder') {
+        toggleFolder(item.path);
+      } else if (item.file) {
+        setFocusedPath(item.path);
+        onSelectFile(item.file);
+      }
+    },
+    [toggleFolder, onSelectFile]
+  );
+
+  // Shared keyboard handler for the tree (role="tree") and the search
+  // results (role="listbox"): arrows/Home/End/type-ahead/Enter, plus
+  // Right/Left expand/collapse for folders and Shift+F10 for the context
+  // menu. Rows only — nested controls (kebab button, rename input) keep
+  // their own key behavior.
+  const handleNavKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const role = target.getAttribute('role');
+      if (role !== 'treeitem' && role !== 'option') return;
+      const path = target.getAttribute('data-tree-path');
+      const idx = navItems.findIndex((i) => i.path === path);
+      if (!path || idx === -1) return;
+      const item = navItems[idx];
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          if (idx < navItems.length - 1) focusNavItem(navItems[idx + 1].path);
+          return;
+        case 'ArrowUp':
+          e.preventDefault();
+          if (idx > 0) focusNavItem(navItems[idx - 1].path);
+          return;
+        case 'Home':
+          e.preventDefault();
+          if (navItems.length > 0) focusNavItem(navItems[0].path);
+          return;
+        case 'End':
+          e.preventDefault();
+          if (navItems.length > 0) {
+            focusNavItem(navItems[navItems.length - 1].path);
+          }
+          return;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (item.type === 'folder') {
+            if (!expandedFolders.has(item.path)) {
+              toggleFolder(item.path);
+            } else if (
+              idx + 1 < navItems.length &&
+              navItems[idx + 1].parent === item.path
+            ) {
+              focusNavItem(navItems[idx + 1].path);
+            }
+          }
+          return;
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (item.type === 'folder' && expandedFolders.has(item.path)) {
+            toggleFolder(item.path);
+          } else if (item.parent) {
+            focusNavItem(item.parent);
+          }
+          return;
+        case 'Enter':
+        case ' ':
+          e.preventDefault();
+          activateNavItem(item);
+          return;
+        case 'Escape':
+          if (isSearching) {
+            e.preventDefault();
+            setSearchQuery('');
+            searchInputRef.current?.focus();
+          }
+          return;
+        default:
+          break;
+      }
+
+      // Shift+F10 / the Menu key opens the row's context menu, anchored
+      // to the row so focus returns here when the menu closes.
+      if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+        e.preventDefault();
+        if (item.type === 'file' && item.file) {
+          const rect = target.getBoundingClientRect();
+          setContextMenu({
+            visible: true,
+            x: rect.left,
+            y: rect.bottom + 4,
+            file: item.file,
+            trigger: target,
+          });
+        }
+        return;
+      }
+
+      // Type-ahead: printable characters (no modifiers) move focus to the
+      // next row whose name starts with the buffer. Repeating one
+      // character cycles through its matches.
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const ta = typeAheadRef.current;
+        window.clearTimeout(ta.timer);
+        ta.buffer += e.key.toLowerCase();
+        ta.timer = window.setTimeout(() => {
+          ta.buffer = '';
+        }, 500);
+        let match: NavItem | undefined;
+        if (/^(.)\1*$/.test(ta.buffer)) {
+          const matches = navItems.filter((i) =>
+            i.name.toLowerCase().startsWith(ta.buffer[0])
+          );
+          if (matches.length > 0) {
+            const cur = matches.findIndex((i) => i.path === path);
+            match = matches[(cur + 1) % matches.length];
+          }
+        } else {
+          match = navItems.find((i) =>
+            i.name.toLowerCase().startsWith(ta.buffer)
+          );
+        }
+        if (match) focusNavItem(match.path);
+      }
+    },
+    [
+      navItems,
+      expandedFolders,
+      toggleFolder,
+      focusNavItem,
+      activateNavItem,
+      isSearching,
+    ]
+  );
 
   // Drag and drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -392,10 +606,20 @@ export default function FileSidebar({
       <Tooltip block content={rowTip}>
       <div
         key={file.path}
+        role="treeitem"
+        aria-level={depth + 1}
+        aria-selected={isActive}
+        tabIndex={tabbablePath === file.path ? 0 : -1}
+        data-tree-path={file.path}
         className={`file-item qh-row-hover ${isActive ? 'active' : ''} ${isBinary ? 'binary' : ''}`}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
         data-folder-path={parentFolderPath}
-        onClick={(e) => !isRenaming && handleFileClick(e, file)}
+        onClick={(e) => {
+          if (isRenaming) return;
+          setFocusedPath(file.path);
+          handleFileClick(e, file);
+        }}
+        onFocus={() => setFocusedPath(file.path)}
         onContextMenu={(e) => handleContextMenu(e, file)}
         draggable={isDraggable}
         onDragStart={
@@ -420,6 +644,9 @@ export default function FileSidebar({
           <button
             type="button"
             className="qh-icon-btn file-kebab"
+            // Not a tab stop: the tree is one tab stop (roving tabindex)
+            // and keyboard users open this menu with Shift+F10 on the row.
+            tabIndex={-1}
             aria-label={`Actions for ${fileName}`}
             aria-haspopup="menu"
             aria-expanded={contextMenu.visible && contextMenu.file?.path === file.path}
@@ -470,15 +697,24 @@ export default function FileSidebar({
       <div key={node.path} className="tree-folder" data-folder-path={node.path}>
         <div
           className="folder-header"
+          role="treeitem"
+          aria-level={depth + 1}
+          aria-expanded={isExpanded}
+          tabIndex={tabbablePath === node.path ? 0 : -1}
+          data-tree-path={node.path}
           style={{ paddingLeft: `${12 + depth * 16}px` }}
-          onClick={() => toggleFolder(node.path)}
+          onClick={() => {
+            setFocusedPath(node.path);
+            toggleFolder(node.path);
+          }}
+          onFocus={() => setFocusedPath(node.path)}
         >
           <span className="folder-chevron">{isExpanded ? '▼' : '▶'}</span>
           <span className="folder-icon">📁</span>
           <span className="folder-name">{node.name}</span>
         </div>
         {isExpanded && (
-          <div className="folder-children">
+          <div className="folder-children" role="group">
             {node.children.map((child) => renderTreeNode(child, depth + 1))}
           </div>
         )}
@@ -506,8 +742,16 @@ export default function FileSidebar({
       return (
         <div
           key={result.path}
+          role="option"
+          aria-selected={isActive}
+          tabIndex={tabbablePath === result.path ? 0 : -1}
+          data-tree-path={result.path}
           className={`search-result qh-row-hover qh-active-accent-row ${isActive ? 'active' : ''}`}
-          onClick={() => onSelectFile(file)}
+          onClick={() => {
+            setFocusedPath(result.path);
+            onSelectFile(file);
+          }}
+          onFocus={() => setFocusedPath(result.path)}
         >
           <div className="search-result-header">
             <span className="file-icon">{getFileIcon(result.path)}</span>
@@ -586,11 +830,22 @@ export default function FileSidebar({
       {searchFiles && (
         <div className="sidebar-search">
           <input
+            ref={searchInputRef}
             type="search"
             className="sidebar-search-input"
             placeholder="Search files…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              // ArrowDown moves into the results list; Escape clears.
+              if (e.key === 'ArrowDown' && navItems.length > 0) {
+                e.preventDefault();
+                focusNavItem(navItems[0].path);
+              } else if (e.key === 'Escape' && isSearching) {
+                e.preventDefault();
+                setSearchQuery('');
+              }
+            }}
             aria-label="Search files"
           />
           {isSearching && (
@@ -607,7 +862,15 @@ export default function FileSidebar({
         </div>
       )}
 
-      <div className="file-list">
+      {/* APG treeview (file tree) / listbox (search results): one tab
+          stop via roving tabindex; arrows/Home/End/type-ahead navigate,
+          Enter activates, Shift+F10 opens the row's context menu. */}
+      <div
+        className="file-list"
+        role={isSearching ? 'listbox' : 'tree'}
+        aria-label={isSearching ? 'Search results' : 'Files'}
+        onKeyDown={handleNavKeyDown}
+      >
         {isSearching ? (
           renderSearchResults()
         ) : files.length === 0 ? (

@@ -85,8 +85,12 @@
   background: var(--sidebar-border);
 }
 
-.outline-button:focus {
-  outline: none;
+/* WCAG 2.4.7: visible keyboard focus on outline rows and chevrons —
+   inset so the ring isn't clipped by the panel's overflow. */
+.outline-button:focus-visible,
+.outline-chevron:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-offset));
 }
 
 /* Indentation for nested items */

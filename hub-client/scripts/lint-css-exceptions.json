@@ -3,9 +3,6 @@
     "components/NewFileDialog.css": [
       "*"
     ],
-    "components/OutlinePanel.css": [
-      "*"
-    ],
     "components/ProjectSelector.css": [
       "*"
     ],
