@@ -11,12 +11,17 @@
  *   clamped horizontally inside the viewport
  * - Non-interactive content only — never put focusable elements inside
  *
+ * The bubble renders in a portal on document.body with fixed positioning,
+ * so it is never clipped by overflow containers (the sidebar is
+ * overflow-hidden and would cut off an in-place bubble — native title
+ * tooltips never clipped because the OS drew them).
+ *
  * Usage: wrap a single element that accepts aria-describedby and event
  * handlers (a DOM element or a component forwarding them):
  *
  *   <Tooltip content="Switch project"><button …/></Tooltip>
  *
- * Phase 1 deliverable of the UI/UX modernization plan (bd-iguk0hpd).
+ * Phase 1 deliverable of the UI/UX modernization (bd-iguk0hpd).
  */
 
 import {
@@ -30,21 +35,24 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import './Tooltip.css';
 
 const HOVER_DELAY_MS = 400;
+const VIEWPORT_MARGIN = 4;
+const GAP = 6;
 
 export interface TooltipProps {
   content: ReactNode;
-  /** Render the anchor as display:contents so block-level children (file
-   * rows, cards) keep their layout. */
+  /** The wrapped child is a block-level row (file items, cards): the
+   * wrapper renders display:contents so the row keeps its layout. */
   block?: boolean;
   children: ReactElement;
 }
 
 export default function Tooltip({ content, block, children }: TooltipProps) {
   const [visible, setVisible] = useState(false);
-  const [placement, setPlacement] = useState<'top' | 'bottom'>('top');
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const id = useId();
   const delayTimer = useRef(0);
   const rootRef = useRef<HTMLSpanElement>(null);
@@ -62,31 +70,43 @@ export default function Tooltip({ content, block, children }: TooltipProps) {
   const hide = useCallback(() => {
     window.clearTimeout(delayTimer.current);
     setVisible(false);
+    setPos(null);
   }, []);
 
   useEffect(() => () => window.clearTimeout(delayTimer.current), []);
 
-  // Viewport-edge flip + horizontal clamp, measured after the tooltip
-  // renders.
-  useEffect(() => {
-    if (!visible) return;
-    const anchor = rootRef.current;
+  // Measure the anchor (the wrapped child, not the wrapper span — a block
+  // wrapper is display:contents and has no box) and place the bubble
+  // centered above it, flipping below and clamping horizontally at the
+  // viewport edges.
+  const updatePosition = useCallback(() => {
+    const anchor = rootRef.current?.firstElementChild ?? rootRef.current;
     const tip = tipRef.current;
     if (!anchor || !tip) return;
-    const anchorRect = anchor.getBoundingClientRect();
-    const tipRect = tip.getBoundingClientRect();
-    const margin = 4;
-    const fitsAbove = anchorRect.top - tipRect.height - margin >= 0;
-    setPlacement(fitsAbove ? 'top' : 'bottom');
-    const overflowRight = tipRect.right - (window.innerWidth - margin);
-    if (overflowRight > 0) {
-      tip.style.transform = `translateX(${-overflowRight}px)`;
-    }
-    const overflowLeft = tipRect.left - margin;
-    if (overflowLeft < 0 && overflowRight <= 0) {
-      tip.style.transform = `translateX(${-overflowLeft}px)`;
-    }
-  }, [visible]);
+    const a = anchor.getBoundingClientRect();
+    const t = tip.getBoundingClientRect();
+    let x = a.left + a.width / 2 - t.width / 2;
+    x = Math.max(
+      VIEWPORT_MARGIN,
+      Math.min(x, window.innerWidth - VIEWPORT_MARGIN - t.width),
+    );
+    const fitsAbove = a.top - t.height - GAP >= VIEWPORT_MARGIN;
+    const y = fitsAbove ? a.top - t.height - GAP : a.bottom + GAP;
+    setPos({ x, y });
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    updatePosition();
+    // Track the anchor while visible (scrolling a sidebar under an open
+    // tooltip would otherwise leave the bubble behind).
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [visible, updatePosition]);
 
   if (!isValidElement(children)) return children;
 
@@ -113,18 +133,32 @@ export default function Tooltip({ content, block, children }: TooltipProps) {
   });
 
   return (
-    <span
-      ref={rootRef}
-      className={`qh-tooltip-anchor${block ? ' qh-tooltip-anchor-block' : ''}`}
-      onMouseEnter={() => show(false)}
-      onMouseLeave={hide}
-    >
-      {wrapped}
-      {visible && (
-        <span ref={tipRef} role="tooltip" id={id} className={`qh-tooltip qh-tooltip-${placement}`}>
-          {content}
-        </span>
-      )}
-    </span>
+    <>
+      <span
+        ref={rootRef}
+        className={`qh-tooltip-anchor${block ? ' qh-tooltip-anchor-block' : ''}`}
+        onMouseEnter={() => show(false)}
+        onMouseLeave={hide}
+      >
+        {wrapped}
+      </span>
+      {visible &&
+        createPortal(
+          <span
+            ref={tipRef}
+            role="tooltip"
+            id={id}
+            className="qh-tooltip"
+            style={{
+              // Hidden until measured, so it never flashes unpositioned.
+              visibility: pos ? 'visible' : 'hidden',
+              ...(pos ? { top: pos.y, left: pos.x } : {}),
+            }}
+          >
+            {content}
+          </span>,
+          document.body,
+        )}
+    </>
   );
 }
