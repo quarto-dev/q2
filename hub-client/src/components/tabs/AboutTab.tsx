@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import Tooltip from '../Tooltip';
+import { SHORTCUT_GROUPS } from '../../utils/keyboardShortcuts';
 import { renderContentToHtml, isWasmReady } from '@quarto/preview-runtime';
 import changelogMd from '../../../changelog.md?raw';
 import moreInfoMd from '../../../resources/more-info.md?raw';
@@ -161,6 +162,25 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
             )}
           </li>
         </ul>
+      </div>
+
+      <div className="about-tab-section">
+        <label className="section-label">Keyboard Shortcuts</label>
+        {SHORTCUT_GROUPS.map((group) => (
+          <div key={group.title} className="shortcuts-group">
+            <span className="shortcuts-group-title">{group.title}</span>
+            <dl className="shortcuts-list">
+              {group.entries.map((entry) => (
+                <div key={`${entry.keys}-${entry.action}`} className="shortcuts-row">
+                  <dt>
+                    <kbd>{entry.keys}</kbd>
+                  </dt>
+                  <dd>{entry.action}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
       </div>
 
       <div className="about-tab-section">

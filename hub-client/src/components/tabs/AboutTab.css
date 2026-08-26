@@ -181,3 +181,48 @@
   color: var(--editor-text-muted);
   text-align: center;
 }
+
+/* Keyboard shortcuts reference (data from utils/keyboardShortcuts.ts) */
+.shortcuts-group {
+  margin-top: var(--space-2);
+}
+
+.shortcuts-group-title {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.shortcuts-list {
+  margin: 0;
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-block: 1px;
+}
+
+.shortcuts-row dt {
+  flex: none;
+  min-width: 110px;
+}
+
+.shortcuts-row dd {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
+.shortcuts-row kbd {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  white-space: nowrap;
+}
