@@ -222,8 +222,6 @@
 .qh-menu-item.accent { color: var(--posit-teal); font-weight: 600; }
 .qh-menu-item.danger { color: var(--error-text); }
 
-.qh-menu-item.two-line .strong { font-weight: 600; }
-
 .qh-menu-item.with-hint {
   flex-direction: row;
   align-items: center;
