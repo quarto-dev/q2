@@ -100,14 +100,25 @@ branches on them and loops over them. The output is markdown, parsed
 back into the page, so raw HTML goes in a ```` ```{=html} ```` block just as
 it would in a `.qmd` file.
 
+That last point has a consequence worth knowing before you write a
+template: paths inside raw HTML are **not** resolved. A link or image
+written as raw HTML keeps the path you gave it, so links to project
+documents ship unrewritten and images are never copied into the output
+— with no warning either way. Write links and images as markdown. See
+[Listing templates](listing-templates.qmd#links-and-images-must-be-markdown)
+for the idiom, and [Paths in websites](paths.qmd#raw-html-is-not-rewritten)
+for the same rule as it applies to page content.
+
 ### Syntax
 
 | Directive | Meaning |
 | --- | --- |
 | `$listing.id$`, `$it.title$` | Interpolate a value; dotted paths walk into maps. |
-| `$for(items)$ … $endfor$` | Loop. Inside the body the current item is `$it$` (also `$items$`). |
+| `${it.title}` | The same, brace-delimited — use it when the value is followed immediately by text that would otherwise run into the name. |
+| `$for(items)$ … $endfor$` | Loop. Inside the body the current item is `$it$` (also `$items$`). Nested loops over a list-valued field work, and the inner `$it$` shadows the outer. |
 | `$sep$` | Inside a loop: emitted between items, not after the last. |
-| `$if(it.image)$ … $else$ … $endif$` | Branch on truthiness (empty strings and missing keys are false). |
+| `$if(it.image)$ … $elseif(it.icon)$ … $else$ … $endif$` | Branch on truthiness (empty strings and missing keys are false). |
+| `$it.title/uppercase$` | Apply a pipe. Available: `uppercase`, `lowercase`, `chomp`, `nowrap`, `alpha`, `roman`, `first`, `last`, `rest`, `allbutlast`, `length`, `pairs`, `reverse`, `left`, `center`, `right`. |
 | `$it:item-default()$` | Apply a partial to a value — here the built-in `item-default` partial, or a same-named `.template` file next to your template file. |
 | `$-- text` | Comment; not rendered. |
 | `$$` | A literal dollar sign — on its own this is still literal text and does not make a file a template. |
@@ -125,15 +136,41 @@ rather than paste the file into the page.
   `template-params:` in the YAML, passed through for your template's
   own options).
 - **`items`** — one entry per item, each with `title`, `subtitle`,
-  `description`, `author`, `date`, `date-modified`, `image`,
+  `description`, `author`, `authors`, `date`, `date-modified`, `image`,
   `image-alt`, `categories`, `path` (the link target, already
   page-relative), `filename`, `reading-time`, `reading-time-minutes`,
-  `word-count`, `order`, plus `image-html` and `category-html`
-  pre-rendered snippets. Custom fields from an inline record or from
-  a document's `listing-item.extra` are readable directly
+  `word-count`, `order`, plus `image-html`, `category-html` and
+  `table-row` pre-rendered snippets. Custom fields from an inline record
+  or from a document's `listing-item.extra` are readable directly
   (`$it.icon$`) and under `$it.extra.icon$`.
 - **`project.*`** — `site-url` and `title` from the website
   configuration.
+
+Only `title` is guaranteed present on every item. `path` is present
+whenever the item has a link target — a document, or a record with
+`href:` — and absent for a record with neither. **The rest are absent
+when the item lacks them, and reading an absent value warns** with
+[`Q-12-10`](/errors/listing/Q-12-10.qmd) — so guard optional reads:
+`$if(it.subtitle)$…$endif$`.
+
+Four more per-item values exist for specific jobs:
+
+- **`outputHref`** — the item's rendered output path. For feeds and
+  cross-references, *not* for links: it is already resolved, so it
+  bypasses the path rewriting that makes `path` work.
+- **`description-placeholder-begin`** / **`-end`** and
+  **`image-placeholder-begin`** / **`-end`** — envelope markers that let
+  Quarto fill in a missing description or image after both documents
+  render. See
+  [Listing templates](listing-templates.qmd#descriptions-and-the-placeholder-envelope).
+- **`show.<field>`** — true for each field named in the listing's
+  `fields:`. Note that `type: custom` has **no** default field set, so
+  every `show.*` is false unless the listing declares `fields:`
+  explicitly.
+- **`metadata-attrs`** — `data-index` and `data-categories` attributes,
+  the equivalent of Quarto 1's `metadataAttrs()`. It must be emitted
+  inside a ```` ```{=html} ```` block; interpolated as markdown its
+  quotes are curled into invalid HTML.
 
 These are the most useful values; the built-in templates show the rest.
 
@@ -164,20 +201,19 @@ $endfor$
 
 Style `.custom-card-grid` and `.custom-card` in your site's CSS.
 
-### Migrating a Quarto 1 template
+### Going further
 
-Quarto 1 listing templates were EJS (`.ejs` / `.ejs.md`). Quarto 2 does
-not run EJS — a carried-over template warns with
+[Listing templates](listing-templates.qmd) covers the rest: the two
+rules that fail silently ([links and
+images](listing-templates.qmd#links-and-images-must-be-markdown), the
+[description
+envelope](listing-templates.qmd#descriptions-and-the-placeholder-envelope)),
+what each [built-in layout
+emits](listing-templates.qmd#what-the-built-in-layouts-emit) so your
+template can inherit its styling, and a worked [port of a Quarto 1 EJS
+template](listing-templates.qmd#porting-a-quarto-1-ejs-template).
+
+If you are carrying a template over from Quarto 1, start there: Quarto 2
+does not run EJS, and a carried-over template warns with
 [`Q-12-9`](/errors/listing/Q-12-9.qmd) at the extension and
-[`Q-12-24`](/errors/listing/Q-12-24.qmd) at the contents. Rewrite it:
-
-| Quarto 1 (EJS) | Quarto 2 (doctemplate) |
-| --- | --- |
-| `<%= item.title %>` | `$it.title$` |
-| `<% for (const item of items) { %> … <% } %>` | `$for(items)$ … $endfor$` |
-| `<% if (item.image) { %> … <% } else { %> … <% } %>` | `$if(it.image)$ … $else$ … $endif$` |
-| `<%= item.myfield %>` | `$it.myfield$` |
-| `<%= items.length %>`, string manipulation, `process.env` | No expressions: pre-compute the value into a listing field or a record key, or drop the branch. |
-
-Give the ported file a neutral extension such as `.template` so the
-`.ejs` warning stops firing.
+[`Q-12-24`](/errors/listing/Q-12-24.qmd) at the contents.
