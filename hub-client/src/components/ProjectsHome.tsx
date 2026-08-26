@@ -41,6 +41,7 @@ import {
   resolveSyncServerUrl,
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
+import { ForkIcon, PeekIcon, PeopleIcon, SortIcon } from './icons';
 import { sortProjectItems, sortOrderLabel, type SortOrder } from '../utils/projectSort';
 import { buildProjectListExport, parseProjectListImport } from '../services/projectListExport';
 import type { Face } from '../utils/facepile';
@@ -132,23 +133,11 @@ function setPendingCollectionAssignment(title: string, collectionId: string): vo
   );
 }
 
-/** Fork glyph for the duplicate affordance (three nodes, branch lines). */
-const forkIcon = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle cx="6" cy="5" r="2.2" stroke="currentColor" strokeWidth="2" />
-    <circle cx="18" cy="5" r="2.2" stroke="currentColor" strokeWidth="2" />
-    <circle cx="12" cy="19" r="2.2" stroke="currentColor" strokeWidth="2" />
-    <path d="M6 7.5v1.5c0 1.7 1.3 3 3 3h6c1.7 0 3-1.3 3-3V7.5M12 12v4.5" stroke="currentColor" strokeWidth="2" />
-  </svg>
-);
+/** Fork glyph for the duplicate affordance. */
+const forkIcon = <ForkIcon />;
 
 /** Magnifying glass for the hover-to-peek affordance. */
-const peekIcon = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="2" />
-    <path d="M15.5 15.5L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-  </svg>
-);
+const peekIcon = <PeekIcon />;
 
 /** Base64-encode without blowing the arg-spread limit on large files. */
 function toBase64(bytes: Uint8Array): string {
@@ -1419,14 +1408,7 @@ export default function ProjectsHome({
                   setMembersFor(membersFor === collection.id ? null : collection.id);
                 }}
               >
-                {hasOthers && (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle cx="9" cy="8" r="3.4" stroke="currentColor" strokeWidth="2" />
-                    <path d="M3 19c0-3 2.7-4.8 6-4.8s6 1.8 6 4.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    <circle cx="17" cy="9" r="2.6" stroke="currentColor" strokeWidth="2" />
-                    <path d="M16.5 14.4c2.6.3 4.5 1.9 4.5 4.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                )}
+                {hasOthers && <PeopleIcon />}
                 {renderFacepile(people, 'md', 3)}
               </button>
             );
@@ -1442,10 +1424,7 @@ export default function ProjectsHome({
                 setOpenMenu(openMenu === sortMenuKey ? null : sortMenuKey);
               }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M7 4v14M7 18l-3.5-3.5M7 18l3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M17 20V6M17 6l-3.5 3.5M17 6l3.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <SortIcon />
             </button>
             {openMenu === sortMenuKey && (
               <div className="qh-menu qh-menu-right">

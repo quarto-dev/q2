@@ -1,4 +1,5 @@
 import { useViewMode } from './ViewModeContext';
+import { LayoutMarkupIcon, LayoutSplitIcon, LayoutPreviewIcon } from './icons';
 import './ViewToggleControl.css';
 
 /**
@@ -17,10 +18,7 @@ export default function ViewToggleControl() {
         aria-label="Markup view"
         aria-pressed={viewMode === 'markup'}
       >
-        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true">
-          <rect x="0" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
-          <rect x="9" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
-        </svg>
+        <LayoutMarkupIcon />
       </button>
       <button
         className={`view-toggle-btn${viewMode === 'both' ? ' active' : ''}`}
@@ -29,10 +27,7 @@ export default function ViewToggleControl() {
         aria-label="Split view"
         aria-pressed={viewMode === 'both'}
       >
-        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true">
-          <rect x="0" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
-          <rect x="7" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
-        </svg>
+        <LayoutSplitIcon />
       </button>
       <button
         className={`view-toggle-btn${viewMode === 'preview' ? ' active' : ''}`}
@@ -41,10 +36,7 @@ export default function ViewToggleControl() {
         aria-label="Preview view"
         aria-pressed={viewMode === 'preview'}
       >
-        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true">
-          <rect x="0" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
-          <rect x="5" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
-        </svg>
+        <LayoutPreviewIcon />
       </button>
     </div>
   );

@@ -3,6 +3,7 @@ import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 import { actorColor } from '../utils/palette';
 import type { ActorIdentity } from '@quarto/preview-runtime';
 import { getActorId } from '@quarto/preview-runtime';
+import { CommentsExpandIcon, CommentsShowIcon, CommentsHideIcon } from './icons';
 import './ReplayDrawer.css';
 import './ViewToggleControl.css';
 
@@ -75,12 +76,6 @@ function CommentsModeToggle({
   /** Outstanding-comment count; badge hidden when 0 or absent. */
   count?: number;
 }) {
-  // Speech-bubble outline shared by the show/hide icons; the expand
-  // icon is the same bubble with a taller body.
-  const bubblePath =
-    'M1 0 h10 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 H5 L2 10 V7 H1 a1 1 0 0 1 -1 -1 V1 a1 1 0 0 1 1 -1 Z';
-  const tallBubblePath =
-    'M1 0 h10 a1 1 0 0 1 1 1 v6 a1 1 0 0 1 -1 1 H5 L2 10 V8 H1 a1 1 0 0 1 -1 -1 V1 a1 1 0 0 1 1 -1 Z';
   return (
     <div
       className="view-toggle-control"
@@ -97,9 +92,7 @@ function CommentsModeToggle({
         title="Expand all comments"
         aria-label="Expand comments"
       >
-        <svg width="12" height="10" viewBox="0 0 12 10">
-          <path d={tallBubblePath} fill="currentColor" />
-        </svg>
+        <CommentsExpandIcon />
       </button>
       <button
         className={`view-toggle-btn${mode === 'show' ? ' active' : ''}`}
@@ -110,9 +103,7 @@ function CommentsModeToggle({
         title="Show comment bubbles"
         aria-label="Show comments"
       >
-        <svg width="12" height="10" viewBox="0 0 12 10">
-          <path d={bubblePath} fill="currentColor" />
-        </svg>
+        <CommentsShowIcon />
       </button>
       <button
         className={`view-toggle-btn${mode === 'hide' ? ' active' : ''}`}
@@ -123,10 +114,7 @@ function CommentsModeToggle({
         title="Hide comment bubbles"
         aria-label="Hide comments"
       >
-        <svg width="12" height="10" viewBox="0 0 12 10">
-          <path d={bubblePath} fill="currentColor" opacity="0.25" />
-          <line x1="1" y1="9" x2="11" y2="1" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
+        <CommentsHideIcon />
       </button>
       {count !== undefined && count > 0 && (
         <span
