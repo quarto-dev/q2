@@ -23,6 +23,7 @@ import UpdateAvailableToast from './UpdateAvailableToast';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
 import DevTokensPage from './DevTokensPage';
 import DevGalleryPage from './DevGalleryPage';
+import AboutTab from './tabs/AboutTab';
 import { ViewModeProvider } from './ViewModeContext';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
@@ -343,6 +344,15 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
     </EditorChrome>
   ),
   sidebar: () => <SidebarHarness />,
+  // The About tab standalone (sidebar width) — covers the shortcuts
+  // reference, which the sidebar route's collapsed ABOUT section hides.
+  'about-tab': () => (
+    <EditorChrome>
+      <div style={{ width: 280, height: '100%', overflowY: 'auto', borderRight: '1px solid var(--sidebar-border)', background: 'var(--sidebar-bg)' }}>
+        <AboutTab wasmStatus="loading" />
+      </div>
+    </EditorChrome>
+  ),
   header: () => (
     <EditorChrome>
       <MinimalHeader

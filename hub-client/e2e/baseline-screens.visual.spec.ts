@@ -38,6 +38,7 @@ const BASELINE_PAGES: {
   { page: 'dialog-share', label: 'dialog-share', selector: '.share-dialog', capture: 'element' },
   { page: 'dialog-new-asset', label: 'dialog-new-asset', selector: '.new-asset-dialog', capture: 'element' },
   { page: 'sidebar', label: 'sidebar-sections', selector: '.sidebar-sections', capture: 'element' },
+  { page: 'about-tab', label: 'about-tab', selector: '.about-tab', capture: 'element' },
   { page: 'header', label: 'minimal-header', selector: '.minimal-header', capture: 'element' },
   { page: 'notifications', label: 'notifications', selector: '.ephemeral-session-banner', capture: 'page' },
   { page: 'tokens', label: 'tokens', selector: 'text=Design tokens', capture: 'page' },
