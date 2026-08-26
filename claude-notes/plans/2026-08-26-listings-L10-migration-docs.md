@@ -25,8 +25,11 @@ None of that carries over.
 
 ### Scope boundaries
 
-- Extend the existing **"Custom templates" section** of
-  `docs/guides/projects/listings.qmd`. Do **not** add a new page.
+- ~~Extend the existing **"Custom templates" section** of
+  `docs/guides/projects/listings.qmd`. Do **not** add a new page.~~
+  **Superseded by decision D1** once the migration treatment became
+  explicitly extensive: `listings.qmd` keeps a tight section and a new
+  sibling page carries the depth. See D1 below.
 - The upstreamed artifacts must be **general**: every example re-rooted
   in q2's own built-in templates and test fixtures. No reference to the
   two external documentation projects, their paths, or their strand ids.
@@ -84,81 +87,82 @@ and pass after. They exist so the documented idioms cannot silently rot.
 All go in `crates/quarto-core/tests/integration/listing_pipeline.rs`
 (per `.claude/rules/integration-tests.md` — no new top-level test files).
 
-- [ ] `custom_template_it_spelling_renders_derived_description` — the
+- [x] `custom_template_it_spelling_derives_description_without_front_matter`
+      — the
       documented `$it.*` template with an unconditional envelope; an item
       with no front-matter `description:` gets the derived preview, and
       the markers are stripped. (The existing
       `custom_listing_emits_no_matching_placeholder_and_derived_ellipsis`
       covers the `$items.*` alias; this locks the spelling the docs use.)
-- [ ] `custom_template_markdown_anchor_rewrites_raw_anchor_does_not` —
+- [x] `custom_template_markdown_anchor_is_rewritten_raw_anchor_is_not` —
       one template emitting both forms; asserts `href="a.html"` present
       **and** `href="a.qmd"` present, pinning the split as contract.
-- [ ] `custom_template_markdown_image_is_copied_raw_image_is_not` —
+- [x] `custom_template_markdown_image_is_copied_raw_image_is_not` —
       record items carrying two distinct image fields; asserts the
       markdown-image file lands in the output dir and the raw-`<img>`
       one does not.
-- [ ] Run: `cargo clippy -p quarto-core --all-targets -- -D warnings`
+- [x] Run: `cargo clippy -p quarto-core --all-targets -- -D warnings`
       and `cargo nextest run -p quarto-core`.
 
 ## Phase 2a — `docs/guides/projects/listings.qmd` (keep tight)
 
-- [ ] **Qualify the raw-HTML sentence.** The section intro currently ends
+- [x] **Qualify the raw-HTML sentence.** The section intro currently ends
       "…so raw HTML goes in a ` ```{=html} ` block just as it would in a
       `.qmd` file." True, and it reads as unqualified permission. Attach
       the consequence, cross-link
       `docs/guides/projects/paths.qmd#raw-html-is-not-rewritten` (same
       rule, page-side instance), and point at the new page.
-- [ ] **Syntax table additions** — keeping only what a listing author
+- [x] **Syntax table additions** — keeping only what a listing author
       would use: `${var}` braced form, `$elseif$`, the pipes list.
       `$^$` / `$~$` are Pandoc line-breaking machinery with no listing
       use case — omit.
-- [ ] **Values-table additions**, each verified present in `binding.rs`:
+- [x] **Values-table additions**, each verified present in `binding.rs`:
       `outputHref` (with "for feeds, not links" — it bypasses rewrite by
       construction), `description-placeholder-begin`/`-end`,
       `image-placeholder-begin`/`-end`, `word-count`, `show.<field>`
       (with the `type: custom` ⇒ empty-`fields:` caveat, finding 6),
       `table-row`, `metadata-attrs` (with the `{=html}`-fence caveat).
-- [ ] **Guard every optional read with `$if$`** — new prose, from
+- [x] **Guard every optional read with `$if$`** — new prose, from
       finding 5. Currently undocumented and it produces a real warning.
-- [ ] **Move** `### Migrating a Quarto 1 template` to the new page,
+- [x] **Move** `### Migrating a Quarto 1 template` to the new page,
       leaving a short pointer. Keep the `#custom-templates` anchor
       intact — `Q-12-7`, `Q-12-9` and `Q-12-24` link to it.
 
 ## Phase 2b — New page `docs/guides/projects/listing-templates.qmd`
 
-- [ ] Front matter (`title`, `description`) matching sibling
+- [x] Front matter (`title`, `description`) matching sibling
       conventions; add to the `docs/_quarto.yml` sidebar directly after
       `guides/projects/listings.qmd`.
-- [ ] **"Links and images must be markdown."** The two silent failure
+- [x] **"Links and images must be markdown."** The two silent failure
       modes as one rule with two costs. The anchor-markdown /
       contents-raw idiom, citing the built-ins'
       ``[`$image-html$`{=html}]($path$)``. Include the masking note
       (finding 3) — it is why this survives testing.
-- [ ] **"Descriptions and the placeholder envelope."** Why the envelope
+- [x] **"Descriptions and the placeholder envelope."** Why the envelope
       must be emitted unconditionally; the extraction rule (first
       non-empty `<p>` in `main.content`, word-boundary truncation at
       `max-description-length`, default 175); the styling-hook advice;
       the note that the built-ins gate the envelope on
       `$if(description)$` and a custom template can do better.
-- [ ] **"What the built-in shapes emit."** Per-shape anatomy for
+- [x] **"What the built-in shapes emit."** Per-shape anatomy for
       `default`, `grid`, `table` — wrapper classes and per-item partial,
       i.e. what a custom template must match to inherit the listing
       CSS and filter/sort UI. Full sources linked, not pasted.
-- [ ] **"Porting a Quarto 1 template."** The mapping table moved from
+- [x] **"Porting a Quarto 1 template."** The mapping table moved from
       `listings.qmd` and extended with the rows that fail silently:
       `<a href="<%- item.path %>">` → `[$it.title$]($it.path$)`,
       `<img src="<%= item.image %>">` → `![]($it.image$)`,
       `metadataAttrs(item)` → `` `$it.metadata-attrs$`{=html} ``.
-- [ ] **The worked before/after**: quarto-web's `docs/gallery/gallery.ejs`
+- [x] **The worked before/after**: quarto-web's `docs/gallery/gallery.ejs`
       (attributed, linked). Cover the nested `$for(it.tiles)$` (finding
       8), the raw-anchor and raw-image conversions, the `alt` ternary
       becoming `$if$`/`$else$`, and the category-grouping loop's
       restructure.
-- [ ] **"What doctemplates cannot do."** No expressions: JS prologues
+- [x] **"What doctemplates cannot do."** No expressions: JS prologues
       and per-item constants become `template-params:`; string
       manipulation must be pre-computed into a record key or
       `listing-item.extra`.
-- [ ] **"Verifying a port."** Inspect rendered `href`/`src` values and
+- [x] **"Verifying a port."** Inspect rendered `href`/`src` values and
       confirm referenced assets landed in the output directory. Neither
       failure produces a diagnostic or a text diff.
 
@@ -167,17 +171,17 @@ All go in `crates/quarto-core/tests/integration/listing_pipeline.rs`
 Convention: `<name>/SKILL.md` with `name`/`description` frontmatter plus
 optional `references/` (`triage/` is the structural model).
 
-- [ ] `SKILL.md` — thin pointer to q2's own docs (not the external
+- [x] `SKILL.md` — thin pointer to q2's own docs (not the external
       guide), with the two silent semantics **stated inline, not merely
       named**: a skill that only names them gets them skipped. Fire on
       the symptoms a user actually sees — `Q-12-7`, `Q-12-9`, `Q-12-24`,
       a listing rendering with the built-in layout, a template dumped
       verbatim into the page.
-- [ ] Add a **verification step**: after porting, inspect the rendered
+- [x] Add a **verification step**: after porting, inspect the rendered
       `href` and `src` values directly, and confirm referenced assets
       landed in the output directory. Neither failure produces a
       diagnostic or a text diff.
-- [ ] `references/worked-examples.md` — the annotated ports, de-branded
+- [x] `references/worked-examples.md` — the annotated ports, de-branded
       and re-rooted: the minimal link+description template, a card grid,
       and the phrasing-content lesson (a standalone markdown link is
       auto-wrapped in `<p>`, so raw HTML inside it must be phrasing
@@ -190,27 +194,27 @@ optional `references/` (`triage/` is the structural model).
 `fcd76aebd` rewrote these two for the EJS → doctemplate correction and
 marked them `status: stub` pending a prose pass. This work touches both.
 
-- [ ] `Q-12-24` — its "After" example already uses a markdown link but
+- [x] `Q-12-24` — its "After" example already uses a markdown link but
       does not say **why**. Add the reason and link the new subsection.
-- [ ] `Q-12-9` — same: the port advice stops at syntax.
-- [ ] Flip both `status: stub` → `status: complete`.
-- [ ] `cargo xtask lint` (error-docs rules; no new codes, so no sidebar
+- [x] `Q-12-9` — same: the port advice stops at syntax.
+- [x] Flip both `status: stub` → `status: complete`.
+- [x] `cargo xtask lint` (error-docs rules; no new codes, so no sidebar
       changes expected).
 
 ## Phase 5 — Verification and close-out
 
-- [ ] `cargo nextest run --workspace` — report the delta against the
+- [x] `cargo nextest run --workspace` — report the delta against the
       live baseline, not a figure from an older document.
-- [ ] `cargo xtask verify --skip-hub-build --skip-hub-tests` (Rust-only
+- [x] `cargo xtask verify --skip-hub-build --skip-hub-tests` (Rust-only
       change; this is the `-D warnings` gate that plain build/nextest
       miss).
-- [ ] **End-to-end**: `cargo run --bin q2 -- render docs/` succeeds, and
+- [x] **End-to-end**: `cargo run --bin q2 -- render docs/` succeeds, and
       the rendered "Custom templates" section is inspected in the output
       — not merely "no errors". Record the invocation and an output
       snippet here.
-- [ ] Reconcile this checklist against what actually landed; commit the
+- [x] Reconcile this checklist against what actually landed; commit the
       corrected plan file.
-- [ ] Close `bd-hzsi`; check whether `bd-qb4o` (L11 close-out) is
+- [x] Close `bd-hzsi`; check whether `bd-qb4o` (L11 close-out) is
       thereby unblocked.
 
 ## Decisions (settled with Gordon, 2026-08-26)
@@ -260,3 +264,102 @@ the frontmatter description carries the wider trigger set.
 
 This is what makes the quarto-web gallery portable at all, and it is
 undocumented today.
+
+## Outcome
+
+All five phases landed. Commits on
+`braid/bd-hzsi-listing-template-migration-docs`:
+
+| Commit | Contents |
+| --- | --- |
+| `d2e6ad554` | Three contract tests in `listing_pipeline.rs` |
+| `faec852d5` | New `listing-templates.qmd`; `listings.qmd` + sidebar |
+| `28b159313` | `.claude/skills/ejs-listing-port/` (SKILL.md + references) |
+| `8794ad4c7` | `Q-12-9` / `Q-12-24` prose pass; `stub` → `complete` |
+
+### Verification
+
+- `cargo xtask lint` — clean, 1059 files.
+- `cargo clippy -p quarto-core --all-targets -- -D warnings` — clean.
+- `cargo nextest run --workspace --no-fail-fast` —
+  **13450 passed, 199 skipped** on this branch vs **13447 passed, 199
+  skipped** on `main` (`3e45bdd2b`). Delta **+3**, exactly the three
+  tests added here; no skip-count change.
+  - Two earlier fail-fast runs failed
+    `quarto-core engine::ts_engine::tests::test_race_free_instance_exclusive`
+    with `DEADLOCK DETECTED: test timed out`. That test uses a hard
+    wall-clock `watchdog(Duration)` helper (`ts_engine.rs:1297`) and
+    both runs happened immediately after heavy `q2 render docs/`
+    invocations. It passes 3/3 in isolation at 0.3 s against a 15 s
+    budget, and the quiet-machine workspace run is green on this branch
+    and on `main` alike. Load-induced flake, same family as
+    `bd-d8nol0xn` / `bd-fuw5gcni`; not attributable to this work.
+- `cargo xtask verify --skip-hub-build --skip-hub-tests` — clean. The
+  hub/WASM legs are skipped deliberately: the only Rust change is added
+  `#[test]` functions in a `tests/integration/` file, which are not part
+  of any crate's lib and cannot reach the `wasm32` target.
+
+### End-to-end evidence
+
+Invocation (from the worktree root; `docs/examples/` staged first — see
+the note below):
+
+```bash
+./target/debug/q2 render docs/
+```
+
+Result, against a true pre-change baseline taken with `git stash -u`:
+
+| | files | warnings | errors |
+| --- | --- | --- | --- |
+| baseline (`stash -u`) | 266 of 266 | 36 | 0 |
+| with this change | 267 of 267 | 36 | 0 |
+
+Same 36 warnings either way (11 `Q-13-4`, 5 `Q-2-50`, 20 `Q-5-6`), none
+citing any file touched here. Output was **inspected**, not inferred:
+
+- The new page's 13 headings render in order, and its 14 code blocks
+  survive intact — including the description-envelope block, whose
+  nested ` ```{=html} ` fences required a four-backtick outer fence
+  (three-backtick nesting silently truncated the block and cascaded 12
+  parse errors, which is how the bug was caught).
+- Every cross-link resolves: `listings.html#custom-templates`,
+  `paths.html#raw-html-is-not-rewritten`,
+  `../../errors/listing/Q-12-{9,10,13,24}.html`.
+- `Q-12-24`'s mapping table renders 7 body rows (was 5), including the
+  two new markdown-link / markdown-image rows.
+
+The worked example in the doc was itself rendered before being written
+down: a fixture reproducing the ported quarto-web gallery template
+produced `href="examples/docs.html"` (rewritten from `.qmd`),
+`src="thumbs/docs.png"` with **both** thumbnails copied into `_site/`,
+an unchanged external `https://` href, and the `alt` conditional
+resolving to `"Quarto Docs example"` (derived) vs `"A custom alt text"`
+(explicit).
+
+The phrasing-content claim in the skill's worked examples was
+demonstrated with `html5lib` rather than asserted: the `<div>`-inside-
+link form has its `<p>` force-closed, the card reparented out of the
+anchor as a sibling, and the anchor reconstructed three times by the
+adoption-agency algorithm; the `<span>` form parses as written.
+
+### Notes for whoever picks this up next
+
+- **`cargo xtask build-agents-docs` does not work from a worktree.** Its
+  staging step resolves `repo_root()` to the *main* checkout (the
+  `[workspace]` Cargo.toml is shared), so it stages
+  `docs/examples/` into `/Users/gordon/src/q2` and then renders the
+  worktree's `docs/`, which fails with "Declared resource
+  'docs/examples' does not exist on disk". Pre-existing, unrelated to
+  this work, worked around here by copying the staged tree in. Same
+  trap `switch_task.rs` documents for `create_worktree::repo_root()`.
+  Not filed — flagging for a decision.
+- `metadata-attrs` is bound but has **no consumer**: no built-in
+  template emits it and nothing in-tree reads `data-index` /
+  `data-categories`. `helpers.rs:117` claims "The list.min.js sort/filter
+  UI is gated on these attrs", which cannot be true today — a built-in
+  listing rendered with `sort-ui: true, filter-ui: true` emits no
+  `valueNames`, no `quarto-listings`, no `new List`, no `data-index`.
+  Recorded as a comment on `bd-nbv80e33`, which owns the underlying gap.
+  The docs therefore describe what `metadata-attrs` *is* and how to emit
+  it safely, and make no claim about it driving the filter UI.
