@@ -44,6 +44,7 @@ import ShareDialog from './ShareDialog';
 import { ForkIcon, PeekIcon, PeopleIcon, SortIcon } from './icons';
 import { Menu, MenuItem, MenuDivider, MenuLabel, MenuSubmenu } from './Menu';
 import Tooltip from './Tooltip';
+import ModalDialog from './ModalDialog';
 import { sortProjectItems, sortOrderLabel, type SortOrder } from '../utils/projectSort';
 import { buildProjectListExport, parseProjectListImport } from '../services/projectListExport';
 import type { Face } from '../utils/facepile';
@@ -1787,15 +1788,18 @@ export default function ProjectsHome({
 
       {/* Duplicate (fork) */}
       {duplicateFor && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => { if (!duplicatingId) setDuplicateFor(null); }}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-duplicate" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-duplicate">Duplicate "{duplicateFor.description}"</h2>
-            <p className="qh-dialog-hint">
-              A fresh copy of all {duplicateFor.summary ? `${duplicateFor.summary.fileCount} ` : ''}files — no
-              edit history carries over.
-            </p>
-            {formError && <div className="qh-error inline">{formError}</div>}
-            <form onSubmit={(e) => { e.preventDefault(); handleDuplicate(); }}>
+        <ModalDialog
+          title={`Duplicate "${duplicateFor.description}"`}
+          onClose={() => { if (!duplicatingId) setDuplicateFor(null); }}
+          className="qh-form-dialog"
+        >
+          <form onSubmit={(e) => { e.preventDefault(); handleDuplicate(); }}>
+            <div className="dialog-content">
+              <p className="qh-dialog-hint">
+                A fresh copy of all {duplicateFor.summary ? `${duplicateFor.summary.fileCount} ` : ''}files — no
+                edit history carries over.
+              </p>
+              {formError && <div className="qh-error inline">{formError}</div>}
               <label className="qh-field-label" htmlFor="qh-dup-name">Name</label>
               <input
                 id="qh-dup-name"
@@ -1817,28 +1821,31 @@ export default function ProjectsHome({
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <div className="qh-dialog-actions">
-                <button type="button" className="qh-btn outline" disabled={!!duplicatingId} onClick={() => setDuplicateFor(null)}>
-                  Cancel
-                </button>
-                <button type="submit" className="qh-btn primary" disabled={!!duplicatingId || !duplicateName.trim()}>
-                  {duplicatingId ? 'Duplicating…' : 'Duplicate'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="qh-btn outline" disabled={!!duplicatingId} onClick={() => setDuplicateFor(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="qh-btn primary" disabled={!!duplicatingId || !duplicateName.trim()}>
+                {duplicatingId ? 'Duplicating…' : 'Duplicate'}
+              </button>
+            </div>
+          </form>
+        </ModalDialog>
       )}
 
       {/* New collection */}
       {newCollectionDialog && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setNewCollectionDialog(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-new-collection" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-new-collection">New collection</h2>
-            {newCollectionDialog.forProject && (
-              <p className="qh-dialog-hint">The project will be moved onto it.</p>
-            )}
-            <form onSubmit={(e) => { e.preventDefault(); commitNewCollection(); }}>
+        <ModalDialog
+          title="New collection"
+          onClose={() => setNewCollectionDialog(null)}
+          className="qh-form-dialog"
+        >
+          <form onSubmit={(e) => { e.preventDefault(); commitNewCollection(); }}>
+            <div className="dialog-content">
+              {newCollectionDialog.forProject && (
+                <p className="qh-dialog-hint">The project will be moved onto it.</p>
+              )}
               <label className="qh-field-label" htmlFor="qh-new-collection-name">Name</label>
               <input
                 id="qh-new-collection-name"
@@ -1848,30 +1855,33 @@ export default function ProjectsHome({
                 placeholder="e.g. Board prep"
                 autoFocus
               />
-              <div className="qh-dialog-actions">
-                <button type="button" className="qh-btn outline" onClick={() => setNewCollectionDialog(null)}>Cancel</button>
-                <button type="submit" className="qh-btn primary" disabled={!newCollectionName.trim()}>Create</button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="qh-btn outline" onClick={() => setNewCollectionDialog(null)}>Cancel</button>
+              <button type="submit" className="qh-btn primary" disabled={!newCollectionName.trim()}>Create</button>
+            </div>
+          </form>
+        </ModalDialog>
       )}
 
       {/* Rename collection */}
       {renameCollectionTarget && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setRenameCollectionTarget(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-rename-collection" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-rename-collection">Rename collection</h2>
-            <p className="qh-dialog-hint">Renames it for everyone subscribed to it.</p>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (renameCollectionValue.trim()) {
-                  onRenameCollection?.(renameCollectionTarget.id, renameCollectionValue.trim());
-                }
-                setRenameCollectionTarget(null);
-              }}
-            >
+        <ModalDialog
+          title="Rename collection"
+          onClose={() => setRenameCollectionTarget(null)}
+          className="qh-form-dialog"
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (renameCollectionValue.trim()) {
+                onRenameCollection?.(renameCollectionTarget.id, renameCollectionValue.trim());
+              }
+              setRenameCollectionTarget(null);
+            }}
+          >
+            <div className="dialog-content">
+              <p className="qh-dialog-hint">Renames it for everyone subscribed to it.</p>
               <label className="qh-field-label" htmlFor="qh-rename-collection">Name</label>
               <input
                 id="qh-rename-collection"
@@ -1880,42 +1890,48 @@ export default function ProjectsHome({
                 onChange={(e) => setRenameCollectionValue(e.target.value)}
                 autoFocus
               />
-              <div className="qh-dialog-actions">
-                <button type="button" className="qh-btn outline" onClick={() => setRenameCollectionTarget(null)}>Cancel</button>
-                <button type="submit" className="qh-btn primary" disabled={!renameCollectionValue.trim()}>Rename</button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="qh-btn outline" onClick={() => setRenameCollectionTarget(null)}>Cancel</button>
+              <button type="submit" className="qh-btn primary" disabled={!renameCollectionValue.trim()}>Rename</button>
+            </div>
+          </form>
+        </ModalDialog>
       )}
 
       {/* Generic destructive confirmation */}
       {confirmState && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setConfirmState(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-confirm" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-confirm">{confirmState.title}</h2>
+        <ModalDialog
+          title={confirmState.title}
+          onClose={() => setConfirmState(null)}
+          className="qh-form-dialog"
+        >
+          <div className="dialog-content">
             <p className="qh-dialog-hint">{confirmState.body}</p>
-            <div className="qh-dialog-actions">
-              <button type="button" className="qh-btn outline" onClick={() => setConfirmState(null)} autoFocus>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="qh-btn danger"
-                onClick={() => { confirmState.action(); setConfirmState(null); }}
-              >
-                {confirmState.confirmLabel}
-              </button>
-            </div>
           </div>
-        </div>
+          <div className="dialog-actions">
+            <button type="button" className="qh-btn outline" onClick={() => setConfirmState(null)} autoFocus>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="qh-btn danger"
+              onClick={() => { confirmState.action(); setConfirmState(null); }}
+            >
+              {confirmState.confirmLabel}
+            </button>
+          </div>
+        </ModalDialog>
       )}
 
       {/* Shared-collection move warning */}
       {pendingMove && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setPendingMove(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-move" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-move">Move "{pendingMove.name}" out of {pendingMove.fromName}?</h2>
+        <ModalDialog
+          title={`Move "${pendingMove.name}" out of ${pendingMove.fromName}?`}
+          onClose={() => setPendingMove(null)}
+          className="qh-form-dialog"
+        >
+          <div className="dialog-content">
             <p className="qh-dialog-hint">
               Please note you're changing {pendingMove.othersCount === 1
                 ? "another person's"
@@ -1931,33 +1947,36 @@ export default function ProjectsHome({
               />
               Don't show this again
             </label>
-            <div className="qh-dialog-actions">
-              <button type="button" className="qh-btn outline" onClick={() => setPendingMove(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="qh-btn primary"
-                onClick={() => {
-                  if (moveWarnChecked) localStorage.setItem(MOVE_WARNING_KEY, '1');
-                  moveProject(pendingMove.indexDocId, pendingMove.target);
-                  setPendingMove(null);
-                }}
-                autoFocus
-              >
-                Move it
-              </button>
-            </div>
           </div>
-        </div>
+          <div className="dialog-actions">
+            <button type="button" className="qh-btn outline" onClick={() => setPendingMove(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="qh-btn primary"
+              onClick={() => {
+                if (moveWarnChecked) localStorage.setItem(MOVE_WARNING_KEY, '1');
+                moveProject(pendingMove.indexDocId, pendingMove.target);
+                setPendingMove(null);
+              }}
+              autoFocus
+            >
+              Move it
+            </button>
+          </div>
+        </ModalDialog>
       )}
 
       {/* Rename dialog */}
       {renameFor && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setRenameFor(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-rename-project" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-rename-project">Rename project</h2>
-            <form onSubmit={(e) => { e.preventDefault(); commitRename(); }}>
+        <ModalDialog
+          title="Rename project"
+          onClose={() => setRenameFor(null)}
+          className="qh-form-dialog"
+        >
+          <form onSubmit={(e) => { e.preventDefault(); commitRename(); }}>
+            <div className="dialog-content">
               <label className="qh-field-label" htmlFor="qh-rename">Name</label>
               <input
                 id="qh-rename"
@@ -1967,23 +1986,26 @@ export default function ProjectsHome({
                 placeholder="e.g. Lab retreat agenda"
                 autoFocus
               />
-              <div className="qh-dialog-actions">
-                <button type="button" className="qh-btn outline" onClick={() => setRenameFor(null)}>Cancel</button>
-                <button type="submit" className="qh-btn primary" disabled={!renameValue.trim()}>Rename</button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="qh-btn outline" onClick={() => setRenameFor(null)}>Cancel</button>
+              <button type="submit" className="qh-btn primary" disabled={!renameValue.trim()}>Rename</button>
+            </div>
+          </form>
+        </ModalDialog>
       )}
 
       {/* New project dialog */}
       {newDialogChoice && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setNewDialogChoice(null)}>
-          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-new-choice" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-new-choice">New {newDialogChoice.name.toLowerCase()}</h2>
-            <p className="qh-dialog-hint">Starter files will be created for you</p>
-            {formError && <div className="qh-error inline">{formError}</div>}
-            <form onSubmit={handleCreate}>
+        <ModalDialog
+          title={`New ${newDialogChoice.name.toLowerCase()}`}
+          onClose={() => setNewDialogChoice(null)}
+          className="qh-form-dialog"
+        >
+          <form onSubmit={handleCreate}>
+            <div className="dialog-content">
+              <p className="qh-dialog-hint">Starter files will be created for you</p>
+              {formError && <div className="qh-error inline">{formError}</div>}
               <label className="qh-field-label" htmlFor="qh-new-name">Name</label>
               <input
                 id="qh-new-name"
@@ -2021,22 +2043,25 @@ export default function ProjectsHome({
                   <button type="button" className="qh-link" onClick={() => setShowServerField(true)}>Change…</button>
                 </div>
               )}
-              <div className="qh-dialog-actions">
-                <button type="button" className="qh-btn outline" onClick={() => setNewDialogChoice(null)}>Cancel</button>
-                <button type="submit" className="qh-btn primary" disabled={isCreating || !newTitle.trim()}>
-                  {isCreating ? 'Creating…' : 'Create'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="qh-btn outline" onClick={() => setNewDialogChoice(null)}>Cancel</button>
+              <button type="submit" className="qh-btn primary" disabled={isCreating || !newTitle.trim()}>
+                {isCreating ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </form>
+        </ModalDialog>
       )}
 
       {/* Connect / Import dialog */}
       {addDialogOpen && (
-        <div className="qh-dialog-backdrop" onMouseDown={() => setAddDialogOpen(false)}>
-          <div className="qh-dialog wide" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-add-existing" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="qh-dialog-title-add-existing">Add an existing project</h2>
+        <ModalDialog
+          title="Add an existing project"
+          onClose={() => setAddDialogOpen(false)}
+          className="qh-form-dialog wide"
+        >
+          <div className="dialog-content">
             <div className="qh-tabs">
               <button
                 className={`qh-tab ${addTab === 'connect' ? 'active' : ''}`}
@@ -2089,7 +2114,7 @@ export default function ProjectsHome({
                   onChange={(e) => setConnectName(e.target.value)}
                   placeholder="e.g. Lab retreat agenda"
                 />
-                <div className="qh-dialog-actions">
+                <div className="dialog-actions">
                   <button type="button" className="qh-btn outline" onClick={() => setAddDialogOpen(false)}>Cancel</button>
                   <button type="submit" className="qh-btn primary" disabled={!connectInput.trim()}>Connect</button>
                 </div>
@@ -2118,7 +2143,7 @@ export default function ProjectsHome({
                   onChange={(e) => setImportTitle(e.target.value)}
                   placeholder="My imported project"
                 />
-                <div className="qh-dialog-actions">
+                <div className="dialog-actions">
                   <button type="button" className="qh-btn outline" onClick={() => setAddDialogOpen(false)}>Cancel</button>
                   <button type="submit" className="qh-btn primary" disabled={isImporting || !importFile}>
                     {isImporting ? 'Importing…' : 'Import'}
@@ -2127,7 +2152,7 @@ export default function ProjectsHome({
               </form>
             )}
           </div>
-        </div>
+        </ModalDialog>
       )}
 
       <ShareDialog

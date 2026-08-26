@@ -88,11 +88,15 @@ export function Menu({
 
   const close = useCallback(
     (returnFocus: boolean) => {
-      // Return focus synchronously, before the parent re-renders: if the
-      // activating item opens a dialog, the dialog's own focus management
-      // must win, and it runs in a post-render effect after this.
-      if (returnFocus && returnFocusRef.current?.isConnected) {
-        returnFocusRef.current.focus();
+      // Defer the focus return past the React commit: if the activating
+      // item opened a dialog, the dialog owns focus now (its autoFocus
+      // child is focused) and the menu must not steal it back.
+      if (returnFocus) {
+        const target = returnFocusRef.current;
+        queueMicrotask(() => {
+          if (document.activeElement?.closest('[role="dialog"]')) return;
+          if (target?.isConnected) target.focus();
+        });
       }
       onClose(returnFocus);
     },

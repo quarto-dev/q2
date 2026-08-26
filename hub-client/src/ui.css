@@ -457,6 +457,13 @@ select.qh-input { appearance: auto; }
   padding: 20px;
 }
 
+/* ProjectsHome form dialogs on the shared ModalDialog chrome: zero the
+   .qh-dialog padding so the header/footer hairlines span edge to edge,
+   matching the editor dialogs. */
+.qh-dialog.qh-form-dialog {
+  padding: 0;
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
