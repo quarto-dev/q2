@@ -11,7 +11,7 @@
 
 @import './NewFileDialog.css';
 
-.ph-dialog.new-asset-dialog {
+.qh-dialog.new-asset-dialog {
   width: 480px;
   padding: 0;
 }

@@ -238,13 +238,13 @@ export default function NewAssetDialog({
             <input
               id="asset-destination"
               type="text"
-              className="ph-input focus-accent"
+              className="qh-input focus-accent"
               value={destination}
               placeholder="(project root)"
               onChange={(e) => setDestination(e.target.value)}
             />
             {destinationError && (
-              <div className="ph-error inline">{destinationError}</div>
+              <div className="qh-error inline">{destinationError}</div>
             )}
           </div>
 
@@ -255,7 +255,7 @@ export default function NewAssetDialog({
                 <p>Drag &amp; drop files here</p>
                 <p className="hint">or</p>
                 <button
-                  className="ph-btn primary browse-btn"
+                  className="qh-btn primary browse-btn"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   Browse Files
@@ -334,15 +334,15 @@ export default function NewAssetDialog({
             onChange={handleFileSelect}
             style={{ display: 'none' }}
           />
-          {submitError && <div className="ph-error inline">{submitError}</div>}
+          {submitError && <div className="qh-error inline">{submitError}</div>}
         </div>
 
         <div className="dialog-actions">
-          <button className="ph-btn outline" onClick={onClose}>
+          <button className="qh-btn outline" onClick={onClose}>
             Cancel
           </button>
           <button
-            className="ph-btn primary"
+            className="qh-btn primary"
             onClick={handleUpload}
             disabled={!canUpload}
           >

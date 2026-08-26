@@ -21,7 +21,7 @@
   border-bottom: 1px solid var(--sidebar-border);
 }
 
-/* Sidebar-header buttons are icon-only .ph-btn.small.outline (ui.css).
+/* Sidebar-header buttons are icon-only .qh-btn.small.outline (ui.css).
    They grow to equal widths so together they fill the header row, whether
    two or three (conditional Print) are present; inline-flex centers the
    SVG glyph. */

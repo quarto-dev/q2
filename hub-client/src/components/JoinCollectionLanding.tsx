@@ -106,45 +106,45 @@ export default function JoinCollectionLanding({
 
   return (
     <div className="projects-home">
-      <div className="ph-join">
-        <div className="ph-join-card">
-          <div className="ph-join-kicker">COLLECTION INVITATION</div>
+      <div className="qh-join">
+        <div className="qh-join-card">
+          <div className="qh-join-kicker">COLLECTION INVITATION</div>
           <h1>
-            {route.inviter} invited you to <span className="ph-join-collection-name">{route.collectionName}</span>
+            {route.inviter} invited you to <span className="qh-join-collection-name">{route.collectionName}</span>
           </h1>
-          <p className="ph-join-sub">
+          <p className="qh-join-sub">
             A shared collection of Quarto projects — its contents sync to you when you join.
           </p>
           {error && (
-            <div className="ph-error inline">
+            <div className="qh-error inline">
               {error.message}
               {error.canSignInAgain && (
-                <button className="ph-btn ph-error-action" onClick={onSignInAgain}>
+                <button className="qh-btn qh-error-action" onClick={onSignInAgain}>
                   Sign in again
                 </button>
               )}
             </div>
           )}
 
-          <div className="ph-join-identity">
-            <div className="ph-field-label">How you'll appear to the team</div>
-            <div className="ph-join-identity-row">
-              <span className="ph-avatar big" style={{ backgroundColor: color }}>
+          <div className="qh-join-identity">
+            <div className="qh-field-label">How you'll appear to the team</div>
+            <div className="qh-join-identity-row">
+              <span className="qh-avatar big" style={{ backgroundColor: color }}>
                 {initialsFor(name || '?')}
               </span>
               <input
-                className="ph-input"
+                className="qh-input"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your name"
                 autoFocus
               />
             </div>
-            <div className="ph-swatches">
+            <div className="qh-swatches">
               {COLOR_PALETTE.map((c) => (
                 <button
                   key={c}
-                  className={`ph-swatch ${color === c ? 'selected' : ''}`}
+                  className={`qh-swatch ${color === c ? 'selected' : ''}`}
                   style={{ backgroundColor: c }}
                   onClick={() => setColor(c)}
                   title={c}
@@ -153,12 +153,12 @@ export default function JoinCollectionLanding({
             </div>
           </div>
 
-          <div className="ph-join-actions">
-            <button className="ph-btn primary" onClick={handleJoin} disabled={!ready || joining || !name.trim()}>
+          <div className="qh-join-actions">
+            <button className="qh-btn primary" onClick={handleJoin} disabled={!ready || joining || !name.trim()}>
               {joining ? 'Joining…' : ready ? `Join ${route.collectionName}` : 'Connecting…'}
             </button>
           </div>
-          <p className="ph-join-note">
+          <p className="qh-join-note">
             Joining subscribes you to this collection — anyone with the link can join and
             add or remove projects.
           </p>

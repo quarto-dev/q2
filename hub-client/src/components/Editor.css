@@ -303,7 +303,7 @@
 }
 
 /* Right-aligned action group; Run is last so it stays pinned to the far
-   right across state transitions. Buttons are .ph-btn.small (ui.css) with a
+   right across state transitions. Buttons are .qh-btn.small (ui.css) with a
    hairline border and solid surface added here. */
 .preview-status-actions {
   display: flex;

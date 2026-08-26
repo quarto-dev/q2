@@ -83,11 +83,11 @@ export default function ModalDialog({
   };
 
   return (
-    <div className="ph-dialog-backdrop" onClick={onClose}>
+    <div className="qh-dialog-backdrop" onClick={onClose}>
       <div
         {...dialogProps}
         ref={dialogRef}
-        className={`ph-dialog${className ? ` ${className}` : ''}`}
+        className={`qh-dialog${className ? ` ${className}` : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

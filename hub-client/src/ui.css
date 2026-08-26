@@ -1,13 +1,13 @@
 /* Shared UI primitives in the QH-ProjectManagement-July26 "Short term" visual
    language: hairline borders, teal primary actions, subtle hovers, soft error
    treatments. Extracted verbatim from ProjectsHome.css so the editor chrome
-   and dialogs share the same rules; class names keep the .ph-* prefix for now
-   (a .qh-* rename is a separate follow-up). Colors route through theme.css
-   tokens so dark mode keeps working. */
+   and dialogs share the same rules; classes use the .qh-* (Quarto Hub)
+   prefix. Colors route through theme.css tokens so dark mode keeps
+   working. */
 
 /* ---- buttons ---- */
 
-.ph-btn {
+.qh-btn {
   font-size: 13px;
   font-weight: 600;
   padding: 8px 14px;
@@ -18,39 +18,39 @@
   white-space: nowrap;
 }
 
-.ph-btn.primary {
+.qh-btn.primary {
   background: var(--posit-teal);
   color: #ffffff;
 }
 
-.ph-btn.primary:hover { filter: brightness(1.08); }
-.ph-btn.primary:disabled { opacity: 0.5; cursor: default; }
+.qh-btn.primary:hover { filter: brightness(1.08); }
+.qh-btn.primary:disabled { opacity: 0.5; cursor: default; }
 
-.ph-btn.outline {
+.qh-btn.outline {
   border-color: var(--border-color);
   color: var(--accent-secondary);
 }
 
-.ph-btn.outline:hover { background: var(--input-bg-alpha); }
-.ph-btn.outline:disabled { opacity: 0.5; cursor: default; }
+.qh-btn.outline:hover { background: var(--input-bg-alpha); }
+.qh-btn.outline:disabled { opacity: 0.5; cursor: default; }
 
-.ph-btn.danger {
+.qh-btn.danger {
   background: var(--posit-red);
   color: #ffffff;
 }
 
-.ph-btn.danger:hover { filter: brightness(1.1); }
+.qh-btn.danger:hover { filter: brightness(1.1); }
 
-.ph-btn.ghost-accent {
+.qh-btn.ghost-accent {
   border: 1px solid var(--posit-teal);
   color: var(--posit-teal);
   font-size: 12.5px;
   padding: 7px 14px;
 }
 
-.ph-btn.ghost-accent:hover { background: rgba(65, 149, 153, 0.08); }
+.qh-btn.ghost-accent:hover { background: rgba(65, 149, 153, 0.08); }
 
-.ph-btn.small {
+.qh-btn.small {
   font-size: 12px;
   font-weight: 400;
   padding: 5px 11px;
@@ -58,9 +58,9 @@
   color: var(--text-primary);
 }
 
-.ph-caret { font-size: 9px; }
+.qh-caret { font-size: 9px; }
 
-.ph-link {
+.qh-link {
   background: none;
   border: none;
   padding: 0;
@@ -70,11 +70,11 @@
   cursor: pointer;
 }
 
-.ph-link:hover { text-decoration: underline; }
-.ph-link.muted { color: var(--text-secondary); font-weight: 400; }
-.ph-link.danger { color: var(--error-text); }
+.qh-link:hover { text-decoration: underline; }
+.qh-link.muted { color: var(--text-secondary); font-weight: 400; }
+.qh-link.danger { color: var(--error-text); }
 
-.ph-icon-btn {
+.qh-icon-btn {
   background: none;
   border: none;
   padding: 2px 8px;
@@ -85,13 +85,13 @@
   line-height: 1;
 }
 
-.ph-icon-btn:hover { background: var(--input-bg-alpha); color: var(--text-primary); }
+.qh-icon-btn:hover { background: var(--input-bg-alpha); color: var(--text-primary); }
 
 /* ---- menus ---- */
 
 .qh-menu-anchor { position: relative; }
 
-.ph-menu {
+.qh-menu {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
@@ -106,9 +106,9 @@
   flex-direction: column;
 }
 
-.ph-menu-right { left: auto; right: 0; }
+.qh-menu-right { left: auto; right: 0; }
 
-.ph-menu-label {
+.qh-menu-label {
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -116,7 +116,7 @@
   padding: 7px 11px 5px;
 }
 
-.ph-menu-item {
+.qh-menu-item {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -133,36 +133,36 @@
   cursor: pointer;
 }
 
-.ph-menu-item:hover { background: var(--context-menu-hover); }
-.ph-menu-item.strong { font-weight: 600; }
-.ph-menu-item.accent { color: var(--posit-teal); font-weight: 600; }
-.ph-menu-item.danger { color: var(--error-text); }
+.qh-menu-item:hover { background: var(--context-menu-hover); }
+.qh-menu-item.strong { font-weight: 600; }
+.qh-menu-item.accent { color: var(--posit-teal); font-weight: 600; }
+.qh-menu-item.danger { color: var(--error-text); }
 
-.ph-menu-item.two-line .strong { font-weight: 600; }
+.qh-menu-item.two-line .strong { font-weight: 600; }
 
-.ph-menu-item.with-hint {
+.qh-menu-item.with-hint {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
 }
 
-.ph-menu-hint { font-size: 10.5px; color: var(--text-muted); }
+.qh-menu-hint { font-size: 10.5px; color: var(--text-muted); }
 
-.ph-menu-subtext {
+.qh-menu-subtext {
   font-size: 11px;
   font-weight: 400;
   color: var(--text-secondary);
 }
 
-.ph-menu-divider {
+.qh-menu-divider {
   height: 1px;
   background: var(--border-color);
   margin: 5px 8px;
 }
 
-.ph-submenu-parent { position: relative; padding: 0; }
+.qh-submenu-parent { position: relative; padding: 0; }
 
-.ph-menu-item-inner {
+.qh-menu-item-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -177,10 +177,10 @@
   cursor: pointer;
 }
 
-.ph-menu-item-inner:hover { background: var(--context-menu-hover); }
-.ph-submenu-arrow { color: var(--text-secondary); }
+.qh-menu-item-inner:hover { background: var(--context-menu-hover); }
+.qh-submenu-arrow { color: var(--text-secondary); }
 
-.ph-submenu {
+.qh-submenu {
   top: -6px;
   left: calc(100% + 4px);
   min-width: 180px;
@@ -188,7 +188,7 @@
 
 /* ---- dialogs ---- */
 
-.ph-dialog-backdrop {
+.qh-dialog-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(23, 50, 77, 0.55);
@@ -198,7 +198,7 @@
   z-index: 100;
 }
 
-.ph-dialog {
+.qh-dialog {
   width: 520px;
   max-width: calc(100vw - 48px);
   background: var(--dialog-bg);
@@ -208,21 +208,21 @@
   box-sizing: border-box;
 }
 
-.ph-dialog.wide { width: 560px; }
+.qh-dialog.wide { width: 560px; }
 
-.ph-dialog h2 {
+.qh-dialog h2 {
   margin: 0 0 4px;
   font-size: 19px;
   color: var(--text-primary);
 }
 
-.ph-dialog-hint {
+.qh-dialog-hint {
   margin: 0 0 6px;
   font-size: 13px;
   color: var(--text-secondary);
 }
 
-.ph-dialog-actions {
+.qh-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -231,7 +231,7 @@
 
 /* ---- forms ---- */
 
-.ph-field-label {
+.qh-field-label {
   display: block;
   font-size: 12px;
   font-weight: 600;
@@ -239,7 +239,7 @@
   margin: 16px 0 6px;
 }
 
-.ph-input {
+.qh-input {
   width: 100%;
   box-sizing: border-box;
   padding: 12px 15px;
@@ -251,12 +251,12 @@
   outline: none;
 }
 
-.ph-input:focus { border-color: var(--border-focus); }
-.ph-input.focus-accent:focus { border-color: var(--posit-teal); }
+.qh-input:focus { border-color: var(--border-focus); }
+.qh-input.focus-accent:focus { border-color: var(--posit-teal); }
 
-select.ph-input { appearance: auto; }
+select.qh-input { appearance: auto; }
 
-.ph-tabs {
+.qh-tabs {
   display: flex;
   background: var(--input-bg-alpha);
   border-radius: 8px;
@@ -264,7 +264,7 @@ select.ph-input { appearance: auto; }
   margin-top: 12px;
 }
 
-.ph-tab {
+.qh-tab {
   flex: 1;
   padding: 8px 0;
   font-size: 13px;
@@ -276,7 +276,7 @@ select.ph-input { appearance: auto; }
   cursor: pointer;
 }
 
-.ph-tab.active {
+.qh-tab.active {
   background: var(--bg-modal);
   color: var(--text-primary);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -284,7 +284,7 @@ select.ph-input { appearance: auto; }
 
 /* ---- errors ---- */
 
-.ph-error {
+.qh-error {
   margin: 14px 30px 0;
   padding: 10px 14px;
   border-radius: 8px;
@@ -294,11 +294,11 @@ select.ph-input { appearance: auto; }
   white-space: pre-wrap;
 }
 
-.ph-error.inline { margin: 12px 0 0; }
+.qh-error.inline { margin: 12px 0 0; }
 
 /* Recovery action inside an error banner (e.g. "Sign in again" on an
    expired-session join failure). */
-.ph-error-action {
+.qh-error-action {
   display: block;
   margin-top: 8px;
   padding: 4px 10px;
@@ -310,19 +310,19 @@ select.ph-input { appearance: auto; }
   cursor: pointer;
 }
 
-.ph-error-action:hover {
+.qh-error-action:hover {
   background: var(--error-bg-subtle);
 }
 
 /* ---- editor dialog chrome ----
    Shared by the editor's NewFile/Share/NewAsset dialogs: a sectioned layout
-   (hairline header/footer) on top of the .ph-dialog surface. The container
-   gets class="ph-dialog <name>-dialog"; the local class supplies width and
+   (hairline header/footer) on top of the .qh-dialog surface. The container
+   gets class="qh-dialog <name>-dialog"; the local class supplies width and
    padding: 0 so the header/footer hairlines span edge to edge. */
 
 /* Editor chrome stacks floating elements up to z-index 1000 (context menu,
    preview error overlay), so dialogs in the editor keep the higher level. */
-.editor-container .ph-dialog-backdrop { z-index: 1000; }
+.editor-container .qh-dialog-backdrop { z-index: 1000; }
 
 .dialog-header {
   display: flex;

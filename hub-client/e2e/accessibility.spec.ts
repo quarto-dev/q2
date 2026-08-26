@@ -60,9 +60,9 @@ test.describe('accessibility (WCAG 2.2)', () => {
       },
     ]);
     await seedProjectInBrowser(page, indexDocId, syncServer, 'A11y Project');
-    const row = page.locator('.ph-row', { hasText: 'A11y Project' });
+    const row = page.locator('.qh-row', { hasText: 'A11y Project' });
     await expect(row).toBeVisible({ timeout: 15000 });
-    await row.locator('.ph-row-name').click();
+    await row.locator('.qh-row-name').click();
 
     // The editor's sidebar New-file button is the dialog trigger.
     const newFileBtn = page.locator('.new-file-btn');
@@ -109,7 +109,7 @@ test.describe('accessibility (WCAG 2.2)', () => {
     ]);
     await seedProjectInBrowser(page, indexDocId, syncServer, 'Dialog Project');
     await expect(
-      page.locator('.ph-row', { hasText: 'Dialog Project' }),
+      page.locator('.qh-row', { hasText: 'Dialog Project' }),
     ).toBeVisible({ timeout: 15000 });
 
     await page.getByRole('button', { name: '＋ New collection' }).click();

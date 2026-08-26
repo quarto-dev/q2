@@ -1023,13 +1023,13 @@ export default function ProjectsHome({
     const shown = users.slice(0, max);
     const extra = users.length - shown.length;
     return (
-      <span className={`ph-facepile ${size}`}>
+      <span className={`qh-facepile ${size}`}>
         {shown.map((u, i) => (
-          <span key={`${u.initials}-${i}`} className="ph-face" style={{ backgroundColor: u.color }} title={u.name}>
+          <span key={`${u.initials}-${i}`} className="qh-face" style={{ backgroundColor: u.color }} title={u.name}>
             {u.initials}
           </span>
         ))}
-        {extra > 0 && <span className="ph-face more" title={`${extra} more`}>+{extra}</span>}
+        {extra > 0 && <span className="qh-face more" title={`${extra} more`}>+{extra}</span>}
       </span>
     );
   };
@@ -1039,7 +1039,7 @@ export default function ProjectsHome({
   if (loading || projectSetConnecting) {
     return (
       <div className="projects-home">
-        <div className="ph-loading">
+        <div className="qh-loading">
           {projectSetConnecting ? 'Connecting to project set…' : 'Loading projects…'}
         </div>
       </div>
@@ -1050,25 +1050,25 @@ export default function ProjectsHome({
   // would require menuitem children and the full menu keyboard pattern,
   // which these action lists don't implement (WCAG 4.1.2).
   const renderProjectMenu = (item: ProjectItem) => (
-    <div className="ph-menu">
-      <button className="ph-menu-item strong" onClick={() => { closeAllMenus(); handleOpen(item); }}>
+    <div className="qh-menu">
+      <button className="qh-menu-item strong" onClick={() => { closeAllMenus(); handleOpen(item); }}>
         Open
       </button>
-      <div className="ph-menu-item ph-submenu-parent">
+      <div className="qh-menu-item qh-submenu-parent">
         <button
-          className="ph-menu-item-inner"
+          className="qh-menu-item-inner"
           onClick={(e) => { e.stopPropagation(); setMoveSubmenuOpen((v) => v === 'move' ? false : 'move'); }}
         >
-          Move to collection <span className="ph-submenu-arrow">▸</span>
+          Move to collection <span className="qh-submenu-arrow">▸</span>
         </button>
         {moveSubmenuOpen === 'move' && (
-          <div className="ph-menu ph-submenu">
+          <div className="qh-menu qh-submenu">
             {collections
               .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
               .map((collection) => (
                 <button
                   key={collection.id}
-                  className="ph-menu-item"
+                  className="qh-menu-item"
                   onClick={() => { requestMove(item.indexDocId, collection.id); closeAllMenus(); }}
                 >
                   {collection.name}
@@ -1076,14 +1076,14 @@ export default function ProjectsHome({
               ))}
             {collectionOf(item.indexDocId) && (
               <button
-                className="ph-menu-item"
+                className="qh-menu-item"
                 onClick={() => { requestMove(item.indexDocId, null); closeAllMenus(); }}
               >
                 No collection
               </button>
             )}
             <button
-              className="ph-menu-item accent"
+              className="qh-menu-item accent"
               onClick={() => openNewCollection(item.indexDocId)}
             >
               ＋ New collection…
@@ -1091,28 +1091,28 @@ export default function ProjectsHome({
           </div>
         )}
       </div>
-      <div className="ph-menu-item ph-submenu-parent">
+      <div className="qh-menu-item qh-submenu-parent">
         <button
-          className="ph-menu-item-inner"
+          className="qh-menu-item-inner"
           onClick={(e) => { e.stopPropagation(); setMoveSubmenuOpen((v) => v === 'add' ? false : 'add'); }}
         >
-          Add to collection <span className="ph-submenu-arrow">▸</span>
+          Add to collection <span className="qh-submenu-arrow">▸</span>
         </button>
         {moveSubmenuOpen === 'add' && (
-          <div className="ph-menu ph-submenu">
+          <div className="qh-menu qh-submenu">
             {collections
               .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
               .map((collection) => (
                 <button
                   key={collection.id}
-                  className="ph-menu-item"
+                  className="qh-menu-item"
                   onClick={() => { addToCollection(item.indexDocId, collection.id); closeAllMenus(); }}
                 >
                   {collection.name}
                 </button>
               ))}
             {collections.every((c) => c.projectIds.includes(item.indexDocId.replace(/^automerge:/, ''))) && (
-              <div className="ph-menu-item ph-menu-subtext" style={{ cursor: 'default' }}>
+              <div className="qh-menu-item qh-menu-subtext" style={{ cursor: 'default' }}>
                 Already in every collection
               </div>
             )}
@@ -1120,15 +1120,15 @@ export default function ProjectsHome({
         )}
       </div>
       <button
-        className="ph-menu-item"
+        className="qh-menu-item"
         disabled={!!duplicatingId}
         onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
       >
         Duplicate
-        <span className="ph-menu-subtext">Fork a fresh copy — no history carried over</span>
+        <span className="qh-menu-subtext">Fork a fresh copy — no history carried over</span>
       </button>
       <button
-        className="ph-menu-item"
+        className="qh-menu-item"
         onClick={() => copyToClipboard(
           buildShareableUrl(item.indexDocId, item.syncServer, item.description, 'index.qmd'),
           item.indexDocId + ':share',
@@ -1137,24 +1137,24 @@ export default function ProjectsHome({
         {copied === item.indexDocId + ':share' ? 'Link copied!' : 'Share link…'}
       </button>
       <button
-        className="ph-menu-item with-hint"
+        className="qh-menu-item with-hint"
         onClick={() => copyToClipboard(item.indexDocId.replace(/^automerge:/, ''), item.indexDocId + ':id')}
       >
         {copied === item.indexDocId + ':id' ? 'ID copied!' : 'Copy project ID'}
-        <span className="ph-menu-hint mono">{shortId(item.indexDocId)}</span>
+        <span className="qh-menu-hint mono">{shortId(item.indexDocId)}</span>
       </button>
       <button
-        className="ph-menu-item"
+        className="qh-menu-item"
         disabled={!!exportingId}
         onClick={(e) => { e.stopPropagation(); handleDownloadZip(item); }}
       >
         {exportingId === item.indexDocId ? 'Preparing ZIP…' : 'Download as ZIP'}
       </button>
-      <button className="ph-menu-item" onClick={() => startRename(item)}>Rename…</button>
-      <div className="ph-menu-divider" />
-      <button className="ph-menu-item danger" onClick={() => handleRemove(item)}>
+      <button className="qh-menu-item" onClick={() => startRename(item)}>Rename…</button>
+      <div className="qh-menu-divider" />
+      <button className="qh-menu-item danger" onClick={() => handleRemove(item)}>
         Remove from this device
-        <span className="ph-menu-subtext">Doesn't delete the project for others</span>
+        <span className="qh-menu-subtext">Doesn't delete the project for others</span>
       </button>
     </div>
   );
@@ -1184,52 +1184,52 @@ export default function ProjectsHome({
   const renderPeek = (item: ProjectItem) => {
     const s = item.summary;
     return (
-      <div className="qh-peek ph-peek" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="qh-peek qh-peek" onMouseDown={(e) => e.stopPropagation()}>
         {s ? (
           <>
-            <div className="ph-peek-header">
+            <div className="qh-peek-header">
               {s.fileCount} {s.fileCount === 1 ? 'FILE' : 'FILES'} · AS OF {formatOpened(s.asOf).toUpperCase()}
             </div>
             {s.contributors.length > 0 && (
-              <div className="ph-peek-people">
+              <div className="qh-peek-people">
                 {renderFacepile(
                   s.contributors.map((c) => ({ name: c.name, color: c.color, initials: initialsFor(c.name) })),
                   'lg', 3,
                 )}
-                <span className="ph-peek-people-label">
+                <span className="qh-peek-people-label">
                   {s.contributors.length === 1
                     ? `${s.contributors[0].name} has joined`
                     : `${s.contributors.map((c) => c.name.split(' ')[0]).join(', ')} have joined`}
                 </span>
               </div>
             )}
-            <div className="ph-peek-files">
+            <div className="qh-peek-files">
               {s.topFiles.map((f) => (
-                <div key={f} className="ph-peek-file mono">{f}</div>
+                <div key={f} className="qh-peek-file mono">{f}</div>
               ))}
               {s.fileCount > s.topFiles.length && (
-                <div className="ph-peek-file more">and {s.fileCount - s.topFiles.length} more…</div>
+                <div className="qh-peek-file more">and {s.fileCount - s.topFiles.length} more…</div>
               )}
             </div>
           </>
         ) : (
           <>
-            <div className="ph-peek-header">NOT OPENED ON THIS DEVICE YET</div>
-            <div className="ph-peek-note">
+            <div className="qh-peek-header">NOT OPENED ON THIS DEVICE YET</div>
+            <div className="qh-peek-note">
               Details are cached when you open a project — or load them now without opening it.
             </div>
           </>
         )}
-        <div className="ph-peek-row">
+        <div className="qh-peek-row">
           <span className="mono">{serverHost(item.syncServer)} · {shortId(item.indexDocId)}</span>
         </div>
-        <div className="ph-peek-divider" />
-        <div className="ph-peek-actions">
-          <button className="ph-link" onClick={() => refreshPeek(item)}>
+        <div className="qh-peek-divider" />
+        <div className="qh-peek-actions">
+          <button className="qh-link" onClick={() => refreshPeek(item)}>
             {peekRefreshing ? 'Refreshing…' : s ? 'Refresh' : 'Load details'}
           </button>
         </div>
-        <div className="ph-peek-footnote">Peeking is read-only — use the ⋯ menu to act on the project.</div>
+        <div className="qh-peek-footnote">Peeking is read-only — use the ⋯ menu to act on the project.</div>
       </div>
     );
   };
@@ -1280,35 +1280,35 @@ export default function ProjectsHome({
     const inviteUrl = buildInviteUrl(collection);
     const copyKey = `collection:${collection.id}:invite`;
     return (
-      <div className="ph-menu ph-members" role="dialog" aria-label={`People on ${collection.name}`}>
-        <div className="ph-menu-label">
+      <div className="qh-menu qh-members" role="dialog" aria-label={`People on ${collection.name}`}>
+        <div className="qh-menu-label">
           {people.length <= 1
             ? 'ONLY YOU SO FAR'
             : `${people.length} PEOPLE SEEN ON THESE PROJECTS`}
         </div>
-        <div className="ph-members-list">
+        <div className="qh-members-list">
           {people.map((m, i) => (
-            <div key={`${m.initials}-${i}`} className="ph-member-row">
-              <span className="ph-face lg" style={{ backgroundColor: m.color }}>{m.initials}</span>
-              <span className="ph-member-name">
+            <div key={`${m.initials}-${i}`} className="qh-member-row">
+              <span className="qh-face lg" style={{ backgroundColor: m.color }}>{m.initials}</span>
+              <span className="qh-member-name">
                 {m.name}
-                {i === 0 && selfUser && <span className="ph-member-you"> (you)</span>}
+                {i === 0 && selfUser && <span className="qh-member-you"> (you)</span>}
               </span>
             </div>
           ))}
         </div>
-        <div className="ph-menu-divider" />
-        <div className="ph-menu-label">INVITE BY LINK</div>
-        <div className="ph-members-invite">
-          <span className="ph-invite-url mono" title={inviteUrl}>{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
+        <div className="qh-menu-divider" />
+        <div className="qh-menu-label">INVITE BY LINK</div>
+        <div className="qh-members-invite">
+          <span className="qh-invite-url mono" title={inviteUrl}>{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
           <button
-            className="ph-btn primary small-invite"
+            className="qh-btn primary small-invite"
             onClick={() => copyToClipboard(inviteUrl, copyKey)}
           >
             {copied === copyKey ? 'Copied!' : 'Copy link'}
           </button>
         </div>
-        <div className="ph-invite-note">
+        <div className="qh-invite-note">
           Anyone with this link can join this collection and add or remove projects.
           Its contents sync to them for real.
         </div>
@@ -1319,7 +1319,7 @@ export default function ProjectsHome({
   const renderCard = (item: ProjectItem) => (
     <div
       key={item.indexDocId}
-      className={`ph-card qh-menu-anchor ${draggingId === item.indexDocId ? 'dragging' : ''} ${peekFor === item.indexDocId ? 'peek-open' : ''}`}
+      className={`qh-card qh-menu-anchor ${draggingId === item.indexDocId ? 'dragging' : ''} ${peekFor === item.indexDocId ? 'peek-open' : ''}`}
       draggable
       onDragStart={handleDragStart(item)}
       onDragEnd={handleDragEnd}
@@ -1330,26 +1330,26 @@ export default function ProjectsHome({
         setOpenMenu(openMenu === item.indexDocId ? null : item.indexDocId);
       }}
     >
-      <button className="ph-card-body" onClick={() => handleOpen(item)} title={item.description}>
-        <span className={`ph-card-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
+      <button className="qh-card-body" onClick={() => handleOpen(item)} title={item.description}>
+        <span className={`qh-card-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
           {item.description}
         </span>
-        <span className="ph-card-footer">
-          <span className="ph-card-meta">
+        <span className="qh-card-footer">
+          <span className="qh-card-meta">
             {item.summary ? `${item.summary.fileCount} ${item.summary.fileCount === 1 ? 'file' : 'files'} · ` : ''}
             opened {formatOpened(item.lastAccessed)}
           </span>
           {renderFacepile(contributorsFor(item), 'sm')}
         </span>
       </button>
-      <span className="ph-card-actions">
+      <span className="qh-card-actions">
         <span
-          className="ph-peek-anchor"
+          className="qh-peek-anchor"
           onMouseOver={() => openPeekHover(item.indexDocId)}
           onMouseOut={closePeekHoverSoon}
         >
           <button
-            className="ph-peek-btn"
+            className="qh-peek-btn"
             title="Peek — see what's inside"
             onClick={(e) => { e.stopPropagation(); openPeekHover(item.indexDocId); }}
           >
@@ -1358,7 +1358,7 @@ export default function ProjectsHome({
           {peekFor === item.indexDocId && renderPeek(item)}
         </span>
         <button
-          className="ph-fork-btn"
+          className="qh-fork-btn"
           title={`Duplicate "${item.description}" (fork a fresh copy)`}
           disabled={!!duplicatingId}
           onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
@@ -1366,7 +1366,7 @@ export default function ProjectsHome({
           {forkIcon}
         </button>
         <button
-          className="ph-card-menu-btn"
+          className="qh-card-menu-btn"
           title="Project actions"
           onClick={(e) => {
             e.stopPropagation();
@@ -1398,18 +1398,18 @@ export default function ProjectsHome({
     return (
       <section
         key={collection.id}
-        className={`ph-collection ${dropTarget === collection.id ? 'drop-target' : ''}`}
+        className={`qh-collection ${dropTarget === collection.id ? 'drop-target' : ''}`}
         {...dropZoneProps(collection.id)}
       >
-        <div className="ph-collection-header qh-menu-anchor">
-          <span className="ph-collection-name">{collection.name}</span>
-          <span className="ph-collection-count">{collectionItems.length}</span>
+        <div className="qh-collection-header qh-menu-anchor">
+          <span className="qh-collection-name">{collection.name}</span>
+          <span className="qh-collection-count">{collectionItems.length}</span>
           {(() => {
             const people = peopleOn(collection);
             const hasOthers = people.length > 1;
             return (
               <button
-                className={`ph-collection-people ${hasOthers ? '' : 'private'}`}
+                className={`qh-collection-people ${hasOthers ? '' : 'private'}`}
                 title={hasOthers
                   ? `${people.length} people seen on these projects — people & invite`
                   : 'Only you so far. Click to invite others.'}
@@ -1431,10 +1431,10 @@ export default function ProjectsHome({
               </button>
             );
           })()}
-          <span className="ph-flex-spacer" />
-          <span className="ph-collection-sort-anchor">
+          <span className="qh-flex-spacer" />
+          <span className="qh-collection-sort-anchor">
             <button
-              className={`ph-icon-btn ph-collection-sort-btn ${collectionSort !== 'newest' ? 'active' : ''}`}
+              className={`qh-icon-btn qh-collection-sort-btn ${collectionSort !== 'newest' ? 'active' : ''}`}
               title={`Sort collection (${sortOrderLabel(collectionSort)})`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -1448,11 +1448,11 @@ export default function ProjectsHome({
               </svg>
             </button>
             {openMenu === sortMenuKey && (
-              <div className="ph-menu ph-menu-right">
+              <div className="qh-menu qh-menu-right">
                 {(['newest', 'oldest', 'name'] as SortOrder[]).map((o) => (
                   <button
                     key={o}
-                    className={`ph-menu-item ${collectionSort === o ? 'strong' : ''}`}
+                    className={`qh-menu-item ${collectionSort === o ? 'strong' : ''}`}
                     onClick={() => {
                       setCollectionSorts((s) => ({ ...s, [collection.id]: o }));
                       setCollectionPages((p) => ({ ...p, [collection.id]: 0 }));
@@ -1466,7 +1466,7 @@ export default function ProjectsHome({
             )}
           </span>
           <button
-            className="ph-icon-btn"
+            className="qh-icon-btn"
             title="Collection actions"
             onClick={(e) => {
               e.stopPropagation();
@@ -1478,15 +1478,15 @@ export default function ProjectsHome({
           </button>
           {membersFor === collection.id && renderMembersPopover(collection)}
           {openMenu === menuKey && (
-            <div className="ph-menu ph-menu-right">
+            <div className="qh-menu qh-menu-right">
               <button
-                className="ph-menu-item"
+                className="qh-menu-item"
                 onClick={() => { setOpenMenu(null); setMembersFor(collection.id); }}
               >
                 People &amp; invite…
               </button>
               <button
-                className="ph-menu-item"
+                className="qh-menu-item"
                 onClick={() => {
                   setRenameCollectionTarget(collection);
                   setRenameCollectionValue(collection.name);
@@ -1494,11 +1494,11 @@ export default function ProjectsHome({
                 }}
               >
                 Rename collection…
-                <span className="ph-menu-subtext">Renames it for everyone subscribed</span>
+                <span className="qh-menu-subtext">Renames it for everyone subscribed</span>
               </button>
-              <div className="ph-menu-divider" />
+              <div className="qh-menu-divider" />
               <button
-                className="ph-menu-item danger"
+                className="qh-menu-item danger"
                 onClick={() => {
                   closeAllMenus();
                   setConfirmState({
@@ -1510,37 +1510,37 @@ export default function ProjectsHome({
                 }}
               >
                 Leave collection
-                <span className="ph-menu-subtext">Removes it from your view only</span>
+                <span className="qh-menu-subtext">Removes it from your view only</span>
               </button>
             </div>
           )}
         </div>
         {collectionItems.length === 0 ? (
-          <div className="ph-collection-empty">Empty collection — drag a project here, or use its ⋯ menu.</div>
+          <div className="qh-collection-empty">Empty collection — drag a project here, or use its ⋯ menu.</div>
         ) : (
-          <div className="ph-collection-row">
+          <div className="qh-collection-row">
             {page > 0 && (
               <button
-                className="ph-pager"
+                className="qh-pager"
                 title={collectionSort === 'newest' ? 'Newer projects' : collectionSort === 'oldest' ? 'Older projects' : 'Previous page'}
                 onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page - 1 }))}
               >
                 ‹
               </button>
             )}
-            <div className="ph-card-grid">{pageItems.map(renderCard)}</div>
+            <div className="qh-card-grid">{pageItems.map(renderCard)}</div>
             {page < pageCount - 1 ? (
               <button
-                className="ph-pager"
+                className="qh-pager"
                 title={collectionSort === 'newest' ? 'Older projects' : collectionSort === 'oldest' ? 'Newer projects' : 'Next page'}
                 onClick={() => setCollectionPages((p) => ({ ...p, [collection.id]: page + 1 }))}
               >
                 ›
-                <span className="ph-pager-pos mono">{page + 1}/{pageCount}</span>
+                <span className="qh-pager-pos mono">{page + 1}/{pageCount}</span>
               </button>
             ) : pageCount > 1 ? (
-              <div className="ph-pager ph-pager-idle">
-                <span className="ph-pager-pos mono">{page + 1}/{pageCount}</span>
+              <div className="qh-pager qh-pager-idle">
+                <span className="qh-pager-pos mono">{page + 1}/{pageCount}</span>
               </div>
             ) : null}
           </div>
@@ -1551,8 +1551,8 @@ export default function ProjectsHome({
 
   return (
     <div className="projects-home">
-      <header className="ph-header">
-        <div className="ph-logo">
+      <header className="qh-header">
+        <div className="qh-logo">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <rect x="3" y="4" width="18" height="3.5" rx="1" stroke="var(--posit-teal)" strokeWidth="1.8" />
             <rect x="3" y="10.2" width="18" height="3.5" rx="1" stroke="var(--posit-teal)" strokeWidth="1.8" />
@@ -1560,7 +1560,7 @@ export default function ProjectsHome({
           </svg>
           <span>Quarto Hub</span>
         </div>
-        <div className="ph-search">
+        <div className="qh-search">
           <input
             ref={searchRef}
             type="text"
@@ -1568,59 +1568,59 @@ export default function ProjectsHome({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <span className="ph-search-kbd mono">⌘K</span>
+          <span className="qh-search-kbd mono">⌘K</span>
         </div>
-        <div className="ph-flex-spacer" />
-        <div className="ph-header-actions">
-          <button className="ph-btn outline" onClick={() => { setAddDialogOpen(true); setAddTab('connect'); setFormError(null); }}>
+        <div className="qh-flex-spacer" />
+        <div className="qh-header-actions">
+          <button className="qh-btn outline" onClick={() => { setAddDialogOpen(true); setAddTab('connect'); setFormError(null); }}>
             Connect / Import ▾
           </button>
-          <div className="qh-menu-anchor ph-new-anchor">
-            <button className="ph-btn primary" onClick={() => setNewMenuOpen((v) => !v)}>
+          <div className="qh-menu-anchor qh-new-anchor">
+            <button className="qh-btn primary" onClick={() => setNewMenuOpen((v) => !v)}>
               ＋ New ▾
             </button>
             {newMenuOpen && (
-              <div className="ph-menu ph-menu-right">
-                <div className="ph-menu-label">START FROM — QUARTO PROJECT TYPES</div>
+              <div className="qh-menu qh-menu-right">
+                <div className="qh-menu-label">START FROM — QUARTO PROJECT TYPES</div>
                 {(projectChoices.length > 0
                   ? projectChoices
                   : [{ id: 'default', name: 'Default', description: 'A minimal Quarto project' }]
                 ).map((choice) => (
-                  <button key={choice.id} className="ph-menu-item two-line" onClick={() => openNewDialog(choice)}>
+                  <button key={choice.id} className="qh-menu-item two-line" onClick={() => openNewDialog(choice)}>
                     <span className="strong">{choice.name}</span>
-                    <span className="ph-menu-subtext">{choice.description}</span>
+                    <span className="qh-menu-subtext">{choice.description}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
-          <div className="qh-menu-anchor ph-avatar-anchor">
+          <div className="qh-menu-anchor qh-avatar-anchor">
             <button
-              className="ph-avatar"
+              className="qh-avatar"
               style={authPicture ? undefined : { backgroundColor: userSettings?.userColor ?? 'var(--posit-blue)' }}
               onClick={() => setAvatarMenuOpen((v) => !v)}
               title={userSettings?.userName}
             >
               {authPicture ? (
-                <img src={authPicture} alt="" className="ph-avatar-img" referrerPolicy="no-referrer" />
+                <img src={authPicture} alt="" className="qh-avatar-img" referrerPolicy="no-referrer" />
               ) : (
                 initialsFor(userSettings?.userName ?? '')
               )}
             </button>
             {avatarMenuOpen && userSettings && (
-              <div className="ph-menu ph-menu-right ph-avatar-menu">
-                <div className="ph-avatar-menu-id">
-                  <span className="ph-avatar big" style={authPicture ? undefined : { backgroundColor: userSettings.userColor }}>
+              <div className="qh-menu qh-menu-right qh-avatar-menu">
+                <div className="qh-avatar-menu-id">
+                  <span className="qh-avatar big" style={authPicture ? undefined : { backgroundColor: userSettings.userColor }}>
                     {authPicture ? (
-                      <img src={authPicture} alt="" className="ph-avatar-img" referrerPolicy="no-referrer" />
+                      <img src={authPicture} alt="" className="qh-avatar-img" referrerPolicy="no-referrer" />
                     ) : (
                       initialsFor(userSettings.userName)
                     )}
                   </span>
-                  <div className="ph-avatar-menu-who">
+                  <div className="qh-avatar-menu-who">
                     {editingName ? (
                       <input
-                        className="ph-name-input"
+                        className="qh-name-input"
                         value={editNameValue}
                         onChange={(e) => setEditNameValue(e.target.value)}
                         onKeyDown={(e) => {
@@ -1631,54 +1631,54 @@ export default function ProjectsHome({
                         autoFocus
                       />
                     ) : (
-                      <div className="ph-avatar-menu-name">
+                      <div className="qh-avatar-menu-name">
                         <strong>{userSettings.userName}</strong>
                         <button
-                          className="ph-link"
+                          className="qh-link"
                           onClick={() => { setEditNameValue(userSettings.userName); setEditingName(true); }}
                         >
                           edit
                         </button>
                       </div>
                     )}
-                    <div className="ph-avatar-menu-mail">
+                    <div className="qh-avatar-menu-mail">
                       {authEmail ?? 'Not signed in'}
-                      {onSignOut && <> · <button className="ph-link" onClick={onSignOut}>Sign out</button></>}
+                      {onSignOut && <> · <button className="qh-link" onClick={onSignOut}>Sign out</button></>}
                     </div>
                   </div>
                 </div>
-                <div className="ph-menu-label">CURSOR COLOR</div>
-                <div className="ph-swatches">
+                <div className="qh-menu-label">CURSOR COLOR</div>
+                <div className="qh-swatches">
                   {COLOR_PALETTE.map((color) => (
                     <button
                       key={color}
-                      className={`ph-swatch ${userSettings.userColor === color ? 'selected' : ''}`}
+                      className={`qh-swatch ${userSettings.userColor === color ? 'selected' : ''}`}
                       style={{ backgroundColor: color }}
                       onClick={() => handleColorChange(color)}
                       title={color}
                     />
                   ))}
                 </div>
-                <div className="ph-menu-divider" />
+                <div className="qh-menu-divider" />
                 {projectSetLinkUrl && (
-                  <button className="ph-menu-item" onClick={() => { setShowLinkDialog(true); setAvatarMenuOpen(false); }}>
+                  <button className="qh-menu-item" onClick={() => { setShowLinkDialog(true); setAvatarMenuOpen(false); }}>
                     Link another browser…
                   </button>
                 )}
-                <button className="ph-menu-item" onClick={handleExportJson}>Export project list (JSON)…</button>
-                <button className="ph-menu-item" onClick={handleImportJson}>Import project list (JSON)…</button>
-                <button className="ph-menu-item with-hint" onClick={cycleColorScheme}>
+                <button className="qh-menu-item" onClick={handleExportJson}>Export project list (JSON)…</button>
+                <button className="qh-menu-item" onClick={handleImportJson}>Import project list (JSON)…</button>
+                <button className="qh-menu-item with-hint" onClick={cycleColorScheme}>
                   Theme
-                  <span className="ph-menu-hint">
+                  <span className="qh-menu-hint">
                     {colorScheme === 'auto' ? 'Auto' : colorScheme === 'dark' ? 'Dark' : 'Light'} ▾
                   </span>
                 </button>
                 {onSwitchToClassicUi && (
                   <>
-                    <div className="ph-menu-divider" />
-                    <button className="ph-menu-item" onClick={onSwitchToClassicUi}>
+                    <div className="qh-menu-divider" />
+                    <button className="qh-menu-item" onClick={onSwitchToClassicUi}>
                       Switch to classic UI
-                      <span className="ph-menu-subtext">Back to the current shipping project list</span>
+                      <span className="qh-menu-subtext">Back to the current shipping project list</span>
                     </button>
                   </>
                 )}
@@ -1689,18 +1689,18 @@ export default function ProjectsHome({
       </header>
 
       {(connectionError || formError) && !addDialogOpen && !newDialogChoice && (
-        <div className="ph-error">{connectionError || formError}</div>
+        <div className="qh-error">{connectionError || formError}</div>
       )}
-      {isConnecting && <div className="ph-connecting">Connecting to sync server…</div>}
+      {isConnecting && <div className="qh-connecting">Connecting to sync server…</div>}
 
-      <main id="main-content" tabIndex={-1} className="ph-main">
+      <main id="main-content" tabIndex={-1} className="qh-main">
         {items.length === 0 && collections.every((c) => c.entries.length === 0) ? (
-          <div className="ph-empty-state">
+          <div className="qh-empty-state">
             <h2>No projects yet</h2>
             <p>Create your first Quarto project, or connect to one a collaborator shared.</p>
-            <div className="ph-empty-actions">
-              <button className="ph-btn primary" onClick={() => setNewMenuOpen(true)}>＋ New project</button>
-              <button className="ph-btn outline" onClick={() => { setAddDialogOpen(true); setAddTab('connect'); }}>
+            <div className="qh-empty-actions">
+              <button className="qh-btn primary" onClick={() => setNewMenuOpen(true)}>＋ New project</button>
+              <button className="qh-btn outline" onClick={() => { setAddDialogOpen(true); setAddTab('connect'); }}>
                 Connect / Import
               </button>
             </div>
@@ -1709,27 +1709,27 @@ export default function ProjectsHome({
           <>
             {collections.map(renderCollection)}
 
-            <div className="ph-new-collection-row">
-              <button className="ph-btn ghost-accent" onClick={() => openNewCollection()}>＋ New collection</button>
+            <div className="qh-new-collection-row">
+              <button className="qh-btn ghost-accent" onClick={() => openNewCollection()}>＋ New collection</button>
             </div>
 
             <section
-              className={`ph-rest ${dropTarget === 'unshelved' ? 'drop-target' : ''}`}
+              className={`qh-rest ${dropTarget === 'unshelved' ? 'drop-target' : ''}`}
               {...dropZoneProps('unshelved')}
             >
-              <div className="ph-rest-header qh-menu-anchor">
-                <span className="ph-rest-title">Everything else</span>
-                <span className="ph-rest-count">{everythingElse.length} · {sortLabel}</span>
-                <span className="ph-flex-spacer" />
-                <button className="ph-btn small outline" onClick={(e) => { e.stopPropagation(); setSortMenuOpen((v) => !v); }}>
-                  Sort <span className="ph-caret">▾</span>
+              <div className="qh-rest-header qh-menu-anchor">
+                <span className="qh-rest-title">Everything else</span>
+                <span className="qh-rest-count">{everythingElse.length} · {sortLabel}</span>
+                <span className="qh-flex-spacer" />
+                <button className="qh-btn small outline" onClick={(e) => { e.stopPropagation(); setSortMenuOpen((v) => !v); }}>
+                  Sort <span className="qh-caret">▾</span>
                 </button>
                 {sortMenuOpen && (
-                  <div className="ph-menu ph-menu-right">
+                  <div className="qh-menu qh-menu-right">
                     {(['newest', 'oldest', 'name'] as SortOrder[]).map((o) => (
                       <button
                         key={o}
-                        className={`ph-menu-item ${sortOrder === o ? 'strong' : ''}`}
+                        className={`qh-menu-item ${sortOrder === o ? 'strong' : ''}`}
                         onClick={() => { setSortOrder(o); setSortMenuOpen(false); }}
                       >
                         {o === 'newest' ? 'Newest first' : o === 'oldest' ? 'Oldest first' : 'A to Z'}
@@ -1739,15 +1739,15 @@ export default function ProjectsHome({
                 )}
               </div>
               {everythingElse.length === 0 ? (
-                <div className="ph-rest-empty">
+                <div className="qh-rest-empty">
                   {query ? 'No projects match your search.' : 'Everything is in a collection.'}
                 </div>
               ) : (
-                <div className="ph-rest-list">
+                <div className="qh-rest-list">
                   {everythingElse.map((item) => (
                     <div
                       key={item.indexDocId}
-                      className={`ph-row qh-menu-anchor ${draggingId === item.indexDocId ? 'dragging' : ''}`}
+                      className={`qh-row qh-menu-anchor ${draggingId === item.indexDocId ? 'dragging' : ''}`}
                       draggable
                       onDragStart={handleDragStart(item)}
                       onDragEnd={handleDragEnd}
@@ -1759,26 +1759,26 @@ export default function ProjectsHome({
                       }}
                     >
                       <button
-                        className={`ph-row-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}
+                        className={`qh-row-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}
                         onClick={() => handleOpen(item)}
                         title={item.description}
                       >
                         {item.description}
                       </button>
                       {isUnnamed(item.description) && (
-                        <button className="ph-link" onClick={() => startRename(item)}>Rename</button>
+                        <button className="qh-link" onClick={() => startRename(item)}>Rename</button>
                       )}
-                      <span className="ph-row-meta">
+                      <span className="qh-row-meta">
                         {item.summary ? `${item.summary.fileCount} ${item.summary.fileCount === 1 ? 'file' : 'files'} · ` : ''}
                         opened {formatOpened(item.lastAccessed)}
                       </span>
                       <span
-                        className="ph-peek-anchor"
+                        className="qh-peek-anchor"
                         onMouseOver={() => openPeekHover(item.indexDocId)}
                         onMouseOut={closePeekHoverSoon}
                       >
                         <button
-                          className="ph-icon-btn ph-peek-btn"
+                          className="qh-icon-btn qh-peek-btn"
                           title="Peek — see what's inside"
                           onClick={(e) => { e.stopPropagation(); openPeekHover(item.indexDocId); }}
                         >
@@ -1787,7 +1787,7 @@ export default function ProjectsHome({
                         {peekFor === item.indexDocId && renderPeek(item)}
                       </span>
                       <button
-                        className="ph-icon-btn ph-fork-btn"
+                        className="qh-icon-btn qh-fork-btn"
                         title={`Duplicate "${item.description}" (fork a fresh copy)`}
                         disabled={!!duplicatingId}
                         onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
@@ -1795,7 +1795,7 @@ export default function ProjectsHome({
                         {forkIcon}
                       </button>
                       <button
-                        className="ph-icon-btn ph-row-menu-btn"
+                        className="qh-icon-btn qh-row-menu-btn"
                         title="Project actions"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1817,28 +1817,28 @@ export default function ProjectsHome({
 
       {/* Duplicate (fork) */}
       {duplicateFor && (
-        <div className="ph-dialog-backdrop" onMouseDown={() => { if (!duplicatingId) setDuplicateFor(null); }}>
-          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-duplicate" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="ph-dialog-title-duplicate">Duplicate "{duplicateFor.description}"</h2>
-            <p className="ph-dialog-hint">
+        <div className="qh-dialog-backdrop" onMouseDown={() => { if (!duplicatingId) setDuplicateFor(null); }}>
+          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-duplicate" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="qh-dialog-title-duplicate">Duplicate "{duplicateFor.description}"</h2>
+            <p className="qh-dialog-hint">
               A fresh copy of all {duplicateFor.summary ? `${duplicateFor.summary.fileCount} ` : ''}files — no
               edit history carries over.
             </p>
-            {formError && <div className="ph-error inline">{formError}</div>}
+            {formError && <div className="qh-error inline">{formError}</div>}
             <form onSubmit={(e) => { e.preventDefault(); handleDuplicate(); }}>
-              <label className="ph-field-label" htmlFor="ph-dup-name">Name</label>
+              <label className="qh-field-label" htmlFor="qh-dup-name">Name</label>
               <input
-                id="ph-dup-name"
-                className="ph-input focus-accent"
+                id="qh-dup-name"
+                className="qh-input focus-accent"
                 value={duplicateName}
                 onChange={(e) => setDuplicateName(e.target.value)}
                 autoFocus
                 onFocus={(e) => e.target.select()}
               />
-              <label className="ph-field-label" htmlFor="ph-dup-collection">Add to collection</label>
+              <label className="qh-field-label" htmlFor="qh-dup-collection">Add to collection</label>
               <select
-                id="ph-dup-collection"
-                className="ph-input"
+                id="qh-dup-collection"
+                className="qh-input"
                 value={duplicateCollectionId}
                 onChange={(e) => setDuplicateCollectionId(e.target.value)}
               >
@@ -1847,11 +1847,11 @@ export default function ProjectsHome({
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <div className="ph-dialog-actions">
-                <button type="button" className="ph-btn outline" disabled={!!duplicatingId} onClick={() => setDuplicateFor(null)}>
+              <div className="qh-dialog-actions">
+                <button type="button" className="qh-btn outline" disabled={!!duplicatingId} onClick={() => setDuplicateFor(null)}>
                   Cancel
                 </button>
-                <button type="submit" className="ph-btn primary" disabled={!!duplicatingId || !duplicateName.trim()}>
+                <button type="submit" className="qh-btn primary" disabled={!!duplicatingId || !duplicateName.trim()}>
                   {duplicatingId ? 'Duplicating…' : 'Duplicate'}
                 </button>
               </div>
@@ -1862,25 +1862,25 @@ export default function ProjectsHome({
 
       {/* New collection */}
       {newCollectionDialog && (
-        <div className="ph-dialog-backdrop" onMouseDown={() => setNewCollectionDialog(null)}>
-          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-new-collection" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="ph-dialog-title-new-collection">New collection</h2>
+        <div className="qh-dialog-backdrop" onMouseDown={() => setNewCollectionDialog(null)}>
+          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-new-collection" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="qh-dialog-title-new-collection">New collection</h2>
             {newCollectionDialog.forProject && (
-              <p className="ph-dialog-hint">The project will be moved onto it.</p>
+              <p className="qh-dialog-hint">The project will be moved onto it.</p>
             )}
             <form onSubmit={(e) => { e.preventDefault(); commitNewCollection(); }}>
-              <label className="ph-field-label" htmlFor="ph-new-collection-name">Name</label>
+              <label className="qh-field-label" htmlFor="qh-new-collection-name">Name</label>
               <input
-                id="ph-new-collection-name"
-                className="ph-input focus-accent"
+                id="qh-new-collection-name"
+                className="qh-input focus-accent"
                 value={newCollectionName}
                 onChange={(e) => setNewCollectionName(e.target.value)}
                 placeholder="e.g. Board prep"
                 autoFocus
               />
-              <div className="ph-dialog-actions">
-                <button type="button" className="ph-btn outline" onClick={() => setNewCollectionDialog(null)}>Cancel</button>
-                <button type="submit" className="ph-btn primary" disabled={!newCollectionName.trim()}>Create</button>
+              <div className="qh-dialog-actions">
+                <button type="button" className="qh-btn outline" onClick={() => setNewCollectionDialog(null)}>Cancel</button>
+                <button type="submit" className="qh-btn primary" disabled={!newCollectionName.trim()}>Create</button>
               </div>
             </form>
           </div>
@@ -1889,10 +1889,10 @@ export default function ProjectsHome({
 
       {/* Rename collection */}
       {renameCollectionTarget && (
-        <div className="ph-dialog-backdrop" onMouseDown={() => setRenameCollectionTarget(null)}>
-          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-rename-collection" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="ph-dialog-title-rename-collection">Rename collection</h2>
-            <p className="ph-dialog-hint">Renames it for everyone subscribed to it.</p>
+        <div className="qh-dialog-backdrop" onMouseDown={() => setRenameCollectionTarget(null)}>
+          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-rename-collection" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="qh-dialog-title-rename-collection">Rename collection</h2>
+            <p className="qh-dialog-hint">Renames it for everyone subscribed to it.</p>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -1902,17 +1902,17 @@ export default function ProjectsHome({
                 setRenameCollectionTarget(null);
               }}
             >
-              <label className="ph-field-label" htmlFor="ph-rename-collection">Name</label>
+              <label className="qh-field-label" htmlFor="qh-rename-collection">Name</label>
               <input
-                id="ph-rename-collection"
-                className="ph-input focus-accent"
+                id="qh-rename-collection"
+                className="qh-input focus-accent"
                 value={renameCollectionValue}
                 onChange={(e) => setRenameCollectionValue(e.target.value)}
                 autoFocus
               />
-              <div className="ph-dialog-actions">
-                <button type="button" className="ph-btn outline" onClick={() => setRenameCollectionTarget(null)}>Cancel</button>
-                <button type="submit" className="ph-btn primary" disabled={!renameCollectionValue.trim()}>Rename</button>
+              <div className="qh-dialog-actions">
+                <button type="button" className="qh-btn outline" onClick={() => setRenameCollectionTarget(null)}>Cancel</button>
+                <button type="submit" className="qh-btn primary" disabled={!renameCollectionValue.trim()}>Rename</button>
               </div>
             </form>
           </div>
@@ -1921,17 +1921,17 @@ export default function ProjectsHome({
 
       {/* Generic destructive confirmation */}
       {confirmState && (
-        <div className="ph-dialog-backdrop" onMouseDown={() => setConfirmState(null)}>
-          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-confirm" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="ph-dialog-title-confirm">{confirmState.title}</h2>
-            <p className="ph-dialog-hint">{confirmState.body}</p>
-            <div className="ph-dialog-actions">
-              <button type="button" className="ph-btn outline" onClick={() => setConfirmState(null)} autoFocus>
+        <div className="qh-dialog-backdrop" onMouseDown={() => setConfirmState(null)}>
+          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-confirm" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="qh-dialog-title-confirm">{confirmState.title}</h2>
+            <p className="qh-dialog-hint">{confirmState.body}</p>
+            <div className="qh-dialog-actions">
+              <button type="button" className="qh-btn outline" onClick={() => setConfirmState(null)} autoFocus>
                 Cancel
               </button>
               <button
                 type="button"
-                className="ph-btn danger"
+                className="qh-btn danger"
                 onClick={() => { confirmState.action(); setConfirmState(null); }}
               >
                 {confirmState.confirmLabel}
@@ -1943,17 +1943,17 @@ export default function ProjectsHome({
 
       {/* Shared-collection move warning */}
       {pendingMove && (
-        <div className="ph-dialog-backdrop" onMouseDown={() => setPendingMove(null)}>
-          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-move" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="ph-dialog-title-move">Move "{pendingMove.name}" out of {pendingMove.fromName}?</h2>
-            <p className="ph-dialog-hint">
+        <div className="qh-dialog-backdrop" onMouseDown={() => setPendingMove(null)}>
+          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-move" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="qh-dialog-title-move">Move "{pendingMove.name}" out of {pendingMove.fromName}?</h2>
+            <p className="qh-dialog-hint">
               Please note you're changing {pendingMove.othersCount === 1
                 ? "another person's"
                 : `${pendingMove.othersCount} other people's`} view of this collection — it will
               no longer appear in {pendingMove.fromName} for them. The project itself isn't
               deleted or changed.
             </p>
-            <label className="ph-checkbox-row">
+            <label className="qh-checkbox-row">
               <input
                 type="checkbox"
                 checked={moveWarnChecked}
@@ -1961,13 +1961,13 @@ export default function ProjectsHome({
               />
               Don't show this again
             </label>
-            <div className="ph-dialog-actions">
-              <button type="button" className="ph-btn outline" onClick={() => setPendingMove(null)}>
+            <div className="qh-dialog-actions">
+              <button type="button" className="qh-btn outline" onClick={() => setPendingMove(null)}>
                 Cancel
               </button>
               <button
                 type="button"
-                className="ph-btn primary"
+                className="qh-btn primary"
                 onClick={() => {
                   if (moveWarnChecked) localStorage.setItem(MOVE_WARNING_KEY, '1');
                   moveProject(pendingMove.indexDocId, pendingMove.target);
@@ -1984,22 +1984,22 @@ export default function ProjectsHome({
 
       {/* Rename dialog */}
       {renameFor && (
-        <div className="ph-dialog-backdrop" onMouseDown={() => setRenameFor(null)}>
-          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-rename-project" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="ph-dialog-title-rename-project">Rename project</h2>
+        <div className="qh-dialog-backdrop" onMouseDown={() => setRenameFor(null)}>
+          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-rename-project" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="qh-dialog-title-rename-project">Rename project</h2>
             <form onSubmit={(e) => { e.preventDefault(); commitRename(); }}>
-              <label className="ph-field-label" htmlFor="ph-rename">Name</label>
+              <label className="qh-field-label" htmlFor="qh-rename">Name</label>
               <input
-                id="ph-rename"
-                className="ph-input focus-accent"
+                id="qh-rename"
+                className="qh-input focus-accent"
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
                 placeholder="e.g. Lab retreat agenda"
                 autoFocus
               />
-              <div className="ph-dialog-actions">
-                <button type="button" className="ph-btn outline" onClick={() => setRenameFor(null)}>Cancel</button>
-                <button type="submit" className="ph-btn primary" disabled={!renameValue.trim()}>Rename</button>
+              <div className="qh-dialog-actions">
+                <button type="button" className="qh-btn outline" onClick={() => setRenameFor(null)}>Cancel</button>
+                <button type="submit" className="qh-btn primary" disabled={!renameValue.trim()}>Rename</button>
               </div>
             </form>
           </div>
@@ -2008,25 +2008,25 @@ export default function ProjectsHome({
 
       {/* New project dialog */}
       {newDialogChoice && (
-        <div className="ph-dialog-backdrop" onMouseDown={() => setNewDialogChoice(null)}>
-          <div className="ph-dialog" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-new-choice" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="ph-dialog-title-new-choice">New {newDialogChoice.name.toLowerCase()}</h2>
-            <p className="ph-dialog-hint">Starter files will be created for you</p>
-            {formError && <div className="ph-error inline">{formError}</div>}
+        <div className="qh-dialog-backdrop" onMouseDown={() => setNewDialogChoice(null)}>
+          <div className="qh-dialog" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-new-choice" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="qh-dialog-title-new-choice">New {newDialogChoice.name.toLowerCase()}</h2>
+            <p className="qh-dialog-hint">Starter files will be created for you</p>
+            {formError && <div className="qh-error inline">{formError}</div>}
             <form onSubmit={handleCreate}>
-              <label className="ph-field-label" htmlFor="ph-new-name">Name</label>
+              <label className="qh-field-label" htmlFor="qh-new-name">Name</label>
               <input
-                id="ph-new-name"
-                className="ph-input focus-accent"
+                id="qh-new-name"
+                className="qh-input focus-accent"
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="Q3 all-hands deck"
                 autoFocus
               />
-              <label className="ph-field-label" htmlFor="ph-new-collection">Add to collection (optional)</label>
+              <label className="qh-field-label" htmlFor="qh-new-collection">Add to collection (optional)</label>
               <select
-                id="ph-new-collection"
-                className="ph-input"
+                id="qh-new-collection"
+                className="qh-input"
                 value={newCollectionId}
                 onChange={(e) => setNewCollectionId(e.target.value)}
               >
@@ -2037,23 +2037,23 @@ export default function ProjectsHome({
               </select>
               {showServerField ? (
                 <>
-                  <label className="ph-field-label" htmlFor="ph-new-server">Sync server</label>
+                  <label className="qh-field-label" htmlFor="qh-new-server">Sync server</label>
                   <input
-                    id="ph-new-server"
-                    className="ph-input mono"
+                    id="qh-new-server"
+                    className="qh-input mono"
                     value={newServer}
                     onChange={(e) => setNewServer(e.target.value)}
                   />
                 </>
               ) : (
-                <div className="ph-server-line">
+                <div className="qh-server-line">
                   Syncs to {serverHost(newServer)}{' '}
-                  <button type="button" className="ph-link" onClick={() => setShowServerField(true)}>Change…</button>
+                  <button type="button" className="qh-link" onClick={() => setShowServerField(true)}>Change…</button>
                 </div>
               )}
-              <div className="ph-dialog-actions">
-                <button type="button" className="ph-btn outline" onClick={() => setNewDialogChoice(null)}>Cancel</button>
-                <button type="submit" className="ph-btn primary" disabled={isCreating || !newTitle.trim()}>
+              <div className="qh-dialog-actions">
+                <button type="button" className="qh-btn outline" onClick={() => setNewDialogChoice(null)}>Cancel</button>
+                <button type="submit" className="qh-btn primary" disabled={isCreating || !newTitle.trim()}>
                   {isCreating ? 'Creating…' : 'Create'}
                 </button>
               </div>
@@ -2064,30 +2064,30 @@ export default function ProjectsHome({
 
       {/* Connect / Import dialog */}
       {addDialogOpen && (
-        <div className="ph-dialog-backdrop" onMouseDown={() => setAddDialogOpen(false)}>
-          <div className="ph-dialog wide" role="dialog" aria-modal="true" aria-labelledby="ph-dialog-title-add-existing" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 id="ph-dialog-title-add-existing">Add an existing project</h2>
-            <div className="ph-tabs">
+        <div className="qh-dialog-backdrop" onMouseDown={() => setAddDialogOpen(false)}>
+          <div className="qh-dialog wide" role="dialog" aria-modal="true" aria-labelledby="qh-dialog-title-add-existing" onMouseDown={(e) => e.stopPropagation()}>
+            <h2 id="qh-dialog-title-add-existing">Add an existing project</h2>
+            <div className="qh-tabs">
               <button
-                className={`ph-tab ${addTab === 'connect' ? 'active' : ''}`}
+                className={`qh-tab ${addTab === 'connect' ? 'active' : ''}`}
                 onClick={() => { setAddTab('connect'); setFormError(null); }}
               >
                 Connect by link or ID
               </button>
               <button
-                className={`ph-tab ${addTab === 'import' ? 'active' : ''}`}
+                className={`qh-tab ${addTab === 'import' ? 'active' : ''}`}
                 onClick={() => { setAddTab('import'); setFormError(null); }}
               >
                 Import from ZIP
               </button>
             </div>
-            {formError && <div className="ph-error inline">{formError}</div>}
+            {formError && <div className="qh-error inline">{formError}</div>}
             {addTab === 'connect' ? (
               <form onSubmit={handleConnect}>
-                <label className="ph-field-label" htmlFor="ph-connect-input">Paste a share link or project ID</label>
+                <label className="qh-field-label" htmlFor="qh-connect-input">Paste a share link or project ID</label>
                 <input
-                  id="ph-connect-input"
-                  className="ph-input mono focus-accent"
+                  id="qh-connect-input"
+                  className="qh-input mono focus-accent"
                   value={connectInput}
                   onChange={(e) => setConnectInput(e.target.value)}
                   placeholder="https://quarto-hub.com/#/share/… or bs58 ID"
@@ -2095,41 +2095,41 @@ export default function ProjectsHome({
                 />
                 {showConnectServer ? (
                   <>
-                    <label className="ph-field-label" htmlFor="ph-connect-server">Sync server</label>
+                    <label className="qh-field-label" htmlFor="qh-connect-server">Sync server</label>
                     <input
-                      id="ph-connect-server"
-                      className="ph-input mono"
+                      id="qh-connect-server"
+                      className="qh-input mono"
                       value={connectServer}
                       onChange={(e) => setConnectServer(e.target.value)}
                     />
                   </>
                 ) : (
-                  <div className="ph-server-line">
+                  <div className="qh-server-line">
                     Server is read from the link · advanced:{' '}
-                    <button type="button" className="ph-link" onClick={() => setShowConnectServer(true)}>
+                    <button type="button" className="qh-link" onClick={() => setShowConnectServer(true)}>
                       set server manually
                     </button>
                   </div>
                 )}
-                <label className="ph-field-label" htmlFor="ph-connect-name">Name it for your list (optional)</label>
+                <label className="qh-field-label" htmlFor="qh-connect-name">Name it for your list (optional)</label>
                 <input
-                  id="ph-connect-name"
-                  className="ph-input"
+                  id="qh-connect-name"
+                  className="qh-input"
                   value={connectName}
                   onChange={(e) => setConnectName(e.target.value)}
                   placeholder="e.g. Lab retreat agenda"
                 />
-                <div className="ph-dialog-actions">
-                  <button type="button" className="ph-btn outline" onClick={() => setAddDialogOpen(false)}>Cancel</button>
-                  <button type="submit" className="ph-btn primary" disabled={!connectInput.trim()}>Connect</button>
+                <div className="qh-dialog-actions">
+                  <button type="button" className="qh-btn outline" onClick={() => setAddDialogOpen(false)}>Cancel</button>
+                  <button type="submit" className="qh-btn primary" disabled={!connectInput.trim()}>Connect</button>
                 </div>
               </form>
             ) : (
               <form onSubmit={handleImportZip}>
-                <label className="ph-field-label" htmlFor="ph-import-file">ZIP file</label>
+                <label className="qh-field-label" htmlFor="qh-import-file">ZIP file</label>
                 <input
-                  id="ph-import-file"
-                  className="ph-input"
+                  id="qh-import-file"
+                  className="qh-input"
                   type="file"
                   accept=".zip,application/zip"
                   onChange={(e) => {
@@ -2140,17 +2140,17 @@ export default function ProjectsHome({
                     }
                   }}
                 />
-                <label className="ph-field-label" htmlFor="ph-import-title">Name</label>
+                <label className="qh-field-label" htmlFor="qh-import-title">Name</label>
                 <input
-                  id="ph-import-title"
-                  className="ph-input"
+                  id="qh-import-title"
+                  className="qh-input"
                   value={importTitle}
                   onChange={(e) => setImportTitle(e.target.value)}
                   placeholder="My imported project"
                 />
-                <div className="ph-dialog-actions">
-                  <button type="button" className="ph-btn outline" onClick={() => setAddDialogOpen(false)}>Cancel</button>
-                  <button type="submit" className="ph-btn primary" disabled={isImporting || !importFile}>
+                <div className="qh-dialog-actions">
+                  <button type="button" className="qh-btn outline" onClick={() => setAddDialogOpen(false)}>Cancel</button>
+                  <button type="submit" className="qh-btn primary" disabled={isImporting || !importFile}>
                     {isImporting ? 'Importing…' : 'Import'}
                   </button>
                 </div>
@@ -2166,11 +2166,11 @@ export default function ProjectsHome({
         onClose={() => setShowLinkDialog(false)}
       />
 
-      <footer className="ph-footer">
+      <footer className="qh-footer">
         <span className="mono" title={`Built: ${__BUILD_TIME__}\nCommit date: ${__GIT_COMMIT_DATE__}`}>
           {__GIT_COMMIT_HASH__}
         </span>
-        <span className="ph-footer-note">collections UI exploration</span>
+        <span className="qh-footer-note">collections UI exploration</span>
       </footer>
     </div>
   );
