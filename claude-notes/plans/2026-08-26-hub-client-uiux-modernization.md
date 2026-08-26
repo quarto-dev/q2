@@ -23,4 +23,40 @@ file above; progress is tracked in braid.
 
 ## Phase 0 progress log
 
-(Updated as work lands; see braid comments for the running trail.)
+**Complete (2026-08-26)** on branch `hub-client-uiux-phase0`, four commits:
+
+- `16cb20b1` test infrastructure: `lint:css` (scripts/lint-css.mjs +
+  grandfathered exceptions), DevHarness baseline routes (projects-home,
+  3 dialogs, sidebar, header, notifications), visual baseline spec,
+  axe-core baseline spec + manifest.
+- `305fec7c` scale tokens in theme.css + layering doc + `#/dev/tokens`
+  gallery page; deterministic baselines (fixed IDB identity, frozen
+  clock, transitions off, fonts awaited); visual config retries: 1.
+- `df1cd10b` `.ph-*` → `.qh-*` rename (611 replacements, 22 files).
+- `7ea60da9` color/z-index burn-down to zero exceptions (187 → 85; the
+  rest are owned by Phases 2/7) + shared utilities (`.qh-truncate`,
+  `.qh-row-hover`, `.qh-active-accent-row`).
+
+Verification: `npm run build:all`, `npm run test:ci` (1005 + 112 + 133),
+visual suite 42/42 pixel-clean vs pre-change baselines, axe baselines
+hold, eslint identical to main (192 pre-existing problems, none added),
+rename-touched e2e specs (projects-home, accessibility, files-header)
+7/7 green on a real e2e build. No changelog entry — Phase 0 is internal
+(changelog policy: user-facing changes only).
+
+Deviations from the plan, recorded:
+
+- Editor-shell baselines are covered surface-by-surface (header, sidebar
+  sections, dialogs, notifications) — the full Editor needs live sync +
+  Monaco + WASM, which the no-server visual config avoids by design.
+- axe/lint:css run locally via `npm run test:visual` / `npm run lint:css`,
+  not `test:ci` (vitest-only); blocking CI wiring is Phase 7 either way.
+- lint:css color rule allows literals in token *definitions*
+  (custom properties) in any file, so the standalone src/debug/ page
+  keeps its local token block.
+- ProjectsHome menu z-index 70 → --z-dropdown (60): order-preserving
+  renumber, pixel-invisible.
+- Known flake: bootHarness's identity-pinning occasionally hits an
+  execution-context teardown under full parallelism; absorbed by
+  `retries: 1` in the visual config (assertions themselves are
+  deterministic).
