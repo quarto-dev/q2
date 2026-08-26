@@ -133,22 +133,99 @@ fn source_info(inline: &Inline) -> Option<quarto_source_map::SourceInfo> {
     }
 }
 
-/// Plain text of a bracket group's contents, for the warning message.
-fn label_text(inline: &Inline) -> String {
-    let content = match inline {
-        Inline::Span(span) => &span.content,
-        Inline::Image(image) => &image.content,
-        _ => return String::new(),
+/// The inlines inside a bracket group — `[…]`'s content, or `![…]`'s alt.
+fn label_content(inline: &Inline) -> Option<&Inlines> {
+    match inline {
+        Inline::Span(span) => Some(&span.content),
+        Inline::Image(image) => Some(&image.content),
+        _ => None,
+    }
+}
+
+/// The label as the **author wrote it**: markdown surface form.
+///
+/// This is the string for every slot that quotes source — the offending
+/// text echoed back, and the remedies the author is expected to copy into
+/// the file. It must therefore be complete: a label holding a link has to
+/// come back as `[#7380](url)`, because a remedy built from anything less
+/// tells the author to delete content
+/// (bd-q249-message-drops-inline-content-pacg3qeu).
+///
+/// Rendered with the qmd writer's *fragment* entry point rather than
+/// [`pampa::writers::qmd::write_inlines`]: the result is spliced into the
+/// middle of a sentence, so the line-start-only escapes (`#`, `>`) would be
+/// noise — and `#` is near-universal here, since the shape that motivated
+/// this is `[#1234](issue-url)`.
+fn label_source(inline: &Inline) -> String {
+    let Some(content) = label_content(inline) else {
+        return String::new();
     };
-    content
-        .iter()
-        .map(|i| match i {
-            Inline::Str(s) => s.text.clone(),
-            Inline::Space(_) => " ".to_string(),
-            Inline::Code(c) => c.text.clone(),
-            _ => String::new(),
-        })
-        .collect()
+    let mut buf = Vec::new();
+    match pampa::writers::qmd::write_inlines_fragment(content, &mut buf) {
+        // Writing into a `Vec` cannot fail for I/O reasons; a writer
+        // diagnostic would mean an inline kind it cannot spell. Falling back
+        // to the reader-visible text loses the markup but never invents a
+        // remedy that deletes content.
+        Ok(()) => String::from_utf8_lossy(&buf).into_owned(),
+        Err(_) => label_rendered(inline),
+    }
+}
+
+/// The label as a **reader perceives it**: markup resolved away.
+///
+/// This is the string for the one slot that describes output rather than
+/// source — "the reader sees …". It is deliberately *not* the same string
+/// as [`label_source`]: for `[see `config.yml` now]` the author wrote
+/// backticks and the reader sees none, and for `[[#7380](url)]` the author
+/// wrote a whole link and the reader sees `#7380`. Conflating the two is
+/// what made this diagnostic claim the reader saw nothing at all.
+///
+/// Pandoc `stringify` semantics. Neither existing helper fits: the
+/// plaintext writer (`pampa::writers::plaintext`) keeps a `Code` span's
+/// backticks, and pampa's Lua `stringify` maps SoftBreak/LineBreak to `\n`,
+/// which would put a newline inside a one-line warning.
+fn label_rendered(inline: &Inline) -> String {
+    let Some(content) = label_content(inline) else {
+        return String::new();
+    };
+    let mut out = String::new();
+    push_rendered(content, &mut out);
+    out
+}
+
+fn push_rendered(inlines: &Inlines, out: &mut String) {
+    for inline in inlines {
+        match inline {
+            Inline::Str(s) => out.push_str(&s.text),
+            // Every break is a space to the reader: HTML collapses it, and
+            // the warning is a single line.
+            Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_) => out.push(' '),
+            Inline::Code(c) => out.push_str(&c.text),
+            Inline::Math(m) => out.push_str(&m.text),
+            Inline::Quoted(q) => {
+                out.push('"');
+                push_rendered(&q.content, out);
+                out.push('"');
+            }
+            Inline::Emph(i) => push_rendered(&i.content, out),
+            Inline::Strong(i) => push_rendered(&i.content, out),
+            Inline::Underline(i) => push_rendered(&i.content, out),
+            Inline::Strikeout(i) => push_rendered(&i.content, out),
+            Inline::Superscript(i) => push_rendered(&i.content, out),
+            Inline::Subscript(i) => push_rendered(&i.content, out),
+            Inline::SmallCaps(i) => push_rendered(&i.content, out),
+            Inline::Link(i) => push_rendered(&i.content, out),
+            Inline::Image(i) => push_rendered(&i.content, out),
+            Inline::Span(i) => push_rendered(&i.content, out),
+            Inline::Cite(i) => push_rendered(&i.content, out),
+            Inline::Insert(i) => push_rendered(&i.content, out),
+            Inline::Delete(i) => push_rendered(&i.content, out),
+            Inline::Highlight(i) => push_rendered(&i.content, out),
+            // Raw inlines, notes, shortcodes and edit comments contribute
+            // nothing a reader sees in the surrounding run of text.
+            _ => {}
+        }
+    }
 }
 
 /// Walk every `Inlines` list in the document, warning on the two shapes.
@@ -209,7 +286,7 @@ fn scan_inlines(inlines: &Inlines, diagnostics: &mut Vec<DiagnosticMessage>) {
 }
 
 fn definition_warning(span: &Inline) -> DiagnosticMessage {
-    let label = label_text(span);
+    let label = label_source(span);
     let mut diagnostic = DiagnosticMessage::warning(format!(
         "`[{label}]:` looks like a link reference definition, which quarto-markdown \
          does not support. The line renders as visible text. Use inline links — \
@@ -221,8 +298,8 @@ fn definition_warning(span: &Inline) -> DiagnosticMessage {
 }
 
 fn reference_use_warning(label: &Inline, reference: &Inline) -> DiagnosticMessage {
-    let label_text = label_text(label);
-    let reference_text = label_text_of_reference(reference);
+    let label_text = label_source(label);
+    let reference_text = label_source(reference);
     let bang = if is_empty_image(label) { "!" } else { "" };
 
     let mut diagnostic = DiagnosticMessage::warning(format!(
@@ -242,19 +319,19 @@ fn reference_use_warning(label: &Inline, reference: &Inline) -> DiagnosticMessag
 }
 
 fn lone_bracket_warning(span: &Inline) -> DiagnosticMessage {
-    let label = label_text(span);
+    // Two different strings: `source` quotes what the author wrote (and is
+    // what the remedies are built from), `rendered` describes what a reader
+    // ends up seeing. They coincide only for an all-text label.
+    let source = label_source(span);
+    let rendered = label_rendered(span);
     let mut diagnostic = DiagnosticMessage::warning(format!(
-        "`[{label}]` has no attribute block, so it renders as an empty span and \
-         the brackets are discarded — the reader sees `{label}`. Write `\\[{label}\\]` \
-         to keep the brackets literal, or `[{label}]{{.class}}` if a span was intended."
+        "`[{source}]` has no attribute block, so it renders as an empty span and \
+         the brackets are discarded — the reader sees `{rendered}`. Write `\\[{source}\\]` \
+         to keep the brackets literal, or `[{source}]{{.class}}` if a span was intended."
     ))
     .with_code(CODE_LONE_BRACKETS);
     diagnostic.location = source_info(span);
     diagnostic
-}
-
-fn label_text_of_reference(reference: &Inline) -> String {
-    label_text(reference)
 }
 
 /// Every `Inlines` list in the document, in document order.
@@ -529,6 +606,138 @@ mod tests {
         assert_eq!(
             codes("Text before [label]: after\n"),
             vec![CODE_LONE_BRACKETS]
+        );
+    }
+
+    /// The Positron release-notes shape. Before
+    /// bd-q249-message-drops-inline-content-pacg3qeu the label walk mapped
+    /// `Link` to the empty string, so this printed ``[]`` and claimed "the
+    /// reader sees ``" — false, and its remedy `\[\]` deleted the link.
+    #[test]
+    fn lone_bracket_warning_keeps_a_link_in_the_label() {
+        let messages = messages("- [[#7380](https://example.com/7380)] Console: cleaned up.\n");
+        assert_eq!(messages.len(), 1);
+        let m = &messages[0];
+        assert!(
+            m.contains("`[[#7380](https://example.com/7380)]` has no attribute block"),
+            "the quoted source must be the author's own text, got: {m}"
+        );
+        assert!(
+            m.contains("the reader sees `#7380`."),
+            "the reader sees the link's text, not nothing, got: {m}"
+        );
+        assert!(
+            m.contains("Write `\\[[#7380](https://example.com/7380)\\]`"),
+            "the remedy must escape only the outer pair and keep the link, got: {m}"
+        );
+    }
+
+    #[test]
+    fn lone_bracket_warning_keeps_two_links_in_the_label() {
+        let messages = messages(
+            "- [[#13991](https://example.com/13991), [#11772](https://example.com/11772)] Two.\n",
+        );
+        assert_eq!(messages.len(), 1);
+        let m = &messages[0];
+        assert!(
+            m.contains(
+                "`[[#13991](https://example.com/13991), \
+                 [#11772](https://example.com/11772)]` has no attribute block"
+            ),
+            "both links must survive the quote, got: {m}"
+        );
+        assert!(
+            m.contains("the reader sees `#13991, #11772`."),
+            "the reader sees both link texts and the separator, got: {m}"
+        );
+    }
+
+    #[test]
+    fn lone_bracket_warning_keeps_emphasis_in_the_label() {
+        let messages = messages("- [*emphasised*] Emphasis inside brackets.\n");
+        assert_eq!(messages.len(), 1);
+        let m = &messages[0];
+        assert!(
+            m.contains("`[*emphasised*]` has no attribute block"),
+            "the quote must keep the emphasis markers, got: {m}"
+        );
+        assert!(
+            m.contains("the reader sees `emphasised`."),
+            "the reader sees the emphasised text without its markers, got: {m}"
+        );
+        assert!(
+            m.contains("Write `\\[*emphasised*\\]`"),
+            "the remedy must keep the emphasis, got: {m}"
+        );
+    }
+
+    /// A code span is markup too: the quoted source keeps its backticks
+    /// (so the printed remedy does not delete them) while "the reader
+    /// sees" drops them, because that is what a reader sees.
+    #[test]
+    fn lone_bracket_warning_keeps_a_code_span_in_the_label() {
+        let messages = messages("- [see `config.yml` now] Text and code.\n");
+        assert_eq!(messages.len(), 1);
+        let m = &messages[0];
+        assert!(
+            m.contains("`[see `config.yml` now]` has no attribute block"),
+            "the quoted source must keep the backticks, got: {m}"
+        );
+        assert!(
+            m.contains("the reader sees `see config.yml now`."),
+            "the reader sees the code text without backticks, got: {m}"
+        );
+        assert!(
+            m.contains("Write `\\[see `config.yml` now\\]`"),
+            "the remedy must keep the code span, got: {m}"
+        );
+    }
+
+    /// The all-text case was correct before this fix and must stay correct:
+    /// no stray escaping introduced by rendering the label through the
+    /// markdown writer.
+    #[test]
+    fn lone_bracket_warning_leaves_plain_text_labels_alone() {
+        let messages = messages("- [#1234] Bare bracket, plain text.\n");
+        assert_eq!(messages.len(), 1);
+        let m = &messages[0];
+        assert!(
+            m.contains("`[#1234]` has no attribute block"),
+            "a plain-text label must not gain escapes, got: {m}"
+        );
+        assert!(m.contains("the reader sees `#1234`."), "got: {m}");
+        assert!(
+            m.contains("Write `\\[#1234\\]`"),
+            "the remedy must escape only the brackets, got: {m}"
+        );
+    }
+
+    /// `reference_use_warning` shares the label walk, so it had the same
+    /// defect: `[*the docs*][gcc]` was reported as `[][gcc]`.
+    #[test]
+    fn reference_use_warning_keeps_markup_in_the_label() {
+        let messages = messages("See [*the docs*][gcc].\n");
+        assert_eq!(messages.len(), 1);
+        let m = &messages[0];
+        assert!(
+            m.contains("`[*the docs*][gcc]` looks like a reference-style link"),
+            "the quoted source must keep the emphasis, got: {m}"
+        );
+        assert!(
+            m.contains("Use the inline form `[*the docs*](url)`"),
+            "the suggested rewrite must keep the emphasis, got: {m}"
+        );
+    }
+
+    /// `definition_warning` shares it too.
+    #[test]
+    fn definition_warning_keeps_markup_in_the_label() {
+        let messages = messages("[*gcc*]: https://e.com\n");
+        assert_eq!(messages.len(), 1);
+        assert!(
+            messages[0].contains("`[*gcc*]:` looks like a link reference definition"),
+            "the quoted source must keep the emphasis, got: {}",
+            messages[0]
         );
     }
 

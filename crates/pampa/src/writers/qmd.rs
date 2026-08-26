@@ -61,6 +61,19 @@ pub struct QmdWriterContext {
     /// caller emits a leading `\` and the dashes stay Unicode so the reader
     /// recovers them rather than reading a HorizontalRule.
     pub suppress_dash_canonicalization: bool,
+
+    /// When true, this run is being written as a fragment embedded *inside* a
+    /// line of surrounding text rather than as a document of its own, so
+    /// `escape_markdown` may consult [`Self::at_line_start`] instead of
+    /// escaping the line-start-only specials (`#`, `>`) everywhere. Set only
+    /// by [`write_inlines_fragment`].
+    pub inline_fragment: bool,
+
+    /// Whether the next byte written begins a line. Maintained by
+    /// `write_inline` alongside `prev_emitted_alnum`, and read only when
+    /// [`Self::inline_fragment`] is set. Starts `false` because a fragment is
+    /// embedded mid-line; a SoftBreak or LineBreak sets it back to `true`.
+    pub at_line_start: bool,
 }
 
 impl Default for QmdWriterContext {
@@ -76,6 +89,8 @@ impl QmdWriterContext {
             emphasis_stack: Vec::new(),
             prev_emitted_alnum: false,
             suppress_dash_canonicalization: false,
+            inline_fragment: false,
+            at_line_start: false,
         }
     }
 
@@ -1553,6 +1568,23 @@ fn line_is_dash_only_hazard(line: &[Inline]) -> bool {
 // `---`) apart from genuinely-literal hyphens (`--` → `\-\-`). A run short
 // enough to be inert (a lone hyphen, or one/two dots) is emitted verbatim.
 //
+/// How [`escape_markdown`] treats the two characters that are markdown-special
+/// only at the *start of a line*: `#` (ATX heading) and `>` (blockquote).
+///
+/// Every other entry in the escape table is special mid-line as well and is
+/// always escaped.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum LineStartEscapes {
+    /// Escape `#` and `>` wherever they appear. The whole-document writer
+    /// cannot know where in a line a given `Str` will land, so it escapes
+    /// conservatively.
+    Always,
+    /// Escape `#` and `>` only where they actually begin a line. The payload
+    /// says whether the text being escaped starts one; newlines *within* the
+    /// text move the position along.
+    WhereMeaningful { starts_line: bool },
+}
+
 // The ASCII apostrophe `'` (and its Unicode form `’`) is escaped whenever the
 // reader would otherwise misclassify it as a smart-quote open/close. The
 // reader's smart-quote classifier accepts `'` as an apostrophe only when it sits
@@ -1563,8 +1595,24 @@ fn line_is_dash_only_hazard(line: &[Inline]) -> bool {
 // `start_prev_is_alnum` (carried in from `QmdWriterContext` so the rule can see
 // across inline boundaries — e.g. a closing backtick from a preceding `Code`
 // span; see bd-nsb9 / issue #205), and the next char in the `Str` body.
-fn escape_markdown(text: &str, start_prev_is_alnum: bool) -> String {
+fn escape_markdown(
+    text: &str,
+    start_prev_is_alnum: bool,
+    line_start_escapes: LineStartEscapes,
+) -> String {
     let chars: Vec<char> = text.chars().collect();
+    // Whether `chars[i]` is the first character of a line. Only consulted for
+    // `#` and `>`, and only under `WhereMeaningful`.
+    let begins_line = |i: usize| match line_start_escapes {
+        LineStartEscapes::Always => true,
+        LineStartEscapes::WhereMeaningful { starts_line } => {
+            if i == 0 {
+                starts_line
+            } else {
+                chars[i - 1] == '\n'
+            }
+        }
+    };
     let mut result = String::new();
     let mut i = 0;
     while i < chars.len() {
@@ -1573,18 +1621,21 @@ fn escape_markdown(text: &str, start_prev_is_alnum: bool) -> String {
             // Characters that must be escaped to avoid triggering markdown syntax:
             '\\' => result.push_str("\\\\"), // Escape character itself
             '<' => result.push_str("\\<"),   // HTML tags, autolinks
-            '>' => result.push_str("\\>"),   // Blockquotes (at line start)
-            '#' => result.push_str("\\#"),   // Headers (at line start)
-            '$' => result.push_str("\\$"),   // Math delimiters
-            '*' => result.push_str("\\*"),   // Emphasis, strong, lists
-            '_' => result.push_str("\\_"),   // Emphasis, strong
-            '[' => result.push_str("\\["),   // Links
-            ']' => result.push_str("\\]"),   // Links
-            '`' => result.push_str("\\`"),   // Code spans
-            '|' => result.push_str("\\|"),   // Tables
-            '~' => result.push_str("\\~"),   // Subscript, strikeout
-            '^' => result.push_str("\\^"),   // Superscript
-            '@' => result.push_str("\\@"),   // Citations: every bare @ in
+            // Blockquotes and headings exist only at the start of a line.
+            '>' if begins_line(i) => result.push_str("\\>"),
+            '>' => result.push('>'),
+            '#' if begins_line(i) => result.push_str("\\#"),
+            '#' => result.push('#'),
+            '$' => result.push_str("\\$"), // Math delimiters
+            '*' => result.push_str("\\*"), // Emphasis, strong, lists
+            '_' => result.push_str("\\_"), // Emphasis, strong
+            '[' => result.push_str("\\["), // Links
+            ']' => result.push_str("\\]"), // Links
+            '`' => result.push_str("\\`"), // Code spans
+            '|' => result.push_str("\\|"), // Tables
+            '~' => result.push_str("\\~"), // Subscript, strikeout
+            '^' => result.push_str("\\^"), // Superscript
+            '@' => result.push_str("\\@"), // Citations: every bare @ in
             // a Str is either a citation start (when followed by alnum/_/{)
             // or an outright parse error (any other position). Always escape.
             '{' => result.push_str("\\{"), // Attribute span open: bare { in
@@ -1686,7 +1737,14 @@ fn write_str(
         }
         return Ok(());
     }
-    let escaped = escape_markdown(&s.text, ctx.prev_emitted_alnum);
+    let line_start_escapes = if ctx.inline_fragment {
+        LineStartEscapes::WhereMeaningful {
+            starts_line: ctx.at_line_start,
+        }
+    } else {
+        LineStartEscapes::Always
+    };
+    let escaped = escape_markdown(&s.text, ctx.prev_emitted_alnum, line_start_escapes);
     write!(buf, "{}", escaped)
 }
 
@@ -2321,7 +2379,7 @@ fn shortcode_string_looks_like_number(s: &str) -> bool {
 
 #[cfg(test)]
 mod smart_typography_writer_tests {
-    use super::{escape_markdown, line_is_dash_only_hazard};
+    use super::{LineStartEscapes, escape_markdown, line_is_dash_only_hazard};
     use crate::pandoc::inline::{Inline, Space, Str};
     use quarto_source_map::SourceInfo;
 
@@ -2342,23 +2400,53 @@ mod smart_typography_writer_tests {
     fn canonicalizes_unicode_smart_chars_unescaped() {
         // Unicode smart chars become their ASCII spelling, emitted UNescaped so
         // the reader re-converts them.
-        assert_eq!(escape_markdown("\u{2014}", false), "---"); // em → ---
-        assert_eq!(escape_markdown("\u{2013}", false), "--"); // en → --
-        assert_eq!(escape_markdown("\u{2026}", false), "..."); // … → ...
-        assert_eq!(escape_markdown("a\u{2014}b\u{2026}c", false), "a---b...c");
+        assert_eq!(
+            escape_markdown("\u{2014}", false, LineStartEscapes::Always),
+            "---"
+        ); // em → ---
+        assert_eq!(
+            escape_markdown("\u{2013}", false, LineStartEscapes::Always),
+            "--"
+        ); // en → --
+        assert_eq!(
+            escape_markdown("\u{2026}", false, LineStartEscapes::Always),
+            "..."
+        ); // … → ...
+        assert_eq!(
+            escape_markdown("a\u{2014}b\u{2026}c", false, LineStartEscapes::Always),
+            "a---b...c"
+        );
         // ’ between alnums is kept as ', elsewhere escaped.
-        assert_eq!(escape_markdown("don\u{2019}t", false), "don't");
+        assert_eq!(
+            escape_markdown("don\u{2019}t", false, LineStartEscapes::Always),
+            "don't"
+        );
     }
 
     #[test]
     fn escapes_literal_dash_and_dot_runs() {
         // Literal ASCII runs the reader would smart-convert must be escaped so
         // they stay literal (e.g. from escaped input `a\-\-b`).
-        assert_eq!(escape_markdown("a--b", false), "a\\-\\-b");
-        assert_eq!(escape_markdown("a---b", false), "a\\-\\-\\-b");
-        assert_eq!(escape_markdown("a-b", false), "a-b"); // lone hyphen inert
-        assert_eq!(escape_markdown("x...", false), "x\\.\\.\\.");
-        assert_eq!(escape_markdown("x..", false), "x.."); // two dots inert
+        assert_eq!(
+            escape_markdown("a--b", false, LineStartEscapes::Always),
+            "a\\-\\-b"
+        );
+        assert_eq!(
+            escape_markdown("a---b", false, LineStartEscapes::Always),
+            "a\\-\\-\\-b"
+        );
+        assert_eq!(
+            escape_markdown("a-b", false, LineStartEscapes::Always),
+            "a-b"
+        ); // lone hyphen inert
+        assert_eq!(
+            escape_markdown("x...", false, LineStartEscapes::Always),
+            "x\\.\\.\\."
+        );
+        assert_eq!(
+            escape_markdown("x..", false, LineStartEscapes::Always),
+            "x.."
+        ); // two dots inert
     }
 
     #[test]
@@ -2594,13 +2682,25 @@ fn write_inline(
     match inline {
         crate::pandoc::Inline::Str(s) => {
             ctx.prev_emitted_alnum = s.text.chars().last().is_some_and(|c| c.is_alphanumeric());
+            // A `Str` body normally holds no newline (the reader emits
+            // SoftBreak nodes instead), but honour one if it does.
+            ctx.at_line_start = s.text.ends_with('\n');
         }
         crate::pandoc::Inline::Custom(_) => {
             // No bytes emitted; preserve prior state.
         }
+        // Both break kinds end their output with a newline, so whatever
+        // follows them begins a line.
+        crate::pandoc::Inline::SoftBreak(_) | crate::pandoc::Inline::LineBreak(_) => {
+            ctx.prev_emitted_alnum = false;
+            ctx.at_line_start = true;
+        }
         // Every other inline kind closes with a non-alphanumeric byte
         // (delimiter, bracket, backtick, newline, space, ...).
-        _ => ctx.prev_emitted_alnum = false,
+        _ => {
+            ctx.prev_emitted_alnum = false;
+            ctx.at_line_start = false;
+        }
     }
 
     result
@@ -2834,6 +2934,48 @@ pub fn write_inlines<T: std::io::Write>(
     Ok(())
 }
 
+/// Write a sequence of inlines as a fragment embedded *inside* a line of
+/// surrounding text.
+///
+/// Like [`write_inlines`], but for output that will be spliced into a larger
+/// line rather than stand as a document of its own — quoting a bracket label
+/// back to the author inside a diagnostic message, for instance.
+///
+/// The difference is escaping. `#` and `>` are markdown-special only at the
+/// start of a line; [`write_inlines`] cannot know where in a line its output
+/// will land, so it escapes them everywhere, turning `[#7380](url)` into
+/// `[\#7380](url)`. This entry point tracks line position and escapes them
+/// only where a reader would really see a heading or a blockquote — so a
+/// fragment round-trips to the author's own spelling, and a `#` that follows
+/// a SoftBreak inside the run is still escaped. Every other escape is
+/// identical between the two.
+///
+/// Introduced for `Q-2-45`/`Q-2-46`/`Q-2-49`, whose messages quote the
+/// offending source and print a remedy the author is expected to copy
+/// (bd-q249-message-drops-inline-content-pacg3qeu).
+pub fn write_inlines_fragment<T: std::io::Write>(
+    inlines: &[crate::pandoc::Inline],
+    buf: &mut T,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut ctx = QmdWriterContext::new();
+    ctx.inline_fragment = true;
+    ctx.at_line_start = false;
+    for inline in inlines {
+        if let Err(e) = write_inline(inline, buf, &mut ctx) {
+            return Err(vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write inline: {}", e))
+                    .build(),
+            ]);
+        }
+    }
+    if !ctx.errors.is_empty() {
+        return Err(ctx.errors);
+    }
+    Ok(())
+}
+
 /// Write metadata (YAML front matter) to the given buffer.
 ///
 /// This is a public wrapper around `write_config_value_meta`, intended for use
@@ -2964,4 +3106,99 @@ fn write_impl_tracked(
     }
 
     Ok(quarto_source_map::SourceInfo::concat(pieces))
+}
+
+#[cfg(test)]
+mod inline_fragment_escaping_tests {
+    //! `#` and `>` are markdown-special only at the start of a line. The
+    //! whole-document writer has no line-position context and so escapes
+    //! them everywhere; the fragment entry point tracks position and
+    //! escapes them only where a reader would actually see a heading or a
+    //! blockquote. See `write_inlines_fragment`.
+
+    use super::write_inlines_fragment;
+
+    /// Parse `source` as a document and render its first block's inlines
+    /// back as an embedded fragment.
+    fn fragment(source: &str) -> String {
+        let mut sink = std::io::sink();
+        let (ast, _ctx, _warnings) =
+            crate::readers::qmd::read(source.as_bytes(), false, "t.qmd", &mut sink, true, None)
+                .expect("fixture must parse");
+        let inlines = match &ast.blocks[0] {
+            crate::pandoc::Block::Paragraph(p) => &p.content,
+            crate::pandoc::Block::Plain(p) => &p.content,
+            other => panic!("fixture must be a paragraph, got {other:?}"),
+        };
+        let mut buf = Vec::new();
+        write_inlines_fragment(inlines, &mut buf).expect("fragment must write");
+        String::from_utf8(buf).expect("fragment must be utf-8")
+    }
+
+    /// The same inlines through the whole-document entry point, which must
+    /// keep escaping conservatively.
+    fn whole_document(source: &str) -> String {
+        let mut sink = std::io::sink();
+        let (ast, _ctx, _warnings) =
+            crate::readers::qmd::read(source.as_bytes(), false, "t.qmd", &mut sink, true, None)
+                .expect("fixture must parse");
+        let inlines = match &ast.blocks[0] {
+            crate::pandoc::Block::Paragraph(p) => &p.content,
+            crate::pandoc::Block::Plain(p) => &p.content,
+            other => panic!("fixture must be a paragraph, got {other:?}"),
+        };
+        let mut buf = Vec::new();
+        super::write_inlines(inlines, &mut buf).expect("inlines must write");
+        String::from_utf8(buf).expect("output must be utf-8")
+    }
+
+    #[test]
+    fn hash_mid_line_is_not_escaped() {
+        assert_eq!(fragment("issue #1234 here\n"), "issue #1234 here");
+    }
+
+    #[test]
+    fn hash_opening_the_fragment_is_not_escaped() {
+        // A fragment is embedded *inside* a line, so its first byte is
+        // never the first byte of a line.
+        assert_eq!(fragment("#1234\n"), "#1234");
+    }
+
+    #[test]
+    fn angle_bracket_mid_line_is_not_escaped() {
+        assert_eq!(fragment("a > b\n"), "a > b");
+    }
+
+    #[test]
+    fn a_link_keeps_its_hash_unescaped() {
+        assert_eq!(
+            fragment("[#7380](https://example.com/7380)\n"),
+            "[#7380](https://example.com/7380)"
+        );
+    }
+
+    /// The escape is dropped only for the two line-start-only characters.
+    /// Everything else in the escape table is special mid-line too.
+    #[test]
+    fn other_escapes_are_unaffected() {
+        assert_eq!(fragment("a\\*b\\_c\\[d\\]e\n"), "a\\*b\\_c\\[d\\]e");
+    }
+
+    /// After a soft break the fragment really is at the start of a line, so
+    /// a leading `#` would be read as a heading and must stay escaped.
+    #[test]
+    fn hash_after_a_soft_break_is_still_escaped() {
+        assert_eq!(fragment("a\n\\#b\n"), "a\n\\#b");
+    }
+
+    /// The whole-document entry point is unchanged: it still has no
+    /// line-position context and still escapes conservatively.
+    #[test]
+    fn whole_document_writer_still_escapes_hash_everywhere() {
+        assert_eq!(whole_document("issue #1234 here\n"), "issue \\#1234 here");
+        assert_eq!(
+            whole_document("[#7380](https://example.com/7380)\n"),
+            "[\\#7380](https://example.com/7380)"
+        );
+    }
 }
