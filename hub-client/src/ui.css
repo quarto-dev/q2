@@ -490,6 +490,21 @@ select.qh-input { appearance: auto; }
   border-top: 1px solid var(--dialog-border);
 }
 
+/* Reduced motion (Phase 3): collapse every transition and animation to
+   effectively-instant for users who request reduced motion. Global by
+   design — any motion added later (Phase 5 transitions, micro-states) is
+   covered automatically. Do not add per-component reduced-motion blocks;
+   0.01ms (not `none`) so transitionend/animationend listeners still fire. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Forced colors (Windows High Contrast): the platform strips backgrounds
    and box shadows, so surfaces that rely on them for their boundary get
    system-color borders here. (.qh-btn/.qh-input keep boundaries via the

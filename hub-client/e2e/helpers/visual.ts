@@ -58,14 +58,11 @@ export async function settleTheme(page: Page, theme: Theme): Promise<void> {
     document.documentElement.classList.remove('dark', 'light');
     document.documentElement.classList.add(t);
   }, theme);
-  // Kill transitions/animations: the theme class flip animates colors over
-  // ~200ms, and axe's contrast check (or a screenshot) taken mid-transition
-  // measures a blended color — the source of an intermittent 3-vs-4 node
-  // drift on projects-home. (Phase 3's animations-off spec config will
-  // subsume this.)
-  await page.addStyleTag({
-    content: '*, *::before, *::after { transition: none !important; animation: none !important; }',
-  });
+  // Motion is already deterministic: bootHarness emulates reduced motion
+  // and the app's global reduced-motion rule (ui.css, Phase 3) collapses
+  // all transitions/animations — including the ~200ms theme-class color
+  // flip whose mid-transition blends used to cause intermittent axe
+  // node-count drift on projects-home.
   // Fonts shift both pixels and axe's contrast measurements; under parallel
   // worker load they can land late. Wait them out before asserting.
   await page.evaluate(() => document.fonts.ready);
@@ -77,16 +74,23 @@ export async function settleTheme(page: Page, theme: Theme): Promise<void> {
  * wait for the app to create its (random) identity in IndexedDB, replace
  * it with the fixed identity, reload so every component re-reads it, then
  * wait for the route's marker selector and settle.
+ *
+ * `motion` defaults to 'reduce' so screenshots are deterministic via the
+ * app's own motion safety (the global prefers-reduced-motion rule in
+ * ui.css, Phase 3) — this subsumes the addStyleTag transition-killer
+ * Phase 0 used here. Pass 'no-preference' only for motion counter-checks.
  */
 export async function bootHarness(
   page: Page,
   route: string,
   selector: string,
   theme: Theme,
+  motion: 'reduce' | 'no-preference' = 'reduce',
 ): Promise<void> {
   await page.clock.install();
   await page.clock.setFixedTime(FIXED_NOW);
   await forceTheme(page, theme);
+  await page.emulateMedia({ reducedMotion: motion });
 
   await page.goto(`/#/dev/${route}`);
 
