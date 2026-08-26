@@ -1,6 +1,7 @@
 import { useViewMode } from './ViewModeContext';
 import { LayoutMarkupIcon, LayoutSplitIcon, LayoutPreviewIcon } from './icons';
 import Tooltip from './Tooltip';
+import { viewToggle } from '../strings';
 import './ViewToggleControl.css';
 
 /**
@@ -12,31 +13,31 @@ export default function ViewToggleControl() {
 
   return (
     <div className="view-toggle-control">
-      <Tooltip content="Expand markup">
+      <Tooltip content={viewToggle.expandMarkup}>
         <button
           className={`view-toggle-btn${viewMode === 'markup' ? ' active' : ''}`}
           onClick={() => setViewMode('markup')}
-          aria-label="Markup view"
+          aria-label={viewToggle.markupView}
           aria-pressed={viewMode === 'markup'}
         >
           <LayoutMarkupIcon />
         </button>
       </Tooltip>
-      <Tooltip content="Split equally">
+      <Tooltip content={viewToggle.splitEqually}>
         <button
           className={`view-toggle-btn${viewMode === 'both' ? ' active' : ''}`}
           onClick={() => setViewMode('both')}
-          aria-label="Split view"
+          aria-label={viewToggle.splitView}
           aria-pressed={viewMode === 'both'}
         >
           <LayoutSplitIcon />
         </button>
       </Tooltip>
-      <Tooltip content="Expand preview">
+      <Tooltip content={viewToggle.expandPreview}>
         <button
           className={`view-toggle-btn${viewMode === 'preview' ? ' active' : ''}`}
           onClick={() => setViewMode('preview')}
-          aria-label="Preview view"
+          aria-label={viewToggle.previewView}
           aria-pressed={viewMode === 'preview'}
         >
           <LayoutPreviewIcon />

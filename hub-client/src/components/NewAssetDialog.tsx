@@ -17,6 +17,7 @@ import {
   type AssetFilePreview,
 } from './fileUpload';
 import ModalDialog from './ModalDialog';
+import { common, dialogs } from '../strings';
 import './NewAssetDialog.css';
 
 export interface NewAssetDialogProps {
@@ -128,13 +129,13 @@ export default function NewAssetDialog({
       const pathErr = validateProjectPath(path);
       if (pathErr) return pathErr;
       if (existingPaths.includes(path)) {
-        return `"${path}" already exists in the project`;
+        return dialogs.newAsset.errorExists(path);
       }
       for (const other of previews) {
         if (other.file === file) continue;
         if (other.error) continue;
         if (composePath(other.file) === path) {
-          return 'Duplicate path with another file in this batch';
+          return dialogs.newAsset.errorDuplicateInBatch;
         }
       }
       return null;
@@ -223,7 +224,7 @@ export default function NewAssetDialog({
 
   return (
     <ModalDialog
-      title="Add asset to project"
+      title={dialogs.newAsset.title}
       className="new-asset-dialog"
       onClose={onClose}
       dialogProps={{
@@ -234,13 +235,13 @@ export default function NewAssetDialog({
     >
         <div className="dialog-content">
           <div className="destination-input">
-            <label htmlFor="asset-destination">Destination folder:</label>
+            <label htmlFor="asset-destination">{dialogs.newAsset.destinationLabel}</label>
             <input
               id="asset-destination"
               type="text"
               className="qh-input focus-accent"
               value={destination}
-              placeholder="(project root)"
+              placeholder={dialogs.newAsset.destinationPlaceholder}
               onChange={(e) => setDestination(e.target.value)}
             />
             {destinationError && (
@@ -252,15 +253,15 @@ export default function NewAssetDialog({
             {previews.length === 0 ? (
               <>
                 <span className="drop-icon">📥</span>
-                <p>Drag &amp; drop files here</p>
-                <p className="hint">or</p>
+                <p>{dialogs.newAsset.dropZone}</p>
+                <p className="hint">{dialogs.newAsset.dropZoneOr}</p>
                 <button
                   className="qh-btn primary browse-btn"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  Browse Files
+                  {dialogs.newAsset.browse}
                 </button>
-                <p className="size-hint">Max file size: {maxMB}MB</p>
+                <p className="size-hint">{dialogs.newAsset.maxSize(maxMB)}</p>
               </>
             ) : (
               <div className="file-previews">
@@ -309,7 +310,7 @@ export default function NewAssetDialog({
                       </div>
                       <button
                         className="remove-btn"
-                        aria-label={`Remove ${editedName}`}
+                        aria-label={dialogs.newAsset.remove(editedName)}
                         onClick={() => removePreview(p.file)}
                       >
                         &times;
@@ -321,7 +322,7 @@ export default function NewAssetDialog({
                   className="add-more-btn"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  + Add more
+                  {dialogs.newAsset.addMore}
                 </button>
               </div>
             )}
@@ -339,14 +340,14 @@ export default function NewAssetDialog({
 
         <div className="dialog-actions">
           <button className="qh-btn outline" onClick={onClose}>
-            Cancel
+            {common.cancel}
           </button>
           <button
             className="qh-btn primary"
             onClick={handleUpload}
             disabled={!canUpload}
           >
-            {isUploading ? 'Uploading...' : 'Upload'}
+            {isUploading ? dialogs.newAsset.uploading : dialogs.newAsset.upload}
           </button>
         </div>
     </ModalDialog>

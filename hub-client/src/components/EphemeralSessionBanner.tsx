@@ -10,13 +10,14 @@
  */
 
 import Tooltip from './Tooltip';
+import { notifications } from '../strings';
 import './notifications.css';
 
 export default function EphemeralSessionBanner() {
   return (
-    <Tooltip block content="Started without --allow-edit: edits sync live to everyone connected but are never written to the project's files. Restart the preview with --allow-edit to persist them.">
+    <Tooltip block content={notifications.ephemeralTooltip}>
       <div className="ephemeral-session-banner" role="status" tabIndex={0}>
-        Ephemeral session — edits won't be saved to disk
+        {notifications.ephemeralBanner}
       </div>
     </Tooltip>
   );

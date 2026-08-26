@@ -21,24 +21,38 @@ import { THEMES, bootHarness } from './helpers/visual';
 // server; under full parallelism the default 30s budget is too tight.
 test.setTimeout(60_000);
 
-const BASELINE_PAGES: { page: string; label: string; selector: string }[] = [
-  { page: 'projects-home', label: 'projects-home', selector: '.projects-home' },
-  { page: 'dialog-new-file', label: 'dialog-new-file', selector: '.new-file-dialog' },
-  { page: 'dialog-share', label: 'dialog-share', selector: '.share-dialog' },
-  { page: 'dialog-new-asset', label: 'dialog-new-asset', selector: '.new-asset-dialog' },
-  { page: 'sidebar', label: 'sidebar-sections', selector: '.sidebar-sections' },
-  { page: 'header', label: 'minimal-header', selector: '.minimal-header' },
-  { page: 'notifications', label: 'notifications', selector: '.ephemeral-session-banner' },
-  { page: 'tokens', label: 'tokens', selector: 'text=Design tokens' },
-  { page: 'gallery', label: 'gallery', selector: 'text=Component gallery' },
+// capture: 'element' screenshots the surface's container, so a change
+// local to that surface can't hide inside a mostly-empty 1280×720 page
+// (a sidebar-wide change once measured 0.86% of full-page pixels — under
+// the tolerance). 'page' is kept where the selector isn't a container
+// (tokens/gallery headings) or the surface has fixed-position children
+// outside it (notifications' toasts).
+const BASELINE_PAGES: {
+  page: string;
+  label: string;
+  selector: string;
+  capture: 'element' | 'page';
+}[] = [
+  { page: 'projects-home', label: 'projects-home', selector: '.projects-home', capture: 'element' },
+  { page: 'dialog-new-file', label: 'dialog-new-file', selector: '.new-file-dialog', capture: 'element' },
+  { page: 'dialog-share', label: 'dialog-share', selector: '.share-dialog', capture: 'element' },
+  { page: 'dialog-new-asset', label: 'dialog-new-asset', selector: '.new-asset-dialog', capture: 'element' },
+  { page: 'sidebar', label: 'sidebar-sections', selector: '.sidebar-sections', capture: 'element' },
+  { page: 'about-tab', label: 'about-tab', selector: '.about-tab', capture: 'element' },
+  { page: 'header', label: 'minimal-header', selector: '.minimal-header', capture: 'element' },
+  { page: 'notifications', label: 'notifications', selector: '.ephemeral-session-banner', capture: 'page' },
+  { page: 'tokens', label: 'tokens', selector: 'text=Design tokens', capture: 'page' },
+  { page: 'gallery', label: 'gallery', selector: 'text=Component gallery', capture: 'page' },
 ];
 
-for (const { page, label, selector } of BASELINE_PAGES) {
+for (const { page, label, selector, capture } of BASELINE_PAGES) {
   for (const theme of THEMES) {
     test(`${label} — ${theme} theme`, async ({ page: browserPage }) => {
       await bootHarness(browserPage, page, selector, theme);
 
-      await expect(browserPage).toHaveScreenshot(`${label}-${theme}.png`, {
+      const target =
+        capture === 'element' ? browserPage.locator(selector) : browserPage;
+      await expect(target).toHaveScreenshot(`${label}-${theme}.png`, {
         // Allow small pixel differences for anti-aliasing variance
         maxDiffPixelRatio: 0.01,
       });

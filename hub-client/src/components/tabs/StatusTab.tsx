@@ -7,6 +7,7 @@
  */
 
 import type { PresenceState } from '../../services/presenceService';
+import { tabs } from '../../strings';
 import './StatusTab.css';
 
 type WasmStatus = 'loading' | 'ready' | 'error';
@@ -28,13 +29,13 @@ export default function StatusTab({
   return (
     <div className="status-tab">
       <div className="status-tab-section">
-        <label className="section-label">Renderer</label>
+        <label className="section-label">{tabs.status.rendererLabel}</label>
         <div className={`status-indicator ${wasmStatus}`}>
           <span className="status-dot" />
           <span className="status-text">
-            {wasmStatus === 'loading' && 'Loading WASM...'}
-            {wasmStatus === 'ready' && 'Ready'}
-            {wasmStatus === 'error' && 'Error'}
+            {wasmStatus === 'loading' && tabs.status.loadingWasm}
+            {wasmStatus === 'ready' && tabs.status.ready}
+            {wasmStatus === 'error' && tabs.status.error}
           </span>
         </div>
         {wasmStatus === 'error' && wasmError && (
@@ -43,13 +44,13 @@ export default function StatusTab({
       </div>
 
       <div className="status-tab-section">
-        <label className="section-label">Collaborators</label>
+        <label className="section-label">{tabs.status.collaboratorsLabel}</label>
         {userCount === 0 ? (
-          <div className="no-users">No other users connected</div>
+          <div className="no-users">{tabs.status.noOthers}</div>
         ) : (
           <div className="user-list">
             <div className="user-count-summary">
-              {userCount} other{userCount === 1 ? '' : 's'} here
+              {tabs.status.othersHere(userCount)}
             </div>
             <ul className="user-names">
               {remoteUsers.map((user) => (

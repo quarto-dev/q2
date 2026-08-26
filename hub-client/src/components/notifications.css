@@ -117,3 +117,12 @@
   outline: var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
 }
+
+/* Forced colors: shadows are stripped — toasts keep a system-color
+   border so they don't merge into the page. */
+@media (forced-colors: active) {
+  .toast,
+  .update-available-toast {
+    border: 1px solid CanvasText;
+  }
+}

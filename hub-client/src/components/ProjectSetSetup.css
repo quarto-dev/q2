@@ -128,8 +128,12 @@
 }
 
 .setup-form-group input:focus {
-  outline: none;
   border-color: var(--border-focus);
+}
+
+.setup-form-group input:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .setup-form-group input:disabled {

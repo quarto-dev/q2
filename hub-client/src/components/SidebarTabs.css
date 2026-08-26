@@ -42,6 +42,13 @@
   background: var(--sidebar-section-hover);
 }
 
+/* WCAG 2.4.7: visible keyboard focus — inset so the ring isn't clipped
+   by the sidebar's overflow. */
+.section-header:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-offset));
+}
+
 .section-chevron {
   font-size: 8px;
   color: var(--editor-text-muted);

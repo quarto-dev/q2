@@ -8,7 +8,7 @@
  * This component is only imported in development builds.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import ProjectSetSetup from './ProjectSetSetup';
 import ProjectsHome from './ProjectsHome';
 import NewFileDialog from './NewFileDialog';
@@ -23,12 +23,14 @@ import UpdateAvailableToast from './UpdateAvailableToast';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
 import DevTokensPage from './DevTokensPage';
 import DevGalleryPage from './DevGalleryPage';
+import AboutTab from './tabs/AboutTab';
 import { ViewModeProvider } from './ViewModeContext';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import type { Symbol } from '@quarto/preview-renderer/types/intelligence';
 import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
 import type { CollectionSnapshot } from '../services/projectSetService';
+import type { SearchFiles } from '../services/search';
 import type { PwaPromptStore } from '../pwaPrompt';
 
 const FAKE_LEGACY_PROJECTS: ProjectEntry[] = [
@@ -165,6 +167,70 @@ const pendingPrompt: PwaPromptStore = {
   isPending: () => true,
 };
 
+/** Search fixture for the sidebar route: substring match over FAKE_FILES. */
+const fakeSearchFiles: SearchFiles = async (query) => {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return FAKE_FILES.filter((f) => f.path.toLowerCase().includes(q)).map(
+    (f) => ({ path: f.path, score: 1, terms: [q] }),
+  );
+};
+
+/**
+ * Stateful sidebar fixture. Keyboard-interaction specs need observable
+ * behavior, so unlike the other baseline routes this one tracks the
+ * selected file (aria-selected / active-row state) and records the last
+ * action in an offscreen testid element for assertions.
+ */
+function SidebarHarness() {
+  const [currentFile, setCurrentFile] = useState<FileEntry | null>(FAKE_FILES[0]);
+  const [lastAction, setLastAction] = useState('none');
+  return (
+    <EditorChrome>
+      <div style={{ width: 280, height: '100%', borderRight: '1px solid var(--sidebar-border)' }}>
+        <SidebarTabs>
+          {(sectionId) =>
+            sectionId === 'files' ? (
+              <FileSidebar
+                files={FAKE_FILES}
+                currentFile={currentFile}
+                onSelectFile={(f) => {
+                  setCurrentFile(f);
+                  setLastAction(`select:${f.path}`);
+                }}
+                onNewFile={() => setLastAction('new-file')}
+                onUploadFiles={() => setLastAction('upload')}
+                onDeleteFile={(f) => setLastAction(`delete:${f.path}`)}
+                onRenameFile={(f, p) => setLastAction(`rename:${f.path}->${p}`)}
+                onOpenInNewTab={(f) => setLastAction(`new-tab:${f.path}`)}
+                onCopyLink={(f) => setLastAction(`copy:${f.path}`)}
+                currentFormat="q2-preview"
+                searchFiles={fakeSearchFiles}
+              />
+            ) : sectionId === 'outline' ? (
+              <OutlinePanel
+                symbols={FAKE_SYMBOLS}
+                onSymbolClick={(s) => setLastAction(`symbol:${s.name}`)}
+              />
+            ) : (
+              <div style={{ padding: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
+                {sectionId} section
+              </div>
+            )
+          }
+        </SidebarTabs>
+      </div>
+      {/* Offscreen action recorder for Playwright assertions. */}
+      <div
+        data-testid="sidebar-last-action"
+        style={{ position: 'fixed', left: -10000, top: 0 }}
+      >
+        {lastAction}
+      </div>
+    </EditorChrome>
+  );
+}
+
 /** Editor chrome must render inside .editor-container for the dark-ramp
  *  token overrides (:root.dark .editor-container) to apply, and under a
  *  ViewModeProvider for ViewToggleControl (MinimalHeader). */
@@ -277,33 +343,13 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
       />
     </EditorChrome>
   ),
-  sidebar: () => (
+  sidebar: () => <SidebarHarness />,
+  // The About tab standalone (sidebar width) — covers the shortcuts
+  // reference, which the sidebar route's collapsed ABOUT section hides.
+  'about-tab': () => (
     <EditorChrome>
-      <div style={{ width: 280, height: '100%', borderRight: '1px solid var(--sidebar-border)' }}>
-        <SidebarTabs>
-          {(sectionId) =>
-            sectionId === 'files' ? (
-              <FileSidebar
-                files={FAKE_FILES}
-                currentFile={FAKE_FILES[0]}
-                onSelectFile={() => {}}
-                onNewFile={() => {}}
-                onUploadFiles={() => {}}
-                onDeleteFile={() => {}}
-                onRenameFile={() => {}}
-                onOpenInNewTab={() => {}}
-                onCopyLink={() => {}}
-                currentFormat="q2-preview"
-              />
-            ) : sectionId === 'outline' ? (
-              <OutlinePanel symbols={FAKE_SYMBOLS} onSymbolClick={() => {}} />
-            ) : (
-              <div style={{ padding: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
-                {sectionId} section
-              </div>
-            )
-          }
-        </SidebarTabs>
+      <div style={{ width: 280, height: '100%', overflowY: 'auto', borderRight: '1px solid var(--sidebar-border)', background: 'var(--sidebar-bg)' }}>
+        <AboutTab wasmStatus="loading" />
       </div>
     </EditorChrome>
   ),

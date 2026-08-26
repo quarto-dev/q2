@@ -9,6 +9,8 @@
 
 import { useState, useEffect } from 'react';
 import Tooltip from '../Tooltip';
+import { SHORTCUT_GROUPS } from '../../utils/keyboardShortcuts';
+import { common, tabs } from '../../strings';
 import { renderContentToHtml, isWasmReady } from '@quarto/preview-runtime';
 import changelogMd from '../../../changelog.md?raw';
 import moreInfoMd from '../../../resources/more-info.md?raw';
@@ -123,12 +125,12 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
       <div className="about-tab-section">
         <label className="section-label">Quarto Hub</label>
         <p className="about-description">
-          A collaborative editor for Quarto projects.
+          {tabs.about.tagline}
         </p>
       </div>
 
       <div className="about-tab-section">
-        <label className="section-label">Links</label>
+        <label className="section-label">{tabs.about.linksLabel}</label>
         <ul className="about-links">
           <li>
             <a
@@ -136,7 +138,7 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              GitHub Repository
+              {tabs.about.github}
             </a>
           </li>
           <li>
@@ -145,7 +147,7 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
               onClick={() => handleOpenModal('moreInfo')}
               disabled={!isReady}
             >
-              {wasmStatus === 'loading' ? 'Loading...' : 'More Information'}
+              {wasmStatus === 'loading' ? common.loading : tabs.about.moreInfo}
             </button>
           </li>
           <li>
@@ -154,20 +156,39 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
               onClick={() => handleOpenModal('changelog')}
               disabled={!isReady}
             >
-              {wasmStatus === 'loading' ? 'Loading...' : 'View Changelog'}
+              {wasmStatus === 'loading' ? common.loading : tabs.about.viewChangelog}
             </button>
             {renderError && (
-              <span className="changelog-error-hint"> (unavailable)</span>
+              <span className="changelog-error-hint"> {tabs.about.unavailable}</span>
             )}
           </li>
         </ul>
       </div>
 
       <div className="about-tab-section">
-        <label className="section-label">Build Info</label>
+        <label className="section-label">{tabs.about.shortcutsLabel}</label>
+        {SHORTCUT_GROUPS.map((group) => (
+          <div key={group.title} className="shortcuts-group">
+            <span className="shortcuts-group-title">{group.title}</span>
+            <dl className="shortcuts-list">
+              {group.entries.map((entry) => (
+                <div key={`${entry.keys}-${entry.action}`} className="shortcuts-row">
+                  <dt>
+                    <kbd>{entry.keys}</kbd>
+                  </dt>
+                  <dd>{entry.action}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
+      </div>
+
+      <div className="about-tab-section">
+        <label className="section-label">{tabs.about.buildInfoLabel}</label>
         <div className="version-info">
-          <span className="commit-label">commit</span>
-          <Tooltip content={`Built: ${__BUILD_TIME__} · Commit date: ${__GIT_COMMIT_DATE__}`}>
+          <span className="commit-label">{tabs.about.commitLabel}</span>
+          <Tooltip content={tabs.about.builtTooltip(__BUILD_TIME__, __GIT_COMMIT_DATE__)}>
             <span className="commit-hash" tabIndex={0}>
               {__GIT_COMMIT_HASH__}
             </span>
@@ -194,7 +215,7 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
                   className="changelog-iframe"
                 />
               ) : (
-                <div className="changelog-loading">Loading...</div>
+                <div className="changelog-loading">{common.loading}</div>
               )}
             </div>
           </div>

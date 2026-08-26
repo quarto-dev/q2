@@ -51,7 +51,7 @@ describe('FileSidebar asset-upload integration', () => {
       render(<FileSidebar {...baseProps} />);
 
       const newBtn = screen.getByRole('button', { name: 'New file' });
-      const uploadBtn = screen.getByRole('button', { name: 'Upload asset' });
+      const uploadBtn = screen.getByRole('button', { name: 'Add asset' });
 
       // Icon-only: no visible text, just an aria-hidden SVG glyph.
       for (const btn of [newBtn, uploadBtn]) {
@@ -65,7 +65,7 @@ describe('FileSidebar asset-upload integration', () => {
     it('calls onUploadFiles with empty files and root destination when nothing is selected', () => {
       const onUploadFiles = vi.fn();
       render(<FileSidebar {...baseProps} onUploadFiles={onUploadFiles} />);
-      fireEvent.click(screen.getByRole('button', { name: /upload/i }));
+      fireEvent.click(screen.getByRole('button', { name: /add asset/i }));
       expect(onUploadFiles).toHaveBeenCalledWith([], '');
     });
 
@@ -78,7 +78,7 @@ describe('FileSidebar asset-upload integration', () => {
           onUploadFiles={onUploadFiles}
         />
       );
-      fireEvent.click(screen.getByRole('button', { name: /upload/i }));
+      fireEvent.click(screen.getByRole('button', { name: /add asset/i }));
       expect(onUploadFiles).toHaveBeenCalledWith([], 'notes');
     });
 
@@ -91,7 +91,7 @@ describe('FileSidebar asset-upload integration', () => {
           onUploadFiles={onUploadFiles}
         />
       );
-      fireEvent.click(screen.getByRole('button', { name: /upload/i }));
+      fireEvent.click(screen.getByRole('button', { name: /add asset/i }));
       expect(onUploadFiles).toHaveBeenCalledWith([], '');
     });
 
@@ -104,7 +104,7 @@ describe('FileSidebar asset-upload integration', () => {
           onUploadFiles={onUploadFiles}
         />
       );
-      fireEvent.click(screen.getByRole('button', { name: /upload/i }));
+      fireEvent.click(screen.getByRole('button', { name: /add asset/i }));
       expect(onUploadFiles).toHaveBeenCalledWith([], '_quarto/grammars/toml');
     });
   });

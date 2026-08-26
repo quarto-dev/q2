@@ -18,9 +18,15 @@
 .replay-drawer--expanded {
   height: 72px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  outline: none;
   display: flex;
   flex-direction: column;
+}
+
+/* The expanded drawer is focusable (tabIndex) — keep a visible keyboard
+   indicator, inset so the ring isn't clipped by surrounding overflow. */
+.replay-drawer--expanded:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-offset));
 }
 
 /* Toggle button — matches .section-header style from SidebarTabs */
@@ -258,6 +264,13 @@
   background: transparent;
   outline: none;
   cursor: pointer;
+}
+
+/* The scrubber is a transparent overlay on the waveform; keyboard focus
+   rings the whole waveform area. */
+.replay-waveform__input:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -1px;
 }
 
 .replay-waveform__input::-webkit-slider-runnable-track {

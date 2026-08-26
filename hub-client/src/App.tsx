@@ -16,6 +16,7 @@ function DevHarnessLazy({ page }: { page: string }) {
   );
 }
 import Editor from './components/Editor';
+import { common, notifications } from './strings';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import SkipLink from './components/SkipLink';
 import Toast from './components/Toast';
@@ -784,7 +785,7 @@ function App() {
   if (AUTH_ENABLED && authLoading) {
     return (
       <div className="project-selector" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading...</div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>{common.loading}</div>
       </div>
     );
   }
@@ -803,7 +804,7 @@ function App() {
   if (screenName === undefined) {
     return (
       <div className="project-selector" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading...</div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>{common.loading}</div>
       </div>
     );
   }
@@ -958,7 +959,7 @@ function App() {
         </ViewModeProvider>
       )}
       <Toast
-        message="Auto-saved"
+        message={notifications.autoSaved}
         visible={showSaveToast}
         onHide={() => setShowSaveToast(false)}
       />

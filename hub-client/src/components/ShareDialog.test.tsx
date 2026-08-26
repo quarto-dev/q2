@@ -27,7 +27,7 @@ describe('ShareDialog accessibility', () => {
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     const labelId = dialog.getAttribute('aria-labelledby');
     expect(labelId).toBeTruthy();
-    expect(document.getElementById(labelId!)?.textContent).toBe('Share Project');
+    expect(document.getElementById(labelId!)?.textContent).toBe('Share project');
   });
 
   it('gives the close button an accessible name', () => {

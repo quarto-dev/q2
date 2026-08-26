@@ -1,4 +1,10 @@
 {
+  "about-tab|dark": {
+    "color-contrast": 3
+  },
+  "about-tab|light": {
+    "color-contrast": 4
+  },
   "dialog-new-asset|dark": {
     "color-contrast": 1
   },

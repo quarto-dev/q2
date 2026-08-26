@@ -6,6 +6,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
+import { sections } from '../strings';
 import './SidebarTabs.css';
 
 export type SectionId = 'files' | 'outline' | 'project' | 'status' | 'settings' | 'about';
@@ -17,12 +18,12 @@ interface Section {
 }
 
 const SECTIONS: Section[] = [
-  { id: 'files', label: 'FILES', defaultExpanded: true },
-  { id: 'outline', label: 'OUTLINE', defaultExpanded: true },
-  { id: 'project', label: 'PROJECT', defaultExpanded: false },
-  { id: 'status', label: 'STATUS', defaultExpanded: false },
-  { id: 'settings', label: 'SETTINGS', defaultExpanded: false },
-  { id: 'about', label: 'ABOUT', defaultExpanded: false },
+  { id: 'files', label: sections.files, defaultExpanded: true },
+  { id: 'outline', label: sections.outline, defaultExpanded: true },
+  { id: 'project', label: sections.project, defaultExpanded: false },
+  { id: 'status', label: sections.status, defaultExpanded: false },
+  { id: 'settings', label: sections.settings, defaultExpanded: false },
+  { id: 'about', label: sections.about, defaultExpanded: false },
 ];
 
 interface SidebarTabsProps {
@@ -57,21 +58,30 @@ export default function SidebarTabs({ children, disabled }: SidebarTabsProps) {
     <div className={`sidebar-sections${disabled ? ' sidebar-sections--disabled' : ''}`}>
       {SECTIONS.map((section) => {
         const isExpanded = expandedSections.has(section.id);
+        const headerId = `sidebar-section-header-${section.id}`;
+        const contentId = `sidebar-section-content-${section.id}`;
         return (
           <div
             key={section.id}
             className={`sidebar-section ${isExpanded ? 'expanded' : 'collapsed'}`}
           >
             <button
+              id={headerId}
               className="section-header"
               onClick={() => toggleSection(section.id)}
               aria-expanded={isExpanded}
+              aria-controls={contentId}
             >
               <span className="section-chevron">{isExpanded ? '▼' : '▶'}</span>
               <span className="section-label">{section.label}</span>
             </button>
             {isExpanded && (
-              <div className="section-content">
+              <div
+                className="section-content"
+                role="region"
+                id={contentId}
+                aria-labelledby={headerId}
+              >
                 {children(section.id)}
               </div>
             )}

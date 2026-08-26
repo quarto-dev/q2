@@ -503,10 +503,14 @@
 
 .form-group input:focus,
 .form-group select:focus {
-  outline: none;
   border-color: var(--posit-green);
   background: var(--input-bg-alpha-hover);
-  box-shadow: 0 0 0 3px var(--posit-green-alpha-25);
+}
+
+.form-group input:focus-visible,
+.form-group select:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .form-group input::placeholder {
@@ -786,9 +790,12 @@
 }
 
 .identity-name-edit input:focus {
-  outline: none;
   border-color: var(--posit-blue);
-  box-shadow: 0 0 0 2px var(--posit-blue-alpha-20);
+}
+
+.identity-name-edit input:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .identity-name-edit button {
