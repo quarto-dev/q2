@@ -12,7 +12,7 @@
  */
 
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { installLinkHandlers } from './iframeLinkHandlers';
+import { installLinkHandlers, routeLinkClick } from './iframeLinkHandlers';
 
 type QmdLinkClickArg = { path: string; anchor: string | null } | { anchor: string };
 
@@ -415,5 +415,75 @@ describe('installLinkHandlers', () => {
 
         expect(onQmdLinkClick).not.toHaveBeenCalled();
         expect(continued).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------
+// bd-y66gbfs4 — `routeLinkClick` is the per-click routing extracted
+// from the body listener so non-delegated surfaces (the comment
+// bubble, whose chrome stopPropagation()s clicks before they reach
+// doc.body) can route link clicks through identical logic. Returns
+// true when it handled (and preventDefault'd) the click.
+
+describe('routeLinkClick', () => {
+    const opts = () => ({
+        currentFilePath: 'dir/current.qmd',
+        projectFilePaths: ['dir/other.qmd', 'index.qmd'],
+        onQmdLinkClick,
+    });
+
+    function clickEventOn(el: Element): MouseEvent {
+        const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
+        Object.defineProperty(ev, 'target', { value: el });
+        return ev;
+    }
+
+    test('external link → window.open in a new tab, handled', () => {
+        const a = appendAnchor('https://example.com/x');
+        const ev = clickEventOn(a);
+        expect(routeLinkClick(ev, opts())).toBe(true);
+        expect(openSpy).toHaveBeenCalledWith(
+            'https://example.com/x',
+            '_blank',
+            'noopener,noreferrer',
+        );
+        expect(ev.defaultPrevented).toBe(true);
+    });
+
+    test('same-document #frag → onQmdLinkClick({anchor}), handled', () => {
+        const a = appendAnchor('#sec-2');
+        const ev = clickEventOn(a);
+        expect(routeLinkClick(ev, opts())).toBe(true);
+        expect(onQmdLinkClick).toHaveBeenCalledWith({ anchor: 'sec-2' });
+        expect(ev.defaultPrevented).toBe(true);
+    });
+
+    test('relative .qmd link resolves against currentFilePath, handled', () => {
+        const a = appendAnchor('./other.qmd#top');
+        const ev = clickEventOn(a);
+        expect(routeLinkClick(ev, opts())).toBe(true);
+        // Leading slash matches `resolveRelativePath`'s VFS-absolute
+        // convention (same shape the delegated listener produces).
+        expect(onQmdLinkClick).toHaveBeenCalledWith({
+            path: '/dir/other.qmd',
+            anchor: 'top',
+        });
+    });
+
+    test('click with no anchor ancestor → not handled, nothing called', () => {
+        const span = doc.createElement('span');
+        doc.body.appendChild(span);
+        const ev = clickEventOn(span);
+        expect(routeLinkClick(ev, opts())).toBe(false);
+        expect(onQmdLinkClick).not.toHaveBeenCalled();
+        expect(openSpy).not.toHaveBeenCalled();
+        expect(ev.defaultPrevented).toBe(false);
+    });
+
+    test('unroutable href (bare .html outside artifact root) → not handled', () => {
+        const a = appendAnchor('/about.html');
+        const ev = clickEventOn(a);
+        expect(routeLinkClick(ev, opts())).toBe(false);
+        expect(ev.defaultPrevented).toBe(false);
     });
 });

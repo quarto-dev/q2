@@ -14,6 +14,13 @@
  *    inline add-comment input at the bottom.
  *  - 'hide' mode strips comments from the text but renders no chrome.
  *
+ * Comment text renders RICH (bd-y66gbfs4): the span's inlines go
+ * through the normal q2-preview inline renderers via a bubble-scoped
+ * registry override (see `CommentSpanContent`) — emphasis, code,
+ * quotes, links, and clamped images render for real; nested editorial
+ * marks and Notes render an affirmative `[unsupported content]` chip;
+ * link clicks route through `routeLinkClick` at the chrome level.
+ *
  * The three-way mode arrives via `PreviewContext.commentsMode` from the
  * host toolbar. Adds/resolves round-trip through
  * `usePreviewEdit().commitSubtreeEdit` (no-ops where `PreviewContext`
@@ -33,7 +40,7 @@
  * `__Q2_PREVIEW_RENDERER__.Block`, exactly as before).
  */
 import React from 'react';
-import { AttributionLookupContext, inlinesToPlainText } from '../../framework';
+import { AttributionLookupContext, Node as AstNode, RegistryContext } from '../../framework';
 import type {
     BlockNode,
     DivBlock,
@@ -48,6 +55,7 @@ import { Block as B } from '../dispatchers';
 import { PreviewContext } from '../PreviewContext';
 import type { CommentsMode } from '../PreviewContext';
 import { usePreviewEdit } from '../usePreviewEdit';
+import { routeLinkClick } from '../../utils/iframeLinkHandlers';
 
 // Shared palette bits.
 const CHROME_BLUE = '#4a7ba7';
@@ -100,7 +108,11 @@ function inlineSlot(block: BlockNode): InlineNode[] | null {
     const tag = document.createElement('style');
     tag.setAttribute('data-q2-comment-styles', '1');
     tag.textContent =
-        '.q2-comment-input::placeholder { color: #a9c7e8; opacity: 1; }';
+        '.q2-comment-input::placeholder { color: #a9c7e8; opacity: 1; }\n' +
+        // Image containment (bd-y66gbfs4): an unconstrained <img> would
+        // widen the shrink-to-fit bubble to its intrinsic size. `100%`
+        // resolves against the bubble's inner max-width'd containers.
+        '.q2-comment-bubble img { max-width: 100%; max-height: 2.5em; object-fit: contain; }';
     document.head.appendChild(tag);
 })();
 
@@ -129,11 +141,94 @@ function sameCommentableKind(rendered: BlockNode, source: BlockNode): boolean {
     return false;
 }
 
-// Pandoc-stringify walk of the span's content: recurses into Quoted /
-// Emph / Code / Link / ... instead of dropping them (bd-wcz4x7y0).
-function commentSpanText(span: InlineNode): string {
-    return inlinesToPlainText((span as SpanInline).c[1]);
-}
+// ---------------------------------------------------------------------
+// Rich bubble content (bd-y66gbfs4). The bubble renders the comment
+// span's inlines through the normal q2-preview inline renderers via the
+// framework's <Node> dispatch, with two deliberate deviations installed
+// through a bubble-scoped registry override:
+//
+//  - Editorial-mark spans and Notes render an affirmative
+//    `[unsupported content]` chip instead of their content. In the wire
+//    format ALL four editorial marks are `t: 'Span'` distinguished only
+//    by class, so the interception is class-aware inside a Span
+//    override (a tag-keyed entry can't see them). Nesting is handled
+//    for free: the provider wraps the whole bubble subtree, so
+//    recursion through any renderer re-enters the override.
+//  - `setLocalAst` is a no-op: the bubble displays the comment; all
+//    comment mutation goes through addComment / resolveCommentAtIndex
+//    on the resolved source node.
+//
+// Plan: claude-notes/plans/2026-08-26-rich-comment-bubbles.md
+
+const EDITORIAL_MARK_CLASSES = new Map<string, string>([
+    ['quarto-edit-comment', 'nested comment'],
+    ['quarto-insert', 'insertion mark'],
+    ['quarto-delete', 'deletion mark'],
+    ['quarto-highlight', 'highlight mark'],
+]);
+
+// Generic text on purpose — the chip must stay narrow in a 140px
+// bubble; the tooltip carries the kind.
+const UnsupportedChip = ({ kind }: { kind: string }) => (
+    <span
+        title={`unsupported in comment bubbles: ${kind}`}
+        style={{
+            fontFamily: 'monospace',
+            fontSize: '0.9em',
+            fontStyle: 'normal',
+            opacity: 0.65,
+        }}
+    >
+        [unsupported content]
+    </span>
+);
+
+const NOOP_SET_LOCAL_AST = () => {};
+
+/**
+ * Renders one comment span's content inlines for display in the
+ * bubble, under the bubble-scoped registry override described above.
+ */
+const CommentSpanContent = ({
+    span,
+    onNavigateToDocument,
+}: {
+    span: InlineNode;
+    onNavigateToDocument?: (path: string, anchor: string | null) => void;
+}) => {
+    const outer = React.useContext(RegistryContext);
+    const bubbleValue = React.useMemo(() => {
+        const OuterSpan = outer.registry['Span'];
+        const BubbleSpan = (props: NodeArgs<InlineNode>) => {
+            const classes = (props.node as SpanInline).c[0][1] ?? [];
+            const marked = classes.find((c) => EDITORIAL_MARK_CLASSES.has(c));
+            if (marked !== undefined) {
+                return <UnsupportedChip kind={EDITORIAL_MARK_CLASSES.get(marked)!} />;
+            }
+            return OuterSpan ? <OuterSpan {...props} /> : null;
+        };
+        const registry = {
+            ...outer.registry,
+            Span: BubbleSpan,
+            // Block content has no place in the chip-sized bubble.
+            Note: () => <UnsupportedChip kind="footnote" />,
+        };
+        return { registry, sourceInfoPool: outer.sourceInfoPool };
+    }, [outer.registry, outer.sourceInfoPool]);
+
+    return (
+        <RegistryContext.Provider value={bubbleValue}>
+            {(span as SpanInline).c[1].map((inline, i) => (
+                <AstNode
+                    key={i}
+                    node={inline}
+                    onNavigateToDocument={onNavigateToDocument}
+                    setLocalAst={NOOP_SET_LOCAL_AST}
+                />
+            ))}
+        </RegistryContext.Provider>
+    );
+};
 
 export const CommentBlock = (args: NodeArgs<BlockNode>) => {
     const edit = usePreviewEdit();
@@ -227,7 +322,13 @@ export const CommentBlock = (args: NodeArgs<BlockNode>) => {
     // (and no wrapper div) renders at all.
     if (mode === 'hide') return content;
     return (
-        <CommentWrapper comments={comments} block={block} edit={edit} mode={mode}>
+        <CommentWrapper
+            comments={comments}
+            block={block}
+            edit={edit}
+            mode={mode}
+            onNavigateToDocument={onNavigateToDocument}
+        >
             {content}
         </CommentWrapper>
     );
@@ -495,14 +596,59 @@ const CommentWrapper = ({
     block,
     edit,
     mode,
+    onNavigateToDocument,
 }: {
     children: React.ReactNode;
     comments: InlineNode[];
     block: BlockNode;
     edit: EditHandle;
     mode: CommentsMode;
+    onNavigateToDocument?: (path: string, anchor: string | null) => void;
 }) => {
     const [commentText, setCommentText] = React.useState('');
+    const previewCtx = React.useContext(PreviewContext);
+
+    /**
+     * Route an `<a>` click inside the bubble through the preview's
+     * link policy (bd-y66gbfs4). The chrome deliberately
+     * stopPropagation()s clicks (they must not reach the click-to-edit
+     * delegate), which also keeps them from the delegated body link
+     * listener — so the bubble routes its own link clicks through the
+     * same extracted logic. Returns true when the click hit a link
+     * (routed or swallowed) so callers skip the bubble's own
+     * expand/open-input behavior.
+     *
+     * Simplifications vs. PreviewRoot's wiring (agreed for v1): no
+     * `scrollToAnchor` host hook — same-document fragments use a plain
+     * smooth `scrollIntoView`; no `projectFilePaths` — artifact hrefs
+     * fall back to the `.qmd` candidate.
+     */
+    const handleBubbleLinkClick = (e: React.MouseEvent): boolean => {
+        const anchor = (e.target as Element | null)?.closest?.('a');
+        if (!anchor) return false;
+        const scrollToFragment = (frag: string) => {
+            document.getElementById(frag)?.scrollIntoView({ behavior: 'smooth' });
+        };
+        const handled = routeLinkClick(e.nativeEvent, {
+            currentFilePath: previewCtx?.currentFilePath ?? '',
+            onQmdLinkClick: (arg) => {
+                if ('path' in arg) {
+                    if (arg.path === previewCtx?.currentFilePath) {
+                        if (arg.anchor) scrollToFragment(arg.anchor);
+                    } else {
+                        onNavigateToDocument?.(arg.path, arg.anchor);
+                    }
+                } else {
+                    scrollToFragment(arg.anchor);
+                }
+            },
+        });
+        // An unroutable href must still never navigate the preview
+        // iframe from inside a bubble — swallow it.
+        if (!handled) e.preventDefault();
+        return true;
+    };
+
     // Clicking a compact bubble expands it in place (with the inline
     // add-comment input open at its bottom).
     const [selfExpanded, setSelfExpanded] = React.useState(false);
@@ -749,6 +895,20 @@ const CommentWrapper = ({
         // so the force layout re-measures.
     }, [chromeVisible, comments.length, expanded, showInlineInput]);
 
+    // Rich content can grow the bubble asynchronously — an <img> in a
+    // comment finishes loading after the force layout measured the
+    // chip. `load` doesn't bubble, so listen in the CAPTURE phase on
+    // the chrome and re-solve when it fires (growth is bounded by the
+    // .q2-comment-bubble img clamp + the chip's own maxWidth).
+    React.useEffect(() => {
+        if (!chromeVisible) return;
+        const el = chromeRef.current;
+        if (!el) return;
+        const onDescendantLoad = () => scheduleBubbleRelayout();
+        el.addEventListener('load', onDescendantLoad, true);
+        return () => el.removeEventListener('load', onDescendantLoad, true);
+    }, [chromeVisible]);
+
     // Sync hover into the registry entry. Re-layout on hover START
     // only: un-hovering keeps the arrangement as-is (it persists until
     // the next hover or a new bubble mounts).
@@ -839,11 +999,19 @@ const CommentWrapper = ({
                             e.preventDefault();
                         }
                     }}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                        // Link clicks inside the bubble route through
+                        // the preview's link policy here (they can't
+                        // reach the delegated body listener past the
+                        // stopPropagation below).
+                        handleBubbleLinkClick(e);
+                        e.stopPropagation();
+                    }}
                     onKeyDown={(e) => e.stopPropagation()}
                 >
                     <div
                         ref={bubbleRef}
+                        className="q2-comment-bubble"
                         style={{
                             // Near-white with just a hint of blue.
                             backgroundColor: '#f7faff',
@@ -853,13 +1021,24 @@ const CommentWrapper = ({
                             border: `1px solid ${CHROME_BLUE}`,
                             fontSize: '0.7rem',
                             cursor: 'pointer',
+                            // Chip-level containment (bd-y66gbfs4): no
+                            // rendered comment content of any kind may
+                            // widen the chip. Generous vs. the designed
+                            // content widths (expanded rows ≈ 220px) so
+                            // it only bites on oversized content.
+                            maxWidth: '260px',
+                            overflow: 'hidden',
                             // Block hover puts an offset-free light
                             // blue glow on the bubble.
                             boxShadow: isHovered ? GLOW : '0 2px 4px rgba(0,0,0,0.2)',
                             transition: 'box-shadow 0.15s',
                             userSelect: 'none',
                         }}
-                        onClick={() => {
+                        onClick={(e) => {
+                            // A click on a link is a navigation, not a
+                            // bubble interaction — the chrome-level
+                            // handler routes it; skip expand/open.
+                            if ((e.target as Element | null)?.closest?.('a')) return;
                             // Clicking a compact bubble expands it in
                             // place; any click opens the inline input.
                             if (!expanded) setSelfExpanded(true);
@@ -904,7 +1083,7 @@ const CommentWrapper = ({
                                                 maxWidth: '160px',
                                                 overflowWrap: 'break-word',
                                             }}>
-                                                {commentSpanText(c)}
+                                                <CommentSpanContent span={c} onNavigateToDocument={onNavigateToDocument} />
                                             </span>
                                             <button
                                                 onClick={(ev) => {
@@ -991,7 +1170,7 @@ const CommentWrapper = ({
                                     whiteSpace: 'nowrap',
                                     textOverflow: 'ellipsis',
                                 }}>
-                                    {commentSpanText(comments[0])}
+                                    <CommentSpanContent span={comments[0]} onNavigateToDocument={onNavigateToDocument} />
                                 </div>
                                 {comments.length > 1 && (
                                     <div style={{ color: '#6699cc', textAlign: 'right' }}>
