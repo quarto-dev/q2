@@ -5,6 +5,37 @@
    prefix. Colors route through theme.css tokens so dark mode keeps
    working. */
 
+/* ---- shared utilities ----
+   Documented single-purpose classes for patterns that would otherwise be
+   re-invented per component. Adopt at exact-match sites; if a component
+   needs something different, that's a design decision, not a fork. */
+
+/* Single-line truncation: ellipsis instead of wrapping. The element (or a
+   flex ancestor) needs a min-width: 0 for the ellipsis to engage. */
+.qh-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Standard row hover for list/tree rows in the sidebar chrome. */
+.qh-row-hover:hover {
+  background: var(--sidebar-border);
+}
+
+/* Active-accent row: the sidebar's selected-row treatment — teal
+   leading-edge accent over the accent background. Uses an always-present
+   transparent border (not a margin offset) so selection causes no layout
+   shift. Logical property keeps the accent on the leading edge in RTL. */
+.qh-active-accent-row {
+  border-inline-start: 2px solid transparent;
+}
+
+.qh-active-accent-row.active {
+  background: var(--editor-accent-bg);
+  border-inline-start-color: var(--sidebar-active-accent);
+}
+
 /* ---- buttons ---- */
 
 .qh-btn {
@@ -20,7 +51,7 @@
 
 .qh-btn.primary {
   background: var(--posit-teal);
-  color: #ffffff;
+  color: var(--text-on-accent);
 }
 
 .qh-btn.primary:hover { filter: brightness(1.08); }
@@ -36,7 +67,7 @@
 
 .qh-btn.danger {
   background: var(--posit-red);
-  color: #ffffff;
+  color: var(--text-on-accent);
 }
 
 .qh-btn.danger:hover { filter: brightness(1.1); }
@@ -48,7 +79,7 @@
   padding: 7px 14px;
 }
 
-.qh-btn.ghost-accent:hover { background: rgba(65, 149, 153, 0.08); }
+.qh-btn.ghost-accent:hover { background: var(--posit-teal-alpha-08); }
 
 .qh-btn.small {
   font-size: 12px;
@@ -101,7 +132,7 @@
   border-radius: 9px;
   box-shadow: 0 8px 28px var(--context-menu-shadow);
   padding: 6px;
-  z-index: 60;
+  z-index: var(--z-dropdown);
   display: flex;
   flex-direction: column;
 }
@@ -191,11 +222,11 @@
 .qh-dialog-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(23, 50, 77, 0.55);
+  background: var(--backdrop-bg);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-overlay);
 }
 
 .qh-dialog {
@@ -279,7 +310,7 @@ select.qh-input { appearance: auto; }
 .qh-tab.active {
   background: var(--bg-modal);
   color: var(--text-primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px var(--alpha-black-08);
 }
 
 /* ---- errors ---- */
@@ -322,7 +353,7 @@ select.qh-input { appearance: auto; }
 
 /* Editor chrome stacks floating elements up to z-index 1000 (context menu,
    preview error overlay), so dialogs in the editor keep the higher level. */
-.editor-container .qh-dialog-backdrop { z-index: 1000; }
+.editor-container .qh-dialog-backdrop { z-index: var(--z-modal); }
 
 .dialog-header {
   display: flex;

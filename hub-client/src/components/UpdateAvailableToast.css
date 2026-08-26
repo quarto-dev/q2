@@ -17,7 +17,7 @@
   font-size: 14px;
   font-family: system-ui, -apple-system, sans-serif;
   box-shadow: 0 4px 12px var(--toast-shadow);
-  z-index: 10001; /* above the transient .toast (10000) */
+  z-index: var(--z-max); /* above the transient .toast (--z-toast) */
   animation: update-available-toast-in 0.2s ease-out;
 }
 

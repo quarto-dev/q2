@@ -35,7 +35,7 @@
 
 .drop-zone.drag-over {
   border-color: var(--dialog-tab-active);
-  background: rgba(65, 149, 153, 0.08);
+  background: var(--posit-teal-alpha-08);
 }
 
 .drop-zone .drop-icon {

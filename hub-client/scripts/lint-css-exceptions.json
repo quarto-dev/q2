@@ -1,150 +1,4 @@
 {
-  "no-hardcoded-color": {
-    "App.css": [
-      "box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);",
-      "color: #ffffff;"
-    ],
-    "components/Editor.css": [
-      "background: rgba(0, 0, 0, 0.05);",
-      "background: rgba(0, 0, 0, 0.4);",
-      "background: rgba(0, 0, 0, 0.6);",
-      "background: rgba(65, 149, 153, 0.05);",
-      "border-color: rgba(255, 255, 255, 0.9);",
-      "border-top: 1px solid var(--error-overlay-border, rgba(0, 0, 0, 0.1));",
-      "border: 2px solid rgba(255, 255, 255, 0.6);",
-      "box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);",
-      "color: #fff;"
-    ],
-    "components/FileSidebar.css": [
-      "background: rgba(65, 149, 153, 0.08);"
-    ],
-    "components/NewFileDialog.css": [
-      "background: rgba(65, 149, 153, 0.08);"
-    ],
-    "components/ProjectSelector.css": [
-      "background: #5ab5b8;",
-      "background: #bacad8;",
-      "background: #ffffff;",
-      "border-color: #5ab5b8;",
-      "border-left-color: #4a6a32;",
-      "box-shadow: 0 0 0 2px rgba(68, 112, 153, 0.2);",
-      "box-shadow: 0 0 0 3px rgba(114, 153, 78, 0.25);",
-      "box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);",
-      "box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);",
-      "box-shadow: 0 4px 12px rgba(65, 149, 153, 0.3);",
-      "box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);",
-      "box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);",
-      "color: #ffffff;"
-    ],
-    "components/ProjectsHome.css": [
-      "background: rgba(65, 149, 153, 0.05);",
-      "box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);",
-      "color: #ffffff;"
-    ],
-    "components/ReplayDrawer.css": [
-      "-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);",
-      "background: conic-gradient( from var(--replay-drawer__attribution-angle), #ff3b30 0deg, #ff9500 60deg, #ffcc00 120deg, #34c759 180deg, #5ac8fa 240deg, #5856d6 300deg, #ff3b30 360deg );",
-      "background: rgba(255, 255, 255, 0.05);",
-      "mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);"
-    ],
-    "components/SkipLink.css": [
-      "color: #fff;"
-    ],
-    "components/debug-inspector/DebugInspectorPanel.css": [
-      "background: #181825;",
-      "background: #1e1e2e;",
-      "background: #313244;",
-      "background: #45475a;",
-      "background: #89b4fa;",
-      "background: #a6e3a1;",
-      "background: #f38ba8;",
-      "border-bottom: 1px solid #313244;",
-      "border-color: #89b4fa;",
-      "border-right: 1px solid #313244;",
-      "border-top: 1px solid #313244;",
-      "border-top: 2px solid #89b4fa;",
-      "border: 1px solid #313244;",
-      "border: 1px solid #45475a;",
-      "box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45);",
-      "color: #1e1e2e;",
-      "color: #6c7086;",
-      "color: #89b4fa;",
-      "color: #a6adc8;",
-      "color: #a6e3a1;",
-      "color: #cdd6f4;",
-      "color: #f38ba8;",
-      "color: #f9e2af;"
-    ],
-    "components/tabs/AboutTab.css": [
-      "background: rgba(23, 50, 77, 0.55);"
-    ],
-    "components/tabs/ProjectTab.css": [
-      "background: rgba(65, 149, 153, 0.08);"
-    ],
-    "debug/debug.css": [
-      "background-color: #fef3c7;",
-      "background-color: rgba(0, 0, 0, 0.05);",
-      "border-bottom: 1px solid #fcd34d;",
-      "color: #000;",
-      "color: #92400e;",
-      "color: #fff;"
-    ],
-    "ui.css": [
-      "background: rgba(23, 50, 77, 0.55);",
-      "background: rgba(65, 149, 153, 0.08);",
-      "box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);",
-      "color: #ffffff;"
-    ]
-  },
-  "no-bare-z-index": {
-    "App.css": [
-      "z-index: 2000;"
-    ],
-    "components/Editor.css": [
-      "z-index: 0;",
-      "z-index: 1000;",
-      "z-index: 100;",
-      "z-index: 10;",
-      "z-index: 1;"
-    ],
-    "components/FileSidebar.css": [
-      "z-index: 1000;"
-    ],
-    "components/ProjectSelector.css": [
-      "z-index: 1000;"
-    ],
-    "components/ProjectSetSetup.css": [
-      "z-index: 1000;"
-    ],
-    "components/ProjectsHome.css": [
-      "z-index: 1000;",
-      "z-index: 40;",
-      "z-index: 70;"
-    ],
-    "components/SkipLink.css": [
-      "z-index: 2000;"
-    ],
-    "components/Toast.css": [
-      "z-index: 10000;"
-    ],
-    "components/UpdateAvailableToast.css": [
-      "z-index: 10001;"
-    ],
-    "components/debug-inspector/DebugInspectorPanel.css": [
-      "z-index: 10000;"
-    ],
-    "components/render/revealjs-menu-override.css": [
-      "z-index: 30;"
-    ],
-    "components/tabs/AboutTab.css": [
-      "z-index: 10000;"
-    ],
-    "ui.css": [
-      "z-index: 1000;",
-      "z-index: 100;",
-      "z-index: 60;"
-    ]
-  },
   "no-outline-none-without-focus-visible": {
     "components/FileSidebar.css": [
       "*"
@@ -186,8 +40,6 @@
       "right: 35px;"
     ],
     "components/FileSidebar.css": [
-      "border-left-color: var(--sidebar-active-accent);",
-      "border-left: 2px solid transparent;",
       "border-left: 2px solid var(--sidebar-active-accent);",
       "margin-left: -2px;",
       "padding-left: 22px;",
@@ -209,8 +61,8 @@
       "text-align: left;"
     ],
     "components/ProjectSelector.css": [
-      "border-left-color: #4a6a32;",
       "border-left-color: var(--posit-orange);",
+      "border-left-color: var(--selector-success);",
       "border-left: 4px solid var(--posit-blue);",
       "margin-left: auto;",
       "margin-right: 6px;",
@@ -253,7 +105,7 @@
       "right: 20px;"
     ],
     "components/debug-inspector/DebugInspectorPanel.css": [
-      "border-right: 1px solid #313244;",
+      "border-right: 1px solid var(--debug-surface-0);",
       "margin-left: 6px;",
       "margin-right: 6px;"
     ],

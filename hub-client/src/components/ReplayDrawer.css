@@ -129,7 +129,7 @@
   border: 1px solid var(--replay-actor-border);
   border-radius: 3px;
   padding: 0 4px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--alpha-white-05);
 }
 
 .replay-drawer__actor-dot {
@@ -391,21 +391,21 @@
      the seam is invisible across the 0/360 boundary. */
   background: conic-gradient(
     from var(--replay-drawer__attribution-angle),
-    #ff3b30 0deg,
-    #ff9500 60deg,
-    #ffcc00 120deg,
-    #34c759 180deg,
-    #5ac8fa 240deg,
-    #5856d6 300deg,
-    #ff3b30 360deg
+    var(--attribution-red) 0deg,
+    var(--attribution-orange) 60deg,
+    var(--attribution-yellow) 120deg,
+    var(--attribution-green) 180deg,
+    var(--attribution-blue) 240deg,
+    var(--attribution-purple) 300deg,
+    var(--attribution-red) 360deg
   );
   -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
+    linear-gradient(var(--black) 0 0) content-box,
+    linear-gradient(var(--black) 0 0);
   -webkit-mask-composite: xor;
           mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
+    linear-gradient(var(--black) 0 0) content-box,
+    linear-gradient(var(--black) 0 0);
           mask-composite: exclude;
   animation: replay-drawer__attribution-spin 2s linear infinite;
   pointer-events: none;

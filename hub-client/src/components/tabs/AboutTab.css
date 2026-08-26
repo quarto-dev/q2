@@ -104,11 +104,11 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(23, 50, 77, 0.55);
+  background: var(--backdrop-bg);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10000;
+  z-index: var(--z-toast);
 }
 
 .changelog-modal {

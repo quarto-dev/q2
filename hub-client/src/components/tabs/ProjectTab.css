@@ -91,7 +91,7 @@
 }
 
 .export-zip-btn:hover {
-  background: rgba(65, 149, 153, 0.08);
+  background: var(--posit-teal-alpha-08);
 }
 
 .export-zip-btn:disabled {

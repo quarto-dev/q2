@@ -4,10 +4,10 @@
   position: absolute;
   top: -48px;
   left: 8px;
-  z-index: 2000;
+  z-index: var(--z-skip);
   padding: 8px 16px;
   background: var(--posit-blue);
-  color: #fff;
+  color: var(--text-on-accent);
   border-radius: 0 0 6px 6px;
   font-size: 14px;
   transition: top 0.15s ease;

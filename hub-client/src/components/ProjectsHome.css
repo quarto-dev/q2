@@ -11,7 +11,7 @@
   background: var(--bg-modal);
   color: var(--text-primary);
   overflow-y: auto;
-  z-index: 1000;
+  z-index: var(--z-modal);
 }
 
 .projects-home .mono {
@@ -39,7 +39,7 @@
   background: var(--bg-modal);
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: var(--z-header);
 }
 
 .qh-logo {
@@ -98,7 +98,7 @@
   height: 30px;
   border-radius: 50%;
   border: none;
-  color: #ffffff;
+  color: var(--text-on-accent);
   font-size: 12px;
   font-weight: 600;
   display: flex;
@@ -200,7 +200,7 @@
 
 .qh-card:hover {
   border-color: var(--posit-blue-light-3);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-1);
 }
 
 .qh-card-body {
@@ -309,7 +309,7 @@
   justify-content: center;
   border-radius: 50%;
   border: 2px solid var(--bg-modal);
-  color: #ffffff;
+  color: var(--text-on-accent);
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -552,7 +552,7 @@
   outline: 2px dashed var(--posit-teal);
   outline-offset: 8px;
   border-radius: 6px;
-  background: rgba(65, 149, 153, 0.05);
+  background: var(--posit-teal-alpha-05);
 }
 
 /* ---- everything else ---- */
@@ -621,7 +621,7 @@
   border-radius: 11px;
   box-shadow: 0 10px 32px var(--context-menu-shadow);
   padding: 17px 19px;
-  z-index: 70;
+  z-index: var(--z-dropdown);
   cursor: default;
 }
 

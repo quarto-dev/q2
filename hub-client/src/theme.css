@@ -180,6 +180,10 @@
   --focus-ring: 2px solid var(--border-focus);
   --focus-ring-offset: 2px;
 
+  /* Fixed semantic constants (same value in both themes). */
+  --text-on-accent: var(--white); /* text on teal/red/blue fills */
+  --backdrop-bg: rgba(23, 50, 77, 0.55); /* modal dialog scrim */
+
   --bg-overlay: rgba(209, 219, 229, 0.95);
   --bg-modal: #ffffff;
   --bg-card: var(--posit-blue-light-1);

@@ -95,10 +95,6 @@
   transition: background 0.15s;
 }
 
-.file-item:hover {
-  background: var(--sidebar-border);
-}
-
 .file-item.active {
   background: var(--editor-accent-bg);
   border-left: 2px solid var(--sidebar-active-accent);
@@ -118,9 +114,6 @@
 .file-name {
   font-size: 13px;
   color: var(--editor-text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .file-item.active .file-name {
@@ -195,7 +188,7 @@
 .drop-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(65, 149, 153, 0.08);
+  background: var(--posit-teal-alpha-08);
   border: 2px dashed var(--sidebar-drop-accent);
   display: flex;
   align-items: center;
@@ -225,7 +218,7 @@
   padding: 4px 0;
   min-width: 120px;
   box-shadow: 0 4px 12px var(--context-menu-shadow);
-  z-index: 1000;
+  z-index: var(--z-modal);
 }
 
 .context-menu button {
@@ -302,16 +295,6 @@
   padding: 6px 12px;
   cursor: pointer;
   transition: background 0.15s;
-  border-left: 2px solid transparent;
-}
-
-.search-result:hover {
-  background: var(--sidebar-border);
-}
-
-.search-result.active {
-  background: var(--editor-accent-bg);
-  border-left-color: var(--sidebar-active-accent);
 }
 
 .search-result-header {
@@ -324,17 +307,11 @@
 .search-result-name {
   color: var(--editor-text);
   font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .search-result-path {
   color: var(--editor-text-muted);
   font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .search-result-snippet {
@@ -343,9 +320,6 @@
   color: var(--editor-text-muted);
   font-size: 11px;
   line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .search-result-snippet mark {
