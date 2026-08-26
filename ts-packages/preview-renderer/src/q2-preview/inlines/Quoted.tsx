@@ -1,10 +1,5 @@
-import { renderChildren } from '../../framework';
+import { QUOTE_CHARS, renderChildren } from '../../framework';
 import type { NodeArgs, QuotedInline } from '../../framework';
-
-const QUOTE_CHARS = {
-    SingleQuote: ['‘', '’'] as const, // ‘ ’
-    DoubleQuote: ['“', '”'] as const, // “ ”
-};
 
 export const Quoted = (args: NodeArgs<QuotedInline>) => {
     const [{ t: kind }] = args.node.c;

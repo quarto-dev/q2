@@ -18,6 +18,16 @@
 import type { BlockNode, InlineNode } from './types';
 
 /**
+ * Opening/closing characters for `Quoted` inlines — the same de-sugaring
+ * Pandoc's stringify applies (Text.Pandoc.Shared `deQuote`), and the same
+ * characters the q2-preview `Quoted` renderer emits.
+ */
+export const QUOTE_CHARS = {
+    SingleQuote: ['‘', '’'] as const,
+    DoubleQuote: ['“', '”'] as const,
+};
+
+/**
  * Pandoc Stringify-equivalent for a list of inlines.
  */
 export function inlinesToPlainText(inlines: InlineNode[]): string {
@@ -54,9 +64,16 @@ function inlineText(node: InlineNode): string {
             return inlinesToPlainText(c[1] ?? []);
         }
         case 'Span':
-        case 'Quoted':
-            // c = [meta, inlines]
+            // c = [attr, inlines]
             return inlinesToPlainText(((n.c as [unknown, InlineNode[]]) ?? [null, []])[1] ?? []);
+        case 'Quoted': {
+            // c = [{t: quoteKind}, inlines]; the quote marks are part of
+            // the plain text (Pandoc stringify parity — bd-wcz4x7y0).
+            const [kind, inlines] = (n.c as [{ t: string } | null, InlineNode[]]) ?? [null, []];
+            const [open, close] =
+                kind?.t === 'SingleQuote' ? QUOTE_CHARS.SingleQuote : QUOTE_CHARS.DoubleQuote;
+            return open + inlinesToPlainText(inlines ?? []) + close;
+        }
         case 'Math':
             // c = [{t: '…Math'}, latex]
             return ((n.c as [unknown, string]) ?? [null, ''])[1] ?? '';

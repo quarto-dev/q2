@@ -62,7 +62,9 @@ describe('inlinesToPlainText', () => {
         ).toBe('click');
     });
 
-    it('walks Span / Quoted inlines', () => {
+    it('walks Span / Quoted inlines (Quoted keeps its quote marks)', () => {
+        // Pandoc's stringify de-sugars Quoted into curly quote characters
+        // (Text.Pandoc.Shared `deQuote`) — bd-wcz4x7y0.
         expect(
             inlinesToPlainText([
                 {
@@ -77,7 +79,18 @@ describe('inlinesToPlainText', () => {
                     c: [{ t: 'DoubleQuote' }, [{ t: 'Str', c: 'q' }]],
                 },
             ] as InlineNode[]),
-        ).toBe('hiq');
+        ).toBe('hi“q”');
+    });
+
+    it('single-quoted inlines get single curly quotes', () => {
+        expect(
+            inlinesToPlainText([
+                {
+                    t: 'Quoted',
+                    c: [{ t: 'SingleQuote' }, [{ t: 'Str', c: 'tis' }]],
+                },
+            ] as InlineNode[]),
+        ).toBe('‘tis’');
     });
 
     it('emits the LaTeX source for Math', () => {
