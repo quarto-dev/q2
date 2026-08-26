@@ -66,6 +66,18 @@ Both Quarto 1 and Quarto 2 render `\[...\]` as literal brackets, and
 Quarto 2 produces no span node at all for the escaped form — so
 re-running the fix is safe.
 
+If the brackets hold formatting or a link, escape only the outer pair
+and leave the inside alone:
+
+```markdown
+- \[[#7380](https://github.com/posit-dev/positron/issues/7380)\] Console: cleaned up.
+```
+
+This shape — a bracketed issue link at the head of a release-note entry
+— is the most common source of `Q-2-49` in ported documents. The link
+still works; only the brackets around it become literal. Escaping the
+inner brackets as well would turn the link into plain text.
+
 If you meant a span, add the attribute block:
 
 ```markdown
