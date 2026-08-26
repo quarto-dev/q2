@@ -10,7 +10,7 @@
   font-size: 14px;
   font-family: system-ui, -apple-system, sans-serif;
   box-shadow: 0 4px 12px var(--toast-shadow);
-  z-index: 10000;
+  z-index: var(--z-toast);
   animation: toast-fade-in 0.2s ease-out;
 }
 

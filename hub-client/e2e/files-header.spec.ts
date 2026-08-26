@@ -23,9 +23,9 @@ async function openEditor(page: Page, title: string, content: string) {
     { path: 'index.qmd', content, contentType: 'text' },
   ]);
   await seedProjectInBrowser(page, indexDocId, syncServer, title);
-  const row = page.locator('.ph-row', { hasText: title });
+  const row = page.locator('.qh-row', { hasText: title });
   await expect(row).toBeVisible({ timeout: 15000 });
-  await row.locator('.ph-row-name').click();
+  await row.locator('.qh-row-name').click();
   await expect(page.locator('.new-file-btn')).toBeVisible({ timeout: 30000 });
 }
 

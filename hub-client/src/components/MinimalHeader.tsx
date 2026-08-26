@@ -123,7 +123,7 @@ export default function MinimalHeader({
           <span className="path-sep" aria-hidden="true">
             |
           </span>
-          <span className={`file-path${currentFilePath ? '' : ' empty'}`}>
+          <span className={`file-path qh-truncate${currentFilePath ? '' : ' empty'}`}>
             {currentFilePath ?? 'No file selected'}
           </span>
         </div>

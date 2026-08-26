@@ -17,6 +17,12 @@
   --color-accent: #d44000;
   --color-success: #72994e;
   --color-warning: #d4a644;
+  --color-warning-bg: #fef3c7;
+  --color-warning-border: #fcd34d;
+  --color-warning-text: #92400e;
+  --color-on-accent: #fff;
+  --color-on-warning: #000;
+  --color-code-bg: rgba(0, 0, 0, 0.05);
   --color-error: #db593b;
   --color-border: #cbd5e1;
   --font-mono: 'Source Code Pro', 'SF Mono', 'Monaco', 'Inconsolata',
@@ -252,7 +258,7 @@ a:hover {
 
 .mode-toggle button.active {
   background-color: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-accent);
   border-color: var(--color-accent);
 }
 
@@ -444,15 +450,15 @@ a:hover {
 }
 .state-badge.ready {
   background-color: var(--color-success);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 .state-badge.loading {
   background-color: var(--color-warning);
-  color: #000;
+  color: var(--color-on-warning);
 }
 .state-badge.unavailable {
   background-color: var(--color-error);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 
 .document-content {
@@ -727,15 +733,15 @@ a:hover {
 
 .unverified-banner {
   padding: 0.5rem 1rem;
-  background-color: #fef3c7;
-  border-bottom: 1px solid #fcd34d;
-  color: #92400e;
+  background-color: var(--color-warning-bg);
+  border-bottom: 1px solid var(--color-warning-border);
+  color: var(--color-warning-text);
   font-size: 0.8rem;
   line-height: 1.4;
 }
 
 .unverified-banner code {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--color-code-bg);
   color: inherit;
 }
 

@@ -134,7 +134,7 @@ export default function NewFileDialog({
                 <label htmlFor="template">Template:</label>
                 <select
                   id="template"
-                  className="ph-input focus-accent"
+                  className="qh-input focus-accent"
                   value={selectedTemplate?.path ?? ''}
                   onChange={(e) => {
                     const template = templates.find((t) => t.path === e.target.value);
@@ -157,7 +157,7 @@ export default function NewFileDialog({
                 ref={filenameInputRef}
                 id="filename"
                 type="text"
-                className="ph-input focus-accent"
+                className="qh-input focus-accent"
                 value={filename}
                 onChange={(e) => {
                   setFilename(e.target.value);
@@ -166,16 +166,16 @@ export default function NewFileDialog({
                 placeholder="e.g., chapter1.qmd"
               />
             </div>
-            {error && <div className="ph-error inline">{error}</div>}
+            {error && <div className="qh-error inline">{error}</div>}
           </div>
         </div>
 
         <div className="dialog-actions">
-          <button className="ph-btn outline" onClick={onClose}>
+          <button className="qh-btn outline" onClick={onClose}>
             Cancel
           </button>
           <button
-            className="ph-btn primary"
+            className="qh-btn primary"
             onClick={handleCreateTextFile}
             disabled={!filename.trim()}
           >

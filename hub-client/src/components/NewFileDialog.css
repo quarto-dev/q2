@@ -2,11 +2,11 @@
    NewAssetDialog (drop zone, file preview rows; lifted into
    components/fileUpload/ by the separate "Phase C" effort).
    Shared dialog chrome — backdrop, header/close, content/actions sections,
-   buttons, inputs, error banner — comes from src/ui.css (the .ph-dialog,
-   .ph-btn, .ph-input, .ph-error families and the editor dialog chrome
+   buttons, inputs, error banner — comes from src/ui.css (the .qh-dialog,
+   .qh-btn, .qh-input, .qh-error families and the editor dialog chrome
    section). */
 
-.ph-dialog.new-file-dialog {
+.qh-dialog.new-file-dialog {
   width: 480px;
   padding: 0;
 }
@@ -35,7 +35,7 @@
 
 .drop-zone.drag-over {
   border-color: var(--dialog-tab-active);
-  background: rgba(65, 149, 153, 0.08);
+  background: var(--posit-teal-alpha-08);
 }
 
 .drop-zone .drop-icon {

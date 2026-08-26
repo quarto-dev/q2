@@ -1,0 +1,141 @@
+{
+  "no-outline-none-without-focus-visible": {
+    "components/FileSidebar.css": [
+      "*"
+    ],
+    "components/NewFileDialog.css": [
+      "*"
+    ],
+    "components/OutlinePanel.css": [
+      "*"
+    ],
+    "components/ProjectSelector.css": [
+      "*"
+    ],
+    "components/ProjectSetSetup.css": [
+      "*"
+    ],
+    "components/ProjectsHome.css": [
+      "*"
+    ],
+    "components/ReplayDrawer.css": [
+      "*"
+    ],
+    "debug/debug.css": [
+      "*"
+    ]
+  },
+  "no-physical-box-props": {
+    "App.css": [
+      "right: 16px;"
+    ],
+    "components/Editor.css": [
+      "left: 0;",
+      "left: 50%;",
+      "margin-left: auto;",
+      "margin-right: 6px;",
+      "padding-left: 20px;",
+      "right: 0;",
+      "right: 16px;",
+      "right: 35px;"
+    ],
+    "components/FileSidebar.css": [
+      "border-left: 2px solid var(--sidebar-active-accent);",
+      "margin-left: -2px;",
+      "padding-left: 22px;",
+      "right: 4px;",
+      "text-align: left;"
+    ],
+    "components/OutlinePanel.css": [
+      "margin-left: 4px;",
+      "padding-left: 12px;",
+      "padding-left: 24px;",
+      "padding-left: 28px;",
+      "padding-left: 36px;",
+      "padding-left: 40px;",
+      "padding-left: 48px;",
+      "padding-left: 52px;",
+      "padding-left: 60px;",
+      "padding-left: 64px;",
+      "padding-left: 76px;",
+      "text-align: left;"
+    ],
+    "components/ProjectSelector.css": [
+      "border-left-color: var(--posit-orange);",
+      "border-left-color: var(--selector-success);",
+      "border-left: 4px solid var(--posit-blue);",
+      "margin-left: auto;",
+      "margin-right: 6px;",
+      "padding-left: 12px;",
+      "padding-right: 40px;"
+    ],
+    "components/ProjectsHome.css": [
+      "left: 0;",
+      "left: auto;",
+      "margin-left: -7px;",
+      "margin-left: 6px;",
+      "margin-left: 8px;",
+      "margin-left: auto;",
+      "padding-left: 20px;",
+      "padding-right: 18px;",
+      "right: 10px;",
+      "right: 8px;",
+      "right: auto;",
+      "text-align: left;"
+    ],
+    "components/ReplayDrawer.css": [
+      "left: 0;",
+      "margin-left: 3px;",
+      "margin-left: 4px;",
+      "margin-left: auto;",
+      "margin-right: 10px;",
+      "text-align: left;"
+    ],
+    "components/SidebarTabs.css": [
+      "border-right: 1px solid var(--sidebar-border);",
+      "text-align: left;"
+    ],
+    "components/SkipLink.css": [
+      "left: 8px;"
+    ],
+    "components/Toast.css": [
+      "left: 50%;"
+    ],
+    "components/UpdateAvailableToast.css": [
+      "right: 20px;"
+    ],
+    "components/debug-inspector/DebugInspectorPanel.css": [
+      "border-right: 1px solid var(--debug-surface-0);",
+      "margin-left: 6px;",
+      "margin-right: 6px;"
+    ],
+    "components/render/revealjs-menu-override.css": [
+      "left: 0;",
+      "left: 30px;",
+      "left: 50%;",
+      "right: 0;"
+    ],
+    "components/tabs/AboutTab.css": [
+      "left: 0;",
+      "right: 0;",
+      "text-align: left;"
+    ],
+    "components/tabs/SettingsTab.css": [
+      "padding-left: 26px;"
+    ],
+    "debug/debug.css": [
+      "border-left: 1px solid var(--color-border);",
+      "border-left: none;",
+      "border-right: 1px solid var(--color-border);",
+      "border-right: none;",
+      "text-align: left;"
+    ],
+    "ui.css": [
+      "left: 0;",
+      "left: auto;",
+      "left: calc(100% + 4px);",
+      "right: 0;",
+      "text-align: left;"
+    ]
+  }
+}

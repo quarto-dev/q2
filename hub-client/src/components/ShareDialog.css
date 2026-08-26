@@ -1,9 +1,9 @@
 /* ShareDialog — warning box and URL field. Shared dialog chrome (backdrop,
    header/close, content/actions sections, buttons, inputs) comes from
-   src/ui.css (the .ph-dialog, .ph-btn, .ph-input families and the editor
+   src/ui.css (the .qh-dialog, .qh-btn, .qh-input families and the editor
    dialog chrome section). */
 
-.ph-dialog.share-dialog {
+.qh-dialog.share-dialog {
   padding: 0;
 }
 

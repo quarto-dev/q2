@@ -7,7 +7,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
   font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   overflow-y: auto;
 }
@@ -18,7 +18,7 @@
   padding: 32px;
   max-width: 500px;
   width: 90%;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 32px var(--alpha-black-50);
   border: 1px solid var(--border-color);
   margin: 32px auto;
 }
@@ -176,14 +176,14 @@
   transition: all 0.2s ease;
   border: 1px solid transparent;
   border-left: 4px solid var(--posit-blue);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px var(--alpha-black-10);
 }
 
 .projects-list li:hover {
   background: var(--bg-card-hover);
   border-color: var(--posit-blue-light-3);
   border-left-color: var(--posit-orange);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 8px var(--alpha-black-15);
 }
 
 .project-info {
@@ -203,8 +203,8 @@
 }
 
 :root.light .projects-list li:hover {
-  background: #BACAD8;
-  border-left-color: #4A6A32;
+  background: var(--selector-accent-subtle);
+  border-left-color: var(--selector-success);
 }
 
 .project-meta {
@@ -293,7 +293,7 @@
   background: var(--bg-card-hover);
   border-color: var(--posit-blue-light-3);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px var(--alpha-black-20);
 }
 
 .action-btn:hover .action-btn-title {
@@ -336,17 +336,17 @@
 .action-btn.create-btn .action-btn-title,
 .action-btn.create-btn .action-btn-hint,
 .action-btn.create-btn .action-btn-icon {
-  color: #ffffff;
+  color: var(--text-on-accent);
 }
 
 .action-btn.create-btn:hover {
-  background: #5ab5b8;
-  border-color: #5ab5b8;
+  background: var(--selector-accent);
+  border-color: var(--selector-accent);
 }
 
 
 .action-btn.create-btn .action-btn-icon {
-  color: #ffffff;
+  color: var(--text-on-accent);
 }
 
 .action-btn.connect-btn {
@@ -361,7 +361,7 @@
 :root.light .action-btn.connect-btn .action-btn-title,
 :root.light .action-btn.connect-btn .action-btn-hint,
 :root.light .action-btn.connect-btn .action-btn-icon {
-  color: #ffffff;
+  color: var(--text-on-accent);
 }
 
 :root.light .action-btn.connect-btn:hover {
@@ -406,7 +406,7 @@
   background: var(--bg-card);
   border: 1px solid transparent;
   border-left: 4px solid var(--posit-blue);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px var(--alpha-black-10);
   transition: all 0.2s ease;
 }
 
@@ -414,7 +414,7 @@
   background: var(--bg-card-hover);
   border-color: var(--posit-blue-light-3);
   border-left-color: var(--posit-orange);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 8px var(--alpha-black-15);
 }
 
 /* Light mode overrides for create form - matches project cards */
@@ -424,9 +424,9 @@
 }
 
 :root.light .add-form.create-form:hover {
-  background: #BACAD8;
+  background: var(--selector-accent-subtle);
   border-color: var(--posit-blue-light-3);
-  border-left-color: #4A6A32;
+  border-left-color: var(--selector-success);
 }
 
 .add-form h2 {
@@ -493,7 +493,7 @@
 :root.light .form-group input,
 :root.light .form-group select {
   border-color: var(--posit-blue-light-3);
-  background: #ffffff;
+  background: var(--bg-input);
 }
 
 :root.light .form-group input:hover,
@@ -506,7 +506,7 @@
   outline: none;
   border-color: var(--posit-green);
   background: var(--input-bg-alpha-hover);
-  box-shadow: 0 0 0 3px rgba(114, 153, 78, 0.25);
+  box-shadow: 0 0 0 3px var(--posit-green-alpha-25);
 }
 
 .form-group input::placeholder {
@@ -600,10 +600,10 @@
 }
 
 .form-actions button.primary:hover {
-  background: #5AB5B8;
-  border-color: #5AB5B8;
+  background: var(--selector-accent);
+  border-color: var(--selector-accent);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(65, 149, 153, 0.3);
+  box-shadow: 0 4px 12px var(--posit-teal-alpha-30);
 }
 
 
@@ -733,7 +733,7 @@
   border-radius: 8px;
   margin-bottom: 12px;
   border: 1px solid var(--border-color);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px var(--alpha-black-10);
 }
 
 .identity-color-dot {
@@ -788,7 +788,7 @@
 .identity-name-edit input:focus {
   outline: none;
   border-color: var(--posit-blue);
-  box-shadow: 0 0 0 2px rgba(68, 112, 153, 0.2);
+  box-shadow: 0 0 0 2px var(--posit-blue-alpha-20);
 }
 
 .identity-name-edit button {

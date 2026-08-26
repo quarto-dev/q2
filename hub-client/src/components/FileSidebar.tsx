@@ -454,7 +454,7 @@ export default function FileSidebar({
     return (
       <div
         key={file.path}
-        className={`file-item ${isActive ? 'active' : ''} ${isBinary ? 'binary' : ''}`}
+        className={`file-item qh-row-hover ${isActive ? 'active' : ''} ${isBinary ? 'binary' : ''}`}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
         data-folder-path={parentFolderPath}
         onClick={(e) => !isRenaming && handleFileClick(e, file)}
@@ -481,7 +481,7 @@ export default function FileSidebar({
             onKeyDown={handleRenameKeyDown}
           />
         ) : (
-          <span className="file-name">{fileName}</span>
+          <span className="file-name qh-truncate">{fileName}</span>
         )}
       </div>
     );
@@ -541,17 +541,17 @@ export default function FileSidebar({
       return (
         <div
           key={result.path}
-          className={`search-result ${isActive ? 'active' : ''}`}
+          className={`search-result qh-row-hover qh-active-accent-row ${isActive ? 'active' : ''}`}
           onClick={() => onSelectFile(file)}
           title={result.path}
         >
           <div className="search-result-header">
             <span className="file-icon">{getFileIcon(result.path)}</span>
-            <span className="search-result-name">{fileName}</span>
-            {dir && <span className="search-result-path">{dir}</span>}
+            <span className="search-result-name qh-truncate">{fileName}</span>
+            {dir && <span className="search-result-path qh-truncate">{dir}</span>}
           </div>
           {snippet.length > 0 && (
-            <div className="search-result-snippet">
+            <div className="search-result-snippet qh-truncate">
               {snippet.map((seg, i) =>
                 seg.match ? (
                   <mark key={i}>{seg.text}</mark>
@@ -577,7 +577,7 @@ export default function FileSidebar({
     >
       <div className="sidebar-header">
         <button
-          className="ph-btn small outline new-file-btn"
+          className="qh-btn small outline new-file-btn"
           onClick={onNewFile}
           title="New file"
           aria-label="New file"
@@ -585,7 +585,7 @@ export default function FileSidebar({
           <FilePlusIcon />
         </button>
         <button
-          className="ph-btn small outline upload-asset-btn"
+          className="qh-btn small outline upload-asset-btn"
           onClick={handleUploadClick}
           title="Upload asset"
           aria-label="Upload asset"
@@ -594,7 +594,7 @@ export default function FileSidebar({
         </button>
         {canOpenPrintable && (
           <button
-            className="ph-btn small outline print-file-btn"
+            className="qh-btn small outline print-file-btn"
             onClick={handleOpenPrintable}
             disabled={isPreparingPrintable}
             title="Open a printable version of this document in a new tab (use your browser's Print to save as PDF)"

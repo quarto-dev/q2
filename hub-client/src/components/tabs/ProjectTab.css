@@ -76,7 +76,7 @@
   border-top: 1px solid var(--border-color);
 }
 
-/* Ghost-accent action, matching .ph-btn.ghost-accent in ui.css. */
+/* Ghost-accent action, matching .qh-btn.ghost-accent in ui.css. */
 .export-zip-btn {
   width: 100%;
   padding: 10px 16px;
@@ -91,7 +91,7 @@
 }
 
 .export-zip-btn:hover {
-  background: rgba(65, 149, 153, 0.08);
+  background: var(--posit-teal-alpha-08);
 }
 
 .export-zip-btn:disabled {

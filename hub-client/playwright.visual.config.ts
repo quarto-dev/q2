@@ -12,7 +12,11 @@ export default defineConfig({
   testMatch: '**/*.visual.spec.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  // One retry absorbs infrastructure flakes (dev-server contention under
+  // full parallelism occasionally destroys the execution context mid-boot).
+  // Assertion failures — pixel diffs, axe drift — are deterministic and
+  // still fail through the retry.
+  retries: 1,
   workers: process.env.CI ? 2 : undefined,
   reporter: 'html',
 

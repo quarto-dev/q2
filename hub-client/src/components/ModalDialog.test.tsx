@@ -107,7 +107,7 @@ describe('ModalDialog backdrop', () => {
     const onClose = vi.fn();
     const { container } = renderDialog(onClose);
 
-    fireEvent.click(container.querySelector('.ph-dialog-backdrop')!);
+    fireEvent.click(container.querySelector('.qh-dialog-backdrop')!);
     expect(onClose).toHaveBeenCalledTimes(1);
 
     onClose.mockClear();

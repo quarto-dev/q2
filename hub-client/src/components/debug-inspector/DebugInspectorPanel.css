@@ -12,21 +12,21 @@
   position: fixed;
   inset: auto 0 0 0;
   height: 55vh;
-  z-index: 10000;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
-  background: #1e1e2e;
-  color: #cdd6f4;
-  border-top: 2px solid #89b4fa;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45);
+  background: var(--debug-base);
+  color: var(--debug-text);
+  border-top: 2px solid var(--debug-blue);
+  box-shadow: 0 -4px 24px var(--alpha-black-45);
   font-family: 'Source Code Pro', ui-monospace, monospace;
   font-size: 12px;
 }
 
 .quarto-debug-inspector button {
-  background: #313244;
-  color: #cdd6f4;
-  border: 1px solid #45475a;
+  background: var(--debug-surface-0);
+  color: var(--debug-text);
+  border: 1px solid var(--debug-surface-1);
   border-radius: 4px;
   padding: 2px 8px;
   cursor: pointer;
@@ -34,7 +34,7 @@
 }
 
 .quarto-debug-inspector button:hover:not(:disabled) {
-  background: #45475a;
+  background: var(--debug-surface-1);
 }
 
 .quarto-debug-inspector button:disabled {
@@ -44,9 +44,9 @@
 
 .quarto-debug-inspector input[type='text'],
 .quarto-debug-inspector select {
-  background: #181825;
-  color: #cdd6f4;
-  border: 1px solid #45475a;
+  background: var(--debug-mantle);
+  color: var(--debug-text);
+  border: 1px solid var(--debug-surface-1);
   border-radius: 4px;
   padding: 2px 6px;
   font: inherit;
@@ -57,8 +57,8 @@
   align-items: center;
   gap: 16px;
   padding: 6px 12px;
-  background: #181825;
-  border-bottom: 1px solid #313244;
+  background: var(--debug-mantle);
+  border-bottom: 1px solid var(--debug-surface-0);
   flex: 0 0 auto;
 }
 
@@ -66,7 +66,7 @@
   font-size: 13px;
   font-weight: 600;
   margin: 0;
-  color: #89b4fa;
+  color: var(--debug-blue);
   white-space: nowrap;
 }
 
@@ -77,9 +77,9 @@
 }
 
 .quarto-debug-inspector .inspector-tabs button.active {
-  background: #89b4fa;
-  color: #1e1e2e;
-  border-color: #89b4fa;
+  background: var(--debug-blue);
+  color: var(--debug-base);
+  border-color: var(--debug-blue);
 }
 
 .quarto-debug-inspector .inspector-close {
@@ -97,7 +97,7 @@
   flex: 0 0 280px;
   overflow-y: auto;
   padding: 8px;
-  border-right: 1px solid #313244;
+  border-right: 1px solid var(--debug-surface-0);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -114,7 +114,7 @@
 .quarto-debug-inspector h4 {
   font-size: 12px;
   margin: 0 0 6px 0;
-  color: #a6adc8;
+  color: var(--debug-subtext);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -127,15 +127,15 @@
   min-height: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #a6e3a1;
+  color: var(--debug-green);
 }
 
 /* Reused document components */
 .quarto-debug-inspector .document-panel {
-  border: 1px solid #313244;
+  border: 1px solid var(--debug-surface-0);
   border-radius: 6px;
   margin-bottom: 8px;
-  background: #181825;
+  background: var(--debug-mantle);
 }
 
 .quarto-debug-inspector .document-header {
@@ -143,7 +143,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-bottom: 1px solid #313244;
+  border-bottom: 1px solid var(--debug-surface-0);
 }
 
 .quarto-debug-inspector .document-header h3 {
@@ -157,17 +157,17 @@
 .quarto-debug-inspector .state-badge {
   padding: 1px 6px;
   border-radius: 8px;
-  background: #45475a;
+  background: var(--debug-surface-1);
 }
 
 .quarto-debug-inspector .state-badge.ready {
-  background: #a6e3a1;
-  color: #1e1e2e;
+  background: var(--debug-green);
+  color: var(--debug-base);
 }
 
 .quarto-debug-inspector .state-badge.unavailable {
-  background: #f38ba8;
-  color: #1e1e2e;
+  background: var(--debug-red);
+  color: var(--debug-base);
 }
 
 .quarto-debug-inspector .document-content {
@@ -177,7 +177,7 @@
 
 .quarto-debug-inspector .index-files {
   padding: 6px 8px;
-  border-top: 1px solid #313244;
+  border-top: 1px solid var(--debug-surface-0);
 }
 
 .quarto-debug-inspector .index-files-list {
@@ -233,12 +233,12 @@
 }
 
 .quarto-debug-inspector .empty {
-  color: #6c7086;
+  color: var(--debug-muted);
   font-style: italic;
 }
 
 .quarto-debug-inspector .error {
-  color: #f38ba8;
+  color: var(--debug-red);
 }
 
 /* Reused message log */
@@ -271,25 +271,25 @@
 }
 
 .quarto-debug-inspector .log-messages .time {
-  color: #6c7086;
+  color: var(--debug-muted);
   margin-right: 6px;
 }
 
 .quarto-debug-inspector .log-messages .type {
-  color: #f9e2af;
+  color: var(--debug-yellow);
   margin-right: 6px;
 }
 
 .quarto-debug-inspector .log-messages .size {
-  color: #6c7086;
+  color: var(--debug-muted);
   margin-left: 6px;
 }
 
 /* Direction coloring in the log (incoming vs outgoing rows). */
 .quarto-debug-inspector .log-messages .incoming {
-  color: #a6e3a1;
+  color: var(--debug-green);
 }
 
 .quarto-debug-inspector .log-messages .outgoing {
-  color: #89b4fa;
+  color: var(--debug-blue);
 }

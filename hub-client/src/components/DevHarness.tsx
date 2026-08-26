@@ -10,7 +10,25 @@
 
 import React from 'react';
 import ProjectSetSetup from './ProjectSetSetup';
+import ProjectsHome from './ProjectsHome';
+import NewFileDialog from './NewFileDialog';
+import ShareDialog from './ShareDialog';
+import NewAssetDialog from './NewAssetDialog';
+import FileSidebar from './FileSidebar';
+import OutlinePanel from './OutlinePanel';
+import SidebarTabs from './SidebarTabs';
+import MinimalHeader from './MinimalHeader';
+import Toast from './Toast';
+import UpdateAvailableToast from './UpdateAvailableToast';
+import EphemeralSessionBanner from './EphemeralSessionBanner';
+import DevTokensPage from './DevTokensPage';
+import { ViewModeProvider } from './ViewModeContext';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
+import type { FileEntry } from '@quarto/preview-renderer/types/project';
+import type { Symbol } from '@quarto/preview-renderer/types/intelligence';
+import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
+import type { CollectionSnapshot } from '../services/projectSetService';
+import type { PwaPromptStore } from '../pwaPrompt';
 
 const FAKE_LEGACY_PROJECTS: ProjectEntry[] = [
   {
@@ -40,6 +58,124 @@ const FAKE_LEGACY_PROJECTS: ProjectEntry[] = [
 ];
 
 const noop = async () => {};
+
+/* ---- canned data for baseline routes ---- */
+
+const FAKE_SET_ENTRIES: ProjectSetEntry[] = [
+  {
+    indexDocId: 'automerge:proj-alpha',
+    syncServer: 'wss://sync.automerge.org',
+    description: 'Research Paper',
+    addedAt: '2026-08-01T10:00:00.000Z',
+    lastAccessed: '2026-08-24T15:30:00.000Z',
+    summary: {
+      fileCount: 4,
+      topFiles: ['index.qmd', 'analysis.qmd', 'references.bib'],
+      contributors: [{ name: 'Ada', color: '#447099' }],
+      asOf: '2026-08-24T15:30:00.000Z',
+    },
+  },
+  {
+    indexDocId: 'automerge:proj-beta',
+    syncServer: 'wss://sync.automerge.org',
+    description: 'Course Notes',
+    addedAt: '2026-08-10T09:00:00.000Z',
+    lastAccessed: '2026-08-20T11:00:00.000Z',
+  },
+  {
+    indexDocId: 'automerge:proj-gamma',
+    syncServer: 'wss://sync.automerge.org',
+    description: 'Blog Redesign',
+    addedAt: '2026-08-15T14:00:00.000Z',
+    lastAccessed: '2026-08-18T08:00:00.000Z',
+  },
+];
+
+const FAKE_COLLECTIONS: CollectionSnapshot[] = [
+  {
+    docId: 'automerge:root-set',
+    syncServer: 'wss://sync.automerge.org',
+    name: undefined,
+    entries: FAKE_SET_ENTRIES,
+    isRoot: true,
+  },
+];
+
+const FAKE_FILES: FileEntry[] = [
+  { path: 'index.qmd', docId: 'automerge:file-1' },
+  { path: 'analysis.qmd', docId: 'automerge:file-2' },
+  { path: 'data/survey.csv', docId: 'automerge:file-3' },
+  { path: 'figures/plot.png', docId: 'automerge:file-4' },
+  { path: '_quarto.yml', docId: 'automerge:file-5' },
+  { path: 'references.bib', docId: 'automerge:file-6' },
+];
+
+const fakeRange = (line: number) => ({
+  start: { line, character: 0 },
+  end: { line, character: 10 },
+});
+
+const FAKE_SYMBOLS: Symbol[] = [
+  {
+    name: 'Introduction',
+    kind: 'string',
+    range: fakeRange(1),
+    selectionRange: fakeRange(1),
+    children: [
+      {
+        name: 'Background',
+        kind: 'string',
+        range: fakeRange(5),
+        selectionRange: fakeRange(5),
+        children: [],
+      },
+    ],
+  },
+  {
+    name: 'setup',
+    detail: '5 lines',
+    kind: 'function',
+    range: fakeRange(12),
+    selectionRange: fakeRange(12),
+    children: [],
+  },
+  {
+    name: 'Results',
+    kind: 'string',
+    range: fakeRange(20),
+    selectionRange: fakeRange(20),
+    children: [
+      {
+        name: 'plot-temperature',
+        detail: '12 lines',
+        kind: 'module',
+        range: fakeRange(24),
+        selectionRange: fakeRange(24),
+        children: [],
+      },
+    ],
+  },
+];
+
+/** Always-pending prompt store so the update toast renders in the harness. */
+const pendingPrompt: PwaPromptStore = {
+  show() {},
+  subscribe: () => () => {},
+  isPending: () => true,
+};
+
+/** Editor chrome must render inside .editor-container for the dark-ramp
+ *  token overrides (:root.dark .editor-container) to apply, and under a
+ *  ViewModeProvider for ViewToggleControl (MinimalHeader). */
+function EditorChrome({ children }: { children: React.ReactNode }) {
+  return (
+    <ViewModeProvider>
+      <div className="editor-container" style={{ height: '100vh', background: 'var(--editor-bg)' }}>
+        {children}
+      </div>
+    </ViewModeProvider>
+  );
+}
 
 interface Props {
   page: string;
@@ -81,6 +217,112 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
       onMigrateProjects={noop}
       onMergeIntoProjectSet={noop}
     />
+  ),
+
+  /* ---- Phase 0 baseline routes (characterization testing) ---- */
+
+  tokens: () => <DevTokensPage />,
+
+  'projects-home': () => (
+    <ProjectsHome
+      onSelectProject={() => {}}
+      isConnecting={false}
+      error={null}
+      projectSetStatus="connected"
+      projectSetEntries={FAKE_SET_ENTRIES}
+      collections={FAKE_COLLECTIONS}
+      onRemoveProjectFromSet={() => {}}
+      onTouchProject={() => {}}
+      onAddProjectToSet={() => {}}
+      onRenameProject={() => {}}
+      onUpdateProjectSummary={() => {}}
+      onCreateCollection={async () => 'automerge:new-collection'}
+      onUnsubscribeCollection={noop}
+      onRenameCollection={() => {}}
+      onAddProjectToCollection={() => {}}
+      onRemoveProjectFromCollection={() => {}}
+      onMoveProjectBetweenCollections={() => {}}
+    />
+  ),
+  'dialog-new-file': () => (
+    <EditorChrome>
+      <NewFileDialog
+        isOpen={true}
+        existingPaths={FAKE_FILES.map((f) => f.path)}
+        onClose={() => {}}
+        onCreateTextFile={() => {}}
+      />
+    </EditorChrome>
+  ),
+  'dialog-share': () => (
+    <EditorChrome>
+      <ShareDialog
+        isOpen={true}
+        shareableUrl="https://hub.example.com/#/share/abc123/index.qmd?name=Research%20Paper"
+        onClose={() => {}}
+      />
+    </EditorChrome>
+  ),
+  'dialog-new-asset': () => (
+    <EditorChrome>
+      <NewAssetDialog
+        isOpen={true}
+        existingPaths={FAKE_FILES.map((f) => f.path)}
+        defaultDestination="figures"
+        onClose={() => {}}
+        onUploadAsset={() => {}}
+      />
+    </EditorChrome>
+  ),
+  sidebar: () => (
+    <EditorChrome>
+      <div style={{ width: 280, height: '100%', borderRight: '1px solid var(--sidebar-border)' }}>
+        <SidebarTabs>
+          {(sectionId) =>
+            sectionId === 'files' ? (
+              <FileSidebar
+                files={FAKE_FILES}
+                currentFile={FAKE_FILES[0]}
+                onSelectFile={() => {}}
+                onNewFile={() => {}}
+                onUploadFiles={() => {}}
+                onDeleteFile={() => {}}
+                onRenameFile={() => {}}
+                onOpenInNewTab={() => {}}
+                onCopyLink={() => {}}
+                currentFormat="q2-preview"
+              />
+            ) : sectionId === 'outline' ? (
+              <OutlinePanel symbols={FAKE_SYMBOLS} onSymbolClick={() => {}} />
+            ) : (
+              <div style={{ padding: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
+                {sectionId} section
+              </div>
+            )
+          }
+        </SidebarTabs>
+      </div>
+    </EditorChrome>
+  ),
+  header: () => (
+    <EditorChrome>
+      <MinimalHeader
+        currentFilePath="index.qmd"
+        projectName="Research Paper"
+        onChooseNewProject={() => {}}
+        onShare={() => {}}
+        onToggleFullscreenPreview={() => {}}
+        isFullscreenPreview={false}
+        isOnline={true}
+      />
+    </EditorChrome>
+  ),
+  notifications: () => (
+    <EditorChrome>
+      <EphemeralSessionBanner />
+      <Toast message="Auto-saved" visible={true} onHide={() => {}} duration={1_000_000} />
+      <UpdateAvailableToast prompt={pendingPrompt} />
+    </EditorChrome>
   ),
 };
 

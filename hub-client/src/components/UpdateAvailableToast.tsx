@@ -32,7 +32,7 @@ export default function UpdateAvailableToast({
       <span>A new version is available.</span>
       <button
         type="button"
-        className="ph-btn primary"
+        className="qh-btn primary"
         onClick={() => window.location.reload()}
       >
         Reload

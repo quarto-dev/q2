@@ -16,6 +16,7 @@
     "postinstall": "cd quarto-hub-sandboxed-preview && npm install --silent",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "lint": "eslint .",
+    "lint:css": "node scripts/lint-css.mjs",
     "preview": "vite preview",
     "local-prod": "../scripts/local-prod.sh",
     "local-prod:nginx": "../scripts/local-prod-nginx.sh",
@@ -59,6 +60,7 @@
   },
   "devDependencies": {
     "@automerge/automerge-repo-storage-nodefs": "^2.5.6",
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^9.39.1",
     "@playwright/test": "^1.60.0",
     "@quarto/preview-e2e-helpers": "*",

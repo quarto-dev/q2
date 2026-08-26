@@ -246,7 +246,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 10;
+  z-index: var(--z-sticky);
 }
 
 /* Editor drag-over state for image drop — same drop-target pattern as
@@ -254,7 +254,7 @@
 .editor-pane.drag-over {
   outline: 2px dashed var(--posit-teal);
   outline-offset: -2px;
-  background: rgba(65, 149, 153, 0.05);
+  background: var(--posit-teal-alpha-05);
 }
 
 .editor-pane.drag-over::after {
@@ -264,12 +264,12 @@
   left: 50%;
   transform: translate(-50%, -50%);
   background: var(--posit-teal);
-  color: #fff;
+  color: var(--text-on-accent);
   padding: 16px 24px;
   border-radius: 8px;
   font-size: 16px;
   font-weight: 600;
-  z-index: 100;
+  z-index: var(--z-overlay);
   pointer-events: none;
 }
 
@@ -303,7 +303,7 @@
 }
 
 /* Right-aligned action group; Run is last so it stays pinned to the far
-   right across state transitions. Buttons are .ph-btn.small (ui.css) with a
+   right across state transitions. Buttons are .qh-btn.small (ui.css) with a
    hairline border and solid surface added here. */
 .preview-status-actions {
   display: flex;
@@ -355,10 +355,10 @@
   min-width: 50px;
   min-height: 50px;
   padding: 0;
-  background: rgba(0, 0, 0, 0.4);
-  border: 2px solid rgba(255, 255, 255, 0.6);
+  background: var(--alpha-black-40);
+  border: 2px solid var(--alpha-white-60);
   border-radius: 50%;
-  color: #fff;
+  color: var(--text-on-accent);
   font-size: 28px;
   font-weight: 300;
   line-height: 1;
@@ -366,14 +366,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
   transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   backdrop-filter: blur(8px);
 }
 
 .fullscreen-close-btn:hover {
-  background: rgba(0, 0, 0, 0.6);
-  border-color: rgba(255, 255, 255, 0.9);
+  background: var(--alpha-black-60);
+  border-color: var(--alpha-white-90);
   transform: scale(1.25);
 }
 
@@ -391,7 +391,7 @@
 /* Double-buffered preview iframes */
 .preview-pane iframe.preview-active {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-raised);
 }
 
 .preview-pane iframe.preview-hidden {
@@ -400,7 +400,7 @@
   left: 0;
   visibility: hidden;
   pointer-events: none;
-  z-index: 0;
+  z-index: var(--z-base);
 }
 
 .header-wrapper {
@@ -439,7 +439,7 @@
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 2px;
-  z-index: 1;
+  z-index: var(--z-raised);
 }
 
 /* Monaco editor overrides */
@@ -456,11 +456,11 @@
   position: absolute;
   bottom: 16px;
   right: 16px;
-  z-index: 1000;
+  z-index: var(--z-modal);
   background: var(--error-overlay-bg);
   border: 1px solid var(--editor-error);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px var(--alpha-black-30);
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 13px;
   color: var(--error-overlay-text);
@@ -565,7 +565,7 @@
 .preview-error-pass1-failures {
   margin-top: 12px;
   padding-top: 8px;
-  border-top: 1px solid var(--error-overlay-border, rgba(0, 0, 0, 0.1));
+  border-top: 1px solid var(--error-overlay-border);
 }
 
 .preview-error-pass1-failure {
@@ -585,7 +585,7 @@
 
 .preview-error-pass1-failure .diagnostic-source-file code {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--alpha-black-05);
   padding: 1px 4px;
   border-radius: 2px;
 }
