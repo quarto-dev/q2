@@ -468,6 +468,64 @@ fn pipeline_omits_sidebar_header_when_title_false() {
     assert!(!index_html.contains("sidebar-title"));
 }
 
+/// bd-sidebar-title-with-navbar-82wxow6m: when the page also renders a
+/// navbar, the sidebar's own title is suppressed end-to-end — Q1's
+/// `sidebar.ejs:51` gates the title block on `!navbar`. Same fixture as
+/// `pipeline_renders_website_title_in_sidebar_header_by_default` plus a
+/// `navbar:` block; the `navbar-brand` assertion is the positive control
+/// that the navbar really rendered.
+#[test]
+fn pipeline_omits_sidebar_header_when_navbar_present() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            &[
+                "project:\n  type: website\n  output-dir: _site\n",
+                "website:\n  title: \"Site\"\n",
+                "  navbar:\n    left:\n      - href: index.qmd\n        text: Home\n",
+                "  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
+            ]
+            .concat(),
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        write(
+            &project_dir.join("about.qmd"),
+            "---\ntitle: About\n---\n\nAbout us.\n",
+        );
+    });
+
+    let index_html = find_html(&outputs, "index");
+    // Positive control: the fixture really does render a navbar, so the
+    // two negative assertions below are about the gate, not about a
+    // navbar that failed to appear.
+    assert!(
+        index_html.contains("navbar-brand"),
+        "fixture must render a navbar; got first 1200 chars: {}",
+        &index_html[..index_html.len().min(1200)]
+    );
+    // Positive control: suppression must not become deletion. Both
+    // assertions below are negative, so without this the test would
+    // still pass if the sidebar vanished entirely under a navbar.
+    assert!(
+        index_html.contains("sidebar-menu-container"),
+        "the sidebar itself must still render under a navbar — only its title is suppressed; got first 1200 chars: {}",
+        &index_html[..index_html.len().min(1200)]
+    );
+    assert!(
+        !index_html.contains("sidebar-header"),
+        "a navbar must suppress the sidebar header; got first 1200 chars: {}",
+        &index_html[..index_html.len().min(1200)]
+    );
+    assert!(
+        !index_html.contains("sidebar-title"),
+        "a navbar must suppress the sidebar title; got first 1200 chars: {}",
+        &index_html[..index_html.len().min(1200)]
+    );
+}
+
 /// `sidebar.title: "Custom"` renders literally and wins over
 /// `website.title`.
 #[test]

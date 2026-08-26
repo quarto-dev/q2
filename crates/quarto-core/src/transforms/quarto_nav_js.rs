@@ -66,7 +66,10 @@ use crate::Result;
 use crate::artifact::{Artifact, ArtifactScope, ArtifactStore};
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
-use crate::transforms::config::{page_has_navbar, rendered_navigation_non_empty};
+use crate::transforms::config::rendered_navigation_non_empty;
+// `page_has_navbar` via the `transforms` re-export, matching
+// `sidebar_render.rs`; `rendered_navigation_non_empty` is not re-exported.
+use crate::transforms::page_has_navbar;
 
 /// headroom.js v0.12.0 (MIT), byte-identical to Q1's vendored copy.
 /// Version contract: `resources/js/README.md` § `headroom/`.

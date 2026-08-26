@@ -45,6 +45,14 @@
 //!   a user filter can replace one without losing the other.
 //! - `rendered.navigation.body-classes` already populated → the
 //!   body-classes output is left alone (user override).
+//! - the page renders a navbar (`rendered.navigation.navbar` non-empty)
+//!   → the sidebar renders, but *without* its own title: Q1's
+//!   `sidebar.ejs:51` gates the title block on `!navbar`
+//!   (bd-sidebar-title-with-navbar-82wxow6m). The flag reaches the
+//!   renderer via `SidebarRenderOptions::has_navbar`; the reason it is
+//!   a *skip* rather than a substitution is documented at the gate.
+//!   Reading `rendered.navigation.navbar` is why this transform must
+//!   be registered after `NavbarRenderTransform`.
 
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_navigation::{
@@ -60,8 +68,8 @@ use crate::project::index::ProjectIndex;
 use crate::render::RenderContext;
 use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::{AstTransform, TransformPhase};
-use crate::transforms::is_feature_disabled;
 use crate::transforms::navigation_href::{NavSurface, resolve_href_for_html};
+use crate::transforms::{is_feature_disabled, page_has_navbar};
 
 pub struct SidebarRenderTransform;
 
@@ -178,12 +186,18 @@ impl AstTransform for SidebarRenderTransform {
             .resource_resolver
             .as_ref()
             .map_or_else(|| "./".to_string(), |r| r.page_url_for_site_root_dir());
+        // The sidebar's own title is suppressed when the page carries a
+        // navbar (bd-sidebar-title-with-navbar-82wxow6m) — see the gate
+        // in `quarto_navigation::render_html`. `page_has_navbar` reads
+        // `rendered.navigation.navbar`, which is why `sidebar-render`
+        // must stay registered after `navbar-render`.
+        let has_navbar = page_has_navbar(&ast.meta);
         let html = sidebar_to_html_with_options(
             &sidebar,
             &SidebarRenderOptions {
                 home_url: &home_url,
                 appended_html: toc_block.as_deref(),
-                has_navbar: false,
+                has_navbar,
             },
         );
 
@@ -257,6 +271,12 @@ fn synthesize_toc_sidebar(ast: &mut Pandoc, ctx: &mut RenderContext, toc_block: 
 
     let mut sidebar = Sidebar::with_defaults();
     sidebar.style = quarto_navigation::SidebarStyle::Floating;
+    // `with_defaults()` leaves the title `Default`, so no header is
+    // emitted here regardless of the flag. Pass the real value anyway
+    // rather than a hardcoded `false`, so this call site does not encode
+    // an assumption a future change to `with_defaults()` could silently
+    // invalidate (bd-sidebar-title-with-navbar-82wxow6m, D4).
+    let has_navbar = page_has_navbar(&ast.meta);
     let home_url = ctx
         .resource_resolver
         .as_ref()
@@ -266,7 +286,7 @@ fn synthesize_toc_sidebar(ast: &mut Pandoc, ctx: &mut RenderContext, toc_block: 
         &SidebarRenderOptions {
             home_url: &home_url,
             appended_html: Some(toc_block),
-            has_navbar: false,
+            has_navbar,
         },
     );
     ast.meta.insert_path(
