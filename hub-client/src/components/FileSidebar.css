@@ -14,24 +14,21 @@
 .sidebar-header {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  /* Compact, left-aligned buttons — right-alignment leaves a gap that
+     reads as a missing button. */
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--sidebar-border);
 }
 
-/* Sidebar-header buttons are icon-only .qh-btn.small.outline (ui.css).
-   They grow to equal widths so together they fill the header row, whether
-   two or three (conditional Print) are present; inline-flex centers the
-   SVG glyph. */
+/* Sidebar-header buttons are icon-only .qh-btn.small.outline (ui.css),
+   each wrapped in a Tooltip anchor span (the wrapper is the flex item).
+   inline-flex centers the SVG glyph. */
 .sidebar-header .new-file-btn,
 .sidebar-header .upload-asset-btn,
 .sidebar-header .print-file-btn {
-  flex: 1 1 0;
-  /* Never shrink below the glyph: if the header is ever too narrow, the
-     buttons wrap whole rather than clip. */
-  min-width: min-content;
   display: inline-flex;
   align-items: center;
   justify-content: center;
