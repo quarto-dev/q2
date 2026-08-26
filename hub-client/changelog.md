@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-08-26
 
+- [`ca959a67`](https://github.com/quarto-dev/q2/commits/ca959a67): Comment bubbles now render comments richly — emphasis, inline code, quotes, links (external links open in a new tab, document links navigate the preview), and images (clamped to the bubble). Content that has no sensible bubble form, like nested editorial marks, shows an explicit "unsupported content" chip instead of rendering incorrectly.
 - [`00e0617a`](https://github.com/quarto-dev/q2/commits/00e0617a): Comment bubbles now show the comment's full text — quoted words, emphasis, and inline code inside a comment were previously dropped from the bubble.
 
 ### 2026-08-25
