@@ -66,6 +66,7 @@ use crate::Result;
 use crate::artifact::{Artifact, ArtifactScope, ArtifactStore};
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
+use crate::transforms::config::{page_has_navbar, rendered_navigation_non_empty};
 
 /// headroom.js v0.12.0 (MIT), byte-identical to Q1's vendored copy.
 /// Version contract: `resources/js/README.md` § `headroom/`.
@@ -96,12 +97,10 @@ struct NavJsDecision {
 fn decide(meta: &ConfigValue) -> NavJsDecision {
     // Same signal as the template's header gate: a non-empty rendered
     // navbar or secondary nav means `#quarto-header.fixed-top` ships.
-    let rendered_non_empty = |key: &str| {
-        meta.get_path(&["rendered", "navigation", key])
-            .and_then(|v| v.as_plain_text())
-            .is_some_and(|s| !s.is_empty())
-    };
-    let has_header = rendered_non_empty("navbar") || rendered_non_empty("secondary-nav");
+    // `page_has_navbar` (shared with the sidebar-title predicate) covers
+    // the `navbar` half; `secondary-nav` has no other consumer yet, so it
+    // reads the same shared `rendered.navigation.<key>` helper directly.
+    let has_header = page_has_navbar(meta) || rendered_navigation_non_empty(meta, "secondary-nav");
     if !has_header {
         return NavJsDecision {
             ship_nav: false,

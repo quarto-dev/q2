@@ -45,6 +45,44 @@ pub fn resolve_website_bool(meta: &ConfigValue, key: &str, default: bool) -> boo
     default
 }
 
+/// Returns `true` if `rendered.navigation.<key>` is present and
+/// non-empty. This is the shared predicate behind [`page_has_navbar`] and
+/// `quarto_nav_js::decide`'s `secondary-nav` check — the same signal the
+/// HTML template's `$if$` gate uses to decide whether `#quarto-header`
+/// ships (see `quarto_nav_js.rs` module docs for the full picture).
+///
+/// Callers must run after the transform that renders `key` into
+/// `rendered.navigation.<key>` (for `"navbar"`, that's
+/// `NavbarRenderTransform`).
+pub(crate) fn rendered_navigation_non_empty(meta: &ConfigValue, key: &str) -> bool {
+    meta.get_path(&["rendered", "navigation", key])
+        .and_then(|v| v.as_plain_text())
+        .is_some_and(|s| !s.is_empty())
+}
+
+/// Returns `true` if the page has a rendered navbar.
+///
+/// This is Q1's `navbar: !!nav.navbar` (the sidebar template's gate for
+/// suppressing the sidebar title when a navbar is present), re-expressed
+/// for q2.
+///
+/// **D2 — why this reads the *rendered* key, not `navigation.navbar` +
+/// `is_feature_disabled`:** Q1's `nav.navbar` is the resolved config
+/// object, which would suggest reading `navigation.navbar` plus
+/// `is_feature_disabled(meta, "navbar")`. Reading `rendered.navigation.navbar`
+/// instead handles cases the config-side read would get wrong: a per-page
+/// `navbar: false` still leaves an author-supplied
+/// `rendered.navigation.navbar` in place (`NavbarRenderTransform` returns
+/// early and the template emits the user's HTML, so a navbar ships even
+/// though `navigation.navbar` reads "disabled"). The rendered-key read
+/// stays consistent with what actually reaches the page.
+///
+/// **Callers must run after `NavbarRenderTransform`** — this reads
+/// `rendered.navigation.navbar`, which that transform populates.
+pub fn page_has_navbar(meta: &ConfigValue) -> bool {
+    rendered_navigation_non_empty(meta, "navbar")
+}
+
 /// Where footnotes/references should be placed.
 ///
 /// Corresponds to the `reference-location` option in Quarto schema.
@@ -284,6 +322,40 @@ mod tests {
     fn resolve_website_bool_top_level_false_disables() {
         let meta = meta_with("page-navigation", bool_value(false));
         assert!(!resolve_website_bool(&meta, "page-navigation", true));
+    }
+
+    /// `meta_with` above builds a flat one-level map, which cannot express
+    /// the 3-level `rendered.navigation.navbar` path `page_has_navbar`
+    /// reads. Build via `insert_path` instead (mirrors
+    /// `quarto_nav_js.rs`'s test `meta_with`).
+    fn meta_with_path(path: &[&str], value: ConfigValue) -> ConfigValue {
+        let mut meta = ConfigValue::null(SourceInfo::for_test());
+        meta.insert_path(path, value);
+        meta
+    }
+
+    #[test]
+    fn page_has_navbar_absent_is_false() {
+        let meta = ConfigValue::null(SourceInfo::for_test());
+        assert!(!page_has_navbar(&meta));
+    }
+
+    #[test]
+    fn page_has_navbar_empty_string_is_false() {
+        let meta = meta_with_path(
+            &["rendered", "navigation", "navbar"],
+            ConfigValue::new_string("", SourceInfo::for_test()),
+        );
+        assert!(!page_has_navbar(&meta));
+    }
+
+    #[test]
+    fn page_has_navbar_non_empty_is_true() {
+        let meta = meta_with_path(
+            &["rendered", "navigation", "navbar"],
+            ConfigValue::new_string("<nav class=\"navbar\">N</nav>", SourceInfo::for_test()),
+        );
+        assert!(page_has_navbar(&meta));
     }
 
     #[test]
