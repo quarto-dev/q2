@@ -89,15 +89,16 @@ export function Menu({
 
   const close = useCallback(
     (returnFocus: boolean) => {
-      // Defer the focus return past the React commit: if the activating
-      // item opened a dialog, the dialog owns focus now (its autoFocus
-      // child is focused) and the menu must not steal it back.
+      // Return focus synchronously, BEFORE the state updates this close
+      // triggers are committed. If the activating item opens a dialog,
+      // the dialog captures its restore target during render — and with
+      // the trigger already focused, that target is the trigger, not the
+      // menu item about to be unmounted. The dialog's autoFocus child
+      // then takes focus on commit (no steal), and focus returns here
+      // when the dialog closes.
       if (returnFocus) {
         const target = returnFocusRef.current;
-        queueMicrotask(() => {
-          if (document.activeElement?.closest('[role="dialog"]')) return;
-          if (target?.isConnected) target.focus();
-        });
+        if (target?.isConnected) target.focus();
       }
       onClose(returnFocus);
     },
@@ -184,6 +185,18 @@ export function Menu({
         // Menus don't trap focus; close and let the tab proceed.
         close(false);
         return;
+      case 'Enter':
+      case ' ': {
+        // Activate explicitly rather than relying on the browser's
+        // default button activation: that click is dispatched AFTER this
+        // handler returns — by then close() has moved focus back to the
+        // trigger, and the stray click would land on the trigger itself
+        // (re-opening the menu) instead of the item.
+        e.preventDefault();
+        const item = activeIndex === -1 ? undefined : list[activeIndex];
+        item?.click();
+        return;
+      }
       default:
         break;
     }

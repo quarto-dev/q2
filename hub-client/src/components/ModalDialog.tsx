@@ -57,9 +57,18 @@ export default function ModalDialog({
   useEffect(() => {
     const restoreTo = restoreFocusTo.current;
     return () => {
-      if (restoreTo instanceof HTMLElement && restoreTo.isConnected) {
-        restoreTo.focus();
+      if (!(restoreTo instanceof HTMLElement) || !restoreTo.isConnected) {
+        return;
       }
+      // Defer past the commit: StrictMode's mount-time double-effect runs
+      // this cleanup while the dialog stays in the DOM (and the autoFocus
+      // child has just taken focus) — restoring there would steal focus
+      // straight back. A real unmount removes the dialog, so by microtask
+      // time the ref is detached and the restore fires only then.
+      queueMicrotask(() => {
+        if (dialogRef.current?.isConnected) return;
+        restoreTo.focus();
+      });
     };
   }, []);
 
