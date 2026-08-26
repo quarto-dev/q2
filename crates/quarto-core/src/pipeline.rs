@@ -1392,6 +1392,14 @@ pub fn build_transform_pipeline(
     // inert there.
     pipeline.push(Box::new(RepoActionsRenderTransform::new()));
     pipeline.push(Box::new(NavbarRenderTransform::new()));
+    // MUST come after NavbarRenderTransform: the sidebar-title gate
+    // (bd-sidebar-title-with-navbar-82wxow6m) suppresses the sidebar's
+    // own title when the page has a navbar, and its predicate reads the
+    // `rendered.navigation.navbar` key NavbarRenderTransform writes —
+    // the same signal the template's header gate uses. Registered
+    // unconditionally on both native and WASM: the preview renders the
+    // sidebar fragment too, so gating it on target would make the
+    // preview disagree with `render` about the title.
     pipeline.push(Box::new(SidebarRenderTransform::new()));
     // Breadcrumbs derive from the resolved `navigation.sidebar`
     // (bd-breadcrumbs-missing-1vpuqh34); the title-block partial
@@ -3733,6 +3741,46 @@ mod tests {
             nav_js > navbar && nav_js > secondary,
             "quarto-nav-js must run after navbar-render ({navbar}) and \
              secondary-nav-render ({secondary}), got {nav_js}; pipeline: {names:?}"
+        );
+    }
+
+    /// bd-sidebar-title-with-navbar-82wxow6m: sidebar-render must be
+    /// registered in the Navigation phase AFTER navbar-render — its
+    /// sidebar-title gate reads the `rendered.navigation.navbar` key
+    /// navbar-render writes. Same pin rationale as
+    /// `test_quarto_nav_js_registered_after_nav_renders`.
+    #[test]
+    fn test_sidebar_render_registered_after_navbar_render() {
+        use crate::transform::TransformPhase;
+
+        let runtime = make_test_runtime();
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            None,
+            Default::default(),
+            None,
+        );
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        let pos = |n: &str| names.iter().position(|x| *x == n);
+
+        let sidebar = pos("sidebar-render").expect("sidebar-render registered");
+        let sidebar_phase = pipeline
+            .iter()
+            .find(|t| t.name() == "sidebar-render")
+            .map(|t| t.phase());
+        assert_eq!(
+            sidebar_phase,
+            Some(TransformPhase::Navigation),
+            "sidebar-render must be in the Navigation phase; pipeline: {names:?}"
+        );
+        let navbar = pos("navbar-render").expect("navbar-render registered");
+        assert!(
+            sidebar > navbar,
+            "sidebar-render must run after navbar-render ({navbar}), got \
+             {sidebar}; pipeline: {names:?}"
         );
     }
 

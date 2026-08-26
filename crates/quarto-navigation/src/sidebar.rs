@@ -383,6 +383,13 @@ impl SidebarEntry {
 }
 
 /// Fully resolved sidebar configuration.
+///
+/// FORWARD NOTE: adding a `logo` field here must also split the title
+/// gate in `render_html.rs` — the renderer collapses Q1's two gates
+/// (outer `sidebar.logo || (sidebar.title && !navbar)` wrapper, inner
+/// `!navbar && sidebar.title` title block) into one only because there
+/// is no `logo`. See the FORWARD NOTE at that gate
+/// (bd-sidebar-title-with-navbar-82wxow6m).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sidebar {
     pub id: Option<String>,

@@ -357,6 +357,24 @@ pub fn secondary_nav_to_html(content: SecondaryNavContent<'_>, toggle_label: &st
     html
 }
 
+/// Render a sidebar **as if the page has no navbar**.
+///
+/// This convenience wrapper hardcodes
+/// [`SidebarRenderOptions::has_navbar`]` = false`, which is not a
+/// neutral default: it is the branch that *emits* the sidebar's own
+/// `sidebar-header`/`sidebar-title` block. The gate lives at the
+/// `SidebarTitle::Text(..) && !opts.has_navbar` condition in
+/// [`sidebar_to_html_with_options`] — read the comment there (and its
+/// FORWARD NOTE about a future `logo` field) before relying on this.
+///
+/// **Production code rendering a page sidebar must not call this.** Call
+/// [`sidebar_to_html_with_options`] with the real `has_navbar`, obtained
+/// from `page_has_navbar` in quarto-core's `transforms::config`, so the
+/// title is suppressed on navbar pages for Q1 parity
+/// (bd-sidebar-title-with-navbar-82wxow6m).
+///
+/// As of that change this wrapper has **no production callers** — every
+/// caller is a test in this file that wants the navbar-free rendering.
 pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
     sidebar_to_html_with_options(
         sidebar,
@@ -386,9 +404,12 @@ pub struct SidebarRenderOptions<'a> {
     /// items, matching Q1's `sidebar.ejs` merge order (items first,
     /// TOC target last).
     pub appended_html: Option<&'a str>,
-    /// Whether the page also renders a navbar. Carried for a future
-    /// gate (Q1 suppresses the sidebar title when `navbar` is
-    /// truthy); currently unread.
+    /// Whether the page also renders a navbar. When true, the
+    /// sidebar's own title is suppressed — Q1's `sidebar.ejs:51` gates
+    /// the title block on `!navbar`
+    /// (bd-sidebar-title-with-navbar-82wxow6m). See the comment at the
+    /// gate for why, and for what changes if `Sidebar` ever gains a
+    /// `logo` field.
     pub has_navbar: bool,
 }
 
@@ -424,13 +445,42 @@ pub fn sidebar_to_html_with_options(sidebar: &Sidebar, opts: &SidebarRenderOptio
     ));
 
     // Title header — emitted only when the title resolved to a concrete
-    // value (`Text`). `Default` reaching the renderer means the resolver
-    // had nothing to substitute (no `website.title`); `Hidden` is an
-    // explicit `title: false`. Either way, no header. The Bootstrap
-    // utility classes match Q1's spacing/alignment for visual parity;
-    // they live here, not in the data model, so we can swap them out
-    // when SCSS evolves. Subtitle is parsed but not rendered yet.
-    if let SidebarTitle::Text(ref title_cv) = sidebar.title {
+    // value (`Text`) AND the page has no navbar. `Default` reaching the
+    // renderer means the resolver had nothing to substitute (no
+    // `website.title`); `Hidden` is an explicit `title: false`. Either
+    // way, no header. The Bootstrap utility classes match Q1's
+    // spacing/alignment for visual parity; they live here, not in the
+    // data model, so we can swap them out when SCSS evolves. Subtitle is
+    // parsed but not rendered yet.
+    //
+    // The `!opts.has_navbar` half is Q1's `sidebar.ejs:51` gate, dropped
+    // when the markup was ported (bd-sidebar-title-with-navbar-82wxow6m).
+    // The rationale is **navbar-item duplication**, not string
+    // duplication: a sidebar whose section has a navbar item sees that
+    // item render *active* on every page the sidebar covers
+    // (`navbar_generate.rs` `mark_active` → `nav-link active` below), so
+    // the navbar already tells the reader which section they are in and
+    // a banner atop the sidebar merely restates it. The markup confirms
+    // the intent — the element is an `<a href="/">` home link, and the
+    // title defaults to `website.title`: it is site/section branding for
+    // when no navbar carries it, not a heading for the sidebar's
+    // contents. Verified against Q1 as a matrix: the suppression holds
+    // even when the sidebar title and the site title are different
+    // strings, and even when the navbar carries no brand text at all —
+    // so this must NOT be narrowed into an equality check. Only the
+    // sidebar's own `title:` is affected; `- section:` labels inside
+    // `contents:` render normally.
+    //
+    // FORWARD NOTE: Q1 actually has *two* gates — an outer wrapper on
+    // `sidebar.logo || (sidebar.title && !navbar)` and an inner title
+    // block on `!navbar && sidebar.title`. They collapse into this one
+    // only because `Sidebar` has no `logo` field. When a `logo` lands,
+    // split them back apart so a logo still emits `sidebar-header`
+    // (plus `sidebar-header-stacked` when both are configured) under a
+    // navbar, while the title stays suppressed.
+    if let SidebarTitle::Text(ref title_cv) = sidebar.title
+        && !opts.has_navbar
+    {
         html.push_str("  <div class=\"sidebar-header pt-lg-2 mt-2 text-left\">\n");
         html.push_str(&format!(
             "    <div class=\"sidebar-title mb-0 py-0\"><a href=\"{}\">{}</a></div>\n",
@@ -2607,6 +2657,73 @@ mod tests {
             html
         );
         assert!(!html.contains("sidebar-title"));
+    }
+
+    /// bd-sidebar-title-with-navbar-82wxow6m: a page with a navbar
+    /// renders no sidebar title. Q1's `sidebar.ejs:51` gates the title
+    /// block on `!navbar`; q2 ported the markup without the condition.
+    /// A/B partner of `sidebar_render_text_title_without_navbar_emits_header`.
+    #[test]
+    fn sidebar_render_text_title_with_navbar_emits_no_header() {
+        let sb = Sidebar {
+            title: SidebarTitle::Text(s("Guides")),
+            contents: vec![link("a.html", "A")],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html_with_options(
+            &sb,
+            &SidebarRenderOptions {
+                home_url: "./",
+                appended_html: None,
+                has_navbar: true,
+            },
+        );
+        assert!(
+            !html.contains("sidebar-header"),
+            "a navbar must suppress the sidebar-header wrapper; html: {}",
+            html
+        );
+        assert!(
+            !html.contains("sidebar-title"),
+            "a navbar must suppress the sidebar title; html: {}",
+            html
+        );
+        // The sidebar's contents are untouched — only the banner goes.
+        assert!(
+            html.contains(">A<"),
+            "sidebar contents must survive; html: {}",
+            html
+        );
+    }
+
+    /// The A/B partner of the test above: the same sidebar with no
+    /// navbar on the page still renders its title, which is the
+    /// ordinary case for books and sidebar-only doc sites.
+    #[test]
+    fn sidebar_render_text_title_without_navbar_emits_header() {
+        let sb = Sidebar {
+            title: SidebarTitle::Text(s("Guides")),
+            contents: vec![link("a.html", "A")],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html_with_options(
+            &sb,
+            &SidebarRenderOptions {
+                home_url: "./",
+                appended_html: None,
+                has_navbar: false,
+            },
+        );
+        assert!(
+            html.contains("<div class=\"sidebar-header pt-lg-2 mt-2 text-left\">"),
+            "no navbar: expected the sidebar-header wrapper; html: {}",
+            html
+        );
+        assert!(
+            html.contains("<div class=\"sidebar-title mb-0 py-0\"><a href=\"./\">Guides</a></div>"),
+            "no navbar: expected the title in a home link; html: {}",
+            html
+        );
     }
 
     #[test]

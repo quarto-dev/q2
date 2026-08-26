@@ -28,9 +28,14 @@ sidebar keeps its whole structure and loses only the banner above it.
 **Why it matters:** 81 pages on the Positron docs (the sole remaining chrome
 difference vs Q1) and 259 of 266 pages on this repo's own docs site.
 
-**Sequencing that is load-bearing:** the two `docs/_quarto.yml` `title:`
+**Sequencing that is load-bearing:** ~~the two `docs/_quarto.yml` `title:`
 deletions travel in the *same commit* as the gate, never before it. Deleting
-them earlier substitutes `website.title` and makes 224 pages read `Quarto 2`.
+them earlier substitutes `website.title` and makes 224 pages read `Quarto 2`.~~
+**Corrected 2026-08-26 (whole-branch review I1): the deletions were reverted —
+the keys are not dead.** `llms_post_render::sidebar_heading` reads
+`sidebar.title` from the data model and falls back to the sidebar `id`, so
+deleting them degraded the shipped `llms.txt` headings. The ordering rule still
+holds for any future deletion; this branch simply does not delete them.
 
 **Why the plan is long:** the reach above earns a paper trail. Most of the
 length is a blast-radius sweep (20 files, each cleared), a reversed ordering
@@ -164,6 +169,19 @@ exists for, so Q1's suppression is correct for both. The inner `- section:`
 labels survive untouched — verified on our own site (`Reveal.js` still present
 on the presentations page, `yaml`/`markdown`/… on the errors pages).
 
+> **CORRECTION (2026-08-26, whole-branch review I1).** The "after the gate"
+> column above is about **rendered HTML only**. It does *not* license deleting
+> the two `title:` keys from `docs/_quarto.yml`: `sidebar.title` has a second
+> consumer, `quarto-core::project::llms_post_render::sidebar_heading`, which
+> reads it straight from the parsed data model and falls back to the raw
+> sidebar `id` (**not** to `website.title`). `docs/_quarto.yml` sets
+> `llms-txt: true`, so deleting the keys degraded the shipped `llms.txt` H2s
+> from `## Presentations` / `## Error reference` to `## presentations` /
+> `## errors` — and that file is the source for `agents-docs-dist/`, embedded
+> in `q2 docs llms` / `q2 agents-info`. **The keys were never dead config.**
+> Phase 4.5 has been reverted; the `title:` lines stay. See the corrected
+> §Correction below.
+
 #### Correction: deleting the two `title:` lines must NOT precede the gate
 
 An earlier draft put the deletion in a phase *before* the gate, reasoning that
@@ -181,10 +199,39 @@ So deleting `title: "Error reference"` before the gate would turn 224 pages from
 `Error reference` into `Quarto 2` — a worse interim state, not a preserved one.
 
 **There is no ordering that avoids the docs headings going away. The gate
-removing them *is* the fix.** The two `title:` deletions are therefore *dead-config
-cleanup* — once the gate lands, a `title:` on a sidebar under a navbar does
-nothing — and they belong in the **same commit as the gate** (Phase 4.5), never
-before it.
+removing them *is* the fix.** The sequencing argument above stands: the deletion
+may never come *earlier* than the gate.
+
+~~The two `title:` deletions are therefore *dead-config cleanup* — once the gate
+lands, a `title:` on a sidebar under a navbar does nothing — and they belong in
+the **same commit as the gate** (Phase 4.5), never before it.~~
+
+> **CORRECTION (2026-08-26, whole-branch review I1).** The struck sentence is
+> false, and the deletion has been reverted (Phase 4.5 unticked below). What
+> the sequencing argument establishes is only that the deletion may not come
+> *earlier* than the gate — not that it must happen at all. It must not:
+> `sidebar.title` is read by a **second consumer** that the gate does not
+> affect. `llms_post_render::sidebar_heading` matches on the parsed
+> `SidebarTitle` and, for anything other than `Text`, falls back to the raw
+> `sidebar.id` — so removing `title: "Error reference"` renamed the `llms.txt`
+> H2 for 224 error pages to `## errors`, and `title: "Presentations"` to
+> `## presentations`. `docs/_quarto.yml:13` sets `llms-txt: true`, and that
+> output ships embedded in the binary via `agents-docs-dist/`.
+>
+> With the gate in place the two keys emit **nothing** in HTML (measured:
+> 0 `sidebar-title` occurrences across the rendered site with the keys
+> present), so keeping them is inert for the website *and* preserves the
+> llms.txt headings. Deleting them was strictly worse than keeping them.
+>
+> This is the branch's own §5 finding turned inside out: D1 gates at the
+> renderer precisely so the data model stays intact for non-HTML consumers,
+> and then 4.5 deleted the model values those consumers read. If the deletion
+> is ever wanted on editorial grounds, it is a separate change that must state
+> the llms.txt heading change as its intended effect.
+>
+> (`sidebar_heading`'s id fallback is a pre-existing wart — three of five docs
+> sidebars are still headed by raw ids. Improving it belongs in its own
+> strand, not here.)
 
 #### Open editorial question (not a blocker for the code)
 
@@ -213,6 +260,15 @@ in the navbar. But it is one page.
 
 Flagged for Gordon; the parity fix does not depend on the answer, and the plan
 proceeds either way.
+
+> **CORRECTION (2026-08-26, whole-branch review I1).** This question is now
+> **moot for this branch**: the two `title:` keys stay in `docs/_quarto.yml`
+> (see the correction above). The gate suppresses their HTML banners
+> regardless, and keeping them preserves the `llms.txt` H2s. Whether the docs
+> site should *also* carry a visible "Error reference" heading under a navbar
+> remains open, but it has no configuration answer — only a structural one
+> (convert `title:` to a top-level `- section:`, analysed and declined above),
+> so answering "yes" would reopen the gate, not the config.
 
 ## Root cause
 
@@ -499,6 +555,8 @@ Not required — the inline fixture is sufficient.
 **behaviour-preserving**, so they land first, each with a genuinely green gate.
 The `docs/_quarto.yml` cleanup travels *with* the gate in Phase 4, never before
 it — see §Expected collateral for the measurement that forced that ordering.
+(**Corrected 2026-08-26:** that cleanup was reverted entirely — the keys are not
+dead. The ordering rule stands for any future deletion; see Phase 4.5.)
 The behaviour change then lands in a single phase where the two tests that can
 be red go red → green **on assertions, not on compile errors** (the third new
 test asserts current behaviour and is green from the start — it is the A/B
@@ -554,25 +612,32 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       figure at `99e7db175` was `13407 passed, 199 skipped`; the +40 is other
       people's work that landed in between, not ours.)
 
-- [ ] **0.2** Repoint `claude-notes/plans/CURRENT.md` at this plan
+- [x] **0.2** Repoint `claude-notes/plans/CURRENT.md` at this plan
       (it currently targets `2026-08-25-scheme-href-path-normalized.md`).
+      Confirmed during 5.6: `CURRENT.md` is a symlink to
+      `2026-08-25-sidebar-title-with-navbar.md`.
 
 ### Phase 1 — `SidebarRenderOptions` (behaviour-preserving)
 
-- [ ] **1.1** In `crates/quarto-navigation/src/render_html.rs`, add
+- [x] **1.1** In `crates/quarto-navigation/src/render_html.rs`, add
       `SidebarRenderOptions<'a>` with fields `home_url: &'a str`,
       `appended_html: Option<&'a str>`, `has_navbar: bool`, each documented.
       The type doc should name Q1's param bag in `nav-before-body.ejs` as the
       model (see §Root cause).
+      Verified in 5.6 against `4c5fe2fd2`: the struct, all three documented
+      fields, and the `nav-before-body.ejs` reference all landed exactly as
+      specified.
 
-- [ ] **1.2** Rename `sidebar_to_html_with_appended` to
+- [x] **1.2** Rename `sidebar_to_html_with_appended` to
       `sidebar_to_html_with_options(sidebar: &Sidebar, opts: &SidebarRenderOptions) -> String`
       and rewrite its body to read `opts.home_url` / `opts.appended_html`.
       Redefine `sidebar_to_html(sidebar, home_url)` to delegate with
       `appended_html: None, has_navbar: false`.
       **Do not add the gate yet** — `has_navbar` is carried but unread.
+      Verified in 5.6: landed exactly as specified; the gate was not added
+      until 4.3.
 
-- [ ] **1.3** Update the call sites. §D3 counts **2 external** ones, but the
+- [x] **1.3** Update the call sites. §D3 counts **2 external** ones, but the
       rename touches **4 places**:
       - `crates/quarto-core/src/transforms/sidebar_render.rs:50` — the `use`
         importing `render_html::sidebar_to_html_with_appended`;
@@ -580,8 +645,10 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
         `has_navbar: false` for now;
       - `crates/quarto-navigation/src/render_html.rs:361` — `sidebar_to_html`'s
         internal delegation.
+      Verified in 5.6: `grep -n sidebar_to_html_with_options` confirms all
+      4 call sites (2 in `sidebar_render.rs`, 2 in `render_html.rs`).
 
-- [ ] **1.4** Gate: `cargo clippy -p quarto-navigation -p quarto-core --all-targets -- -D warnings`
+- [x] **1.4** Gate: `cargo clippy -p quarto-navigation -p quarto-core --all-targets -- -D warnings`
       then `cargo nextest run -p quarto-navigation -p quarto-core`.
       **Must be fully green** — nothing has changed behaviourally. The unread
       `has_navbar` will *not* trip `dead_code`: `SidebarRenderOptions` is a
@@ -589,10 +656,13 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       publicly reachable and the lint does not fire. If something unexpected
       does object, fix it in place — do **not** reach forward and add the gate
       early, which would undo the sequencing this plan just established.
+      Superseded by the 5.5 full-workspace `cargo xtask verify` (which runs
+      `cargo clippy --workspace --all-targets -- -D warnings`) and the 5.1
+      full-workspace nextest run, both green in this attempt.
 
 ### Phase 2 — `page_has_navbar` (behaviour-preserving)
 
-- [ ] **2.1** Add to `crates/quarto-core/src/transforms/config.rs`, next to
+- [x] **2.1** Add to `crates/quarto-core/src/transforms/config.rs`, next to
       `is_feature_disabled` (`:23`) and `resolve_website_bool` (`:38`):
       ```rust
       pub fn page_has_navbar(meta: &ConfigValue) -> bool
@@ -605,13 +675,19 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       **Use `as_plain_text()`, not `as_str()`** — the `metadata-as-str` lint rule
       exists because `as_str()` returns `None` for
       `ConfigValueKind::PandocInlines`.
+      Verified in 5.6 against `afe3007d5`: `page_has_navbar` delegates to a
+      new `rendered_navigation_non_empty` helper via `as_plain_text()`, with
+      the D2 rationale and the after-`NavbarRenderTransform` note both in
+      the doc comment.
 
-- [ ] **2.2** Export it: `mod config;` is **private**
+- [x] **2.2** Export it: `mod config;` is **private**
       (`transforms/mod.rs:43`), and the crate convention is the re-export list
       at `transforms/mod.rs:115`. Add `page_has_navbar` there, the way
       `navbar_render.rs:36` reaches `is_feature_disabled`.
+      Verified in 5.6: `transforms/mod.rs`'s re-export list now includes
+      `page_has_navbar` alongside `is_feature_disabled`.
 
-- [ ] **2.3** Unit-test `page_has_navbar` in `config.rs`'s test module (`:200`):
+- [x] **2.3** Unit-test `page_has_navbar` in `config.rs`'s test module (`:200`):
       absent key → `false`; empty-string value → `false`; non-empty → `true`.
 
       **The existing `meta_with` in that module (`config.rs:207`) will not
@@ -619,23 +695,33 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       `rendered.navigation.navbar`. Use the pattern from
       `quarto_nav_js.rs:184`: `ConfigValue::null(SourceInfo::for_test())` then
       `insert_path`. Either copy that helper or generalise it.
+      Verified in 5.6: exactly the three tests
+      (`page_has_navbar_absent_is_false`, `page_has_navbar_empty_string_is_false`,
+      `page_has_navbar_non_empty_is_true`) via a new `meta_with_path` helper;
+      all three pass in the 5.1 workspace run.
 
-- [ ] **2.4** Refactor `quarto_nav_js.rs::decide` (`:98-104`) onto the shared
+- [x] **2.4** Refactor `quarto_nav_js.rs::decide` (`:98-104`) onto the shared
       helper for the `navbar` half, keeping the local closure for
       `secondary-nav`, or generalise the helper — implementer's call, but the
       two copies of the navbar predicate must not both survive. Its four
       predicate tests (`:201`, `:216`, `:233`, `:245`) must stay green
       **unchanged**.
+      Verified in 5.6: `decide` now calls `page_has_navbar(meta) ||
+      rendered_navigation_non_empty(meta, "secondary-nav")`; no local
+      predicate closure remains. The four `quarto_nav_js` predicate tests
+      are unmodified in the diff and pass in the 5.1 run.
 
-- [ ] **2.5** Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings`;
+- [x] **2.5** Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings`;
       `cargo nextest run -p quarto-core -E 'test(page_has_navbar) or test(ships_) or test(empty_rendered_navbar)'`.
       Fully green. (Note: `test()` is a **substring match on the test name** —
       `test(config)` would match unrelated tests and miss `page_has_navbar`
       entirely.)
+      Superseded by the 5.5 full-workspace `cargo xtask verify` and the 5.1
+      full-workspace nextest run, both green in this attempt.
 
 ### Phase 3 — Split the shortcode fixture (behaviour-preserving)
 
-- [ ] **3.1** `sidebar_title_shortcode_substitutes`
+- [x] **3.1** `sidebar_title_shortcode_substitutes`
       (`crates/quarto-core/tests/integration/shortcode_config_pipeline.rs:203`)
       renders `full_fixture` (`:122`), which declares **both** a navbar and
       `sidebar.title: "Side {{< meta version >}}"`, and asserts `"Side 9.9.9"`
@@ -651,12 +737,17 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
 
       Comment the new fixture with **why** it exists and this strand id;
       otherwise the next reader will "helpfully" re-merge the two.
+      Verified in 5.6 against `72612260d`: new navbar-free `sidebar_only_fixture`
+      (matching `headroom_pipeline.rs`'s shape), commented with the strand id
+      and an explicit "do not re-merge" note; `full_fixture` is untouched.
 
-- [ ] **3.2** Gate: `cargo nextest run -p quarto-core -E 'test(shortcode_config)'`.
+- [x] **3.2** Gate: `cargo nextest run -p quarto-core -E 'test(shortcode_config)'`.
       Fully green — a navbar-free fixture substitutes the shortcode identically
       either side of the gate, which is what makes this safe to land first.
+      `sidebar_title_shortcode_substitutes` passes in the 5.1 full-workspace
+      run in this attempt.
 
-- [ ] **3.3** Capture the **pre-fix** docs baseline, for comparison in 4.6.
+- [x] **3.3** Capture the **pre-fix** docs baseline, for comparison in 4.6.
       Already measured at the rebased base `c11aa0e4d` (recorded in §Expected
       collateral). Re-run only if something touching navigation rendering or
       `docs/_quarto.yml` has landed since — note the errors sidebar grows by one
@@ -672,10 +763,14 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       Use `cargo run --bin q2 --`, never the ambient `quarto`: `CLAUDE.md` is
       explicit that `docs/` is a Quarto **2** site and Q1 gives misleading
       results on it.
+      Done as part of `72612260d`'s commit (baseline re-confirmed at
+      `224/34/1`, matching §Expected collateral); nothing touching navigation
+      rendering or `docs/_quarto.yml` landed between then and 4.6, so no
+      further re-run was needed there or in this phase (5.3).
 
 ### Phase 4 — The behaviour change (TDD)
 
-- [ ] **4.1** Write the failing tests. Everything compiles now, so these fail on
+- [x] **4.1** Write the failing tests. Everything compiles now, so these fail on
       **assertions**.
 
       In `crates/quarto-navigation/src/render_html.rs`, after
@@ -697,7 +792,7 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
         positive control that the fixture is wired — that it *does* contain
         `navbar-brand`.
 
-- [ ] **4.2** Confirm all three fail **on their assertions**, not on a panic in
+- [x] **4.2** Confirm all three fail **on their assertions**, not on a panic in
       fixture setup and not on a compile error:
       ```
       cargo nextest run -p quarto-navigation -E 'test(sidebar_render_text_title_with_navbar)'
@@ -706,7 +801,7 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       (`sidebar_render_text_title_without_navbar_emits_header` passes already —
       it asserts current behaviour. Only the `with_navbar` one is red here.)
 
-- [ ] **4.3** Add the gate in `render_html.rs`. Edition is 2024 and let-chains
+- [x] **4.3** Add the gate in `render_html.rs`. Edition is 2024 and let-chains
       are already used in this workspace (`appendix.rs:192`):
       ```rust
       if let SidebarTitle::Text(ref title_cv) = sidebar.title
@@ -726,7 +821,7 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       Phase-1 hardcoded `false`. That is not 4.3 failing to take — there is no
       gate between 4.3 and 4.4 for exactly this reason.
 
-- [ ] **4.4** Wire the real value in `sidebar_render.rs`: compute
+- [x] **4.4** Wire the real value in `sidebar_render.rs`: compute
       `let has_navbar = page_has_navbar(&ast.meta);` and pass it at both call
       sites, replacing the Phase-1 `false`.
 
@@ -736,14 +831,22 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       before the later `insert_path`). See D4 for why it passes the real value
       rather than `false`.
 
-- [ ] **4.5** **Same commit as the gate**: delete the two now-dead `title:` lines
-      in `docs/_quarto.yml` — `:77` (`title: "Presentations"`) and `:84`
+- [ ] **4.5** ~~**Same commit as the gate**: delete the two now-dead `title:`
+      lines in `docs/_quarto.yml` — `:77` (`title: "Presentations"`) and `:84`
       (`title: "Error reference"`). With the gate in place they render nothing,
-      so this is dead-config cleanup. See §Expected collateral for why it must
-      not be done earlier (deleting them pre-gate substitutes `website.title`
-      and makes 224 pages read `Quarto 2` instead).
+      so this is dead-config cleanup.~~ **REVERTED 2026-08-26 (whole-branch
+      review I1) — do not do this.** The premise was false: the keys were never
+      dead. `quarto-core::project::llms_post_render::sidebar_heading` reads
+      `sidebar.title` from the parsed data model and falls back to the raw
+      sidebar `id`, not to `website.title`, so with `llms-txt: true` set at
+      `docs/_quarto.yml:13` the deletion degraded the shipped `llms.txt` H2s to
+      `## presentations` / `## errors`. Both lines were restored to their
+      pre-branch text; the gate alone still renders 0 `sidebar-title`
+      occurrences across the site. The sequencing argument in §Expected
+      collateral is unaffected and still holds (the deletion may never come
+      *earlier* than the gate) — it just no longer happens at all.
 
-- [ ] **4.6** Re-render `docs/` and compare against the 3.3 baseline:
+- [x] **4.6** Re-render `docs/` and compare against the 3.3 baseline:
       ```bash
       cargo build --bin q2 && cargo run --bin q2 -- render docs/
       grep -rl 'sidebar-title' docs/_site --include='*.html' | wc -l
@@ -759,10 +862,37 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       under a navbar — the gate did not take. A dropped section label means the
       gate is over-reaching. Either way, stop.
 
-- [ ] **4.7** Update the `sidebar_render.rs` module doc's §"Skip conditions"
+      **Observed (2026-08-26, this worktree, `cargo run --bin q2 -- render docs/`,
+      266 of 266 files rendered, 280 `.html` outputs):**
+
+      | measurement | pre-fix | post-fix | expected |
+      | --- | ---: | ---: | --- |
+      | pages containing `sidebar-title` | 259 | **0** | 259 → 0 ✓ |
+      | pages containing `sidebar-header` | — | **0** | 0 (no `logo` field exists) ✓ |
+      | `Reveal.js` in `presentations/revealjs/index.html` | 5 | **5** | still 5 ✓ |
+      | `>yaml<` in `errors/index.html` | 1 | **1** | still 1 ✓ |
+
+      The pre-fix 259 was re-confirmed here against the `docs/_site` tree left
+      by the 3.3 baseline render before it was deleted and re-rendered, so both
+      numbers come from this worktree.
+
+      Inspected markup — `docs/_site/errors/index.html`, sidebar now opens
+      straight into the menu container, with the `Error reference` content link
+      and the `- section:` labels intact:
+
+      ```html
+      <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation sidebar-floating overflow-auto" role="doc-toc">
+        <div class="sidebar-menu-container">
+          <ul class="list-unstyled mt-1">
+            <li class="sidebar-item">
+              <div class="sidebar-item-container">
+                <a href="index.html" class="sidebar-item-text sidebar-link active"><span class="menu-text">Error reference</span></a>
+      ```
+
+- [x] **4.7** Update the `sidebar_render.rs` module doc's §"Skip conditions"
       list to record that a page with a navbar renders no sidebar title.
 
-- [ ] **4.8** Add the pipeline ordering comment above
+- [x] **4.8** Add the pipeline ordering comment above
       `SidebarRenderTransform::new()` (`pipeline.rs:1395`): SidebarRender MUST
       come after NavbarRender because its title gate reads
       `rendered.navigation.navbar`.
@@ -772,13 +902,13 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       `#[cfg(not(target_arch = "wasm32"))]`, whereas `SidebarRenderTransform` is
       unconditional and must stay that way (see 5.5 on the preview).
 
-- [ ] **4.9** Add `test_sidebar_render_registered_after_navbar_render` in
+- [x] **4.9** Add `test_sidebar_render_registered_after_navbar_render` in
       `pipeline.rs`'s test module, modelled on
       `test_quarto_nav_js_registered_after_nav_renders` (`:3704`): assert
       `sidebar-render` is in `TransformPhase::Navigation` and positioned after
       `navbar-render`.
 
-- [ ] **4.10** Gate:
+- [x] **4.10** Gate:
       `cargo clippy -p quarto-navigation -p quarto-core --all-targets -- -D warnings`;
       `cargo nextest run -p quarto-navigation -p quarto-core`. Fully green —
       including `sidebar_title_shortcode_substitutes`, already repaired in
@@ -786,7 +916,7 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
 
 ### Phase 5 — Verification
 
-- [ ] **5.1** `cargo nextest run --workspace`, captured to a log file and
+- [x] **5.1** `cargo nextest run --workspace`, captured to a log file and
       inspected with `grep`/`tail` (do **not** pipe nextest through `tail`
       inline). Report the delta against the Phase 0 baseline
       (`13447 passed, 199 skipped`). Expected: **+7 passed** (2 renderer unit +
@@ -799,7 +929,23 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       re-measure on the new base before claiming a delta; never subtract from a
       figure copied out of this document.
 
-- [ ] **5.2** **End-to-end through the binary.** `cargo build --bin q2`, then run
+      **Observed (2026-08-26, this worktree, this attempt):**
+      `cargo nextest run --workspace > $LOG 2>&1` (redirected to a log file,
+      inspected with `grep`/`tail`, never piped through `tail` inline):
+      ```
+      Summary [ 129.094s] 13454 tests run: 13454 passed, 199 skipped
+      ```
+      Exactly the expected `13454 passed, 199 skipped` (+7 on the pinned
+      baseline, 0 removed, skips unchanged). Confirmed all 7 new tests present
+      and `PASS` in the log: `sidebar_render_text_title_with_navbar_emits_no_header`,
+      `sidebar_render_text_title_without_navbar_emits_header`,
+      `page_has_navbar_absent_is_false`, `page_has_navbar_empty_string_is_false`,
+      `page_has_navbar_non_empty_is_true`,
+      `pipeline_omits_sidebar_header_when_navbar_present`,
+      `test_sidebar_render_registered_after_navbar_render`. No `FAIL` lines and
+      no `(N leaky)` annotation in this run.
+
+- [x] **5.2** **End-to-end through the binary.** `cargo build --bin q2`, then run
       the §Reproduction fixture. Record in the session transcript **and** append
       to this plan: the exact invocation, the observed `grep -c 'sidebar-title'`
       counts for both fixtures, and an explicit note that the output was
@@ -809,12 +955,51 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       navbar is unaffected) and that `nav#quarto-sidebar` still contains its
       `sidebar-menu-container` (only the header went away, not the menu).
 
-- [ ] **5.3** Docs already verified in 4.6. Re-run it only if anything landed
+      **Observed (2026-08-26, this worktree, this attempt).** Fixture recreated
+      verbatim from §Reproduction fixture under the session scratchpad
+      (`.../scratchpad/sidebar-repro/{with-navbar,without-navbar}/`, not
+      `/tmp`). `cargo build --bin q2` succeeded. Invocation, run from inside
+      each project directory with the explicit built binary (never the
+      ambient `quarto`/`q2`):
+      ```
+      /Users/gordon/src/q2/.worktrees/workspace-3/target/debug/q2 render
+      grep -c 'sidebar-title' _site/index.html
+      ```
+      Results:
+      | fixture | `q2 render` | `grep -c 'sidebar-title' _site/index.html` |
+      | --- | --- | --- |
+      | `with-navbar/` | `Rendered 2 of 2 files` | **0** |
+      | `without-navbar/` | `Rendered 2 of 2 files` | **1** |
+
+      Matches expected `with-navbar → 0`, `without-navbar → 1` exactly.
+
+      Inspected (not inferred) both outputs:
+      - `with-navbar/_site/index.html:21` still contains
+        `<div class="navbar-brand-container mx-auto"><a class="navbar-brand"
+        href="./"><span class="navbar-title">Site Title</span></a></div>` —
+        the navbar is unaffected.
+      - `with-navbar/_site/index.html`'s `<nav id="quarto-sidebar" …>` opens
+        directly into `<div class="sidebar-menu-container">` followed by the
+        `Index`/`Two` links — only the title banner is gone, the menu survives
+        (`grep -c 'sidebar-menu-container'` → 1).
+      - `without-navbar/_site/index.html:33` still contains
+        `<div class="sidebar-title mb-0 py-0"><a href="./">Guides</a></div>` —
+        the control case renders the title as before.
+
+- [x] **5.3** Docs already verified in 4.6. Re-run it only if anything landed
       after that step. Do **not** commit `docs/_site/` — it is build output.
 
-- [ ] **5.4** `cargo xtask lint`.
+      Confirmed in this attempt: `efa3ce196` (Phase 4, which already includes
+      the 4.6 docs re-render and measurement) is still the branch tip; nothing
+      has landed since. No re-render performed. `git status --short` is clean;
+      `docs/_site/` exists on disk (left over from the 4.6 render) but is
+      covered by `docs/.gitignore:3` and does not appear in `git status`.
 
-- [ ] **5.5** `cargo xtask verify`. **Full, not `--skip-hub-build`**:
+- [x] **5.4** `cargo xtask lint`.
+
+      **Observed:** `All checks passed! (1059 files checked)`, exit code 0.
+
+- [x] **5.5** `cargo xtask verify`. **Full, not `--skip-hub-build`**:
       `quarto-core` is in `wasm-quarto-hub-client`'s dependency closure, and
       `quarto-navigation`'s public API changes here.
 
@@ -835,11 +1020,59 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       after this chrome change, re-run `cargo build --bin q2` afterwards
       (`CLAUDE.md` §Verifying Rust changes in `q2 preview`).
 
-- [ ] **5.6** Reconcile this plan against what actually happened — verify every
+      **Observed (2026-08-26, this worktree, this attempt).** Ran the full
+      `cargo xtask verify` (no `--skip-hub-build`, no `--e2e`) to a log file.
+      All 14 steps passed:
+      ```
+      ✓ Step 1/14  custom lints + clippy (cargo clippy --workspace --all-targets -- -D warnings)
+      ✓ Step 2/14  Rust formatting
+      ✓ Step 3/14  Rust workspace build (warnings denied)
+      ✓ Step 4/14  tree-sitter grammar tests
+      ✓ Step 5/14  Rust workspace tests: 13454 tests run: 13454 passed, 199 skipped
+      ✓ Step 6/14  ts-packages workspaces build
+      ✓ Step 7/14  hub-client build (includes WASM)
+      ✓ Step 8/14  hub-client tests (test:ci): 90 files / 1005 tests, then
+                    integration 15 files / 112 tests, then wasm suite, all passed
+      ✓ Step 9/14  trace-viewer SPA build
+      ✓ Step 10/14 trace-viewer tests: 3 files / 10 tests passed
+      ✓ Step 11/14 shared preview-* package tests: multiple suites, all passed
+                    (e.g. 43 passed/2 skipped of 45 files, 577 passed/36 skipped
+                    of 613 tests; 53/53 files, 606 passed/1 skipped of 607)
+      ✓ Step 12/14 hub MCP package tests: 8/8 files, 77/77 tests
+      ✓ Step 13/14 q2-preview-spa placeholder build (includes the WASM +
+                    22,490 kB wasm_quarto_hub_client bundle, so `quarto-core`'s
+                    and `quarto-navigation`'s changed public API is proven to
+                    build for the WASM target)
+      – Step 14/14 Playwright E2E skipped (--e2e not passed, as instructed)
+      ✓ All verification steps passed!
+      EXIT CODE: 0
+      ```
+      **Preview/render parity, as flagged above:** `SidebarRenderTransform` is
+      registered unconditionally in `build_transform_pipeline` (native and
+      WASM both reach it — only `quarto-nav-js`'s push is
+      `cfg(not(target_arch = "wasm32"))`), so `q2 preview` and the hub-client
+      preview stop showing sidebar titles on navbar sites too, exactly like
+      `q2 render`. This is correct and intended — parity is preserved, not
+      broken. `cargo build --bin q2` was already run separately for 5.2, so
+      the `include_dir!`-embedded SPA is current if anyone eyeballs
+      `q2 preview` next, though no such manual preview check was performed in
+      this phase.
+
+- [x] **5.6** Reconcile this plan against what actually happened — verify every
       checkbox against the landed work, correct any that are wrong, and commit
       the updated plan.
 
+      Done: every Phase 0–4 checkbox was verified against the actual commit
+      diffs (`4c5fe2fd2`, `afe3007d5`, `72612260d`, `efa3ce196`), not against
+      the prior summaries, and corrected from unticked to ticked with a note
+      on what was checked. No discrepancies were found between the plan's
+      description of the work and what actually landed.
+
 - [ ] **5.7** `braid close bd-sidebar-title-with-navbar-82wxow6m --reason "..."`.
+      **Deliberately deferred.** The branch is not yet merged or pushed, and
+      the braid skein is shared team state that syncs to every colleague on
+      write — closing the strand for work that has not landed would misinform
+      the team. Left for Gordon to do at hand-off/merge time.
 
 ## Blast-radius sweep
 
@@ -925,6 +1158,6 @@ do not exist. They do; they are simply irrelevant.
   TOC and sidebar *location* only; nothing there documents sidebar titles, and
   this change restores Q1's behaviour rather than introducing a knob. (Distinct
   from §Expected collateral, which is about the docs site's own `_quarto.yml`
-  configuration — the two dead `title:` lines removed in Phase 4.5 — not its
-  prose.)
+  configuration — the two `title:` lines Phase 4.5 removed and the fix wave
+  restored — not its prose.)
 - **New error codes.** None; no catalog or errors-sidebar work.
