@@ -111,3 +111,9 @@
   flex-shrink: 0;
   cursor: help;
 }
+
+/* Focusable for its tooltip — needs a visible indicator (WCAG 2.4.7). */
+.ephemeral-session-banner:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}

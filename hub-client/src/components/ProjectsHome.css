@@ -792,6 +792,12 @@
 
 .qh-footer-note { opacity: 0.8; }
 
+/* Focusable for its tooltip — needs a visible indicator (WCAG 2.4.7). */
+.qh-footer .mono:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
 @media (max-width: 980px) {
   .qh-card-grid { grid-template-columns: repeat(3, 1fr); }
   .qh-search { width: 200px; }

@@ -26,6 +26,7 @@
 
 import {
   useEffect,
+  useId,
   useRef,
   useCallback,
   useState,
@@ -146,6 +147,10 @@ export function Menu({
   }, [close, triggerRef, ignoreOutsideSelector]);
 
   const typeAhead = useRef({ buffer: '', timer: 0 });
+  useEffect(() => {
+    const ta = typeAhead.current;
+    return () => window.clearTimeout(ta.timer);
+  }, []);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     const list = items();
@@ -183,8 +188,9 @@ export function Menu({
         break;
     }
     // Type-ahead: accumulate printable characters, focus the next item
-    // whose text starts with the buffer.
-    if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    // whose text starts with the buffer. Space is excluded — it activates
+    // the focused item rather than extending the buffer.
+    if (e.key.length === 1 && e.key !== ' ' && !e.metaKey && !e.ctrlKey && !e.altKey) {
       const ta = typeAhead.current;
       window.clearTimeout(ta.timer);
       ta.buffer += e.key.toLowerCase();
@@ -208,6 +214,8 @@ export function Menu({
   const onClick = (e: ReactMouseEvent) => {
     const item = (e.target as HTMLElement).closest('[role="menuitem"]');
     if (!item) return;
+    // Disabled items don't activate — the click must not close the menu.
+    if (item.getAttribute('aria-disabled') === 'true') return;
     close(true);
   };
 
@@ -312,6 +320,7 @@ export interface MenuSubmenuProps {
 export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
   const [open, setOpen] = useState(false);
   const itemRef = useRef<HTMLButtonElement>(null);
+  const itemId = useId();
 
   return (
     <div
@@ -330,6 +339,7 @@ export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
       <button
         type="button"
         role="menuitem"
+        id={itemId}
         aria-haspopup="menu"
         aria-expanded={open}
         ref={itemRef}
@@ -359,6 +369,7 @@ export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
         <div
           className="qh-menu qh-submenu"
           role="menu"
+          aria-labelledby={itemId}
           onKeyDown={(e) => {
             if (e.key === 'ArrowLeft') {
               e.preventDefault();

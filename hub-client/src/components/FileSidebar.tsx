@@ -632,6 +632,9 @@ export default function FileSidebar({
       {/* Context Menu */}
       {contextMenu.visible && contextMenu.file && (
         <Menu
+          // Key by file so re-opening for a different row remounts:
+          // first-item focus and the viewport flip are mount-time effects.
+          key={contextMenu.file.path}
           fixed={{ x: contextMenu.x, y: contextMenu.y }}
           onClose={() => closeContextMenu()}
           triggerRef={{ current: contextMenu.trigger ?? null }}

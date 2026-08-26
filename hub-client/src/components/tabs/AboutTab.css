@@ -97,6 +97,12 @@
   cursor: help;
 }
 
+/* Focusable for its tooltip — needs a visible indicator (WCAG 2.4.7). */
+.commit-hash:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
 /* Changelog Modal */
 .changelog-modal-overlay {
   position: fixed;

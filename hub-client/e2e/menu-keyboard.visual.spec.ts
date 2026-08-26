@@ -126,6 +126,13 @@ test('pointer: clicking an item closes; clicking the trigger toggles', async ({ 
   await expect(page.locator('[role="menu"]')).toHaveCount(0);
 });
 
+test('pointer: clicking a disabled item neither activates nor closes', async ({ page }) => {
+  const menu = await openMenu(page);
+  await menu.locator('[role="menuitem"]', { hasText: 'Unavailable action' }).click({ force: true });
+  await expect(topMenu(page)).toBeVisible();
+  await expect(page.getByTestId('menu-last-action')).toHaveText('Last action: (none)');
+});
+
 test('pointer: clicking outside closes without focusing the trigger', async ({ page }) => {
   await openMenu(page);
   await page.click('h1');

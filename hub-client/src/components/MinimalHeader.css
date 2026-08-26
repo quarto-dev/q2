@@ -117,6 +117,12 @@
   user-select: none;
 }
 
+/* Focusable for its tooltip — needs a visible indicator (WCAG 2.4.7). */
+.header-right .connection-indicator:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
 .header-right .connection-indicator.online {
   border-color: var(--editor-success);
 }

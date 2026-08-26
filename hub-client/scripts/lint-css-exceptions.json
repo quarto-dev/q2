@@ -12,9 +12,6 @@
     "components/ProjectSetSetup.css": [
       "*"
     ],
-    "components/ProjectsHome.css": [
-      "*"
-    ],
     "components/ReplayDrawer.css": [
       "*"
     ],
