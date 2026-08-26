@@ -227,6 +227,15 @@ export default function DevGalleryPage() {
             <option>Second option</option>
           </select>
         </Row>
+        <Row label="disabled">
+          <input
+            className="qh-input"
+            style={{ maxWidth: 260 }}
+            defaultValue="Disabled input"
+            disabled
+            aria-label="Disabled example"
+          />
+        </Row>
         <Row label="invalid">
           <span style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 260 }}>
             <input

@@ -313,7 +313,13 @@
   margin-top: 22px;
 }
 
-/* ---- forms ---- */
+/* ---- forms ----
+   .qh-input is the canonical text input/select. Focus is a border-color
+   change (the established pattern — no additional ring). Validation: one
+   pattern — the input gets aria-invalid="true" and error text is wired
+   via aria-describedby (inline, field-level); form-level failures use
+   .qh-error.inline below the fields. See the gallery's Form controls
+   section for both. */
 
 .qh-field-label {
   display: block;
@@ -337,6 +343,13 @@
 
 .qh-input:focus { border-color: var(--border-focus); }
 .qh-input.focus-accent:focus { border-color: var(--posit-teal); }
+
+.qh-input:disabled { opacity: 0.5; cursor: default; }
+
+.qh-input[aria-invalid="true"],
+.qh-input[aria-invalid="true"]:focus {
+  border-color: var(--error-text);
+}
 
 select.qh-input { appearance: auto; }
 
