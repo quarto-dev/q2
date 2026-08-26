@@ -77,6 +77,36 @@
   flex-shrink: 0;
 }
 
+/* Narrow windows (Phase 4): let the project name truncate with an
+   ellipsis instead of being clipped mid-word by .header-doc's overflow.
+   Scoped to the media query because overflow != visible changes the
+   span's baseline alignment, and the 1280px baselines must stay
+   pixel-identical. */
+@media (max-width: 700px) {
+  .header-doc .project-name {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Very narrow windows (Phase 4): wrap to two rows — project controls and
+   identity on the first, status and view controls right-aligned on the
+   second. Without it, .header-left collapses to zero flex width and its
+   buttons paint *under* .header-right (which is flex-shrink: 0 and later
+   in paint order). Phase 5 owns the designed answer (overflow menu). */
+@media (max-width: 480px) {
+  .minimal-header {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .header-left { flex: 1 1 100%; }
+
+  .header-right { margin-inline-start: auto; }
+}
+
 .header-doc .path-sep {
   color: var(--editor-text-muted);
   font-size: 13px;

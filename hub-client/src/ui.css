@@ -168,6 +168,14 @@
   top: calc(100% + 6px);
   left: 0;
   min-width: 250px;
+  /* Never wider than the viewport, with margin for the content-box
+     padding/border and the anchor's own inset (a right-anchored menu
+     opens leftward from its trigger, which sits inside the header's
+     padding — .qh-avatar-menu's 320px otherwise clips the left edge of a
+     320px window). Matches the dialog margin convention (100vw - 48px).
+     Where min-width and max-width conflict, the minimum wins — menus
+     keep their 250px floor. */
+  max-width: calc(100vw - 48px);
   background: var(--context-menu-bg);
   border: 1px solid var(--context-menu-border);
   border-radius: 9px;
@@ -283,6 +291,12 @@
 .qh-dialog {
   width: 520px;
   max-width: calc(100vw - 48px);
+  /* Small/short windows: cap the height and let the content section
+     scroll internally. The backdrop centers the dialog, so overflowing
+     the viewport would clip the header and actions past both edges. */
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
   background: var(--dialog-bg);
   border-radius: 12px;
   padding: 26px 30px;
@@ -464,6 +478,7 @@ select.qh-input { appearance: auto; }
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid var(--dialog-border);
+  flex-shrink: 0;
 }
 
 .dialog-header h2 {
@@ -505,6 +520,10 @@ select.qh-input { appearance: auto; }
 
 .dialog-content {
   padding: 20px;
+  /* Scrolls internally when the dialog hits its viewport-capped
+     max-height, keeping the header and actions on screen. */
+  overflow-y: auto;
+  min-height: 0;
 }
 
 /* ProjectsHome form dialogs on the shared ModalDialog chrome: zero the
@@ -520,6 +539,7 @@ select.qh-input { appearance: auto; }
   gap: 12px;
   padding: 16px 20px;
   border-top: 1px solid var(--dialog-border);
+  flex-shrink: 0;
 }
 
 /* Reduced motion (Phase 3): collapse every transition and animation to

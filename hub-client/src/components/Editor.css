@@ -239,6 +239,23 @@
   overflow: hidden;
 }
 
+/* Narrow windows (Phase 4): shrink the summary-strip floor so the strips
+   plus the sidebar cannot overflow the shell — at 320px the 180px strip
+   minimums otherwise clip the panes. The designed narrow layout (sidebar
+   drawer, split-view collapse) is Phase 5 work. */
+@media (max-width: 700px) {
+  .editor-main.view-mode-markup .preview-pane {
+    min-width: 80px;
+    max-width: 120px;
+  }
+
+  .editor-main.view-mode-preview .editor-pane {
+    flex-basis: 120px;
+    min-width: 80px;
+    max-width: 120px;
+  }
+}
+
 /* Markdown summary overlay for preview mode */
 .markdown-summary-overlay {
   position: absolute;
