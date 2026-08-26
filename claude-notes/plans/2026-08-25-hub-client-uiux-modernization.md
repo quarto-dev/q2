@@ -1,7 +1,7 @@
 # Hub-Client UI/UX Modernization Plan
 
 **Date:** 2026-08-25
-**Status:** Approved 2026-08-25 — Phases 0–3 complete (Phase 3 = PR #611); Phase 4 next
+**Status:** Approved 2026-08-25 — Phases 0–4 complete (Phase 3 = PR #611); Phase 5 (feedback gate) next
 **Tracking:** braid epic `bd-2q55e6rc` (per-phase strands hang off it)
 **Scope:** `hub-client/` React/TypeScript app only — no Rust, no WASM, no sync-protocol changes.
 
@@ -480,28 +480,92 @@ themes). **CI follow-up:** the new routes need `chromium-linux` baselines
 via the `recreate-all-snapshots` workflow dispatch on this branch (or the
 retry step's auto-commit), same as Phase 2.
 
-## Phase 4 — Graceful narrow viewports
+## Phase 4 — Graceful narrow viewports — **DONE (2026-08-26, branch `hub-client-uiux-phase4`)**
 
 **Goal:** small windows and split-screen use degrade gracefully; no horizontal
 scroll, no clipped controls.
 
 ### Test specifications (write first)
-- [ ] Playwright viewport matrix specs at 1280 / 900 / 700 / 480 / 320px
+- [x] Playwright viewport matrix specs at 1280 / 900 / 700 / 480 / 320px
       widths for editor shell, projects home, and each dialog — 320px covers
       the WCAG 1.4.10 reflow requirement (400% zoom at 1280px).
+      **Done:** `e2e/viewport-matrix.visual.spec.ts` — 44 layout assertions
+      (no horizontal scroll on document + surface; controls inside viewport)
+      + 34 screenshots (both themes at the widths that depart from the 1280
+      baselines). New composed `#/dev/editor-shell(-markup/-preview)` harness
+      routes render the real MinimalHeader/SidebarTabs/`.editor-main
+      view-mode-*` flex rules with placeholder panes (Monaco/iframe need
+      services the no-server harness lacks). Shared assertions live in
+      `e2e/helpers/visual.ts` (`expectNoHorizontalScroll`,
+      `expectInsideViewport`). **Watched failing first:** 4 assertion
+      failures at 320px (projects-home header overflow 94px, avatar menu
+      clipped left, new-asset dialog clipped top+bottom in a short viewport,
+      preview-mode panes overflow 42px); the row-identity spec was written
+      alongside its fix and verified failing by reverting the rule (name
+      squeezed to 14px).
 
 ### Work items
-- [ ] Dialogs/menus verified against small viewports (max-width rules already
-      partially exist — audit and complete).
-- [ ] ProjectsHome grid: extend the existing 980/760 breakpoints for
-      intermediate widths.
-- [ ] Editor shell at narrow widths: fix clipping/overflow in place —
-      truncation, wrapping, min-widths — so nothing breaks. Layout redesigns
-      (sidebar drawer, split-view collapse, header overflow menu) involve
-      design judgment and are deferred to Phase 5.
-- [ ] Fix any reflow failures the 320px matrix row surfaces (no horizontal
-      scroll, no clipped controls — WCAG 1.4.10).
-- [ ] Changelog entry.
+- [x] Dialogs/menus verified against small viewports (max-width rules already
+      partially exist — audit and complete). **Done:** dialogs already cap
+      width (`max-width: calc(100vw - 48px)`); added the missing height cap —
+      `.qh-dialog` gets `max-height: calc(100vh - 48px)` + flex column, and
+      `.dialog-content` scrolls internally (header/actions pinned), fixing
+      top+bottom clipping of tall dialogs in short windows. Menus gained
+      `max-width: calc(100vw - 48px)` (content-box, so the 320px-wide avatar
+      menu no longer clips past the left edge at 320px; the 250px min-width
+      floor still wins where they conflict). Menu/Tooltip already had
+      fixed-placement viewport flip/clamp (Phase 1) — anchor-relative menus
+      rely on right-anchoring, verified by matrix specs opening the New,
+      avatar, and file-row context menus at 320px. **Review follow-up
+      (same branch):** the peek popover (`.qh-peek`, 320px content-box =
+      360px total, anchored to the row's left edge) clipped 57px past a
+      320px viewport — at ≤480px it now spans its anchor's full width
+      (the row/card is always inside the viewport). The row-menu submenu
+      needed no fix: `.qh-row .qh-menu` (specificity 0,2,0) overrides
+      `.qh-submenu`'s rightward `left: calc(100% + 4px)`, anchoring
+      submenus to each item's right edge — inside the viewport at 320
+      and 1280 alike (measured, then pinned by a matrix spec).
+- [x] ProjectsHome grid: extend the existing 980/760 breakpoints for
+      intermediate widths. **Done:** new ≤480px breakpoint — card grid to one
+      column; header wraps to two rows (actions row, full-width search row)
+      with the brand mark giving way (the wordmark already drops at 760px);
+      `.qh-main` padding 30px → 16px. Project rows: the name keeps an 8ch
+      floor and the metadata ellipsizes around it — previously the nowrap
+      meta plus the row's three action buttons could squeeze the name to
+      zero width (found in screenshot review, not by the matrix assertions).
+- [x] Editor shell at narrow widths: fix clipping/overflow in place —
+      truncation, wrapping, min-widths — so nothing breaks. **Done:** ≤700px:
+      markup/preview summary-strip min/max-widths 120–180px → 80–120px;
+      header `.project-name` truncates with ellipsis (media-query scoped —
+      `overflow: hidden` changes the span's baseline alignment, and the
+      1280px baselines must stay pixel-identical). ≤480px: sidebar width
+      floor 180px → 120px (rows/labels already truncate); MinimalHeader
+      wraps to two rows — previously `.header-left` collapsed to ~9px flex
+      width while its icon buttons painted on, ending up *under*
+      `.header-right` (later in paint order): an overlap no viewport-bounds
+      assertion catches, pinned by asserting `.header-left`'s own
+      scrollWidth. Layout redesigns (sidebar drawer, split-view collapse,
+      header overflow menu) remain Phase 5 design work.
+- [x] Fix any reflow failures the 320px matrix row surfaces (no horizontal
+      scroll, no clipped controls — WCAG 1.4.10). **Done:** all four audit
+      failures fixed; 44/44 assertions pass at every matrix width.
+- [x] Changelog entry. **Done:** four entries (second commit, two-commit
+      workflow).
+
+**Verification:** lint:css clean; eslint clean on touched files (the
+repo-wide `npm run lint` reports 204 pre-existing problems in untouched
+files); test:ci green (1006 unit + 112 integration + 133 wasm = 1251);
+test:visual green (194 specs — all 1280px characterization baselines
+pixel-identical, confirming the changes are media-query scoped or
+value-preserving); build:all green. New 320/480px snapshots inspected
+visually (wrapped headers, single-column rows, internal dialog scroll all
+render correctly in both themes). **Trap recorded:** Playwright's
+`--update-snapshots` skips rewrites when the new capture is within the
+spec's `maxDiffPixelRatio` tolerance — the row-name fix (a ~0.5% pixel
+change) silently kept the stale capture; force-regenerate by deleting the
+PNG and running `--update-snapshots=missing`. **CI follow-up:** the new
+routes need `chromium-linux` baselines via the `recreate-all-snapshots`
+workflow dispatch on this branch, same as Phases 2–3.
 
 ## Phase 5 — Visual refinement (feedback gate)
 

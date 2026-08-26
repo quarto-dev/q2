@@ -3,7 +3,8 @@
  * dev-harness routes (#/dev/...) — no hub server required.
  */
 
-import type { Page } from '@playwright/test';
+import { expect } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 export const THEMES = ['light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
@@ -159,4 +160,55 @@ export async function bootHarness(
   await page.reload();
   await page.waitForSelector(selector, { timeout: 15000 });
   await settleTheme(page, theme);
+}
+
+/**
+ * WCAG 1.4.10 reflow: at narrow widths the page must not scroll
+ * horizontally. Asserts the document, and optionally a surface container
+ * whose own scrollWidth is what actually grows when the surface is
+ * fixed-position (`.projects-home`) or clips overflow (`.editor-main`) —
+ * in those cases the document itself never reports the overflow. A 1px
+ * tolerance absorbs sub-pixel rounding.
+ */
+export async function expectNoHorizontalScroll(
+  page: Page,
+  surfaceSelector?: string,
+): Promise<void> {
+  const docOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(docOverflow, 'document has horizontal overflow').toBeLessThanOrEqual(1);
+  if (surfaceSelector) {
+    const surfaceOverflow = await page
+      .locator(surfaceSelector)
+      .evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(
+      surfaceOverflow,
+      `${surfaceSelector} has horizontal overflow`,
+    ).toBeLessThanOrEqual(1);
+  }
+}
+
+/**
+ * Assert a locator's rendered box stays fully inside the viewport — the
+ * "no clipped controls" half of the narrow-viewport contract. A 1px
+ * tolerance absorbs sub-pixel rounding.
+ */
+export async function expectInsideViewport(
+  page: Page,
+  locator: Locator,
+  label: string,
+): Promise<void> {
+  const box = await locator.boundingBox();
+  const vp = page.viewportSize();
+  expect(box, `${label} has no layout box`).not.toBeNull();
+  expect(vp, 'page has no viewport size').not.toBeNull();
+  expect(box!.x, `${label} is clipped at the left edge`).toBeGreaterThanOrEqual(-1);
+  expect(box!.y, `${label} is clipped at the top edge`).toBeGreaterThanOrEqual(-1);
+  expect(box!.x + box!.width, `${label} is clipped at the right edge`).toBeLessThanOrEqual(
+    vp!.width + 1,
+  );
+  expect(box!.y + box!.height, `${label} is clipped at the bottom edge`).toBeLessThanOrEqual(
+    vp!.height + 1,
+  );
 }

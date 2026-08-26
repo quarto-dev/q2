@@ -803,6 +803,53 @@
   .qh-logo span { display: none; }
 }
 
+/* Phones-sized windows / extreme split-screen (WCAG 1.4.10 floor is
+   320px): the header reflows to two rows — actions on the first row, the
+   search field full-width on the second — and the card grid goes to a
+   single column. The brand mark gives way to keep every action reachable
+   (the wordmark already drops at 760px); Phase 5 owns the designed
+   narrow layout. */
+@media (max-width: 480px) {
+  .qh-header {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    padding: 11px 12px;
+  }
+
+  .qh-logo { display: none; }
+
+  .qh-search {
+    order: 3;
+    flex: 1 1 100%;
+    width: auto;
+  }
+
+  .qh-card-grid { grid-template-columns: 1fr; }
+
+  .qh-main { padding: 16px 16px 32px; }
+
+  /* Project rows: the name keeps a floor and the metadata ellipsizes
+     around it — today the nowrap meta plus the row actions can squeeze
+     the name to zero width, losing the row's identity. */
+  .qh-row-name { min-width: 8ch; }
+
+  .qh-row-meta {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* The peek popover anchors to the row/card's left edge with a fixed
+     320px content-box width (360px with padding/border), which clips
+     past a narrow viewport's right edge. Span the anchor's full width
+     instead — the row or card is always inside the viewport. */
+  .qh-peek {
+    inset-inline-start: 0;
+    inset-inline-end: 0;
+    width: auto;
+  }
+}
+
 /* ---- per-collection sort button ---- */
 
 .qh-collection-sort-anchor {

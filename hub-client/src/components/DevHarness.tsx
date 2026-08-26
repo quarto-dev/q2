@@ -178,49 +178,47 @@ const fakeSearchFiles: SearchFiles = async (query) => {
 };
 
 /**
- * Stateful sidebar fixture. Keyboard-interaction specs need observable
- * behavior, so unlike the other baseline routes this one tracks the
- * selected file (aria-selected / active-row state) and records the last
- * action in an offscreen testid element for assertions.
+ * Stateful sidebar sections fixture, shared by the sidebar and
+ * editor-shell routes. Interaction specs need observable behavior, so
+ * this tracks the selected file (aria-selected / active-row state) and
+ * records the last action in an offscreen testid element for assertions.
  */
-function SidebarHarness({ files = FAKE_FILES }: { files?: FileEntry[] }) {
+function StatefulSidebarSections({ files = FAKE_FILES }: { files?: FileEntry[] }) {
   const [currentFile, setCurrentFile] = useState<FileEntry | null>(files[0] ?? null);
   const [lastAction, setLastAction] = useState('none');
   return (
-    <EditorChrome>
-      <div style={{ width: 280, height: '100%', borderRight: '1px solid var(--sidebar-border)' }}>
-        <SidebarTabs>
-          {(sectionId) =>
-            sectionId === 'files' ? (
-              <FileSidebar
-                files={files}
-                currentFile={currentFile}
-                onSelectFile={(f) => {
-                  setCurrentFile(f);
-                  setLastAction(`select:${f.path}`);
-                }}
-                onNewFile={() => setLastAction('new-file')}
-                onUploadFiles={() => setLastAction('upload')}
-                onDeleteFile={(f) => setLastAction(`delete:${f.path}`)}
-                onRenameFile={(f, p) => setLastAction(`rename:${f.path}->${p}`)}
-                onOpenInNewTab={(f) => setLastAction(`new-tab:${f.path}`)}
-                onCopyLink={(f) => setLastAction(`copy:${f.path}`)}
-                currentFormat="q2-preview"
-                searchFiles={fakeSearchFiles}
-              />
-            ) : sectionId === 'outline' ? (
-              <OutlinePanel
-                symbols={FAKE_SYMBOLS}
-                onSymbolClick={(s) => setLastAction(`symbol:${s.name}`)}
-              />
-            ) : (
-              <div style={{ padding: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
-                {sectionId} section
-              </div>
-            )
-          }
-        </SidebarTabs>
-      </div>
+    <>
+      <SidebarTabs>
+        {(sectionId) =>
+          sectionId === 'files' ? (
+            <FileSidebar
+              files={files}
+              currentFile={currentFile}
+              onSelectFile={(f) => {
+                setCurrentFile(f);
+                setLastAction(`select:${f.path}`);
+              }}
+              onNewFile={() => setLastAction('new-file')}
+              onUploadFiles={() => setLastAction('upload')}
+              onDeleteFile={(f) => setLastAction(`delete:${f.path}`)}
+              onRenameFile={(f, p) => setLastAction(`rename:${f.path}->${p}`)}
+              onOpenInNewTab={(f) => setLastAction(`new-tab:${f.path}`)}
+              onCopyLink={(f) => setLastAction(`copy:${f.path}`)}
+              currentFormat="q2-preview"
+              searchFiles={fakeSearchFiles}
+            />
+          ) : sectionId === 'outline' ? (
+            <OutlinePanel
+              symbols={FAKE_SYMBOLS}
+              onSymbolClick={(s) => setLastAction(`symbol:${s.name}`)}
+            />
+          ) : (
+            <div style={{ padding: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
+              {sectionId} section
+            </div>
+          )
+        }
+      </SidebarTabs>
       {/* Offscreen action recorder for Playwright assertions. */}
       <div
         data-testid="sidebar-last-action"
@@ -228,6 +226,64 @@ function SidebarHarness({ files = FAKE_FILES }: { files?: FileEntry[] }) {
       >
         {lastAction}
       </div>
+    </>
+  );
+}
+
+/**
+ * Stateful sidebar fixture at a fixed harness width, mirroring how the
+ * sidebar sits in the editor shell.
+ */
+function SidebarHarness({ files = FAKE_FILES }: { files?: FileEntry[] }) {
+  return (
+    <EditorChrome>
+      <div style={{ width: 280, height: '100%', borderRight: '1px solid var(--sidebar-border)' }}>
+        <StatefulSidebarSections files={files} />
+      </div>
+    </EditorChrome>
+  );
+}
+
+/**
+ * Composed editor-shell fixture (Phase 4): the real MinimalHeader,
+ * SidebarTabs, and `.editor-main view-mode-*` pane layout from Editor.tsx
+ * with placeholder pane content standing in for Monaco and the preview
+ * iframe (both need services the no-server harness doesn't have). This
+ * lets viewport-matrix specs exercise the shell's flex interplay at
+ * narrow widths. The view mode is pinned per route — ViewToggleControl
+ * renders from its own context default and is not wired to the panes.
+ */
+function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'preview' }) {
+  const placeholder: React.CSSProperties = {
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'var(--editor-text-muted)',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 12,
+  };
+  return (
+    <EditorChrome>
+      <MinimalHeader
+        currentFilePath="index.qmd"
+        projectName="Research Paper"
+        onChooseNewProject={() => {}}
+        onShare={() => {}}
+        onToggleFullscreenPreview={() => {}}
+        isFullscreenPreview={false}
+        isOnline={true}
+      />
+      <main className={`editor-main view-mode-${viewMode}`}>
+        <StatefulSidebarSections />
+        <div className="pane editor-pane">
+          <div style={placeholder}>Editor pane</div>
+        </div>
+        <div className="pane-divider" />
+        <div className="pane preview-pane">
+          <div style={placeholder}>Preview pane</div>
+        </div>
+      </main>
     </EditorChrome>
   );
 }
@@ -422,6 +478,10 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
     </EditorChrome>
   ),
   sidebar: () => <SidebarHarness />,
+  /* ---- Phase 4: composed editor shell for the viewport matrix ---- */
+  'editor-shell': () => <EditorShellHarness viewMode="both" />,
+  'editor-shell-markup': () => <EditorShellHarness viewMode="markup" />,
+  'editor-shell-preview': () => <EditorShellHarness viewMode="preview" />,
   // The About tab standalone (sidebar width) — covers the shortcuts
   // reference, which the sidebar route's collapsed ABOUT section hides.
   'about-tab': () => (
