@@ -50,7 +50,16 @@ beforeAll(async () => {
     await import('./q2-preview/entry');
 });
 
-const FRAMEWORK_PRIMITIVES = ['renderChildren', 'renderNode', 'Node'] as const;
+const FRAMEWORK_PRIMITIVES = [
+    'renderChildren',
+    'renderNode',
+    'Node',
+    // Plain-text walks (bd-wcz4x7y0): the experimental comment examples
+    // stringify comment spans via the debug global, so the helpers must
+    // stay on both surfaces.
+    'inlinesToPlainText',
+    'blocksToPlainText',
+] as const;
 
 describe('framework-primitive parity across iframe globals', () => {
     test.each(FRAMEWORK_PRIMITIVES)(

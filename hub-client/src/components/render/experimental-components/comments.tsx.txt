@@ -1,6 +1,7 @@
 const React = window.React;
 const {
-  Block: B
+  Block: B,
+  inlinesToPlainText
 } = window.__REACT_AST_DEBUG_RENDERER__;
 
 function isComment(inline: InlineNode): boolean {
@@ -36,11 +37,7 @@ export const Block = (args: NodeArgs<BlockNode>) => {
         }
     }
 
-    const commentContents = comments.map((c) => (c as SpanInline).c[1].map((o: InlineNode) => {
-        if (o.t === 'Str') return (o as StrInline).c;
-        if (o.t === 'Space') return ' ';
-        return '';
-    }).join(''))
+    const commentContents = comments.map((c) => inlinesToPlainText((c as SpanInline).c[1]))
     const reactions = commentContents.filter(c => splitEmoji(c).length === 1)
     const reactionCounts = reactions.reduce((acc, emoji) =>
         acc.set(emoji, (acc.get(emoji) || 0) + 1),
@@ -293,13 +290,7 @@ const CommentWrapper = ({ children, comments, reactionCounts, setLocalAst, block
                                 zIndex: '9999'
                             }}>
                                 {comments.map((comment, i) => {
-                                    const commentContent = (comment as SpanInline).c[1]
-                                        .map((inline: InlineNode) => {
-                                            if (inline.t === 'Str') return (inline as StrInline).c;
-                                            if (inline.t === 'Space') return ' ';
-                                            return '';
-                                        })
-                                        .join('');
+                                    const commentContent = inlinesToPlainText((comment as SpanInline).c[1]);
 
                                     return (
                                         <div

@@ -33,7 +33,7 @@
  * `__Q2_PREVIEW_RENDERER__.Block`, exactly as before).
  */
 import React from 'react';
-import { AttributionLookupContext } from '../../framework';
+import { AttributionLookupContext, inlinesToPlainText } from '../../framework';
 import type {
     BlockNode,
     DivBlock,
@@ -43,7 +43,6 @@ import type {
     ParaBlock,
     PlainBlock,
     SpanInline,
-    StrInline,
 } from '../../framework';
 import { Block as B } from '../dispatchers';
 import { PreviewContext } from '../PreviewContext';
@@ -130,14 +129,10 @@ function sameCommentableKind(rendered: BlockNode, source: BlockNode): boolean {
     return false;
 }
 
+// Pandoc-stringify walk of the span's content: recurses into Quoted /
+// Emph / Code / Link / ... instead of dropping them (bd-wcz4x7y0).
 function commentSpanText(span: InlineNode): string {
-    return (span as SpanInline).c[1]
-        .map((o: InlineNode) => {
-            if (o.t === 'Str') return (o as StrInline).c;
-            if (o.t === 'Space') return ' ';
-            return '';
-        })
-        .join('');
+    return inlinesToPlainText((span as SpanInline).c[1]);
 }
 
 export const CommentBlock = (args: NodeArgs<BlockNode>) => {
