@@ -838,6 +838,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  /* The peek popover anchors to the row/card's left edge with a fixed
+     320px content-box width (360px with padding/border), which clips
+     past a narrow viewport's right edge. Span the anchor's full width
+     instead — the row or card is always inside the viewport. */
+  .qh-peek {
+    inset-inline-start: 0;
+    inset-inline-end: 0;
+    width: auto;
+  }
 }
 
 /* ---- per-collection sort button ---- */

@@ -516,7 +516,15 @@ scroll, no clipped controls.
       floor still wins where they conflict). Menu/Tooltip already had
       fixed-placement viewport flip/clamp (Phase 1) — anchor-relative menus
       rely on right-anchoring, verified by matrix specs opening the New,
-      avatar, and file-row context menus at 320px.
+      avatar, and file-row context menus at 320px. **Review follow-up
+      (same branch):** the peek popover (`.qh-peek`, 320px content-box =
+      360px total, anchored to the row's left edge) clipped 57px past a
+      320px viewport — at ≤480px it now spans its anchor's full width
+      (the row/card is always inside the viewport). The row-menu submenu
+      needed no fix: `.qh-row .qh-menu` (specificity 0,2,0) overrides
+      `.qh-submenu`'s rightward `left: calc(100% + 4px)`, anchoring
+      submenus to each item's right edge — inside the viewport at 320
+      and 1280 alike (measured, then pinned by a matrix spec).
 - [x] ProjectsHome grid: extend the existing 980/760 breakpoints for
       intermediate widths. **Done:** new ≤480px breakpoint — card grid to one
       column; header wraps to two rows (actions row, full-width search row)

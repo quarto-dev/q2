@@ -125,6 +125,28 @@ test('file-row context menu stays inside the viewport at 320px', async ({ page }
   await expectInsideViewport(page, menu, 'context menu');
 });
 
+test('peek popover stays inside the viewport at 320px', async ({ page }) => {
+  await bootAt(page, 320, 'projects-home', '.projects-home');
+  await page
+    .getByRole('button', { name: "Peek — see what's inside Research Paper" })
+    .click();
+  const peek = page.locator('.qh-peek');
+  await expect(peek).toBeVisible();
+  await expectInsideViewport(page, peek, 'peek popover');
+});
+
+test('row menu submenu stays inside the viewport at 320px', async ({ page }) => {
+  await bootAt(page, 320, 'projects-home', '.projects-home');
+  await page.getByRole('button', { name: 'Actions for Research Paper' }).click();
+  const menu = page.locator('[role="menu"]');
+  await expect(menu).toBeVisible();
+  // Submenus open on hover (pointer parity); keyboard uses ArrowRight.
+  await menu.locator('.qh-submenu-parent', { hasText: 'Move to collection' }).hover();
+  const submenu = page.locator('.qh-submenu');
+  await expect(submenu).toBeVisible();
+  await expectInsideViewport(page, submenu, 'Move to collection submenu');
+});
+
 /* ---- dialogs ---- */
 
 const DIALOG_ROUTES: { route: string; selector: string; label: string }[] = [
