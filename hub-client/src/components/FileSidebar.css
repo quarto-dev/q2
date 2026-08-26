@@ -209,42 +209,25 @@
   font-size: 32px;
 }
 
-/* Context menu */
-.context-menu {
-  position: fixed;
-  background: var(--context-menu-bg);
-  border: 1px solid var(--context-menu-border);
-  border-radius: 6px;
-  padding: 4px 0;
-  min-width: 120px;
-  box-shadow: 0 4px 12px var(--context-menu-shadow);
-  z-index: var(--z-modal);
-}
+/* Context menu: the shared .qh-menu component (ui.css) with .qh-menu-fixed
+   placement. */
 
-.context-menu button {
-  display: block;
-  width: 100%;
-  padding: 8px 16px;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  text-align: left;
-  color: var(--editor-text-dim);
+/* Visible kebab affordance on file rows — the menu is no longer
+   right-click-only. Hidden until the row is hovered or the button is
+   focused (keyboard users always have a visible, tabbable path). */
+.file-item .file-kebab {
+  margin-inline-start: auto;
+  padding: 2px 4px;
   font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s;
+  color: var(--editor-text-muted);
+  opacity: 0;
+  flex-shrink: 0;
 }
 
-.context-menu button:hover {
-  background: var(--context-menu-hover);
-}
-
-.context-menu button.danger {
-  color: var(--context-menu-danger);
-}
-
-.context-menu button.danger:hover {
-  background: var(--context-menu-danger-bg);
+.file-item:hover .file-kebab,
+.file-item .file-kebab:focus-visible,
+.file-item .file-kebab[aria-expanded="true"] {
+  opacity: 1;
 }
 
 /* ── Full-text search ─────────────────────────────────────────────── */

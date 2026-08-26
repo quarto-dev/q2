@@ -48,6 +48,7 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'setup-migration', label: 'setup-migration', selector: '.setup-modal' },
   { page: 'setup-fresh', label: 'setup-fresh', selector: '.setup-modal' },
   { page: 'tokens', label: 'tokens', selector: 'text=Design tokens' },
+  { page: 'gallery', label: 'gallery', selector: 'text=Component gallery' },
 ];
 
 /** key → { ruleId: nodeCount } */

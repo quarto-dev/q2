@@ -177,6 +177,16 @@
 
 .qh-menu-right { left: auto; right: 0; }
 
+/* Context-menu placement at cursor coordinates (fixed instead of
+   anchor-relative); the Menu component flips at viewport edges. */
+.qh-menu-fixed {
+  position: fixed;
+  top: auto;
+  left: auto;
+  min-width: 180px;
+  z-index: var(--z-modal);
+}
+
 .qh-menu-label {
   font-size: 10.5px;
   font-weight: 700;
@@ -203,6 +213,8 @@
 }
 
 .qh-menu-item:hover { background: var(--context-menu-hover); }
+.qh-menu-item[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+.qh-menu-item[aria-disabled="true"]:hover { background: none; }
 .qh-menu-item.strong { font-weight: 600; }
 .qh-menu-item.accent { color: var(--posit-teal); font-weight: 600; }
 .qh-menu-item.danger { color: var(--error-text); }

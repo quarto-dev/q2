@@ -30,6 +30,7 @@ const BASELINE_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'header', label: 'minimal-header', selector: '.minimal-header' },
   { page: 'notifications', label: 'notifications', selector: '.ephemeral-session-banner' },
   { page: 'tokens', label: 'tokens', selector: 'text=Design tokens' },
+  { page: 'gallery', label: 'gallery', selector: 'text=Component gallery' },
 ];
 
 for (const { page, label, selector } of BASELINE_PAGES) {

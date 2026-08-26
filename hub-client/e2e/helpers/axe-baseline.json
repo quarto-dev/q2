@@ -11,6 +11,12 @@
   "dialog-share|light": {
     "color-contrast": 2
   },
+  "gallery|dark": {
+    "color-contrast": 7
+  },
+  "gallery|light": {
+    "color-contrast": 3
+  },
   "minimal-header|dark": {
     "color-contrast": 1
   },

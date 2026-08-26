@@ -1,8 +1,5 @@
 {
   "no-outline-none-without-focus-visible": {
-    "components/FileSidebar.css": [
-      "*"
-    ],
     "components/NewFileDialog.css": [
       "*"
     ],
@@ -43,8 +40,7 @@
       "border-left: 2px solid var(--sidebar-active-accent);",
       "margin-left: -2px;",
       "padding-left: 22px;",
-      "right: 4px;",
-      "text-align: left;"
+      "right: 4px;"
     ],
     "components/OutlinePanel.css": [
       "margin-left: 4px;",

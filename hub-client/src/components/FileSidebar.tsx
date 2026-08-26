@@ -19,7 +19,8 @@ import {
 import { resolveDefaultDestination } from './fileUpload';
 import { buildSnippet, type SearchFiles, type SearchResult } from '../services/search';
 import { openPrintableDocument } from '../services/printableDocument';
-import { FilePlusIcon, UploadIcon, PrintIcon } from './icons';
+import { FilePlusIcon, UploadIcon, PrintIcon, MoreIcon } from './icons';
+import { Menu, MenuItem } from './Menu';
 import './FileSidebar.css';
 
 export interface FileSidebarProps {
@@ -63,6 +64,8 @@ interface ContextMenuState {
   x: number;
   y: number;
   file: FileEntry | null;
+  /** The kebab button that opened the menu (kebab-opened menus only). */
+  trigger?: HTMLElement | null;
 }
 
 /** Image extensions for drag-drop detection */
@@ -269,13 +272,6 @@ export default function FileSidebar({
     setContextMenu((prev) => ({ ...prev, visible: false }));
   }, []);
 
-  // Handle clicks outside context menu
-  const handleSidebarClick = useCallback(() => {
-    if (contextMenu.visible) {
-      closeContextMenu();
-    }
-  }, [contextMenu.visible, closeContextMenu]);
-
   // Rename handlers
   const startRename = useCallback((file: FileEntry) => {
     setRenamingFile(file);
@@ -420,6 +416,37 @@ export default function FileSidebar({
         ) : (
           <span className="file-name qh-truncate">{fileName}</span>
         )}
+        {!isRenaming && (onOpenInNewTab || onCopyLink || onRenameFile || onDeleteFile) && (
+          <button
+            type="button"
+            className="qh-icon-btn file-kebab"
+            aria-label={`Actions for ${fileName}`}
+            aria-haspopup="menu"
+            aria-expanded={contextMenu.visible && contextMenu.file?.path === file.path}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (contextMenu.visible && contextMenu.file?.path === file.path) {
+                closeContextMenu();
+                return;
+              }
+              const rect = e.currentTarget.getBoundingClientRect();
+              setContextMenu({
+                visible: true,
+                x: rect.left,
+                y: rect.bottom + 4,
+                file,
+                trigger: e.currentTarget,
+              });
+            }}
+            onContextMenu={(e) => {
+              // Menu key / right-click on the kebab opens the same menu.
+              e.stopPropagation();
+              handleContextMenu(e, file);
+            }}
+          >
+            <MoreIcon />
+          </button>
+        )}
       </div>
     );
   };
@@ -510,7 +537,6 @@ export default function FileSidebar({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onClick={handleSidebarClick}
     >
       <div className="sidebar-header">
         <button
@@ -601,34 +627,33 @@ export default function FileSidebar({
 
       {/* Context Menu */}
       {contextMenu.visible && contextMenu.file && (
-        <div
-          className="context-menu"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
+        <Menu
+          fixed={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={() => closeContextMenu()}
+          triggerRef={{ current: contextMenu.trigger ?? null }}
+          aria-label={`Actions for ${contextMenu.file.path}`}
         >
           {onOpenInNewTab && (
-            <button onClick={() => handleOpenInNewTab(contextMenu.file!)}>
+            <MenuItem onSelect={() => handleOpenInNewTab(contextMenu.file!)}>
               Open in New Tab
-            </button>
+            </MenuItem>
           )}
           {onCopyLink && (
-            <button onClick={() => handleCopyLink(contextMenu.file!)}>
+            <MenuItem onSelect={() => handleCopyLink(contextMenu.file!)}>
               Copy Link
-            </button>
+            </MenuItem>
           )}
           {onRenameFile && (
-            <button onClick={() => startRename(contextMenu.file!)}>
+            <MenuItem onSelect={() => startRename(contextMenu.file!)}>
               Rename
-            </button>
+            </MenuItem>
           )}
           {onDeleteFile && (
-            <button
-              className="danger"
-              onClick={() => handleDelete(contextMenu.file!)}
-            >
+            <MenuItem danger onSelect={() => handleDelete(contextMenu.file!)}>
               Delete
-            </button>
+            </MenuItem>
           )}
-        </div>
+        </Menu>
       )}
     </div>
   );

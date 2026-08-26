@@ -42,6 +42,7 @@ import {
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
 import { ForkIcon, PeekIcon, PeopleIcon, SortIcon } from './icons';
+import { Menu, MenuItem, MenuDivider, MenuLabel, MenuSubmenu } from './Menu';
 import { sortProjectItems, sortOrderLabel, type SortOrder } from '../utils/projectSort';
 import { buildProjectListExport, parseProjectListImport } from '../services/projectListExport';
 import type { Face } from '../utils/facepile';
@@ -252,7 +253,7 @@ export default function ProjectsHome({
   // Menus / popovers. openMenu identifies the ⋯ menu by project id or
   // `collection:<id>`; submenus and the peek popover are tracked separately.
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [moveSubmenuOpen, setMoveSubmenuOpen] = useState<false | 'move' | 'add'>(false);
+
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [peekFor, setPeekFor] = useState<string | null>(null);
@@ -452,7 +453,6 @@ export default function ProjectsHome({
 
   const closeAllMenus = useCallback(() => {
     setOpenMenu(null);
-    setMoveSubmenuOpen(false);
     setNewMenuOpen(false);
     setAvatarMenuOpen(false);
     setPeekFor(null);
@@ -1035,117 +1035,89 @@ export default function ProjectsHome({
     );
   }
 
-  // Menus are plain groups of buttons, not ARIA menus: role="menu"
-  // would require menuitem children and the full menu keyboard pattern,
-  // which these action lists don't implement (WCAG 4.1.2).
+  // The shared APG menu primitive (components/Menu.tsx): arrow-key nav,
+  // type-ahead, Escape with focus return, submenus.
   const renderProjectMenu = (item: ProjectItem) => (
-    <div className="qh-menu">
-      <button className="qh-menu-item strong" onClick={() => { closeAllMenus(); handleOpen(item); }}>
+    <Menu onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label={`Actions for ${item.title}`}>
+      <MenuItem strong onSelect={() => { closeAllMenus(); handleOpen(item); }}>
         Open
-      </button>
-      <div className="qh-menu-item qh-submenu-parent">
-        <button
-          className="qh-menu-item-inner"
-          onClick={(e) => { e.stopPropagation(); setMoveSubmenuOpen((v) => v === 'move' ? false : 'move'); }}
-        >
-          Move to collection <span className="qh-submenu-arrow">▸</span>
-        </button>
-        {moveSubmenuOpen === 'move' && (
-          <div className="qh-menu qh-submenu">
-            {collections
-              .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
-              .map((collection) => (
-                <button
-                  key={collection.id}
-                  className="qh-menu-item"
-                  onClick={() => { requestMove(item.indexDocId, collection.id); closeAllMenus(); }}
-                >
-                  {collection.name}
-                </button>
-              ))}
-            {collectionOf(item.indexDocId) && (
-              <button
-                className="qh-menu-item"
-                onClick={() => { requestMove(item.indexDocId, null); closeAllMenus(); }}
-              >
-                No collection
-              </button>
-            )}
-            <button
-              className="qh-menu-item accent"
-              onClick={() => openNewCollection(item.indexDocId)}
+      </MenuItem>
+      <MenuSubmenu label="Move to collection">
+        {collections
+          .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
+          .map((collection) => (
+            <MenuItem
+              key={collection.id}
+              onSelect={() => { requestMove(item.indexDocId, collection.id); closeAllMenus(); }}
             >
-              ＋ New collection…
-            </button>
+              {collection.name}
+            </MenuItem>
+          ))}
+        {collectionOf(item.indexDocId) && (
+          <MenuItem onSelect={() => { requestMove(item.indexDocId, null); closeAllMenus(); }}>
+            No collection
+          </MenuItem>
+        )}
+        <MenuItem accent onSelect={() => openNewCollection(item.indexDocId)}>
+          ＋ New collection…
+        </MenuItem>
+      </MenuSubmenu>
+      <MenuSubmenu label="Add to collection">
+        {collections
+          .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
+          .map((collection) => (
+            <MenuItem
+              key={collection.id}
+              onSelect={() => { addToCollection(item.indexDocId, collection.id); closeAllMenus(); }}
+            >
+              {collection.name}
+            </MenuItem>
+          ))}
+        {collections.every((c) => c.projectIds.includes(item.indexDocId.replace(/^automerge:/, ''))) && (
+          <div className="qh-menu-item qh-menu-subtext" role="presentation" style={{ cursor: 'default' }}>
+            Already in every collection
           </div>
         )}
-      </div>
-      <div className="qh-menu-item qh-submenu-parent">
-        <button
-          className="qh-menu-item-inner"
-          onClick={(e) => { e.stopPropagation(); setMoveSubmenuOpen((v) => v === 'add' ? false : 'add'); }}
-        >
-          Add to collection <span className="qh-submenu-arrow">▸</span>
-        </button>
-        {moveSubmenuOpen === 'add' && (
-          <div className="qh-menu qh-submenu">
-            {collections
-              .filter((c) => !c.projectIds.includes(item.indexDocId.replace(/^automerge:/, '')))
-              .map((collection) => (
-                <button
-                  key={collection.id}
-                  className="qh-menu-item"
-                  onClick={() => { addToCollection(item.indexDocId, collection.id); closeAllMenus(); }}
-                >
-                  {collection.name}
-                </button>
-              ))}
-            {collections.every((c) => c.projectIds.includes(item.indexDocId.replace(/^automerge:/, ''))) && (
-              <div className="qh-menu-item qh-menu-subtext" style={{ cursor: 'default' }}>
-                Already in every collection
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      <button
-        className="qh-menu-item"
+      </MenuSubmenu>
+      <MenuItem
         disabled={!!duplicatingId}
-        onClick={(e) => { e.stopPropagation(); openDuplicateDialog(item); }}
+        subtext="Fork a fresh copy — no history carried over"
+        onSelect={() => openDuplicateDialog(item)}
       >
         Duplicate
-        <span className="qh-menu-subtext">Fork a fresh copy — no history carried over</span>
-      </button>
-      <button
-        className="qh-menu-item"
-        onClick={() => copyToClipboard(
+      </MenuItem>
+      <MenuItem
+        keepOpen
+        onSelect={() => copyToClipboard(
           buildShareableUrl(item.indexDocId, item.syncServer, item.description, 'index.qmd'),
           item.indexDocId + ':share',
         )}
       >
         {copied === item.indexDocId + ':share' ? 'Link copied!' : 'Share link…'}
-      </button>
-      <button
-        className="qh-menu-item with-hint"
-        onClick={() => copyToClipboard(item.indexDocId.replace(/^automerge:/, ''), item.indexDocId + ':id')}
+      </MenuItem>
+      <MenuItem
+        keepOpen
+        hint={<span className="mono">{shortId(item.indexDocId)}</span>}
+        onSelect={() => copyToClipboard(item.indexDocId.replace(/^automerge:/, ''), item.indexDocId + ':id')}
       >
         {copied === item.indexDocId + ':id' ? 'ID copied!' : 'Copy project ID'}
-        <span className="qh-menu-hint mono">{shortId(item.indexDocId)}</span>
-      </button>
-      <button
-        className="qh-menu-item"
+      </MenuItem>
+      <MenuItem
         disabled={!!exportingId}
-        onClick={(e) => { e.stopPropagation(); handleDownloadZip(item); }}
+        onSelect={() => handleDownloadZip(item)}
       >
         {exportingId === item.indexDocId ? 'Preparing ZIP…' : 'Download as ZIP'}
-      </button>
-      <button className="qh-menu-item" onClick={() => startRename(item)}>Rename…</button>
-      <div className="qh-menu-divider" />
-      <button className="qh-menu-item danger" onClick={() => handleRemove(item)}>
+      </MenuItem>
+      <MenuItem onSelect={() => startRename(item)}>Rename…</MenuItem>
+      <MenuDivider />
+      <MenuItem
+        danger
+        subtext="Doesn't delete the project for others"
+        onSelect={() => handleRemove(item)}
+      >
         Remove from this device
-        <span className="qh-menu-subtext">Doesn't delete the project for others</span>
-      </button>
-    </div>
+      </MenuItem>
+    </Menu>
   );
 
   /** Refresh a peek summary via a short background connection. Contributors
@@ -1427,21 +1399,21 @@ export default function ProjectsHome({
               <SortIcon />
             </button>
             {openMenu === sortMenuKey && (
-              <div className="qh-menu qh-menu-right">
+              <Menu className="qh-menu-right" onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label="Sort collection">
                 {(['newest', 'oldest', 'name'] as SortOrder[]).map((o) => (
-                  <button
+                  <MenuItem
                     key={o}
-                    className={`qh-menu-item ${collectionSort === o ? 'strong' : ''}`}
-                    onClick={() => {
+                    strong={collectionSort === o}
+                    onSelect={() => {
                       setCollectionSorts((s) => ({ ...s, [collection.id]: o }));
                       setCollectionPages((p) => ({ ...p, [collection.id]: 0 }));
                       setOpenMenu(null);
                     }}
                   >
                     {o === 'newest' ? 'Newest first' : o === 'oldest' ? 'Oldest first' : 'A to Z'}
-                  </button>
+                  </MenuItem>
                 ))}
-              </div>
+              </Menu>
             )}
           </span>
           <button
@@ -1457,28 +1429,25 @@ export default function ProjectsHome({
           </button>
           {membersFor === collection.id && renderMembersPopover(collection)}
           {openMenu === menuKey && (
-            <div className="qh-menu qh-menu-right">
-              <button
-                className="qh-menu-item"
-                onClick={() => { setOpenMenu(null); setMembersFor(collection.id); }}
-              >
+            <Menu className="qh-menu-right" onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label={`Actions for ${collection.name}`}>
+              <MenuItem onSelect={() => { setOpenMenu(null); setMembersFor(collection.id); }}>
                 People &amp; invite…
-              </button>
-              <button
-                className="qh-menu-item"
-                onClick={() => {
+              </MenuItem>
+              <MenuItem
+                subtext="Renames it for everyone subscribed"
+                onSelect={() => {
                   setRenameCollectionTarget(collection);
                   setRenameCollectionValue(collection.name);
                   closeAllMenus();
                 }}
               >
                 Rename collection…
-                <span className="qh-menu-subtext">Renames it for everyone subscribed</span>
-              </button>
-              <div className="qh-menu-divider" />
-              <button
-                className="qh-menu-item danger"
-                onClick={() => {
+              </MenuItem>
+              <MenuDivider />
+              <MenuItem
+                danger
+                subtext="Removes it from your view only"
+                onSelect={() => {
                   closeAllMenus();
                   setConfirmState({
                     title: `Leave "${collection.name}"?`,
@@ -1489,9 +1458,8 @@ export default function ProjectsHome({
                 }}
               >
                 Leave collection
-                <span className="qh-menu-subtext">Removes it from your view only</span>
-              </button>
-            </div>
+              </MenuItem>
+            </Menu>
           )}
         </div>
         {collectionItems.length === 0 ? (
@@ -1559,18 +1527,17 @@ export default function ProjectsHome({
               ＋ New ▾
             </button>
             {newMenuOpen && (
-              <div className="qh-menu qh-menu-right">
-                <div className="qh-menu-label">START FROM — QUARTO PROJECT TYPES</div>
+              <Menu className="qh-menu-right" onClose={() => setNewMenuOpen(false)} ignoreOutsideSelector=".qh-menu-anchor" aria-label="New project">
+                <MenuLabel>START FROM — QUARTO PROJECT TYPES</MenuLabel>
                 {(projectChoices.length > 0
                   ? projectChoices
                   : [{ id: 'default', name: 'Default', description: 'A minimal Quarto project' }]
                 ).map((choice) => (
-                  <button key={choice.id} className="qh-menu-item two-line" onClick={() => openNewDialog(choice)}>
-                    <span className="strong">{choice.name}</span>
-                    <span className="qh-menu-subtext">{choice.description}</span>
-                  </button>
+                  <MenuItem key={choice.id} strong subtext={choice.description} onSelect={() => openNewDialog(choice)}>
+                    {choice.name}
+                  </MenuItem>
                 ))}
-              </div>
+              </Menu>
             )}
           </div>
           <div className="qh-menu-anchor qh-avatar-anchor">
@@ -1704,17 +1671,17 @@ export default function ProjectsHome({
                   Sort <span className="qh-caret">▾</span>
                 </button>
                 {sortMenuOpen && (
-                  <div className="qh-menu qh-menu-right">
+                  <Menu className="qh-menu-right" onClose={() => setSortMenuOpen(false)} ignoreOutsideSelector=".qh-menu-anchor" aria-label="Sort projects">
                     {(['newest', 'oldest', 'name'] as SortOrder[]).map((o) => (
-                      <button
+                      <MenuItem
                         key={o}
-                        className={`qh-menu-item ${sortOrder === o ? 'strong' : ''}`}
-                        onClick={() => { setSortOrder(o); setSortMenuOpen(false); }}
+                        strong={sortOrder === o}
+                        onSelect={() => { setSortOrder(o); setSortMenuOpen(false); }}
                       >
                         {o === 'newest' ? 'Newest first' : o === 'oldest' ? 'Oldest first' : 'A to Z'}
-                      </button>
+                      </MenuItem>
                     ))}
-                  </div>
+                  </Menu>
                 )}
               </div>
               {everythingElse.length === 0 ? (
