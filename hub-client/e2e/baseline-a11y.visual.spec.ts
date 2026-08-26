@@ -27,7 +27,11 @@ import { test, expect } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { THEMES, FIXED_NOW, forceTheme, settleTheme } from './helpers/visual';
+import { THEMES, bootHarness } from './helpers/visual';
+
+// bootHarness does two page loads (identity pinning) against a shared dev
+// server; under full parallelism the default 30s budget is too tight.
+test.setTimeout(60_000);
 
 const BASELINE_PATH = fileURLToPath(
   new URL('./helpers/axe-baseline.json', import.meta.url),
@@ -43,6 +47,7 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'notifications', label: 'notifications', selector: '.ephemeral-session-banner' },
   { page: 'setup-migration', label: 'setup-migration', selector: '.setup-modal' },
   { page: 'setup-fresh', label: 'setup-fresh', selector: '.setup-modal' },
+  { page: 'tokens', label: 'tokens', selector: 'text=Design tokens' },
 ];
 
 /** key → { ruleId: nodeCount } */
@@ -62,13 +67,7 @@ const written: AxeBaseline = {};
 for (const { page, label, selector } of SCAN_PAGES) {
   for (const theme of THEMES) {
     test(`axe: ${label} — ${theme} theme`, async ({ page: browserPage }) => {
-      await browserPage.clock.install();
-      await browserPage.clock.setFixedTime(FIXED_NOW);
-      await forceTheme(browserPage, theme);
-
-      await browserPage.goto(`/#/dev/${page}`);
-      await browserPage.waitForSelector(selector, { timeout: 15000 });
-      await settleTheme(browserPage, theme);
+      await bootHarness(browserPage, page, selector, theme);
 
       const results = await new AxeBuilder({ page: browserPage }).analyze();
       const blocking = results.violations.filter(

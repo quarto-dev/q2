@@ -15,7 +15,11 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { THEMES, FIXED_NOW, forceTheme, settleTheme } from './helpers/visual';
+import { THEMES, bootHarness } from './helpers/visual';
+
+// bootHarness does two page loads (identity pinning) against a shared dev
+// server; under full parallelism the default 30s budget is too tight.
+test.setTimeout(60_000);
 
 const BASELINE_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'projects-home', label: 'projects-home', selector: '.projects-home' },
@@ -25,18 +29,13 @@ const BASELINE_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'sidebar', label: 'sidebar-sections', selector: '.sidebar-sections' },
   { page: 'header', label: 'minimal-header', selector: '.minimal-header' },
   { page: 'notifications', label: 'notifications', selector: '.ephemeral-session-banner' },
+  { page: 'tokens', label: 'tokens', selector: 'text=Design tokens' },
 ];
 
 for (const { page, label, selector } of BASELINE_PAGES) {
   for (const theme of THEMES) {
     test(`${label} — ${theme} theme`, async ({ page: browserPage }) => {
-      await browserPage.clock.install();
-      await browserPage.clock.setFixedTime(FIXED_NOW);
-      await forceTheme(browserPage, theme);
-
-      await browserPage.goto(`/#/dev/${page}`);
-      await browserPage.waitForSelector(selector, { timeout: 15000 });
-      await settleTheme(browserPage, theme);
+      await bootHarness(browserPage, page, selector, theme);
 
       await expect(browserPage).toHaveScreenshot(`${label}-${theme}.png`, {
         // Allow small pixel differences for anti-aliasing variance

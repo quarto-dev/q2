@@ -1,3 +1,29 @@
+/* ==========================================================================
+   theme.css — the hub-client design-token file.
+
+   TOKEN LAYERING CONVENTION (lint:css enforces the color/z-index rules):
+
+   1. Primitives — raw values, theme-agnostic: Posit brand ramps, fixed
+      alpha tints (--alpha-black-*, --posit-teal-alpha-*), the debug and
+      attribution palettes. Components never reference these directly.
+   2. Scales — the design system's measuring sticks: --space-*, --radius-*,
+      --shadow-*, --z-*, --text-*, --font-weight-*, --leading-*,
+      --duration-*, --ease-*, --focus-ring. Use these instead of magic
+      numbers; if a value doesn't fit the scale, that's a design decision
+      to make explicitly, not a one-off to slip in.
+   3. Semantic aliases — per-theme role tokens (--bg-modal, --text-primary,
+      --border-color, ...). Defined in :root (light), redefined in
+      :root.dark. Components consume these.
+   4. Component tokens — per-component aliases (--dialog-*, --sidebar-*,
+      --replay-*) referencing layers 1-3. Add one only when a value is
+      genuinely component-specific.
+
+   Rules of thumb: new colors land in THIS file (lint:css forbids
+   hex/rgb() at use sites); z-index always uses a --z-* layer; new
+   components consume scale + semantic tokens. Standalone dev pages that
+   do not load theme.css (src/debug/) keep a local token block instead.
+   ========================================================================== */
+
 /* Posit Brand Colors - always available regardless of theme */
 :root {
   /* Primary */
@@ -25,6 +51,135 @@
   --posit-green: #72994E;
   --posit-red: #DB593B;
 
+  /* ---- Primitives: fixed constants (theme-agnostic) ---- */
+
+  --white: #fff;
+  --black: #000;
+
+  /* Fixed alpha tints. Unlike the semantic alpha tokens below
+     (--input-bg-alpha etc., which flip to white-based alphas in dark
+     mode), these hold one value in both themes — used where the current
+     design specifies a fixed tint (drop overlays, shadows, focus rings). */
+  --alpha-black-05: rgba(0, 0, 0, 0.05);
+  --alpha-black-06: rgba(0, 0, 0, 0.06);
+  --alpha-black-08: rgba(0, 0, 0, 0.08);
+  --alpha-black-10: rgba(0, 0, 0, 0.1);
+  --alpha-black-15: rgba(0, 0, 0, 0.15);
+  --alpha-black-20: rgba(0, 0, 0, 0.2);
+  --alpha-black-30: rgba(0, 0, 0, 0.3);
+  --alpha-black-40: rgba(0, 0, 0, 0.4);
+  --alpha-black-45: rgba(0, 0, 0, 0.45);
+  --alpha-black-50: rgba(0, 0, 0, 0.5);
+  --alpha-black-60: rgba(0, 0, 0, 0.6);
+  --alpha-white-05: rgba(255, 255, 255, 0.05);
+  --alpha-white-60: rgba(255, 255, 255, 0.6);
+  --alpha-white-90: rgba(255, 255, 255, 0.9);
+  --posit-teal-alpha-05: rgba(65, 149, 153, 0.05);
+  --posit-teal-alpha-08: rgba(65, 149, 153, 0.08);
+  --posit-teal-alpha-30: rgba(65, 149, 153, 0.3);
+  --posit-blue-alpha-20: rgba(68, 112, 153, 0.2);
+  --posit-green-alpha-25: rgba(114, 153, 78, 0.25);
+
+  /* Attribution ring palette (ReplayDrawer) — Apple system colors, one
+     per collaborator, fixed in both themes. */
+  --attribution-red: #ff3b30;
+  --attribution-orange: #ff9500;
+  --attribution-yellow: #ffcc00;
+  --attribution-green: #34c759;
+  --attribution-blue: #5ac8fa;
+  --attribution-purple: #5856d6;
+
+  /* Debug inspector palette (Catppuccin Macchiato) — the debug panel is
+     a permanently-dark dev tool; these stay fixed in both themes. */
+  --debug-base: #1e1e2e;
+  --debug-mantle: #181825;
+  --debug-surface-0: #313244;
+  --debug-surface-1: #45475a;
+  --debug-text: #cdd6f4;
+  --debug-subtext: #a6adc8;
+  --debug-muted: #6c7086;
+  --debug-blue: #89b4fa;
+  --debug-green: #a6e3a1;
+  --debug-red: #f38ba8;
+  --debug-yellow: #f9e2af;
+
+  /* Legacy ProjectSelector palette (pre-QH-ProjectManagement-July26
+     classic selector). Fixed values; the classic selector is light-only
+     today. */
+  --selector-accent: #5ab5b8;
+  --selector-accent-subtle: #bacad8;
+  --selector-success: #4a6a32;
+
+  /* ---- Scales ---- */
+
+  /* Spacing — 4px base. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Radii. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Elevation. --shadow-1 is identical in both themes today (the card
+     hover shadow was designed light-only); --shadow-2/3 carry per-theme
+     values. */
+  --shadow-1: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-2: 0 8px 28px rgba(0, 0, 0, 0.12);
+  --shadow-3: 0 20px 60px rgba(0, 0, 0, 0.15);
+
+  /* Z-index layers — the only legal z-index values (lint:css). From
+     bottom to top: */
+  --z-base: 0; /* hidden double-buffered preview frame */
+  --z-raised: 1; /* active preview frame, in-pane watermarks */
+  --z-sticky: 10; /* in-pane overlays (editor drop target) */
+  --z-header: 40; /* sticky page headers */
+  --z-dropdown: 60; /* menus */
+  --z-overlay: 100; /* dialog backdrops (default), drop messages */
+  --z-modal: 1000; /* editor-chrome floating layer: context menus, dialogs
+                      in the editor, error overlays, full-page surfaces */
+  --z-skip: 2000; /* skip link and other must-clear-modals chrome */
+  --z-toast: 10000; /* toasts, changelog modal, debug inspector */
+  --z-max: 10001; /* update-available toast (above the transient toast) */
+  /* reveal.js's own controls live at ~30 inside the preview iframe's
+     stacking context; the menu-button override must stay above them. */
+  --z-revealjs-menu: 30;
+
+  /* Type scale. */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --leading-tight: 1.25;
+  --leading-base: 1.5;
+  /* The dominant monospace stack (4 of 10 use sites; the rest migrate in
+     Phase 1's monospace unification). */
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Motion — 100-200ms, ease-out entrances; animate transform/opacity
+     only. prefers-reduced-motion handling is global (Phase 3). */
+  --duration-fast: 100ms;
+  --duration-base: 200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Focus ring — the one consistent visible-focus treatment (WCAG 2.4.7).
+     Use: outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); */
+  --focus-ring: 2px solid var(--border-focus);
+  --focus-ring-offset: 2px;
+
   --bg-overlay: rgba(209, 219, 229, 0.95);
   --bg-modal: #ffffff;
   --bg-card: var(--posit-blue-light-1);
@@ -45,7 +200,7 @@
   --input-bg-alpha: rgba(68, 112, 153, 0.08);
   --input-bg-alpha-hover: rgba(68, 112, 153, 0.15);
   --bg-subtle: rgba(0, 0, 0, 0.03);
-  --modal-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  --modal-shadow: var(--shadow-3);
   --logo-filter: none;
 
   /* Editor-specific */
@@ -193,7 +348,10 @@
   --input-bg-alpha: rgba(255, 255, 255, 0.08);
   --input-bg-alpha-hover: rgba(255, 255, 255, 0.12);
   --bg-subtle: rgba(255, 255, 255, 0.05);
-  --modal-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  /* Per-theme elevation values (light values declared in :root). */
+  --shadow-2: 0 8px 28px rgba(0, 0, 0, 0.3);
+  --shadow-3: 0 20px 60px rgba(0, 0, 0, 0.5);
+  --modal-shadow: var(--shadow-3);
   --logo-filter: none;
 
   /* Editor-specific */

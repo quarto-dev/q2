@@ -8,8 +8,10 @@
  *
  *   no-hardcoded-color
  *     Hex (#abc, #aabbcc, ...) and rgb()/rgba() colors may only appear in
- *     src/theme.css, where tokens are defined. Everything else references
- *     var(--token).
+ *     token definitions (custom-property declarations, `--foo: ...`),
+ *     conventionally in src/theme.css. Use sites reference var(--token).
+ *     (Standalone dev pages that do not load theme.css — e.g. the
+ *     src/debug/ inspector page — keep a local token block instead.)
  *
  *   no-bare-z-index
  *     z-index must reference a --z-* scale token (var(--z-modal) etc.),
@@ -132,7 +134,7 @@ const RULES = [
     check(file, decls) {
       if (file === TOKEN_FILE) return [];
       return decls
-        .filter((d) => COLOR_RE.test(d.value))
+        .filter((d) => COLOR_RE.test(d.value) && !d.prop.startsWith('--'))
         .map((d) => ({ snippet: d.snippet, line: d.line }));
     },
   },
