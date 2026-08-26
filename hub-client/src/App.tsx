@@ -16,8 +16,9 @@ function DevHarnessLazy({ page }: { page: string }) {
   );
 }
 import Editor from './components/Editor';
-import { common, notifications } from './strings';
+import { notifications } from './strings';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import LoadingIndicator from './components/Loading';
 import SkipLink from './components/SkipLink';
 import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
@@ -667,9 +668,18 @@ function App() {
     });
   }, [project]);
 
+  // The last project-open attempt, kept so the connection error banner
+  // on the projects home can offer a "Try again" recovery action
+  // (Phase 3). Cleared on success, on disconnect, and when a different
+  // action (project creation) is what might have failed.
+  const [lastOpenAttempt, setLastOpenAttempt] = useState<
+    { project: ProjectEntry; filePathOverride?: string } | null
+  >(null);
+
   const handleSelectProject = useCallback(async (selectedProject: ProjectEntry, filePathOverride?: string) => {
     setIsConnecting(true);
     setConnectionError(null);
+    setLastOpenAttempt({ project: selectedProject, filePathOverride });
 
     try {
       const newActorId = await resolveActorId(selectedProject.indexDocId);
@@ -678,7 +688,8 @@ function App() {
       setProject(selectedProject);
       setFiles(loadedFiles);
       setFileContents(contents);
-      
+      setLastOpenAttempt(null);
+
 
       if (filePathOverride) {
         navigateToFile(selectedProject.id, filePathOverride, { replace: true });
@@ -698,6 +709,7 @@ function App() {
     setFiles([]);
     setFileContents(new Map());
     setConnectionError(null);
+    setLastOpenAttempt(null);
     // Update URL to show project selector
     navigateToProjectSelector({ replace: true });
   }, [navigateToProjectSelector]);
@@ -714,6 +726,7 @@ function App() {
   ) => {
     setIsConnecting(true);
     setConnectionError(null);
+    setLastOpenAttempt(null);
 
     try {
       // Convert scaffold files to the format expected by createNewProject
@@ -785,7 +798,7 @@ function App() {
   if (AUTH_ENABLED && authLoading) {
     return (
       <div className="project-selector" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>{common.loading}</div>
+        <LoadingIndicator />
       </div>
     );
   }
@@ -804,7 +817,7 @@ function App() {
   if (screenName === undefined) {
     return (
       <div className="project-selector" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>{common.loading}</div>
+        <LoadingIndicator />
       </div>
     );
   }
@@ -880,6 +893,11 @@ function App() {
             onProjectCreated={handleProjectCreated}
             isConnecting={isConnecting}
             error={connectionError}
+            onRetry={
+              lastOpenAttempt
+                ? () => void handleSelectProject(lastOpenAttempt.project, lastOpenAttempt.filePathOverride)
+                : undefined
+            }
             onSignOut={AUTH_ENABLED ? logout : undefined}
             authEmail={auth?.email}
             authPicture={auth?.picture}

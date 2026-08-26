@@ -384,6 +384,36 @@ select.qh-input { appearance: auto; }
   box-shadow: 0 1px 3px var(--alpha-black-08);
 }
 
+/* ---- loading indicator ----
+   The one loading indicator (Phase 3): spinner + label, announced
+   politely to screen readers (role="status" via components/Loading.tsx).
+   The spin is covered by the global prefers-reduced-motion rule below. */
+
+.qh-loading,
+.qh-connecting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.qh-spinner {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-secondary);
+  border-radius: 50%;
+  animation: qh-spin 0.8s linear infinite;
+}
+
+@keyframes qh-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ---- errors ---- */
 
 .qh-error {
@@ -399,15 +429,17 @@ select.qh-input { appearance: auto; }
 .qh-error.inline { margin: 12px 0 0; }
 
 /* Recovery action inside an error banner (e.g. "Sign in again" on an
-   expired-session join failure). */
+   expired-session join failure, "Try again" on a failed load). Colors
+   inherit from the banner so the same class works on app-theme and
+   editor-theme error surfaces. */
 .qh-error-action {
   display: block;
   margin-top: 8px;
   padding: 4px 10px;
-  border: 1px solid var(--error-text);
+  border: 1px solid currentColor;
   border-radius: 6px;
   background: transparent;
-  color: var(--error-text);
+  color: inherit;
   font-size: 12px;
   cursor: pointer;
 }

@@ -50,6 +50,16 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'setup-fresh', label: 'setup-fresh', selector: '.setup-modal' },
   { page: 'tokens', label: 'tokens', selector: 'text=Design tokens' },
   { page: 'gallery', label: 'gallery', selector: 'text=Component gallery' },
+  // Phase 3 async-state routes (loading / error+retry / empty). These
+  // render pre-existing chrome whose contrast debt is already baselined
+  // on other pages (teal primary button, editor muted text), so they
+  // join the characterization baseline rather than strict scans.
+  { page: 'projects-home-loading', label: 'projects-home-loading', selector: '.qh-loading' },
+  { page: 'projects-home-error', label: 'projects-home-error', selector: '.qh-error' },
+  { page: 'projects-home-empty', label: 'projects-home-empty', selector: '.qh-empty-state' },
+  { page: 'sidebar-empty', label: 'sidebar-empty', selector: '.empty-state' },
+  { page: 'status-tab-loading', label: 'status-tab-loading', selector: '.status-tab' },
+  { page: 'status-tab-error', label: 'status-tab-error', selector: '.status-tab' },
 ];
 
 /** key → { ruleId: nodeCount } */
