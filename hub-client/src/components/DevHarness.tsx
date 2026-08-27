@@ -291,7 +291,6 @@ function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'previ
             currentFilePath="index.qmd"
             onToggleFullscreenPreview={() => setLastAction('fullscreen-preview')}
             isFullscreenPreview={false}
-            isOnline={true}
             sidebarOpen={drawer.drawerOpen}
             onToggleSidebar={drawer.isDrawer ? drawer.toggle : undefined}
             sidebarToggleRef={drawer.toggleRef}
@@ -622,7 +621,6 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
           currentFilePath="index.qmd"
           onToggleFullscreenPreview={() => {}}
           isFullscreenPreview={false}
-          isOnline={true}
         />
       </div>
     </EditorChrome>

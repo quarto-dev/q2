@@ -21,16 +21,35 @@
 .top-bar {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
+  /* No vertical padding: the 36px min-height sets the bar height (the
+     project bar's full-height switch cell relies on this too). */
+  padding: 0 12px;
   background: var(--editor-header-bg);
   border-bottom: 1px solid var(--editor-header-border);
   min-height: 36px;
 }
 
 .project-top-bar {
-  gap: 6px;
+  gap: 10px;
   min-width: 0;
   flex-shrink: 0;
+  /* The switch-project box owns the left edge (full-height cell). */
+  padding: 0 7px 0 0;
+  /* Match the sidebar background (same layer count as .sidebar-sections,
+     which also paints --sidebar-bg over the project column). */
+  background: var(--sidebar-bg);
+}
+
+/* Full-height square cell for the switch-project action, separated
+   from the project name by a right border. */
+.switch-project-box {
+  align-self: stretch;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-right: 1px solid var(--editor-header-border);
 }
 
 .document-top-bar {
@@ -59,34 +78,6 @@
 .top-bar .qh-icon-btn:hover {
   background: var(--view-toggle-hover-bg);
   color: var(--editor-text);
-}
-
-/* Preview is the primary action: filled accent pill with icon + label. */
-.top-bar .preview-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 12px;
-  background: var(--header-preview-bg);
-  border: 1px solid var(--header-preview-bg);
-  border-radius: var(--radius-sm);
-  color: var(--header-preview-text);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background-color var(--duration-fast) var(--ease-out);
-}
-
-.top-bar .preview-btn:hover {
-  background: var(--btn-accent-hover-bg);
-  border-color: var(--btn-accent-hover-bg);
-}
-
-.top-bar .preview-btn:active {
-  background: var(--btn-accent-active-bg);
-  border-color: var(--btn-accent-active-bg);
 }
 
 /* Project identity: fills the space between share and switch actions. */
@@ -137,9 +128,13 @@
     row-gap: 6px;
   }
 
-  .document-top-bar .header-left { flex: 1 1 100%; }
+  .document-top-bar .header-left {
+    flex: 1 1 100%;
+  }
 
-  .document-top-bar .header-right { margin-inline-start: auto; }
+  .document-top-bar .header-right {
+    margin-inline-start: auto;
+  }
 }
 
 .header-doc .file-path {
@@ -159,58 +154,4 @@
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
-}
-
-.header-right .connection-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: inherit;
-  cursor: pointer;
-  box-sizing: border-box;
-  height: 28px;
-  padding: 0 10px;
-  background: var(--editor-header-bg);
-  border: 1px solid var(--editor-disconnected-border);
-  border-radius: var(--radius-xs);
-  font-size: 12px;
-  line-height: 1;
-  user-select: none;
-}
-
-/* Focusable for its tooltip — needs a visible indicator (WCAG 2.4.7). */
-.header-right .connection-indicator:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: var(--focus-ring-offset);
-}
-
-.header-right .connection-indicator.online {
-  border-color: var(--editor-success);
-}
-
-.header-right .connection-indicator.offline {
-  border-color: var(--editor-warning);
-}
-
-.header-right .connection-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--editor-text-muted);
-  flex-shrink: 0;
-}
-
-.header-right .connection-indicator.online .connection-dot {
-  background-color: var(--editor-success);
-  box-shadow: 0 0 4px color-mix(in srgb, var(--editor-success) 60%, transparent);
-}
-
-.header-right .connection-indicator.offline .connection-dot {
-  background-color: var(--editor-warning);
-  box-shadow: 0 0 4px color-mix(in srgb, var(--editor-warning) 60%, transparent);
-}
-
-.header-right .connection-text {
-  color: var(--editor-text-dim);
-  font-weight: 500;
 }

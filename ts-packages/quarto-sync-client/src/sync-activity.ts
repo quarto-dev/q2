@@ -53,6 +53,14 @@ export interface DocSyncActivity {
   lastSyncMessageAt: number | null;
   lastEphemeralMessageAt: number | null;
   lastRemoteChangeAt: number | null;
+  /** Last doc change made by the local actor (ms epoch). */
+  lastLocalChangeAt: number | null;
+  /**
+   * Last time a storage-backed peer (the hub) confirmed heads that
+   * include a local change from this session — i.e. "your change got
+   * synced" (ms epoch).
+   */
+  lastLocalDeliveredAt: number | null;
 }
 
 /** One timestamped connection-lifecycle event for the debug log. */
@@ -92,6 +100,8 @@ function emptyDocActivity(): DocSyncActivity {
     lastSyncMessageAt: null,
     lastEphemeralMessageAt: null,
     lastRemoteChangeAt: null,
+    lastLocalChangeAt: null,
+    lastLocalDeliveredAt: null,
   };
 }
 
@@ -134,6 +144,14 @@ export function recordRemoteChange(
   };
   docEntry(documentId).lastRemoteChangeAt = lastRemoteChange.at;
   perDocRemoteChange.set(documentId, lastRemoteChange);
+}
+
+export function recordLocalChange(documentId: string): void {
+  docEntry(documentId).lastLocalChangeAt = Date.now();
+}
+
+export function recordLocalDelivery(documentId: string): void {
+  docEntry(documentId).lastLocalDeliveredAt = Date.now();
 }
 
 export function getSyncActivity(): SyncActivity {

@@ -528,18 +528,36 @@
   flex-direction: column;
 }
 
-/* Project bottom bar: empty for now; mirrors the replay drawer's
-   collapsed height so the two bottom bars read as one row. */
+/* Project bottom bar: sync-status badge for the project index doc;
+   mirrors the replay drawer's collapsed height so the two bottom bars
+   read as one row. */
 .project-bottom-bar {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
   min-height: 28px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  background: var(--editor-bg);
+  /* Match the sidebar background (same as .project-top-bar). */
+  background: var(--sidebar-bg);
   border-top: 1px solid var(--editor-header-border);
 }
 
+/* Document bottom bar: replay drawer (fills) + sync-status badge. */
 .document-bottom-bar {
   flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.document-bottom-bar .replay-drawer {
+  flex: 1;
+  min-width: 0;
+}
+
+.document-bottom-bar .sync-status-badge {
+  flex-shrink: 0;
+  background: var(--editor-bg);
+  border-top: 1px solid var(--editor-header-border);
 }
 
 /* Replay mode banner — overlays bottom edge of header */

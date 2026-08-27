@@ -50,9 +50,8 @@
    States are defined once on the base class (hover per variant,
    disabled and focus-visible shared). Deliberately NOT part of this
    system: .view-toggle-btn (a segmented-control member with an active
-   state, not a button look), .qh-pager (a vertical navigation strip),
-   and .top-bar .preview-btn (the header's filled primary pill,
-   on header-specific tokens). Radii/paddings stay on their current
+   state, not a button look) and .qh-pager (a vertical navigation strip).
+   Radii/paddings stay on their current
    values until the Phase 5 grid-alignment pass. */
 
 .qh-btn {

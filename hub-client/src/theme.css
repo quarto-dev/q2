@@ -198,7 +198,7 @@
      don't change per theme). Hover lightens ~8%, press darkens ~6%.
      Replaces filter: brightness(), which also lightened the label text
      and forced a containing block. Consumed by .qh-btn.primary/.danger,
-     .top-bar .preview-btn, .ui-variant-toggle. */
+     .ui-variant-toggle. */
   --btn-accent-hover-bg: color-mix(in srgb, var(--posit-teal) 92%, var(--white));
   --btn-accent-active-bg: color-mix(in srgb, var(--posit-teal) 94%, var(--black));
   --btn-danger-hover-bg: color-mix(in srgb, var(--posit-red) 90%, var(--white));
@@ -320,10 +320,6 @@
   --replay-tooltip-bg: #ffffff;
 
   /* Minimal header */
-  --header-preview-bg: var(--posit-teal);
-  --header-preview-text: #ffffff;
-  --header-preview-shadow: rgba(0, 0, 0, 0.15);
-  --header-preview-shadow-hover: rgba(0, 0, 0, 0.25);
 
   /* Markdown summary (minimap) */
   --summary-bg: #f0f0f0;
@@ -473,10 +469,6 @@
   --replay-tooltip-bg: #0f0f1e;
 
   /* Minimal header */
-  --header-preview-bg: var(--posit-teal);
-  --header-preview-text: #ffffff;
-  --header-preview-shadow: rgba(255, 255, 255, 0.3);
-  --header-preview-shadow-hover: rgba(255, 255, 255, 0.4);
 
   /* Markdown summary (minimap) */
   --summary-bg: #1e1e1e;

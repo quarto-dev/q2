@@ -65,7 +65,10 @@ import {
   recordSyncMessage,
   recordEphemeralMessage,
   recordRemoteChange,
+  recordLocalChange,
+  recordLocalDelivery,
   recordConnectionEvent,
+  getDocSyncActivity,
 } from './sync-activity.js';
 
 /**
@@ -599,6 +602,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
             beforeText: textOf(patchInfo.before),
             afterText: textOf(patchInfo.after),
           });
+        } else if (changes.length > 0) {
+          // All applied changes carry the local actor: a local edit.
+          recordLocalChange(String(handle.documentId));
         }
       } catch {
         // Classification is best-effort display info; never break sync.
@@ -610,6 +616,22 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         if (!watchedHandles.has(handle)) {
           watchedHandles.add(handle);
           handle.on('change', onHandleChange);
+          // Stamp "your change got synced": when a storage-backed peer's
+          // confirmed heads catch up to a doc that has an unacknowledged
+          // local change from this session, record the delivery time.
+          // Same signal the exit drain uses (isDelivered, bd-10deu8h4).
+          handle.on('remote-heads', () => {
+            try {
+              if (!handle.isReady()) return;
+              const docId = String(handle.documentId);
+              const a = getDocSyncActivity(docId);
+              if (!a.lastLocalChangeAt) return;
+              if ((a.lastLocalDeliveredAt ?? 0) >= a.lastLocalChangeAt) return;
+              if (isDelivered(handle)) recordLocalDelivery(docId);
+            } catch {
+              // Display-only bookkeeping; never break sync.
+            }
+          });
         }
       }
     };

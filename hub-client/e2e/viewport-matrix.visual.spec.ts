@@ -240,8 +240,8 @@ for (const { route, mode } of SHELL_ROUTES) {
       }
       await expectInsideViewport(
         page,
-        page.locator('.connection-indicator'),
-        'connection indicator',
+        page.locator('.view-toggle-control'),
+        'view toggle',
       );
       // No pane is clipped past the viewport's right edge. At ≤900px the
       // sidebar is an off-canvas drawer by design (Phase 5) — the drawer

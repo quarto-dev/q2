@@ -47,6 +47,7 @@ import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
 import ProjectTopBar from './ProjectTopBar';
 import DocumentTopBar from './DocumentTopBar';
+import SyncStatusBadge from './SyncStatusBadge';
 import SidebarTabs from './SidebarTabs';
 import SidebarDrawer from './SidebarDrawer';
 import OutlinePanel from './OutlinePanel';
@@ -1141,7 +1142,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             }}
           </SidebarTabs>
             </SidebarDrawer>
-            <div className="project-bottom-bar" />
+            <div className="project-bottom-bar">
+              <SyncStatusBadge scope="project" />
+            </div>
           </div>
         )}
 
@@ -1153,7 +1156,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               currentFilePath={currentFile?.path ?? null}
               onToggleFullscreenPreview={handleToggleFullscreenPreview}
               isFullscreenPreview={isFullscreenPreview}
-              isOnline={isOnline}
               sidebarOpen={sidebarDrawer.drawerOpen}
               onToggleSidebar={sidebarDrawer.isDrawer ? sidebarDrawer.toggle : undefined}
               sidebarToggleRef={sidebarDrawer.toggleRef}
@@ -1286,6 +1288,10 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               attributionDisabled={
                 currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'
               }
+            />
+            <SyncStatusBadge
+              scope="document"
+              currentFilePath={currentFile?.path ?? null}
             />
           </div>
         )}

@@ -26,15 +26,17 @@ export default function ProjectTopBar({
 }: ProjectTopBarProps) {
   return (
     <header className="top-bar project-top-bar">
-      <Tooltip content={header.switchProject}>
-        <button
-          className="qh-icon-btn boxed"
-          onClick={onChooseNewProject}
-          aria-label={header.switchProject}
-        >
-          <SwitchIcon />
-        </button>
-      </Tooltip>
+      <div className="switch-project-box">
+        <Tooltip content={header.switchProject}>
+          <button
+            className="qh-icon-btn boxed"
+            onClick={onChooseNewProject}
+            aria-label={header.switchProject}
+          >
+            <SwitchIcon />
+          </button>
+        </Tooltip>
+      </div>
       <span className="project-name">{projectName}</span>
       {onShare && (
         <Tooltip content={header.shareProject}>

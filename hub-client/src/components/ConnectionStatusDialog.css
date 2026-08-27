@@ -125,7 +125,7 @@
   background: rgba(76, 175, 80, 0.22);
 }
 
-/* Mirrors .header-right .connection-indicator in TopBars.css. */
+/* Badge look shared with the old header connection indicator. */
 .connection-status-badge {
   display: inline-flex;
   align-items: center;

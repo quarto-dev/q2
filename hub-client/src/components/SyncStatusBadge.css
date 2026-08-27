@@ -1,0 +1,51 @@
+/* SyncStatusBadge — dot + status line in the bottom bars. */
+
+.sync-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--editor-text-dim);
+  white-space: nowrap;
+  cursor: pointer;
+  min-height: 28px;
+}
+
+.sync-status-badge:hover {
+  color: var(--editor-text);
+}
+
+.sync-status-badge:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-offset));
+}
+
+.sync-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sync-status-dot.green {
+  background-color: var(--editor-success);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--editor-success) 60%, transparent);
+}
+
+.sync-status-dot.yellow {
+  background-color: var(--editor-warning);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--editor-warning) 60%, transparent);
+}
+
+.sync-status-dot.yellow-green {
+  background-color: yellowgreen;
+  box-shadow: 0 0 4px color-mix(in srgb, yellowgreen 60%, transparent);
+}
+
+.sync-status-text em {
+  font-style: italic;
+}
