@@ -26,6 +26,8 @@ import DevTokensPage from './DevTokensPage';
 import DevGalleryPage from './DevGalleryPage';
 import AboutTab from './tabs/AboutTab';
 import ReplayDrawer from './ReplayDrawer';
+import SidebarDrawer from './SidebarDrawer';
+import { useSidebarDrawer } from '../hooks/useSidebarDrawer';
 import { ViewModeProvider } from './ViewModeContext';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
@@ -256,6 +258,10 @@ function SidebarHarness({ files = FAKE_FILES }: { files?: FileEntry[] }) {
  * renders from its own context default and is not wired to the panes.
  */
 function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'preview' }) {
+  // Phase 5: the same drawer wiring as Editor.tsx, plus an offscreen
+  // recorder so specs can assert overflow-menu actions fire.
+  const drawer = useSidebarDrawer();
+  const [lastAction, setLastAction] = useState('none');
   const placeholder: React.CSSProperties = {
     height: '100%',
     display: 'flex',
@@ -271,13 +277,18 @@ function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'previ
         currentFilePath="index.qmd"
         projectName="Research Paper"
         onChooseNewProject={() => {}}
-        onShare={() => {}}
-        onToggleFullscreenPreview={() => {}}
+        onShare={() => setLastAction('share')}
+        onToggleFullscreenPreview={() => setLastAction('fullscreen-preview')}
         isFullscreenPreview={false}
         isOnline={true}
+        sidebarOpen={drawer.drawerOpen}
+        onToggleSidebar={drawer.isDrawer ? drawer.toggle : undefined}
+        sidebarToggleRef={drawer.toggleRef}
       />
       <main className={`editor-main view-mode-${viewMode}`}>
-        <StatefulSidebarSections />
+        <SidebarDrawer drawer={drawer}>
+          <StatefulSidebarSections />
+        </SidebarDrawer>
         <div className="pane editor-pane">
           <div style={placeholder}>Editor pane</div>
         </div>
@@ -286,6 +297,13 @@ function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'previ
           <div style={placeholder}>Preview pane</div>
         </div>
       </main>
+      {/* Offscreen action recorder for Playwright assertions. */}
+      <div
+        data-testid="header-last-action"
+        style={{ position: 'fixed', left: -10000, top: 0 }}
+      >
+        {lastAction}
+      </div>
     </EditorChrome>
   );
 }
@@ -362,6 +380,9 @@ function StatusTabErrorHarness() {
 /** Editor chrome must render inside .editor-container for the dark-ramp
  *  token overrides (:root.dark .editor-container) to apply, and under a
  *  ViewModeProvider for ViewToggleControl (MinimalHeader). */
+/** Module-level so ReplayHarness render stays pure (see timestamp below). */
+const REPLAY_FIXTURE_TIMESTAMP = (Date.now() - 42 * 60_000) / 1000;
+
 /**
  * Replay drawer fixture (Phase 5): the real expanded drawer with a remote
  * actor, plus a static replica of the "me" actor chip. The real
@@ -380,9 +401,11 @@ function ReplayHarness() {
     playbackSpeed: 1,
     currentContent: '',
     // Seconds, not ms — ReplayDrawer formats with `new Date(ts * 1000)`.
-    // Visual specs pin the clock (FIXED_NOW), so Date.now() is
-    // deterministic there; the offset gives a "42 minutes ago" label.
-    timestamp: (Date.now() - 42 * 60_000) / 1000,
+    // Module-level so render stays pure (react-hooks/purity); visual
+    // specs pin the clock (FIXED_NOW) before page load, so the module
+    // evaluation is deterministic there. The offset gives a "42 minutes
+    // ago" label.
+    timestamp: REPLAY_FIXTURE_TIMESTAMP,
     actor: 'b3f7c2a1-remote',
     chunkActors: Array.from({ length: 24 }, (_, i) =>
       i % 3 === 2

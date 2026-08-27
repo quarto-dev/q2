@@ -32,6 +32,7 @@ import { useSlideThumbnails } from '../hooks/useSlideThumbnails';
 import { useCursorToSlide } from '../hooks/useCursorToSlide';
 import { useReplayMode } from '../hooks/useReplayMode';
 import { useAutomergeSync } from '../hooks/useAutomergeSync';
+import { useSidebarDrawer } from '../hooks/useSidebarDrawer';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
@@ -41,6 +42,7 @@ import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
 import MinimalHeader from './MinimalHeader';
 import SidebarTabs from './SidebarTabs';
+import SidebarDrawer from './SidebarDrawer';
 import OutlinePanel from './OutlinePanel';
 import ProjectTab from './tabs/ProjectTab';
 import StatusTab from './tabs/StatusTab';
@@ -175,6 +177,9 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
 export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
+  // Narrow-viewport sidebar drawer (Phase 5): ≤900px the sidebar leaves
+  // the flex row and becomes a modal overlay drawer.
+  const sidebarDrawer = useSidebarDrawer();
   const { effectiveTheme } = useTheme();
 
   // Full-text search index over the open project (Phase 1: client-side).
@@ -1005,6 +1010,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onToggleFullscreenPreview={handleToggleFullscreenPreview}
             isFullscreenPreview={isFullscreenPreview}
             isOnline={isOnline}
+            sidebarOpen={sidebarDrawer.drawerOpen}
+            onToggleSidebar={sidebarDrawer.isDrawer ? sidebarDrawer.toggle : undefined}
+            sidebarToggleRef={sidebarDrawer.toggleRef}
           />
           {replayState.isActive && (
             <div className="replay-mode-banner">REPLAY MODE</div>
@@ -1028,6 +1036,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
       <main id="main-content" tabIndex={-1} className={`editor-main view-mode-${viewMode}`}>
         {!isFullscreenPreview && (
+          <SidebarDrawer drawer={sidebarDrawer}>
           <SidebarTabs disabled={replayState.isActive}>
             {(activeTab) => {
               switch (activeTab) {
@@ -1089,6 +1098,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               }
             }}
           </SidebarTabs>
+          </SidebarDrawer>
         )}
         {!isFullscreenPreview && (
           <div className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}>

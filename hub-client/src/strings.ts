@@ -48,6 +48,9 @@ export const header = {
   shareProject: 'Share this project',
   fullscreenPreview: 'Fullscreen preview',
   preview: 'Preview',
+  toggleSidebar: 'Toggle sidebar',
+  sidebarDrawerLabel: 'Sidebar',
+  moreActions: 'More actions',
   noFileSelected: 'No file selected',
   online: 'Online',
   offline: 'Offline',
@@ -207,6 +210,7 @@ export const viewToggle = {
   markupView: 'Markup view',
   splitEqually: 'Split equally',
   splitView: 'Split view',
+  splitUnavailable: 'Split view needs a wider window',
   expandPreview: 'Expand preview',
   previewView: 'Preview view',
 } as const;

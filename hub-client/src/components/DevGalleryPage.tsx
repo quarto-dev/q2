@@ -26,6 +26,7 @@ import {
   PeopleIcon,
   SortIcon,
   MoreIcon,
+  PanelLeftIcon,
   LayoutMarkupIcon,
   LayoutSplitIcon,
   LayoutPreviewIcon,
@@ -268,6 +269,7 @@ export default function DevGalleryPage() {
           <PeopleIcon />
           <SortIcon />
           <MoreIcon />
+          <PanelLeftIcon />
         </Row>
         <Row label="pictograms">
           <LayoutMarkupIcon />

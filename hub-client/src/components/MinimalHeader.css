@@ -88,12 +88,27 @@
    Scoped to the media query because overflow != visible changes the
    span's baseline alignment, and the 1280px baselines must stay
    pixel-identical. */
+/* Header overflow menu (Phase 5): hidden by default; at ≤700px the
+   secondary actions (share, fullscreen preview) collapse into it. */
+.header-overflow {
+  display: none;
+}
+
 @media (max-width: 700px) {
   .header-doc .project-name {
     flex-shrink: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .minimal-header .header-share-btn,
+  .minimal-header .preview-btn {
+    display: none;
+  }
+
+  .minimal-header .header-overflow {
+    display: block;
   }
 }
 
