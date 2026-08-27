@@ -80,7 +80,8 @@ for (const width of SHOT_WIDTHS) {
       await bootAt(page, width, 'projects-home', '.projects-home', theme);
       await expect(page.locator('.projects-home')).toHaveScreenshot(
         `projects-home-${width}-${theme}.png`,
-        { maxDiffPixelRatio: 0.01 },
+        // Footer embeds the live commit hash — mask it (see baseline-screens).
+        { maxDiffPixelRatio: 0.01, mask: [page.locator('.qh-footer')] },
       );
     });
   }

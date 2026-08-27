@@ -40,7 +40,8 @@ for (const theme of THEMES) {
     await expect(page.locator('.qh-skeleton-card')).toHaveCount(8);
     await expect(page.locator('.projects-home')).toHaveScreenshot(
       `projects-home-loading-${theme}.png`,
-      { maxDiffPixelRatio: 0.01 },
+      // Footer embeds the live commit hash — mask it (see baseline-screens).
+      { maxDiffPixelRatio: 0.01, mask: [page.locator('.qh-footer')] },
     );
   });
 }
@@ -53,7 +54,7 @@ for (const theme of THEMES) {
     await expect(page.locator('.qh-error')).toContainText('Could not reach the sync server.');
     await expect(page.locator('.projects-home')).toHaveScreenshot(
       `projects-home-error-${theme}.png`,
-      { maxDiffPixelRatio: 0.01 },
+      { maxDiffPixelRatio: 0.01, mask: [page.locator('.qh-footer')] },
     );
   });
 }
@@ -80,7 +81,7 @@ for (const theme of THEMES) {
     ).toBeVisible();
     await expect(page.locator('.projects-home')).toHaveScreenshot(
       `projects-home-empty-${theme}.png`,
-      { maxDiffPixelRatio: 0.01 },
+      { maxDiffPixelRatio: 0.01, mask: [page.locator('.qh-footer')] },
     );
   });
 }

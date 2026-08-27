@@ -7,7 +7,7 @@
   inset-inline-end: 16px;
   z-index: var(--z-skip);
   padding: 8px 14px;
-  font-size: 12.5px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text-on-accent);
   background: var(--posit-teal);

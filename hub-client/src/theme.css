@@ -158,6 +158,7 @@
   --z-revealjs-menu: 30;
 
   /* Type scale. */
+  --text-2xs: 10px;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
