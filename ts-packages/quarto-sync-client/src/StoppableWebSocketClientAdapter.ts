@@ -27,6 +27,7 @@ import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network
 import type { PeerId, PeerMetadata } from '@automerge/automerge-repo/slim';
 
 import { syncLog } from './log.js';
+import { recordConnectionEvent } from './sync-activity.js';
 
 export class StoppableWebSocketClientAdapter extends BrowserWebSocketClientAdapter {
   #stopped = false;
@@ -44,6 +45,7 @@ export class StoppableWebSocketClientAdapter extends BrowserWebSocketClientAdapt
     syncLog(
       `WebSocket error (will retry): ${err?.code ?? 'unknown'} ${err?.message ?? ''}`.trim(),
     );
+    recordConnectionEvent('ws-error', `${err?.code ?? 'unknown'} ${err?.message ?? ''}`.trim());
   };
 
   override connect(peerId: PeerId, peerMetadata?: PeerMetadata): void {

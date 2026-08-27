@@ -351,6 +351,14 @@ export function getIndexHandle() {
 }
 
 /**
+ * Live, independent connection signals (websocket readyState, peer
+ * handshake) for the connection-status dialog. Null before connect.
+ */
+export function getConnectionInfo() {
+  return client?.getConnectionInfo() ?? null;
+}
+
+/**
  * Get all current file paths that have handles.
  */
 export function getFilePaths(): string[] {

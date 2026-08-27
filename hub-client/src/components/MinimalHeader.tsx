@@ -5,7 +5,9 @@
  * Right: online status, layout toggle, fullscreen-preview action.
  */
 
+import { useState } from 'react';
 import ViewToggleControl from './ViewToggleControl';
+import ConnectionStatusDialog from './ConnectionStatusDialog';
 import { SwitchIcon, ShareIcon, PreviewIcon } from './icons';
 import Tooltip from './Tooltip';
 import { header } from '../strings';
@@ -32,6 +34,7 @@ export default function MinimalHeader({
   isFullscreenPreview = false,
   isOnline = true,
 }: MinimalHeaderProps) {
+  const [showConnectionStatus, setShowConnectionStatus] = useState(false);
   return (
     <header className="minimal-header">
       <div className="header-left">
@@ -72,14 +75,20 @@ export default function MinimalHeader({
             isOnline ? header.connectedTooltip : header.offlineTooltip
           }
         >
-          <div
+          <button
             className={`connection-indicator ${isOnline ? 'online' : 'offline'}`}
-            tabIndex={0}
+            onClick={() => setShowConnectionStatus(true)}
           >
             <span className="connection-dot" aria-hidden="true" />
             <span className="connection-text">{isOnline ? header.online : header.offline}</span>
-          </div>
+          </button>
         </Tooltip>
+        {showConnectionStatus && (
+          <ConnectionStatusDialog
+            currentFilePath={currentFilePath}
+            onClose={() => setShowConnectionStatus(false)}
+          />
+        )}
         <ViewToggleControl />
         {onToggleFullscreenPreview && !isFullscreenPreview && (
           <Tooltip content={header.fullscreenPreview}>

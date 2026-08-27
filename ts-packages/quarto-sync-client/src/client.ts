@@ -7,8 +7,20 @@
  */
 
 import { Repo, DocHandle, updateText, splice, generateAutomergeUrl, parseAutomergeUrl } from '@automerge/automerge-repo';
-import type { DocumentId, Patch, StorageId } from '@automerge/automerge-repo';
-import { clone as automergeClone, from as automergeFrom, save as automergeSerialize } from '@automerge/automerge';
+import type {
+  DocumentId,
+  Patch,
+  StorageId,
+  DocHandleChangePayload,
+} from '@automerge/automerge-repo';
+import {
+  clone as automergeClone,
+  from as automergeFrom,
+  save as automergeSerialize,
+  getChanges as automergeGetChanges,
+  decodeChange as automergeDecodeChange,
+  getActorId as automergeGetActorId,
+} from '@automerge/automerge';
 import type { NetworkAdapter } from '@automerge/automerge-repo/slim';
 
 import { StoppableWebSocketClientAdapter } from './StoppableWebSocketClientAdapter.js';
@@ -49,6 +61,12 @@ import type {
 } from './types.js';
 import { computeSHA256 } from './hash.js';
 import { syncLog } from './log.js';
+import {
+  recordSyncMessage,
+  recordEphemeralMessage,
+  recordRemoteChange,
+  recordConnectionEvent,
+} from './sync-activity.js';
 
 /**
  * The sync server could not be reached within the peer-wait budget
@@ -191,12 +209,26 @@ function sameHeads(a: readonly string[], b: readonly string[]): boolean {
   return a.every((h) => bSet.has(h));
 }
 
+/** Live, independent connection signals (see getConnectionInfo). */
+export interface ConnectionInfo {
+  /** WebSocket.readyState (0–3), or null when there is no socket. */
+  wsReadyState: number | null;
+  wsUrl: string | null;
+  /** Peers whose automerge handshake is currently established. */
+  peers: Array<{ peerId: string; storageId?: string }>;
+}
+
 /**
  * Internal state for a sync client instance.
  */
 interface SyncClientState {
   repo: Repo | null;
   wsAdapter: NetworkAdapter | null;
+  /**
+   * The unwrapped websocket adapter (wsAdapter may be a debug-tap
+   * wrapper); kept so getConnectionInfo can read the live socket.
+   */
+  rawWsAdapter: NetworkAdapter | null;
   indexHandle: DocHandle<IndexDocument> | null;
   fileHandles: Map<string, DocHandle<FileDocument>>;
   /**
@@ -348,6 +380,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   const state: SyncClientState = {
     repo: null,
     wsAdapter: null,
+    rawWsAdapter: null,
     indexHandle: null,
     fileHandles: new Map(),
     unavailableFiles: new Map(),
@@ -377,10 +410,12 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   if (typeof g.addEventListener === 'function') {
     const onBrowserOffline = () => {
       syncLog('Browser offline event fired');
+      recordConnectionEvent('browser-offline');
       callbacks.onConnectionChange?.(false);
     };
     const onBrowserOnline = () => {
       syncLog('Browser online event fired');
+      recordConnectionEvent('browser-online');
       callbacks.onConnectionChange?.(true);
     };
 
@@ -504,15 +539,90 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       if (peerMetadata?.storageId) {
         state.peerStorageIds.set(peerId, peerMetadata.storageId);
       }
+      recordConnectionEvent(
+        'peer-connected',
+        peerMetadata?.storageId ? `${peerId} (storage ${peerMetadata.storageId})` : peerId,
+      );
     };
     const onPeerGone = ({ peerId }: { peerId: string }) => {
       state.connectedPeers.delete(peerId);
+      recordConnectionEvent('peer-disconnected', peerId);
     };
+    // Stamp sync-activity timestamps for the connection-status dialog.
+    const onMessage = (msg: {
+      type: string;
+      documentId?: string;
+      senderId?: string;
+      data?: Uint8Array;
+    }) => {
+      if (msg.type === 'ephemeral') {
+        recordEphemeralMessage(msg.documentId);
+      } else {
+        recordSyncMessage({
+          type: msg.type,
+          documentId: msg.documentId,
+          senderId: msg.senderId,
+          byteLength: msg.data?.byteLength,
+        });
+      }
+    };
+    // Record the diff (patches) of remotely-caused document changes so
+    // the connection-status dialog can show what the last sync did.
+    //
+    // The installed automerge-repo neither emits Repo `document` events
+    // nor reports patchInfo.source (hardcoded 'change' — upstream TODO),
+    // so instead: periodically sweep the repo's handle cache to attach
+    // change listeners, and classify a change as remote when any of its
+    // applied automerge changes carries an actor other than the doc's
+    // own local actor. Handle-level listeners die with the repo.
+    const onHandleChange = ({
+      handle,
+      doc,
+      patches,
+      patchInfo,
+    }: DocHandleChangePayload<unknown>) => {
+      // The initial load/arrival event fires before the handle flips to
+      // ready; skip it so a doc loaded from IndexedDB (full of historic
+      // remote actors) isn't reported as a fresh remote change.
+      if (!handle.isReady()) return;
+      try {
+        const localActor = automergeGetActorId(doc);
+        const changes = automergeGetChanges(patchInfo.before, patchInfo.after);
+        if (changes.some(c => automergeDecodeChange(c).actor !== localActor)) {
+          // Text docs (schema TextDocumentContent) carry a `text` field;
+          // capture before/after so the UI can render a real diff view.
+          const textOf = (d: unknown): string | undefined => {
+            const t = (d as { text?: unknown } | null)?.text;
+            return typeof t === 'string' ? t : undefined;
+          };
+          recordRemoteChange(String(handle.documentId), patches, {
+            beforeText: textOf(patchInfo.before),
+            afterText: textOf(patchInfo.after),
+          });
+        }
+      } catch {
+        // Classification is best-effort display info; never break sync.
+      }
+    };
+    const watchedHandles = new WeakSet<DocHandle<unknown>>();
+    const watchHandles = () => {
+      for (const handle of Object.values(repo.handles)) {
+        if (!watchedHandles.has(handle)) {
+          watchedHandles.add(handle);
+          handle.on('change', onHandleChange);
+        }
+      }
+    };
+    watchHandles();
+    const watchTimer = setInterval(watchHandles, 2000);
     repo.networkSubsystem.on('peer', onPeer);
     repo.networkSubsystem.on('peer-disconnected', onPeerGone);
+    repo.networkSubsystem.on('message', onMessage);
     state.cleanupFns.push(() => {
+      clearInterval(watchTimer);
       repo.networkSubsystem.off('peer', onPeer);
       repo.networkSubsystem.off('peer-disconnected', onPeerGone);
+      repo.networkSubsystem.off('message', onMessage);
     });
   }
 
@@ -864,10 +974,15 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     // Disconnect from any existing connection
     await disconnect();
 
+    recordConnectionEvent('connect', syncServerUrl);
     try {
-      state.wsAdapter = wrapAdapter(
-        await buildWsAdapter(syncServerUrl, effectiveAuth, options.retryIntervalMs),
+      const rawAdapter = await buildWsAdapter(
+        syncServerUrl,
+        effectiveAuth,
+        options.retryIntervalMs,
       );
+      state.rawWsAdapter = rawAdapter;
+      state.wsAdapter = wrapAdapter(rawAdapter);
       state.repo = new Repo({
         network: [state.wsAdapter],
         storage: buildStorageAdapter(options.storage),
@@ -953,8 +1068,13 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       indexHandle.on('change', indexChangeHandler);
       state.cleanupFns.push(() => indexHandle.off('change', indexChangeHandler));
 
-      // Subscribe to network events for ongoing connection status
-      let currentlyOnline = isOnline;
+      // Subscribe to network events for ongoing connection status.
+      // Initialize from the live peer set, not the waitForPeer outcome:
+      // a peer whose handshake completed after waitForPeer's timeout but
+      // before this subscription would otherwise be missed, leaving the
+      // flag stuck at "offline" while a peer is connected (trackPeers is
+      // subscribed before waitForPeer, so its set has no such gap).
+      let currentlyOnline = state.connectedPeers.size > 0;
       const onPeerConnect = () => {
         if (!currentlyOnline) {
           currentlyOnline = true;
@@ -1123,9 +1243,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     astCache.clear();
 
     if (state.wsAdapter) {
+      recordConnectionEvent('disconnect');
       (state.wsAdapter as { disconnect: () => void }).disconnect();
       state.wsAdapter = null;
     }
+    state.rawWsAdapter = null;
 
     state.repo = null;
     state.indexHandle = null;
@@ -1463,6 +1585,25 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * Live, independent connection signals for the connection-status
+   * dialog: raw websocket readyState (read straight off the socket)
+   * and the current automerge peer handshake state.
+   */
+  function getConnectionInfo(): ConnectionInfo {
+    // Both ws adapters expose their underlying socket as `socket`.
+    const socket = (state.rawWsAdapter as { socket?: { readyState?: number; url?: string } } | null)
+      ?.socket;
+    return {
+      wsReadyState: socket?.readyState ?? null,
+      wsUrl: socket?.url ?? null,
+      peers: [...state.connectedPeers].map(peerId => ({
+        peerId,
+        storageId: state.peerStorageIds.get(peerId),
+      })),
+    };
+  }
+
+  /**
    * Get all file paths.
    */
   function getFilePaths(): string[] {
@@ -1622,12 +1763,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // The timeout defaults to 1 ms so the browser falls back to IDB
       // quickly; callers that need guaranteed online creation (e.g. test
       // helpers) should pass options.peerTimeoutMs to wait for the peer.
-      let isOnline = false;
       try {
         syncLog('Waiting for peer connection...');
         await waitForPeer(state.repo, options.peerTimeoutMs ?? 1);
         syncLog('Peer connected - online mode');
-        isOnline = true;
       } catch (peerError) {
         if (options.requireOnline) {
           await disconnect();
@@ -1638,7 +1777,6 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           );
         }
         console.warn('Peer connection failed, creating project in offline mode:', peerError);
-        isOnline = false;
       }
 
       // Phase 1: Generate a document ID and resolve the actor ID before
@@ -1732,8 +1870,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       indexHandle.on('change', indexChangeHandler);
       state.cleanupFns.push(() => indexHandle.off('change', indexChangeHandler));
 
-      // Subscribe to network events for ongoing connection status
-      let currentlyOnline = isOnline;
+      // Subscribe to network events for ongoing connection status.
+      // Initialized from the live peer set for the same missed-peer-event
+      // reason as in connect() above.
+      let currentlyOnline = state.connectedPeers.size > 0;
       const onPeerConnect = () => {
         if (!currentlyOnline) {
           currentlyOnline = true;
@@ -1828,6 +1968,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     isConnected,
     getFileHandle,
     getIndexHandle,
+    getConnectionInfo,
     getFilePaths,
     getUnavailableFiles,
     getSyncDiagnostics,
