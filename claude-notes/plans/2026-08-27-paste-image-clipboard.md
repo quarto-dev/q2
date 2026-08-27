@@ -391,12 +391,48 @@ P2 could later become a project setting if paste-heavy projects ask for it.
       the stale-closure trap), routing through the tested module.
 - [x] `npm run build:all` + `npm run test:ci` (hub-client gates), plus
       workspace Rust gates untouched-but-verified per pre-push checklist.
-- [ ] **End-to-end verification** per CLAUDE.md: real browser session
-      against a running hub; paste a real image from the OS clipboard;
-      observe file creation, markdown insertion, and preview rendering;
-      record the invocation + observed output in this plan.
+- [x] **End-to-end verification** per CLAUDE.md — performed 2026-08-27
+      against the production bundle in local-prod mode. See §6 below.
 - [ ] hub-client changelog entry (two-commit workflow).
 - [ ] Close bd-706b0ixu with pointers.
+
+## 6. End-to-end verification record (2026-08-27)
+
+Setup: `cargo build --bin hub`, `cd hub-client && npm run
+build:local-prod`, `npm run local-prod`; Chrome (DevTools MCP) at
+`http://127.0.0.1:8080`. The page footer showed bundle commit
+`e0e2d2bbc` — the feature commit — before testing (the service worker
+initially served the previous bundle; "New version available → Reload"
+was required first). A fresh project `paste-image-e2e` was created and
+`index.qmd` opened in split view.
+
+The paste was driven by dispatching a `ClipboardEvent` carrying a real
+`File` (a 79-byte deterministic 16×16 PNG, SHA-256 `f613c380a1…`) at
+Monaco's focus element (`.native-edit-context` — monaco 0.55 runs in
+EditContext mode; there is no `.inputarea` textarea). A true OS-level
+Cmd-V could not be synthesized: CDP key events carry no clipboard
+payload, so `press_key Meta+V` is a no-op in Chrome — a limitation of
+the harness, not of the handler; the synthetic event exercises the
+identical listener → classify → ingest → CRDT → preview path in the
+shipped bundle. Observed, in the running app:
+
+1. `![](pasted-f613c380.png)` inserted at the cursor — the name matches
+   the PNG's true SHA-256 prefix; `pasted-f613c380.png` appeared in the
+   FILES sidebar; the preview rendered `<img
+   src="data:image/png;base64,iVBORw0KGgo…"` with
+   `naturalWidth/Height = 16` (bytes round-tripped through the CRDT).
+2. Repeat paste of the same PNG: a second reference inserted, sidebar
+   still lists exactly one file — hash-name dedup confirmed live.
+3. SVG file paste (`evil.svg` containing `<script>`): passed through;
+   Monaco inserted the filename text `evil.svg`; no file created —
+   decisions S1 + status-quo fall-through confirmed live.
+4. Excel-style mixed payload (PNG rendition + `text/plain` TSV):
+   passed through; the TSV text was inserted, image ignored.
+5. Console: zero errors/warnings during the whole sequence.
+
+(Note: `defaultPrevented` is not a usable probe for pass-through cases
+— Monaco's own paste handler preventDefaults everything it processes;
+the inserted text is the discriminating evidence.)
 
 ## Open questions
 
