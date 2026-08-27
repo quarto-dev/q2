@@ -3,7 +3,7 @@ title: "Quarto 1 EJS Listing Template Extension"
 description: "A listing `template:` ends in `.ejs` or `.ejs.md` — the Quarto 1 EJS convention. Quarto 2 does not run EJS; custom listing templates are doctemplates."
 code: Q-12-9
 subsystem: listing
-status: stub
+status: complete
 since: "99.9.9"
 categories:
   - listing
@@ -46,10 +46,19 @@ listing:
 ```
 
 `<%= item.title %>` becomes `$it.title$` inside `$for(items)$ …
-$endfor$`; `<% if (item.image) { %>` becomes `$if(it.image)$`. The
+$endfor$`; `<% if (item.image) { %>` becomes `$if(it.image)$`.
+[`Q-12-24`](Q-12-24.qmd) has a fuller mapping table, and the
 [Listings guide](/guides/projects/listings.qmd#custom-templates)
-lists the values a template can read and shows a complete card
-template; [`Q-12-24`](Q-12-24.qmd) has a fuller mapping table.
+lists the values a template can read.
+
+That syntax translation is the mechanical half of the port. The half
+that fails silently is link and image markup. A doctemplate's output
+is markdown, and Quarto resolves paths only after parsing it — so a
+link written as raw HTML keeps its `.qmd` href, and an image written
+as raw HTML is never copied into the site at all. Neither failure
+produces a warning. [Listing
+templates](/guides/projects/listing-templates.qmd) covers both, and is
+worth reading before you port rather than after.
 
 If you only renamed the file without porting its contents, you will
 see `Q-12-24` next.

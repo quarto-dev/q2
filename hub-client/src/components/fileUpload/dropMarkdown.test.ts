@@ -40,6 +40,18 @@ describe('buildDropMarkdown', () => {
     it('falls back to the target path verbatim without a current file', () => {
       expect(buildDropMarkdown('image', null, 'photo.png')).toBe('![](photo.png)');
     });
+
+    it('includes alt text when provided', () => {
+      expect(
+        buildDropMarkdown('image', 'posts/hello.qmd', 'posts/photo.png', 'a caption')
+      ).toBe('![a caption](photo.png)');
+    });
+
+    it('treats an empty alt text like the default', () => {
+      expect(
+        buildDropMarkdown('image', 'posts/hello.qmd', 'posts/photo.png', '')
+      ).toBe('![](photo.png)');
+    });
   });
 
   describe('link markdown', () => {

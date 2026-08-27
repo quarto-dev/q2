@@ -31,6 +31,7 @@ WASM rebuild is needed for a changelog-only edit.
 - [`c552ff92`](https://github.com/quarto-dev/q2/commits/c552ff92): Dialogs, menus, tooltips, and toasts now animate in with a quick, subtle fade/rise — all motion respects your system's reduced-motion setting.
 - [`b7f32163`](https://github.com/quarto-dev/q2/commits/b7f32163): Buttons now respond to being pressed (a small darken on click), and hover states share one consistent timing.
 - [`00e57708`](https://github.com/quarto-dev/q2/commits/00e57708): Outline panel icons (headers, code cells, functions) and the replay drawer's "you" chip now use Posit brand colors instead of off-palette ones.
+- [`e0e2d2bbc`](https://github.com/quarto-dev/q2/commits/e0e2d2bbc): Paste images directly into the source editor — Cmd/Ctrl-V with an image on the clipboard (a screenshot, a copied image, or a copied image file) uploads it next to the current document under an automatic content-based name and inserts the image reference at the cursor, with no dialog; selected text becomes the alt text. Text pastes and text-plus-image pastes (like spreadsheet cells) behave exactly as before, and SVG files still go through the upload dialog.
 - [`e279bc9c9`](https://github.com/quarto-dev/q2/commits/e279bc9c9): `local-prod:nginx` now accepts `--port` like plain `local-prod`, and starts correctly when `OIDC_CLIENT_ID` in your shell enables hub auth — the readiness check previously failed on the hub's 401 even though the hub was up.
 
 ### 2026-08-26

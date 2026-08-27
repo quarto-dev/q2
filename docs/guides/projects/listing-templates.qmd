@@ -1,0 +1,427 @@
+---
+title: "Listing Templates"
+description: "Write a custom listing template, and port one from Quarto 1's EJS."
+---
+
+A listing can render through a template you write instead of one of the
+built-in layouts. [Listings](listings.qmd#custom-templates) covers the
+configuration and the values a template can read; this page covers the
+parts that are easy to get wrong, the anatomy of the built-in layouts,
+and how to port a Quarto 1 EJS template.
+
+Two rules on this page matter more than the rest, because breaking
+either one produces **no error, no warning, and no visible difference in
+the template's text**. A ported listing looks finished, renders without
+complaint, and ships broken links or missing images. They are the first
+two sections.
+
+## Links and images must be markdown
+
+A template's output is markdown. Quarto parses it back into the page,
+and only *then* resolves paths: `LinkRewriteTransform` walks the parsed
+result and rewrites `.qmd` link targets to their output URLs, and
+resource collection notes every image so the file gets copied into the
+output directory.
+
+Both of those work on parsed markdown nodes. Raw HTML is passed through
+untouched — Quarto 2 does not parse HTML you author yourself, on this
+page or [anywhere else](paths.qmd#raw-html-is-not-rewritten). So a path
+inside a raw-HTML attribute is invisible to both.
+
+`$it.path$` is deliberately a **source** path (`posts/intro.qmd`, not
+`posts/intro.html`), which is what makes the markdown form resolve:
+
+``` markdown
+[$it.title$]($it.path$)          <!-- ✔ becomes href="posts/intro.html" -->
+`<a href="$it.path$">`{=html}    <!-- ✘ ships href="posts/intro.qmd" -->
+```
+
+Raw HTML is still fine *inside* the link text — only the anchor itself
+has to be markdown. The built-in layouts rely on this, wrapping a
+pre-rendered HTML thumbnail in a markdown link:
+
+``` markdown
+[`$image-html$`{=html}]($path$){.no-external}
+```
+
+Anchor in markdown, contents raw. That covers most of what tempts people
+toward a raw `<a>`.
+
+### Images cost twice
+
+For images the same split costs two things rather than one. A markdown
+image is rewritten **and** collected for copying; a raw `<img>` is
+neither, so the file is never written into the site at all:
+
+``` markdown
+![$it.image-alt$]($it.image$)     <!-- ✔ rewritten, and the file is copied -->
+`<img src="$it.image$">`{=html}   <!-- ✘ neither: the src 404s in the deployed site -->
+```
+
+Markdown images take attributes, so class, width and height are not a
+reason to reach for raw HTML:
+
+``` markdown
+![$it.image-alt$]($it.image$){.card-img-top width=320}
+```
+
+If you genuinely need an asset referenced only from raw HTML, declare it
+under `resources:` in `_quarto.yml` so it is copied anyway — see
+[Paths in websites](paths.qmd#raw-html-is-not-rewritten).
+
+### Why this survives testing
+
+The image failure hides itself in the most common case. When the image
+comes from an item document's own front matter:
+
+``` yaml
+---
+title: Introducing Widgets
+image: cover.png
+---
+```
+
+…then *that page's* own render collects `cover.png` and copies it. A
+template using a raw `<img>` appears to work perfectly. The file is in
+the output directory; the `src` resolves; nothing is wrong.
+
+The failure appears only when the image has no other route into the
+output tree — an [inline record](listings.qmd#records), or a custom
+field:
+
+``` yaml
+listing:
+  type: custom
+  template: card.template
+  contents:
+    - title: External Guide
+      href: https://example.com/guide
+      thumbnail: thumbs/guide.png    # nothing else references this
+```
+
+Now `thumbs/guide.png` is copied if the template writes
+`![]($it.thumbnail$)`, and silently absent if it writes
+`<img src="$it.thumbnail$">`. Which is why the check at the end of this
+page is worth running even when the listing looks right.
+
+## Descriptions and the placeholder envelope
+
+When an item has no `description:` in its front matter, Quarto can fill
+one in from the item page itself — the first paragraph of the rendered
+document, truncated at a word boundary. This happens *after* both
+documents are rendered, as a substitution pass over the host page, and
+it only happens inside a marker envelope your template emits:
+
+```` markdown
+::: {.listing-description}
+```{=html}
+$it.description-placeholder-begin$
+```
+
+$if(it.description)$
+$it.description$
+$endif$
+
+```{=html}
+$it.description-placeholder-end$
+```
+:::
+````
+
+Three things about that shape are load-bearing:
+
+**The markers go outside the `$if$`, not inside.** The envelope marks
+the *region* to substitute, so it has to exist for exactly the items
+that have no description — the ones the `$if$` skips. Emit it
+unconditionally.
+
+**The markers are HTML comments,** so they belong in a raw-HTML block
+(```` ```{=html} ````). They are stripped from the finished page whether
+or not a substitution happened.
+
+**Wrap the envelope in a div.** The substituted preview is plain text
+with no block structure of its own, so a container gives it a styling
+hook and keeps it separated from the surrounding content. The built-ins
+use `.listing-description`.
+
+The built-in layouts gate the *whole* envelope on `$if(description)$`,
+so items with no front-matter description get no preview there. A custom
+template that emits the envelope unconditionally does better — this is
+one of the few places where a hand-written template beats the built-in.
+
+The truncation limit is the listing's `max-description-length` (default
+175). Setting it to `0` disables truncation. If no usable first
+paragraph is found the markers are simply removed, leaving whatever the
+`$if$` produced, and Quarto emits
+[`Q-12-13`](/errors/listing/Q-12-13.qmd).
+
+## Guard optional values with `$if$`
+
+Most per-item values are absent rather than empty when an item does not
+have them, and reading an absent value directly is a warning, not a
+silent blank:
+
+```
+Warning [Q-12-10]: Listing `listing-1` doctemplate produced
+1 diagnostic(s); first: Undefined variable: it.description
+```
+
+So `$it.description$` on its own is only correct for values that are
+always present — `title`, `path` (whenever the item has a link target
+at all), and the four placeholder markers. Everything else wants a
+guard:
+
+``` markdown
+$if(it.subtitle)$[$it.subtitle$]{.listing-subtitle}$endif$
+```
+
+## What the built-in layouts emit
+
+A custom template is spliced into the same listing container as a
+built-in one, so matching the built-in class names is what lets your
+template inherit the listing CSS. Each built-in layout is a wrapper
+template that applies a per-item partial:
+
+| Layout | Wrapper element | Per-item partial |
+| --- | --- | --- |
+| `default` | `::: {.list .quarto-listing-default}` | `item-default` |
+| `grid` | `::: {.list .grid .quarto-listing-grid .quarto-listing-cols-N}` | `item-grid` |
+| `table` | `::: {.quarto-listing-table-wrapper}` | `item-table` |
+
+`item-default` emits a `.quarto-post` with `thumbnail`, `body` and
+`metadata` regions. `item-grid` emits a Bootstrap card —
+`.quarto-grid-item.card` with `.card-img-top`, `.card-body`,
+`.card-attribution`. `item-table` is a single line, `$table-row$`,
+because the table layout's cells are pre-rendered by Quarto into that
+one value.
+
+You can apply the built-in partials from your own template, which is the
+cheapest way to customise a layout — wrap or interleave the built-in item
+rendering rather than reproducing it:
+
+``` markdown
+::: {.list .my-listing}
+$for(items)$
+$if(it.pinned)$
+::: {.pinned-banner}
+Pinned
+:::
+$endif$
+$it:item-default()$
+$endfor$
+:::
+```
+
+The full sources are the best reference for idiomatic style, and they
+are short:
+[`crates/quarto-core/src/project/listing/templates/`](https://github.com/quarto-dev/q2/tree/main/crates/quarto-core/src/project/listing/templates).
+
+## Porting a Quarto 1 EJS template
+
+Quarto 1 listing templates were EJS — embedded JavaScript, under a
+`.ejs` or `.ejs.md` extension. Quarto 2 does not run EJS: a
+carried-over template warns at the extension
+([`Q-12-9`](/errors/listing/Q-12-9.qmd)) and at its contents
+([`Q-12-24`](/errors/listing/Q-12-24.qmd)), and the listing is left out
+of the page rather than pasted in raw.
+
+Give the ported file a neutral extension such as `.template` so the
+extension warning stops firing.
+
+### The mapping
+
+| Quarto 1 (EJS) | Quarto 2 (doctemplate) |
+| --- | --- |
+| `<%= item.title %>` | `$it.title$` |
+| `<% for (const item of items) { %> … <% } %>` | `$for(items)$ … $endfor$` |
+| `<% if (item.image) { %> … <% } else { %> … <% } %>` | `$if(it.image)$ … $else$ … $endif$` |
+| `<%= item.myfield %>` | `$it.myfield$`, or `$it.extra.myfield$` |
+| `<a href="<%- item.path %>">` | `[$it.title$]($it.path$)` — **not** a raw anchor |
+| `<img src="<%= item.image %>">` | `![$it.image-alt$]($it.image$)` — **not** a raw `<img>` |
+| `<%= metadataAttrs(item) %>` | `` `$it.metadata-attrs$`{=html} `` — see below |
+| `<div class="card">` … `</div>` | `::: {.card}` … `:::` |
+| `<%= items.length %>`, string manipulation, `process.env` | No expressions — see [What doctemplates cannot do](#what-doctemplates-cannot-do) |
+
+The interpolation, control-flow and custom-field rows are mechanical,
+and a half-finished port announces itself. Three rows do not: the anchor
+and image rows fail silently, and `metadataAttrs` fails in a way that
+looks like a typo in your CSS. Check those three twice.
+
+`$it.metadata-attrs$` is the direct equivalent of Quarto 1's
+`metadataAttrs()` helper, producing `data-index` and — when the item has
+categories — `data-categories`. It is the one value in the table that
+you **must** put inside a ```` ```{=html} ```` block: interpolated as markdown
+it goes through the typographic filter and comes out as
+`data-index=“0”` with curly quotes, which is not a valid attribute.
+Note that none of Quarto 2's built-in layouts emit it.
+
+### A worked example
+
+Quarto's own website has a gallery listing, and it is a fair
+representative of a real Quarto 1 template: everything wrapped in one
+`{=html}` fence, raw anchors, a raw thumbnail image, a helper call, a
+nested loop over a custom field, and an `alt` attribute built by nested
+ternaries.
+
+Here is [`docs/gallery/gallery.ejs`](https://github.com/quarto-dev/quarto-web/blob/main/docs/gallery/gallery.ejs)
+from `quarto-dev/quarto-web`, abridged to one card:
+
+```` markdown
+```{=html}
+<% for (const item of items) { %>
+<h2><%- item.category %></h2>
+<p><%- item.description %></p>
+<div class="list grid" style="column-gap: 10px;">
+<% for (const tile of item.tiles) { %>
+  <div class="card border-2 rounded-3 g-col-12 g-col-sm-6 g-col-md-4 mb-2" <%= metadataAttrs(tile) %>>
+    <div class="card-header py-1 px-2 border-bottom border-1 bg-light">
+      <small class="card-text inline-block">
+        <a href="<%- tile.href %>" class="listing-title"><%= tile.title %></a>
+        <% if (tile.code) { %>
+        <a href="<%- tile.code %>" title="View source code" class="source-code">
+          <i class="bi-code-slash"></i>
+        </a>
+        <% } %>
+        <span class="text-muted listing-subtitle"><%= tile.subtitle %></span>
+      </small>
+    </div>
+    <a href="<%- tile.href %>">
+      <img src="<%- tile.thumbnail %>" alt="<% if (tile.alt) { %><%= tile.alt %><% } else { %><%= tile.title %> example<% } %>" class="card-img-top"/>
+    </a>
+  </div>
+<% } %>
+</div>
+<% } %>
+```
+````
+
+And the port:
+
+```` markdown
+$for(items)$
+## $it.title$
+
+$if(it.description)$
+$it.description$
+$endif$
+
+::: {.list .grid .gallery-grid}
+$for(it.tiles)$
+::: {.card .g-col-12 .g-col-sm-6 .g-col-md-4}
+::: {.card-header}
+[$it.title$]($it.href$){.listing-title}$if(it.code)$ [`<i class="bi-code-slash"></i>`{=html}]($it.code$){.source-code title="View source code"}$endif$
+$if(it.subtitle)$[$it.subtitle$]{.text-muted .listing-subtitle}$endif$
+:::
+
+[![$if(it.alt)$$it.alt$$else$$it.title$ example$endif$]($it.thumbnail$){.card-img-top}]($it.href$)
+:::
+
+$endfor$
+:::
+
+$endfor$
+````
+
+Point by point:
+
+**The `{=html}` fence is gone.** It wrapped the whole template, which is
+what made every path inside it invisible. Dropping it is most of the
+port.
+
+**`<div class="…">` became `::: {.…}`.** Fenced divs produce the same
+`<div>` with the same classes, and — unlike a raw `<div>` — their
+contents are markdown, so links and images inside them are resolved.
+
+**The two raw anchors became markdown links,** so `tile.href` is
+rewritten from `.qmd` to `.html`. The inner icon anchor keeps its raw
+`<i>` as link *text*, which is allowed.
+
+**The raw `<img>` became a markdown image nested inside a markdown
+link** — `[![alt](src)](href)`. That single change both rewrites the
+thumbnail path and gets the file copied into the output directory.
+
+**The `alt` ternaries became `$if$`/`$else$`,** which is a direct
+translation because the original only chose between two strings.
+
+**The nested loop survives.** `$for(it.tiles)$` iterates a list of maps
+held in a custom field, and inside it `$it$` rebinds to the current
+tile, shadowing the outer item. Custom-field values are used verbatim,
+so paths in them must be written relative to the page that declares the
+listing.
+
+**`metadataAttrs(tile)` was dropped rather than translated.**
+`$it.metadata-attrs$` is bound per *item*, not per nested map, so the
+tiles have no equivalent. Since no built-in layout emits it either,
+dropping it changes nothing here — but it is the kind of helper call
+that needs a decision rather than a mechanical rewrite.
+
+**The outer loop restructured.** The original grouped by
+`item.category`, emitting a heading per group; the port emits a heading
+per item and treats `tiles` as that item's children, which is the shape
+the data already had. Quarto 2 has no grouping construct, so a Quarto 1
+template that groups will always need this kind of judgement.
+
+### What doctemplates cannot do {#what-doctemplates-cannot-do}
+
+A doctemplate interpolates, branches and loops. It cannot evaluate
+expressions, so anything computed in EJS has to move somewhere that runs
+before the template does.
+
+**A JavaScript prologue of constants** becomes `template-params:`,
+read as `$listing.template-params.<key>$`:
+
+``` yaml
+listing:
+  type: custom
+  template: card.template
+  template-params:
+    columns: 2
+```
+
+This is also the answer for a per-item field that is really a
+listing-level setting. A Quarto 1 template could read `items[0].columns`
+to get a value that was identical on every item; a doctemplate cannot
+index a list, and shouldn't need to.
+
+**String manipulation** — slugifying a title, taking a path's directory
+with `lastIndexOf('/')`, formatting a number — has to be pre-computed
+into an inline record key or the document's `listing-item.extra`, and
+read back as `$it.<key>$`. There are text pipes (`$it.title/uppercase$`,
+and `lowercase`, `chomp`, `nowrap`, `alpha`, `roman`, `first`, `last`,
+`rest`, `allbutlast`, `length`, `pairs`, `reverse`, `left`, `center`,
+`right`) but they do not compose into general string surgery.
+
+**Counts and aggregates** — `items.length`, sums, any "is this the last
+one" logic — have no direct form. `$sep$` covers separators between
+items, which is the common case; a genuine total has to come from
+metadata.
+
+## Verifying a port
+
+Neither of the two silent failures produces a diagnostic, and neither
+changes the template's text in a way review would catch. So after
+porting, check the rendered output rather than the template:
+
+``` bash
+quarto render .
+```
+
+Then, in the generated HTML for the listing's host page:
+
+1. **Read the `href` values.** Every link to a project document should
+   end in `.html`. A surviving `.qmd` means that anchor is still raw
+   HTML.
+2. **Read the `src` values, then check the files exist.** For each image
+   `src`, confirm the file is actually present at that path under the
+   output directory. A `src` that looks right but has no file behind it
+   is a raw `<img>`.
+3. **Check an item with no `description:`.** It should show a preview
+   drawn from its first paragraph. If it shows nothing, the placeholder
+   envelope is inside an `$if$` instead of around it.
+4. **Look for [`Q-12-10`](/errors/listing/Q-12-10.qmd).** An "Undefined
+   variable" warning means an optional value is being read without an
+   `$if$` guard.
+
+Steps 1 and 2 are the ones worth automating if you maintain several
+custom listings; both failures are invisible to everything except the
+rendered output.
