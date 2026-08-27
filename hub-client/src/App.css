@@ -12,7 +12,7 @@
   color: var(--text-on-accent);
   background: var(--posit-teal);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   box-shadow: 0 4px 14px var(--alpha-black-20);
   transition: background-color var(--duration-fast) var(--ease-out);

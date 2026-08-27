@@ -44,7 +44,7 @@
   color: var(--error-text);
   font-size: 12px;
   line-height: 1.35;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .sidebar-printable-error-dismiss {
@@ -183,7 +183,7 @@
   flex: 1;
   background: var(--editor-accent-bg);
   border: 1px solid var(--sidebar-active-accent);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   padding: 2px 6px;
   font-size: 13px;
   color: var(--editor-text);
@@ -260,7 +260,7 @@
   padding: 4px 8px;
   background: var(--editor-accent-bg);
   border: 1px solid var(--editor-accent-border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--editor-text);
   font-size: 12px;
 }
@@ -322,6 +322,6 @@
 .search-result-snippet mark {
   background: var(--editor-accent-border);
   color: var(--editor-text);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   padding: 0 1px;
 }

@@ -14,7 +14,7 @@
   height: 24px;
   background: var(--view-toggle-bg);
   border: none;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   color: var(--view-toggle-text);
   cursor: pointer;
   padding: 0;

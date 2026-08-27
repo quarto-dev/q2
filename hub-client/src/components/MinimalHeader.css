@@ -38,7 +38,7 @@
   padding: 0 12px;
   background: var(--header-preview-bg);
   border: 1px solid var(--header-preview-bg);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--header-preview-text);
   font-size: 13px;
   font-weight: 600;
@@ -162,7 +162,7 @@
   padding: 0 10px;
   background: var(--editor-header-bg);
   border: 1px solid var(--editor-disconnected-border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   line-height: 1;
   user-select: none;
