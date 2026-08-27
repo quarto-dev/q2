@@ -9,7 +9,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 HUB_CLIENT_DIR="$PROJECT_ROOT/hub-client"
 DATA_DIR="$PROJECT_ROOT/.local-prod-data"
 HUB_PORT=3000
-NGINX_PORT=8080
+NGINX_PORT="$(node "$SCRIPT_DIR/local-prod-port.mjs" "$@")"
 Q2_SANDBOXED_PREVIEW_PORT=8081
 
 # Color output
@@ -115,7 +115,7 @@ mkdir -p "$DATA_DIR"
 # Generate nginx config with absolute paths
 log_step "Generating nginx configuration..."
 DIST_PATH_ABSOLUTE="$HUB_CLIENT_DIR/dist"
-sed "s|DIST_PATH|$DIST_PATH_ABSOLUTE|g" "$PROJECT_ROOT/config/local-nginx.conf" > "$DATA_DIR/nginx.conf"
+sed "s|DIST_PATH|$DIST_PATH_ABSOLUTE|g; s|NGINX_PORT|$NGINX_PORT|g" "$PROJECT_ROOT/config/local-nginx.conf" > "$DATA_DIR/nginx.conf"
 
 # Add required nginx directives (pid, error_log, events, http wrapper)
 cat > "$DATA_DIR/nginx.conf.tmp" << EOF
@@ -176,10 +176,15 @@ if ! kill -0 "$HUB_PID" 2>/dev/null; then
     exit 1
 fi
 
-# Wait for hub health endpoint
+# Wait for hub health endpoint. Readiness = any HTTP response, not a 2xx:
+# with auth enabled (OIDC_CLIENT_ID set in the environment), /health
+# requires credentials and returns 401 even though the hub is up.
 for i in {1..10}; do
-    if curl -f http://127.0.0.1:$HUB_PORT/health >/dev/null 2>&1; then
+    if curl -s -o /dev/null http://127.0.0.1:$HUB_PORT/health 2>/dev/null; then
         log_info "Hub is ready (PID: $HUB_PID)"
+        if [ -n "${OIDC_CLIENT_ID:-}" ]; then
+            log_info "Auth enabled via OIDC_CLIENT_ID from the environment"
+        fi
         break
     fi
     if [ $i -eq 10 ]; then
