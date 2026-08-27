@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-08-27
 
+- [`38922590`](https://github.com/quarto-dev/q2/commits/38922590): A sidebar toggle button now sits at the left of the editor header at every window size — click it to hide or show the sidebar (in narrow windows it opens the sidebar as an overlay drawer). The button is muted grey so it reads as sidebar chrome, not a title-bar action.
 - [`c5c5f23d`](https://github.com/quarto-dev/q2/commits/c5c5f23d): Corners are now consistent across the app — buttons, menus, cards, and dialogs share one radius scale (buttons and cards are slightly rounder).
 - [`b95d5e18`](https://github.com/quarto-dev/q2/commits/b95d5e18): Narrow windows now get a designed layout: the sidebar becomes an overlay drawer (open it from the new header button, dismiss with Escape or by clicking outside), split view collapses to the editor when the window is too narrow for two panes, and the header's Share and Preview actions move into a "More actions" menu.
 - [`0c751c75`](https://github.com/quarto-dev/q2/commits/0c751c75): The projects home now shows a skeleton of the page while projects load (instead of a spinner), and empty states ("No projects yet", "No files yet") gained a guiding icon.
