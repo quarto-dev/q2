@@ -41,7 +41,7 @@
   letter-spacing: 0.5px;
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s;
+  transition: background-color var(--duration-fast) var(--ease-out);
   user-select: none;
 }
 

@@ -3,8 +3,8 @@
 /* Floating switch back to the collections UI exploration (explore/projects-collections-ui) */
 .ui-variant-toggle {
   position: fixed;
-  bottom: 16px;
-  right: 16px;
+  inset-block-end: 16px;
+  inset-inline-end: 16px;
   z-index: var(--z-skip);
   padding: 8px 14px;
   font-size: 12.5px;
@@ -15,6 +15,8 @@
   border-radius: 8px;
   cursor: pointer;
   box-shadow: 0 4px 14px var(--alpha-black-20);
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 
-.ui-variant-toggle:hover { filter: brightness(1.08); }
+.ui-variant-toggle:hover { background: var(--btn-accent-hover-bg); }
+.ui-variant-toggle:active { background: var(--btn-accent-active-bg); }

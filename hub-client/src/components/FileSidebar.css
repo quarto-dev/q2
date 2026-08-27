@@ -89,7 +89,7 @@
   gap: 8px;
   padding: 6px 12px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .file-item.active {
@@ -140,7 +140,7 @@
   color: var(--editor-text-muted);
   font-size: 12px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .folder-header:hover {
@@ -284,7 +284,7 @@
 .search-result {
   padding: 6px 12px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .search-result-header {

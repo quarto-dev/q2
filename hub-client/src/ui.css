@@ -19,6 +19,9 @@
 }
 
 /* Standard row hover for list/tree rows in the sidebar chrome. */
+.qh-row-hover {
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
 .qh-row-hover:hover {
   background: var(--sidebar-border);
 }
@@ -64,6 +67,10 @@
   cursor: pointer;
   background: none;
   white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 
 .qh-btn:disabled { opacity: 0.5; cursor: default; }
@@ -78,7 +85,8 @@
   color: var(--text-on-accent);
 }
 
-.qh-btn.primary:hover { filter: brightness(1.08); }
+.qh-btn.primary:hover { background: var(--btn-accent-hover-bg); }
+.qh-btn.primary:active { background: var(--btn-accent-active-bg); }
 
 .qh-btn.outline {
   border-color: var(--border-color);
@@ -86,13 +94,15 @@
 }
 
 .qh-btn.outline:hover { background: var(--input-bg-alpha); }
+.qh-btn.outline:active { background: var(--input-bg-alpha-hover); }
 
 .qh-btn.danger {
   background: var(--posit-red);
   color: var(--text-on-accent);
 }
 
-.qh-btn.danger:hover { filter: brightness(1.1); }
+.qh-btn.danger:hover { background: var(--btn-danger-hover-bg); }
+.qh-btn.danger:active { background: var(--btn-danger-active-bg); }
 
 .qh-btn.ghost-accent {
   border: 1px solid var(--posit-teal);
@@ -139,6 +149,9 @@
   cursor: pointer;
   border-radius: 5px;
   line-height: 1;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 
 .qh-icon-btn:hover { background: var(--input-bg-alpha); color: var(--text-primary); }
@@ -221,6 +234,7 @@
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .qh-menu-item:hover { background: var(--context-menu-hover); }

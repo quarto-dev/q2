@@ -1,8 +1,5 @@
 {
   "no-physical-box-props": {
-    "App.css": [
-      "right: 16px;"
-    ],
     "components/Editor.css": [
       "left: 0;",
       "left: 50%;",

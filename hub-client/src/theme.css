@@ -191,6 +191,16 @@
   --text-on-accent: var(--white); /* text on teal/red/blue fills */
   --backdrop-bg: rgba(23, 50, 77, 0.55); /* modal dialog scrim */
 
+  /* Filled-accent button micro-states (theme-constant — the accent fills
+     don't change per theme). Hover lightens ~8%, press darkens ~6%.
+     Replaces filter: brightness(), which also lightened the label text
+     and forced a containing block. Consumed by .qh-btn.primary/.danger,
+     .minimal-header .preview-btn, .ui-variant-toggle. */
+  --btn-accent-hover-bg: color-mix(in srgb, var(--posit-teal) 92%, var(--white));
+  --btn-accent-active-bg: color-mix(in srgb, var(--posit-teal) 94%, var(--black));
+  --btn-danger-hover-bg: color-mix(in srgb, var(--posit-red) 90%, var(--white));
+  --btn-danger-active-bg: color-mix(in srgb, var(--posit-red) 93%, var(--black));
+
   --bg-overlay: rgba(209, 219, 229, 0.95);
   --bg-modal: #ffffff;
   --bg-card: var(--posit-blue-light-1);

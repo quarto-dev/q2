@@ -44,11 +44,17 @@
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
-  transition: filter 0.15s;
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .minimal-header .preview-btn:hover {
-  filter: brightness(1.08);
+  background: var(--btn-accent-hover-bg);
+  border-color: var(--btn-accent-hover-bg);
+}
+
+.minimal-header .preview-btn:active {
+  background: var(--btn-accent-active-bg);
+  border-color: var(--btn-accent-active-bg);
 }
 
 /* Vertical divider separating the actions from the document identity. */
