@@ -122,6 +122,8 @@ function installMockRepo<T>(
       import: vi.fn().mockReturnValue(createHandle),
       create: vi.fn().mockReturnValue(createHandle),
       networkSubsystem: mockNetworkSubsystem,
+      // client.ts trackPeers() sweeps repo.handles on connect
+      handles: {},
     });
     return this as Repo;
   } as unknown as typeof Repo);
@@ -356,6 +358,8 @@ describe('createSyncClient.getBinaryDocById URL normalization (bd-4uvv)', () => 
         import: vi.fn().mockReturnValue(binaryHandle),
         create: vi.fn().mockReturnValue(binaryHandle),
         networkSubsystem: mockNetworkSubsystem,
+        // client.ts trackPeers() sweeps repo.handles on connect
+        handles: {},
       });
       return this as Repo;
     } as unknown as typeof Repo);
@@ -392,6 +396,8 @@ describe('createSyncClient.getBinaryDocById URL normalization (bd-4uvv)', () => 
         import: vi.fn().mockReturnValue(indexHandle),
         create: vi.fn().mockReturnValue(indexHandle),
         networkSubsystem: { on: vi.fn(), off: vi.fn() },
+        // client.ts trackPeers() sweeps repo.handles on connect
+        handles: {},
       });
       return this as Repo;
     } as unknown as typeof Repo);
@@ -432,6 +438,8 @@ describe('createSyncClient.getBinaryDocById URL normalization (bd-4uvv)', () => 
         import: vi.fn().mockReturnValue(indexHandle),
         create: vi.fn().mockReturnValue(indexHandle),
         networkSubsystem: { on: vi.fn(), off: vi.fn() },
+        // client.ts trackPeers() sweeps repo.handles on connect
+        handles: {},
       });
       return this as Repo;
     } as unknown as typeof Repo);

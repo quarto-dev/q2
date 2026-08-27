@@ -137,6 +137,8 @@ function installRepo<T>(
       import: vi.fn().mockReturnValue(handle),
       create: vi.fn().mockReturnValue(handle),
       networkSubsystem: net,
+      // client.ts trackPeers() sweeps repo.handles on connect
+      handles: {},
     });
     return this as Repo;
   } as unknown as typeof Repo);
@@ -213,12 +215,13 @@ describe('connect() options bag', () => {
     await flushMicrotasks();
 
     // The whole point: no deadline timer exists. (A finite budget
-    // would have scheduled exactly one setTimeout by now.)
-    expect(vi.getTimerCount()).toBe(0);
+    // would have scheduled exactly one setTimeout by now.) The one
+    // live timer is trackPeers' handle-watch interval, not a deadline.
+    expect(vi.getTimerCount()).toBe(1);
 
     // Simulate the peer arriving far later than any old budget.
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(vi.getTimerCount()).toBe(0); // still no timer, still waiting
+    expect(vi.getTimerCount()).toBe(1); // still no deadline timer, still waiting
     net.emit('peer', { peerId: 'peer-1' });
     await flushMicrotasks();
 
@@ -242,7 +245,8 @@ describe('connect() options bag', () => {
       { peerTimeoutMs: 5000 },
     );
     await flushMicrotasks();
-    expect(vi.getTimerCount()).toBe(1);
+    // The deadline timer plus trackPeers' handle-watch interval.
+    expect(vi.getTimerCount()).toBe(2);
 
     await vi.advanceTimersByTimeAsync(5001);
     await expect(connectPromise).resolves.toEqual([]); // offline fallback
