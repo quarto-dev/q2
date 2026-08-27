@@ -119,7 +119,7 @@ npm run local-prod -- --port 9000
 
 Two modes available:
 - `local-prod` - Node.js proxy (fast, recommended)
-- `local-prod:nginx` - nginx in Docker (tests actual nginx config)
+- `local-prod:nginx` - local nginx (tests actual nginx config); takes the same `--port` option
 
 See [`../scripts/README.md`](../scripts/README.md) for details and troubleshooting.
 

@@ -7,7 +7,7 @@ This directory contains automation scripts for the Kyoto project.
 Two modes available:
 
 **`local-prod.sh`** (Node.js proxy) - Quick setup, no dependencies
-**`local-prod-nginx.sh`** (nginx in Docker) - Test actual nginx config
+**`local-prod-nginx.sh`** (native nginx) - Test actual nginx config
 
 ### What it does
 
@@ -78,12 +78,21 @@ Fast setup, tests WebSocket proxying and routing. Good for 90% of development.
 ```bash
 cd hub-client
 npm run local-prod:nginx
+
+# Custom port works here too (pass it to both build and run):
+npm run build:local-prod -- --port 9000
+npm run local-prod:nginx -- --port 9000
 ```
 
 Tests the actual nginx configuration from production. Use when:
 - Testing nginx config changes before deploying
 - Validating gzip compression, security headers
 - Debugging nginx-specific issues
+
+If `OIDC_CLIENT_ID` is set in your shell, the local hub picks it up and runs
+with auth enabled (the script logs "Auth enabled via OIDC_CLIENT_ID from the
+environment"). The readiness check treats the resulting 401 as "up". Unset
+the variable if you want the default no-auth local setup.
 
 **Architecture differences:**
 - **Node.js mode:** Browser → Node.js proxy (port 8080) → hub (port 3000)
