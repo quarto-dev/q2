@@ -115,7 +115,7 @@ function SymbolTree({
                   onClick={() => onSymbolClick(symbol)}
                 >
                 <span className={`outline-icon ${className}`}>{icon}</span>
-                <span className="outline-name">{symbol.name}</span>
+                <span className="outline-name qh-truncate">{symbol.name}</span>
                 {symbol.detail && (
                   <span className="outline-detail">{symbol.detail}</span>
                 )}

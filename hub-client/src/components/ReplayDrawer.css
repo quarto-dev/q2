@@ -103,7 +103,7 @@
   display: block;
   width: 160px;
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--replay-handle);
   transition: background 0.15s;
 }
@@ -133,7 +133,7 @@
   color: var(--editor-text-dim);
   font-family: var(--font-mono);
   border: 1px solid var(--replay-actor-border);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   padding: 0 4px;
   background: var(--alpha-white-05);
 }
@@ -191,7 +191,7 @@
   padding: 0;
   background: var(--editor-accent-bg);
   border: 1px solid var(--editor-accent-border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--editor-text-dim);
   font-size: 11px;
   cursor: pointer;
@@ -226,7 +226,7 @@
   color: var(--editor-success);
   font-size: 11px;
   font-weight: 600;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   flex-shrink: 0;
 }
 
@@ -247,7 +247,7 @@
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 /* Transparent range input overlaid on waveform for interaction */
@@ -304,7 +304,7 @@
   padding: 3px 8px;
   background: var(--replay-tooltip-bg);
   border: 1px solid var(--editor-header-border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--editor-text-dim);
   font-size: 11px;
   white-space: nowrap;
@@ -324,7 +324,7 @@
   padding: 0 8px;
   background: var(--editor-accent-bg);
   border: 1px solid var(--editor-accent-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--editor-text-dim);
   font-size: 11px;
   font-weight: 500;
@@ -445,7 +445,7 @@
   height: 14px;
   padding: 0 4px;
   margin-left: 4px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   font-size: 10px;
   font-weight: 600;
   line-height: 1;

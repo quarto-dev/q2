@@ -41,8 +41,16 @@
   letter-spacing: 0.5px;
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s;
+  transition: background-color var(--duration-fast) var(--ease-out);
   user-select: none;
+}
+
+/* Section content fades/rises in on expand — a mount animation (expand
+   re-renders the region). Collapse unmounts immediately: no exit
+   animation without JS height measurement, and height transitions are
+   layout motion, which the motion principle forbids. */
+.section-content {
+  animation: qh-rise-in var(--duration-fast) var(--ease-out);
 }
 
 .section-header:hover {
@@ -65,9 +73,6 @@
 
 .section-label {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .section-content {

@@ -3,7 +3,7 @@ title: "Custom Listing Template Is Not a Doctemplate"
 description: "A `type: custom` listing template has no doctemplate directives or still contains Quarto 1 EJS markup, so Quarto 2 skipped the listing rather than copy the file into the page."
 code: Q-12-24
 subsystem: listing
-status: stub
+status: complete
 since: "99.9.9"
 categories:
   - listing
@@ -51,6 +51,8 @@ Rewrite the template as a doctemplate. The common mappings:
 | `<% for (const item of items) { %> … <% } %>` | `$for(items)$ … $endfor$`     |
 | `<% if (item.image) { %> … <% } %>`     | `$if(it.image)$ … $endif$`          |
 | `<%= item.myfield %>` (custom field)    | `$it.myfield$` or `$it.extra.myfield$` |
+| `<a href="<%- item.path %>">`           | `[$it.title$]($it.path$)` — a markdown link, not a raw anchor |
+| `<img src="<%= item.image %>">`         | `![$it.image-alt$]($it.image$)` — a markdown image, not a raw `<img>` |
 | JavaScript expressions                  | Pre-compute the value into a listing field |
 
 Before:
@@ -73,8 +75,19 @@ $endfor$
 :::
 ```
 
-The [Listings guide](/guides/projects/listings.qmd#custom-templates)
-documents the values a template can read and a complete card example.
+Two changes in that example are not cosmetic. The `<div>` became a
+fenced div, whose contents Quarto parses as markdown; and the raw
+`<a href>` became a markdown link. That second change is what makes the
+href work. A template's output is markdown, and Quarto rewrites `.qmd`
+link targets only after parsing it — so a raw-HTML anchor keeps the
+source path and ships a dead href, with no warning. Images behave the
+same way, and cost more: an image written as raw HTML is never copied
+into the site at all.
+
+[Listing templates](/guides/projects/listing-templates.qmd) covers both
+rules and works through a full port. The [Listings
+guide](/guides/projects/listings.qmd#custom-templates) documents the
+values a template can read.
 
 ## Related
 

@@ -54,12 +54,14 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   // render pre-existing chrome whose contrast debt is already baselined
   // on other pages (teal primary button, editor muted text), so they
   // join the characterization baseline rather than strict scans.
-  { page: 'projects-home-loading', label: 'projects-home-loading', selector: '.qh-loading' },
+  { page: 'projects-home-loading', label: 'projects-home-loading', selector: '.qh-skeleton-page' },
   { page: 'projects-home-error', label: 'projects-home-error', selector: '.qh-error' },
   { page: 'projects-home-empty', label: 'projects-home-empty', selector: '.qh-empty-state' },
   { page: 'sidebar-empty', label: 'sidebar-empty', selector: '.empty-state' },
   { page: 'status-tab-loading', label: 'status-tab-loading', selector: '.status-tab' },
   { page: 'status-tab-error', label: 'status-tab-error', selector: '.status-tab' },
+  // Phase 5: replay drawer surface (actor chips, transport controls).
+  { page: 'replay', label: 'replay-drawer', selector: '.replay-drawer' },
 ];
 
 /** key → { ruleId: nodeCount } */

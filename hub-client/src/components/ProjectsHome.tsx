@@ -41,11 +41,10 @@ import {
   resolveSyncServerUrl,
 } from '../utils/routing';
 import ShareDialog from './ShareDialog';
-import { ForkIcon, PeekIcon, PeopleIcon, SortIcon } from './icons';
+import { FilePlusIcon, ForkIcon, PeekIcon, PeopleIcon, SortIcon } from './icons';
 import { Menu, MenuItem, MenuDivider, MenuLabel, MenuSubmenu } from './Menu';
 import Tooltip from './Tooltip';
 import ModalDialog from './ModalDialog';
-import LoadingIndicator from './Loading';
 import { common } from '../strings';
 import { sortProjectItems, sortOrderLabel, type SortOrder } from '../utils/projectSort';
 import { buildProjectListExport, parseProjectListImport } from '../services/projectListExport';
@@ -1057,11 +1056,25 @@ export default function ProjectsHome({
   // ---- rendering ----
 
   if (loading || projectSetConnecting) {
+    // Skeleton grid shaped like the loaded page (Phase 5); role="status"
+    // keeps the Phase 3 polite loading announcement for screen readers.
     return (
       <div className="projects-home">
-        <LoadingIndicator
-          label={projectSetConnecting ? 'Connecting to project set…' : 'Loading projects…'}
-        />
+        <main
+          className="qh-main qh-skeleton-page"
+          role="status"
+          aria-label={projectSetConnecting ? 'Connecting to project set…' : 'Loading projects…'}
+        >
+          <div className="qh-skeleton qh-skeleton-heading" aria-hidden="true" />
+          <div className="qh-card-grid" aria-hidden="true">
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className="qh-card qh-skeleton-card">
+                <div className="qh-skeleton qh-skeleton-line" style={{ width: '60%' }} />
+                <div className="qh-skeleton qh-skeleton-line-sm" style={{ width: '40%' }} />
+              </div>
+            ))}
+          </div>
+        </main>
       </div>
     );
   }
@@ -1197,7 +1210,7 @@ export default function ProjectsHome({
             )}
             <div className="qh-peek-files">
               {s.topFiles.map((f) => (
-                <div key={f} className="qh-peek-file mono">{f}</div>
+                <div key={f} className="qh-peek-file mono qh-truncate">{f}</div>
               ))}
               {s.fileCount > s.topFiles.length && (
                 <div className="qh-peek-file more">and {s.fileCount - s.topFiles.length} more…</div>
@@ -1282,7 +1295,7 @@ export default function ProjectsHome({
           {people.map((m, i) => (
             <div key={`${m.initials}-${i}`} className="qh-member-row">
               <span className="qh-face lg" style={{ backgroundColor: m.color }}>{m.initials}</span>
-              <span className="qh-member-name">
+              <span className="qh-member-name qh-truncate">
                 {m.name}
                 {i === 0 && selfUser && <span className="qh-member-you"> (you)</span>}
               </span>
@@ -1293,7 +1306,7 @@ export default function ProjectsHome({
         <div className="qh-menu-label">INVITE BY LINK</div>
         <div className="qh-members-invite">
           <Tooltip block content={inviteUrl}>
-            <span className="qh-invite-url mono">{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
+            <span className="qh-invite-url mono qh-truncate">{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
           </Tooltip>
           <button
             className="qh-btn primary small-invite"
@@ -1324,7 +1337,7 @@ export default function ProjectsHome({
       }}
     >
       <button className="qh-card-body" onClick={() => handleOpen(item)}>
-        <span className={`qh-card-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
+        <span className={`qh-card-name qh-truncate ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
           {item.description}
         </span>
         <span className="qh-card-footer">
@@ -1707,6 +1720,7 @@ export default function ProjectsHome({
           </div>
         ) : items.length === 0 && collections.every((c) => c.entries.length === 0) ? (
           <div className="qh-empty-state">
+            <div className="qh-empty-icon" aria-hidden="true"><FilePlusIcon size={24} /></div>
             <h2>No projects yet</h2>
             <p>Create your first Quarto project, or connect to one a collaborator shared.</p>
             <div className="qh-empty-actions">
@@ -1769,7 +1783,7 @@ export default function ProjectsHome({
                       }}
                     >
                       <button
-                        className={`qh-row-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}
+                        className={`qh-row-name qh-truncate ${isUnnamed(item.description) ? 'unnamed' : ''}`}
                         onClick={() => handleOpen(item)}
                       >
                         {item.description}

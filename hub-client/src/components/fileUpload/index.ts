@@ -13,3 +13,19 @@ export {
 } from './resolveDefaultDestination';
 export { processAssetFiles, type AssetFilePreview } from './processAssetFiles';
 export { buildDropMarkdown, type DropMarkdownKind } from './dropMarkdown';
+export {
+  classifyPastePayload,
+  pastedImageFilename,
+  sanitizeAltText,
+  ACCEPTED_PASTE_IMAGE_TYPES,
+  type PastePayload,
+  type PastePayloadFile,
+  type PasteClassification,
+} from './pasteImages';
+export {
+  createPasteImageHandler,
+  type CreatePasteImageHandlerDeps,
+  type PasteImageEditor,
+  type PasteImageHandler,
+  type PasteRange,
+} from './pasteImageHandler';

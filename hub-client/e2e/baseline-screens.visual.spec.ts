@@ -32,8 +32,13 @@ const BASELINE_PAGES: {
   label: string;
   selector: string;
   capture: 'element' | 'page';
+  /** Selector masked out of the capture (dynamic content). */
+  mask?: string;
 }[] = [
-  { page: 'projects-home', label: 'projects-home', selector: '.projects-home', capture: 'element' },
+  // The projects-home footer renders the live git commit hash — mask it
+  // so baselines don't go stale on every commit (the 1% tolerance was
+  // silently absorbing the churn).
+  { page: 'projects-home', label: 'projects-home', selector: '.projects-home', capture: 'element', mask: '.qh-footer' },
   { page: 'dialog-new-file', label: 'dialog-new-file', selector: '.new-file-dialog', capture: 'element' },
   { page: 'dialog-share', label: 'dialog-share', selector: '.share-dialog', capture: 'element' },
   { page: 'dialog-new-asset', label: 'dialog-new-asset', selector: '.new-asset-dialog', capture: 'element' },
@@ -45,7 +50,7 @@ const BASELINE_PAGES: {
   { page: 'gallery', label: 'gallery', selector: 'text=Component gallery', capture: 'page' },
 ];
 
-for (const { page, label, selector, capture } of BASELINE_PAGES) {
+for (const { page, label, selector, capture, mask } of BASELINE_PAGES) {
   for (const theme of THEMES) {
     test(`${label} — ${theme} theme`, async ({ page: browserPage }) => {
       await bootHarness(browserPage, page, selector, theme);
@@ -55,6 +60,7 @@ for (const { page, label, selector, capture } of BASELINE_PAGES) {
       await expect(target).toHaveScreenshot(`${label}-${theme}.png`, {
         // Allow small pixel differences for anti-aliasing variance
         maxDiffPixelRatio: 0.01,
+        ...(mask ? { mask: [browserPage.locator(mask)] } : {}),
       });
     });
   }

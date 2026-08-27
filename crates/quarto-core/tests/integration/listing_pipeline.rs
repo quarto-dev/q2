@@ -1389,3 +1389,165 @@ fn explicit_description_untruncated_when_max_length_zero() {
         host
     );
 }
+
+// ─────────────────────────────────────────────────────────────────
+// L10 — contract tests for the idioms the migration docs teach
+// (bd-hzsi). These lock behaviour that
+// `docs/guides/projects/listing-templates.qmd` asserts. All three
+// pass against unmodified production code: they exist so the
+// documented idioms cannot silently rot, and so the two *silent*
+// failure modes (raw HTML is neither link-rewritten nor
+// resource-collected) stay pinned as deliberate contract rather
+// than drifting into accidental "fixes".
+// ─────────────────────────────────────────────────────────────────
+
+/// The custom-template spelling the docs use is `$it.<key>$` inside
+/// `$for(items)$` (`$items.<key>$` is an accepted alias, covered by
+/// `custom_listing_emits_no_matching_placeholder_and_derived_ellipsis`).
+/// This pins the documented spelling *and* the documented envelope
+/// shape: the `description-placeholder-begin`/`-end` markers are
+/// emitted **unconditionally**, outside the `$if(it.description)$`
+/// guard, so an item with no front-matter `description:` still gets
+/// a post-render first-paragraph preview. The built-ins gate the
+/// whole envelope on `$if(description)$` and therefore do *not*
+/// get this; a custom template can do better, which is the point
+/// the docs make.
+#[test]
+fn custom_template_it_spelling_derives_description_without_front_matter() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  type: custom\n  template: card.template\n  contents: posts\nformat: html\n---\n",
+        );
+        // Exactly the shape documented in the "Descriptions and the
+        // placeholder envelope" section: markers unconditional, the
+        // explicit-description fallback guarded.
+        write(
+            &p.join("card.template"),
+            "$for(items)$\n[$it.title$]($it.path$)\n\n::: {.listing-description}\n```{=html}\n$it.description-placeholder-begin$\n```\n\n$if(it.description)$\n$it.description$\n$endif$\n\n```{=html}\n$it.description-placeholder-end$\n```\n:::\n\n$endfor$\n",
+        );
+        // No `description:` in front matter — the preview must come
+        // from the rendered page's first paragraph.
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: Alpha\nformat: html\n---\n\nDerived from the first paragraph.\n",
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    assert!(
+        host.contains("Derived from the first paragraph."),
+        "unconditional envelope must yield a derived description for an item \
+         with no front-matter `description:`; got:\n{}",
+        host
+    );
+    assert!(
+        !host.contains("desc-begin(5A0113B34292)") && !host.contains("desc-end(5A0113B34292)"),
+        "envelope markers must be stripped from the output; got:\n{}",
+        host
+    );
+}
+
+/// The #1 porting trap, pinned in both directions: a markdown link
+/// built from `$it.path$` is rewritten by `LinkRewriteTransform` to
+/// the output URL, while a raw-HTML anchor over the same value is
+/// not — `Inline::RawInline` is a no-op leaf in that transform
+/// (`transforms/link_rewrite.rs`). Quarto 1's EJS received
+/// already-resolved `.html` hrefs and raw HTML was the norm there,
+/// so a carried-over template ships a dead `.qmd` href with no
+/// diagnostic.
+#[test]
+fn custom_template_markdown_anchor_is_rewritten_raw_anchor_is_not() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Blog\nlisting:\n  type: custom\n  template: card.template\n  contents: posts\nformat: html\n---\n",
+        );
+        write(
+            &p.join("card.template"),
+            "$for(items)$\nmd: [$it.title$]($it.path$)\n\nraw: `<a href=\"$it.path$\">$it.title$</a>`{=html}\n\n$endfor$\n",
+        );
+        write(
+            &p.join("posts/a.qmd"),
+            "---\ntitle: Alpha\nformat: html\n---\n\nBody.\n",
+        );
+    });
+
+    let host = html_for(&outputs, "index");
+    assert!(
+        host.contains(r#"href="posts/a.html""#),
+        "markdown link must be rewritten to the output URL; got:\n{}",
+        host
+    );
+    // Deliberate, documented behaviour — not a bug to be "fixed"
+    // without also updating listing-templates.qmd and paths.qmd.
+    assert!(
+        host.contains(r#"href="posts/a.qmd""#),
+        "raw-HTML anchor must pass through unrewritten (RawInline is a no-op \
+         leaf in LinkRewriteTransform); got:\n{}",
+        host
+    );
+}
+
+/// The same split costs *two* things for images rather than one: a
+/// markdown image is rewritten **and** collected for copying, while
+/// a raw `<img>` is neither — so the asset never reaches the output
+/// tree at all and the `src` 404s.
+///
+/// The two image paths come from inline-record fields on purpose.
+/// When the image is an item *document's* own front-matter `image:`,
+/// that page's render copies it regardless (see
+/// `front_matter_image_is_rebased_and_copied`), which **masks** the
+/// bug — the raw-`<img>` template appears to work. Record and custom
+/// fields have no such second copier, which is where it bites.
+#[test]
+fn custom_template_markdown_image_is_copied_raw_image_is_not() {
+    let (dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            concat!(
+                "---\ntitle: Blog\nlisting:\n  type: custom\n  template: card.template\n",
+                "  contents:\n",
+                "    - title: MdItem\n      href: https://example.com/md\n      pic-md: images/md.png\n",
+                "    - title: RawItem\n      href: https://example.com/raw\n      pic-raw: images/raw.png\n",
+                "format: html\n---\n"
+            ),
+        );
+        write(
+            &p.join("card.template"),
+            "$for(items)$\n$if(it.pic-md)$md: ![]($it.pic-md$)$endif$\n$if(it.pic-raw)$raw: `<img src=\"$it.pic-raw$\">`{=html}$endif$\n\n$endfor$\n",
+        );
+        write(&p.join("images/md.png"), "not-really-a-png");
+        write(&p.join("images/raw.png"), "not-really-a-png");
+    });
+
+    let host = html_for(&outputs, "index");
+    // Both render a src; the difference is invisible in the HTML.
+    assert!(
+        host.contains(r#"src="images/md.png""#) && host.contains(r#"src="images/raw.png""#),
+        "both forms must emit a src (the failure is not visible in the markup); got:\n{}",
+        host
+    );
+    assert!(
+        dir.join("_site/images/md.png").exists(),
+        "markdown image must be collected and copied into the output tree"
+    );
+    // Deliberate, documented behaviour — see the doc-comment above.
+    assert!(
+        !dir.join("_site/images/raw.png").exists(),
+        "raw-HTML <img> must not be collected (RawInline is a no-op leaf in \
+         ResourceCollector), so the asset never reaches the output tree"
+    );
+}

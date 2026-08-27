@@ -28,6 +28,7 @@
   width: max-content;
   max-width: 300px;
   pointer-events: none;
+  animation: qh-pop-in var(--duration-fast) var(--ease-out);
 }
 
 /* Forced colors: the shadow is stripped — keep a system-color border. */
