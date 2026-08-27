@@ -893,6 +893,7 @@ export default function FileSidebar({
           renderSearchResults()
         ) : files.length === 0 ? (
           <div className="empty-state">
+            <FilePlusIcon size={16} />
             <p>{fileSidebar.emptyTitle}</p>
             <p className="hint">{fileSidebar.emptyHint}</p>
           </div>

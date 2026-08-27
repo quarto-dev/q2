@@ -72,6 +72,13 @@
   color: var(--editor-text-muted);
 }
 
+/* Illustrated empty state (Phase 5): small muted glyph above the copy
+   (inherits currentColor from .empty-state). */
+.empty-state > svg {
+  display: block;
+  margin: 0 auto 8px;
+}
+
 .empty-state p {
   margin: 0 0 8px;
   font-size: 13px;

@@ -458,6 +458,22 @@ select.qh-input { appearance: auto; }
   from { opacity: 0; transform: scale(0.97); }
 }
 
+/* Skeleton loading blocks (Phase 5): content-shaped placeholders for
+   async surfaces. Opacity pulse only (transform/opacity motion rule);
+   the global reduced-motion rule stills the pulse. Usage: wrap in a
+   role="status" container with an aria-label — the bars themselves are
+   decorative. */
+.qh-skeleton {
+  border-radius: var(--radius-sm);
+  background: var(--input-bg-alpha);
+  animation: qh-skeleton-pulse 1.6s var(--ease-standard) infinite;
+}
+
+@keyframes qh-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
 @keyframes qh-spin {
   to { transform: rotate(360deg); }
 }

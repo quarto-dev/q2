@@ -54,7 +54,7 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   // render pre-existing chrome whose contrast debt is already baselined
   // on other pages (teal primary button, editor muted text), so they
   // join the characterization baseline rather than strict scans.
-  { page: 'projects-home-loading', label: 'projects-home-loading', selector: '.qh-loading' },
+  { page: 'projects-home-loading', label: 'projects-home-loading', selector: '.qh-skeleton-page' },
   { page: 'projects-home-error', label: 'projects-home-error', selector: '.qh-error' },
   { page: 'projects-home-empty', label: 'projects-home-empty', selector: '.qh-empty-state' },
   { page: 'sidebar-empty', label: 'sidebar-empty', selector: '.empty-state' },

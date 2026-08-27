@@ -766,6 +766,58 @@
   padding: 90px 20px;
 }
 
+/* Illustrated empty state (Phase 5): muted glyph in a soft roundel
+   above the headline. */
+.qh-empty-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--input-bg-alpha);
+  color: var(--text-muted);
+}
+
+/* Loading skeleton (Phase 5): shaped like the loaded page — a heading
+   bar over the real card grid. Bars pulse via .qh-skeleton (ui.css);
+   the container is one role="status" announcement. */
+.qh-skeleton-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* The real grid stretches its tracks to fill the loaded page; with only
+   two skeleton rows that would spread them apart — pack from the top. */
+.qh-skeleton-page .qh-card-grid {
+  align-content: start;
+}
+
+.qh-skeleton-heading {
+  height: 28px;
+  width: 220px;
+  border-radius: var(--radius-md);
+}
+
+.qh-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 13px 15px; /* matches .qh-card-body */
+  height: 86px;
+  box-sizing: border-box;
+}
+
+.qh-skeleton-line {
+  height: 14px;
+}
+
+.qh-skeleton-line-sm {
+  height: 12px;
+}
+
 .qh-empty-state h2 { font-size: 20px; margin: 0 0 8px; }
 .qh-empty-state p { color: var(--text-secondary); font-size: 14px; margin: 0 0 22px; }
 
