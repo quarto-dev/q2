@@ -1077,15 +1077,17 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   return (
     <div className="editor-container">
       <div className="editor-columns">
-        {/* Project column: project-scoped chrome (top bar, sidebar, bottom bar) */}
+        {/* Project column: project-scoped chrome (top bar, sidebar, bottom
+            bar). The whole column is inside SidebarDrawer, so at ≤900px
+            it becomes the off-canvas drawer in one piece. */}
         {!isFullscreenPreview && (
+          <SidebarDrawer drawer={sidebarDrawer}>
           <div className="project-column">
             <ProjectTopBar
               projectName={project.description}
               onChooseNewProject={onDisconnect}
               onShare={handleShare}
             />
-            <SidebarDrawer drawer={sidebarDrawer}>
             <SidebarTabs disabled={replayState.isActive}>
             {(activeTab) => {
               switch (activeTab) {
@@ -1147,11 +1149,11 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               }
             }}
           </SidebarTabs>
-            </SidebarDrawer>
             <div className="project-bottom-bar">
               <SyncStatusBadge scope="project" />
             </div>
           </div>
+          </SidebarDrawer>
         )}
 
         {/* Document column: document-scoped chrome (top bar, panes, bottom bar) */}

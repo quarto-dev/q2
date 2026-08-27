@@ -38,8 +38,8 @@ export default function DocumentTopBar({
 }: DocumentTopBarProps) {
   return (
     <header className="top-bar document-top-bar">
-      <div className="header-left">
-        {onToggleSidebar && (
+      {onToggleSidebar && (
+        <div className="sidebar-toggle-box">
           <Tooltip content={header.toggleSidebar}>
             <button
               ref={sidebarToggleRef}
@@ -52,7 +52,9 @@ export default function DocumentTopBar({
               <PanelLeftIcon />
             </button>
           </Tooltip>
-        )}
+        </div>
+      )}
+      <div className="header-left">
         <div className="header-doc">
           <span className={`file-path qh-truncate${currentFilePath ? '' : ' empty'}`}>
             {currentFilePath ?? header.noFileSelected}

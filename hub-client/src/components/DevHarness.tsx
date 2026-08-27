@@ -275,17 +275,17 @@ function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'previ
   return (
     <EditorChrome>
       <div className="editor-columns">
-        <div className="project-column">
-          <ProjectTopBar
-            projectName="Research Paper"
-            onChooseNewProject={() => {}}
-            onShare={() => setLastAction('share')}
-          />
-          <SidebarDrawer drawer={drawer}>
+        <SidebarDrawer drawer={drawer}>
+          <div className="project-column">
+            <ProjectTopBar
+              projectName="Research Paper"
+              onChooseNewProject={() => {}}
+              onShare={() => setLastAction('share')}
+            />
             <StatefulSidebarSections />
-          </SidebarDrawer>
-          <div className="project-bottom-bar" />
-        </div>
+            <div className="project-bottom-bar" />
+          </div>
+        </SidebarDrawer>
         <div className="document-column">
           <DocumentTopBar
             currentFilePath="index.qmd"

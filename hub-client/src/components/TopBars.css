@@ -42,7 +42,8 @@
 
 /* Full-height square cell for the switch-project action, separated
    from the project name by a right border. */
-.switch-project-box {
+.switch-project-box,
+.sidebar-toggle-box {
   align-self: stretch;
   aspect-ratio: 1 / 1;
   display: flex;
@@ -57,6 +58,9 @@
   justify-content: space-between;
   gap: 16px;
   flex-shrink: 0;
+  /* The sidebar-toggle box owns the left edge (full-height cell),
+     mirroring the project bar's switch-project box. */
+  padding-left: 0;
 }
 
 .header-left {
@@ -101,32 +105,6 @@
   overflow: hidden;
 }
 
-/* Sidebar toggle (Phase 5, design review): permanent chrome that reads
-   as the sidebar's own — the sidebar's background tint and border.
-   Grey in both states; opening the sidebar deepens the tint to the
-   sidebar's content layer. Never teal — teal marks the switch-project
-   action, which exits to another view. */
-.top-bar .sidebar-toggle-btn {
-  color: var(--editor-text-muted);
-  background: var(--sidebar-bg);
-  border-color: var(--sidebar-border);
-}
-
-.top-bar .sidebar-toggle-btn[aria-expanded='true'] {
-  color: var(--text-secondary);
-  background: var(--input-bg-alpha);
-}
-
-.top-bar .sidebar-toggle-btn:hover {
-  color: var(--text-primary);
-  background: var(--sidebar-section-hover);
-}
-
-/* The switch-project button is the shell's one teal icon: it exits the
-   editor for the projects view. */
-.top-bar .header-switch-btn {
-  color: var(--posit-teal);
-}
 
 /* Very narrow windows (Phase 4): wrap the document bar to two rows —
    sidebar toggle and file path on the first, status and view controls

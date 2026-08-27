@@ -218,12 +218,16 @@
     transform: none;
   }
 
-  /* The sidebar's own width rules (220px/min-180/max-300) are for the
-     static flex child; in the drawer it fills the drawer's width. */
-  .sidebar-drawer .sidebar-sections {
+  /* The drawer carries the whole project column (top bar, sidebar,
+     bottom bar). The column's own width rules (220px/min-180/max-300)
+     are for the static flex child; in the drawer it fills the drawer's
+     width and height, and the drawer's own edge replaces its border. */
+  .sidebar-drawer .project-column {
     width: 100%;
+    min-width: 0;
     max-width: none;
     height: 100%;
+    border-right: none;
   }
 
   .drawer-scrim {
