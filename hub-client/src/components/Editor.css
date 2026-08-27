@@ -86,7 +86,7 @@
 .sync-status {
   font-size: 12px;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .sync-status.connected {
@@ -102,7 +102,7 @@
 .user-count {
   font-size: 12px;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--editor-accent-bg);
   color: var(--editor-accent-text);
   cursor: help;
@@ -113,7 +113,7 @@
   padding: 6px 12px;
   background: var(--editor-accent-bg);
   border: 1px solid var(--editor-accent-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .current-file-indicator .file-path {
@@ -135,7 +135,7 @@
   padding: 6px 10px;
   background: var(--editor-accent-bg);
   border: 1px solid var(--editor-accent-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--editor-text-dim);
   font-size: 13px;
   cursor: pointer;
@@ -162,7 +162,7 @@
   padding: 8px 16px;
   background: none;
   border: 1px solid var(--editor-disconnected-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--editor-text-muted);
   font-size: 14px;
   cursor: pointer;
@@ -178,6 +178,55 @@
   flex: 1;
   display: flex;
   overflow: hidden;
+  /* Anchor for the narrow-viewport sidebar drawer + scrim (Phase 5). */
+  position: relative;
+}
+
+/* Sidebar drawer (Phase 5): above 900px the wrapper is layout-transparent
+   (display: contents) and the sidebar is a static flex child. At ≤900px
+   the drawer is off-canvas until toggled, sliding in over the panes with
+   a scrim. Behavior (focus, Escape, trap) lives in useSidebarDrawer. */
+.sidebar-drawer {
+  display: contents;
+}
+
+@media (max-width: 900px) {
+  .sidebar-drawer {
+    display: block;
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: min(280px, 80vw);
+    background: var(--bg-modal);
+    border-inline-end: 1px solid var(--border-color);
+    box-shadow: var(--shadow-3);
+    z-index: var(--z-modal);
+    /* Physical axis: transforms have no logical equivalent — an RTL pass
+       must flip this. */
+    transform: translateX(-105%);
+    transition: transform var(--duration-base) var(--ease-out);
+    overflow-y: auto;
+  }
+
+  .sidebar-drawer.open {
+    transform: none;
+  }
+
+  /* The sidebar's own width rules (220px/min-180/max-300) are for the
+     static flex child; in the drawer it fills the drawer's width. */
+  .sidebar-drawer .sidebar-sections {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+  }
+
+  .drawer-scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--backdrop-bg);
+    z-index: var(--z-overlay);
+    animation: qh-fade-in var(--duration-base) var(--ease-out);
+  }
 }
 
 .pane {
@@ -254,6 +303,14 @@
     min-width: 80px;
     max-width: 120px;
   }
+
+  /* Split-view collapse (Phase 5): two ~350px panes are useless this
+     narrow — the editor takes the width and the preview is one tap away
+     on the view toggle (whose split button is disabled at ≤700px). */
+  .editor-main.view-mode-both .preview-pane,
+  .editor-main.view-mode-both .pane-divider {
+    display: none;
+  }
 }
 
 /* Markdown summary overlay for preview mode */
@@ -283,7 +340,7 @@
   background: var(--posit-teal);
   color: var(--text-on-accent);
   padding: 16px 24px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 16px;
   font-weight: 600;
   z-index: var(--z-overlay);
@@ -464,7 +521,7 @@
   z-index: var(--z-modal);
   background: var(--error-overlay-bg);
   border: 1px solid var(--editor-error);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: 0 4px 12px var(--alpha-black-30);
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 13px;
@@ -487,7 +544,7 @@
   padding: 8px 12px;
   border-bottom: 1px solid var(--error-overlay-border);
   background: var(--error-overlay-header-bg);
-  border-radius: 8px 8px 0 0;
+  border-radius: var(--radius-md) 8px 0 0;
 }
 
 .preview-error-title {
@@ -592,5 +649,5 @@
   font-family: var(--font-mono);
   background: var(--alpha-black-05);
   padding: 1px 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }

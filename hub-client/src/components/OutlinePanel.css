@@ -76,7 +76,7 @@
   border: none;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background-color var(--duration-fast) var(--ease-out);
   color: var(--editor-text-dim);
   font-size: 13px;
 }
@@ -140,9 +140,6 @@
 
 .outline-name {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .outline-detail {

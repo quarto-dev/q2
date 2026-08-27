@@ -22,7 +22,7 @@
 /* Upload form */
 .drop-zone {
   border: 2px dashed var(--dialog-input-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 32px;
   text-align: center;
   transition: all 0.2s;
@@ -75,7 +75,7 @@
   gap: 12px;
   padding: 10px;
   background: var(--dialog-file-preview-bg);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   margin-bottom: 8px;
 }
 
@@ -88,7 +88,7 @@
   width: 48px;
   height: 48px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .file-preview .file-icon {
@@ -110,7 +110,7 @@
   padding: 4px 8px;
   background: var(--dialog-file-input-bg);
   border: 1px solid var(--dialog-file-input-border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--editor-text);
   font-size: 13px;
   box-sizing: border-box;
@@ -163,7 +163,7 @@
   padding: 12px;
   background: var(--dialog-file-preview-bg);
   border: 1px dashed var(--dialog-input-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--editor-text-muted);
   font-size: 13px;
   cursor: pointer;

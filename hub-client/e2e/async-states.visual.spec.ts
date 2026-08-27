@@ -31,13 +31,17 @@ const RECORDER = '[data-testid="async-last-action"]';
 
 for (const theme of THEMES) {
   test(`project list loading — ${theme} theme`, async ({ page }) => {
-    await bootHarness(page, 'projects-home-loading', '.qh-loading', theme);
+    // Phase 5: the spinner became a skeleton grid shaped like the loaded
+    // page; the role="status" announcement is now an aria-label on the
+    // skeleton container (the bars are decorative, aria-hidden).
+    await bootHarness(page, 'projects-home-loading', '.qh-skeleton-page', theme);
     const status = page.getByRole('status');
-    await expect(status).toContainText('Connecting to project set…');
-    await expect(page.locator('.qh-spinner')).toBeAttached();
+    await expect(status).toHaveAttribute('aria-label', 'Connecting to project set…');
+    await expect(page.locator('.qh-skeleton-card')).toHaveCount(8);
     await expect(page.locator('.projects-home')).toHaveScreenshot(
       `projects-home-loading-${theme}.png`,
-      { maxDiffPixelRatio: 0.01 },
+      // Footer embeds the live commit hash — mask it (see baseline-screens).
+      { maxDiffPixelRatio: 0.01, mask: [page.locator('.qh-footer')] },
     );
   });
 }
@@ -50,7 +54,7 @@ for (const theme of THEMES) {
     await expect(page.locator('.qh-error')).toContainText('Could not reach the sync server.');
     await expect(page.locator('.projects-home')).toHaveScreenshot(
       `projects-home-error-${theme}.png`,
-      { maxDiffPixelRatio: 0.01 },
+      { maxDiffPixelRatio: 0.01, mask: [page.locator('.qh-footer')] },
     );
   });
 }
@@ -77,7 +81,7 @@ for (const theme of THEMES) {
     ).toBeVisible();
     await expect(page.locator('.projects-home')).toHaveScreenshot(
       `projects-home-empty-${theme}.png`,
-      { maxDiffPixelRatio: 0.01 },
+      { maxDiffPixelRatio: 0.01, mask: [page.locator('.qh-footer')] },
     );
   });
 }

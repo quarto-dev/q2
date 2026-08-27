@@ -80,7 +80,8 @@ for (const width of SHOT_WIDTHS) {
       await bootAt(page, width, 'projects-home', '.projects-home', theme);
       await expect(page.locator('.projects-home')).toHaveScreenshot(
         `projects-home-${width}-${theme}.png`,
-        { maxDiffPixelRatio: 0.01 },
+        // Footer embeds the live commit hash — mask it (see baseline-screens).
+        { maxDiffPixelRatio: 0.01, mask: [page.locator('.qh-footer')] },
       );
     });
   }
@@ -221,21 +222,39 @@ for (const { route, mode } of SHELL_ROUTES) {
       // paint on, ending up *under* .header-right — an internal overlap
       // no viewport assertion catches. Its own scrollWidth reports it.
       await expectNoHorizontalScroll(page, '.header-left');
-      // Header controls stay reachable.
-      await expectInsideViewport(
-        page,
-        page.getByRole('button', { name: 'Fullscreen preview' }),
-        'preview button',
-      );
+      // Header controls stay reachable. At ≤700px the preview button
+      // collapses into the overflow menu (Phase 5) — the kebab is the
+      // reachable control.
+      if (width > 700) {
+        await expectInsideViewport(
+          page,
+          page.getByRole('button', { name: 'Fullscreen preview' }),
+          'preview button',
+        );
+      } else {
+        await expectInsideViewport(
+          page,
+          page.getByRole('button', { name: 'More actions' }),
+          'overflow menu button',
+        );
+      }
       await expectInsideViewport(
         page,
         page.locator('.connection-indicator'),
         'connection indicator',
       );
-      // No pane is clipped past the viewport's right edge.
-      await expectInsideViewport(page, page.locator('.sidebar-sections'), 'sidebar');
+      // No pane is clipped past the viewport's right edge. At ≤900px the
+      // sidebar is an off-canvas drawer by design (Phase 5) — the drawer
+      // specs below own its geometry.
+      if (width > 900) {
+        await expectInsideViewport(page, page.locator('.sidebar-sections'), 'sidebar');
+      }
       await expectInsideViewport(page, page.locator('.editor-pane'), 'editor pane');
-      await expectInsideViewport(page, page.locator('.preview-pane'), 'preview pane');
+      // Split view collapses below 700px (Phase 5): the preview pane is
+      // display:none there, not clipped.
+      if (width > 700) {
+        await expectInsideViewport(page, page.locator('.preview-pane'), 'preview pane');
+      }
     });
   }
 }
@@ -292,3 +311,121 @@ for (const width of [480, 320] as const) {
     });
   }
 }
+
+/* ---- Phase 5: narrow-viewport layout design ----
+   The designed narrow layouts deferred from Phase 4: the sidebar becomes
+   an overlay drawer with scrim at ≤900px, split view collapses to the
+   editor pane at ≤700px, and the header's secondary actions collapse
+   into an overflow menu at ≤700px. */
+
+/* ---- sidebar drawer (≤900px) ---- */
+
+test('sidebar is an off-canvas drawer at 800px, static at 1280px', async ({ page }) => {
+  await bootAt(page, 800, 'editor-shell', '.editor-main');
+  await expect(page.getByRole('button', { name: 'Toggle sidebar' })).toBeVisible();
+  // Off-canvas via transform — present in the DOM, outside the viewport.
+  await expect(page.locator('.sidebar-drawer')).not.toBeInViewport();
+  await expectNoHorizontalScroll(page, '.editor-main');
+
+  await bootAt(page, 1280, 'editor-shell', '.editor-main');
+  await expect(page.getByRole('button', { name: 'Toggle sidebar' })).toHaveCount(0);
+  await expect(page.locator('.sidebar-sections')).toBeVisible();
+});
+
+test('sidebar drawer opens with scrim and moves focus in', async ({ page }) => {
+  await bootAt(page, 800, 'editor-shell', '.editor-main');
+  await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+  const drawer = page.locator('.sidebar-drawer');
+  await expect(drawer).toBeInViewport();
+  await expect(page.locator('.drawer-scrim')).toBeVisible();
+  // Focus moved into the drawer on open (modal drawer pattern).
+  const focusInside = await page.evaluate(() =>
+    document.querySelector('.sidebar-drawer')?.contains(document.activeElement),
+  );
+  expect(focusInside).toBe(true);
+});
+
+test('sidebar drawer: Escape closes and focus returns to the toggle', async ({ page }) => {
+  await bootAt(page, 800, 'editor-shell', '.editor-main');
+  const toggle = page.getByRole('button', { name: 'Toggle sidebar' });
+  await toggle.click();
+  await expect(page.locator('.drawer-scrim')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.drawer-scrim')).toHaveCount(0);
+  await expect(toggle).toBeFocused();
+});
+
+test('sidebar drawer closes on scrim click', async ({ page }) => {
+  await bootAt(page, 800, 'editor-shell', '.editor-main');
+  await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+  const scrim = page.locator('.drawer-scrim');
+  await expect(scrim).toBeVisible();
+  await scrim.click({ position: { x: 400, y: 400 } });
+  await expect(scrim).toHaveCount(0);
+});
+
+test('sidebar drawer traps Tab within itself while open', async ({ page }) => {
+  await bootAt(page, 800, 'editor-shell', '.editor-main');
+  await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+  const drawer = page.locator('.sidebar-drawer');
+  await expect(drawer).toBeInViewport();
+  // Tab well past the drawer's focusable count; focus must stay inside.
+  for (let i = 0; i < 20; i++) await page.keyboard.press('Tab');
+  const focusInside = await page.evaluate(() =>
+    document.querySelector('.sidebar-drawer')?.contains(document.activeElement),
+  );
+  expect(focusInside).toBe(true);
+});
+
+for (const theme of THEMES) {
+  test(`sidebar drawer open at 800px — ${theme} theme`, async ({ page }) => {
+    await bootAt(page, 800, 'editor-shell', '.editor-main', theme);
+    await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+    await expect(page.locator('.drawer-scrim')).toBeVisible();
+    await expect(page.locator('.editor-container')).toHaveScreenshot(
+      `sidebar-drawer-800-${theme}.png`,
+      { maxDiffPixelRatio: 0.01 },
+    );
+  });
+}
+
+/* ---- split-view collapse (≤700px) ---- */
+
+test('split view collapses to the editor pane at 700px', async ({ page }) => {
+  await bootAt(page, 700, 'editor-shell', '.editor-main');
+  await expect(page.locator('.preview-pane')).toBeHidden();
+  await expect(page.locator('.pane-divider')).toBeHidden();
+  await expect(page.locator('.editor-pane')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Split view' })).toBeDisabled();
+  await expectNoHorizontalScroll(page, '.editor-main');
+});
+
+test('split view intact at 900px (counter-check)', async ({ page }) => {
+  await bootAt(page, 900, 'editor-shell', '.editor-main');
+  await expect(page.locator('.preview-pane')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Split view' })).toBeEnabled();
+});
+
+/* ---- header overflow menu (≤700px) ---- */
+
+test('header secondary actions collapse into an overflow menu at 700px', async ({ page }) => {
+  await bootAt(page, 700, 'editor-shell', '.editor-main');
+  await expect(page.locator('.minimal-header .preview-btn')).toBeHidden();
+  await expect(page.locator('.minimal-header .header-share-btn')).toBeHidden();
+  const overflow = page.getByRole('button', { name: 'More actions' });
+  await expect(overflow).toBeVisible();
+  await overflow.click();
+  const menu = page.locator('[role="menu"]');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Share this project' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Fullscreen preview' })).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Share this project' }).click();
+  await expect(page.getByTestId('header-last-action')).toHaveText('share');
+});
+
+test('header actions inline at 1280px (counter-check)', async ({ page }) => {
+  await bootAt(page, 1280, 'editor-shell', '.editor-main');
+  await expect(page.locator('.minimal-header .preview-btn')).toBeVisible();
+  await expect(page.locator('.minimal-header .header-share-btn')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'More actions' })).toHaveCount(0);
+});

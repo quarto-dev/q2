@@ -63,6 +63,16 @@ export function FilePlusIcon({ size }: IconProps) {
   );
 }
 
+/** Panel with a left section — "toggle sidebar". */
+export function PanelLeftIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 3v18" />
+    </StrokeIcon>
+  );
+}
+
 /** Arrow rising out of a tray — "upload". */
 export function UploadIcon({ size }: IconProps) {
   return (

@@ -33,7 +33,7 @@
 
 .markdown-summary::-webkit-scrollbar-thumb {
   background: var(--summary-scrollbar-thumb);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 .markdown-summary::-webkit-scrollbar-thumb:hover {

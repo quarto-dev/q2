@@ -1,7 +1,7 @@
 # Hub-Client UI/UX Modernization Plan
 
 **Date:** 2026-08-25
-**Status:** Approved 2026-08-25 — Phases 0–4 complete (Phase 3 = PR #611); Phase 5 (feedback gate) next
+**Status:** Approved 2026-08-25 — Phases 0–4 complete (Phase 3 = PR #611); Phase 5 implemented 2026-08-27 (branch `hub-client-uiux-phase5`, deck at `.worktrees/phase5-review-deck/`) — awaiting design review
 **Tracking:** braid epic `bd-2q55e6rc` (per-phase strands hang off it)
 **Scope:** `hub-client/` React/TypeScript app only — no Rust, no WASM, no sync-protocol changes.
 
@@ -567,7 +567,7 @@ PNG and running `--update-snapshots=missing`. **CI follow-up:** the new
 routes need `chromium-linux` baselines via the `recreate-all-snapshots`
 workflow dispatch on this branch, same as Phases 2–3.
 
-## Phase 5 — Visual refinement (feedback gate)
+## Phase 5 — Visual refinement (feedback gate) — **IMPLEMENTED (2026-08-27, branch `hub-client-uiux-phase5`), awaiting design review**
 
 **Goal:** every opinionated visual change lands here, in one reviewable stage.
 Phases 0–4 are objective — WCAG compliance, consistency, engineering hygiene —
@@ -577,36 +577,79 @@ proposed with before/after Playwright diffs (light + dark), lands as its own
 commit, and can be individually approved, held, or reverted.
 
 ### Test specifications (write first)
-- [ ] Before/after visual-diff deck per proposed change, generated from the
+- [x] Before/after visual-diff deck per proposed change, generated from the
       Playwright baselines in both themes, assembled for review.
-- [ ] The full Phase 0–4 spec suite (visual, axe-core, keyboard,
+      **Done:** the deck is `.worktrees/phase5-review-deck/` (gitignored,
+      local-only) — one directory per change with before/after pairs, a
+      README with the decision table, and motion videos. New permanent
+      coverage added along the way: `#/dev/replay` harness route +
+      `outline-replay.visual.spec.ts`, `hover-states.visual.spec.ts`
+      (hover/press/kebab/tooltip captures), drawer specs in
+      `viewport-matrix`.
+- [x] The full Phase 0–4 spec suite (visual, axe-core, keyboard,
       reduced-motion, viewport matrix) re-run green after each change.
+      **Done:** green after every change (221 specs at the end); axe
+      baseline regenerated twice (replay route added; projects-home-loading
+      debt cleared by the skeleton).
 
 ### Work items
-- [ ] **Ratify-or-adjust review of Phase 1's new visible elements**: the
-      file-row kebab button, the styled tooltip, and the unified
-      notification placement landed in Phase 1 as accessibility-driven
-      additions without design feedback. Include their gallery states in the
-      review deck; each is confirmed as-is or adjusted here.
-- [ ] Off-palette token values: re-map `--outline-header-icon` /
-      `--outline-code-icon` / `--outline-function-icon` and
-      `--replay-actor-me-text` onto the Posit palette (deferred from Phase 0).
-- [ ] Motion design: token-driven transitions — dialogs (fade + 4px rise),
-      menus/tooltips (fade + subtle scale), toasts (slide + fade), sidebar
-      section expand/collapse, view-toggle state change (deferred from
-      Phase 3; reduced-motion safety already landed there).
-- [ ] Hover/press micro-states: one consistent 100–150ms ease-out pattern on
-      all interactive elements, replacing the duplicated `brightness(1.08)`
-      rules.
-- [ ] Skeleton loading screens and illustrated/copy-polished empty states —
-      the designed presentation of the functional states from Phase 3.
-- [ ] Narrow-viewport layout design: sidebar overlay/drawer with scrim below
-      ~900px, split-view collapse below ~700px, header actions collapsing
-      into an overflow menu (reusing the Phase 1 menu component) — deferred
-      from Phase 4.
-- [ ] Alignment pass: everything on the 4px grid; optical icon alignment in
-      buttons/rows; consistent truncation rules.
-- [ ] Changelog entry covering all approved user-visible visual changes.
+- [x] **Ratify-or-adjust review of Phase 1's new visible elements** (670d7fe4f):
+      kebab, tooltip, notification placement captured for review
+      (deck `change-00-ratify-phase1/`); proposal is ratify as-is. The
+      tooltip capture needed a page-region clip — Playwright element
+      screenshots of the portaled position:fixed bubble capture it
+      unstyled (tooling artifact, computed styles verified correct).
+- [x] Off-palette token values (00e577087): outline icons + replay me-chip
+      re-mapped onto Posit ramps — one hue family per meaning (header blue,
+      code teal, function orange), each theme picking the ramp step that
+      keeps ≥4.5:1. New primitives: teal/orange dark+light steps, two
+      posit-blue alphas. axe: replay light contrast nodes 4→3.
+- [x] Motion design (c552ff922): three shared `from`-only keyframes
+      (qh-fade-in/qh-rise-in/qh-pop-in), transform/opacity only — dialogs
+      fade+4px rise at 200ms, menus/tooltips fade+scale(0.97) at 100ms,
+      sidebar section content rises on expand (collapse stays instant:
+      height transitions are layout motion), toast timings migrated to
+      tokens. View toggle keeps the Change-2 cross-fade (no sliding pill).
+- [x] Hover/press micro-states (b7f321633): `filter: brightness()` hovers
+      replaced by color-mix tokens (--btn-accent-*/--btn-danger-*), new
+      :active press states on filled buttons, one 100ms ease-out hover
+      transition across buttons/icon buttons/menu items/rows/view toggle.
+- [x] Skeleton loading + empty states (0c751c752): `.qh-skeleton`
+      (opacity pulse); ProjectsHome loading is a skeleton card grid shaped
+      like the page (role="status" preserved via aria-label); empty states
+      gain muted icon treatments. StatusTab/boot gates keep the spinner
+      (no known content shape).
+- [x] Narrow-viewport layout design (b95d5e18a): sidebar overlay drawer
+      with scrim ≤900px (useSidebarDrawer + SidebarDrawer shared by Editor
+      and the harness; focus in/out, Escape, scrim click, Tab trap, inert
+      when off-canvas; `display: contents` above the breakpoint); split
+      view collapses to the editor pane ≤700px (toggle's split button
+      disabled with explanatory tooltip); header share/preview collapse
+      into a kebab overflow menu ≤700px (Phase 1 Menu).
+- [x] Alignment pass: type scale (23d57bd78 — half-pixel sizes onto the
+      scale, new `--text-2xs: 10px`; 7.5px facepile glyph documented
+      exception), radius scale (c5c5f23d0 — new xs/xl steps; ~70
+      declarations migrated; buttons 7→8, menus 9→8, cards 10→12),
+      truncation + icons (ed09d1a3e — eight ad-hoc trios onto
+      `.qh-truncate`; `.qh-btn` gains inline-flex for future icon+text).
+      **Scope-out filed as bd-aqhrmebz:** wholesale spacing-grid migration
+      (2px/6px/10px one-offs) needs per-component design review, not a
+      mechanical sweep.
+- [x] Changelog entry (two-commit workflow): six user-visible entries under
+      2026-08-27.
+
+**Traps recorded for future phases:**
+- The projects-home footer renders the live git commit hash — captures of
+  it now mask `.qh-footer` (the 1% tolerance had silently absorbed the
+  per-commit churn; every baseline was perpetually stale).
+- Playwright element screenshots of portaled `position: fixed` content
+  (the tooltip) capture it unstyled — use page-region clips.
+- eslint's react-hooks v6 rules: no `Date.now()` in render (module-level
+  fixtures), no refs nested in props objects, no sync setState in effects
+  (`useSyncExternalStore` for media queries).
+- **CI follow-up (as with Phases 2–4):** `chromium-linux` baselines for
+  all new/changed captures need the `recreate-all-snapshots` workflow
+  dispatch on this branch — the full set this time (radius sweep).
 
 ## Phase 6 — Enthusiast details (stretch; only after Phases 0–5)
 

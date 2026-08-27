@@ -38,17 +38,23 @@
   padding: 0 12px;
   background: var(--header-preview-bg);
   border: 1px solid var(--header-preview-bg);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--header-preview-text);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
-  transition: filter 0.15s;
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .minimal-header .preview-btn:hover {
-  filter: brightness(1.08);
+  background: var(--btn-accent-hover-bg);
+  border-color: var(--btn-accent-hover-bg);
+}
+
+.minimal-header .preview-btn:active {
+  background: var(--btn-accent-active-bg);
+  border-color: var(--btn-accent-active-bg);
 }
 
 /* Vertical divider separating the actions from the document identity. */
@@ -82,12 +88,27 @@
    Scoped to the media query because overflow != visible changes the
    span's baseline alignment, and the 1280px baselines must stay
    pixel-identical. */
+/* Header overflow menu (Phase 5): hidden by default; at ≤700px the
+   secondary actions (share, fullscreen preview) collapse into it. */
+.header-overflow {
+  display: none;
+}
+
 @media (max-width: 700px) {
   .header-doc .project-name {
     flex-shrink: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .minimal-header .header-share-btn,
+  .minimal-header .preview-btn {
+    display: none;
+  }
+
+  .minimal-header .header-overflow {
+    display: block;
   }
 }
 
@@ -141,7 +162,7 @@
   padding: 0 10px;
   background: var(--editor-header-bg);
   border: 1px solid var(--editor-disconnected-border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   line-height: 1;
   user-select: none;

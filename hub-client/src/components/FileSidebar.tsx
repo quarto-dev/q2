@@ -710,7 +710,7 @@ export default function FileSidebar({
         >
           <span className="folder-chevron">{isExpanded ? '▼' : '▶'}</span>
           <span className="folder-icon">📁</span>
-          <span className="folder-name">{node.name}</span>
+          <span className="folder-name qh-truncate">{node.name}</span>
         </div>
         {isExpanded && (
           <div className="folder-children" role="group">
@@ -893,6 +893,7 @@ export default function FileSidebar({
           renderSearchResults()
         ) : files.length === 0 ? (
           <div className="empty-state">
+            <FilePlusIcon size={16} />
             <p>{fileSidebar.emptyTitle}</p>
             <p className="hint">{fileSidebar.emptyHint}</p>
           </div>

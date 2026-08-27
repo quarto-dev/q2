@@ -11,7 +11,7 @@
 .warning-box {
   background: var(--warning-bg);
   border: 1px solid var(--warning-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   margin-bottom: 20px;
 }
