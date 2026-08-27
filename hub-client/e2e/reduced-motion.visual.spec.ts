@@ -66,6 +66,27 @@ test.describe('prefers-reduced-motion: reduce', () => {
     expect(instant(await animationDuration(page, '.toast'))).toBe(true);
     expect(await animationIterationCount(page, '.toast')).toBe('1');
   });
+
+  test('no entrance animations on Phase 5 motion surfaces', async ({ page }) => {
+    // Dialog: fade (backdrop) + 4px rise (panel)
+    await bootHarness(page, 'dialog-new-file', '.qh-dialog', 'light');
+    expect(instant(await animationDuration(page, '.qh-dialog'))).toBe(true);
+    expect(instant(await animationDuration(page, '.qh-dialog-backdrop'))).toBe(true);
+
+    // Sidebar section content: rise on expand (mount animation)
+    await bootHarness(page, 'sidebar', '.sidebar-sections', 'light');
+    expect(instant(await animationDuration(page, '.section-content'))).toBe(true);
+
+    // Menu + tooltip: fade + subtle scale (shared qh-pop-in keyframes)
+    await bootHarness(page, 'gallery', 'text=Component gallery', 'light');
+    await page.click('button:has-text("Gallery menu")');
+    await expect(page.locator('[role="menu"]')).toBeVisible();
+    expect(instant(await animationDuration(page, '.qh-menu'))).toBe(true);
+    await page.keyboard.press('Escape');
+    await page.focus('button:has-text("Hover or focus me")');
+    await expect(page.locator('.qh-tooltip')).toBeVisible();
+    expect(instant(await animationDuration(page, '.qh-tooltip'))).toBe(true);
+  });
 });
 
 test.describe('counter-check: no-preference still animates', () => {
@@ -77,5 +98,23 @@ test.describe('counter-check: no-preference still animates', () => {
   test('entrance animations apply without the preference', async ({ page }) => {
     await bootHarness(page, 'notifications', '.ephemeral-session-banner', 'light', 'no-preference');
     expect(instant(await animationDuration(page, '.toast'))).toBe(false);
+  });
+
+  test('Phase 5 entrance animations apply without the preference', async ({ page }) => {
+    await bootHarness(page, 'dialog-new-file', '.qh-dialog', 'light', 'no-preference');
+    expect(instant(await animationDuration(page, '.qh-dialog'))).toBe(false);
+    expect(instant(await animationDuration(page, '.qh-dialog-backdrop'))).toBe(false);
+
+    await bootHarness(page, 'sidebar', '.sidebar-sections', 'light', 'no-preference');
+    expect(instant(await animationDuration(page, '.section-content'))).toBe(false);
+
+    await bootHarness(page, 'gallery', 'text=Component gallery', 'light', 'no-preference');
+    await page.click('button:has-text("Gallery menu")');
+    await expect(page.locator('[role="menu"]')).toBeVisible();
+    expect(instant(await animationDuration(page, '.qh-menu'))).toBe(false);
+    await page.keyboard.press('Escape');
+    await page.focus('button:has-text("Hover or focus me")');
+    await expect(page.locator('.qh-tooltip')).toBeVisible();
+    expect(instant(await animationDuration(page, '.qh-tooltip'))).toBe(false);
   });
 });

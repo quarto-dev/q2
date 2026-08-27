@@ -195,11 +195,13 @@
   box-shadow: 0 8px 28px var(--context-menu-shadow);
   padding: 6px;
   z-index: var(--z-dropdown);
+  animation: qh-pop-in var(--duration-fast) var(--ease-out);
+  transform-origin: top left;
   display: flex;
   flex-direction: column;
 }
 
-.qh-menu-right { left: auto; right: 0; }
+.qh-menu-right { left: auto; right: 0; transform-origin: top right; }
 
 /* Context-menu placement at cursor coordinates (fixed instead of
    anchor-relative); the Menu component flips at viewport edges. */
@@ -300,6 +302,7 @@
   align-items: center;
   justify-content: center;
   z-index: var(--z-overlay);
+  animation: qh-fade-in var(--duration-base) var(--ease-out);
 }
 
 .qh-dialog {
@@ -316,6 +319,7 @@
   padding: 26px 30px;
   box-shadow: var(--modal-shadow);
   box-sizing: border-box;
+  animation: qh-rise-in var(--duration-base) var(--ease-out);
 }
 
 .qh-dialog.wide { width: 560px; }
@@ -436,6 +440,22 @@ select.qh-input { appearance: auto; }
   border-top-color: var(--accent-secondary);
   border-radius: 50%;
   animation: qh-spin 0.8s linear infinite;
+}
+
+/* Entrance motion (Phase 5): transform/opacity only, token-timed. The
+   global prefers-reduced-motion rule collapses these to 0.01ms; never
+   add per-component reduced-motion overrides. `from`-only keyframes
+   animate to the element's natural end state. */
+@keyframes qh-fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes qh-rise-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+@keyframes qh-pop-in {
+  from { opacity: 0; transform: scale(0.97); }
 }
 
 @keyframes qh-spin {

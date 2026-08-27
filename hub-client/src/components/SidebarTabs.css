@@ -45,6 +45,14 @@
   user-select: none;
 }
 
+/* Section content fades/rises in on expand — a mount animation (expand
+   re-renders the region). Collapse unmounts immediately: no exit
+   animation without JS height measurement, and height transitions are
+   layout motion, which the motion principle forbids. */
+.section-content {
+  animation: qh-rise-in var(--duration-fast) var(--ease-out);
+}
+
 .section-header:hover {
   background: var(--sidebar-section-hover);
 }

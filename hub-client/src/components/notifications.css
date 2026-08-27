@@ -34,7 +34,7 @@
   font-size: var(--text-md);
   box-shadow: 0 4px 12px var(--toast-shadow);
   z-index: var(--z-toast);
-  animation: toast-fade-in 0.2s ease-out;
+  animation: toast-fade-in var(--duration-base) var(--ease-out);
 }
 
 @keyframes toast-fade-in {
@@ -64,7 +64,7 @@
   font-size: var(--text-md);
   box-shadow: 0 4px 12px var(--toast-shadow);
   z-index: var(--z-max);
-  animation: update-available-toast-in 0.2s ease-out;
+  animation: update-available-toast-in var(--duration-base) var(--ease-out);
 }
 
 .update-available-toast-dismiss {
