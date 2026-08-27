@@ -61,6 +61,12 @@
   /* Buttons don't inherit color (UA stylesheet) — the base must declare
      it, or bare .qh-btn renders black-on-dark in the dark theme. */
   color: var(--text-primary);
+  /* inline-flex + centering so a future icon next to the label is
+     optically aligned by construction (no per-button fixes). */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
   padding: 8px 14px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;

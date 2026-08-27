@@ -215,11 +215,9 @@
   font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   max-width: 100%;
-  padding-right: 18px;
+  /* Room for the row's hover kebab; truncation via .qh-truncate. */
+  padding-inline-end: var(--space-4);
 }
 
 .qh-card-name.unnamed,
@@ -401,11 +399,8 @@
 
 .qh-member-name {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .qh-member-you { color: var(--text-secondary); }
@@ -435,11 +430,8 @@
 
 .qh-invite-url {
   flex: 1;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .qh-btn.primary.small-invite {
@@ -582,9 +574,6 @@
 .qh-row-name {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   background: none;
   border: none;
   text-align: left;
@@ -646,12 +635,9 @@
 }
 
 .qh-peek-file {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-primary);
   padding: 2.5px 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .qh-peek-file.more {

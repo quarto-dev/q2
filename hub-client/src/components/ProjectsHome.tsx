@@ -1210,7 +1210,7 @@ export default function ProjectsHome({
             )}
             <div className="qh-peek-files">
               {s.topFiles.map((f) => (
-                <div key={f} className="qh-peek-file mono">{f}</div>
+                <div key={f} className="qh-peek-file mono qh-truncate">{f}</div>
               ))}
               {s.fileCount > s.topFiles.length && (
                 <div className="qh-peek-file more">and {s.fileCount - s.topFiles.length} more…</div>
@@ -1295,7 +1295,7 @@ export default function ProjectsHome({
           {people.map((m, i) => (
             <div key={`${m.initials}-${i}`} className="qh-member-row">
               <span className="qh-face lg" style={{ backgroundColor: m.color }}>{m.initials}</span>
-              <span className="qh-member-name">
+              <span className="qh-member-name qh-truncate">
                 {m.name}
                 {i === 0 && selfUser && <span className="qh-member-you"> (you)</span>}
               </span>
@@ -1306,7 +1306,7 @@ export default function ProjectsHome({
         <div className="qh-menu-label">INVITE BY LINK</div>
         <div className="qh-members-invite">
           <Tooltip block content={inviteUrl}>
-            <span className="qh-invite-url mono">{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
+            <span className="qh-invite-url mono qh-truncate">{inviteUrl.replace(/^https?:\/\//, '').slice(0, 34)}…</span>
           </Tooltip>
           <button
             className="qh-btn primary small-invite"
@@ -1337,7 +1337,7 @@ export default function ProjectsHome({
       }}
     >
       <button className="qh-card-body" onClick={() => handleOpen(item)}>
-        <span className={`qh-card-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
+        <span className={`qh-card-name qh-truncate ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
           {item.description}
         </span>
         <span className="qh-card-footer">
@@ -1783,7 +1783,7 @@ export default function ProjectsHome({
                       }}
                     >
                       <button
-                        className={`qh-row-name ${isUnnamed(item.description) ? 'unnamed' : ''}`}
+                        className={`qh-row-name qh-truncate ${isUnnamed(item.description) ? 'unnamed' : ''}`}
                         onClick={() => handleOpen(item)}
                       >
                         {item.description}

@@ -169,9 +169,6 @@
 
 .folder-name {
   font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .folder-children {

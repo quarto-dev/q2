@@ -73,7 +73,7 @@ export default function SidebarTabs({ children, disabled }: SidebarTabsProps) {
               aria-controls={contentId}
             >
               <span className="section-chevron">{isExpanded ? '▼' : '▶'}</span>
-              <span className="section-label">{section.label}</span>
+              <span className="section-label qh-truncate">{section.label}</span>
             </button>
             {isExpanded && (
               <div
