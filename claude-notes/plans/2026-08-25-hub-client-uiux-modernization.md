@@ -599,6 +599,19 @@ commit, and can be individually approved, held, or reverted.
       tooltip capture needed a page-region clip — Playwright element
       screenshots of the portaled position:fixed bubble capture it
       unstyled (tooling artifact, computed styles verified correct).
+      **Review adjustments landed:** (1) fullscreen preview went blank at
+      ≤700px — the split-collapse rule hid the fullscreen pane; fixed by
+      excluding `.fullscreen` (60b156d43, regression spec watched red
+      first). (2) The drawer toggle was drawer-only and undiscoverable —
+      now permanent header chrome that hides/shows the static sidebar
+      above 900px too, in muted grey with a sidebar-tinted active state
+      (38922590d). (3) Round 2 (e3a86d053): view-mode switcher hidden at
+      ≤700px (the Preview pill covers switching), Share + Preview back
+      inline (kebab menu retired), the toggle is a grey chip in the
+      sidebar's own tint, and switch-project is teal (the one
+      exit-to-another-view action). **Note:** PR #622 merged before these
+      adjustments; they ride the follow-up branch
+      `hub-client-uiux-phase5-review`.
 - [x] Off-palette token values (00e577087): outline icons + replay me-chip
       re-mapped onto Posit ramps — one hue family per meaning (header blue,
       code teal, function orange), each theme picking the ramp step that

@@ -2,14 +2,13 @@
  * Document Top Bar
  *
  * Document-scoped chrome heading the document column. Left: sidebar
- * toggle + current file path. Right: layout toggle, fullscreen-preview
- * action. (Sync status lives in the bottom bars' SyncStatusBadge.)
+ * toggle + current file path. Right: fullscreen-preview action.
+ * (Sync status lives in the bottom bars' SyncStatusBadge; the
+ * editor/preview split is resized by dragging the pane divider.)
  */
 
-import { useRef, useState } from 'react';
-import { PreviewIcon, PanelLeftIcon, MoreIcon } from './icons';
+import { PreviewIcon, PanelLeftIcon } from './icons';
 import Tooltip from './Tooltip';
-import { Menu, MenuItem } from './Menu';
 import { header } from '../strings';
 import './TopBars.css';
 
@@ -18,9 +17,11 @@ interface DocumentTopBarProps {
   onToggleFullscreenPreview?: () => void;
   isFullscreenPreview?: boolean;
   /**
-   * Sidebar drawer toggle (Phase 5): rendered only at ≤900px, when the
-   * sidebar is a drawer — the caller (Editor) gates on the breakpoint
-   * via onToggleSidebar's presence. The ref gets focus on drawer close.
+   * Sidebar toggle (Phase 5, made permanent after design review):
+   * visible at every width — hides/shows the static sidebar above
+   * 900px, opens/closes the overlay drawer at ≤900px. `sidebarOpen`
+   * reflects the sidebar's current on-screen presence (aria-expanded).
+   * The ref gets focus on drawer close.
    */
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
@@ -35,15 +36,6 @@ export default function DocumentTopBar({
   onToggleSidebar,
   sidebarToggleRef,
 }: DocumentTopBarProps) {
-  const [overflowOpen, setOverflowOpen] = useState(false);
-  const overflowTriggerRef = useRef<HTMLButtonElement | null>(null);
-  // Secondary actions collapse into the overflow menu at ≤700px (CSS
-  // hides the inline buttons and reveals the kebab). Rendered only when
-  // at least one collapsible action exists.
-  const hasCollapsibleActions = !!(
-    onToggleFullscreenPreview && !isFullscreenPreview
-  );
-
   return (
     <header className="top-bar document-top-bar">
       <div className="header-left">
@@ -78,40 +70,6 @@ export default function DocumentTopBar({
               <PreviewIcon />
             </button>
           </Tooltip>
-        )}
-        {hasCollapsibleActions && (
-          <div className="qh-menu-anchor header-overflow">
-            <Tooltip content={header.moreActions}>
-              <button
-                ref={overflowTriggerRef}
-                className="qh-icon-btn boxed"
-                onClick={() => setOverflowOpen((v) => !v)}
-                aria-label={header.moreActions}
-                aria-expanded={overflowOpen}
-              >
-                <MoreIcon />
-              </button>
-            </Tooltip>
-            {overflowOpen && (
-              <Menu
-                className="qh-menu-right"
-                triggerRef={overflowTriggerRef}
-                onClose={() => setOverflowOpen(false)}
-                aria-label={header.moreActions}
-              >
-                {onToggleFullscreenPreview && !isFullscreenPreview && (
-                  <MenuItem
-                    onSelect={() => {
-                      setOverflowOpen(false);
-                      onToggleFullscreenPreview();
-                    }}
-                  >
-                    {header.fullscreenPreview}
-                  </MenuItem>
-                )}
-              </Menu>
-            )}
-          </div>
         )}
       </div>
     </header>

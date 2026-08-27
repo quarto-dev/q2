@@ -29,7 +29,7 @@ export default function ProjectTopBar({
       <div className="switch-project-box">
         <Tooltip content={header.switchProject}>
           <button
-            className="qh-icon-btn boxed"
+            className="qh-icon-btn boxed header-switch-btn"
             onClick={onChooseNewProject}
             aria-label={header.switchProject}
           >

@@ -291,8 +291,8 @@ function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'previ
             currentFilePath="index.qmd"
             onToggleFullscreenPreview={() => setLastAction('fullscreen-preview')}
             isFullscreenPreview={false}
-            sidebarOpen={drawer.drawerOpen}
-            onToggleSidebar={drawer.isDrawer ? drawer.toggle : undefined}
+            sidebarOpen={drawer.sidebarVisible}
+            onToggleSidebar={drawer.toggle}
             sidebarToggleRef={drawer.toggleRef}
           />
           <main className={`editor-main view-mode-${viewMode}`}>
@@ -600,6 +600,33 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
   'editor-shell': () => <EditorShellHarness viewMode="both" />,
   'editor-shell-markup': () => <EditorShellHarness viewMode="markup" />,
   'editor-shell-preview': () => <EditorShellHarness viewMode="preview" />,
+  // Fullscreen preview (Editor.tsx: header/editor-pane/divider unmount,
+  // the preview pane gains .fullscreen) — regression cover for the
+  // ≤700px split-collapse rule hiding the fullscreen pane.
+  'editor-shell-fullscreen': () => (
+    <EditorChrome>
+      <main className="editor-main view-mode-both">
+        <div className="pane preview-pane fullscreen">
+          <button className="fullscreen-close-btn" aria-label="Exit fullscreen preview">
+            ✕
+          </button>
+          <div
+            style={{
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--editor-text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+            }}
+          >
+            Preview pane (fullscreen)
+          </div>
+        </div>
+      </main>
+    </EditorChrome>
+  ),
   // The About tab standalone (sidebar width) — covers the shortcuts
   // reference, which the sidebar route's collapsed ABOUT section hides.
   'about-tab': () => (
@@ -621,8 +648,17 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
           currentFilePath="index.qmd"
           onToggleFullscreenPreview={() => {}}
           isFullscreenPreview={false}
+          // The sidebar toggle is permanent chrome (Phase 5 review); the
+          // header route has no sidebar, so a static open state + dummy ref.
+          sidebarOpen={true}
+          onToggleSidebar={() => {}}
+          sidebarToggleRef={{ current: null }}
         />
       </div>
+      {/* The toggle's aria-controls points at the drawer's id; in the
+          real app the drawer always exists, so the route stubs it
+          (axe's aria-valid-attr-value flags a dangling reference). */}
+      <div id="sidebar-drawer" hidden />
     </EditorChrome>
   ),
   notifications: () => (

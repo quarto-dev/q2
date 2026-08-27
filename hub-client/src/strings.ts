@@ -49,7 +49,6 @@ export const header = {
   fullscreenPreview: 'Fullscreen preview',
   toggleSidebar: 'Toggle sidebar',
   sidebarDrawerLabel: 'Sidebar',
-  moreActions: 'More actions',
   noFileSelected: 'No file selected',
 } as const;
 

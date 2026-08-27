@@ -190,6 +190,12 @@
   display: contents;
 }
 
+/* Static layout, sidebar hidden via the header toggle: the wrapper
+   leaves the layout entirely (the panes take the width). */
+.sidebar-drawer.hidden {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .sidebar-drawer {
     display: block;
@@ -333,8 +339,11 @@
 
   /* Split-view collapse (Phase 5): two ~350px panes are useless this
      narrow — the editor takes the width and the preview is one tap away
-     on the view toggle (whose split button is disabled at ≤700px). */
-  .editor-main.view-mode-both .preview-pane,
+     on the header's Preview button (the view toggle is hidden ≤700px —
+     MinimalHeader.css). The fullscreen preview pane keeps its place:
+     collapsing must not hide the one surface fullscreen mode exists to
+     show. */
+  .editor-main.view-mode-both .preview-pane:not(.fullscreen),
   .editor-main.view-mode-both .pane-divider {
     display: none;
   }

@@ -101,20 +101,31 @@
   overflow: hidden;
 }
 
-/* Header overflow menu (Phase 5): hidden by default; at ≤700px the
-   secondary action (fullscreen preview) collapses into it. */
-.header-overflow {
-  display: none;
+/* Sidebar toggle (Phase 5, design review): permanent chrome that reads
+   as the sidebar's own — the sidebar's background tint and border.
+   Grey in both states; opening the sidebar deepens the tint to the
+   sidebar's content layer. Never teal — teal marks the switch-project
+   action, which exits to another view. */
+.top-bar .sidebar-toggle-btn {
+  color: var(--editor-text-muted);
+  background: var(--sidebar-bg);
+  border-color: var(--sidebar-border);
 }
 
-@media (max-width: 700px) {
-  .document-top-bar .preview-btn {
-    display: none;
-  }
+.top-bar .sidebar-toggle-btn[aria-expanded='true'] {
+  color: var(--text-secondary);
+  background: var(--input-bg-alpha);
+}
 
-  .document-top-bar .header-overflow {
-    display: block;
-  }
+.top-bar .sidebar-toggle-btn:hover {
+  color: var(--text-primary);
+  background: var(--sidebar-section-hover);
+}
+
+/* The switch-project button is the shell's one teal icon: it exits the
+   editor for the projects view. */
+.top-bar .header-switch-btn {
+  color: var(--posit-teal);
 }
 
 /* Very narrow windows (Phase 4): wrap the document bar to two rows —
