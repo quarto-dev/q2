@@ -7,11 +7,13 @@
  * - Buttons to view markdown documents (changelog, more info) in modal
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Tooltip from '../Tooltip';
 import { SHORTCUT_GROUPS } from '../../utils/keyboardShortcuts';
 import { common, tabs } from '../../strings';
 import { renderContentToHtml, isWasmReady } from '@quarto/preview-runtime';
+import { useTheme } from '../ThemeContext';
+import { injectChangelogStyles } from '../../utils/changelogDoc';
 import changelogMd from '../../../changelog.md?raw';
 import moreInfoMd from '../../../resources/more-info.md?raw';
 import './AboutTab.css';
@@ -21,46 +23,6 @@ type WasmStatus = 'loading' | 'ready' | 'error';
 interface AboutTabProps {
   wasmStatus: WasmStatus;
 }
-
-// Minimal CSS for changelog rendering
-const changelogStyles = `
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-    font-size: 14px;
-    line-height: 1.6;
-    color: #333;
-    padding: 24px;
-    margin: 0;
-    max-width: 800px;
-  }
-  h2 {
-    font-size: 20px;
-    font-weight: 600;
-    margin: 0 0 16px 0;
-    color: #111;
-  }
-  ul {
-    margin: 0;
-    padding: 0 0 0 20px;
-  }
-  li {
-    margin: 8px 0;
-  }
-  a {
-    color: #646cff;
-    text-decoration: none;
-  }
-  a:hover {
-    text-decoration: underline;
-  }
-  code {
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-    font-size: 13px;
-    background: #f4f4f4;
-    padding: 2px 6px;
-    border-radius: 3px;
-  }
-`;
 
 // Document configuration for the modal viewer
 interface MarkdownDocument {
@@ -74,9 +36,10 @@ const documents: Record<string, MarkdownDocument> = {
 };
 
 export default function AboutTab({ wasmStatus }: AboutTabProps) {
-  const [renderedDocs, setRenderedDocs] = useState<Record<string, string>>({});
+  const [rawDocs, setRawDocs] = useState<Record<string, string>>({});
   const [renderError, setRenderError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<string | null>(null);
+  const { effectiveTheme } = useTheme();
 
   // Render all markdown documents when WASM becomes ready
   useEffect(() => {
@@ -90,17 +53,13 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
         for (const [key, doc] of Object.entries(documents)) {
           const result = await renderContentToHtml(doc.markdown);
           if (result.success) {
-            // Inject minimal styles into the rendered HTML
-            rendered[key] = result.html.replace(
-              '</head>',
-              `<style>${changelogStyles}</style></head>`
-            );
+            rendered[key] = result.html;
           } else {
             setRenderError(result.error || `Failed to render ${doc.title}`);
             return;
           }
         }
-        setRenderedDocs(rendered);
+        setRawDocs(rendered);
         setRenderError(null);
       } catch (err) {
         setRenderError(err instanceof Error ? err.message : 'Unknown error');
@@ -109,6 +68,17 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
 
     renderDocuments();
   }, [wasmStatus]);
+
+  // Inject theme-matched styles into the iframe documents. Kept as a pure
+  // re-injection over the raw renders so a theme flip restyles an already
+  // rendered document without re-running the WASM pipeline (GH #624).
+  const renderedDocs = useMemo(() => {
+    const themed: Record<string, string> = {};
+    for (const [key, html] of Object.entries(rawDocs)) {
+      themed[key] = injectChangelogStyles(html, effectiveTheme);
+    }
+    return themed;
+  }, [rawDocs, effectiveTheme]);
 
   const handleOpenModal = (docKey: string) => {
     setActiveModal(docKey);

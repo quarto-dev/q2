@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-08-27
 
+- [`ff9896c7`](https://github.com/quarto-dev/q2/commits/ff9896c7): The changelog and more-info viewer now follows the app's colour scheme — in dark mode the text is readable light-on-dark (and links use the app's blue) instead of near-invisible dark text on the dark dialog.
 - [`e3a86d05`](https://github.com/quarto-dev/q2/commits/e3a86d05): Small-window header tidied up: at the smallest widths the view-mode switcher is hidden (the Preview button covers switching) and Share + Preview stay as plain buttons instead of a "..." menu. The sidebar toggle is now a grey chip in the sidebar's own colour, clearly separate from the title-bar buttons, and the switch-project icon is teal to mark it as the way out to your projects.
 - [`38922590`](https://github.com/quarto-dev/q2/commits/38922590): A sidebar toggle button now sits at the left of the editor header at every window size — click it to hide or show the sidebar (in narrow windows it opens the sidebar as an overlay drawer). The button is muted grey so it reads as sidebar chrome, not a title-bar action.
 - [`c5c5f23d`](https://github.com/quarto-dev/q2/commits/c5c5f23d): Corners are now consistent across the app — buttons, menus, cards, and dialogs share one radius scale (buttons and cards are slightly rounder).
