@@ -47,7 +47,11 @@
   /* Accent */
   --posit-orange: #D44000;
   --posit-orange-hover: #E57366;
+  --posit-orange-dark-1: #B03800;
+  --posit-orange-light-1: #F09C8F;
   --posit-teal: #419599;
+  --posit-teal-dark-1: #2E6E71;
+  --posit-teal-light-1: #7FBFC2;
   --posit-green: #72994E;
   --posit-red: #DB593B;
 
@@ -77,6 +81,8 @@
   --posit-teal-alpha-05: rgba(65, 149, 153, 0.05);
   --posit-teal-alpha-08: rgba(65, 149, 153, 0.08);
   --posit-teal-alpha-30: rgba(65, 149, 153, 0.3);
+  --posit-blue-alpha-08: rgba(68, 112, 153, 0.08);
+  --posit-blue-alpha-15: rgba(68, 112, 153, 0.15);
   --posit-blue-alpha-20: rgba(68, 112, 153, 0.2);
   --posit-green-alpha-25: rgba(114, 153, 78, 0.25);
 
@@ -251,10 +257,12 @@
   --menu-hint-text: var(--text-muted);
   --context-menu-danger-bg: var(--error-bg-subtle);
 
-  /* Outline panel symbol colors */
-  --outline-header-icon: #9333ea;
-  --outline-code-icon: #2563eb;
-  --outline-function-icon: #b45309;
+  /* Outline panel symbol colors — one hue family per symbol class
+     (header = blue, code = teal, function = orange); each theme picks
+     the ramp step that keeps the glyph ≥4.5:1 on the sidebar bg. */
+  --outline-header-icon: var(--posit-blue);
+  --outline-code-icon: var(--posit-teal-dark-1);
+  --outline-function-icon: var(--posit-orange-dark-1);
 
   /* Dialogs */
   --dialog-bg: var(--bg-modal);
@@ -293,9 +301,9 @@
   --replay-handle: #c0c0c0;
   --replay-handle-hover: #888;
   --replay-actor-border: #ccc;
-  --replay-actor-me-text: #2563eb;
-  --replay-actor-me-border: #93c5fd;
-  --replay-actor-me-bg: rgba(37, 99, 235, 0.08);
+  --replay-actor-me-text: var(--posit-blue-dark-1);
+  --replay-actor-me-border: var(--posit-blue-light-2);
+  --replay-actor-me-bg: var(--posit-blue-alpha-08);
   --replay-tooltip-bg: #ffffff;
 
   /* Minimal header */
@@ -403,10 +411,11 @@
   --context-menu-danger: var(--posit-red);
   --context-menu-danger-bg: var(--error-bg-subtle);
 
-  /* Outline panel symbol colors */
-  --outline-header-icon: #c586c0;
-  --outline-code-icon: #9cdcfe;
-  --outline-function-icon: #dcdcaa;
+  /* Outline panel symbol colors — same hue families as light theme,
+     lighter ramp steps for the dark sidebar bg (≥4.5:1). */
+  --outline-header-icon: var(--posit-blue-light-2);
+  --outline-code-icon: var(--posit-teal-light-1);
+  --outline-function-icon: var(--posit-orange-light-1);
 
   /* Dialogs */
   --dialog-bg: var(--bg-modal);
@@ -445,9 +454,9 @@
   --replay-handle: #444;
   --replay-handle-hover: #888;
   --replay-actor-border: #666;
-  --replay-actor-me-text: #aad4ff;
-  --replay-actor-me-border: #335580;
-  --replay-actor-me-bg: rgba(51, 85, 128, 0.15);
+  --replay-actor-me-text: var(--posit-blue-light-2);
+  --replay-actor-me-border: var(--posit-blue-dark-1);
+  --replay-actor-me-bg: var(--posit-blue-alpha-15);
   --replay-tooltip-bg: #0f0f1e;
 
   /* Minimal header */

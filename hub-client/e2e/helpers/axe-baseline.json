@@ -53,6 +53,12 @@
   "projects-home|light": {
     "color-contrast": 3
   },
+  "replay-drawer|dark": {
+    "color-contrast": 1
+  },
+  "replay-drawer|light": {
+    "color-contrast": 3
+  },
   "setup-fresh|dark": {
     "color-contrast": 1
   },

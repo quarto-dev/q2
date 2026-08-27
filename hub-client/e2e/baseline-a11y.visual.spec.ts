@@ -60,6 +60,8 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'sidebar-empty', label: 'sidebar-empty', selector: '.empty-state' },
   { page: 'status-tab-loading', label: 'status-tab-loading', selector: '.status-tab' },
   { page: 'status-tab-error', label: 'status-tab-error', selector: '.status-tab' },
+  // Phase 5: replay drawer surface (actor chips, transport controls).
+  { page: 'replay', label: 'replay-drawer', selector: '.replay-drawer' },
 ];
 
 /** key → { ruleId: nodeCount } */

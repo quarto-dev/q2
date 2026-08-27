@@ -25,6 +25,7 @@ import EphemeralSessionBanner from './EphemeralSessionBanner';
 import DevTokensPage from './DevTokensPage';
 import DevGalleryPage from './DevGalleryPage';
 import AboutTab from './tabs/AboutTab';
+import ReplayDrawer from './ReplayDrawer';
 import { ViewModeProvider } from './ViewModeContext';
 import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
@@ -33,6 +34,7 @@ import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
 import type { CollectionSnapshot } from '../services/projectSetService';
 import type { SearchFiles } from '../services/search';
 import type { PwaPromptStore } from '../pwaPrompt';
+import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 
 const FAKE_LEGACY_PROJECTS: ProjectEntry[] = [
   {
@@ -360,6 +362,88 @@ function StatusTabErrorHarness() {
 /** Editor chrome must render inside .editor-container for the dark-ramp
  *  token overrides (:root.dark .editor-container) to apply, and under a
  *  ViewModeProvider for ViewToggleControl (MinimalHeader). */
+/**
+ * Replay drawer fixture (Phase 5): the real expanded drawer with a remote
+ * actor, plus a static replica of the "me" actor chip. The real
+ * `--me` state requires the live sync actor id (getActorId()), which the
+ * no-server harness doesn't have — the replica uses the real
+ * `replay-drawer__actor` classes so token changes render authentically.
+ * Keep the replica's markup in sync with the actor chip in
+ * ReplayDrawer.tsx.
+ */
+function ReplayHarness() {
+  const state: ReplayState = {
+    isActive: true,
+    historyLength: 100,
+    currentIndex: 41,
+    isPlaying: false,
+    playbackSpeed: 1,
+    currentContent: '',
+    // Seconds, not ms — ReplayDrawer formats with `new Date(ts * 1000)`.
+    // Visual specs pin the clock (FIXED_NOW), so Date.now() is
+    // deterministic there; the offset gives a "42 minutes ago" label.
+    timestamp: (Date.now() - 42 * 60_000) / 1000,
+    actor: 'b3f7c2a1-remote',
+    chunkActors: Array.from({ length: 24 }, (_, i) =>
+      i % 3 === 2
+        ? [
+            { actor: 'b3f7c2a1-remote', fraction: 0.6 },
+            { actor: 'e4d8f0a2-other', fraction: 0.4 },
+          ]
+        : [{ actor: 'b3f7c2a1-remote', fraction: 1 }],
+    ),
+  };
+  const controls: ReplayControls = {
+    enter: () => {},
+    exit: () => {},
+    apply: () => {},
+    seekTo: () => {},
+    seekToStart: () => {},
+    seekToEnd: () => {},
+    play: () => {},
+    pause: () => {},
+    stepForward: () => {},
+    stepBackward: () => {},
+    cycleSpeed: () => {},
+    getTimestampAtIndex: () => null,
+  };
+  return (
+    <EditorChrome>
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
+        {/* Tight crop target for the visual spec — the full-height flex
+            wrapper above is just for bottom-docking. */}
+        <div data-testid="replay-fixture">
+          {/* Static replica of the "me" actor chip (see comment above). */}
+          <div style={{ padding: '8px 12px', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: 'var(--editor-text-dim)' }}>
+              &ldquo;me&rdquo; chip replica:
+            </span>
+            <span className="replay-drawer__actor replay-drawer__actor--me">
+              <span
+                className="replay-drawer__actor-dot"
+                style={{ backgroundColor: '#447099' }}
+              />
+              Ada Lovelace
+            </span>
+            <span className="replay-drawer__actor">
+              <span
+                className="replay-drawer__actor-dot"
+                style={{ backgroundColor: '#E91E63' }}
+              />
+              Grace Hopper
+            </span>
+          </div>
+          <ReplayDrawer
+            state={state}
+            controls={controls}
+            identities={{ 'b3f7c2a1-remote': { name: 'Grace Hopper', color: '#E91E63' } }}
+          />
+        </div>
+      </div>
+    </EditorChrome>
+  );
+}
+
 function EditorChrome({ children }: { children: React.ReactNode }) {
   return (
     <ViewModeProvider>
@@ -478,6 +562,8 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
     </EditorChrome>
   ),
   sidebar: () => <SidebarHarness />,
+  /* ---- Phase 5: replay drawer (actor-chip token review) ---- */
+  replay: () => <ReplayHarness />,
   /* ---- Phase 4: composed editor shell for the viewport matrix ---- */
   'editor-shell': () => <EditorShellHarness viewMode="both" />,
   'editor-shell-markup': () => <EditorShellHarness viewMode="markup" />,
