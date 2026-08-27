@@ -53,6 +53,11 @@ interface Props {
   commentsMode?: CommentsMode;
   onCommentsModeChange?: (next: CommentsMode) => void;
   /**
+   * Optional status element (the document sync-status badge) rendered
+   * in the bar's right-side cluster, to the left of the Authors pill.
+   */
+  statusSlot?: React.ReactNode;
+  /**
    * Number of outstanding editorial comments on the active page
    * (bd-0rsk07il, GH #445), from the render pipeline's
    * `DocumentProfile` comment summary. Renders one count badge on
@@ -80,10 +85,9 @@ function CommentsModeToggle({
 }) {
   return (
     <div
-      className="view-toggle-control"
+      className="view-toggle-control comments-mode-box"
       role="group"
       aria-label="Comment display mode"
-      style={{ marginLeft: '6px' }}
     >
       <Tooltip content="Expand all comments">
         <button
@@ -121,6 +125,9 @@ function CommentsModeToggle({
           <CommentsHideIcon />
         </button>
       </Tooltip>
+      <span className="comments-mode-label" aria-hidden="true">
+        Comments
+      </span>
       {count !== undefined && count > 0 && (
         <span
           className="comments-toggle-badge"
@@ -216,6 +223,7 @@ export default function ReplayDrawer({
   commentsMode,
   onCommentsModeChange,
   commentsCount,
+  statusSlot,
 }: Props) {
   const showAttributionToggle =
     attributionOn !== undefined && onAttributionChange !== undefined;
@@ -323,6 +331,7 @@ export default function ReplayDrawer({
           <span className="replay-drawer__chevron">&#x25B6;</span>
           <span>{replay.title}</span>
         </button>
+        {statusSlot}
         {showAttributionToggle && (
           <AttributionToggle
             attributionOn={attributionOn!}
@@ -389,6 +398,7 @@ export default function ReplayDrawer({
           </span>
         </div>
 
+        {statusSlot}
         {showAttributionToggle && (
           <AttributionToggle
             attributionOn={attributionOn!}

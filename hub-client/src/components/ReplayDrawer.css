@@ -402,24 +402,22 @@
   /* Full-circle rainbow that rotates — the band itself is the
      indicator, no transparent gap. First and last stops match so
      the seam is invisible across the 0/360 boundary. */
-  background: conic-gradient(
-    from var(--replay-drawer__attribution-angle),
-    var(--attribution-red) 0deg,
-    var(--attribution-orange) 60deg,
-    var(--attribution-yellow) 120deg,
-    var(--attribution-green) 180deg,
-    var(--attribution-blue) 240deg,
-    var(--attribution-purple) 300deg,
-    var(--attribution-red) 360deg
-  );
+  background: conic-gradient(from var(--replay-drawer__attribution-angle),
+      var(--attribution-red) 0deg,
+      var(--attribution-orange) 60deg,
+      var(--attribution-yellow) 120deg,
+      var(--attribution-green) 180deg,
+      var(--attribution-blue) 240deg,
+      var(--attribution-purple) 300deg,
+      var(--attribution-red) 360deg);
   -webkit-mask:
     linear-gradient(var(--black) 0 0) content-box,
     linear-gradient(var(--black) 0 0);
   -webkit-mask-composite: xor;
-          mask:
+  mask:
     linear-gradient(var(--black) 0 0) content-box,
     linear-gradient(var(--black) 0 0);
-          mask-composite: exclude;
+  mask-composite: exclude;
   animation: replay-drawer__attribution-spin 2s linear infinite;
   pointer-events: none;
 }
@@ -437,6 +435,28 @@
    (bd-0rsk07il, GH #445). One badge for the whole group; hidden at
    zero (the element is simply not rendered). Reuses the view-toggle
    palette so it reads as part of the control. */
+/* Comments toggle: its own bordered box, each button outlined, with a
+   "Comments" label to the right of the buttons. */
+.comments-mode-box {
+  align-self: stretch;
+  padding: 1px 8px 1px 5px;
+  border-left: 1px solid var(--editor-header-border);
+  gap: 3px;
+}
+
+.comments-mode-box .view-toggle-btn {
+  border: 1px solid var(--editor-header-border);
+  width: 20px;
+  height: 20px;
+}
+
+.comments-mode-label {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--editor-text-dim);
+  user-select: none;
+}
+
 .comments-toggle-badge {
   display: inline-flex;
   align-items: center;

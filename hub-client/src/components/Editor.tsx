@@ -1330,10 +1330,12 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               attributionDisabled={
                 currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'
               }
-            />
-            <SyncStatusBadge
-              scope="document"
-              currentFilePath={currentFile?.path ?? null}
+              statusSlot={
+                <SyncStatusBadge
+                  scope="document"
+                  currentFilePath={currentFile?.path ?? null}
+                />
+              }
             />
           </div>
         )}

@@ -243,12 +243,10 @@
   cursor: col-resize;
   /* Pointer events must reach the divider, not scroll the page (touch). */
   touch-action: none;
-  background: linear-gradient(
-    to right,
-    transparent 2px,
-    var(--editor-header-border) 2px 3px,
-    transparent 3px
-  );
+  background: linear-gradient(to right,
+      transparent 2px,
+      var(--editor-header-border) 2px 3px,
+      transparent 3px);
 }
 
 .pane-divider:hover,
@@ -547,7 +545,9 @@
 /* Narrow windows: the sidebar-sections width floor drops (SidebarTabs.css);
    mirror it on the column. */
 @media (max-width: 480px) {
-  .project-column { min-width: 120px; }
+  .project-column {
+    min-width: 120px;
+  }
 }
 
 .document-column {
@@ -571,22 +571,10 @@
   border-top: 1px solid var(--editor-header-border);
 }
 
-/* Document bottom bar: replay drawer (fills) + sync-status badge. */
+/* Document bottom bar: the replay drawer (which hosts the document
+   sync-status badge in its right-side cluster). */
 .document-bottom-bar {
   flex-shrink: 0;
-  display: flex;
-  align-items: stretch;
-}
-
-.document-bottom-bar .replay-drawer {
-  flex: 1;
-  min-width: 0;
-}
-
-.document-bottom-bar .sync-status-badge {
-  flex-shrink: 0;
-  background: var(--editor-bg);
-  border-top: 1px solid var(--editor-header-border);
 }
 
 /* Replay mode banner — overlays bottom edge of header */
@@ -595,13 +583,11 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--success-bg-subtle),
-    var(--success-bg-subtle) 4px,
-    transparent 4px,
-    transparent 8px
-  );
+  background: repeating-linear-gradient(-45deg,
+      var(--success-bg-subtle),
+      var(--success-bg-subtle) 4px,
+      transparent 4px,
+      transparent 8px);
   color: var(--editor-success);
   text-align: center;
   padding: 2px 0;

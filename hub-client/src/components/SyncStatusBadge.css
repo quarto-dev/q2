@@ -46,6 +46,13 @@
   box-shadow: 0 0 4px color-mix(in srgb, yellowgreen 60%, transparent);
 }
 
+/* Truncate rather than overflow when the cell has a fixed width. */
+.sync-status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .sync-status-text em {
   font-style: italic;
 }
