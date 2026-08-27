@@ -2,19 +2,25 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMediaQuery } from './useMediaQuery';
 
 /**
- * Sidebar drawer behavior (Phase 5 narrow-viewport design): at ≤900px the
- * sidebar leaves the flex layout and becomes a modal overlay drawer (the
- * CSS lives in Editor.css — `.sidebar-drawer` is `display: contents`
- * above the breakpoint, so the wrapper is layout-transparent there).
+ * Sidebar visibility + drawer behavior (Phase 5 narrow-viewport design,
+ * extended after design review): the header toggle is permanent chrome.
+ * Above 900px it hides/shows the static sidebar (VS Code style); at
+ * ≤900px the sidebar leaves the flex layout and becomes a modal overlay
+ * drawer the toggle opens/closes (the CSS lives in Editor.css —
+ * `.sidebar-drawer` is `display: contents` in the static layout, so the
+ * wrapper is layout-transparent there).
  *
- * The hook owns the open state, Escape close, focus-into-drawer on open,
- * focus return to the toggle on close, and the Tab trap while open.
+ * The two modes keep separate state: hiding the static sidebar does not
+ * open the drawer on a narrow resize, and vice versa. The hook owns the
+ * open state, Escape close, focus-into-drawer on open, focus return to
+ * the toggle on close, and the Tab trap while the drawer is open.
  * `SidebarDrawer` (components/SidebarDrawer.tsx) renders the wrapper +
  * scrim from these values; MinimalHeader renders the toggle button.
  */
 export function useSidebarDrawer() {
   const isDrawer = useMediaQuery('(max-width: 900px)');
   const [open, setOpen] = useState(false);
+  const [visible, setVisible] = useState(true);
   const toggleRef = useRef<HTMLButtonElement | null>(null);
   const drawerRef = useRef<HTMLDivElement | null>(null);
 
@@ -23,6 +29,8 @@ export function useSidebarDrawer() {
   // means the drawer reopens as the user left it (VS Code's sidebar
   // behaves the same way).
   const drawerOpen = isDrawer && open;
+  /** Whether the sidebar is on screen right now (drives aria-expanded). */
+  const sidebarVisible = isDrawer ? drawerOpen : visible;
 
   // Focus into the drawer on open. On close, return focus to the toggle
   // only when focus is still inside the drawer — don't steal it back
@@ -73,7 +81,15 @@ export function useSidebarDrawer() {
   return {
     isDrawer,
     drawerOpen,
-    toggle: useCallback(() => setOpen((v) => !v), []),
+    visible,
+    sidebarVisible,
+    toggle: useCallback(() => {
+      if (isDrawer) {
+        setOpen((v) => !v);
+      } else {
+        setVisible((v) => !v);
+      }
+    }, [isDrawer]),
     close: useCallback(() => setOpen(false), []),
     toggleRef,
     drawerRef,

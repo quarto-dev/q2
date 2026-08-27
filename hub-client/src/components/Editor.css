@@ -190,6 +190,12 @@
   display: contents;
 }
 
+/* Static layout, sidebar hidden via the header toggle: the wrapper
+   leaves the layout entirely (the panes take the width). */
+.sidebar-drawer.hidden {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .sidebar-drawer {
     display: block;

@@ -328,8 +328,39 @@ test('sidebar is an off-canvas drawer at 800px, static at 1280px', async ({ page
   await expectNoHorizontalScroll(page, '.editor-main');
 
   await bootAt(page, 1280, 'editor-shell', '.editor-main');
-  await expect(page.getByRole('button', { name: 'Toggle sidebar' })).toHaveCount(0);
+  // The toggle is permanent chrome (Phase 5 review feedback): visible at
+  // every width, and the sidebar starts visible at 1280px.
+  const toggle = page.getByRole('button', { name: 'Toggle sidebar' });
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('.sidebar-sections')).toBeVisible();
+});
+
+test('sidebar toggle hides and restores the sidebar at 1280px', async ({ page }) => {
+  await bootAt(page, 1280, 'editor-shell', '.editor-main');
+  const toggle = page.getByRole('button', { name: 'Toggle sidebar' });
+  await toggle.click();
+  await expect(page.locator('.sidebar-sections')).toBeHidden();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expectNoHorizontalScroll(page, '.editor-main');
+  await toggle.click();
+  await expect(page.locator('.sidebar-sections')).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('sidebar hidden at 1280px stays closed as a drawer at 800px', async ({ page }) => {
+  await bootAt(page, 1280, 'editor-shell', '.editor-main');
+  const toggle = page.getByRole('button', { name: 'Toggle sidebar' });
+  await toggle.click();
+  await expect(page.locator('.sidebar-sections')).toBeHidden();
+  // Narrowing across the breakpoint must not pop the sidebar back: the
+  // drawer opens only when the user asks.
+  await page.setViewportSize({ width: 800, height: 720 });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.sidebar-drawer')).not.toBeInViewport();
+  await toggle.click();
+  await expect(page.locator('.sidebar-drawer')).toBeInViewport();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('sidebar drawer opens with scrim and moves focus in', async ({ page }) => {

@@ -1078,8 +1078,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onToggleFullscreenPreview={handleToggleFullscreenPreview}
             isFullscreenPreview={isFullscreenPreview}
             isOnline={isOnline}
-            sidebarOpen={sidebarDrawer.drawerOpen}
-            onToggleSidebar={sidebarDrawer.isDrawer ? sidebarDrawer.toggle : undefined}
+            sidebarOpen={sidebarDrawer.sidebarVisible}
+            onToggleSidebar={sidebarDrawer.toggle}
             sidebarToggleRef={sidebarDrawer.toggleRef}
           />
           {replayState.isActive && (

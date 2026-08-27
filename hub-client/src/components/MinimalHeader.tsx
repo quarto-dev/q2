@@ -24,9 +24,11 @@ interface MinimalHeaderProps {
   /** Whether the project is connected to the sync server */
   isOnline?: boolean;
   /**
-   * Sidebar drawer toggle (Phase 5): rendered only at ≤900px, when the
-   * sidebar is a drawer — the caller (Editor) gates on the breakpoint
-   * via onToggleSidebar's presence. The ref gets focus on drawer close.
+   * Sidebar toggle (Phase 5, made permanent after design review):
+   * visible at every width — hides/shows the static sidebar above
+   * 900px, opens/closes the overlay drawer at ≤900px. `sidebarOpen`
+   * reflects the sidebar's current on-screen presence (aria-expanded).
+   * The ref gets focus on drawer close.
    */
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;

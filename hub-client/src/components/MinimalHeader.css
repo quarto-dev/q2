@@ -94,6 +94,18 @@
   display: none;
 }
 
+/* Sidebar toggle (Phase 5, after design review): permanent chrome, but
+   it must read as belonging to the sidebar, not as a title-bar action —
+   muted grey at rest. A faint sidebar-tinted background appears while
+   the sidebar is open, tying the button to its surface. */
+.minimal-header .sidebar-toggle-btn {
+  color: var(--editor-text-muted);
+}
+
+.minimal-header .sidebar-toggle-btn[aria-expanded='true'] {
+  background: var(--sidebar-bg);
+}
+
 @media (max-width: 700px) {
   .header-doc .project-name {
     flex-shrink: 1;

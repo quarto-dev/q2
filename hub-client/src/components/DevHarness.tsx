@@ -281,8 +281,8 @@ function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'previ
         onToggleFullscreenPreview={() => setLastAction('fullscreen-preview')}
         isFullscreenPreview={false}
         isOnline={true}
-        sidebarOpen={drawer.drawerOpen}
-        onToggleSidebar={drawer.isDrawer ? drawer.toggle : undefined}
+        sidebarOpen={drawer.sidebarVisible}
+        onToggleSidebar={drawer.toggle}
         sidebarToggleRef={drawer.toggleRef}
       />
       <main className={`editor-main view-mode-${viewMode}`}>
@@ -637,6 +637,11 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
         onToggleFullscreenPreview={() => {}}
         isFullscreenPreview={false}
         isOnline={true}
+        // The sidebar toggle is permanent chrome (Phase 5 review); the
+        // header route has no sidebar, so a static open state + dummy ref.
+        sidebarOpen={true}
+        onToggleSidebar={() => {}}
+        sidebarToggleRef={{ current: null }}
       />
     </EditorChrome>
   ),
