@@ -44,7 +44,7 @@ const BASELINE_PAGES: {
   { page: 'dialog-new-asset', label: 'dialog-new-asset', selector: '.new-asset-dialog', capture: 'element' },
   { page: 'sidebar', label: 'sidebar-sections', selector: '.sidebar-sections', capture: 'element' },
   { page: 'about-tab', label: 'about-tab', selector: '.about-tab', capture: 'element' },
-  { page: 'header', label: 'minimal-header', selector: '.minimal-header', capture: 'element' },
+  { page: 'header', label: 'top-bars', selector: '.top-bars', capture: 'element' },
   { page: 'notifications', label: 'notifications', selector: '.ephemeral-session-banner', capture: 'page' },
   { page: 'tokens', label: 'tokens', selector: 'text=Design tokens', capture: 'page' },
   { page: 'gallery', label: 'gallery', selector: 'text=Component gallery', capture: 'page' },

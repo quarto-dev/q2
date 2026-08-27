@@ -44,7 +44,7 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'dialog-new-asset', label: 'dialog-new-asset', selector: '.new-asset-dialog' },
   { page: 'sidebar', label: 'sidebar-sections', selector: '.sidebar-sections' },
   { page: 'about-tab', label: 'about-tab', selector: '.about-tab' },
-  { page: 'header', label: 'minimal-header', selector: '.minimal-header' },
+  { page: 'header', label: 'top-bars', selector: '.top-bars' },
   { page: 'notifications', label: 'notifications', selector: '.ephemeral-session-banner' },
   { page: 'setup-migration', label: 'setup-migration', selector: '.setup-modal' },
   { page: 'setup-fresh', label: 'setup-fresh', selector: '.setup-modal' },

@@ -1,25 +1,23 @@
 /**
- * Minimal Header Component
+ * Document Top Bar
  *
- * Slim header bar. Left: switch/share actions + project / file identity.
+ * Document-scoped chrome. Left: sidebar toggle + current file path.
  * Right: online status, layout toggle, fullscreen-preview action.
+ * Sits to the right of ProjectTopBar in the `.top-bars` row; eventually
+ * this bar lives with the rest of the document UI in a right-hand column.
  */
 
 import { useRef, useState } from 'react';
 import ViewToggleControl from './ViewToggleControl';
-import { SwitchIcon, ShareIcon, PreviewIcon, PanelLeftIcon, MoreIcon } from './icons';
+import { PreviewIcon, PanelLeftIcon, MoreIcon } from './icons';
 import ConnectionStatusDialog from './ConnectionStatusDialog';
 import Tooltip from './Tooltip';
 import { Menu, MenuItem } from './Menu';
 import { header } from '../strings';
-import './MinimalHeader.css';
+import './TopBars.css';
 
-interface MinimalHeaderProps {
+interface DocumentTopBarProps {
   currentFilePath: string | null;
-  projectName: string;
-  onChooseNewProject: () => void;
-  /** Called when user wants to share the project */
-  onShare?: () => void;
   onToggleFullscreenPreview?: () => void;
   isFullscreenPreview?: boolean;
   /** Whether the project is connected to the sync server */
@@ -34,29 +32,27 @@ interface MinimalHeaderProps {
   sidebarToggleRef?: React.RefObject<HTMLButtonElement | null>;
 }
 
-export default function MinimalHeader({
+export default function DocumentTopBar({
   currentFilePath,
-  projectName,
-  onChooseNewProject,
-  onShare,
   onToggleFullscreenPreview,
   isFullscreenPreview = false,
   isOnline = true,
   sidebarOpen,
   onToggleSidebar,
   sidebarToggleRef,
-}: MinimalHeaderProps) {
+}: DocumentTopBarProps) {
   const [showConnectionStatus, setShowConnectionStatus] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowTriggerRef = useRef<HTMLButtonElement | null>(null);
   // Secondary actions collapse into the overflow menu at ≤700px (CSS
   // hides the inline buttons and reveals the kebab). Rendered only when
   // at least one collapsible action exists.
-  const hasCollapsibleActions =
-    !!onShare || !!(onToggleFullscreenPreview && !isFullscreenPreview);
+  const hasCollapsibleActions = !!(
+    onToggleFullscreenPreview && !isFullscreenPreview
+  );
 
   return (
-    <header className="minimal-header">
+    <header className="top-bar document-top-bar">
       <div className="header-left">
         {onToggleSidebar && (
           <Tooltip content={header.toggleSidebar}>
@@ -72,32 +68,7 @@ export default function MinimalHeader({
             </button>
           </Tooltip>
         )}
-        <Tooltip content={header.switchProject}>
-          <button
-            className="qh-icon-btn boxed"
-            onClick={onChooseNewProject}
-            aria-label={header.switchProject}
-          >
-            <SwitchIcon />
-          </button>
-        </Tooltip>
-        {onShare && (
-          <Tooltip content={header.shareProject}>
-            <button
-              className="qh-icon-btn boxed header-share-btn"
-              onClick={onShare}
-              aria-label={header.shareProject}
-            >
-              <ShareIcon />
-            </button>
-          </Tooltip>
-        )}
-        <span className="header-divider" aria-hidden="true" />
         <div className="header-doc">
-          <span className="project-name">{projectName}</span>
-          <span className="path-sep" aria-hidden="true">
-            |
-          </span>
           <span className={`file-path qh-truncate${currentFilePath ? '' : ' empty'}`}>
             {currentFilePath ?? header.noFileSelected}
           </span>
@@ -156,16 +127,6 @@ export default function MinimalHeader({
                 onClose={() => setOverflowOpen(false)}
                 aria-label={header.moreActions}
               >
-                {onShare && (
-                  <MenuItem
-                    onSelect={() => {
-                      setOverflowOpen(false);
-                      onShare();
-                    }}
-                  >
-                    {header.shareProject}
-                  </MenuItem>
-                )}
                 {onToggleFullscreenPreview && !isFullscreenPreview && (
                   <MenuItem
                     onSelect={() => {

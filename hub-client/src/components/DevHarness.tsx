@@ -18,7 +18,8 @@ import FileSidebar from './FileSidebar';
 import OutlinePanel from './OutlinePanel';
 import SidebarTabs from './SidebarTabs';
 import StatusTab from './tabs/StatusTab';
-import MinimalHeader from './MinimalHeader';
+import ProjectTopBar from './ProjectTopBar';
+import DocumentTopBar from './DocumentTopBar';
 import Toast from './Toast';
 import UpdateAvailableToast from './UpdateAvailableToast';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
@@ -249,7 +250,7 @@ function SidebarHarness({ files = FAKE_FILES }: { files?: FileEntry[] }) {
 }
 
 /**
- * Composed editor-shell fixture (Phase 4): the real MinimalHeader,
+ * Composed editor-shell fixture (Phase 4): the real top bars,
  * SidebarTabs, and `.editor-main view-mode-*` pane layout from Editor.tsx
  * with placeholder pane content standing in for Monaco and the preview
  * iframe (both need services the no-server harness doesn't have). This
@@ -273,30 +274,39 @@ function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'previ
   };
   return (
     <EditorChrome>
-      <MinimalHeader
-        currentFilePath="index.qmd"
-        projectName="Research Paper"
-        onChooseNewProject={() => {}}
-        onShare={() => setLastAction('share')}
-        onToggleFullscreenPreview={() => setLastAction('fullscreen-preview')}
-        isFullscreenPreview={false}
-        isOnline={true}
-        sidebarOpen={drawer.drawerOpen}
-        onToggleSidebar={drawer.isDrawer ? drawer.toggle : undefined}
-        sidebarToggleRef={drawer.toggleRef}
-      />
-      <main className={`editor-main view-mode-${viewMode}`}>
-        <SidebarDrawer drawer={drawer}>
-          <StatefulSidebarSections />
-        </SidebarDrawer>
-        <div className="pane editor-pane">
-          <div style={placeholder}>Editor pane</div>
+      <div className="editor-columns">
+        <div className="project-column">
+          <ProjectTopBar
+            projectName="Research Paper"
+            onChooseNewProject={() => {}}
+            onShare={() => setLastAction('share')}
+          />
+          <SidebarDrawer drawer={drawer}>
+            <StatefulSidebarSections />
+          </SidebarDrawer>
+          <div className="project-bottom-bar" />
         </div>
-        <div className="pane-divider" />
-        <div className="pane preview-pane">
-          <div style={placeholder}>Preview pane</div>
+        <div className="document-column">
+          <DocumentTopBar
+            currentFilePath="index.qmd"
+            onToggleFullscreenPreview={() => setLastAction('fullscreen-preview')}
+            isFullscreenPreview={false}
+            isOnline={true}
+            sidebarOpen={drawer.drawerOpen}
+            onToggleSidebar={drawer.isDrawer ? drawer.toggle : undefined}
+            sidebarToggleRef={drawer.toggleRef}
+          />
+          <main className={`editor-main view-mode-${viewMode}`}>
+            <div className="pane editor-pane">
+              <div style={placeholder}>Editor pane</div>
+            </div>
+            <div className="pane-divider" />
+            <div className="pane preview-pane">
+              <div style={placeholder}>Preview pane</div>
+            </div>
+          </main>
         </div>
-      </main>
+      </div>
       {/* Offscreen action recorder for Playwright assertions. */}
       <div
         data-testid="header-last-action"
@@ -379,7 +389,7 @@ function StatusTabErrorHarness() {
 
 /** Editor chrome must render inside .editor-container for the dark-ramp
  *  token overrides (:root.dark .editor-container) to apply, and under a
- *  ViewModeProvider for ViewToggleControl (MinimalHeader). */
+ *  ViewModeProvider for ViewToggleControl (DocumentTopBar). */
 /** Module-level so ReplayHarness render stays pure (see timestamp below). */
 const REPLAY_FIXTURE_TIMESTAMP = (Date.now() - 42 * 60_000) / 1000;
 
@@ -602,15 +612,19 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
   ),
   header: () => (
     <EditorChrome>
-      <MinimalHeader
-        currentFilePath="index.qmd"
-        projectName="Research Paper"
-        onChooseNewProject={() => {}}
-        onShare={() => {}}
-        onToggleFullscreenPreview={() => {}}
-        isFullscreenPreview={false}
-        isOnline={true}
-      />
+      <div className="top-bars">
+        <ProjectTopBar
+          projectName="Research Paper"
+          onChooseNewProject={() => {}}
+          onShare={() => {}}
+        />
+        <DocumentTopBar
+          currentFilePath="index.qmd"
+          onToggleFullscreenPreview={() => {}}
+          isFullscreenPreview={false}
+          isOnline={true}
+        />
+      </div>
     </EditorChrome>
   ),
   notifications: () => (

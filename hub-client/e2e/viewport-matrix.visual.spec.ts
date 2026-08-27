@@ -8,9 +8,9 @@
  * Matrix: 1280 / 900 / 700 / 480 / 320px widths over the editor shell,
  * projects home, and every dialog. The full editor can't boot in the
  * no-server harness (Phase 0's known limit), so the shell is covered by
- * the composed `#/dev/editor-shell*` routes: the real MinimalHeader,
- * SidebarTabs, and `.editor-main view-mode-*` flex rules with placeholder
- * panes for Monaco/iframe.
+ * the composed `#/dev/editor-shell*` routes: the real ProjectTopBar,
+ * DocumentTopBar, SidebarTabs, and `.editor-main view-mode-*` flex rules
+ * with placeholder panes for Monaco/iframe.
  *
  * Layout assertions run in the light theme (geometry is
  * theme-independent); screenshots run in both themes at the widths where
@@ -410,22 +410,22 @@ test('split view intact at 900px (counter-check)', async ({ page }) => {
 
 test('header secondary actions collapse into an overflow menu at 700px', async ({ page }) => {
   await bootAt(page, 700, 'editor-shell', '.editor-main');
-  await expect(page.locator('.minimal-header .preview-btn')).toBeHidden();
-  await expect(page.locator('.minimal-header .header-share-btn')).toBeHidden();
+  await expect(page.locator('.document-top-bar .preview-btn')).toBeHidden();
+  // Share lives in the project top bar now and stays inline at all widths.
+  await expect(page.locator('.project-top-bar .header-share-btn')).toBeVisible();
   const overflow = page.getByRole('button', { name: 'More actions' });
   await expect(overflow).toBeVisible();
   await overflow.click();
   const menu = page.locator('[role="menu"]');
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: 'Share this project' })).toBeVisible();
   await expect(menu.getByRole('menuitem', { name: 'Fullscreen preview' })).toBeVisible();
-  await menu.getByRole('menuitem', { name: 'Share this project' }).click();
-  await expect(page.getByTestId('header-last-action')).toHaveText('share');
+  await menu.getByRole('menuitem', { name: 'Fullscreen preview' }).click();
+  await expect(page.getByTestId('header-last-action')).toHaveText('fullscreen-preview');
 });
 
 test('header actions inline at 1280px (counter-check)', async ({ page }) => {
   await bootAt(page, 1280, 'editor-shell', '.editor-main');
-  await expect(page.locator('.minimal-header .preview-btn')).toBeVisible();
-  await expect(page.locator('.minimal-header .header-share-btn')).toBeVisible();
+  await expect(page.locator('.document-top-bar .preview-btn')).toBeVisible();
+  await expect(page.locator('.project-top-bar .header-share-btn')).toBeVisible();
   await expect(page.getByRole('button', { name: 'More actions' })).toHaveCount(0);
 });

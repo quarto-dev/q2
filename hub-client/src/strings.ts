@@ -42,7 +42,7 @@ export const common = {
   reload: 'Reload',
 } as const;
 
-/** MinimalHeader (editor shell top bar). */
+/** Top bars (ProjectTopBar + DocumentTopBar, the editor shell top row). */
 export const header = {
   switchProject: 'Switch project',
   shareProject: 'Share this project',

@@ -176,9 +176,9 @@
 
 .editor-main {
   flex: 1;
+  min-height: 0;
   display: flex;
   overflow: hidden;
-  /* Anchor for the narrow-viewport sidebar drawer + scrim (Phase 5). */
   position: relative;
 }
 
@@ -479,6 +479,66 @@
 
 .header-wrapper {
   position: relative;
+  flex-shrink: 0;
+}
+
+/* Two-column shell: project column (left — project top bar, sidebar,
+   project bottom bar) and document column (right — document top bar,
+   panes, replay drawer). Also the positioning anchor for the
+   narrow-viewport sidebar drawer + scrim. */
+.editor-columns {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+.project-column {
+  width: 220px;
+  min-width: 180px;
+  max-width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+}
+
+/* Inside the column the sidebar fills the available width/height; its
+   own width and border rules are for the old flex-row placement. */
+.project-column .sidebar-sections {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  border-right: none;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Narrow windows: the sidebar-sections width floor drops (SidebarTabs.css);
+   mirror it on the column. */
+@media (max-width: 480px) {
+  .project-column { min-width: 120px; }
+}
+
+.document-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Project bottom bar: empty for now; mirrors the replay drawer's
+   collapsed height so the two bottom bars read as one row. */
+.project-bottom-bar {
+  flex-shrink: 0;
+  min-height: 28px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--editor-bg);
+  border-top: 1px solid var(--editor-header-border);
+}
+
+.document-bottom-bar {
   flex-shrink: 0;
 }
 

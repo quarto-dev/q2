@@ -7,7 +7,7 @@
  * - "Export ZIP" button to download all project files
  * - "Screenshot Preview" button to capture the preview pane as a PNG
  *
- * Project switching lives in the MinimalHeader switch-project button, not
+ * Project switching lives in the ProjectTopBar switch-project button, not
  * here.
  */
 

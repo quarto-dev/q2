@@ -1,32 +1,26 @@
 /**
- * Tests for the MinimalHeader connection indicator.
+ * Tests for the DocumentTopBar connection indicator.
  *
  * @vitest-environment jsdom
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import MinimalHeader from './MinimalHeader';
+import DocumentTopBar from './DocumentTopBar';
 import { ViewModeProvider } from './ViewModeContext';
 
 afterEach(cleanup);
 
-const baseProps = {
-  currentFilePath: 'index.qmd',
-  projectName: 'My Project',
-  onChooseNewProject: () => {},
-};
-
-// MinimalHeader renders <ViewToggleControl/>, which reads ViewModeContext.
+// DocumentTopBar renders <ViewToggleControl/>, which reads ViewModeContext.
 function renderHeader(isOnline: boolean) {
   return render(
     <ViewModeProvider>
-      <MinimalHeader {...baseProps} isOnline={isOnline} />
+      <DocumentTopBar currentFilePath="index.qmd" isOnline={isOnline} />
     </ViewModeProvider>,
   );
 }
 
-describe('MinimalHeader connection indicator', () => {
+describe('DocumentTopBar connection indicator', () => {
   it('shows Online when connected', () => {
     renderHeader(true);
     const indicator = document.querySelector('.connection-indicator')!;

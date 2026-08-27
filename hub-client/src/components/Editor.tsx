@@ -45,7 +45,8 @@ import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
-import MinimalHeader from './MinimalHeader';
+import ProjectTopBar from './ProjectTopBar';
+import DocumentTopBar from './DocumentTopBar';
 import SidebarTabs from './SidebarTabs';
 import SidebarDrawer from './SidebarDrawer';
 import OutlinePanel from './OutlinePanel';
@@ -1068,44 +1069,17 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
   return (
     <div className="editor-container">
-      {!isFullscreenPreview && (
-        <div className="header-wrapper">
-          <MinimalHeader
-            currentFilePath={currentFile?.path ?? null}
-            projectName={project.description}
-            onChooseNewProject={onDisconnect}
-            onShare={handleShare}
-            onToggleFullscreenPreview={handleToggleFullscreenPreview}
-            isFullscreenPreview={isFullscreenPreview}
-            isOnline={isOnline}
-            sidebarOpen={sidebarDrawer.drawerOpen}
-            onToggleSidebar={sidebarDrawer.isDrawer ? sidebarDrawer.toggle : undefined}
-            sidebarToggleRef={sidebarDrawer.toggleRef}
-          />
-          {replayState.isActive && (
-            <div className="replay-mode-banner">REPLAY MODE</div>
-          )}
-        </div>
-      )}
-
-      {!isFullscreenPreview && sessionEphemeral && <EphemeralSessionBanner />}
-
-      {!isFullscreenPreview && unlocatedErrors.length > 0 && (
-        <div className="diagnostics-banner">
-          {unlocatedErrors.map((diag, i) => (
-            <div key={i} className={`diagnostic-item diagnostic-${diag.kind}`}>
-              {diag.code && <span className="diagnostic-code">[{diag.code}]</span>}
-              <span className="diagnostic-title">{diag.title}</span>
-              {diag.problem && <span className="diagnostic-problem">: {diag.problem}</span>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <main id="main-content" tabIndex={-1} className={`editor-main view-mode-${viewMode}`}>
+      <div className="editor-columns">
+        {/* Project column: project-scoped chrome (top bar, sidebar, bottom bar) */}
         {!isFullscreenPreview && (
-          <SidebarDrawer drawer={sidebarDrawer}>
-          <SidebarTabs disabled={replayState.isActive}>
+          <div className="project-column">
+            <ProjectTopBar
+              projectName={project.description}
+              onChooseNewProject={onDisconnect}
+              onShare={handleShare}
+            />
+            <SidebarDrawer drawer={sidebarDrawer}>
+            <SidebarTabs disabled={replayState.isActive}>
             {(activeTab) => {
               switch (activeTab) {
                 case 'files':
@@ -1166,8 +1140,45 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               }
             }}
           </SidebarTabs>
-          </SidebarDrawer>
+            </SidebarDrawer>
+            <div className="project-bottom-bar" />
+          </div>
         )}
+
+        {/* Document column: document-scoped chrome (top bar, panes, bottom bar) */}
+        <div className="document-column">
+        {!isFullscreenPreview && (
+          <div className="header-wrapper">
+            <DocumentTopBar
+              currentFilePath={currentFile?.path ?? null}
+              onToggleFullscreenPreview={handleToggleFullscreenPreview}
+              isFullscreenPreview={isFullscreenPreview}
+              isOnline={isOnline}
+              sidebarOpen={sidebarDrawer.drawerOpen}
+              onToggleSidebar={sidebarDrawer.isDrawer ? sidebarDrawer.toggle : undefined}
+              sidebarToggleRef={sidebarDrawer.toggleRef}
+            />
+            {replayState.isActive && (
+              <div className="replay-mode-banner">REPLAY MODE</div>
+            )}
+          </div>
+        )}
+
+        {!isFullscreenPreview && sessionEphemeral && <EphemeralSessionBanner />}
+
+        {!isFullscreenPreview && unlocatedErrors.length > 0 && (
+          <div className="diagnostics-banner">
+            {unlocatedErrors.map((diag, i) => (
+              <div key={i} className={`diagnostic-item diagnostic-${diag.kind}`}>
+                {diag.code && <span className="diagnostic-code">[{diag.code}]</span>}
+                <span className="diagnostic-title">{diag.title}</span>
+                {diag.problem && <span className="diagnostic-problem">: {diag.problem}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <main id="main-content" tabIndex={-1} className={`editor-main view-mode-${viewMode}`}>
         {!isFullscreenPreview && (
           <div className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}>
             {/* Show MarkdownSummary overlay in preview mode */}
@@ -1256,26 +1267,30 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onAttributionGeneratingChange={setAttributionGenerating}
           />
         </div>
-      </main>
+        </main>
 
-      {/* Replay mode drawer */}
-      {!isFullscreenPreview && (
-        <ReplayDrawer
-          state={replayState}
-          controls={replayControls}
-          disabled={!!currentFile && isBinaryExtension(currentFile.path)}
-          identities={identities}
-          attributionOn={attributionOn}
-          onAttributionChange={setAttributionOn}
-          commentsMode={commentsMode}
-          onCommentsModeChange={setCommentsMode}
-          commentsCount={outstandingCommentCount}
-          attributionGenerating={attributionGenerating}
-          attributionDisabled={
-            currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'
-          }
-        />
-      )}
+        {/* Document bottom bar: replay drawer */}
+        {!isFullscreenPreview && (
+          <div className="document-bottom-bar">
+            <ReplayDrawer
+              state={replayState}
+              controls={replayControls}
+              disabled={!!currentFile && isBinaryExtension(currentFile.path)}
+              identities={identities}
+              attributionOn={attributionOn}
+              onAttributionChange={setAttributionOn}
+              commentsMode={commentsMode}
+              onCommentsModeChange={setCommentsMode}
+              commentsCount={outstandingCommentCount}
+              attributionGenerating={attributionGenerating}
+              attributionDisabled={
+                currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'
+              }
+            />
+          </div>
+        )}
+        </div>
+      </div>
 
       {/* New text-file dialog */}
       <NewFileDialog

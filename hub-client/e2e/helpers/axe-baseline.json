@@ -23,12 +23,6 @@
   "gallery|light": {
     "color-contrast": 3
   },
-  "minimal-header|dark": {
-    "color-contrast": 1
-  },
-  "minimal-header|light": {
-    "color-contrast": 1
-  },
   "notifications|dark": {
     "color-contrast": 1
   },
@@ -88,5 +82,11 @@
   },
   "status-tab-loading|light": {
     "color-contrast": 4
+  },
+  "top-bars|dark": {
+    "color-contrast": 1
+  },
+  "top-bars|light": {
+    "color-contrast": 1
   }
 }

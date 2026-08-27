@@ -55,9 +55,9 @@ test.describe('prefers-reduced-motion: reduce', () => {
   });
 
   test('no transitions on header chrome', async ({ page }) => {
-    await bootHarness(page, 'header', '.minimal-header', 'light');
+    await bootHarness(page, 'header', '.top-bars', 'light');
     // .qh-icon-btn has `transition: background/color/border-color 0.15s`
-    expect(instant(await transitionDuration(page, '.minimal-header .qh-icon-btn'))).toBe(true);
+    expect(instant(await transitionDuration(page, '.top-bar .qh-icon-btn'))).toBe(true);
   });
 
   test('no entrance animation on notifications', async ({ page }) => {

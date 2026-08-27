@@ -1,12 +1,43 @@
-.minimal-header {
+/* ProjectTopBar heads the project column (left); DocumentTopBar heads
+   the document column (right). Split from the old single MinimalHeader.
+   The .top-bars row wrapper survives for the DevHarness header fixture,
+   which shows the two bars side by side in isolation. */
+
+.top-bars {
+  display: flex;
+  align-items: stretch;
+}
+
+.top-bars .project-top-bar {
+  flex-shrink: 0;
+  max-width: 50%;
+  border-right: 1px solid var(--editor-header-border);
+}
+
+.top-bars .document-top-bar {
+  flex: 1;
+}
+
+.top-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 6px 12px;
   background: var(--editor-header-bg);
   border-bottom: 1px solid var(--editor-header-border);
   min-height: 36px;
+}
+
+.project-top-bar {
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.document-top-bar {
+  min-width: 0;
+  justify-content: space-between;
   gap: 16px;
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -17,20 +48,21 @@
   gap: 6px;
 }
 
-/* Header icon actions (switch / share) use the shared .qh-icon-btn.boxed
-   system from ui.css; only the header-context colors are overridden here. */
-.minimal-header .qh-icon-btn {
+/* Bar icon actions (switch / share / sidebar toggle) use the shared
+   .qh-icon-btn.boxed system from ui.css; only the header-context colors
+   are overridden here. */
+.top-bar .qh-icon-btn {
   color: var(--editor-text-muted);
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.minimal-header .qh-icon-btn:hover {
+.top-bar .qh-icon-btn:hover {
   background: var(--view-toggle-hover-bg);
   color: var(--editor-text);
 }
 
 /* Preview is the primary action: filled accent pill with icon + label. */
-.minimal-header .preview-btn {
+.top-bar .preview-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -47,26 +79,29 @@
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 
-.minimal-header .preview-btn:hover {
+.top-bar .preview-btn:hover {
   background: var(--btn-accent-hover-bg);
   border-color: var(--btn-accent-hover-bg);
 }
 
-.minimal-header .preview-btn:active {
+.top-bar .preview-btn:active {
   background: var(--btn-accent-active-bg);
   border-color: var(--btn-accent-active-bg);
 }
 
-/* Vertical divider separating the actions from the document identity. */
-.header-divider {
-  width: 1px;
-  align-self: stretch;
-  margin: 4px 2px;
-  background: var(--editor-header-border);
-  flex-shrink: 0;
+/* Project identity: fills the space between share and switch actions. */
+.project-top-bar .project-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--editor-text);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Document identity: project name / file path. */
+/* Document identity: current file path. */
 .header-doc {
   display: flex;
   align-items: baseline;
@@ -75,63 +110,36 @@
   overflow: hidden;
 }
 
-.header-doc .project-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--editor-text);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* Narrow windows (Phase 4): let the project name truncate with an
-   ellipsis instead of being clipped mid-word by .header-doc's overflow.
-   Scoped to the media query because overflow != visible changes the
-   span's baseline alignment, and the 1280px baselines must stay
-   pixel-identical. */
 /* Header overflow menu (Phase 5): hidden by default; at ≤700px the
-   secondary actions (share, fullscreen preview) collapse into it. */
+   secondary action (fullscreen preview) collapses into it. */
 .header-overflow {
   display: none;
 }
 
 @media (max-width: 700px) {
-  .header-doc .project-name {
-    flex-shrink: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .minimal-header .header-share-btn,
-  .minimal-header .preview-btn {
+  .document-top-bar .preview-btn {
     display: none;
   }
 
-  .minimal-header .header-overflow {
+  .document-top-bar .header-overflow {
     display: block;
   }
 }
 
-/* Very narrow windows (Phase 4): wrap to two rows — project controls and
-   identity on the first, status and view controls right-aligned on the
-   second. Without it, .header-left collapses to zero flex width and its
-   buttons paint *under* .header-right (which is flex-shrink: 0 and later
-   in paint order). Phase 5 owns the designed answer (overflow menu). */
+/* Very narrow windows (Phase 4): wrap the document bar to two rows —
+   sidebar toggle and file path on the first, status and view controls
+   right-aligned on the second. Without it, .header-left collapses to
+   zero flex width and its buttons paint *under* .header-right (which
+   is flex-shrink: 0 and later in paint order). */
 @media (max-width: 480px) {
-  .minimal-header {
+  .document-top-bar {
     flex-wrap: wrap;
     row-gap: 6px;
   }
 
-  .header-left { flex: 1 1 100%; }
+  .document-top-bar .header-left { flex: 1 1 100%; }
 
-  .header-right { margin-inline-start: auto; }
-}
-
-.header-doc .path-sep {
-  color: var(--editor-text-muted);
-  font-size: 13px;
-  flex-shrink: 0;
+  .document-top-bar .header-right { margin-inline-start: auto; }
 }
 
 .header-doc .file-path {
