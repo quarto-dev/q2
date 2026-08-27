@@ -2,7 +2,7 @@
 
 **Braid strand:** bd-706b0ixu
 **Created:** 2026-08-27
-**Status:** Approved — executing (design decisions resolved 2026-08-27)
+**Status:** Complete (implemented, verified E2E, strand closed 2026-08-27)
 **Follow-up strands:** bd-yspyic32 (mixed text+image payloads), bd-myoj9kp5
 (pipeline-wide SVG posture)
 
@@ -393,8 +393,8 @@ P2 could later become a project setting if paste-heavy projects ask for it.
       workspace Rust gates untouched-but-verified per pre-push checklist.
 - [x] **End-to-end verification** per CLAUDE.md — performed 2026-08-27
       against the production bundle in local-prod mode. See §6 below.
-- [ ] hub-client changelog entry (two-commit workflow).
-- [ ] Close bd-706b0ixu with pointers.
+- [x] hub-client changelog entry (two-commit workflow) — a32f8cdb1.
+- [x] Close bd-706b0ixu with pointers — closed 2026-08-27.
 
 ## 6. End-to-end verification record (2026-08-27)
 
