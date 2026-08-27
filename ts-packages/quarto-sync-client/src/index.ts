@@ -66,6 +66,7 @@ export type {
   StrandedFileDiagnostic,
   DocInventoryEntry,
   NetworkAdapterWrapper,
+  ConnectionInfo,
 } from './client.js';
 
 // Injectable diagnostic-log sink (bd-sl4o01y0): stdio hosts (hub-mcp)
@@ -96,6 +97,21 @@ export type {
 // announces one — exit-drain delivery confirmation keys off it,
 // bd-10deu8h4).
 export { MemoryStorageAdapter } from './storage-adapter.js';
+
+// Coarse last-activity timestamps for the connection-status dialog.
+export {
+  getSyncActivity,
+  getDocSyncActivity,
+  getDocRemoteChange,
+  getConnectionLog,
+} from './sync-activity.js';
+export type {
+  SyncActivity,
+  DocSyncActivity,
+  SyncMessageSummary,
+  RemoteChangeSummary,
+  ConnectionEvent,
+} from './sync-activity.js';
 
 // Export utilities
 export { computeSHA256 } from './hash.js';

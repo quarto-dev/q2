@@ -1,0 +1,169 @@
+.connection-status-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 320px;
+}
+
+.connection-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.connection-status-row dt {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.connection-status-row dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.connection-status-table {
+  width: 100%;
+  margin-top: 14px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.connection-status-table thead th {
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-align: right;
+  padding: 2px 0 6px 16px;
+}
+
+.connection-status-table tbody th {
+  color: var(--text-secondary);
+  font-weight: 400;
+  text-align: left;
+  padding: 3px 0;
+  white-space: nowrap;
+}
+
+.connection-status-table td {
+  color: var(--text-primary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 0 3px 16px;
+  white-space: nowrap;
+}
+
+.connection-status-diff {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.connection-status-diff-header {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.connection-status-patches {
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+  background: var(--input-bg-alpha, rgba(128, 128, 128, 0.1));
+  border-radius: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--text-primary);
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.connection-status-patches li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.connection-status-inline-diff {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.inline-diff-line {
+  display: flex;
+}
+
+.inline-diff-gutter {
+  width: 34px;
+  flex-shrink: 0;
+  text-align: right;
+  padding-right: 10px;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.inline-diff-content {
+  flex: 1;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.inline-diff-content .del {
+  background: rgba(244, 67, 54, 0.18);
+  text-decoration: line-through;
+}
+
+.inline-diff-content .ins {
+  background: rgba(76, 175, 80, 0.22);
+}
+
+/* Mirrors .header-right .connection-indicator in MinimalHeader.css. */
+.connection-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 10px;
+  background: var(--editor-header-bg);
+  border: 1px solid var(--editor-disconnected-border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--editor-text-dim);
+}
+
+.connection-status-badge .connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--editor-text-muted);
+  flex-shrink: 0;
+}
+
+.connection-status-badge.online {
+  border-color: var(--editor-success);
+}
+
+.connection-status-badge.offline {
+  border-color: var(--editor-warning);
+}
+
+.connection-status-badge.online .connection-dot {
+  background-color: var(--editor-success);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--editor-success) 60%, transparent);
+}
+
+.connection-status-badge.offline .connection-dot {
+  background-color: var(--editor-warning);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--editor-warning) 60%, transparent);
+}
