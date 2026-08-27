@@ -17,14 +17,15 @@ export type DropMarkdownKind = 'image' | 'link';
 export function buildDropMarkdown(
   kind: DropMarkdownKind,
   currentFilePath: string | null,
-  targetPath: string
+  targetPath: string,
+  altText: string = ''
 ): string {
   const href = currentFilePath
     ? relativePathBetween(currentFilePath, targetPath)
     : targetPath;
 
   if (kind === 'image') {
-    return `![](${href})`;
+    return `![${altText}](${href})`;
   }
   const fileName = targetPath.split('/').pop() || targetPath;
   return `[${fileName}](${href})`;
