@@ -591,6 +591,33 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
   'editor-shell': () => <EditorShellHarness viewMode="both" />,
   'editor-shell-markup': () => <EditorShellHarness viewMode="markup" />,
   'editor-shell-preview': () => <EditorShellHarness viewMode="preview" />,
+  // Fullscreen preview (Editor.tsx: header/editor-pane/divider unmount,
+  // the preview pane gains .fullscreen) — regression cover for the
+  // ≤700px split-collapse rule hiding the fullscreen pane.
+  'editor-shell-fullscreen': () => (
+    <EditorChrome>
+      <main className="editor-main view-mode-both">
+        <div className="pane preview-pane fullscreen">
+          <button className="fullscreen-close-btn" aria-label="Exit fullscreen preview">
+            ✕
+          </button>
+          <div
+            style={{
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--editor-text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+            }}
+          >
+            Preview pane (fullscreen)
+          </div>
+        </div>
+      </main>
+    </EditorChrome>
+  ),
   // The About tab standalone (sidebar width) — covers the shortcuts
   // reference, which the sidebar route's collapsed ABOUT section hides.
   'about-tab': () => (

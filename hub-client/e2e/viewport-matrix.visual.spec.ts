@@ -429,3 +429,14 @@ test('header actions inline at 1280px (counter-check)', async ({ page }) => {
   await expect(page.locator('.minimal-header .header-share-btn')).toBeVisible();
   await expect(page.getByRole('button', { name: 'More actions' })).toHaveCount(0);
 });
+
+/* ---- fullscreen preview at narrow widths (regression: the ≤700px
+   split-collapse rule must not hide the fullscreen preview pane) ---- */
+
+for (const width of [700, 320] as const) {
+  test(`fullscreen preview shows the preview pane at ${width}px`, async ({ page }) => {
+    await bootAt(page, width, 'editor-shell-fullscreen', '.editor-main');
+    await expect(page.locator('.preview-pane.fullscreen')).toBeVisible();
+    await expectNoHorizontalScroll(page, '.editor-main');
+  });
+}
