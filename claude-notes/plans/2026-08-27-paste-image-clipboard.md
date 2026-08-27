@@ -369,7 +369,7 @@ P2 could later become a project setting if paste-heavy projects ask for it.
 - [x] File follow-up strands and link `related` to bd-706b0ixu:
       bd-yspyic32 (mixed payloads), bd-myoj9kp5 (pipeline-wide SVG
       posture).
-- [ ] **Tests first** — a pure, DOM-free decision module
+- [x] **Tests first** — a pure, DOM-free decision module
       `fileUpload/pasteImages.ts`:
       `classifyPastePayload({files: {name, type}[], text})` →
       `'take-over' | 'pass-through'`, and
@@ -379,17 +379,17 @@ P2 could later become a project setting if paste-heavy projects ask for it.
       payload, SVG file, empty file list, multi-file, unsupported raster)
       and the filename/extension map. Verify tests fail before
       implementing.
-- [ ] Extend `buildDropMarkdown` with optional alt text (test-first).
-- [ ] Testable ingest orchestration: `createPasteImageHandler(deps)` in
+- [x] Extend `buildDropMarkdown` with optional alt text (test-first).
+- [x] Testable ingest orchestration: `createPasteImageHandler(deps)` in
       `fileUpload/` — a factory taking injected deps (classify, process,
       createBinaryFile, markdown builder, editor accessors) so the full
       paste flow (size validation, sequential ingest, single-file
       selection-as-alt, multi-file space join, file-switch guard) is unit
       tested without jsdom or Monaco. Verify tests fail, then implement.
-- [ ] Wire a stable capture-phase `paste` listener in `Editor.tsx`
+- [x] Wire a stable capture-phase `paste` listener in `Editor.tsx`
       (attached once at editor mount, delegating through a ref to avoid
       the stale-closure trap), routing through the tested module.
-- [ ] `npm run build:all` + `npm run test:ci` (hub-client gates), plus
+- [x] `npm run build:all` + `npm run test:ci` (hub-client gates), plus
       workspace Rust gates untouched-but-verified per pre-push checklist.
 - [ ] **End-to-end verification** per CLAUDE.md: real browser session
       against a running hub; paste a real image from the OS clipboard;

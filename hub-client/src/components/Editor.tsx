@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 // Side effects only: bundles Monaco + workers so no runtime CDN fetch occurs.
 import '../monacoSetup';
 import MonacoEditor from '@monaco-editor/react';
@@ -21,8 +21,13 @@ import { hasExecutableCells } from '../services/executableCells';
 import type { Diagnostic, RenderComment } from '@quarto/preview-renderer/types/diagnostic';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
 import { registerQmdLanguage } from './quartoTheme';
-import { processFileForUpload } from '../services/resourceService';
-import { buildDropMarkdown, resolveDefaultDestination } from './fileUpload';
+import { processFileForUpload, FILE_SIZE_LIMITS } from '../services/resourceService';
+import {
+  buildDropMarkdown,
+  resolveDefaultDestination,
+  classifyPastePayload,
+  createPasteImageHandler,
+} from './fileUpload';
 import { useProjectSearch } from '../services/search';
 import { usePresence } from '../hooks/usePresence';
 import { usePreference } from '../hooks/usePreference';
@@ -689,12 +694,17 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       }
     });
 
-    // Attach drag-drop handlers to editor container
+    // Attach drag-drop and paste handlers to editor container
     const domNode = editor.getDomNode();
     if (domNode) {
       domNode.addEventListener('dragover', handleEditorDragOver);
       domNode.addEventListener('dragleave', handleEditorDragLeave);
       domNode.addEventListener('drop', handleEditorDrop);
+      // Capture phase: the paste event targets Monaco's hidden textarea,
+      // and Monaco's own listener (which preventDefaults and re-implements
+      // text paste) sits on that textarea — capture on the container runs
+      // first, so image payloads can be intercepted (bd-706b0ixu).
+      domNode.addEventListener('paste', handleEditorPaste, true);
     }
 
     // Signal that editor is ready for scroll sync
@@ -894,9 +904,66 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     setShowNewAssetDialog(true);
   }, [currentFile]);
 
-  // Cleanup editor drag-drop listeners on unmount. Note: intelligence-provider
-  // disposal lives in useIntelligenceProviders (mount-only) — it must NOT be
-  // coupled to `handleEditorDrop`, whose identity changes with `currentFile`.
+  // Clipboard image paste (bd-706b0ixu, see
+  // claude-notes/plans/2026-08-27-paste-image-clipboard.md): silent
+  // ingest — content-hash-named file next to the current document, then
+  // a markdown reference at the cursor. Every dep reads through a ref or
+  // a stable callback, so both callbacks below are identity-stable and
+  // the DOM listener can be attached once at editor mount.
+  const pasteImageIngest = useMemo(
+    () =>
+      createPasteImageHandler({
+        getCurrentFilePath,
+        getEditor: () => {
+          const editor = editorRef.current;
+          if (!editor) return null;
+          return {
+            getSelection: () => editor.getSelection(),
+            getTextInRange: (range) =>
+              editor.getModel()?.getValueInRange(range) ?? '',
+            replaceRange: (range, text) => {
+              // Monaco's onChange fires synchronously from executeEdits,
+              // updating both React state and CRDT via the splice path.
+              editor.executeEdits('image-paste', [
+                { range, text, forceMoveMarkers: true },
+              ]);
+            },
+          };
+        },
+        processFile: processFileForUpload,
+        createBinaryFile,
+        maxFileSize: FILE_SIZE_LIMITS.MAX_FILE_SIZE,
+        onError: (message) => console.error(message),
+      }),
+    [getCurrentFilePath]
+  );
+
+  const handleEditorPaste = useCallback(
+    (e: ClipboardEvent) => {
+      const clipboard = e.clipboardData;
+      if (!clipboard) return;
+      const files = Array.from(clipboard.files);
+      if (
+        classifyPastePayload({
+          files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
+          text: clipboard.getData('text/plain'),
+        }) !== 'take-over'
+      ) {
+        return; // text and mixed payloads: Monaco's paste handling runs
+      }
+      // Taking over: stop Monaco's own handler (it would insert the
+      // filename rider as stray text) before the async ingest starts.
+      e.preventDefault();
+      e.stopPropagation();
+      void pasteImageIngest(files);
+    },
+    [pasteImageIngest]
+  );
+
+  // Cleanup editor drag-drop/paste listeners on unmount. Note:
+  // intelligence-provider disposal lives in useIntelligenceProviders
+  // (mount-only) — it must NOT be coupled to `handleEditorDrop`, whose
+  // identity changes with `currentFile`.
   useEffect(() => {
     return () => {
       const domNode = editorRef.current?.getDomNode();
@@ -904,9 +971,10 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         domNode.removeEventListener('dragover', handleEditorDragOver);
         domNode.removeEventListener('dragleave', handleEditorDragLeave);
         domNode.removeEventListener('drop', handleEditorDrop);
+        domNode.removeEventListener('paste', handleEditorPaste, true);
       }
     };
-  }, [handleEditorDragOver, handleEditorDragLeave, handleEditorDrop]);
+  }, [handleEditorDragOver, handleEditorDragLeave, handleEditorDrop, handleEditorPaste]);
 
   // Handle creating a new text file
   const handleCreateTextFile = useCallback(async (path: string, initialContent: string) => {
