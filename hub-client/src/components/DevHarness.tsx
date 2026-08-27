@@ -255,8 +255,8 @@ function SidebarHarness({ files = FAKE_FILES }: { files?: FileEntry[] }) {
  * with placeholder pane content standing in for Monaco and the preview
  * iframe (both need services the no-server harness doesn't have). This
  * lets viewport-matrix specs exercise the shell's flex interplay at
- * narrow widths. The view mode is pinned per route — ViewToggleControl
- * renders from its own context default and is not wired to the panes.
+ * narrow widths. The view mode is pinned per route (the segmented
+ * view-toggle control was removed; the divider drag owns the split now).
  */
 function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'preview' }) {
   // Phase 5: the same drawer wiring as Editor.tsx, plus an offscreen
@@ -388,7 +388,7 @@ function StatusTabErrorHarness() {
 
 /** Editor chrome must render inside .editor-container for the dark-ramp
  *  token overrides (:root.dark .editor-container) to apply, and under a
- *  ViewModeProvider for ViewToggleControl (DocumentTopBar). */
+ *  ViewModeProvider for Editor-shell fixtures. */
 /** Module-level so ReplayHarness render stays pure (see timestamp below). */
 const REPLAY_FIXTURE_TIMESTAMP = (Date.now() - 42 * 60_000) / 1000;
 

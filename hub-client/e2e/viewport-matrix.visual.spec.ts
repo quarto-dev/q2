@@ -238,11 +238,6 @@ for (const { route, mode } of SHELL_ROUTES) {
           'overflow menu button',
         );
       }
-      await expectInsideViewport(
-        page,
-        page.locator('.view-toggle-control'),
-        'view toggle',
-      );
       // No pane is clipped past the viewport's right edge. At ≤900px the
       // sidebar is an off-canvas drawer by design (Phase 5) — the drawer
       // specs below own its geometry.
@@ -396,14 +391,13 @@ test('split view collapses to the editor pane at 700px', async ({ page }) => {
   await expect(page.locator('.preview-pane')).toBeHidden();
   await expect(page.locator('.pane-divider')).toBeHidden();
   await expect(page.locator('.editor-pane')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Split view' })).toBeDisabled();
   await expectNoHorizontalScroll(page, '.editor-main');
 });
 
 test('split view intact at 900px (counter-check)', async ({ page }) => {
   await bootAt(page, 900, 'editor-shell', '.editor-main');
   await expect(page.locator('.preview-pane')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Split view' })).toBeEnabled();
+  await expect(page.locator('.pane-divider')).toBeVisible();
 });
 
 /* ---- header overflow menu (≤700px) ---- */

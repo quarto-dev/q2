@@ -16,13 +16,10 @@ const ViewModeContext = createContext<ViewModeContextType | null>(null);
 const STORAGE_KEY = 'qh-view-mode';
 
 export function ViewModeProvider({ children }: { children: ReactNode }) {
-  const [viewMode, setViewModeState] = useState<ViewMode>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === 'markup' || saved === 'preview' || saved === 'both') {
-      return saved;
-    }
-    return 'both';
-  });
+  // Always start in split view. The segmented view-toggle control was
+  // removed (pane resizing replaced it), so a persisted 'markup'/'preview'
+  // mode would be a trap with no UI to leave it — ignore the stored value.
+  const [viewMode, setViewModeState] = useState<ViewMode>('both');
 
   // Persist to localStorage
   useEffect(() => {

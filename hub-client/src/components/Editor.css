@@ -235,11 +235,40 @@
   transition: flex 0.3s ease;
 }
 
-/* Pane divider between editor and preview */
+/* Pane divider between editor and preview — drag to resize the split.
+   5px grab target with a 1px line drawn down its center. */
 .pane-divider {
-  width: 1px;
-  background: var(--editor-header-border);
+  width: 5px;
   flex-shrink: 0;
+  cursor: col-resize;
+  /* Pointer events must reach the divider, not scroll the page (touch). */
+  touch-action: none;
+  background: linear-gradient(
+    to right,
+    transparent 2px,
+    var(--editor-header-border) 2px 3px,
+    transparent 3px
+  );
+}
+
+.pane-divider:hover,
+.editor-main.dragging-divider .pane-divider {
+  background: var(--editor-drag-accent);
+}
+
+/* While dragging: no flex animation (the panes must track the pointer),
+   and the preview iframe must not swallow pointer events. */
+.editor-main.dragging-divider .pane {
+  transition: none;
+}
+
+.editor-main.dragging-divider .preview-pane iframe {
+  pointer-events: none;
+}
+
+.editor-main.dragging-divider {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .editor-pane {

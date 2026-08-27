@@ -184,6 +184,12 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
 export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
+
+  // Editor/preview split (replaces the view-toggle segmented control):
+  // drag the pane divider to resize. Fraction of the main row given to
+  // the editor pane; session-only.
+  const [editorPaneFraction, setEditorPaneFraction] = useState(0.5);
+  const [isDraggingDivider, setIsDraggingDivider] = useState(false);
   // Narrow-viewport sidebar drawer (Phase 5): ≤900px the sidebar leaves
   // the flex row and becomes a modal overlay drawer.
   const sidebarDrawer = useSidebarDrawer();
@@ -1180,9 +1186,16 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           </div>
         )}
 
-        <main id="main-content" tabIndex={-1} className={`editor-main view-mode-${viewMode}`}>
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={`editor-main view-mode-${viewMode}${isDraggingDivider ? ' dragging-divider' : ''}`}
+        >
         {!isFullscreenPreview && (
-          <div className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}>
+          <div
+            className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}
+            style={viewMode === 'both' ? { flex: `${editorPaneFraction} 1 0%` } : undefined}
+          >
             {/* Show MarkdownSummary overlay in preview mode */}
             {viewMode === 'preview' && (
               <div className="markdown-summary-overlay">
@@ -1217,12 +1230,41 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           </div>
         )}
 
-        {/* Pane divider */}
+        {/* Pane divider — drag to resize the editor/preview split */}
         {!isFullscreenPreview && (
-          <div className="pane-divider" />
+          <div
+            className="pane-divider"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize editor and preview panes"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              setIsDraggingDivider(true);
+            }}
+            onPointerMove={(e) => {
+              if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+              const main = e.currentTarget.parentElement;
+              if (!main) return;
+              const rect = main.getBoundingClientRect();
+              const frac = (e.clientX - rect.left) / rect.width;
+              setEditorPaneFraction(Math.min(0.85, Math.max(0.15, frac)));
+            }}
+            onPointerUp={(e) => {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+              setIsDraggingDivider(false);
+            }}
+          />
         )}
 
-        <div className={`pane preview-pane${isFullscreenPreview ? ' fullscreen' : ''}`}>
+        <div
+          className={`pane preview-pane${isFullscreenPreview ? ' fullscreen' : ''}`}
+          style={
+            viewMode === 'both' && !isFullscreenPreview
+              ? { flex: `${1 - editorPaneFraction} 1 0%` }
+              : undefined
+          }
+        >
           {isFullscreenPreview && (
             <button
               className="fullscreen-close-btn"

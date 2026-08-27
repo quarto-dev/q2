@@ -7,7 +7,6 @@
  */
 
 import { useRef, useState } from 'react';
-import ViewToggleControl from './ViewToggleControl';
 import { PreviewIcon, PanelLeftIcon, MoreIcon } from './icons';
 import Tooltip from './Tooltip';
 import { Menu, MenuItem } from './Menu';
@@ -69,7 +68,6 @@ export default function DocumentTopBar({
         </div>
       </div>
       <div className="header-right">
-        <ViewToggleControl />
         {onToggleFullscreenPreview && !isFullscreenPreview && (
           <Tooltip content={header.fullscreenPreview}>
             <button
