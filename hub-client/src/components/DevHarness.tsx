@@ -643,6 +643,10 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
         onToggleSidebar={() => {}}
         sidebarToggleRef={{ current: null }}
       />
+      {/* The toggle's aria-controls points at the drawer's id; in the
+          real app the drawer always exists, so the route stubs it
+          (axe's aria-valid-attr-value flags a dangling reference). */}
+      <div id="sidebar-drawer" hidden />
     </EditorChrome>
   ),
   notifications: () => (

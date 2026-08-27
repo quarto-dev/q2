@@ -88,22 +88,31 @@
    Scoped to the media query because overflow != visible changes the
    span's baseline alignment, and the 1280px baselines must stay
    pixel-identical. */
-/* Header overflow menu (Phase 5): hidden by default; at ≤700px the
-   secondary actions (share, fullscreen preview) collapse into it. */
-.header-overflow {
-  display: none;
-}
-
-/* Sidebar toggle (Phase 5, after design review): permanent chrome, but
-   it must read as belonging to the sidebar, not as a title-bar action —
-   muted grey at rest. A faint sidebar-tinted background appears while
-   the sidebar is open, tying the button to its surface. */
+/* Sidebar toggle (Phase 5, design review): permanent chrome that reads
+   as the sidebar's own — the sidebar's background tint and border.
+   Grey in both states; opening the sidebar deepens the tint to the
+   sidebar's content layer. Never teal — teal marks the switch-project
+   action, which exits to another view. */
 .minimal-header .sidebar-toggle-btn {
   color: var(--editor-text-muted);
+  background: var(--sidebar-bg);
+  border-color: var(--sidebar-border);
 }
 
 .minimal-header .sidebar-toggle-btn[aria-expanded='true'] {
-  background: var(--sidebar-bg);
+  color: var(--text-secondary);
+  background: var(--input-bg-alpha);
+}
+
+.minimal-header .sidebar-toggle-btn:hover {
+  color: var(--text-primary);
+  background: var(--sidebar-section-hover);
+}
+
+/* The switch-project button is the header's one teal icon: it exits the
+   editor for the projects view. */
+.minimal-header .header-switch-btn {
+  color: var(--posit-teal);
 }
 
 @media (max-width: 700px) {
@@ -114,13 +123,12 @@
     text-overflow: ellipsis;
   }
 
-  .minimal-header .header-share-btn,
-  .minimal-header .preview-btn {
+  /* Smallest-header composition (Phase 5 review): the view-mode buttons
+     are hidden this narrow — split view is collapsed (Editor.css) and
+     the Preview pill covers the editor⇄preview switch — leaving room for
+     the inline Share and Preview buttons. */
+  .minimal-header .view-toggle-control {
     display: none;
-  }
-
-  .minimal-header .header-overflow {
-    display: block;
   }
 }
 

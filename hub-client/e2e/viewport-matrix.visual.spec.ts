@@ -222,22 +222,12 @@ for (const { route, mode } of SHELL_ROUTES) {
       // paint on, ending up *under* .header-right — an internal overlap
       // no viewport assertion catches. Its own scrollWidth reports it.
       await expectNoHorizontalScroll(page, '.header-left');
-      // Header controls stay reachable. At ≤700px the preview button
-      // collapses into the overflow menu (Phase 5) — the kebab is the
-      // reachable control.
-      if (width > 700) {
-        await expectInsideViewport(
-          page,
-          page.getByRole('button', { name: 'Fullscreen preview' }),
-          'preview button',
-        );
-      } else {
-        await expectInsideViewport(
-          page,
-          page.getByRole('button', { name: 'More actions' }),
-          'overflow menu button',
-        );
-      }
+      // Header controls stay reachable.
+      await expectInsideViewport(
+        page,
+        page.getByRole('button', { name: 'Fullscreen preview' }),
+        'preview button',
+      );
       await expectInsideViewport(
         page,
         page.locator('.connection-indicator'),
@@ -336,6 +326,33 @@ test('sidebar is an off-canvas drawer at 800px, static at 1280px', async ({ page
   await expect(page.locator('.sidebar-sections')).toBeVisible();
 });
 
+test('sidebar toggle is a distinct chip in both states', async ({ page }) => {
+  await bootAt(page, 1280, 'editor-shell', '.editor-main');
+  const toggle = page.getByRole('button', { name: 'Toggle sidebar' });
+  const bare = page.getByRole('button', { name: 'Switch project' });
+  const styleOf = (el: HTMLElement) => {
+    const cs = getComputedStyle(el);
+    return { bg: cs.backgroundColor, border: cs.borderTopColor };
+  };
+  // The toggle wears the sidebar's own grey tint in both states — never
+  // bare/transparent like the title-bar buttons. Open deepens the tint.
+  const on = await toggle.evaluate(styleOf);
+  const bareStyle = await bare.evaluate(styleOf);
+  expect(on.bg).not.toBe(bareStyle.bg);
+  expect(on.bg).not.toBe('rgba(0, 0, 0, 0)');
+  // The switch-project button is the header's teal one: it exits the
+  // editor for the projects view. The toggle stays grey.
+  const switchColor = await bare.evaluate((el) => getComputedStyle(el).color);
+  expect(switchColor).toBe('rgb(65, 149, 153)'); // --posit-teal
+  // Sidebar off: still a visible chip (background + border), just greyer.
+  await toggle.click();
+  await expect(page.locator('.sidebar-sections')).toBeHidden();
+  const off = await toggle.evaluate(styleOf);
+  expect(off.bg).not.toBe('rgba(0, 0, 0, 0)');
+  expect(off.border).not.toBe('rgba(0, 0, 0, 0)');
+  expect(off.bg).not.toBe(on.bg);
+});
+
 test('sidebar toggle hides and restores the sidebar at 1280px', async ({ page }) => {
   await bootAt(page, 1280, 'editor-shell', '.editor-main');
   const toggle = page.getByRole('button', { name: 'Toggle sidebar' });
@@ -427,7 +444,8 @@ test('split view collapses to the editor pane at 700px', async ({ page }) => {
   await expect(page.locator('.preview-pane')).toBeHidden();
   await expect(page.locator('.pane-divider')).toBeHidden();
   await expect(page.locator('.editor-pane')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Split view' })).toBeDisabled();
+  // The view toggle itself is hidden this narrow (the header composition
+  // specs own that assertion); the Preview pill covers editor⇄preview.
   await expectNoHorizontalScroll(page, '.editor-main');
 });
 
@@ -437,27 +455,35 @@ test('split view intact at 900px (counter-check)', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Split view' })).toBeEnabled();
 });
 
-/* ---- header overflow menu (≤700px) ---- */
+/* ---- smallest-header composition (≤700px, Phase 5 review) ----
+   Review feedback: the view-mode buttons are hidden this narrow (split
+   is collapsed anyway; the Preview pill covers editor⇄preview), and
+   Share + Preview stay inline — the kebab overflow menu is retired. */
 
-test('header secondary actions collapse into an overflow menu at 700px', async ({ page }) => {
+test('header at 700px: inline share + preview, no view toggle, no kebab', async ({ page }) => {
   await bootAt(page, 700, 'editor-shell', '.editor-main');
-  await expect(page.locator('.minimal-header .preview-btn')).toBeHidden();
-  await expect(page.locator('.minimal-header .header-share-btn')).toBeHidden();
-  const overflow = page.getByRole('button', { name: 'More actions' });
-  await expect(overflow).toBeVisible();
-  await overflow.click();
-  const menu = page.locator('[role="menu"]');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: 'Share this project' })).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: 'Fullscreen preview' })).toBeVisible();
-  await menu.getByRole('menuitem', { name: 'Share this project' }).click();
+  await expect(page.locator('.minimal-header .preview-btn')).toBeVisible();
+  await expect(page.locator('.minimal-header .header-share-btn')).toBeVisible();
+  await expect(page.locator('.minimal-header .view-toggle-control')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'More actions' })).toHaveCount(0);
+  // The inline actions still fire.
+  await page.locator('.minimal-header .header-share-btn').click();
   await expect(page.getByTestId('header-last-action')).toHaveText('share');
+});
+
+test('header at 320px: same composition, nothing clipped', async ({ page }) => {
+  await bootAt(page, 320, 'editor-shell', '.editor-main');
+  await expect(page.locator('.minimal-header .preview-btn')).toBeVisible();
+  await expect(page.locator('.minimal-header .header-share-btn')).toBeVisible();
+  await expect(page.locator('.minimal-header .view-toggle-control')).toBeHidden();
+  await expectNoHorizontalScroll(page, '.minimal-header');
 });
 
 test('header actions inline at 1280px (counter-check)', async ({ page }) => {
   await bootAt(page, 1280, 'editor-shell', '.editor-main');
   await expect(page.locator('.minimal-header .preview-btn')).toBeVisible();
   await expect(page.locator('.minimal-header .header-share-btn')).toBeVisible();
+  await expect(page.locator('.minimal-header .view-toggle-control')).toBeVisible();
   await expect(page.getByRole('button', { name: 'More actions' })).toHaveCount(0);
 });
 
