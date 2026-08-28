@@ -96,66 +96,98 @@ export async function bootHarness(
   await page.goto(`/#/dev/${route}`);
 
   // Wait for the app's boot to create the identity record, then pin it.
-  // The dev server can trigger a full-page reload mid-boot (vite re-
-  // optimizes dependencies on a cold cache — the CI environment), which
-  // destroys the execution context under either of these probes. Both
-  // are idempotent, so retry past the reload.
-  for (let attempt = 0; ; attempt++) {
-    try {
-      await page.waitForFunction(
-        () =>
-          new Promise<boolean>((resolve) => {
-            const req = indexedDB.open('quarto-hub');
-            req.onsuccess = () => {
-              const db = req.result;
-              if (!db.objectStoreNames.contains('userSettings')) {
-                db.close();
-                resolve(false);
-                return;
-              }
-              const tx = db.transaction('userSettings', 'readonly');
-              const get = tx.objectStore('userSettings').get('identity');
-              get.onsuccess = () => {
-                db.close();
-                resolve(!!get.result);
-              };
-              get.onerror = () => {
-                db.close();
-                resolve(false);
-              };
-            };
-            req.onerror = () => resolve(false);
-          }),
-        undefined,
-        { timeout: 15000 },
-      );
-      await page.evaluate((identity) => {
-        return new Promise<void>((resolve, reject) => {
-          const req = indexedDB.open('quarto-hub');
-          req.onsuccess = () => {
-            const db = req.result;
-            const tx = db.transaction('userSettings', 'readwrite');
-            tx.objectStore('userSettings').put(identity);
-            tx.oncomplete = () => {
-              db.close();
-              resolve();
-            };
-            tx.onerror = () => {
-              db.close();
-              reject(tx.error);
-            };
+  //
+  // The probe is a Node-side loop around page.evaluate (which awaits
+  // async functions) — NOT page.waitForFunction. Playwright 1.60 does
+  // not await a promise-returning waitForFunction predicate: the Promise
+  // object is itself truthy, so waitForFunction "succeeds" after one
+  // poll and the identity write races the app's boot. Under `vite dev`
+  // the first poll landed late enough to usually win that race (with
+  // occasional beforeEach-timeout flakes on CI); under `vite preview`
+  // it fires within ~10ms and loses deterministically — the write's
+  // transaction on the not-yet-created userSettings store throws inside
+  // onsuccess, leaving the promise unsettled and the DB connection open,
+  // which then blocks the app's own schema migration forever (mutual
+  // deadlock, 30s beforeEach timeout on every test).
+  //
+  // The probe checks indexedDB.databases() first (Chromium-only, which
+  // is all this suite runs) so it never creates the database itself: an
+  // open() ahead of the app's first migration would force a v1→v5
+  // upgrade and contend with the app's connections. Every probe path
+  // closes its connection before resolving.
+  const deadline = Date.now() + 15_000;
+  for (;;) {
+    const found = await page.evaluate(async () => {
+      const dbs = await indexedDB.databases();
+      if (!dbs.some((d) => d.name === 'quarto-hub')) return false;
+      return new Promise<boolean>((resolve) => {
+        const req = indexedDB.open('quarto-hub');
+        req.onsuccess = () => {
+          const db = req.result;
+          const finish = (value: boolean) => {
+            db.close();
+            resolve(value);
           };
-          req.onerror = () => reject(req.error);
-        });
-      }, FIXED_IDENTITY);
-      break;
-    } catch (err) {
-      if (attempt >= 2 || !/Execution context was destroyed/.test(String(err))) {
-        throw err;
-      }
-      await page.waitForLoadState('load');
+          try {
+            if (!db.objectStoreNames.contains('userSettings')) {
+              finish(false);
+              return;
+            }
+            const tx = db.transaction('userSettings', 'readonly');
+            const get = tx.objectStore('userSettings').get('identity');
+            get.onsuccess = () => finish(!!get.result);
+            get.onerror = () => finish(false);
+            tx.onerror = () => finish(false);
+          } catch {
+            finish(false);
+          }
+        };
+        req.onerror = () => resolve(false);
+        req.onblocked = () => resolve(false);
+      });
+    });
+    if (found) break;
+    if (Date.now() > deadline) {
+      throw new Error(
+        'Timed out (15000ms) waiting for the app to create its identity record',
+      );
     }
+    await page.waitForTimeout(250);
   }
+
+  // Pin the fixed identity. The probe above only returns once the app's
+  // migration has completed, so the store is guaranteed to exist; the
+  // try/catch and close-on-all-paths are belt-and-braces.
+  await page.evaluate((identity) => {
+    return new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open('quarto-hub');
+      req.onsuccess = () => {
+        const db = req.result;
+        try {
+          const tx = db.transaction('userSettings', 'readwrite');
+          tx.objectStore('userSettings').put(identity);
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+          };
+          tx.onabort = () => {
+            db.close();
+            reject(tx.error);
+          };
+        } catch (err) {
+          db.close();
+          reject(err);
+        }
+      };
+      req.onerror = () => reject(req.error);
+      req.onblocked = () =>
+        reject(new Error('identity write blocked by an open connection'));
+    });
+  }, FIXED_IDENTITY);
 
   await page.reload();
   await page.waitForSelector(selector, { timeout: 15000 });
