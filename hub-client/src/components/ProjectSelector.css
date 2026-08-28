@@ -904,9 +904,8 @@
   border: 1px solid var(--border-color);
 }
 
-:root.light .version-info .commit-hash {
-  color: var(--posit-blue);
-}
+/* No light-only color override: --posit-blue is 3.72:1 on the --bg-card
+   chip background (WCAG 1.4.3 failure); --text-secondary is 5.45:1. */
 
 /* Project Set Info */
 

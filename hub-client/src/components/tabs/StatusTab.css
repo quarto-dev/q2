@@ -30,17 +30,17 @@
 
 .status-indicator.loading {
   background: var(--warning-bg);
-  color: var(--editor-warning);
+  color: var(--editor-warning-text);
 }
 
 .status-indicator.ready {
   background: var(--success-bg-subtle);
-  color: var(--editor-success);
+  color: var(--editor-success-text);
 }
 
 .status-indicator.error {
   background: var(--error-bg-subtle);
-  color: var(--editor-error);
+  color: var(--editor-error-text);
 }
 
 .status-dot {
@@ -52,7 +52,7 @@
 
 .status-error {
   font-size: 12px;
-  color: var(--editor-error);
+  color: var(--editor-error-text);
   padding: 8px;
   background: var(--error-bg-subtle);
   border-radius: var(--radius-xs);

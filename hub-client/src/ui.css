@@ -87,7 +87,7 @@
 }
 
 .qh-btn.primary {
-  background: var(--posit-teal);
+  background: var(--accent-action-bg);
   color: var(--text-on-accent);
 }
 
@@ -103,7 +103,7 @@
 .qh-btn.outline:active { background: var(--input-bg-alpha-hover); }
 
 .qh-btn.danger {
-  background: var(--posit-red);
+  background: var(--btn-danger-bg);
   color: var(--text-on-accent);
 }
 
@@ -112,7 +112,7 @@
 
 .qh-btn.ghost-accent {
   border: 1px solid var(--posit-teal);
-  color: var(--posit-teal);
+  color: var(--accent-action-text);
   font-size: var(--text-base);
   padding: 7px 14px;
 }
