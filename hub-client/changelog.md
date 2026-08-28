@@ -23,8 +23,17 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-28
+
+- [`0c08f15d`](https://github.com/quarto-dev/q2/commits/0c08f15d4): The dev-harness test suite now runs against the production bundle (about 10x faster in CI), and the dev-harness code is no longer included in production builds or the preview app embedded in the q2 binary.
+- [`4c137558`](https://github.com/quarto-dev/q2/commits/4c137558b): Fixed a test-harness race that could stall app boot on a fresh profile — the cause of the intermittent beforeEach timeouts in CI.
+- [`5599a22d`](https://github.com/quarto-dev/q2/commits/5599a22d): The dev-harness test suite no longer floods CI logs with connection-refused proxy errors — the dev server now skips the hub proxy entirely when no hub is running.
+- [`28afc1e1`](https://github.com/quarto-dev/q2/commits/28afc1e1): The inline diff in the connection-status dialog now highlights deleted and inserted text with the app's Posit red and green tints instead of off-palette colours.
+- [`5e7278cf`](https://github.com/quarto-dev/q2/commits/5e7278cf): Setup screens are easier to read in dark mode — the tagline and backup-hint text, and the red error banner shown when the sync server can't be reached during migration, now meet contrast guidelines.
+
 ### 2026-08-27
 
+- [`ff9896c7`](https://github.com/quarto-dev/q2/commits/ff9896c7): The changelog and more-info viewer now follows the app's colour scheme — in dark mode the text is readable light-on-dark (and links use the app's blue) instead of near-invisible dark text on the dark dialog.
 - [`e3a86d05`](https://github.com/quarto-dev/q2/commits/e3a86d05): Small-window header tidied up: at the smallest widths the view-mode switcher is hidden (the Preview button covers switching) and Share + Preview stay as plain buttons instead of a "..." menu. The sidebar toggle is now a grey chip in the sidebar's own colour, clearly separate from the title-bar buttons, and the switch-project icon is teal to mark it as the way out to your projects.
 - [`38922590`](https://github.com/quarto-dev/q2/commits/38922590): A sidebar toggle button now sits at the left of the editor header at every window size — click it to hide or show the sidebar (in narrow windows it opens the sidebar as an overlay drawer). The button is muted grey so it reads as sidebar chrome, not a title-bar action.
 - [`c5c5f23d`](https://github.com/quarto-dev/q2/commits/c5c5f23d): Corners are now consistent across the app — buttons, menus, cards, and dialogs share one radius scale (buttons and cards are slightly rounder).

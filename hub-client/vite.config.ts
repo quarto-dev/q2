@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import type { Plugin } from 'vite'
+import type { Plugin, ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import wasm from 'vite-plugin-wasm'
 import compression from 'compression'
@@ -53,6 +53,15 @@ function attributionViewerCssPlugin(): Plugin {
 
 /** Hub server URL. Override with VITE_HUB_SERVER env var. */
 const hubTarget = process.env.VITE_HUB_SERVER || 'http://localhost:3000';
+
+/**
+ * Drop the /auth and /ws proxy entries entirely. The dev-harness
+ * Playwright suite (playwright.harness.config.ts) boots `vite dev` with
+ * no hub server at all; proxying at a dead target turns the app's auth
+ * keepalive probes into hundreds of ECONNREFUSED proxy errors per run
+ * (bd-a1cwdir9). Without a proxy those requests get a fast local 404.
+ */
+const disableHubProxy = process.env.VITE_DISABLE_HUB_PROXY === '1';
 
 /** Disable service worker in E2E tests to avoid caching interference */
 const isE2E = process.env.VITE_E2E === '1';
@@ -270,7 +279,8 @@ export default defineConfig({
   },
 })
 
-function proxyConfig() {
+function proxyConfig(): Record<string, string | ProxyOptions> {
+  if (disableHubProxy) return {};
   return {
     // Forward /auth/* to the hub server (JWT validation, cookies, OAuth callback).
     '/auth': {

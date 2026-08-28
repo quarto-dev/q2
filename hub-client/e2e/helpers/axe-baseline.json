@@ -53,12 +53,6 @@
   "replay-drawer|light": {
     "color-contrast": 3
   },
-  "setup-fresh|dark": {
-    "color-contrast": 1
-  },
-  "setup-migration|dark": {
-    "color-contrast": 2
-  },
   "sidebar-empty|dark": {
     "color-contrast": 10
   },

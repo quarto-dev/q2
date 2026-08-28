@@ -163,7 +163,8 @@ export interface JoinCollectionRoute {
 
 /**
  * Route for dev-only harness pages (component previews, visual testing).
- * Only parsed in development builds; in production, #/dev/... falls through to project-selector.
+ * Only parsed in development builds and VITE_E2E=1 test builds; in real
+ * production builds, #/dev/... falls through to project-selector.
  */
 export interface DevRoute {
   type: 'dev';
@@ -311,8 +312,16 @@ export function parseHashRoute(hash: string): Route {
     return { type: 'project', projectId };
   }
 
-  // Parse dev route: /dev/<page> (only in development builds)
-  if (import.meta.env.DEV && segments[0] === 'dev' && segments[1]) {
+  // Parse dev route: /dev/<page>. Parsed in development builds and in
+  // VITE_E2E=1 test builds — the Playwright harness suite runs against a
+  // production bundle served by `vite preview`, so DEV is false there and
+  // the VITE_E2E arm is what admits the route. Never parsed in deployed
+  // builds, where the DevHarness chunk is also tree-shaken out of App.tsx.
+  if (
+    (import.meta.env.DEV || import.meta.env.VITE_E2E === '1') &&
+    segments[0] === 'dev' &&
+    segments[1]
+  ) {
     return { type: 'dev', page: decodeURIComponent(segments[1]) };
   }
 

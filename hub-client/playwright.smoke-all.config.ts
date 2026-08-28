@@ -14,7 +14,7 @@ import baseConfig from './playwright.config';
  * matches zero tests and fails with "No tests found" (this is exactly how the
  * first nightly run failed; see the `hub-client-e2e` workflow's smoke-all step).
  *
- * Mirroring the `playwright.visual.config.ts` pattern, this config selects the
+ * Mirroring the `playwright.harness.config.ts` pattern, this config selects the
  * smoke-all spec via `testMatch` instead of trying to override `testIgnore` on
  * the CLI. Everything else — the hub `globalSetup`/`globalTeardown`, the
  * `vite preview` web server, retries, workers, and the chromium project — is

@@ -127,6 +127,8 @@ async function setupClientWithFile(initialText: string) {
       import: vi.fn().mockReturnValue(indexHandle),
       create: vi.fn().mockReturnValue(fileHandle),
       networkSubsystem: mockNetworkSubsystem,
+      // client.ts trackPeers() sweeps repo.handles on connect
+      handles: {},
     });
     return this as Repo;
   } as unknown as typeof Repo);

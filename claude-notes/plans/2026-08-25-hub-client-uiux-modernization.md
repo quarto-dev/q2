@@ -576,6 +576,17 @@ design feedback. This phase is the single feedback gate: each change is
 proposed with before/after Playwright diffs (light + dark), lands as its own
 commit, and can be individually approved, held, or reverted.
 
+> **Note (2026-08-28):** the pixel-diff screenshot layer this phase's
+> review flow was built on (`baseline-screens`, `setup-screens`,
+> `hover-states`, `outline-replay` specs + all PNG baselines +
+> `playwright.visual.config.ts` + the CI auto-commit-baselines leg) was
+> dropped in 593fd6ce4 (bd-8g1bn8a0) — baseline regeneration was friction
+> while visual churn is ongoing. The behavioral and axe specs survive as
+> `*.harness.spec.ts` under `playwright.harness.config.ts`
+> (`npm run test:harness`). **Re-adding the pixel layer once this phase's
+> review rounds close is tracked as bd-wlubinvq**; the specs and baselines
+> are recoverable from git history.
+
 ### Test specifications (write first)
 - [x] Before/after visual-diff deck per proposed change, generated from the
       Playwright baselines in both themes, assembled for review.
