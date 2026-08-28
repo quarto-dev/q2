@@ -203,7 +203,10 @@
     inset-block: 0;
     inset-inline-start: 0;
     width: min(280px, 80vw);
-    background: var(--bg-modal);
+    /* The project column and its bars are transparent (they rely on the
+       .editor-columns canvas); in the drawer this backing plays that
+       role, so it must be the sidebar surface, not the modal white. */
+    background: var(--sidebar-bg);
     border-inline-end: 1px solid var(--border-color);
     box-shadow: var(--shadow-3);
     z-index: var(--z-modal);
@@ -341,16 +344,9 @@
     max-width: 120px;
   }
 
-  /* Split-view collapse (Phase 5): two ~350px panes are useless this
-     narrow — the editor takes the width and the preview is one tap away
-     on the header's Preview button (the view toggle is hidden ≤700px —
-     MinimalHeader.css). The fullscreen preview pane keeps its place:
-     collapsing must not hide the one surface fullscreen mode exists to
-     show. */
-  .editor-main.view-mode-both .preview-pane:not(.fullscreen),
-  .editor-main.view-mode-both .pane-divider {
-    display: none;
-  }
+  /* (The Phase 5 split-view collapse was removed: with the draggable
+     divider and split presets, the preview stays available at every
+     width — users size the panes themselves.) */
 }
 
 /* Markdown summary overlay for preview mode */

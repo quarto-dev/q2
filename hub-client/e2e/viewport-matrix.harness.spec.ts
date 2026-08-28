@@ -205,11 +205,7 @@ for (const { route, mode } of SHELL_ROUTES) {
         await expectInsideViewport(page, page.locator('.sidebar-sections'), 'sidebar');
       }
       await expectInsideViewport(page, page.locator('.editor-pane'), 'editor pane');
-      // Split view collapses below 700px (Phase 5): the preview pane is
-      // display:none there, not clipped.
-      if (width > 700) {
-        await expectInsideViewport(page, page.locator('.preview-pane'), 'preview pane');
-      }
+      await expectInsideViewport(page, page.locator('.preview-pane'), 'preview pane');
     });
   }
 }
@@ -237,8 +233,8 @@ for (const width of [480, 320] as const) {
 
 /* ---- Phase 5: narrow-viewport layout design ----
    The designed narrow layouts deferred from Phase 4: the sidebar becomes
-   an overlay drawer with scrim at ≤900px, split view collapses to the
-   editor pane at ≤700px, and the header's secondary actions collapse
+   an overlay drawer with scrim at ≤900px, split view persists at every
+   width (divider-sized), and the header's secondary actions collapse
    into an overflow menu at ≤700px. */
 
 /* ---- sidebar drawer (≤900px) ---- */
@@ -346,22 +342,6 @@ test('sidebar drawer traps Tab within itself while open', async ({ page }) => {
     document.querySelector('.sidebar-drawer')?.contains(document.activeElement),
   );
   expect(focusInside).toBe(true);
-});
-
-/* ---- split-view collapse (≤700px) ---- */
-
-test('split view collapses to the editor pane at 700px', async ({ page }) => {
-  await bootAt(page, 700, 'editor-shell', '.editor-main');
-  await expect(page.locator('.preview-pane')).toBeHidden();
-  await expect(page.locator('.pane-divider')).toBeHidden();
-  await expect(page.locator('.editor-pane')).toBeVisible();
-  await expectNoHorizontalScroll(page, '.editor-main');
-});
-
-test('split view intact at 900px (counter-check)', async ({ page }) => {
-  await bootAt(page, 900, 'editor-shell', '.editor-main');
-  await expect(page.locator('.preview-pane')).toBeVisible();
-  await expect(page.locator('.pane-divider')).toBeVisible();
 });
 
 /* ---- smallest-header composition (≤700px, Phase 5 review) ----
