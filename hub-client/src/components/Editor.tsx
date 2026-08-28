@@ -1315,32 +1315,31 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         </div>
         </main>
 
-        {/* Document bottom bar: replay drawer */}
-        {!isFullscreenPreview && (
-          <div className="document-bottom-bar">
-            <ReplayDrawer
-              state={replayState}
-              controls={replayControls}
-              disabled={!!currentFile && isBinaryExtension(currentFile.path)}
-              identities={identities}
-              attributionOn={attributionOn}
-              onAttributionChange={setAttributionOn}
-              commentsMode={commentsMode}
-              onCommentsModeChange={setCommentsMode}
-              commentsCount={outstandingCommentCount}
-              attributionGenerating={attributionGenerating}
-              attributionDisabled={
-                currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'
-              }
-              statusSlot={
-                <SyncStatusBadge
-                  scope="document"
-                  currentFilePath={currentFile?.path ?? null}
-                />
-              }
-            />
-          </div>
-        )}
+        {/* Document bottom bar: replay drawer. Stays mounted in
+            fullscreen preview so sync status and replay remain visible. */}
+        <div className="document-bottom-bar">
+          <ReplayDrawer
+            state={replayState}
+            controls={replayControls}
+            disabled={!!currentFile && isBinaryExtension(currentFile.path)}
+            identities={identities}
+            attributionOn={attributionOn}
+            onAttributionChange={setAttributionOn}
+            commentsMode={commentsMode}
+            onCommentsModeChange={setCommentsMode}
+            commentsCount={outstandingCommentCount}
+            attributionGenerating={attributionGenerating}
+            attributionDisabled={
+              currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'
+            }
+            statusSlot={
+              <SyncStatusBadge
+                scope="document"
+                currentFilePath={currentFile?.path ?? null}
+              />
+            }
+          />
+        </div>
         </div>
       </div>
 

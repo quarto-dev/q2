@@ -242,7 +242,6 @@
 .pane {
   flex: 1;
   min-width: 0;
-  transition: flex 0.3s ease;
 }
 
 /* Pane divider between editor and preview — drag to resize the split.
@@ -264,12 +263,7 @@
   background: var(--editor-drag-accent);
 }
 
-/* While dragging: no flex animation (the panes must track the pointer),
-   and the preview iframe must not swallow pointer events. */
-.editor-main.dragging-divider .pane {
-  transition: none;
-}
-
+/* While dragging, the preview iframe must not swallow pointer events. */
 .editor-main.dragging-divider .preview-pane iframe {
   pointer-events: none;
 }
