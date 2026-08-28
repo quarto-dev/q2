@@ -53,7 +53,7 @@ with VO+←/→ (VO = Ctrl+Option) and interact with VO+Space; use the rotor
 
 ## Windows High Contrast (forced colors) pass
 
-Automated coverage: `e2e/forced-colors.visual.spec.ts` emulates
+Automated coverage: `e2e/forced-colors.harness.spec.ts` emulates
 `forced-colors: active` and asserts buttons, menus, dialogs, tooltips,
 and the selected file row keep visible boundaries.
 
