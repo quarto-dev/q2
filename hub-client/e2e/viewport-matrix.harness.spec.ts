@@ -284,6 +284,13 @@ test('sidebar toggle is a distinct chip in both states', async ({ page }) => {
   // Sidebar off: still a visible chip (background + border), just greyer.
   await toggle.click();
   await expect(page.locator('.sidebar-sections')).toBeHidden();
+  // The chip's background settles asynchronously after the state flip
+  // (attribute change → style recalc → the pointer's hover style under
+  // the just-clicked toggle). A single immediate read can land mid-settle
+  // and still show the on-state value, so poll until it moves.
+  await expect
+    .poll(async () => (await toggle.evaluate(styleOf)).bg, { timeout: 2000 })
+    .not.toBe(on.bg);
   const off = await toggle.evaluate(styleOf);
   expect(off.bg).not.toBe('rgba(0, 0, 0, 0)');
   expect(off.border).not.toBe('rgba(0, 0, 0, 0)');

@@ -7,6 +7,11 @@ interface ImportMetaEnv {
   readonly VITE_GOOGLE_CLIENT_ID?: string
   /** Base path the hub is reverse-proxied at. */
   readonly VITE_HUB_BASE_PATH?: string
+  /**
+   * Set to '1' for E2E test builds: exposes window.__quartoTest and
+   * admits #/dev harness routes. Never set for deployed builds.
+   */
+  readonly VITE_E2E?: string
 }
 
 interface ImportMeta {

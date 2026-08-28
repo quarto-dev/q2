@@ -6,9 +6,19 @@ import JoinCollectionLanding from './components/JoinCollectionLanding';
 import ProjectSetSetup from './components/ProjectSetSetup';
 
 // Lazy-loaded dev harness — only fetched when navigating to #/dev/... routes.
-// In production builds, the DevRoute type is never parsed, so this code is never reached.
-const DevHarnessRaw = lazy(() => import('./components/DevHarness'));
+// Dev routes are parsed only in development builds and VITE_E2E=1 test
+// builds (see routing.ts). Both flags are compile-time constants, so in
+// production and preview-embed builds rollup evaluates DEV_ROUTES_ENABLED
+// to false and tree-shakes the dynamic import: no DevHarness chunk is
+// emitted at all (it was dead weight in the q2 binary's embedded SPA).
+const DEV_ROUTES_ENABLED = import.meta.env.DEV || import.meta.env.VITE_E2E === '1';
+const DevHarnessRaw = DEV_ROUTES_ENABLED
+  ? lazy(() => import('./components/DevHarness'))
+  : null;
 function DevHarnessLazy({ page }: { page: string }) {
+  // Unreachable when dev routes are disabled (the route never parses);
+  // the guard keeps the null union honest.
+  if (!DevHarnessRaw) return null;
   return (
     <Suspense fallback={null}>
       <DevHarnessRaw page={page} />
@@ -823,7 +833,8 @@ function App() {
   }
 
   // Dev harness: render components in isolation for visual testing.
-  // Only available in development builds; the DevRoute type is never parsed in production.
+  // Only reachable in development builds and VITE_E2E=1 test builds; in
+  // production the DevRoute type is never parsed (see routing.ts).
   if (route.type === 'dev') {
     return <DevHarnessLazy page={route.page} />;
   }

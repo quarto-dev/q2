@@ -247,6 +247,32 @@ describe('parseHashRoute', () => {
       expect(parseHashRoute('#/link-project-set')).toEqual({ type: 'project-selector' });
     });
   });
+
+  describe('dev routes', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('parses #/dev/<page> in development builds', () => {
+      // vitest runs with import.meta.env.DEV === true by default
+      expect(parseHashRoute('#/dev/tokens')).toEqual({ type: 'dev', page: 'tokens' });
+    });
+
+    it('parses #/dev/<page> in VITE_E2E test builds (harness suite runs vite preview)', () => {
+      vi.stubEnv('DEV', false);
+      vi.stubEnv('VITE_E2E', '1');
+      expect(parseHashRoute('#/dev/tokens')).toEqual({ type: 'dev', page: 'tokens' });
+    });
+
+    it('falls through to project-selector in production builds', () => {
+      vi.stubEnv('DEV', false);
+      expect(parseHashRoute('#/dev/tokens')).toEqual({ type: 'project-selector' });
+    });
+
+    it('ignores #/dev without a page even when enabled', () => {
+      expect(parseHashRoute('#/dev')).toEqual({ type: 'project-selector' });
+    });
+  });
 });
 
 describe('buildHashRoute', () => {
