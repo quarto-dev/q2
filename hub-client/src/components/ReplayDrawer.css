@@ -223,7 +223,7 @@
   padding: 0 10px;
   background: var(--editor-success-bg);
   border-color: var(--editor-success);
-  color: var(--editor-success);
+  color: var(--editor-success-text);
   font-size: 11px;
   font-weight: 600;
   border-radius: var(--radius-xs);
@@ -349,7 +349,7 @@
 }
 
 .replay-drawer__attribution--on {
-  color: var(--editor-success);
+  color: var(--editor-success-text);
   border-color: var(--editor-success);
   background: var(--editor-success-bg);
 }

@@ -75,7 +75,9 @@
   top: 50%;
   transform: translateY(-50%);
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  /* --text-secondary: dark --text-muted is 4.26:1 on the card tint —
+     just under the WCAG 1.4.3 4.5:1 minimum. */
+  color: var(--text-secondary);
   pointer-events: none;
 }
 
@@ -823,7 +825,9 @@
   color: var(--text-muted);
 }
 
-.qh-footer-note { opacity: 0.8; }
+/* .qh-footer-note keeps full-opacity --text-muted: at opacity 0.8 the
+   composite drops to 3.49:1 (light) / 3.92:1 (dark) — under the WCAG
+   1.4.3 4.5:1 minimum. */
 
 /* Focusable for its tooltip — needs a visible indicator (WCAG 2.4.7). */
 .qh-footer .mono:focus-visible {
