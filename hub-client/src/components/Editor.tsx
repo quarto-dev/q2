@@ -47,6 +47,8 @@ import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
 import ProjectTopBar from './ProjectTopBar';
 import DocumentTopBar from './DocumentTopBar';
+import Tooltip from './Tooltip';
+import { PreviewIcon } from './icons';
 import SyncStatusBadge from './SyncStatusBadge';
 import SidebarTabs from './SidebarTabs';
 import SidebarDrawer from './SidebarDrawer';
@@ -134,6 +136,10 @@ const editorOptions = {
   minimap: { enabled: false },
   fontSize: 14,
   lineNumbers: 'on' as const,
+  // Size the number column near the document's actual digit count
+  // instead of Monaco's default 5-char reserve; the extra char over the
+  // digits acts as left padding (numbers are right-aligned).
+  lineNumbersMinChars: 4,
   wordWrap: 'on' as const,
   padding: { top: 16 },
   scrollBeyondLastLine: false,
@@ -190,6 +196,16 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // the editor pane; session-only.
   const [editorPaneFraction, setEditorPaneFraction] = useState(0.5);
   const [isDraggingDivider, setIsDraggingDivider] = useState(false);
+  // True briefly while a split-preset button animates the divider to
+  // its target; drags stay instant (no transition).
+  const [splitAnimating, setSplitAnimating] = useState(false);
+  const splitAnimTimer = useRef<number | null>(null);
+  const handleSetSplitPreset = useCallback((fraction: number) => {
+    setEditorPaneFraction(fraction);
+    setSplitAnimating(true);
+    if (splitAnimTimer.current !== null) window.clearTimeout(splitAnimTimer.current);
+    splitAnimTimer.current = window.setTimeout(() => setSplitAnimating(false), 350);
+  }, []);
   // Narrow-viewport sidebar drawer (Phase 5): ≤900px the sidebar leaves
   // the flex row and becomes a modal overlay drawer.
   const sidebarDrawer = useSidebarDrawer();
@@ -662,6 +678,23 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     monacoRef.current = monaco;
     onSyncEditorMount(editor);
     onPresenceEditorMount(editor);
+
+    // Compact the gutter when the editor gets narrow (split dragged
+    // small): drop the line numbers and folding arrows, keeping a
+    // sliver of decoration lane as padding.
+    let gutterCompact: boolean | null = null;
+    const applyNarrowLayout = (width: number) => {
+      const compact = width < 400;
+      if (compact === gutterCompact) return;
+      gutterCompact = compact;
+      editor.updateOptions(
+        compact
+          ? { lineNumbers: 'off', folding: false, lineDecorationsWidth: 4 }
+          : { lineNumbers: 'on', folding: true, lineDecorationsWidth: 10 },
+      );
+    };
+    applyNarrowLayout(editor.getLayoutInfo().width);
+    editor.onDidLayoutChange((info) => applyNarrowLayout(info.width));
 
     // Register intelligence providers (symbols, folding, semantic tokens).
     // The getter uses a ref so it always returns the current file path.
@@ -1167,6 +1200,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               sidebarOpen={sidebarDrawer.sidebarVisible}
               onToggleSidebar={sidebarDrawer.toggle}
               sidebarToggleRef={sidebarDrawer.toggleRef}
+              splitFraction={editorPaneFraction}
+              onSetSplit={handleSetSplitPreset}
             />
             {replayState.isActive && (
               <div className="replay-mode-banner">REPLAY MODE</div>
@@ -1191,7 +1226,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         <main
           id="main-content"
           tabIndex={-1}
-          className={`editor-main view-mode-${viewMode}${isDraggingDivider ? ' dragging-divider' : ''}`}
+          className={`editor-main view-mode-${viewMode}${isDraggingDivider ? ' dragging-divider' : ''}${splitAnimating ? ' split-animating' : ''}`}
         >
         {!isFullscreenPreview && (
           <div
@@ -1268,13 +1303,15 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           }
         >
           {isFullscreenPreview && (
-            <button
-              className="fullscreen-close-btn"
-              onClick={handleToggleFullscreenPreview}
-              aria-label="Exit fullscreen preview"
-            >
-              ✕
-            </button>
+            <Tooltip content="Exit fullscreen preview">
+              <button
+                className="qh-icon-btn boxed fullscreen-close-btn"
+                onClick={handleToggleFullscreenPreview}
+                aria-label="Exit fullscreen preview"
+              >
+                <PreviewIcon />
+              </button>
+            </Tooltip>
           )}
           <PreviewStatusBar
             path={currentFile?.path ?? null}

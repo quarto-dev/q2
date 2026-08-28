@@ -8,6 +8,7 @@
  */
 
 import { PreviewIcon, PanelLeftIcon } from './icons';
+import ViewToggleControl from './ViewToggleControl';
 import Tooltip from './Tooltip';
 import { header } from '../strings';
 import './TopBars.css';
@@ -26,6 +27,10 @@ interface DocumentTopBarProps {
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
   sidebarToggleRef?: React.RefObject<HTMLButtonElement | null>;
+  /** Current editor-pane fraction, for the split-preset buttons. */
+  splitFraction?: number;
+  /** Jump the divider to a preset fraction (animated). */
+  onSetSplit?: (fraction: number) => void;
 }
 
 export default function DocumentTopBar({
@@ -35,6 +40,8 @@ export default function DocumentTopBar({
   sidebarOpen,
   onToggleSidebar,
   sidebarToggleRef,
+  splitFraction,
+  onSetSplit,
 }: DocumentTopBarProps) {
   return (
     <header className="top-bar document-top-bar">
@@ -56,13 +63,17 @@ export default function DocumentTopBar({
       )}
       <div className="header-left">
         <div className="header-doc">
+          <span className="doc-kicker" aria-hidden="true">
+            Document
+          </span>
           <span className={`file-path qh-truncate${currentFilePath ? '' : ' empty'}`}>
             {currentFilePath ?? header.noFileSelected}
           </span>
         </div>
       </div>
-      <div className="header-right">
-        {onToggleFullscreenPreview && !isFullscreenPreview && (
+      <ViewToggleControl fraction={splitFraction} onSelect={onSetSplit} />
+      {onToggleFullscreenPreview && !isFullscreenPreview && (
+        <div className="fullscreen-btn-box">
           <Tooltip content={header.fullscreenPreview}>
             <button
               className="qh-icon-btn boxed preview-btn"
@@ -72,8 +83,8 @@ export default function DocumentTopBar({
               <PreviewIcon />
             </button>
           </Tooltip>
-        )}
-      </div>
+        </div>
+      )}
     </header>
   );
 }

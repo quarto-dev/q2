@@ -20,6 +20,7 @@ import ConnectionStatusDialog, {
 import FileSidebar from './FileSidebar';
 import OutlinePanel from './OutlinePanel';
 import SidebarTabs from './SidebarTabs';
+import { PreviewIcon } from './icons';
 import StatusTab from './tabs/StatusTab';
 import ProjectTopBar from './ProjectTopBar';
 import DocumentTopBar from './DocumentTopBar';
@@ -675,8 +676,11 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
     <EditorChrome>
       <main className="editor-main view-mode-both">
         <div className="pane preview-pane fullscreen">
-          <button className="fullscreen-close-btn" aria-label="Exit fullscreen preview">
-            ✕
+          <button
+            className="qh-icon-btn boxed fullscreen-close-btn"
+            aria-label="Exit fullscreen preview"
+          >
+            <PreviewIcon />
           </button>
           <div
             style={{

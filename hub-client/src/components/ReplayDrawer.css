@@ -320,7 +320,7 @@
   gap: 6px;
   flex-shrink: 0;
   height: 20px;
-  margin-right: 10px;
+  margin: 0 8px;
   padding: 0 8px;
   background: var(--editor-accent-bg);
   border: 1px solid var(--editor-accent-border);
@@ -435,11 +435,18 @@
    (bd-0rsk07il, GH #445). One badge for the whole group; hidden at
    zero (the element is simply not rendered). Reuses the view-toggle
    palette so it reads as part of the control. */
+/* Document sync-status badge (statusSlot): separated from the Authors
+   pill by a right border spanning the bar. */
+.replay-drawer .sync-status-badge {
+  align-self: stretch;
+  border-right: 1px solid var(--editor-header-border);
+}
+
 /* Comments toggle: its own bordered box, each button outlined, with a
    "Comments" label to the right of the buttons. */
 .comments-mode-box {
   align-self: stretch;
-  padding: 1px 8px 1px 5px;
+  padding: 1px 8px;
   border-left: 1px solid var(--editor-header-border);
   gap: 3px;
 }

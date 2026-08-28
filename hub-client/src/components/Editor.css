@@ -263,6 +263,12 @@
   background: var(--editor-drag-accent);
 }
 
+/* Split-preset jump: animate the panes to the new fraction. Scoped to
+   the transient class so divider drags stay instant. */
+.editor-main.split-animating .pane {
+  transition: flex-grow 0.3s ease;
+}
+
 /* While dragging, the preview iframe must not swallow pointer events. */
 .editor-main.dragging-divider .preview-pane iframe {
   pointer-events: none;
@@ -454,40 +460,22 @@
   width: 100%;
 }
 
+/* Exit control: same look as the header's fullscreen-preview button
+   (.qh-icon-btn.boxed + PreviewIcon), floated over the top-right of the
+   preview with a bar-colored backing so it stays legible on content. */
 .fullscreen-close-btn {
   position: fixed;
-  top: 20px;
-  right: 35px;
-  width: 50px;
-  height: 50px;
-  min-width: 50px;
-  min-height: 50px;
-  padding: 0;
-  background: var(--alpha-black-40);
-  border: 2px solid var(--alpha-white-60);
-  border-radius: 50%;
-  color: var(--text-on-accent);
-  font-size: 28px;
-  font-weight: 300;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /* Where the header's fullscreen button sits in normal mode: 8px tile
+     margin + 1px border + ~4px centering in the 36px bar. */
+  top: 13px;
+  right: 14px;
+  background: var(--editor-header-bg);
+  border-color: var(--editor-header-border);
   z-index: var(--z-modal);
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  backdrop-filter: blur(8px);
 }
 
 .fullscreen-close-btn:hover {
-  background: var(--alpha-black-60);
-  border-color: var(--alpha-white-90);
-  transform: scale(1.25);
-}
-
-.fullscreen-close-btn:active {
-  transform: scale(0.9);
-  transition: all 0.1s;
+  background: var(--view-toggle-hover-bg);
 }
 
 .preview-pane iframe {
@@ -525,6 +513,17 @@
   min-height: 0;
   display: flex;
   position: relative;
+  /* Tiled look: the document column is a rounded panel; the gutter
+     shares the project column's surface, so the project side reads as
+     filling everything up to the document tile. */
+  background: var(--sidebar-bg);
+}
+
+/* Fullscreen preview: edge-to-edge, no tile frame. */
+.editor-columns:has(.preview-pane.fullscreen) .document-column {
+  margin: 0;
+  border: none;
+  border-radius: 0;
 }
 
 .project-column {
@@ -534,8 +533,10 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-border);
+  /* Transparent: .editor-columns already paints --sidebar-bg as the
+     shared canvas — a second translucent layer here reads darker than
+     the gutter around the document tile. */
+  background: transparent;
 }
 
 /* Inside the column the sidebar fills the available width/height; its
@@ -547,7 +548,17 @@
   border-right: none;
   flex: 1;
   min-height: 0;
+  /* The column owns the tint: --sidebar-bg is translucent in light
+     mode, so a second layer here would read darker than the gutter. */
+  background: transparent;
 }
+
+/* Same single-layer rule for the bars inside the column. */
+.project-column .project-top-bar,
+.project-column .project-bottom-bar {
+  background: transparent;
+}
+
 
 /* Narrow windows: the sidebar-sections width floor drops (SidebarTabs.css);
    mirror it on the column. */
@@ -562,6 +573,32 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* No left margin: the project side runs right up to the tile's
+     border (its section borders end at the document edge). */
+  margin: 8px 8px 8px 0;
+  background: var(--editor-bg);
+  border: 1px solid var(--editor-header-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* Sidebar hidden via the header toggle: the document tile goes
+   edge-to-edge, no gutter. */
+.editor-columns:has(> .sidebar-drawer.hidden) .document-column {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+
+/* Drawer breakpoint: the project column is off-canvas, so the tile
+   also goes edge-to-edge. */
+@media (max-width: 900px) {
+  .document-column {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+  }
+
 }
 
 /* Project bottom bar: sync-status badge for the project index doc;
@@ -582,6 +619,11 @@
    sync-status badge in its right-side cluster). */
 .document-bottom-bar {
   flex-shrink: 0;
+}
+
+/* Dark mode: match Monaco's background (see .document-top-bar). */
+:root.dark .document-bottom-bar .replay-drawer {
+  background: var(--monaco-bg);
 }
 
 /* Replay mode banner — overlays bottom edge of header */
@@ -610,7 +652,9 @@
 }
 
 .monaco-editor .margin {
-  background: var(--editor-bg) !important;
+  /* Dark: slightly darker than Monaco's background (--monaco-gutter-bg
+     only exists in the dark editor scope); light keeps --editor-bg. */
+  background: var(--monaco-gutter-bg, var(--editor-bg)) !important;
 }
 
 /* Preview error overlay (toast notification) */

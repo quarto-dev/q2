@@ -37,7 +37,12 @@ export default function ProjectTopBar({
           </button>
         </Tooltip>
       </div>
-      <span className="project-name">{projectName}</span>
+      <div className="project-identity">
+        <span className="project-kicker" aria-hidden="true">
+          Project
+        </span>
+        <span className="project-name">{projectName}</span>
+      </div>
       {onShare && (
         <Tooltip content={header.shareProject}>
           <button

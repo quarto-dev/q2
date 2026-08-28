@@ -227,6 +227,16 @@ export const tabs = {
   },
 } as const;
 
+/** ViewToggleControl (markup / split / preview segmented control). */
+export const viewToggle = {
+  expandMarkup: 'Expand markup',
+  markupView: 'Markup view',
+  splitEqually: 'Split equally',
+  splitView: 'Split view',
+  expandPreview: 'Expand preview',
+  previewView: 'Preview view',
+} as const;
+
 /** ReplayDrawer transport and overlays. */
 export const replay = {
   title: 'Replay',
