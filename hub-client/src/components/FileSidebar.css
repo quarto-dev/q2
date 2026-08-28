@@ -96,14 +96,18 @@
   gap: 8px;
   padding: 6px 12px;
   cursor: pointer;
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .file-item.active {
-  background: var(--editor-accent-bg);
-  border-left: 2px solid var(--sidebar-active-accent);
-  /* Reduce paddingLeft by 2px to account for border */
-  margin-left: -2px;
+  /* Same surface as the document top/bottom bars (--monaco-bg exists
+     only in the dark editor scope; light falls back to --editor-bg). */
+  background: var(--monaco-bg, var(--editor-bg));
+  /* Right edge: subtle, drawn inside via inset shadow — no layout
+     change, so no horizontal overflow. */
+  box-shadow: inset -2px 0 0 var(--sidebar-border);
 }
 
 .file-item.binary {
@@ -141,8 +145,16 @@
 }
 
 .file-name {
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--editor-text-dim);
+}
+
+/* Calmer hover than the shared .qh-row-hover gray (too loud in light
+   mode): the border color mixed most of the way back into the sidebar
+   surface. */
+.file-item.qh-row-hover:hover {
+  background: color-mix(in srgb, var(--sidebar-border) 35%, var(--sidebar-bg));
 }
 
 .file-item.active .file-name {
@@ -316,6 +328,7 @@
 }
 
 .search-result-name {
+  font-family: var(--font-mono);
   color: var(--editor-text);
   font-size: 13px;
 }

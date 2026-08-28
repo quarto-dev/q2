@@ -82,7 +82,9 @@
 }
 
 .outline-row:hover {
-  background: var(--sidebar-border);
+  /* Calmer hover, matching the file rows: border color mixed most of
+     the way back into the sidebar surface. */
+  background: color-mix(in srgb, var(--sidebar-border) 35%, var(--sidebar-bg));
 }
 
 /* WCAG 2.4.7: visible keyboard focus on outline rows and chevrons —
