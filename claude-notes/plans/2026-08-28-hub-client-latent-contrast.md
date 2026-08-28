@@ -21,7 +21,7 @@ light/dark theme.
 
 ### Phase 1 — token and CSS fixes
 
-- [ ] Editor.css text usages → per-theme text tokens (all verified
+- [x] Editor.css text usages → per-theme text tokens (all verified
   failing L, several D; fixed ≥4.95:1 everywhere):
   - `.diagnostic-item.diagnostic-error/-warning` (banner text, 3.20/2.46 L)
     → `--editor-error-text` / `--editor-warning-text`
@@ -38,46 +38,46 @@ light/dark theme.
   - `.preview-error-diagnostics .diagnostic-line`,
     `.diagnostic-source-file` (2.94 L) → `--editor-warning-text`
   - `.preview-error-diagnostics .diagnostic-title` → `--editor-error-text`
-- [ ] Audit finding beyond the strand's enumerated lines:
+- [x] Audit finding beyond the strand's enumerated lines:
   `.diagnostic-info` (4.38 L on banner) and `.diagnostic-note` (2.66 L /
   4.48 D) fail too; `--editor-info`/`--editor-note` are consumed only by
   diagnostic text, so fix at the token level: light `--editor-info` →
   `--posit-blue-dark-1` (6.41 banner), `--editor-note` →
   `var(--editor-text-muted)` both themes (4.60 L / 4.99 D banner).
-- [ ] `:root.dark --accent-secondary`: `--posit-blue` (#447099, 2.18:1 on
+- [x] `:root.dark --accent-secondary`: `--posit-blue` (#447099, 2.18:1 on
   navy modal #213D4F) → `#93b3d0` (5.20:1 navy, 7.10 page-bg; matches
   the slate-ramp value). Consumers are all text/border (qh-btn.outline,
   qh-link, spinner, link-browser hover border) — no fills.
-- [ ] ErrorBoundary fallback: hardcoded `#fee/#fcc/#900` inline styles →
+- [x] ErrorBoundary fallback: hardcoded `#fee/#fcc/#900` inline styles →
   theme tokens (`--error-bg-subtle`/`--diagnostics-border`/`--error-text`)
   so the dark `--accent-secondary` bump doesn't regress its outline
   buttons (and the fallback finally follows the theme).
-- [ ] Teal text → `--accent-action-text` (3.5:1 → ≥5.3:1):
+- [x] Teal text → `--accent-action-text` (3.5:1 → ≥5.3:1):
   ProjectTab `.export-zip-btn` color + `.screenshot-btn:hover` color
   (borders keep `--posit-teal`), MinimalHeader `.header-switch-btn`,
   ProjectsHome `.qh-fork-btn:hover`/`.qh-peek-btn:hover`/
   `.qh-join-kicker`/`.qh-join-collection-name`, ui.css
   `.qh-menu-item.accent`, ProjectSelector `.connecting` color.
-- [ ] ReplayDrawer `.replay-drawer__attribution--on:hover`: text
+- [x] ReplayDrawer `.replay-drawer__attribution--on:hover`: text
   `--editor-bg` on `--editor-success` fill (3.02 L) →
   `var(--posit-blue-dark-3)` (4.95:1 on #72994E in both themes).
 
 ### Phase 2 — axe coverage for the editor shell
 
-- [ ] New harness route `editor-status-states`: diagnostics banner (all
+- [x] New harness route `editor-status-states`: diagnostics banner (all
   four kinds, mirroring Editor.tsx markup), PreviewStatusBar in error
   state, PreviewErrorOverlay expanded + collapsed, replay-mode-banner —
   inside EditorChrome so the editor token scope applies.
-- [ ] Add `editor-shell` and `editor-status-states` to SCAN_PAGES in
+- [x] Add `editor-shell` and `editor-status-states` to SCAN_PAGES in
   baseline-a11y.harness.spec.ts; regenerate baseline (expect no new
   entries — pages scan clean after Phase 1).
 
 ### Phase 3 — verification
 
-- [ ] `npm run lint:css`, unit tests, `npm run build:all`
-- [ ] Harness suite green incl. baseline-a11y read-mode
-- [ ] Two-commit workflow + hub-client/changelog.md entry
-- [ ] Report; do NOT push without approval
+- [x] `npm run lint:css`, unit tests, `npm run build:all`
+- [x] Harness suite green incl. baseline-a11y read-mode
+- [x] Two-commit workflow + hub-client/changelog.md entry
+- [x] Report; do NOT push without approval
 
 ## Details
 
