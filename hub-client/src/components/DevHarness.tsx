@@ -14,6 +14,9 @@ import ProjectsHome from './ProjectsHome';
 import NewFileDialog from './NewFileDialog';
 import ShareDialog from './ShareDialog';
 import NewAssetDialog from './NewAssetDialog';
+import ConnectionStatusDialog, {
+  type ConnectionStatusHarnessData,
+} from './ConnectionStatusDialog';
 import FileSidebar from './FileSidebar';
 import OutlinePanel from './OutlinePanel';
 import SidebarTabs from './SidebarTabs';
@@ -481,6 +484,55 @@ interface Props {
   page: string;
 }
 
+/**
+ * Canned data for the connection-status dialog route. Timestamps anchor
+ * to the harness fixed clock (e2e/helpers/harness.ts FIXED_NOW), so the
+ * "42s ago"-style relative labels are stable under test.
+ */
+const FIXED_NOW_MS = Date.parse('2026-08-25T12:00:00.000Z');
+const FAKE_CONNECTION_STATUS: ConnectionStatusHarnessData = {
+  browserOnline: true,
+  connInfo: {
+    wsReadyState: 1, // WebSocket.OPEN
+    wsUrl: 'wss://sync.example.com',
+    peers: [{ peerId: 'peer-alice', storageId: 'storage-alice' }],
+  },
+  connLog: [
+    { at: FIXED_NOW_MS - 90_000, kind: 'ws-open', detail: 'wss://sync.example.com' },
+    { at: FIXED_NOW_MS - 85_000, kind: 'peer-handshake', detail: 'peer-alice' },
+  ],
+  fileStats: {
+    lastSyncMessageAt: FIXED_NOW_MS - 5_000,
+    lastEphemeralMessageAt: FIXED_NOW_MS - 42_000,
+    lastRemoteChangeAt: FIXED_NOW_MS - 180_000,
+  },
+  indexStats: {
+    lastSyncMessageAt: FIXED_NOW_MS - 5_000,
+    lastEphemeralMessageAt: FIXED_NOW_MS - 3_600_000,
+    lastRemoteChangeAt: FIXED_NOW_MS - 720_000,
+  },
+  // beforeText/afterText render the inline character diff (del/ins spans).
+  fileChange: {
+    at: FIXED_NOW_MS - 180_000,
+    documentId: 'automerge:fake-file',
+    patchCount: 1,
+    patches: [{ action: 'splice', path: ['content'], value: 'cat' }],
+    beforeText: '# My Paper\n\nThe quick brown fox jumps over the lazy dog.\n',
+    afterText: '# My Paper\n\nThe quick brown fox jumps over the lazy cat.\n',
+  },
+  // No beforeText/afterText: renders the patch-list fallback instead,
+  // including the "…and N more" overflow line (patchCount > patches.length).
+  indexChange: {
+    at: FIXED_NOW_MS - 720_000,
+    documentId: 'automerge:fake-index',
+    patchCount: 24,
+    patches: [
+      { action: 'put', path: ['entries', 'paper.qmd', 'heads'], value: 'abc123' },
+      { action: 'insert', path: ['entries'], values: ['notes.qmd'] },
+    ],
+  },
+};
+
 const DEV_PAGES: Record<string, () => React.ReactNode> = {
   'setup-migration': () => (
     <ProjectSetSetup
@@ -581,6 +633,18 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
         defaultDestination="figures"
         onClose={() => {}}
         onUploadAsset={() => {}}
+      />
+    </EditorChrome>
+  ),
+  /* Connection-status dialog with canned online state, per-doc stats, an
+     inline diff (del/ins tints), the patch-list fallback, and a connection
+     log — every content variant the dialog can render, in one route. */
+  'dialog-connection-status': () => (
+    <EditorChrome>
+      <ConnectionStatusDialog
+        currentFilePath="paper.qmd"
+        onClose={noop}
+        harnessData={FAKE_CONNECTION_STATUS}
       />
     </EditorChrome>
   ),
