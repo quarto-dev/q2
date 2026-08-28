@@ -226,7 +226,7 @@
   padding: 0 10px;
   background: var(--editor-success-bg);
   border-color: var(--editor-success);
-  color: var(--editor-success);
+  color: var(--editor-success-text);
   font-size: 11px;
   font-weight: 600;
   border-radius: var(--radius-xs);
@@ -353,14 +353,16 @@
 }
 
 .replay-drawer__attribution--on {
-  color: var(--editor-success);
+  color: var(--editor-success-text);
   border-color: var(--editor-success);
   background: var(--editor-success-bg);
 }
 
 .replay-drawer__attribution--on:hover {
   background: var(--editor-success);
-  color: var(--editor-bg);
+  /* Dark text on the solid green fill: --editor-bg was 3.02:1 in light
+     (WCAG 1.4.3 failure); #17212B is 4.95:1 on #72994E in both themes. */
+  color: var(--posit-blue-dark-3);
 }
 
 .replay-drawer__attribution-dot {

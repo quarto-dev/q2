@@ -26,11 +26,11 @@
 }
 
 .diagnostic-item.diagnostic-error {
-  color: var(--editor-error);
+  color: var(--editor-error-text);
 }
 
 .diagnostic-item.diagnostic-warning {
-  color: var(--editor-warning);
+  color: var(--editor-warning-text);
 }
 
 .diagnostic-item.diagnostic-info {
@@ -50,9 +50,9 @@
   font-weight: 500;
 }
 
-.diagnostic-problem {
-  opacity: 0.85;
-}
+/* No opacity de-emphasis on .diagnostic-problem: opacity composites the
+   text toward the background and drops the status colors below 4.5:1
+   (WCAG 1.4.3) — same failure as the projects-home footer note. */
 
 .editor-header {
   display: flex;
@@ -91,12 +91,12 @@
 
 .sync-status.connected {
   background: var(--editor-success-bg);
-  color: var(--editor-success);
+  color: var(--editor-success-text);
 }
 
 .sync-status.disconnected {
   background: var(--editor-error-bg);
-  color: var(--editor-error);
+  color: var(--editor-error-text);
 }
 
 .user-count {
@@ -171,7 +171,7 @@
 
 .disconnect-btn:hover {
   border-color: var(--editor-error);
-  color: var(--editor-error);
+  color: var(--editor-error-text);
 }
 
 .editor-main {
@@ -413,7 +413,7 @@
 }
 
 .preview-status-error {
-  color: var(--editor-error);
+  color: var(--editor-error-text);
 }
 
 /* Right-aligned action group; Run is last so it stays pinned to the far
@@ -443,7 +443,7 @@
 
 .preview-status-bar .preview-status-clear-confirm-btn {
   border-color: var(--editor-error);
-  color: var(--editor-error);
+  color: var(--editor-error-text);
 }
 
 /* Green liveness dot, shown only while an executor is online. */
@@ -641,10 +641,10 @@
   left: 0;
   right: 0;
   /* Solid (it floats over pane content): green mixed onto the editor
-     surface. */
+     surface. Text uses main's contrast-fixed success-text token. */
   background: color-mix(in srgb, var(--posit-green) 15%, var(--editor-bg));
   border-bottom: 1px solid var(--editor-header-border);
-  color: var(--editor-success);
+  color: var(--editor-success-text);
   text-align: center;
   padding: 2px 0;
   font-size: 10px;
@@ -699,7 +699,7 @@
 }
 
 .preview-error-title {
-  color: var(--editor-error);
+  color: var(--editor-error-text);
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -724,7 +724,7 @@
 }
 
 .preview-error-expand-btn {
-  color: var(--editor-error);
+  color: var(--editor-error-text);
   font-weight: 600;
 }
 
@@ -762,12 +762,12 @@
 }
 
 .preview-error-diagnostics .diagnostic-line {
-  color: var(--editor-warning);
+  color: var(--editor-warning-text);
   font-weight: 500;
 }
 
 .preview-error-diagnostics .diagnostic-title {
-  color: var(--editor-error);
+  color: var(--editor-error-text);
 }
 
 .preview-error-diagnostics .diagnostic-problem {
@@ -792,7 +792,7 @@
 .preview-error-pass1-failure .diagnostic-source-file {
   font-size: 12px;
   font-weight: 600;
-  color: var(--editor-warning);
+  color: var(--editor-warning-text);
   margin-bottom: 4px;
 }
 

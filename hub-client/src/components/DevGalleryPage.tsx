@@ -141,6 +141,7 @@ export default function DevGalleryPage() {
   const [inputValue, setInputValue] = useState('Editable text');
   return (
     <div
+      className="dev-gallery-page"
       style={{
         padding: 'var(--space-5)',
         maxWidth: 900,

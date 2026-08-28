@@ -58,12 +58,12 @@ function DefaultFallback({ error, onReset }: { error: Error; onReset: () => void
       style={{
         padding: '24px',
         margin: '16px',
-        backgroundColor: '#fee',
-        border: '1px solid #fcc',
+        backgroundColor: 'var(--error-bg-subtle)',
+        border: '1px solid var(--diagnostics-border)',
         borderRadius: '6px',
         fontFamily: 'system-ui, sans-serif',
         fontSize: '14px',
-        color: '#900',
+        color: 'var(--error-text)',
       }}
     >
       <h3 style={{ margin: '0 0 8px 0' }}>Something went wrong</h3>

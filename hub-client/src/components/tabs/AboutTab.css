@@ -93,7 +93,9 @@
 .commit-hash {
   font-family: var(--font-mono);
   font-size: 13px;
-  color: var(--accent-secondary);
+  /* --text-secondary: --accent-secondary (#447099) is only 3.72:1 on the
+     light card tint (#d1dbe5) — under the WCAG 1.4.3 4.5:1 minimum. */
+  color: var(--text-secondary);
   cursor: help;
 }
 

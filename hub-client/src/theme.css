@@ -26,508 +26,541 @@
 
 /* Posit Brand Colors - always available regardless of theme */
 :root {
-   /* Primary */
-   --posit-blue: #447099;
-   --posit-blue-light-1: #D1DBE5;
-   --posit-blue-light-2: #A2B8CB;
-   --posit-blue-light-3: #7494B1;
-   --posit-blue-dark-1: #305775;
-   --posit-blue-dark-2: #213D4F;
-   --posit-blue-dark-3: #17212B;
+  /* Primary */
+  --posit-blue: #447099;
+  --posit-blue-light-1: #D1DBE5;
+  --posit-blue-light-2: #A2B8CB;
+  --posit-blue-light-3: #7494B1;
+  --posit-blue-dark-1: #305775;
+  --posit-blue-dark-2: #213D4F;
+  --posit-blue-dark-3: #17212B;
 
-   /* Grays */
-   --posit-gray: #404041;
-   --posit-gray-light-1: #C2C2C4;
-   --posit-gray-light-2: #949494;
-   --posit-gray-light-3: #707073;
-   --posit-gray-dark-1: #333333;
-   --posit-gray-dark-2: #242426;
-   --posit-gray-dark-3: #151515;
+  /* Grays */
+  --posit-gray: #404041;
+  --posit-gray-light-1: #C2C2C4;
+  --posit-gray-light-2: #949494;
+  --posit-gray-light-3: #707073;
+  --posit-gray-dark-1: #333333;
+  --posit-gray-dark-2: #242426;
+  --posit-gray-dark-3: #151515;
 
-   /* Accent */
-   --posit-orange: #D44000;
-   --posit-orange-hover: #E57366;
-   --posit-orange-dark-1: #B03800;
-   --posit-orange-light-1: #F09C8F;
-   --posit-teal: #419599;
-   --posit-teal-dark-1: #2E6E71;
-   --posit-teal-light-1: #7FBFC2;
-   --posit-green: #72994E;
-   --posit-red: #DB593B;
+  /* Accent */
+  --posit-orange: #D44000;
+  --posit-orange-hover: #E57366;
+  --posit-orange-dark-1: #B03800;
+  --posit-orange-light-1: #F09C8F;
+  --posit-teal: #419599;
+  --posit-teal-dark-1: #2E6E71;
+  --posit-teal-light-1: #7FBFC2;
+  --posit-green: #72994E;
+  --posit-red: #DB593B;
 
-   /* ---- Primitives: fixed constants (theme-agnostic) ---- */
+  /* ---- Primitives: fixed constants (theme-agnostic) ---- */
 
-   --white: #fff;
-   --black: #000;
+  --white: #fff;
+  --black: #000;
 
-   /* Fixed alpha tints. Unlike the semantic alpha tokens below
+  /* Fixed alpha tints. Unlike the semantic alpha tokens below
      (--input-bg-alpha etc., which flip to white-based alphas in dark
      mode), these hold one value in both themes — used where the current
      design specifies a fixed tint (drop overlays, shadows, focus rings). */
-   --alpha-black-05: rgba(0, 0, 0, 0.05);
-   --alpha-black-06: rgba(0, 0, 0, 0.06);
-   --alpha-black-08: rgba(0, 0, 0, 0.08);
-   --alpha-black-10: rgba(0, 0, 0, 0.1);
-   --alpha-black-15: rgba(0, 0, 0, 0.15);
-   --alpha-black-20: rgba(0, 0, 0, 0.2);
-   --alpha-black-30: rgba(0, 0, 0, 0.3);
-   --alpha-black-40: rgba(0, 0, 0, 0.4);
-   --alpha-black-45: rgba(0, 0, 0, 0.45);
-   --alpha-black-50: rgba(0, 0, 0, 0.5);
-   --alpha-black-60: rgba(0, 0, 0, 0.6);
-   --alpha-white-05: rgba(255, 255, 255, 0.05);
-   --alpha-white-60: rgba(255, 255, 255, 0.6);
-   --alpha-white-90: rgba(255, 255, 255, 0.9);
-   --posit-teal-alpha-05: rgba(65, 149, 153, 0.05);
-   --posit-teal-alpha-08: rgba(65, 149, 153, 0.08);
-   --posit-teal-alpha-30: rgba(65, 149, 153, 0.3);
-   --posit-blue-alpha-08: rgba(68, 112, 153, 0.08);
-   --posit-blue-alpha-15: rgba(68, 112, 153, 0.15);
-   --posit-blue-alpha-20: rgba(68, 112, 153, 0.2);
-   --posit-green-alpha-25: rgba(114, 153, 78, 0.25);
+  --alpha-black-05: rgba(0, 0, 0, 0.05);
+  --alpha-black-06: rgba(0, 0, 0, 0.06);
+  --alpha-black-08: rgba(0, 0, 0, 0.08);
+  --alpha-black-10: rgba(0, 0, 0, 0.1);
+  --alpha-black-15: rgba(0, 0, 0, 0.15);
+  --alpha-black-20: rgba(0, 0, 0, 0.2);
+  --alpha-black-30: rgba(0, 0, 0, 0.3);
+  --alpha-black-40: rgba(0, 0, 0, 0.4);
+  --alpha-black-45: rgba(0, 0, 0, 0.45);
+  --alpha-black-50: rgba(0, 0, 0, 0.5);
+  --alpha-black-60: rgba(0, 0, 0, 0.6);
+  --alpha-white-05: rgba(255, 255, 255, 0.05);
+  --alpha-white-60: rgba(255, 255, 255, 0.6);
+  --alpha-white-90: rgba(255, 255, 255, 0.9);
+  --posit-teal-alpha-05: rgba(65, 149, 153, 0.05);
+  --posit-teal-alpha-08: rgba(65, 149, 153, 0.08);
+  --posit-teal-alpha-30: rgba(65, 149, 153, 0.3);
+  --posit-blue-alpha-08: rgba(68, 112, 153, 0.08);
+  --posit-blue-alpha-15: rgba(68, 112, 153, 0.15);
+  --posit-blue-alpha-20: rgba(68, 112, 153, 0.2);
+  --posit-green-alpha-25: rgba(114, 153, 78, 0.25);
 
-   /* Attribution ring palette (ReplayDrawer) — Apple system colors, one
+  /* Attribution ring palette (ReplayDrawer) — Apple system colors, one
      per collaborator, fixed in both themes. */
-   --attribution-red: #ff3b30;
-   --attribution-orange: #ff9500;
-   --attribution-yellow: #ffcc00;
-   --attribution-green: #34c759;
-   --attribution-blue: #5ac8fa;
-   --attribution-purple: #5856d6;
+  --attribution-red: #ff3b30;
+  --attribution-orange: #ff9500;
+  --attribution-yellow: #ffcc00;
+  --attribution-green: #34c759;
+  --attribution-blue: #5ac8fa;
+  --attribution-purple: #5856d6;
 
-   /* Debug inspector palette (Catppuccin Macchiato) — the debug panel is
+  /* Debug inspector palette (Catppuccin Macchiato) — the debug panel is
      a permanently-dark dev tool; these stay fixed in both themes. */
-   --debug-base: #1e1e2e;
-   --debug-mantle: #181825;
-   --debug-surface-0: #313244;
-   --debug-surface-1: #45475a;
-   --debug-text: #cdd6f4;
-   --debug-subtext: #a6adc8;
-   --debug-muted: #6c7086;
-   --debug-blue: #89b4fa;
-   --debug-green: #a6e3a1;
-   --debug-red: #f38ba8;
-   --debug-yellow: #f9e2af;
+  --debug-base: #1e1e2e;
+  --debug-mantle: #181825;
+  --debug-surface-0: #313244;
+  --debug-surface-1: #45475a;
+  --debug-text: #cdd6f4;
+  --debug-subtext: #a6adc8;
+  --debug-muted: #6c7086;
+  --debug-blue: #89b4fa;
+  --debug-green: #a6e3a1;
+  --debug-red: #f38ba8;
+  --debug-yellow: #f9e2af;
 
-   /* Legacy ProjectSelector palette (pre-QH-ProjectManagement-July26
+  /* Legacy ProjectSelector palette (pre-QH-ProjectManagement-July26
      classic selector). Fixed values; the classic selector is light-only
      today. */
-   --selector-accent: #5ab5b8;
-   --selector-accent-subtle: #bacad8;
-   --selector-success: #4a6a32;
+  --selector-accent: #5ab5b8;
+  --selector-accent-subtle: #bacad8;
+  --selector-success: #4a6a32;
+  /* "Connecting…" banner text on the classic selector's light
+     background (--input-bg-alpha over the 95% --bg-overlay composite):
+     --accent-action-text is only 3.89:1 there; this clears 4.5:1
+     (4.76:1). */
+  --selector-connecting-text: #276061;
 
-   /* ---- Scales ---- */
+  /* ---- Scales ---- */
 
-   /* Spacing — 4px base. */
-   --space-1: 4px;
-   --space-2: 8px;
-   --space-3: 12px;
-   --space-4: 16px;
-   --space-5: 24px;
-   --space-6: 32px;
-   --space-7: 48px;
-   --space-8: 64px;
+  /* Spacing — 4px base. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
 
-   /* Radii. */
-   --radius-xs: 4px;
-   --radius-sm: 6px;
-   --radius-md: 8px;
-   --radius-lg: 12px;
-   --radius-xl: 16px;
+  /* Radii. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 
-   /* Elevation. --shadow-1 is identical in both themes today (the card
+  /* Elevation. --shadow-1 is identical in both themes today (the card
      hover shadow was designed light-only); --shadow-2/3 carry per-theme
      values. */
-   --shadow-1: 0 2px 8px rgba(0, 0, 0, 0.06);
-   --shadow-2: 0 8px 28px rgba(0, 0, 0, 0.12);
-   --shadow-3: 0 20px 60px rgba(0, 0, 0, 0.15);
+  --shadow-1: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-2: 0 8px 28px rgba(0, 0, 0, 0.12);
+  --shadow-3: 0 20px 60px rgba(0, 0, 0, 0.15);
 
-   /* Z-index layers — the only legal z-index values (lint:css). From
+  /* Z-index layers — the only legal z-index values (lint:css). From
      bottom to top: */
-   --z-base: 0;
-   /* hidden double-buffered preview frame */
-   --z-raised: 1;
-   /* active preview frame, in-pane watermarks */
-   --z-sticky: 10;
-   /* in-pane overlays (editor drop target) */
-   --z-header: 40;
-   /* sticky page headers */
-   --z-dropdown: 60;
-   /* menus */
-   --z-overlay: 100;
-   /* dialog backdrops (default), drop messages */
-   --z-modal: 1000;
-   /* editor-chrome floating layer: context menus, dialogs
+  --z-base: 0; /* hidden double-buffered preview frame */
+  --z-raised: 1; /* active preview frame, in-pane watermarks */
+  --z-sticky: 10; /* in-pane overlays (editor drop target) */
+  --z-header: 40; /* sticky page headers */
+  --z-dropdown: 60; /* menus */
+  --z-overlay: 100; /* dialog backdrops (default), drop messages */
+  --z-modal: 1000; /* editor-chrome floating layer: context menus, dialogs
                       in the editor, error overlays, full-page surfaces */
-   --z-skip: 2000;
-   /* skip link and other must-clear-modals chrome */
-   --z-toast: 10000;
-   /* toasts, changelog modal, debug inspector */
-   --z-max: 10001;
-   /* update-available toast (above the transient toast) */
-   /* reveal.js's own controls live at ~30 inside the preview iframe's
+  --z-skip: 2000; /* skip link and other must-clear-modals chrome */
+  --z-toast: 10000; /* toasts, changelog modal, debug inspector */
+  --z-max: 10001; /* update-available toast (above the transient toast) */
+  /* reveal.js's own controls live at ~30 inside the preview iframe's
      stacking context; the menu-button override must stay above them. */
-   --z-revealjs-menu: 30;
+  --z-revealjs-menu: 30;
 
-   /* Type scale. */
-   --text-2xs: 10px;
-   --text-xs: 11px;
-   --text-sm: 12px;
-   --text-base: 13px;
-   --text-md: 14px;
-   --text-lg: 18px;
-   --text-xl: 24px;
-   --font-weight-normal: 400;
-   --font-weight-medium: 500;
-   --font-weight-semibold: 600;
-   --font-weight-bold: 700;
-   --leading-tight: 1.25;
-   --leading-base: 1.5;
-   /* The single monospace stack — all app surfaces migrated in Phase 1.
+  /* Type scale. */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --leading-tight: 1.25;
+  --leading-base: 1.5;
+  /* The single monospace stack — all app surfaces migrated in Phase 1.
      (src/debug/debug.css is a standalone page with its own local token.) */
-   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-   /* Motion — 100-200ms, ease-out entrances; animate transform/opacity
+  /* Motion — 100-200ms, ease-out entrances; animate transform/opacity
      only. prefers-reduced-motion handling is a global rule in ui.css
      (collapses all durations); never add per-component overrides. */
-   --duration-fast: 100ms;
-   --duration-base: 200ms;
-   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast: 100ms;
+  --duration-base: 200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
-   /* Focus ring — the one consistent visible-focus treatment (WCAG 2.4.7).
+  /* Focus ring — the one consistent visible-focus treatment (WCAG 2.4.7).
      Use: outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); */
-   --focus-ring: 2px solid var(--border-focus);
-   --focus-ring-offset: 2px;
+  --focus-ring: 2px solid var(--border-focus);
+  --focus-ring-offset: 2px;
 
-   /* Fixed semantic constants (same value in both themes). */
-   --text-on-accent: var(--white);
-   /* text on teal/red/blue fills */
-   --backdrop-bg: rgba(23, 50, 77, 0.55);
-   /* modal dialog scrim */
+  /* Fixed semantic constants (same value in both themes). */
+  --text-on-accent: var(--white); /* text on teal/red/blue fills */
+  --backdrop-bg: rgba(23, 50, 77, 0.55); /* modal dialog scrim */
 
-   /* Filled-accent button micro-states (theme-constant — the accent fills
+  /* Accent action colors (WCAG 1.4.3): white text on the brand teal/red
+     fills is only 3.5:1/3.8:1 — below the 4.5:1 normal-text minimum — so
+     filled action buttons use these darker fills, and teal action text
+     (ghost-accent buttons) uses --accent-action-text, which flips to a
+     lighter teal in dark theme (see :root.dark). */
+  --accent-action-bg: var(--posit-teal-dark-1); /* 5.86:1 with white text */
+  --accent-action-text: var(--posit-teal-dark-1); /* 5.86:1 on white */
+  --btn-danger-bg: #c0392b; /* 5.44:1 with white text */
+
+  /* Filled-accent button micro-states (theme-constant — the accent fills
      don't change per theme). Hover lightens ~8%, press darkens ~6%.
      Replaces filter: brightness(), which also lightened the label text
      and forced a containing block. Consumed by .qh-btn.primary/.danger,
-     .ui-variant-toggle. */
-   --btn-accent-hover-bg: color-mix(in srgb, var(--posit-teal) 92%, var(--white));
-   --btn-accent-active-bg: color-mix(in srgb, var(--posit-teal) 94%, var(--black));
-   --btn-danger-hover-bg: color-mix(in srgb, var(--posit-red) 90%, var(--white));
-   --btn-danger-active-bg: color-mix(in srgb, var(--posit-red) 93%, var(--black));
+     .ui-variant-toggle. Hover/active stay
+     ≥4.5:1 with white text (4.90:1/6.46:1 accent, 4.63:1/6.08:1 danger). */
+  --btn-accent-hover-bg: color-mix(in srgb, var(--accent-action-bg) 92%, var(--white));
+  --btn-accent-active-bg: color-mix(in srgb, var(--accent-action-bg) 94%, var(--black));
+  --btn-danger-hover-bg: color-mix(in srgb, var(--btn-danger-bg) 90%, var(--white));
+  --btn-danger-active-bg: color-mix(in srgb, var(--btn-danger-bg) 93%, var(--black));
 
-   --bg-overlay: rgba(209, 219, 229, 0.95);
-   --bg-modal: #ffffff;
-   --bg-card: var(--posit-blue-light-1);
-   --bg-card-hover: var(--posit-blue-light-2);
-   --bg-input: #ffffff;
-   --text-primary: var(--posit-blue-dark-3);
-   --text-secondary: var(--posit-blue-dark-1);
-   --text-muted: var(--posit-blue);
-   --border-color: var(--posit-blue-light-2);
-   --border-focus: var(--posit-blue);
-   --accent-primary: var(--posit-orange);
-   --accent-secondary: var(--posit-blue);
-   --error-bg: var(--posit-red);
-   --error-text: #c0392b;
-   --error-bg-subtle: rgba(219, 89, 59, 0.08);
-   --success-bg: var(--posit-teal);
-   --success-bg-subtle: rgba(114, 153, 78, 0.12);
-   --input-bg-alpha: rgba(68, 112, 153, 0.08);
-   --input-bg-alpha-hover: rgba(68, 112, 153, 0.15);
-   --bg-subtle: rgba(0, 0, 0, 0.03);
-   --modal-shadow: var(--shadow-3);
-   --logo-filter: none;
+  --bg-overlay: rgba(209, 219, 229, 0.95);
+  --bg-modal: #ffffff;
+  --bg-card: var(--posit-blue-light-1);
+  --bg-card-hover: var(--posit-blue-light-2);
+  --bg-input: #ffffff;
+  --text-primary: var(--posit-blue-dark-3);
+  --text-secondary: var(--posit-blue-dark-1);
+  --text-muted: var(--posit-blue);
+  --border-color: var(--posit-blue-light-2);
+  --border-focus: var(--posit-blue);
+  --accent-primary: var(--posit-orange);
+  --accent-secondary: var(--posit-blue);
+  --error-bg: var(--posit-red);
+  --error-text: #c0392b;
+  --error-bg-subtle: rgba(219, 89, 59, 0.08);
+  --success-bg: var(--posit-teal);
+  --success-bg-subtle: rgba(114, 153, 78, 0.12);
+  --input-bg-alpha: rgba(68, 112, 153, 0.08);
+  --input-bg-alpha-hover: rgba(68, 112, 153, 0.15);
+  --bg-subtle: rgba(0, 0, 0, 0.03);
+  --modal-shadow: var(--shadow-3);
+  --logo-filter: none;
 
-   /* Editor-specific */
-   --editor-bg: #f5f5f5;
-   --editor-header-bg: var(--bg-modal);
-   --editor-header-border: var(--border-color);
-   --editor-text: var(--posit-blue-dark-3);
-   --editor-text-dim: #555;
-   --editor-text-muted: #777;
-   --editor-accent-bg: var(--input-bg-alpha);
-   --editor-accent-border: var(--border-color);
-   --editor-accent-text: var(--accent-secondary);
-   --editor-success: var(--posit-green);
-   --editor-success-bg: var(--success-bg-subtle);
-   --editor-error: var(--posit-red);
-   --editor-error-bg: var(--error-bg-subtle);
-   --editor-warning: #ca8a04;
-   --editor-info: var(--accent-secondary);
-   --editor-note: var(--posit-blue-light-3);
-   --editor-drag-accent: var(--posit-teal);
-   --editor-disconnected-border: var(--border-color);
+  /* Editor-specific */
+  --editor-bg: #f5f5f5;
+  --editor-header-bg: var(--bg-modal);
+  --editor-header-border: var(--border-color);
+  --editor-text: var(--posit-blue-dark-3);
+  --editor-text-dim: #555;
+  /* 4.58:1 on the worst light background (the sidebar's #e7ebed
+     composite); the old #777 was 3.73:1 there (WCAG 1.4.3 failure). */
+  --editor-text-muted: #696969;
+  --editor-accent-bg: var(--input-bg-alpha);
+  --editor-accent-border: var(--border-color);
+  --editor-accent-text: var(--accent-secondary);
+  --editor-success: var(--posit-green);
+  --editor-success-bg: var(--success-bg-subtle);
+  --editor-error: var(--posit-red);
+  --editor-error-bg: var(--error-bg-subtle);
+  --editor-warning: #ca8a04;
+  /* Text-on-tinted-background variants (WCAG 1.4.3): the brand hues
+     above fail 4.5:1 on their subtle backgrounds, so status/message
+     text uses these; keep the brand hues for borders, dots, fills. */
+  --editor-error-text: #b0392e; /* 4.83:1 on the --error-bg-subtle composite */
+  --editor-warning-text: #92400e; /* 6.37:1 on --warning-bg */
+  --editor-success-text: #4a6a32; /* 5.06:1 on --editor-success-bg */
+  /* Info/note are consumed only by diagnostic text (Editor.css), so they
+     must clear 4.5:1 on the diagnostics-banner and error-overlay
+     backgrounds: the accent blue is 4.38:1 on the banner composite and
+     the light-3 ramp step 2.66:1 — both fail WCAG 1.4.3. */
+  --editor-info: var(--posit-blue-dark-1); /* 6.41:1 on the banner composite */
+  --editor-note: var(--editor-text-muted); /* 4.60:1 on the banner composite */
+  --editor-drag-accent: var(--posit-teal);
+  --editor-disconnected-border: var(--border-color);
 
-   /* Sidebar — posit-blue tint (not neutral --bg-subtle) so its saturation
+  /* Sidebar — posit-blue tint (not neutral --bg-subtle) so its saturation
      matches the other editor chrome (--input-bg-alpha bars). Section
      headers/content stack a second layer of this alpha over --sidebar-bg,
      landing at ~8% ≈ --input-bg-alpha; hover therefore steps up to
      --input-bg-alpha-hover to stay visible. */
-   --sidebar-bg: rgb(227, 234, 241);
-   --sidebar-border: var(--border-color);
-   --sidebar-section-bg: rgb(207, 221, 235);
-   --sidebar-section-hover: var(--input-bg-alpha-hover);
-   --sidebar-drag-bg: #c8d8ea;
-   --sidebar-active-accent: var(--posit-teal);
-   --sidebar-drop-accent: var(--posit-teal);
+  --sidebar-bg: rgb(227, 234, 241);
+  --sidebar-border: var(--border-color);
+  --sidebar-section-bg: rgb(207, 221, 235);
+  --sidebar-section-hover: var(--input-bg-alpha-hover);
+  --sidebar-drag-bg: #c8d8ea;
+  --sidebar-active-accent: var(--posit-teal);
+  --sidebar-drop-accent: var(--posit-teal);
 
-   /* Context menu */
-   --context-menu-bg: var(--bg-modal);
-   --context-menu-border: var(--border-color);
-   --context-menu-hover: var(--input-bg-alpha);
-   --context-menu-shadow: rgba(0, 0, 0, 0.12);
-   --context-menu-danger: var(--posit-red);
-   /* Shortcut hints: --text-muted meets 4.5:1 on --bg-modal in light. */
-   --menu-hint-text: var(--text-muted);
-   --context-menu-danger-bg: var(--error-bg-subtle);
+  /* Context menu */
+  --context-menu-bg: var(--bg-modal);
+  --context-menu-border: var(--border-color);
+  --context-menu-hover: var(--input-bg-alpha);
+  --context-menu-shadow: rgba(0, 0, 0, 0.12);
+  --context-menu-danger: var(--posit-red);
+  /* Shortcut hints: --text-muted meets 4.5:1 on --bg-modal in light. */
+  --menu-hint-text: var(--text-muted);
+  --context-menu-danger-bg: var(--error-bg-subtle);
 
-   /* Outline panel symbol colors — one hue family per symbol class
+  /* Outline panel symbol colors — one hue family per symbol class
      (header = blue, code = teal, function = orange); each theme picks
      the ramp step that keeps the glyph ≥4.5:1 on the sidebar bg. */
-   --outline-header-icon: var(--posit-blue);
-   --outline-code-icon: var(--posit-teal-dark-1);
-   --outline-function-icon: var(--posit-orange-dark-1);
+  --outline-header-icon: var(--posit-blue);
+  --outline-code-icon: var(--posit-teal-dark-1);
+  --outline-function-icon: var(--posit-orange-dark-1);
 
-   /* Dialogs */
-   --dialog-bg: var(--bg-modal);
-   --dialog-border: var(--border-color);
-   --dialog-shadow: rgba(0, 0, 0, 0.15);
-   --dialog-input-bg: var(--input-bg-alpha);
-   --dialog-input-border: var(--border-color);
-   --dialog-input-hover-bg: var(--input-bg-alpha-hover);
-   --dialog-tab-active: var(--posit-teal);
-   --dialog-primary-bg: var(--posit-teal);
-   --dialog-danger-bg: var(--error-bg-subtle);
-   --dialog-danger-border: #fca5a5;
-   --dialog-disabled-bg: #e5e5e5;
-   --dialog-file-preview-bg: var(--input-bg-alpha);
-   --dialog-file-input-bg: var(--input-bg-alpha);
-   --dialog-file-input-border: var(--border-color);
-   --dialog-add-more-hover-bg: var(--input-bg-alpha-hover);
+  /* Dialogs */
+  --dialog-bg: var(--bg-modal);
+  --dialog-border: var(--border-color);
+  --dialog-shadow: rgba(0, 0, 0, 0.15);
+  --dialog-input-bg: var(--input-bg-alpha);
+  --dialog-input-border: var(--border-color);
+  --dialog-input-hover-bg: var(--input-bg-alpha-hover);
+  --dialog-tab-active: var(--posit-teal);
+  --dialog-primary-bg: var(--accent-action-bg);
+  --dialog-danger-bg: var(--error-bg-subtle);
+  --dialog-danger-border: #fca5a5;
+  --dialog-disabled-bg: #e5e5e5;
+  --dialog-file-preview-bg: var(--input-bg-alpha);
+  --dialog-file-input-bg: var(--input-bg-alpha);
+  --dialog-file-input-border: var(--border-color);
+  --dialog-add-more-hover-bg: var(--input-bg-alpha-hover);
 
-   /* Warning box (share dialog) */
-   --warning-bg: #fef3c7;
-   --warning-border: #fcd34d;
-   --warning-icon: #d97706;
-   --warning-text: #92400e;
-   --warning-detail: #a16207;
-   --dialog-copied-bg: var(--posit-green);
+  /* Warning box (share dialog) */
+  --warning-bg: #fef3c7;
+  --warning-border: #fcd34d;
+  --warning-icon: #d97706;
+  --warning-text: #92400e;
+  /* 6.37:1 on --warning-bg; the old #a16207 was 4.42:1 (just under 4.5). */
+  --warning-detail: #92400e;
+  --dialog-copied-bg: var(--posit-green);
 
-   /* View toggle */
-   --view-toggle-bg: var(--bg-modal);
-   --view-toggle-text: var(--posit-blue);
-   --view-toggle-hover-bg: var(--input-bg-alpha);
-   --view-toggle-hover-text: var(--posit-blue-dark-1);
-   --view-toggle-active-bg: var(--input-bg-alpha);
-   --view-toggle-active-text: var(--posit-blue-dark-2);
+  /* View toggle */
+  --view-toggle-bg: var(--bg-modal);
+  --view-toggle-text: var(--posit-blue);
+  --view-toggle-hover-bg: var(--input-bg-alpha);
+  --view-toggle-hover-text: var(--posit-blue-dark-1);
+  --view-toggle-active-bg: var(--input-bg-alpha);
+  --view-toggle-active-text: var(--posit-blue-dark-2);
 
-   /* Replay drawer */
-   --replay-handle: #c0c0c0;
-   --replay-handle-hover: #888;
-   --replay-actor-border: #ccc;
-   --replay-actor-me-text: var(--posit-blue-dark-1);
-   --replay-actor-me-border: var(--posit-blue-light-2);
-   --replay-actor-me-bg: var(--posit-blue-alpha-08);
-   --replay-tooltip-bg: #ffffff;
+  /* Replay drawer */
+  --replay-handle: #c0c0c0;
+  --replay-handle-hover: #888;
+  --replay-actor-border: #ccc;
+  --replay-actor-me-text: var(--posit-blue-dark-1);
+  --replay-actor-me-border: var(--posit-blue-light-2);
+  --replay-actor-me-bg: var(--posit-blue-alpha-08);
+  --replay-tooltip-bg: #ffffff;
 
-   /* Minimal header */
+  /* Minimal header */
 
-   /* Markdown summary (minimap) */
-   --summary-bg: #f0f0f0;
-   --summary-text: #333;
-   --summary-scrollbar-track: #f0f0f0;
-   --summary-scrollbar-thumb: #c0c0c0;
-   --summary-scrollbar-thumb-hover: #a0a0a0;
+  /* Markdown summary (minimap) */
+  --summary-bg: #f0f0f0;
+  --summary-text: #333;
+  --summary-scrollbar-track: #f0f0f0;
+  --summary-scrollbar-thumb: #c0c0c0;
+  --summary-scrollbar-thumb-hover: #a0a0a0;
 
-   /* Preview error overlay */
-   --error-overlay-bg: #ffffff;
-   --error-overlay-header-bg: #f5f5f5;
-   --error-overlay-border: #ddd;
-   --error-overlay-text: #333;
-   --error-overlay-dismiss: #777;
+  /* Preview error overlay */
+  --error-overlay-bg: #ffffff;
+  --error-overlay-header-bg: #f5f5f5;
+  --error-overlay-border: #ddd;
+  --error-overlay-text: #333;
+  --error-overlay-dismiss: #777;
 
-   /* Diagnostics banner */
-   --diagnostics-bg: var(--error-bg-subtle);
-   --diagnostics-border: #fca5a5;
+  /* Diagnostics banner */
+  --diagnostics-bg: var(--error-bg-subtle);
+  --diagnostics-border: #fca5a5;
 
-   /* Toast */
-   --toast-bg: #213547;
-   --toast-text: #ffffff;
-   --toast-shadow: rgba(0, 0, 0, 0.15);
+  /* Toast */
+  --toast-bg: #213547;
+  --toast-text: #ffffff;
+  --toast-shadow: rgba(0, 0, 0, 0.15);
 
-   /* Page-level */
-   --page-bg: #ffffff;
-   --page-text: #213547;
-   --link-hover: var(--posit-blue-dark-1);
+  /* Page-level */
+  --page-bg: #ffffff;
+  --page-text: #213547;
+  --link-hover: var(--posit-blue-dark-1);
 }
 
 /* Dark Theme */
 :root.dark {
-   --bg-overlay: rgba(23, 33, 43, 0.9);
-   --bg-modal: var(--posit-blue-dark-2);
-   --bg-card: var(--posit-blue-dark-1);
-   --bg-card-hover: var(--posit-blue);
-   --bg-input: var(--posit-blue-dark-3);
-   --text-primary: #ffffff;
-   --text-secondary: var(--posit-blue-light-2);
-   --text-muted: var(--posit-blue-light-3);
-   --border-color: var(--posit-blue-dark-1);
-   --border-focus: var(--posit-blue);
-   --accent-primary: var(--posit-orange);
-   --accent-secondary: var(--posit-blue);
-   --error-bg: var(--posit-red);
-   /* #ff9480 clears WCAG 4.5:1 on the --error-bg-subtle composite over
+  --bg-overlay: rgba(23, 33, 43, 0.9);
+  --bg-modal: var(--posit-blue-dark-2);
+  --bg-card: var(--posit-blue-dark-1);
+  --bg-card-hover: var(--posit-blue);
+  --bg-input: var(--posit-blue-dark-3);
+  --text-primary: #ffffff;
+  --text-secondary: var(--posit-blue-light-2);
+  --text-muted: var(--posit-blue-light-3);
+  --border-color: var(--posit-blue-dark-1);
+  /* #93b3d0 instead of --posit-blue: #447099 fails WCAG 1.4.11's 3:1
+     focus-indicator minimum on most dark surfaces (1.47:1 on bg-card,
+     2.18:1 on the navy modal). #93b3d0 clears it everywhere (worst
+     3.50:1 on bg-card) and matches dark --accent-secondary. */
+  --border-focus: #93b3d0;
+  --accent-primary: var(--posit-orange);
+  /* #93b3d0 (the slate-ramp value) instead of --posit-blue: #447099 is
+     2.18:1 on the navy modal bg — outline buttons/links in root-level
+     dark dialogs failed WCAG 1.4.3 severely. 5.20:1 on #213D4F. */
+  --accent-secondary: #93b3d0;
+  /* 6.37:1 on --page-bg #242424; the brand teal is only 4.42:1 there. */
+  --accent-action-text: #5fb3b7;
+  --error-bg: var(--posit-red);
+  /* #ff9480 clears WCAG 4.5:1 on the --error-bg-subtle composite over
      --bg-modal with margin: 4.76:1 (the old #ff8a70 was 4.43:1). */
-   --error-text: #ff9480;
-   --error-bg-subtle: rgba(219, 89, 59, 0.15);
-   --success-bg: var(--posit-teal);
-   --success-bg-subtle: rgba(114, 153, 78, 0.22);
-   --input-bg-alpha: rgba(255, 255, 255, 0.08);
-   --input-bg-alpha-hover: rgba(255, 255, 255, 0.12);
-   --bg-subtle: rgba(255, 255, 255, 0.05);
-   /* Per-theme elevation values (light values declared in :root). */
-   --shadow-2: 0 8px 28px rgba(0, 0, 0, 0.3);
-   --shadow-3: 0 20px 60px rgba(0, 0, 0, 0.5);
-   --modal-shadow: var(--shadow-3);
-   --logo-filter: none;
+  --error-text: #ff9480;
+  --error-bg-subtle: rgba(219, 89, 59, 0.15);
+  --success-bg: var(--posit-teal);
+  --success-bg-subtle: rgba(114, 153, 78, 0.22);
+  --input-bg-alpha: rgba(255, 255, 255, 0.08);
+  --input-bg-alpha-hover: rgba(255, 255, 255, 0.12);
+  --bg-subtle: rgba(255, 255, 255, 0.05);
+  /* Per-theme elevation values (light values declared in :root). */
+  --shadow-2: 0 8px 28px rgba(0, 0, 0, 0.3);
+  --shadow-3: 0 20px 60px rgba(0, 0, 0, 0.5);
+  --modal-shadow: var(--shadow-3);
+  --logo-filter: none;
 
-   /* Editor-specific */
-   --editor-bg: var(--bg-modal);
-   --editor-header-bg: var(--bg-modal);
-   --editor-header-border: var(--border-color);
-   --editor-text: var(--text-primary);
-   --editor-text-dim: #ccc;
-   --editor-text-muted: #888;
-   --editor-accent-bg: var(--input-bg-alpha);
-   --editor-accent-border: var(--border-color);
-   --editor-accent-text: var(--accent-secondary);
-   --editor-success: var(--posit-green);
-   --editor-success-bg: var(--success-bg-subtle);
-   --editor-error: var(--posit-red);
-   --editor-error-bg: var(--error-bg-subtle);
-   --editor-warning: #fbbf24;
-   --editor-info: var(--accent-secondary);
-   --editor-note: var(--posit-blue-light-3);
-   --editor-drag-accent: var(--posit-teal);
-   --editor-disconnected-border: var(--border-color);
+  /* Editor-specific */
+  --editor-bg: var(--bg-modal);
+  --editor-header-bg: var(--bg-modal);
+  --editor-header-border: var(--border-color);
+  --editor-text: var(--text-primary);
+  --editor-text-dim: #ccc;
+  /* 4.68:1 on the worst dark background (the sidebar's #2b3034
+     composite); the old #888 was 3.76:1 there (WCAG 1.4.3 failure). */
+  --editor-text-muted: #999999;
+  --editor-accent-bg: var(--input-bg-alpha);
+  --editor-accent-border: var(--border-color);
+  --editor-accent-text: var(--accent-secondary);
+  --editor-success: var(--posit-green);
+  --editor-success-bg: var(--success-bg-subtle);
+  --editor-error: var(--posit-red);
+  --editor-error-bg: var(--error-bg-subtle);
+  --editor-warning: #fbbf24;
+  /* Text-on-tinted-background variants — see the light-theme note. */
+  --editor-error-text: #ff9480; /* 5.94:1 on the --error-bg-subtle composite */
+  --editor-warning-text: #fbbf24; /* 7.66:1 on --warning-bg */
+  --editor-success-text: #9dc183; /* 5.99:1 on --editor-success-bg */
+  --editor-info: var(--accent-secondary);
+  --editor-note: var(--editor-text-muted); /* 4.99:1 on the banner composite */
+  --editor-drag-accent: var(--posit-teal);
+  --editor-disconnected-border: var(--border-color);
 
-   /* Sidebar — same stacking scheme as light theme; white alpha matches the
+  /* Sidebar — same stacking scheme as light theme; white alpha matches the
      dark --input-bg-alpha family, so sections land at ~8% like the other
      editor chrome. */
-   --sidebar-bg: rgb(25, 30, 35);
-   --sidebar-border: var(--border-color);
-   --sidebar-section-bg: rgb(19, 22, 25);
-   --sidebar-section-hover: var(--input-bg-alpha-hover);
-   --sidebar-drag-bg: #1a2a4e;
-   --sidebar-active-accent: var(--posit-teal);
-   --sidebar-drop-accent: var(--posit-teal);
+  --sidebar-bg: rgb(25, 30, 35);
+  --sidebar-border: var(--border-color);
+  --sidebar-section-bg: rgb(19, 22, 25);
+  --sidebar-section-hover: var(--input-bg-alpha-hover);
+  --sidebar-drag-bg: #1a2a4e;
+  --sidebar-active-accent: var(--posit-teal);
+  --sidebar-drop-accent: var(--posit-teal);
 
-   /* Context menu */
-   --context-menu-bg: var(--bg-modal);
-   --context-menu-border: var(--border-color);
-   --context-menu-hover: var(--input-bg-alpha);
-   --context-menu-shadow: rgba(0, 0, 0, 0.3);
-   /* Shortcut hints: --text-muted is only 3.6:1 on --bg-modal in dark
+  /* Context menu */
+  --context-menu-bg: var(--bg-modal);
+  --context-menu-border: var(--border-color);
+  --context-menu-hover: var(--input-bg-alpha);
+  --context-menu-shadow: rgba(0, 0, 0, 0.3);
+  /* Shortcut hints: --text-muted is only 3.6:1 on --bg-modal in dark
      (fails WCAG 1.4.3); --text-secondary is 5.6:1. */
-   --menu-hint-text: var(--text-secondary);
-   --context-menu-danger: var(--posit-red);
-   --context-menu-danger-bg: var(--error-bg-subtle);
+  --menu-hint-text: var(--text-secondary);
+  --context-menu-danger: var(--posit-red);
+  --context-menu-danger-bg: var(--error-bg-subtle);
 
-   /* Outline panel symbol colors — same hue families as light theme,
+  /* Outline panel symbol colors — same hue families as light theme,
      lighter ramp steps for the dark sidebar bg (≥4.5:1). */
-   --outline-header-icon: var(--posit-blue-light-2);
-   --outline-code-icon: var(--posit-teal-light-1);
-   --outline-function-icon: var(--posit-orange-light-1);
+  --outline-header-icon: var(--posit-blue-light-2);
+  --outline-code-icon: var(--posit-teal-light-1);
+  --outline-function-icon: var(--posit-orange-light-1);
 
-   /* Dialogs */
-   --dialog-bg: var(--bg-modal);
-   --dialog-border: var(--border-color);
-   --dialog-shadow: rgba(0, 0, 0, 0.4);
-   --dialog-input-bg: var(--input-bg-alpha);
-   --dialog-input-border: var(--border-color);
-   --dialog-input-hover-bg: var(--input-bg-alpha-hover);
-   --dialog-tab-active: var(--posit-teal);
-   --dialog-primary-bg: var(--posit-teal);
-   --dialog-danger-bg: var(--error-bg-subtle);
-   --dialog-danger-border: #5a2020;
-   --dialog-disabled-bg: #444;
-   --dialog-file-preview-bg: var(--input-bg-alpha);
-   --dialog-file-input-bg: var(--input-bg-alpha);
-   --dialog-file-input-border: var(--border-color);
-   --dialog-add-more-hover-bg: var(--input-bg-alpha-hover);
+  /* Dialogs */
+  --dialog-bg: var(--bg-modal);
+  --dialog-border: var(--border-color);
+  --dialog-shadow: rgba(0, 0, 0, 0.4);
+  --dialog-input-bg: var(--input-bg-alpha);
+  --dialog-input-border: var(--border-color);
+  --dialog-input-hover-bg: var(--input-bg-alpha-hover);
+  --dialog-tab-active: var(--posit-teal);
+  --dialog-primary-bg: var(--accent-action-bg);
+  --dialog-danger-bg: var(--error-bg-subtle);
+  --dialog-danger-border: #5a2020;
+  --dialog-disabled-bg: #444;
+  --dialog-file-preview-bg: var(--input-bg-alpha);
+  --dialog-file-input-bg: var(--input-bg-alpha);
+  --dialog-file-input-border: var(--border-color);
+  --dialog-add-more-hover-bg: var(--input-bg-alpha-hover);
 
-   /* Warning box (share dialog) */
-   --warning-bg: #3d3020;
-   --warning-border: #5a4520;
-   --warning-icon: #f59e0b;
-   --warning-text: #fbbf24;
-   --warning-detail: #d4a644;
-   --dialog-copied-bg: var(--posit-green);
+  /* Warning box (share dialog) */
+  --warning-bg: #3d3020;
+  --warning-border: #5a4520;
+  --warning-icon: #f59e0b;
+  --warning-text: #fbbf24;
+  --warning-detail: #d4a644;
+  --dialog-copied-bg: var(--posit-green);
 
-   /* View toggle */
-   --view-toggle-bg: var(--bg-modal);
-   --view-toggle-text: var(--accent-secondary);
-   --view-toggle-hover-bg: var(--input-bg-alpha);
-   --view-toggle-hover-text: #aabbdd;
-   --view-toggle-active-bg: var(--input-bg-alpha);
-   --view-toggle-active-text: #c0d0f0;
+  /* View toggle */
+  --view-toggle-bg: var(--bg-modal);
+  --view-toggle-text: var(--accent-secondary);
+  --view-toggle-hover-bg: var(--input-bg-alpha);
+  --view-toggle-hover-text: #aabbdd;
+  --view-toggle-active-bg: var(--input-bg-alpha);
+  --view-toggle-active-text: #c0d0f0;
 
-   /* Replay drawer */
-   --replay-handle: #444;
-   --replay-handle-hover: #888;
-   --replay-actor-border: #666;
-   --replay-actor-me-text: var(--posit-blue-light-2);
-   --replay-actor-me-border: var(--posit-blue-dark-1);
-   --replay-actor-me-bg: var(--posit-blue-alpha-15);
-   --replay-tooltip-bg: #0f0f1e;
+  /* Replay drawer */
+  --replay-handle: #444;
+  --replay-handle-hover: #888;
+  --replay-actor-border: #666;
+  --replay-actor-me-text: var(--posit-blue-light-2);
+  --replay-actor-me-border: var(--posit-blue-dark-1);
+  --replay-actor-me-bg: var(--posit-blue-alpha-15);
+  --replay-tooltip-bg: #0f0f1e;
 
-   /* Minimal header */
+  /* Minimal header */
 
-   /* Markdown summary (minimap) */
-   --summary-bg: #1e1e1e;
-   --summary-text: #d4d4d4;
-   --summary-scrollbar-track: #1e1e1e;
-   --summary-scrollbar-thumb: #4a4a4a;
-   --summary-scrollbar-thumb-hover: #5a5a5a;
+  /* Markdown summary (minimap) */
+  --summary-bg: #1e1e1e;
+  --summary-text: #d4d4d4;
+  --summary-scrollbar-track: #1e1e1e;
+  --summary-scrollbar-thumb: #4a4a4a;
+  --summary-scrollbar-thumb-hover: #5a5a5a;
 
-   /* Preview error overlay */
-   --error-overlay-bg: #1e1e1e;
-   --error-overlay-header-bg: #2d2d2d;
-   --error-overlay-border: #333;
-   --error-overlay-text: #e0e0e0;
-   --error-overlay-dismiss: #999;
+  /* Preview error overlay */
+  --error-overlay-bg: #1e1e1e;
+  --error-overlay-header-bg: #2d2d2d;
+  --error-overlay-border: #333;
+  --error-overlay-text: #e0e0e0;
+  --error-overlay-dismiss: #999;
 
-   /* Diagnostics banner */
-   --diagnostics-bg: var(--error-bg-subtle);
-   --diagnostics-border: #4a2020;
+  /* Diagnostics banner */
+  --diagnostics-bg: var(--error-bg-subtle);
+  --diagnostics-border: #4a2020;
 
-   /* Toast */
-   --toast-bg: #3a3a3a;
-   --toast-text: rgba(255, 255, 255, 0.87);
-   --toast-shadow: rgba(0, 0, 0, 0.3);
+  /* Toast */
+  --toast-bg: #3a3a3a;
+  --toast-text: rgba(255, 255, 255, 0.87);
+  --toast-shadow: rgba(0, 0, 0, 0.3);
 
-   /* Page-level */
-   --page-bg: #242424;
-   --page-text: black;
-   --link-hover: var(--posit-blue-light-2);
+  /* Page-level */
+  --page-bg: #242424;
+  --page-text: black;
+  --link-hover: var(--posit-blue-light-2);
 }
 
 /* Full-page surfaces (projects home, editor) use a darker, desaturated slate
    ramp in dark mode — the shared navy ramp (--posit-blue-dark-*) reads poorly
    at page scale: low-contrast pairs like outline buttons (--posit-blue on
    navy) get hard to read. Custom properties cascade, so everything inside
-   (cards, dialogs, buttons) follows. Modals elsewhere keep the navy ramp. */
+   (cards, dialogs, buttons) follows. Modals elsewhere keep the navy ramp.
+   The dev gallery joins the scope because it previews editor chrome. */
 :root.dark .projects-home,
-:root.dark .editor-container {
-   --bg-modal: #191e23;
-   --bg-card: #242b32;
-   --bg-card-hover: #2d3640;
-   --bg-input: #14181c;
-   --border-color: #353e48;
-   --text-secondary: #a9b6c0;
-   --text-muted: #8494a1;
-   --accent-secondary: #93b3d0;
+:root.dark .editor-container,
+:root.dark .dev-gallery-page {
+  --bg-modal: #191e23;
+  --bg-card: #242b32;
+  --bg-card-hover: #2d3640;
+  --bg-input: #14181c;
+  --border-color: #353e48;
+  --text-secondary: #a9b6c0;
+  --text-muted: #8494a1;
+  --accent-secondary: #93b3d0;
 }
 
 /* Aliases that reference ramp tokens must be re-declared in the ramp's
@@ -536,32 +569,30 @@
    aliases above never see the ramp. Only aliases of ramp-overridden tokens
    need this; alpha tints and brand constants resolve identically anywhere. */
 :root.dark .projects-home,
-:root.dark .editor-container {
-   --dialog-bg: var(--bg-modal);
-   --dialog-border: var(--border-color);
-   --dialog-input-border: var(--border-color);
-   --dialog-file-input-border: var(--border-color);
+:root.dark .editor-container,
+:root.dark .dev-gallery-page {
+  --dialog-bg: var(--bg-modal);
+  --dialog-border: var(--border-color);
+  --dialog-input-border: var(--border-color);
+  --dialog-file-input-border: var(--border-color);
 }
 
 :root.dark .editor-container {
-   --editor-bg: var(--bg-modal);
-   --editor-header-bg: var(--bg-modal);
-   /* Monaco's vs-dark base background — the document bars match it so
-      the editor pane and its chrome read as one surface in dark mode. */
-   --monaco-bg: #1e1e1e;
-   /* Monaco's line-number gutter: a step darker than the editor. */
-   --monaco-gutter-bg: #191919;
-   --editor-header-border: var(--border-color);
-   --editor-accent-border: var(--border-color);
-   --editor-accent-text: var(--accent-secondary);
-   --editor-info: var(--accent-secondary);
-   --editor-disconnected-border: var(--border-color);
-   /* Sidebar/project column: darker and bluer than the top bar's slate
-     (--bg-modal #191e23) so the project side reads as its own surface.
-     Section headers still stack their white-alpha tint on top. */
-   --sidebar-border: var(--border-color);
-   --context-menu-bg: var(--bg-modal);
-   --context-menu-border: var(--border-color);
-   --view-toggle-bg: var(--bg-modal);
-   --view-toggle-text: var(--accent-secondary);
+  --editor-bg: var(--bg-modal);
+  --editor-header-bg: var(--bg-modal);
+  /* Monaco's vs-dark base background — the document bars match it so
+     the editor pane and its chrome read as one surface in dark mode. */
+  --monaco-bg: #1e1e1e;
+  /* Monaco's line-number gutter: a step darker than the editor. */
+  --monaco-gutter-bg: #191919;
+  --editor-header-border: var(--border-color);
+  --editor-accent-border: var(--border-color);
+  --editor-accent-text: var(--accent-secondary);
+  --editor-info: var(--accent-secondary);
+  --editor-disconnected-border: var(--border-color);
+  --sidebar-border: var(--border-color);
+  --context-menu-bg: var(--bg-modal);
+  --context-menu-border: var(--border-color);
+  --view-toggle-bg: var(--bg-modal);
+  --view-toggle-text: var(--accent-secondary);
 }

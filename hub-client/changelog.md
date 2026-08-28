@@ -25,6 +25,9 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-08-28
 
+- [`6f2ca7ff`](https://github.com/quarto-dev/q2/commits/6f2ca7ff1): The keyboard focus ring in dark mode is now clearly visible on every surface — it was previously too close in color to dark backgrounds to see on dialogs and cards.
+- [`99846282`](https://github.com/quarto-dev/q2/commits/99846282b): More text now meets WCAG AA contrast in both themes — error and warning text in the editor's diagnostics banner, preview status line, and render-error overlay; teal accent text in menus, buttons, and the join screen; links and outline buttons in dark-mode dialogs; and the replay attribution pill's hover state.
+- [`7308c973`](https://github.com/quarto-dev/q2/commits/7308c9730): Buttons, status messages, and muted label text throughout the app now meet WCAG AA contrast guidelines in both themes — primary actions use a darker teal, danger buttons a deeper red, and status/warning/success text uses purpose-built shades — and the accessibility baseline is now completely clean (zero accepted violations).
 - [`0c08f15d`](https://github.com/quarto-dev/q2/commits/0c08f15d4): The dev-harness test suite now runs against the production bundle (about 10x faster in CI), and the dev-harness code is no longer included in production builds or the preview app embedded in the q2 binary.
 - [`4c137558`](https://github.com/quarto-dev/q2/commits/4c137558b): Fixed a test-harness race that could stall app boot on a fresh profile — the cause of the intermittent beforeEach timeouts in CI.
 - [`5599a22d`](https://github.com/quarto-dev/q2/commits/5599a22d): The dev-harness test suite no longer floods CI logs with connection-refused proxy errors — the dev server now skips the hub proxy entirely when no hub is running.
