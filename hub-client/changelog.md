@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-08-28
 
+- [`5599a22d`](https://github.com/quarto-dev/q2/commits/5599a22d): The dev-harness test suite no longer floods CI logs with connection-refused proxy errors — the dev server now skips the hub proxy entirely when no hub is running.
 - [`28afc1e1`](https://github.com/quarto-dev/q2/commits/28afc1e1): The inline diff in the connection-status dialog now highlights deleted and inserted text with the app's Posit red and green tints instead of off-palette colours.
 - [`5e7278cf`](https://github.com/quarto-dev/q2/commits/5e7278cf): Setup screens are easier to read in dark mode — the tagline and backup-hint text, and the red error banner shown when the sync server can't be reached during migration, now meet contrast guidelines.
 
