@@ -393,7 +393,11 @@
   --text-secondary: var(--posit-blue-light-2);
   --text-muted: var(--posit-blue-light-3);
   --border-color: var(--posit-blue-dark-1);
-  --border-focus: var(--posit-blue);
+  /* #93b3d0 instead of --posit-blue: #447099 fails WCAG 1.4.11's 3:1
+     focus-indicator minimum on most dark surfaces (1.47:1 on bg-card,
+     2.18:1 on the navy modal). #93b3d0 clears it everywhere (worst
+     3.50:1 on bg-card) and matches dark --accent-secondary. */
+  --border-focus: #93b3d0;
   --accent-primary: var(--posit-orange);
   /* #93b3d0 (the slate-ramp value) instead of --posit-blue: #447099 is
      2.18:1 on the navy modal bg — outline buttons/links in root-level
