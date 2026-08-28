@@ -206,7 +206,9 @@ jobs:
 
       # Dev-harness behavioral tests: keyboard contracts, dialog focus,
       # axe scans, forced-colors, reduced-motion, viewport reflow. No hub
-      # server needed — the config boots vite dev against #/dev/ routes.
+      # server needed — the config serves the VITE_E2E=1 dist built above
+      # via `vite preview` (VITE_E2E admits the #/dev routes in a
+      # production bundle).
       - name: Run harness tests
         run: |
           cd hub-client

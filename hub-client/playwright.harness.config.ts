@@ -9,6 +9,15 @@ import { defineConfig, devices } from '@playwright/test';
  * collapse, and narrow-viewport reflow. No hub server or network access
  * is needed.
  *
+ * They run against the production bundle (`vite preview`), not `vite
+ * dev`: dev mode re-transforms ~500 modules per page load and its
+ * mid-boot dependency re-optimization was the source of the beforeEach
+ * timeouts under 2-worker/2-core CI contention. The bundle must be
+ * built with VITE_E2E=1 — that flag is what admits #/dev routes in a
+ * production build (see parseHashRoute in src/utils/routing.ts). The
+ * `test:harness` script builds it; CI reuses the dist from the job's
+ * earlier VITE_E2E=1 build step.
+ *
  * The pixel-diff screenshot layer that used to share this setup was
  * dropped while Phase 5 visual churn is ongoing (bd-8g1bn8a0); re-adding
  * it is tracked as bd-wlubinvq, and the specs and baselines are
@@ -46,14 +55,15 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run preview -- --port 5173',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
     env: {
-      // No hub runs during harness tests. Without this, vite dev proxies
-      // /auth and /ws at the default target (localhost:3000) and every
-      // app boot's auth keepalive probes log ECONNREFUSED (bd-a1cwdir9).
+      // No hub runs during harness tests. Without this, vite preview
+      // proxies /auth and /ws at the default target (localhost:3000) and
+      // every app boot's auth keepalive probes log ECONNREFUSED
+      // (bd-a1cwdir9).
       VITE_DISABLE_HUB_PROXY: '1',
     },
   },
