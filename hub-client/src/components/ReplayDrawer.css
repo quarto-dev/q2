@@ -356,7 +356,9 @@
 
 .replay-drawer__attribution--on:hover {
   background: var(--editor-success);
-  color: var(--editor-bg);
+  /* Dark text on the solid green fill: --editor-bg was 3.02:1 in light
+     (WCAG 1.4.3 failure); #17212B is 4.95:1 on #72994E in both themes. */
+  color: var(--posit-blue-dark-3);
 }
 
 .replay-drawer__attribution-dot {

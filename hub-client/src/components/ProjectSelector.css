@@ -655,13 +655,21 @@
 
 .project-selector .connecting {
   background: var(--input-bg-alpha);
-  color: var(--posit-teal);
+  color: var(--accent-action-text);
   padding: 12px;
   border-radius: 6px;
   margin-bottom: 16px;
   text-align: center;
   border: 1px solid var(--posit-teal);
   font-weight: 500;
+}
+
+/* --accent-action-text (#2E6E71) is 3.89:1 on this banner's light
+   background (input-alpha over the 95% bg-overlay composite);
+   --selector-connecting-text clears WCAG 1.4.3 at 4.76:1. Dark passes
+   as-is (5.27:1). */
+:root.light .project-selector .connecting {
+  color: var(--selector-connecting-text);
 }
 
 /* User Identity Section */

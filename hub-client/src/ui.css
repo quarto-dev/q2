@@ -249,7 +249,7 @@
 .qh-menu-item[aria-disabled="true"] { opacity: 0.5; cursor: default; }
 .qh-menu-item[aria-disabled="true"]:hover { background: none; }
 .qh-menu-item.strong { font-weight: 600; }
-.qh-menu-item.accent { color: var(--posit-teal); font-weight: 600; }
+.qh-menu-item.accent { color: var(--accent-action-text); font-weight: 600; }
 .qh-menu-item.danger { color: var(--error-text); }
 
 .qh-menu-item.with-hint {

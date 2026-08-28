@@ -64,6 +64,12 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'status-tab-error', label: 'status-tab-error', selector: '.status-tab' },
   // Phase 5: replay drawer surface (actor chips, transport controls).
   { page: 'replay', label: 'replay-drawer', selector: '.replay-drawer' },
+  // bd-uue5voml: the composed editor shell and the editor status
+  // surfaces (diagnostics banner, preview status bar, error overlay,
+  // replay banner) — regression cover for the --editor-*-text token
+  // mapping, which no previously-scanned page renders.
+  { page: 'editor-shell', label: 'editor-shell', selector: '.editor-container' },
+  { page: 'editor-status-states', label: 'editor-status-states', selector: '.diagnostics-banner' },
 ];
 
 /** key → { ruleId: nodeCount } */

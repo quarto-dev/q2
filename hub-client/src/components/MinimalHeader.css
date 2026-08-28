@@ -112,7 +112,7 @@
 /* The switch-project button is the header's one teal icon: it exits the
    editor for the projects view. */
 .minimal-header .header-switch-btn {
-  color: var(--posit-teal);
+  color: var(--accent-action-text);
 }
 
 @media (max-width: 700px) {
