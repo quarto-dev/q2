@@ -115,6 +115,11 @@
   --selector-accent: #5ab5b8;
   --selector-accent-subtle: #bacad8;
   --selector-success: #4a6a32;
+  /* "Connecting…" banner text on the classic selector's light
+     background (--input-bg-alpha over the 95% --bg-overlay composite):
+     --accent-action-text is only 3.89:1 there; this clears 4.5:1
+     (4.76:1). */
+  --selector-connecting-text: #276061;
 
   /* ---- Scales ---- */
 
@@ -260,8 +265,12 @@
   --editor-error-text: #b0392e; /* 4.83:1 on the --error-bg-subtle composite */
   --editor-warning-text: #92400e; /* 6.37:1 on --warning-bg */
   --editor-success-text: #4a6a32; /* 5.06:1 on --editor-success-bg */
-  --editor-info: var(--accent-secondary);
-  --editor-note: var(--posit-blue-light-3);
+  /* Info/note are consumed only by diagnostic text (Editor.css), so they
+     must clear 4.5:1 on the diagnostics-banner and error-overlay
+     backgrounds: the accent blue is 4.38:1 on the banner composite and
+     the light-3 ramp step 2.66:1 — both fail WCAG 1.4.3. */
+  --editor-info: var(--posit-blue-dark-1); /* 6.41:1 on the banner composite */
+  --editor-note: var(--editor-text-muted); /* 4.60:1 on the banner composite */
   --editor-drag-accent: var(--posit-teal);
   --editor-disconnected-border: var(--border-color);
 
@@ -384,9 +393,16 @@
   --text-secondary: var(--posit-blue-light-2);
   --text-muted: var(--posit-blue-light-3);
   --border-color: var(--posit-blue-dark-1);
-  --border-focus: var(--posit-blue);
+  /* #93b3d0 instead of --posit-blue: #447099 fails WCAG 1.4.11's 3:1
+     focus-indicator minimum on most dark surfaces (1.47:1 on bg-card,
+     2.18:1 on the navy modal). #93b3d0 clears it everywhere (worst
+     3.50:1 on bg-card) and matches dark --accent-secondary. */
+  --border-focus: #93b3d0;
   --accent-primary: var(--posit-orange);
-  --accent-secondary: var(--posit-blue);
+  /* #93b3d0 (the slate-ramp value) instead of --posit-blue: #447099 is
+     2.18:1 on the navy modal bg — outline buttons/links in root-level
+     dark dialogs failed WCAG 1.4.3 severely. 5.20:1 on #213D4F. */
+  --accent-secondary: #93b3d0;
   /* 6.37:1 on --page-bg #242424; the brand teal is only 4.42:1 there. */
   --accent-action-text: #5fb3b7;
   --error-bg: var(--posit-red);
@@ -427,7 +443,7 @@
   --editor-warning-text: #fbbf24; /* 7.66:1 on --warning-bg */
   --editor-success-text: #9dc183; /* 5.99:1 on --editor-success-bg */
   --editor-info: var(--accent-secondary);
-  --editor-note: var(--posit-blue-light-3);
+  --editor-note: var(--editor-text-muted); /* 4.99:1 on the banner composite */
   --editor-drag-accent: var(--posit-teal);
   --editor-disconnected-border: var(--border-color);
 

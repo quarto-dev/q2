@@ -280,7 +280,9 @@ test('sidebar toggle is a distinct chip in both states', async ({ page }) => {
   // The switch-project button is the header's teal one: it exits the
   // editor for the projects view. The toggle stays grey.
   const switchColor = await bare.evaluate((el) => getComputedStyle(el).color);
-  expect(switchColor).toBe('rgb(65, 149, 153)'); // --posit-teal
+  // --accent-action-text (the contrast-safe teal text token; --posit-teal
+  // itself is only 3.5:1 on white — bd-uue5voml).
+  expect(switchColor).toBe('rgb(46, 110, 113)');
   // Sidebar off: still a visible chip (background + border), just greyer.
   await toggle.click();
   await expect(page.locator('.sidebar-sections')).toBeHidden();

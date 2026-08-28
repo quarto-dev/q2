@@ -83,7 +83,7 @@
   background: none;
   border: 1px solid var(--posit-teal);
   border-radius: var(--radius-sm);
-  color: var(--posit-teal);
+  color: var(--accent-action-text);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
@@ -122,7 +122,7 @@
 
 .screenshot-btn:hover {
   border-color: var(--posit-teal);
-  color: var(--posit-teal);
+  color: var(--accent-action-text);
 }
 
 .screenshot-btn:disabled {

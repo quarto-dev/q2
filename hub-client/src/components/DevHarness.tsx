@@ -29,6 +29,9 @@ import DevTokensPage from './DevTokensPage';
 import DevGalleryPage from './DevGalleryPage';
 import AboutTab from './tabs/AboutTab';
 import ReplayDrawer from './ReplayDrawer';
+import { PreviewStatusBar } from './render/PreviewStatusBar';
+import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
+import type { Diagnostic, Pass1Failure } from '@quarto/preview-renderer/types/diagnostic';
 import SidebarDrawer from './SidebarDrawer';
 import { useSidebarDrawer } from '../hooks/useSidebarDrawer';
 import { ViewModeProvider } from './ViewModeContext';
@@ -246,6 +249,104 @@ function SidebarHarness({ files = FAKE_FILES }: { files?: FileEntry[] }) {
     <EditorChrome>
       <div style={{ width: 280, height: '100%', borderRight: '1px solid var(--sidebar-border)' }}>
         <StatefulSidebarSections files={files} />
+      </div>
+    </EditorChrome>
+  );
+}
+
+/**
+ * Editor status surfaces (bd-uue5voml): the diagnostics banner, the
+ * preview status bar in its error state, the preview error overlay
+ * (expanded and collapsed), and the replay-mode banner — every surface
+ * whose status text consumes the --editor-*-text tokens. The banner
+ * markup mirrors Editor.tsx (unlocatedErrors); the overlay and status
+ * bar are the real components with canned error state. Exists so the
+ * axe baseline scans these surfaces — the real-app e2e cannot reach
+ * them without a failing render.
+ */
+const HARNESS_BANNER_DIAGNOSTICS: Pick<Diagnostic, 'kind' | 'code' | 'title' | 'problem'>[] = [
+  { kind: 'error', code: 'Q-1-1', title: 'Render failed', problem: 'something broke' },
+  { kind: 'warning', title: 'Unresolved cross-reference', problem: '@fig-missing not found' },
+  { kind: 'info', title: 'Using default format', problem: 'html' },
+  { kind: 'note', title: 'Execution skipped', problem: 'no executable cells' },
+];
+
+const HARNESS_OVERLAY_DIAGNOSTICS: Diagnostic[] = [
+  {
+    kind: 'error',
+    title: 'Unknown cell option',
+    problem: 'cell uses an option that does not exist',
+    start_line: 12,
+    hints: [],
+    details: [],
+  },
+];
+
+const HARNESS_PASS1_FAILURES: Pass1Failure[] = [
+  {
+    source_file: 'notes.qmd',
+    error: 'parse error',
+    diagnostics: [
+      {
+        kind: 'error',
+        title: 'Malformed YAML metadata',
+        problem: 'unexpected end of stream',
+        start_line: 3,
+        hints: [],
+        details: [],
+      },
+    ],
+  },
+];
+
+function EditorStatusStatesHarness() {
+  return (
+    <EditorChrome>
+      {/* Mirrors the diagnostics-banner markup in Editor.tsx. */}
+      <div className="diagnostics-banner">
+        {HARNESS_BANNER_DIAGNOSTICS.map((diag, i) => (
+          <div key={i} className={`diagnostic-item diagnostic-${diag.kind}`}>
+            {diag.code && <span className="diagnostic-code">[{diag.code}]</span>}
+            <span className="diagnostic-title">{diag.title}</span>
+            {diag.problem && <span className="diagnostic-problem">: {diag.problem}</span>}
+          </div>
+        ))}
+      </div>
+      <PreviewStatusBar
+        path="index.qmd"
+        executorsOnline={true}
+        hasExecutableCells={true}
+        capture={{
+          captureDocId: 'automerge:cap-1',
+          state: 'error',
+          lastError: 'Execution failed: something broke',
+        }}
+        onRun={() => {}}
+        onClear={() => {}}
+      />
+      {/* The overlays are position:absolute; each gets a relative box. */}
+      <div style={{ position: 'relative', height: 300 }}>
+        <PreviewErrorOverlay
+          error={{
+            message: 'Render failed with 1 diagnostic',
+            diagnostics: HARNESS_OVERLAY_DIAGNOSTICS,
+            pass1Failures: HARNESS_PASS1_FAILURES,
+          }}
+          visible={true}
+          collapsed={false}
+          onToggleCollapsed={() => {}}
+        />
+      </div>
+      <div style={{ position: 'relative', height: 56 }}>
+        <PreviewErrorOverlay
+          error={{ message: 'Render failed with 1 diagnostic' }}
+          visible={true}
+          collapsed={true}
+          onToggleCollapsed={() => {}}
+        />
+      </div>
+      <div style={{ position: 'relative', height: 24 }}>
+        <div className="replay-mode-banner">REPLAY MODE</div>
       </div>
     </EditorChrome>
   );
@@ -651,6 +752,11 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
   sidebar: () => <SidebarHarness />,
   /* ---- Phase 5: replay drawer (actor-chip token review) ---- */
   replay: () => <ReplayHarness />,
+  /* ---- bd-uue5voml: editor status surfaces (diagnostics banner, preview
+     status bar, error overlay, replay banner) so the axe baseline scans
+     the --editor-*-text token mapping — the real-app e2e can't reach
+     these states without a failing render. ---- */
+  'editor-status-states': () => <EditorStatusStatesHarness />,
   /* ---- Phase 4: composed editor shell for the viewport matrix ---- */
   'editor-shell': () => <EditorShellHarness viewMode="both" />,
   'editor-shell-markup': () => <EditorShellHarness viewMode="markup" />,
