@@ -176,9 +176,9 @@
 
 .editor-main {
   flex: 1;
+  min-height: 0;
   display: flex;
   overflow: hidden;
-  /* Anchor for the narrow-viewport sidebar drawer + scrim (Phase 5). */
   position: relative;
 }
 
@@ -203,7 +203,10 @@
     inset-block: 0;
     inset-inline-start: 0;
     width: min(280px, 80vw);
-    background: var(--bg-modal);
+    /* The project column and its bars are transparent (they rely on the
+       .editor-columns canvas); in the drawer this backing plays that
+       role, so it must be the sidebar surface, not the modal white. */
+    background: var(--sidebar-bg);
     border-inline-end: 1px solid var(--border-color);
     box-shadow: var(--shadow-3);
     z-index: var(--z-modal);
@@ -218,12 +221,16 @@
     transform: none;
   }
 
-  /* The sidebar's own width rules (220px/min-180/max-300) are for the
-     static flex child; in the drawer it fills the drawer's width. */
-  .sidebar-drawer .sidebar-sections {
+  /* The drawer carries the whole project column (top bar, sidebar,
+     bottom bar). The column's own width rules (220px/min-180/max-300)
+     are for the static flex child; in the drawer it fills the drawer's
+     width and height, and the drawer's own edge replaces its border. */
+  .sidebar-drawer .project-column {
     width: 100%;
+    min-width: 0;
     max-width: none;
     height: 100%;
+    border-inline-end: none;
   }
 
   .drawer-scrim {
@@ -238,14 +245,41 @@
 .pane {
   flex: 1;
   min-width: 0;
-  transition: flex 0.3s ease;
 }
 
-/* Pane divider between editor and preview */
+/* Pane divider between editor and preview — drag to resize the split.
+   5px grab target with a 1px line drawn down its center. */
 .pane-divider {
-  width: 1px;
-  background: var(--editor-header-border);
+  width: 5px;
   flex-shrink: 0;
+  cursor: col-resize;
+  /* Pointer events must reach the divider, not scroll the page (touch). */
+  touch-action: none;
+  background: linear-gradient(to right,
+      transparent 2px,
+      var(--editor-header-border) 2px 3px,
+      transparent 3px);
+}
+
+.pane-divider:hover,
+.editor-main.dragging-divider .pane-divider {
+  background: var(--editor-drag-accent);
+}
+
+/* Split-preset jump: animate the panes to the new fraction. Scoped to
+   the transient class so divider drags stay instant. */
+.editor-main.split-animating .pane {
+  transition: flex-grow 0.3s ease;
+}
+
+/* While dragging, the preview iframe must not swallow pointer events. */
+.editor-main.dragging-divider .preview-pane iframe {
+  pointer-events: none;
+}
+
+.editor-main.dragging-divider {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .editor-pane {
@@ -310,16 +344,9 @@
     max-width: 120px;
   }
 
-  /* Split-view collapse (Phase 5): two ~350px panes are useless this
-     narrow — the editor takes the width and the preview is one tap away
-     on the header's Preview button (the view toggle is hidden ≤700px —
-     MinimalHeader.css). The fullscreen preview pane keeps its place:
-     collapsing must not hide the one surface fullscreen mode exists to
-     show. */
-  .editor-main.view-mode-both .preview-pane:not(.fullscreen),
-  .editor-main.view-mode-both .pane-divider {
-    display: none;
-  }
+  /* (The Phase 5 split-view collapse was removed: with the draggable
+     divider and split presets, the preview stays available at every
+     width — users size the panes themselves.) */
 }
 
 /* Markdown summary overlay for preview mode */
@@ -429,40 +456,28 @@
   width: 100%;
 }
 
+/* Exit control: same look as the header's fullscreen-preview button
+   (.qh-icon-btn.boxed + PreviewIcon), floated over the top-right of the
+   preview with a bar-colored backing so it stays legible on content. */
 .fullscreen-close-btn {
   position: fixed;
-  top: 20px;
-  right: 35px;
-  width: 50px;
-  height: 50px;
-  min-width: 50px;
-  min-height: 50px;
-  padding: 0;
-  background: var(--alpha-black-40);
-  border: 2px solid var(--alpha-white-60);
-  border-radius: 50%;
-  color: var(--text-on-accent);
-  font-size: 28px;
-  font-weight: 300;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /* Where the header's fullscreen button sits in normal mode: 8px tile
+     margin + 1px border + ~4px centering in the 36px bar. */
+  top: 13px;
+  inset-inline-end: 14px;
   z-index: var(--z-modal);
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  backdrop-filter: blur(8px);
 }
 
-.fullscreen-close-btn:hover {
-  background: var(--alpha-black-60);
-  border-color: var(--alpha-white-90);
-  transform: scale(1.25);
+/* Solid backing + visible border in both themes, hovered or not (it
+   floats over arbitrary preview content). The triple selector outranks
+   .qh-icon-btn.boxed's transparent border and alpha hover. */
+.qh-icon-btn.boxed.fullscreen-close-btn {
+  background: var(--editor-bg);
+  border-color: var(--editor-header-border);
 }
 
-.fullscreen-close-btn:active {
-  transform: scale(0.9);
-  transition: all 0.1s;
+.qh-icon-btn.boxed.fullscreen-close-btn:hover {
+  background: color-mix(in srgb, var(--editor-text-muted) 15%, var(--editor-bg));
 }
 
 .preview-pane iframe {
@@ -491,19 +506,140 @@
   flex-shrink: 0;
 }
 
+/* Two-column shell: project column (left — project top bar, sidebar,
+   project bottom bar) and document column (right — document top bar,
+   panes, replay drawer). Also the positioning anchor for the
+   narrow-viewport sidebar drawer + scrim. */
+.editor-columns {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+  /* Tiled look: the document column is a rounded panel; the gutter
+     shares the project column's surface, so the project side reads as
+     filling everything up to the document tile. */
+  background: var(--sidebar-bg);
+}
+
+/* Fullscreen preview: edge-to-edge, no tile frame. */
+.editor-columns:has(.preview-pane.fullscreen) .document-column {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+
+.project-column {
+  width: 220px;
+  min-width: 180px;
+  max-width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  /* Transparent: .editor-columns already paints --sidebar-bg as the
+     shared canvas — a second translucent layer here reads darker than
+     the gutter around the document tile. */
+  background: transparent;
+}
+
+/* Inside the column the sidebar fills the available width/height; its
+   own width and border rules are for the old flex-row placement. */
+.project-column .sidebar-sections {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  border-inline-end: none;
+  flex: 1;
+  min-height: 0;
+  /* The column owns the tint: --sidebar-bg is translucent in light
+     mode, so a second layer here would read darker than the gutter. */
+  background: transparent;
+}
+
+/* Same single-layer rule for the bars inside the column. */
+.project-column .project-top-bar,
+.project-column .project-bottom-bar {
+  background: transparent;
+}
+
+
+/* Narrow windows: the sidebar-sections width floor drops (SidebarTabs.css);
+   mirror it on the column. */
+@media (max-width: 480px) {
+  .project-column {
+    min-width: 120px;
+  }
+}
+
+.document-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  /* No left margin: the project side runs right up to the tile's
+     border (its section borders end at the document edge). */
+  margin: 8px 8px 8px 0;
+  background: var(--editor-bg);
+  border: 1px solid var(--editor-header-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* Sidebar hidden via the header toggle: the document tile goes
+   edge-to-edge, no gutter. */
+.editor-columns:has(> .sidebar-drawer.hidden) .document-column {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+
+/* Drawer breakpoint: the project column is off-canvas, so the tile
+   also goes edge-to-edge. */
+@media (max-width: 900px) {
+  .document-column {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+  }
+
+}
+
+/* Project bottom bar: sync-status badge for the project index doc;
+   mirrors the replay drawer's collapsed height so the two bottom bars
+   read as one row. */
+.project-bottom-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* Match the sidebar background (same as .project-top-bar). */
+  background: var(--sidebar-bg);
+  border-top: 1px solid var(--editor-header-border);
+}
+
+/* Document bottom bar: the replay drawer (which hosts the document
+   sync-status badge in its right-side cluster). */
+.document-bottom-bar {
+  flex-shrink: 0;
+}
+
+/* Dark mode: match Monaco's background (see .document-top-bar). */
+:root.dark .document-bottom-bar .replay-drawer {
+  background: var(--monaco-bg);
+}
+
 /* Replay mode banner — overlays bottom edge of header */
 .replay-mode-banner {
   position: absolute;
-  bottom: 0;
+  /* Just below the header wrapper (floats over the pane top) instead
+     of overlapping the top bar's bottom edge. */
+  top: 100%;
   left: 0;
   right: 0;
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--success-bg-subtle),
-    var(--success-bg-subtle) 4px,
-    transparent 4px,
-    transparent 8px
-  );
+  /* Solid (it floats over pane content): green mixed onto the editor
+     surface. Text uses main's contrast-fixed success-text token. */
+  background: color-mix(in srgb, var(--posit-green) 15%, var(--editor-bg));
+  border-bottom: 1px solid var(--editor-header-border);
   color: var(--editor-success-text);
   text-align: center;
   padding: 2px 0;
@@ -519,7 +655,9 @@
 }
 
 .monaco-editor .margin {
-  background: var(--editor-bg) !important;
+  /* Dark: slightly darker than Monaco's background (--monaco-gutter-bg
+     only exists in the dark editor scope); light keeps --editor-bg. */
+  background: var(--monaco-gutter-bg, var(--editor-bg)) !important;
 }
 
 /* Preview error overlay (toast notification) */

@@ -188,6 +188,76 @@ export function MoreIcon({ size = 16 }: IconProps) {
 }
 
 /* ------------------------------------------------------------------ */
+/* File-type icons (FileSidebar rows).                                */
+/* ------------------------------------------------------------------ */
+
+/** Outline paper sheet with the filled Quarto mark (four quadrant
+    slices, per public/quarto-icon.svg) in its body — .qmd/.md sources. */
+export function QmdFileIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M11.4 13.9 L11.4 10.1 A3.8 3.8 0 0 0 7.6 13.9 Z" fill="currentColor" stroke="none" />
+      <path d="M12.6 13.9 L16.4 13.9 A3.8 3.8 0 0 0 12.6 10.1 Z" fill="currentColor" stroke="none" />
+      <path d="M11.4 15.1 L7.6 15.1 A3.8 3.8 0 0 0 11.4 18.9 Z" fill="currentColor" stroke="none" />
+      <path d="M12.6 15.1 L12.6 18.9 A3.8 3.8 0 0 0 16.4 15.1 Z" fill="currentColor" stroke="none" />
+    </StrokeIcon>
+  );
+}
+
+/** Plain paper sheet — generic file. */
+export function FileTextIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+    </StrokeIcon>
+  );
+}
+
+/** Framed picture with sun and mountains — image files. */
+export function ImageFileIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+    </StrokeIcon>
+  );
+}
+
+/** Folder — file-tree directories. */
+export function FolderIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+    </StrokeIcon>
+  );
+}
+
+/** Arrow dropping into a tray — drop-target overlays. */
+export function DownloadIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </StrokeIcon>
+  );
+}
+
+/** Gear — config files (yaml/json). */
+export function GearIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </StrokeIcon>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Layout pictograms (fixed 12×10 viewBox) — view-toggle glyphs.      */
 /* ------------------------------------------------------------------ */
 
@@ -207,8 +277,8 @@ function LayoutGlyph({ children }: LayoutGlyphProps) {
 export function LayoutMarkupIcon() {
   return (
     <LayoutGlyph>
-      <rect x="0" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
-      <rect x="9" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
+      <rect x="0.5" y="0.5" width="6" height="9" rx="1" fill="none" stroke="currentColor" />
+      <rect x="9.5" y="0.5" width="2" height="9" rx="1" fill="none" stroke="currentColor" opacity="0.35" />
     </LayoutGlyph>
   );
 }
@@ -217,8 +287,8 @@ export function LayoutMarkupIcon() {
 export function LayoutSplitIcon() {
   return (
     <LayoutGlyph>
-      <rect x="0" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
-      <rect x="7" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
+      <rect x="0.5" y="0.5" width="4" height="9" rx="1" fill="none" stroke="currentColor" />
+      <rect x="7.5" y="0.5" width="4" height="9" rx="1" fill="none" stroke="currentColor" />
     </LayoutGlyph>
   );
 }
@@ -227,8 +297,8 @@ export function LayoutSplitIcon() {
 export function LayoutPreviewIcon() {
   return (
     <LayoutGlyph>
-      <rect x="0" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
-      <rect x="5" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
+      <rect x="0.5" y="0.5" width="2" height="9" rx="1" fill="none" stroke="currentColor" opacity="0.35" />
+      <rect x="5.5" y="0.5" width="6" height="9" rx="1" fill="none" stroke="currentColor" />
     </LayoutGlyph>
   );
 }
@@ -237,16 +307,19 @@ export function LayoutPreviewIcon() {
 /* Comments-mode pictograms (fixed 12×10 viewBox) — replay drawer.    */
 /* ------------------------------------------------------------------ */
 
+/* Outline bubbles: geometry inset 0.5px so the 1px stroke stays inside
+   the 12×10 viewBox. */
 const BUBBLE_PATH =
-  'M1 0 h10 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 H5 L2 10 V7 H1 a1 1 0 0 1 -1 -1 V1 a1 1 0 0 1 1 -1 Z';
+  'M1.5 0.5 H10.5 A1 1 0 0 1 11.5 1.5 V5.5 A1 1 0 0 1 10.5 6.5 H4.8 L2.5 8.8 V6.5 H1.5 A1 1 0 0 1 0.5 5.5 V1.5 A1 1 0 0 1 1.5 0.5 Z';
 const TALL_BUBBLE_PATH =
-  'M1 0 h10 a1 1 0 0 1 1 1 v6 a1 1 0 0 1 -1 1 H5 L2 10 V8 H1 a1 1 0 0 1 -1 -1 V1 a1 1 0 0 1 1 -1 Z';
+  'M1.5 0.5 H10.5 A1 1 0 0 1 11.5 1.5 V7 A1 1 0 0 1 10.5 8 H4.8 L2.5 9.9 V8 H1.5 A1 1 0 0 1 0.5 7 V1.5 A1 1 0 0 1 1.5 0.5 Z';
 
-/** Tall comment bubble — "expand all comments". */
+/** Tall comment bubble with a text divider — "expand all comments". */
 export function CommentsExpandIcon() {
   return (
     <LayoutGlyph>
-      <path d={TALL_BUBBLE_PATH} fill="currentColor" />
+      <path d={TALL_BUBBLE_PATH} fill="none" stroke="currentColor" strokeLinejoin="round" />
+      <line x1="0.5" y1="4.25" x2="11.5" y2="4.25" stroke="currentColor" />
     </LayoutGlyph>
   );
 }
@@ -255,7 +328,7 @@ export function CommentsExpandIcon() {
 export function CommentsShowIcon() {
   return (
     <LayoutGlyph>
-      <path d={BUBBLE_PATH} fill="currentColor" />
+      <path d={BUBBLE_PATH} fill="none" stroke="currentColor" strokeLinejoin="round" />
     </LayoutGlyph>
   );
 }
@@ -264,7 +337,7 @@ export function CommentsShowIcon() {
 export function CommentsHideIcon() {
   return (
     <LayoutGlyph>
-      <path d={BUBBLE_PATH} fill="currentColor" opacity="0.25" />
+      <path d={BUBBLE_PATH} fill="none" stroke="currentColor" strokeLinejoin="round" opacity="0.35" />
       <line x1="1" y1="9" x2="11" y2="1" stroke="currentColor" strokeWidth="1.5" />
     </LayoutGlyph>
   );

@@ -53,6 +53,11 @@ interface Props {
   commentsMode?: CommentsMode;
   onCommentsModeChange?: (next: CommentsMode) => void;
   /**
+   * Optional status element (the document sync-status badge) rendered
+   * in the bar's right-side cluster, to the left of the Authors pill.
+   */
+  statusSlot?: React.ReactNode;
+  /**
    * Number of outstanding editorial comments on the active page
    * (bd-0rsk07il, GH #445), from the render pipeline's
    * `DocumentProfile` comment summary. Renders one count badge on
@@ -80,10 +85,9 @@ function CommentsModeToggle({
 }) {
   return (
     <div
-      className="view-toggle-control"
+      className="view-toggle-control comments-mode-box"
       role="group"
       aria-label="Comment display mode"
-      style={{ marginLeft: '6px' }}
     >
       <Tooltip content="Expand all comments">
         <button
@@ -121,6 +125,9 @@ function CommentsModeToggle({
           <CommentsHideIcon />
         </button>
       </Tooltip>
+      <span className="comments-mode-label" aria-hidden="true">
+        Comments
+      </span>
       {count !== undefined && count > 0 && (
         <span
           className="comments-toggle-badge"
@@ -141,6 +148,42 @@ interface AttributionToggleProps {
 }
 
 function AttributionToggle({ attributionOn, onAttributionChange, generating, disabled }: AttributionToggleProps) {
+  // Drive the multicolor ring's conic-gradient angle with eased angular
+  // velocity: ramps up when generation starts and coasts to a stop when
+  // it ends (CSS animation-play-state can only hard start/stop).
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const angleRef = useRef(0);
+  const speedRef = useRef(0); // deg/s
+  useEffect(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    if (
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return;
+    }
+    const TARGET = generating && !disabled ? 180 : 0; // 180deg/s = 2s/rev
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min((now - last) / 1000, 0.1);
+      last = now;
+      // Exponential ease toward the target speed (~0.4s ramp).
+      speedRef.current += (TARGET - speedRef.current) * Math.min(1, dt * 5);
+      if (Math.abs(TARGET - speedRef.current) < 2) speedRef.current = TARGET;
+      angleRef.current = (angleRef.current + speedRef.current * dt) % 360;
+      el.style.setProperty(
+        '--replay-drawer__attribution-angle',
+        `${angleRef.current}deg`,
+      );
+      if (speedRef.current !== 0 || TARGET !== 0) {
+        raf = requestAnimationFrame(tick);
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [generating, disabled]);
   const classes = [
     'replay-drawer__attribution',
     attributionOn && !disabled && 'replay-drawer__attribution--on',
@@ -157,8 +200,12 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
     ? 'Authors overlay unavailable for this format'
     : `Authors overlay ${attributionOn ? 'on' : 'off'}`;
   return (
+    // Full-height cell around the pill — border/divider styling lands
+    // here, never on the pill itself.
+    <span className="replay-drawer__authors-cell">
     <Tooltip content={titleText}>
       <button
+        ref={btnRef}
         type="button"
         className={classes}
         onClick={(e) => {
@@ -174,6 +221,7 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
         <span className="replay-drawer__attribution-label">Authors</span>
       </button>
     </Tooltip>
+    </span>
   );
 }
 
@@ -216,6 +264,7 @@ export default function ReplayDrawer({
   commentsMode,
   onCommentsModeChange,
   commentsCount,
+  statusSlot,
 }: Props) {
   const showAttributionToggle =
     attributionOn !== undefined && onAttributionChange !== undefined;
@@ -323,6 +372,7 @@ export default function ReplayDrawer({
           <span className="replay-drawer__chevron">&#x25B6;</span>
           <span>{replay.title}</span>
         </button>
+        {statusSlot}
         {showAttributionToggle && (
           <AttributionToggle
             attributionOn={attributionOn!}
@@ -389,6 +439,7 @@ export default function ReplayDrawer({
           </span>
         </div>
 
+        {statusSlot}
         {showAttributionToggle && (
           <AttributionToggle
             attributionOn={attributionOn!}

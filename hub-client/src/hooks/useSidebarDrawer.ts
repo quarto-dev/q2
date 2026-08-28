@@ -15,7 +15,7 @@ import { useMediaQuery } from './useMediaQuery';
  * open state, Escape close, focus-into-drawer on open, focus return to
  * the toggle on close, and the Tab trap while the drawer is open.
  * `SidebarDrawer` (components/SidebarDrawer.tsx) renders the wrapper +
- * scrim from these values; MinimalHeader renders the toggle button.
+ * scrim from these values; DocumentTopBar renders the toggle button.
  */
 export function useSidebarDrawer() {
   const isDrawer = useMediaQuery('(max-width: 900px)');

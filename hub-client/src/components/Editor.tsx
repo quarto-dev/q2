@@ -45,7 +45,11 @@ import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
-import MinimalHeader from './MinimalHeader';
+import ProjectTopBar from './ProjectTopBar';
+import DocumentTopBar from './DocumentTopBar';
+import Tooltip from './Tooltip';
+import { PreviewIcon } from './icons';
+import SyncStatusBadge from './SyncStatusBadge';
 import SidebarTabs from './SidebarTabs';
 import SidebarDrawer from './SidebarDrawer';
 import OutlinePanel from './OutlinePanel';
@@ -132,6 +136,10 @@ const editorOptions = {
   minimap: { enabled: false },
   fontSize: 14,
   lineNumbers: 'on' as const,
+  // Size the number column near the document's actual digit count
+  // instead of Monaco's default 5-char reserve; the extra char over the
+  // digits acts as left padding (numbers are right-aligned).
+  lineNumbersMinChars: 4,
   wordWrap: 'on' as const,
   padding: { top: 16 },
   scrollBeyondLastLine: false,
@@ -182,6 +190,22 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
 export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
+
+  // Editor/preview split (replaces the view-toggle segmented control):
+  // drag the pane divider to resize. Fraction of the main row given to
+  // the editor pane; session-only.
+  const [editorPaneFraction, setEditorPaneFraction] = useState(0.5);
+  const [isDraggingDivider, setIsDraggingDivider] = useState(false);
+  // True briefly while a split-preset button animates the divider to
+  // its target; drags stay instant (no transition).
+  const [splitAnimating, setSplitAnimating] = useState(false);
+  const splitAnimTimer = useRef<number | null>(null);
+  const handleSetSplitPreset = useCallback((fraction: number) => {
+    setEditorPaneFraction(fraction);
+    setSplitAnimating(true);
+    if (splitAnimTimer.current !== null) window.clearTimeout(splitAnimTimer.current);
+    splitAnimTimer.current = window.setTimeout(() => setSplitAnimating(false), 350);
+  }, []);
   // Narrow-viewport sidebar drawer (Phase 5): ≤900px the sidebar leaves
   // the flex row and becomes a modal overlay drawer.
   const sidebarDrawer = useSidebarDrawer();
@@ -655,6 +679,23 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     onSyncEditorMount(editor);
     onPresenceEditorMount(editor);
 
+    // Compact the gutter when the editor gets narrow (split dragged
+    // small): drop the line numbers and folding arrows, keeping a
+    // sliver of decoration lane as padding.
+    let gutterCompact: boolean | null = null;
+    const applyNarrowLayout = (width: number) => {
+      const compact = width < 400;
+      if (compact === gutterCompact) return;
+      gutterCompact = compact;
+      editor.updateOptions(
+        compact
+          ? { lineNumbers: 'off', folding: false, lineDecorationsWidth: 4 }
+          : { lineNumbers: 'on', folding: true, lineDecorationsWidth: 10 },
+      );
+    };
+    applyNarrowLayout(editor.getLayoutInfo().width);
+    editor.onDidLayoutChange((info) => applyNarrowLayout(info.width));
+
     // Register intelligence providers (symbols, folding, semantic tokens).
     // The getter uses a ref so it always returns the current file path.
     registerIntelligenceProvidersOnMount(monaco);
@@ -1068,44 +1109,19 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
   return (
     <div className="editor-container">
-      {!isFullscreenPreview && (
-        <div className="header-wrapper">
-          <MinimalHeader
-            currentFilePath={currentFile?.path ?? null}
-            projectName={project.description}
-            onChooseNewProject={onDisconnect}
-            onShare={handleShare}
-            onToggleFullscreenPreview={handleToggleFullscreenPreview}
-            isFullscreenPreview={isFullscreenPreview}
-            isOnline={isOnline}
-            sidebarOpen={sidebarDrawer.sidebarVisible}
-            onToggleSidebar={sidebarDrawer.toggle}
-            sidebarToggleRef={sidebarDrawer.toggleRef}
-          />
-          {replayState.isActive && (
-            <div className="replay-mode-banner">REPLAY MODE</div>
-          )}
-        </div>
-      )}
-
-      {!isFullscreenPreview && sessionEphemeral && <EphemeralSessionBanner />}
-
-      {!isFullscreenPreview && unlocatedErrors.length > 0 && (
-        <div className="diagnostics-banner">
-          {unlocatedErrors.map((diag, i) => (
-            <div key={i} className={`diagnostic-item diagnostic-${diag.kind}`}>
-              {diag.code && <span className="diagnostic-code">[{diag.code}]</span>}
-              <span className="diagnostic-title">{diag.title}</span>
-              {diag.problem && <span className="diagnostic-problem">: {diag.problem}</span>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <main id="main-content" tabIndex={-1} className={`editor-main view-mode-${viewMode}`}>
+      <div className="editor-columns">
+        {/* Project column: project-scoped chrome (top bar, sidebar, bottom
+            bar). The whole column is inside SidebarDrawer, so at ≤900px
+            it becomes the off-canvas drawer in one piece. */}
         {!isFullscreenPreview && (
           <SidebarDrawer drawer={sidebarDrawer}>
-          <SidebarTabs disabled={replayState.isActive}>
+          <div className="project-column">
+            <ProjectTopBar
+              projectName={project.description}
+              onChooseNewProject={onDisconnect}
+              onShare={handleShare}
+            />
+            <SidebarTabs disabled={replayState.isActive}>
             {(activeTab) => {
               switch (activeTab) {
                 case 'files':
@@ -1166,10 +1182,57 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               }
             }}
           </SidebarTabs>
+            <div className="project-bottom-bar">
+              <SyncStatusBadge scope="project" />
+            </div>
+          </div>
           </SidebarDrawer>
         )}
+
+        {/* Document column: document-scoped chrome (top bar, panes, bottom bar) */}
+        <div className="document-column">
         {!isFullscreenPreview && (
-          <div className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}>
+          <div className="header-wrapper">
+            <DocumentTopBar
+              currentFilePath={currentFile?.path ?? null}
+              onToggleFullscreenPreview={handleToggleFullscreenPreview}
+              isFullscreenPreview={isFullscreenPreview}
+              sidebarOpen={sidebarDrawer.sidebarVisible}
+              onToggleSidebar={sidebarDrawer.toggle}
+              sidebarToggleRef={sidebarDrawer.toggleRef}
+              splitFraction={editorPaneFraction}
+              onSetSplit={handleSetSplitPreset}
+            />
+            {replayState.isActive && (
+              <div className="replay-mode-banner">REPLAY MODE</div>
+            )}
+          </div>
+        )}
+
+        {!isFullscreenPreview && sessionEphemeral && <EphemeralSessionBanner />}
+
+        {!isFullscreenPreview && unlocatedErrors.length > 0 && (
+          <div className="diagnostics-banner">
+            {unlocatedErrors.map((diag, i) => (
+              <div key={i} className={`diagnostic-item diagnostic-${diag.kind}`}>
+                {diag.code && <span className="diagnostic-code">[{diag.code}]</span>}
+                <span className="diagnostic-title">{diag.title}</span>
+                {diag.problem && <span className="diagnostic-problem">: {diag.problem}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={`editor-main view-mode-${viewMode}${isDraggingDivider ? ' dragging-divider' : ''}${splitAnimating ? ' split-animating' : ''}`}
+        >
+        {!isFullscreenPreview && (
+          <div
+            className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}
+            style={viewMode === 'both' ? { flex: `${editorPaneFraction} 1 0%` } : undefined}
+          >
             {/* Show MarkdownSummary overlay in preview mode */}
             {viewMode === 'preview' && (
               <div className="markdown-summary-overlay">
@@ -1204,29 +1267,67 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           </div>
         )}
 
-        {/* Pane divider */}
+        {/* Pane divider — drag to resize the editor/preview split */}
         {!isFullscreenPreview && (
-          <div className="pane-divider" />
+          <div
+            className="pane-divider"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize editor and preview panes"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              setIsDraggingDivider(true);
+            }}
+            onPointerMove={(e) => {
+              if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+              const main = e.currentTarget.parentElement;
+              if (!main) return;
+              const rect = main.getBoundingClientRect();
+              const frac = (e.clientX - rect.left) / rect.width;
+              setEditorPaneFraction(Math.min(0.85, Math.max(0.15, frac)));
+            }}
+            onPointerUp={(e) => {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+              setIsDraggingDivider(false);
+            }}
+          />
         )}
 
-        <div className={`pane preview-pane${isFullscreenPreview ? ' fullscreen' : ''}`}>
+        <div
+          className={`pane preview-pane${isFullscreenPreview ? ' fullscreen' : ''}`}
+          style={
+            viewMode === 'both' && !isFullscreenPreview
+              ? { flex: `${1 - editorPaneFraction} 1 0%` }
+              : undefined
+          }
+        >
           {isFullscreenPreview && (
-            <button
-              className="fullscreen-close-btn"
-              onClick={handleToggleFullscreenPreview}
-              aria-label="Exit fullscreen preview"
-            >
-              ✕
-            </button>
+            /* block: the tooltip anchor must not generate a box — the
+               button is position: fixed, and an in-flow anchor span
+               would leave an empty line at the top of the pane. */
+            <Tooltip content="Exit fullscreen preview" block>
+              <button
+                className="qh-icon-btn boxed fullscreen-close-btn"
+                onClick={handleToggleFullscreenPreview}
+                aria-label="Exit fullscreen preview"
+              >
+                <PreviewIcon />
+              </button>
+            </Tooltip>
           )}
-          <PreviewStatusBar
-            path={currentFile?.path ?? null}
-            executorsOnline={!!executorsOnline}
-            hasExecutableCells={hasExecutableCells(content)}
-            capture={currentFile ? captures?.[currentFile.path] : undefined}
-            onRun={(p) => { onRequestExecution?.(p); }}
-            onClear={(p) => clearCapture(p)}
-          />
+          {/* Hidden in fullscreen: the execution status strip would read
+              as a stray dark bar above the presented document. */}
+          {!isFullscreenPreview && (
+            <PreviewStatusBar
+              path={currentFile?.path ?? null}
+              executorsOnline={!!executorsOnline}
+              hasExecutableCells={hasExecutableCells(content)}
+              capture={currentFile ? captures?.[currentFile.path] : undefined}
+              onRun={(p) => { onRequestExecution?.(p); }}
+              onClear={(p) => clearCapture(p)}
+            />
+          )}
           <PreviewRouter
             content={displayContent}
             currentFile={currentFile}
@@ -1256,26 +1357,35 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onAttributionGeneratingChange={setAttributionGenerating}
           />
         </div>
-      </main>
+        </main>
 
-      {/* Replay mode drawer */}
-      {!isFullscreenPreview && (
-        <ReplayDrawer
-          state={replayState}
-          controls={replayControls}
-          disabled={!!currentFile && isBinaryExtension(currentFile.path)}
-          identities={identities}
-          attributionOn={attributionOn}
-          onAttributionChange={setAttributionOn}
-          commentsMode={commentsMode}
-          onCommentsModeChange={setCommentsMode}
-          commentsCount={outstandingCommentCount}
-          attributionGenerating={attributionGenerating}
-          attributionDisabled={
-            currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'
-          }
-        />
-      )}
+        {/* Document bottom bar: replay drawer. Stays mounted in
+            fullscreen preview so sync status and replay remain visible. */}
+        <div className="document-bottom-bar">
+          <ReplayDrawer
+            state={replayState}
+            controls={replayControls}
+            disabled={!!currentFile && isBinaryExtension(currentFile.path)}
+            identities={identities}
+            attributionOn={attributionOn}
+            onAttributionChange={setAttributionOn}
+            commentsMode={commentsMode}
+            onCommentsModeChange={setCommentsMode}
+            commentsCount={outstandingCommentCount}
+            attributionGenerating={attributionGenerating}
+            attributionDisabled={
+              currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'
+            }
+            statusSlot={
+              <SyncStatusBadge
+                scope="document"
+                currentFilePath={currentFile?.path ?? null}
+              />
+            }
+          />
+        </div>
+        </div>
+      </div>
 
       {/* New text-file dialog */}
       <NewFileDialog

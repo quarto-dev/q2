@@ -1,0 +1,88 @@
+/* SyncStatusBadge — dot + status line in the bottom bars. */
+
+.sync-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--editor-text-dim);
+  white-space: nowrap;
+  cursor: pointer;
+  min-height: 28px;
+}
+
+.sync-status-badge:hover {
+  color: var(--editor-text);
+}
+
+.sync-status-badge:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-offset));
+}
+
+.sync-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Fresh-sync state: the dot pulses — a radial gradient breathing
+   between green (center) and yellow-green (rim). The gradient stop is a
+   registered custom property so the keyframes can interpolate it.
+   (prefers-reduced-motion: the global rule in ui.css collapses all
+   animation durations.) */
+@property --sync-pulse-stop {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 25%;
+}
+
+.sync-status-dot.green {
+  background: radial-gradient(
+    circle,
+    var(--editor-success) var(--sync-pulse-stop),
+    yellowgreen 100%
+  );
+  animation: sync-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes sync-pulse {
+  0%,
+  100% {
+    --sync-pulse-stop: 5%;
+    transform: scale(1);
+    box-shadow: 0 0 2px 0 yellowgreen;
+  }
+
+  50% {
+    --sync-pulse-stop: 75%;
+    transform: scale(1.08);
+    box-shadow: 0 0 4px 1px yellowgreen;
+  }
+}
+
+.sync-status-dot.yellow {
+  background-color: var(--editor-warning);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--editor-warning) 60%, transparent);
+}
+
+.sync-status-dot.yellow-green {
+  background-color: yellowgreen;
+  box-shadow: 0 0 4px color-mix(in srgb, yellowgreen 60%, transparent);
+}
+
+/* Truncate rather than overflow when the cell has a fixed width. */
+.sync-status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sync-status-text em {
+  font-style: italic;
+}

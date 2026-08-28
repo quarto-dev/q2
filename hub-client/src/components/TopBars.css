@@ -1,0 +1,229 @@
+/* ProjectTopBar heads the project column (left); DocumentTopBar heads
+   the document column (right). Split from the old single MinimalHeader.
+   The .top-bars row wrapper survives for the DevHarness header fixture,
+   which shows the two bars side by side in isolation. */
+
+.top-bars {
+  display: flex;
+  align-items: stretch;
+}
+
+.top-bars .project-top-bar {
+  flex-shrink: 0;
+  max-width: 50%;
+  border-inline-end: 1px solid var(--editor-header-border);
+}
+
+.top-bars .document-top-bar {
+  flex: 1;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  /* No vertical padding: the 36px min-height sets the bar height (the
+     project bar's full-height switch cell relies on this too). */
+  padding: 0 5px;
+  background: var(--editor-header-bg);
+  border-bottom: 1px solid var(--editor-header-border);
+  min-height: 36px;
+}
+
+.project-top-bar {
+  gap: 10px;
+  min-width: 0;
+  flex-shrink: 0;
+  /* The switch-project box owns the left edge (full-height cell). */
+  padding: 0 7px 0 0;
+  /* Match the sidebar background (same layer count as .sidebar-sections,
+     which also paints --sidebar-bg over the project column). */
+  background: var(--sidebar-bg);
+}
+
+/* Full-height square cell for the switch-project action, separated
+   from the project name by a right border. */
+.switch-project-box,
+.sidebar-toggle-box {
+  align-self: stretch;
+  width: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-inline-end: 1px solid var(--editor-header-border);
+}
+
+/* The toggle's square wears the project side's surface color (one tint
+   layer over the same white base as the side). */
+.sidebar-toggle-box {
+  background: var(--sidebar-bg);
+}
+
+/* View toggle: centered at the bar's bottom edge, half-height buttons
+   that read as attached to (hanging from) the bar's bottom border. */
+.document-top-bar .view-toggle-control {
+  position: absolute;
+  inset-inline-start: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  /* Outline grouping the three buttons, open at the attached bottom
+     edge; standard chrome border color. */
+  --split-group-border: var(--editor-header-border);
+  padding: 0;
+  gap: 0;
+  border: 1px solid var(--split-group-border);
+  border-bottom: none;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+}
+
+/* Dividers between the buttons (the Tooltip anchor spans are the
+   control's direct children). */
+.document-top-bar .view-toggle-control .qh-tooltip-anchor+.qh-tooltip-anchor {
+  border-inline-start: 1px solid var(--split-group-border);
+}
+
+.document-top-bar .view-toggle-btn {
+  /* Flush with the group outline so the dividers span full height. */
+  height: 24px;
+  /* Quiet default; hover/active fills come from the base rules. */
+  background: transparent;
+}
+
+/* Fullscreen-preview cell: mirrors the toggle box at the bar's right
+   edge (full-height square, separated by a left border). */
+.fullscreen-btn-box {
+  align-self: stretch;
+  width: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-inline-start: 1px solid var(--editor-header-border);
+}
+
+.document-top-bar {
+  position: relative;
+  /* Same surface as the bottom bar (the replay drawer): --editor-bg is
+     the light-mode gray; dark mode overrides with --monaco-bg below. */
+  background: var(--editor-bg);
+  min-width: 0;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  /* The sidebar-toggle and fullscreen boxes own the bar's edges
+     (full-height cells), so the bar itself has no side padding. */
+  padding: 0;
+}
+
+/* Dark mode: the document bars match Monaco's editor background so the
+   pane and its chrome read as one surface. */
+:root.dark .document-top-bar {
+  background: var(--monaco-bg);
+}
+
+.header-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Bar icon actions (switch / share / sidebar toggle) use the shared
+   .qh-icon-btn.boxed system from ui.css; only the header-context colors
+   are overridden here. */
+.top-bar .qh-icon-btn {
+  color: var(--editor-text-muted);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.top-bar .qh-icon-btn:hover {
+  background: var(--view-toggle-hover-bg);
+  color: var(--editor-text);
+}
+
+/* Project identity: fills the space between share and switch actions. */
+/* Identity block: small all-caps kicker above the project name. */
+.project-top-bar .project-identity {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.project-top-bar .project-kicker,
+.document-top-bar .doc-kicker {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--editor-text-muted);
+  line-height: 1.2;
+}
+
+/* Lighter still for the document kicker. */
+.document-top-bar .doc-kicker {
+  opacity: 0.6;
+}
+
+.project-top-bar .project-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--editor-text);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+/* Document identity: small all-caps kicker above the file path. */
+.header-doc {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+
+/* Very narrow windows (Phase 4): wrap the document bar to two rows —
+   sidebar toggle and file path on the first, status and view controls
+   right-aligned on the second. Without it, .header-left collapses to
+   zero flex width and its buttons paint *under* .header-right (which
+   is flex-shrink: 0 and later in paint order). */
+@media (max-width: 480px) {
+  .document-top-bar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .document-top-bar .header-left {
+    flex: 1 1 100%;
+  }
+
+  .document-top-bar .header-right {
+    margin-inline-start: auto;
+  }
+}
+
+.header-doc .file-path {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--editor-text-dim);
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.header-doc .file-path.empty {
+  color: var(--editor-text-muted);
+  font-style: italic;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}

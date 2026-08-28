@@ -20,8 +20,10 @@ import ConnectionStatusDialog, {
 import FileSidebar from './FileSidebar';
 import OutlinePanel from './OutlinePanel';
 import SidebarTabs from './SidebarTabs';
+import { PreviewIcon } from './icons';
 import StatusTab from './tabs/StatusTab';
-import MinimalHeader from './MinimalHeader';
+import ProjectTopBar from './ProjectTopBar';
+import DocumentTopBar from './DocumentTopBar';
 import Toast from './Toast';
 import UpdateAvailableToast from './UpdateAvailableToast';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
@@ -353,13 +355,13 @@ function EditorStatusStatesHarness() {
 }
 
 /**
- * Composed editor-shell fixture (Phase 4): the real MinimalHeader,
+ * Composed editor-shell fixture (Phase 4): the real top bars,
  * SidebarTabs, and `.editor-main view-mode-*` pane layout from Editor.tsx
  * with placeholder pane content standing in for Monaco and the preview
  * iframe (both need services the no-server harness doesn't have). This
  * lets viewport-matrix specs exercise the shell's flex interplay at
- * narrow widths. The view mode is pinned per route — ViewToggleControl
- * renders from its own context default and is not wired to the panes.
+ * narrow widths. The view mode is pinned per route (the segmented
+ * view-toggle control was removed; the divider drag owns the split now).
  */
 function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'preview' }) {
   // Phase 5: the same drawer wiring as Editor.tsx, plus an offscreen
@@ -377,30 +379,38 @@ function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'previ
   };
   return (
     <EditorChrome>
-      <MinimalHeader
-        currentFilePath="index.qmd"
-        projectName="Research Paper"
-        onChooseNewProject={() => {}}
-        onShare={() => setLastAction('share')}
-        onToggleFullscreenPreview={() => setLastAction('fullscreen-preview')}
-        isFullscreenPreview={false}
-        isOnline={true}
-        sidebarOpen={drawer.sidebarVisible}
-        onToggleSidebar={drawer.toggle}
-        sidebarToggleRef={drawer.toggleRef}
-      />
-      <main className={`editor-main view-mode-${viewMode}`}>
+      <div className="editor-columns">
         <SidebarDrawer drawer={drawer}>
-          <StatefulSidebarSections />
+          <div className="project-column">
+            <ProjectTopBar
+              projectName="Research Paper"
+              onChooseNewProject={() => {}}
+              onShare={() => setLastAction('share')}
+            />
+            <StatefulSidebarSections />
+            <div className="project-bottom-bar" />
+          </div>
         </SidebarDrawer>
-        <div className="pane editor-pane">
-          <div style={placeholder}>Editor pane</div>
+        <div className="document-column">
+          <DocumentTopBar
+            currentFilePath="index.qmd"
+            onToggleFullscreenPreview={() => setLastAction('fullscreen-preview')}
+            isFullscreenPreview={false}
+            sidebarOpen={drawer.sidebarVisible}
+            onToggleSidebar={drawer.toggle}
+            sidebarToggleRef={drawer.toggleRef}
+          />
+          <main className={`editor-main view-mode-${viewMode}`}>
+            <div className="pane editor-pane">
+              <div style={placeholder}>Editor pane</div>
+            </div>
+            <div className="pane-divider" />
+            <div className="pane preview-pane">
+              <div style={placeholder}>Preview pane</div>
+            </div>
+          </main>
         </div>
-        <div className="pane-divider" />
-        <div className="pane preview-pane">
-          <div style={placeholder}>Preview pane</div>
-        </div>
-      </main>
+      </div>
       {/* Offscreen action recorder for Playwright assertions. */}
       <div
         data-testid="header-last-action"
@@ -483,7 +493,7 @@ function StatusTabErrorHarness() {
 
 /** Editor chrome must render inside .editor-container for the dark-ramp
  *  token overrides (:root.dark .editor-container) to apply, and under a
- *  ViewModeProvider for ViewToggleControl (MinimalHeader). */
+ *  ViewModeProvider for Editor-shell fixtures. */
 /** Module-level so ReplayHarness render stays pure (see timestamp below). */
 const REPLAY_FIXTURE_TIMESTAMP = (Date.now() - 42 * 60_000) / 1000;
 
@@ -606,11 +616,15 @@ const FAKE_CONNECTION_STATUS: ConnectionStatusHarnessData = {
     lastSyncMessageAt: FIXED_NOW_MS - 5_000,
     lastEphemeralMessageAt: FIXED_NOW_MS - 42_000,
     lastRemoteChangeAt: FIXED_NOW_MS - 180_000,
+    lastLocalChangeAt: FIXED_NOW_MS - 12_000,
+    lastLocalDeliveredAt: FIXED_NOW_MS - 11_000,
   },
   indexStats: {
     lastSyncMessageAt: FIXED_NOW_MS - 5_000,
     lastEphemeralMessageAt: FIXED_NOW_MS - 3_600_000,
     lastRemoteChangeAt: FIXED_NOW_MS - 720_000,
+    lastLocalChangeAt: null,
+    lastLocalDeliveredAt: null,
   },
   // beforeText/afterText render the inline character diff (del/ins spans).
   fileChange: {
@@ -768,8 +782,11 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
     <EditorChrome>
       <main className="editor-main view-mode-both">
         <div className="pane preview-pane fullscreen">
-          <button className="fullscreen-close-btn" aria-label="Exit fullscreen preview">
-            ✕
+          <button
+            className="qh-icon-btn boxed fullscreen-close-btn"
+            aria-label="Exit fullscreen preview"
+          >
+            <PreviewIcon />
           </button>
           <div
             style={{
@@ -799,20 +816,23 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
   ),
   header: () => (
     <EditorChrome>
-      <MinimalHeader
-        currentFilePath="index.qmd"
-        projectName="Research Paper"
-        onChooseNewProject={() => {}}
-        onShare={() => {}}
-        onToggleFullscreenPreview={() => {}}
-        isFullscreenPreview={false}
-        isOnline={true}
-        // The sidebar toggle is permanent chrome (Phase 5 review); the
-        // header route has no sidebar, so a static open state + dummy ref.
-        sidebarOpen={true}
-        onToggleSidebar={() => {}}
-        sidebarToggleRef={{ current: null }}
-      />
+      <div className="top-bars">
+        <ProjectTopBar
+          projectName="Research Paper"
+          onChooseNewProject={() => {}}
+          onShare={() => {}}
+        />
+        <DocumentTopBar
+          currentFilePath="index.qmd"
+          onToggleFullscreenPreview={() => {}}
+          isFullscreenPreview={false}
+          // The sidebar toggle is permanent chrome (Phase 5 review); the
+          // header route has no sidebar, so a static open state + dummy ref.
+          sidebarOpen={true}
+          onToggleSidebar={() => {}}
+          sidebarToggleRef={{ current: null }}
+        />
+      </div>
       {/* The toggle's aria-controls points at the drawer's id; in the
           real app the drawer always exists, so the route stubs it
           (axe's aria-valid-attr-value flags a dangling reference). */}

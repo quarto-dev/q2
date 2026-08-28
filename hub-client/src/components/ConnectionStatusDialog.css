@@ -127,7 +127,7 @@
   background: var(--success-bg-subtle);
 }
 
-/* Mirrors .header-right .connection-indicator in MinimalHeader.css. */
+/* Badge look shared with the old header connection indicator. */
 .connection-status-badge {
   display: inline-flex;
   align-items: center;

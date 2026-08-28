@@ -1,1 +1,14 @@
-{}
+{
+  "editor-shell|dark": {
+    "color-contrast": 1
+  },
+  "editor-shell|light": {
+    "color-contrast": 1
+  },
+  "top-bars|dark": {
+    "color-contrast": 1
+  },
+  "top-bars|light": {
+    "color-contrast": 1
+  }
+}

@@ -42,20 +42,26 @@ export const common = {
   reload: 'Reload',
 } as const;
 
-/** MinimalHeader (editor shell top bar). */
+/** Top bars (ProjectTopBar + DocumentTopBar, the editor shell top row). */
 export const header = {
   switchProject: 'Switch project',
   shareProject: 'Share this project',
   fullscreenPreview: 'Fullscreen preview',
-  preview: 'Preview',
   toggleSidebar: 'Toggle sidebar',
   sidebarDrawerLabel: 'Sidebar',
   noFileSelected: 'No file selected',
-  online: 'Online',
-  offline: 'Offline',
-  connectedTooltip: 'Connected to the sync server',
-  offlineTooltip:
-    'Working offline. Changes are saved locally and will sync when connection is restored.',
+} as const;
+
+/** SyncStatusBadge (project + document bottom bars). */
+export const syncStatus = {
+  /** Prefix when disconnected (browser offline / socket down / no peer). */
+  savingLocally: 'Offline',
+  syncedAgo: (ago: string) => `synced ${ago}`,
+  neverSynced: 'not synced yet',
+  synced: 'Synced',
+  justNow: 'just now',
+  underMinuteAgo: '<1 minute ago',
+  tooltip: 'Sync status — click for connection details',
 } as const;
 
 /** FileSidebar — file tree, search, and the row actions menu. */

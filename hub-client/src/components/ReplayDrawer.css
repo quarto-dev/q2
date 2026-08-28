@@ -78,9 +78,8 @@
 .replay-drawer__header {
   display: flex;
   align-items: center;
-  gap: 10px;
   height: 28px;
-  padding: 4px 10px 0;
+  padding: 0 0 0 8px;
   flex-shrink: 0;
 }
 
@@ -93,7 +92,7 @@
   background: none;
   border: none;
   padding: 0;
-  margin: -4px 0 0;
+  margin: 0 8px 0;
   align-self: stretch;
   cursor: pointer;
   min-width: 0;
@@ -117,6 +116,10 @@
   align-items: baseline;
   gap: 8px;
   margin-left: auto;
+  margin-inline-end: 8px;
+  text-overflow: ellipsis;
+  height: 20px;
+  overflow: hidden;
 }
 
 .replay-drawer__position {
@@ -320,9 +323,10 @@
   gap: 6px;
   flex-shrink: 0;
   height: 20px;
-  margin-right: 10px;
+  margin: 0 8px;
   padding: 0 8px;
-  background: var(--editor-accent-bg);
+  /* Off state: same surface as the inactive comment-mode toggles. */
+  background: var(--view-toggle-bg);
   border: 1px solid var(--editor-accent-border);
   border-radius: var(--radius-lg);
   color: var(--editor-text-dim);
@@ -379,23 +383,29 @@
    is being generated. A conic-gradient on a ::before pseudo-element
    sits one pixel outside the pill's border; the inner mask cuts the
    centre so only a ~1px ring shows. The `--angle` custom property is
-   registered via @property so the @keyframe interpolation produces
-   smooth motion (without @property the value would jump at 0/360).
+   registered via @property (inherits, so the JS-driven value set on
+   the button reaches the pseudo-element) and driven by a small rAF
+   loop in AttributionToggle that eases the angular velocity, so the
+   spin ramps up and down smoothly instead of hard start/stop.
 
    We intentionally keep the static border underneath — the rotating
    highlight rides on top, so the pill never looks "borderless" mid-
    animation if a browser ignores the pseudo-element. */
 @property --replay-drawer__attribution-angle {
   syntax: '<angle>';
-  inherits: false;
+  inherits: true;
   initial-value: 0deg;
 }
 
-.replay-drawer__attribution--generating {
+.replay-drawer__attribution--generating,
+.replay-drawer__attribution--on {
   position: relative;
 }
 
-.replay-drawer__attribution--generating::before {
+/* The multicolor ring: static while the overlay is on, spinning while
+   attribution data is generating. */
+.replay-drawer__attribution--generating::before,
+.replay-drawer__attribution--on::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -404,41 +414,96 @@
   /* Full-circle rainbow that rotates — the band itself is the
      indicator, no transparent gap. First and last stops match so
      the seam is invisible across the 0/360 boundary. */
-  background: conic-gradient(
-    from var(--replay-drawer__attribution-angle),
-    var(--attribution-red) 0deg,
-    var(--attribution-orange) 60deg,
-    var(--attribution-yellow) 120deg,
-    var(--attribution-green) 180deg,
-    var(--attribution-blue) 240deg,
-    var(--attribution-purple) 300deg,
-    var(--attribution-red) 360deg
-  );
+  /* Muted palette: each actor color at ~65% alpha (transparency OK'd
+     here — the thin ring should blend with whatever is behind it). */
+  --ring-red: color-mix(in srgb, var(--attribution-red) 65%, transparent);
+  --ring-orange: color-mix(in srgb, var(--attribution-orange) 65%, transparent);
+  --ring-yellow: color-mix(in srgb, var(--attribution-yellow) 65%, transparent);
+  --ring-green: color-mix(in srgb, var(--attribution-green) 65%, transparent);
+  --ring-blue: color-mix(in srgb, var(--attribution-blue) 65%, transparent);
+  --ring-purple: color-mix(in srgb, var(--attribution-purple) 65%, transparent);
+  background: conic-gradient(from var(--replay-drawer__attribution-angle),
+      var(--ring-red) 0deg,
+      var(--ring-orange) 60deg,
+      var(--ring-yellow) 120deg,
+      var(--ring-green) 180deg,
+      var(--ring-blue) 240deg,
+      var(--ring-purple) 300deg,
+      var(--ring-red) 360deg);
   -webkit-mask:
     linear-gradient(var(--black) 0 0) content-box,
     linear-gradient(var(--black) 0 0);
   -webkit-mask-composite: xor;
-          mask:
+  mask:
     linear-gradient(var(--black) 0 0) content-box,
     linear-gradient(var(--black) 0 0);
-          mask-composite: exclude;
-  animation: replay-drawer__attribution-spin 2s linear infinite;
+  mask-composite: exclude;
   pointer-events: none;
 }
 
-@keyframes replay-drawer__attribution-spin {
-  to {
-    --replay-drawer__attribution-angle: 360deg;
-  }
-}
-
-/* (No local prefers-reduced-motion block: the global rule in ui.css
-   collapses the attribution spin along with all other motion — Phase 3.) */
+/* (No CSS animation here: AttributionToggle's rAF loop rotates the
+   angle with eased velocity, and skips motion entirely under
+   prefers-reduced-motion.) */
 
 /* Outstanding-comments count badge on the comments-mode toggle
    (bd-0rsk07il, GH #445). One badge for the whole group; hidden at
    zero (the element is simply not rendered). Reuses the view-toggle
    palette so it reads as part of the control. */
+/* Authors pill container: a full-height cell (pill centered inside). */
+.replay-drawer__authors-cell {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Expanded drawer: bottom border on the header's status / authors /
+   comments containers, separating them from the controls row below. */
+.replay-drawer--expanded .sync-status-badge,
+.replay-drawer--expanded .replay-drawer__authors-cell,
+.replay-drawer--expanded .comments-mode-box {
+  border-bottom: 1px solid var(--editor-header-border);
+}
+
+.replay-drawer--expanded .sync-status-badge {
+  border-end-start-radius: var(--radius-sm);
+}
+
+/* Document sync-status badge (statusSlot): full-height dividers on
+   both sides, dot on the right so it stays put as the text changes. */
+.replay-drawer .sync-status-badge {
+  align-self: stretch;
+  border-inline-end: 1px solid var(--editor-header-border);
+  flex-direction: row-reverse;
+}
+
+/* The left divider only when the drawer is expanded (collapsed, the
+   badge blends into the bar). */
+.replay-drawer--expanded .sync-status-badge {
+  border-inline-start: 1px solid var(--editor-header-border);
+}
+
+/* Comments toggle: its own bordered box, each button outlined, with a
+   "Comments" label to the right of the buttons. */
+.comments-mode-box {
+  align-self: stretch;
+  padding: 1px 8px;
+  border-inline-start: 1px solid var(--editor-header-border);
+  gap: 3px;
+}
+
+.comments-mode-box .view-toggle-btn {
+  border: 1px solid var(--editor-header-border);
+  width: 20px;
+  height: 20px;
+}
+
+.comments-mode-label {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--editor-text-dim);
+  user-select: none;
+}
+
 .comments-toggle-badge {
   display: inline-flex;
   align-items: center;

@@ -212,7 +212,7 @@
      don't change per theme). Hover lightens ~8%, press darkens ~6%.
      Replaces filter: brightness(), which also lightened the label text
      and forced a containing block. Consumed by .qh-btn.primary/.danger,
-     .minimal-header .preview-btn, .ui-variant-toggle. Hover/active stay
+     .ui-variant-toggle. Hover/active stay
      ≥4.5:1 with white text (4.90:1/6.46:1 accent, 4.63:1/6.08:1 danger). */
   --btn-accent-hover-bg: color-mix(in srgb, var(--accent-action-bg) 92%, var(--white));
   --btn-accent-active-bg: color-mix(in srgb, var(--accent-action-bg) 94%, var(--black));
@@ -279,9 +279,15 @@
      headers/content stack a second layer of this alpha over --sidebar-bg,
      landing at ~8% ≈ --input-bg-alpha; hover therefore steps up to
      --input-bg-alpha-hover to stay visible. */
-  --sidebar-bg: rgba(68, 112, 153, 0.04);
+  --sidebar-bg: rgb(227, 234, 241);
   --sidebar-border: var(--border-color);
-  --sidebar-section-bg: var(--sidebar-bg);
+  --sidebar-section-bg: rgb(207, 221, 235);
+  /* Section-header text: 4.5:1+ on --sidebar-section-bg (the generic
+     dim text is only 3.97:1 there — bd-7byucvr6 follow-up). */
+  --sidebar-section-text: #4a5560;
+  /* Links on the sidebar surface: --accent-secondary is 4.3:1 on
+     --sidebar-bg; the darker ramp step clears 4.5:1 (6.3:1). */
+  --sidebar-link-text: var(--posit-blue-dark-1);
   --sidebar-section-hover: var(--input-bg-alpha-hover);
   --sidebar-drag-bg: #c8d8ea;
   --sidebar-active-accent: var(--posit-teal);
@@ -348,10 +354,6 @@
   --replay-tooltip-bg: #ffffff;
 
   /* Minimal header */
-  --header-preview-bg: var(--accent-action-bg);
-  --header-preview-text: #ffffff;
-  --header-preview-shadow: rgba(0, 0, 0, 0.15);
-  --header-preview-shadow-hover: rgba(0, 0, 0, 0.25);
 
   /* Markdown summary (minimap) */
   --summary-bg: #f0f0f0;
@@ -450,9 +452,12 @@
   /* Sidebar — same stacking scheme as light theme; white alpha matches the
      dark --input-bg-alpha family, so sections land at ~8% like the other
      editor chrome. */
-  --sidebar-bg: rgba(255, 255, 255, 0.04);
+  --sidebar-bg: rgb(25, 30, 35);
   --sidebar-border: var(--border-color);
-  --sidebar-section-bg: var(--sidebar-bg);
+  --sidebar-section-bg: rgb(19, 22, 25);
+  /* Dark surfaces: the generic tokens already clear 4.5:1 here. */
+  --sidebar-section-text: var(--editor-text-dim);
+  --sidebar-link-text: var(--accent-secondary);
   --sidebar-section-hover: var(--input-bg-alpha-hover);
   --sidebar-drag-bg: #1a2a4e;
   --sidebar-active-accent: var(--posit-teal);
@@ -518,10 +523,6 @@
   --replay-tooltip-bg: #0f0f1e;
 
   /* Minimal header */
-  --header-preview-bg: var(--accent-action-bg);
-  --header-preview-text: #ffffff;
-  --header-preview-shadow: rgba(255, 255, 255, 0.3);
-  --header-preview-shadow-hover: rgba(255, 255, 255, 0.4);
 
   /* Markdown summary (minimap) */
   --summary-bg: #1e1e1e;
@@ -588,6 +589,11 @@
 :root.dark .editor-container {
   --editor-bg: var(--bg-modal);
   --editor-header-bg: var(--bg-modal);
+  /* Monaco's vs-dark base background — the document bars match it so
+     the editor pane and its chrome read as one surface in dark mode. */
+  --monaco-bg: #1e1e1e;
+  /* Monaco's line-number gutter: a step darker than the editor. */
+  --monaco-gutter-bg: #191919;
   --editor-header-border: var(--border-color);
   --editor-accent-border: var(--border-color);
   --editor-accent-text: var(--accent-secondary);

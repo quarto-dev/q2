@@ -14,7 +14,9 @@
    the pane strips fit a 320px window without clipping; rows and section
    labels already truncate. Phase 5 owns the designed drawer layout. */
 @media (max-width: 480px) {
-  .sidebar-sections { min-width: 120px; }
+  .sidebar-sections {
+    min-width: 120px;
+  }
 }
 
 .sidebar-section {
@@ -35,7 +37,7 @@
   background: var(--sidebar-section-bg);
   border: none;
   border-radius: 0;
-  color: var(--editor-text-dim);
+  color: var(--sidebar-section-text);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.5px;

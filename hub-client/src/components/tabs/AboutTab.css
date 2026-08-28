@@ -11,7 +11,7 @@
   gap: 8px;
 }
 
-.section-label {
+.about-tab .section-label {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -40,7 +40,7 @@
 }
 
 .about-links a {
-  color: var(--accent-secondary);
+  color: var(--sidebar-link-text);
   text-decoration: none;
   transition: color 0.15s;
 }
@@ -54,7 +54,7 @@
   background: none;
   border: none;
   padding: 0;
-  color: var(--accent-secondary);
+  color: var(--sidebar-link-text);
   font-size: 13px;
   cursor: pointer;
   text-align: left;

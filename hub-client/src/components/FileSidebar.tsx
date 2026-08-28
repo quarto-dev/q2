@@ -19,7 +19,18 @@ import {
 import { resolveDefaultDestination } from './fileUpload';
 import { buildSnippet, type SearchFiles, type SearchResult } from '../services/search';
 import { openPrintableDocument } from '../services/printableDocument';
-import { FilePlusIcon, UploadIcon, PrintIcon, MoreIcon } from './icons';
+import {
+  FilePlusIcon,
+  UploadIcon,
+  PrintIcon,
+  MoreIcon,
+  QmdFileIcon,
+  FileTextIcon,
+  ImageFileIcon,
+  GearIcon,
+  FolderIcon,
+  DownloadIcon,
+} from './icons';
 import { Menu, MenuItem } from './Menu';
 import Tooltip from './Tooltip';
 import { common, fileSidebar } from '../strings';
@@ -96,24 +107,36 @@ function isSourceFile(path: string): boolean {
   return ext === 'qmd' || ext === 'md';
 }
 
-/** Get file icon based on extension */
-function getFileIcon(path: string): string {
+/** File icon + per-type tint, wrapped in the .file-icon span. */
+function getFileIcon(path: string): React.ReactNode {
   const ext = path.split('.').pop()?.toLowerCase() || '';
 
-  // Images
   if (IMAGE_EXTENSIONS.includes(ext)) {
-    return '🖼️';
+    return (
+      <span className="file-icon file-icon--image">
+        <ImageFileIcon size={16} />
+      </span>
+    );
   }
-  // Documents
-  if (ext === 'pdf') return '📕';
-  // Quarto/Markdown
-  if (['qmd', 'md'].includes(ext)) return '📝';
-  // Config
-  if (['yml', 'yaml', 'json'].includes(ext)) return '⚙️';
-  // Code
-  if (['js', 'ts', 'tsx', 'jsx', 'css', 'html'].includes(ext)) return '📄';
-  // Default
-  return '📄';
+  if (['qmd', 'md'].includes(ext)) {
+    return (
+      <span className="file-icon file-icon--qmd">
+        <QmdFileIcon size={16} />
+      </span>
+    );
+  }
+  if (['yml', 'yaml', 'json'].includes(ext)) {
+    return (
+      <span className="file-icon file-icon--config">
+        <GearIcon size={16} />
+      </span>
+    );
+  }
+  return (
+    <span className="file-icon">
+      <FileTextIcon size={16} />
+    </span>
+  );
 }
 
 
@@ -625,7 +648,7 @@ export default function FileSidebar({
           isDraggable ? (e) => handleFileDragStart(e, file) : undefined
         }
       >
-        <span className="file-icon">{getFileIcon(file.path)}</span>
+        {getFileIcon(file.path)}
         {isRenaming ? (
           <input
             ref={renameInputRef}
@@ -709,7 +732,7 @@ export default function FileSidebar({
           onFocus={() => setFocusedPath(node.path)}
         >
           <span className="folder-chevron">{isExpanded ? '▼' : '▶'}</span>
-          <span className="folder-icon">📁</span>
+          <span className="folder-icon"><FolderIcon size={16} /></span>
           <span className="folder-name qh-truncate">{node.name}</span>
         </div>
         {isExpanded && (
@@ -753,7 +776,7 @@ export default function FileSidebar({
           onFocus={() => setFocusedPath(result.path)}
         >
           <div className="search-result-header">
-            <span className="file-icon">{getFileIcon(result.path)}</span>
+            {getFileIcon(result.path)}
             <span className="search-result-name qh-truncate">{fileName}</span>
             {dir && <span className="search-result-path qh-truncate">{dir}</span>}
           </div>
@@ -905,7 +928,7 @@ export default function FileSidebar({
       {isDragOver && (
         <div className="drop-overlay">
           <div className="drop-message">
-            <span className="drop-icon">📥</span>
+            <span className="drop-icon"><DownloadIcon size={32} /></span>
             <span>{fileSidebar.dropOverlay}</span>
           </div>
         </div>
