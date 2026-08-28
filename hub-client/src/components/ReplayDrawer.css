@@ -383,23 +383,29 @@
    is being generated. A conic-gradient on a ::before pseudo-element
    sits one pixel outside the pill's border; the inner mask cuts the
    centre so only a ~1px ring shows. The `--angle` custom property is
-   registered via @property so the @keyframe interpolation produces
-   smooth motion (without @property the value would jump at 0/360).
+   registered via @property (inherits, so the JS-driven value set on
+   the button reaches the pseudo-element) and driven by a small rAF
+   loop in AttributionToggle that eases the angular velocity, so the
+   spin ramps up and down smoothly instead of hard start/stop.
 
    We intentionally keep the static border underneath — the rotating
    highlight rides on top, so the pill never looks "borderless" mid-
    animation if a browser ignores the pseudo-element. */
 @property --replay-drawer__attribution-angle {
   syntax: '<angle>';
-  inherits: false;
+  inherits: true;
   initial-value: 0deg;
 }
 
-.replay-drawer__attribution--generating {
+.replay-drawer__attribution--generating,
+.replay-drawer__attribution--on {
   position: relative;
 }
 
-.replay-drawer__attribution--generating::before {
+/* The multicolor ring: static while the overlay is on, spinning while
+   attribution data is generating. */
+.replay-drawer__attribution--generating::before,
+.replay-drawer__attribution--on::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -408,14 +414,22 @@
   /* Full-circle rainbow that rotates — the band itself is the
      indicator, no transparent gap. First and last stops match so
      the seam is invisible across the 0/360 boundary. */
+  /* Muted palette: each actor color at ~65% alpha (transparency OK'd
+     here — the thin ring should blend with whatever is behind it). */
+  --ring-red: color-mix(in srgb, var(--attribution-red) 65%, transparent);
+  --ring-orange: color-mix(in srgb, var(--attribution-orange) 65%, transparent);
+  --ring-yellow: color-mix(in srgb, var(--attribution-yellow) 65%, transparent);
+  --ring-green: color-mix(in srgb, var(--attribution-green) 65%, transparent);
+  --ring-blue: color-mix(in srgb, var(--attribution-blue) 65%, transparent);
+  --ring-purple: color-mix(in srgb, var(--attribution-purple) 65%, transparent);
   background: conic-gradient(from var(--replay-drawer__attribution-angle),
-      var(--attribution-red) 0deg,
-      var(--attribution-orange) 60deg,
-      var(--attribution-yellow) 120deg,
-      var(--attribution-green) 180deg,
-      var(--attribution-blue) 240deg,
-      var(--attribution-purple) 300deg,
-      var(--attribution-red) 360deg);
+      var(--ring-red) 0deg,
+      var(--ring-orange) 60deg,
+      var(--ring-yellow) 120deg,
+      var(--ring-green) 180deg,
+      var(--ring-blue) 240deg,
+      var(--ring-purple) 300deg,
+      var(--ring-red) 360deg);
   -webkit-mask:
     linear-gradient(var(--black) 0 0) content-box,
     linear-gradient(var(--black) 0 0);
@@ -424,18 +438,12 @@
     linear-gradient(var(--black) 0 0) content-box,
     linear-gradient(var(--black) 0 0);
   mask-composite: exclude;
-  animation: replay-drawer__attribution-spin 2s linear infinite;
   pointer-events: none;
 }
 
-@keyframes replay-drawer__attribution-spin {
-  to {
-    --replay-drawer__attribution-angle: 360deg;
-  }
-}
-
-/* (No local prefers-reduced-motion block: the global rule in ui.css
-   collapses the attribution spin along with all other motion — Phase 3.) */
+/* (No CSS animation here: AttributionToggle's rAF loop rotates the
+   angle with eased velocity, and skips motion entirely under
+   prefers-reduced-motion.) */
 
 /* Outstanding-comments count badge on the comments-mode toggle
    (bd-0rsk07il, GH #445). One badge for the whole group; hidden at

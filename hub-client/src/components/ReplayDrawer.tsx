@@ -148,6 +148,42 @@ interface AttributionToggleProps {
 }
 
 function AttributionToggle({ attributionOn, onAttributionChange, generating, disabled }: AttributionToggleProps) {
+  // Drive the multicolor ring's conic-gradient angle with eased angular
+  // velocity: ramps up when generation starts and coasts to a stop when
+  // it ends (CSS animation-play-state can only hard start/stop).
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const angleRef = useRef(0);
+  const speedRef = useRef(0); // deg/s
+  useEffect(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    if (
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return;
+    }
+    const TARGET = generating && !disabled ? 180 : 0; // 180deg/s = 2s/rev
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min((now - last) / 1000, 0.1);
+      last = now;
+      // Exponential ease toward the target speed (~0.4s ramp).
+      speedRef.current += (TARGET - speedRef.current) * Math.min(1, dt * 5);
+      if (Math.abs(TARGET - speedRef.current) < 2) speedRef.current = TARGET;
+      angleRef.current = (angleRef.current + speedRef.current * dt) % 360;
+      el.style.setProperty(
+        '--replay-drawer__attribution-angle',
+        `${angleRef.current}deg`,
+      );
+      if (speedRef.current !== 0 || TARGET !== 0) {
+        raf = requestAnimationFrame(tick);
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [generating, disabled]);
   const classes = [
     'replay-drawer__attribution',
     attributionOn && !disabled && 'replay-drawer__attribution--on',
@@ -169,6 +205,7 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
     <span className="replay-drawer__authors-cell">
     <Tooltip content={titleText}>
       <button
+        ref={btnRef}
         type="button"
         className={classes}
         onClick={(e) => {
