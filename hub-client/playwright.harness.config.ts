@@ -50,5 +50,11 @@ export default defineConfig({
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
+    env: {
+      // No hub runs during harness tests. Without this, vite dev proxies
+      // /auth and /ws at the default target (localhost:3000) and every
+      // app boot's auth keepalive probes log ECONNREFUSED (bd-a1cwdir9).
+      VITE_DISABLE_HUB_PROXY: '1',
+    },
   },
 });
