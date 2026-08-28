@@ -119,6 +119,15 @@ jobs:
         shell: bash
         run: npm ci
 
+      # design-system.md's token/physical-prop rules are only enforced by
+      # this script — nothing else gates them. Runs right after npm ci so
+      # a violation fails in seconds, not after the multi-minute WASM
+      # build. (Added after ConnectionStatusDialog.css landed with 9
+      # violations one day after the rule itself merged — bd-owmzraf6.)
+      - name: Lint hub-client CSS
+        shell: bash
+        run: npm run lint:css -w hub-client
+
       # Deno — needed for engine-host-deno deno-test and the freshness gate.
       # denoland/setup-deno is safe here: this workflow has no "Free disk space"
       # step (and no remove_tool_cache invariant to preserve).

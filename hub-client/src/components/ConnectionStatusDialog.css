@@ -23,7 +23,7 @@
   color: var(--text-primary);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: end;
 }
 
 .connection-status-table {
@@ -36,21 +36,21 @@
 .connection-status-table thead th {
   color: var(--text-secondary);
   font-weight: 500;
-  text-align: right;
+  text-align: end;
   padding: 2px 0 6px 16px;
 }
 
 .connection-status-table tbody th {
   color: var(--text-secondary);
   font-weight: 400;
-  text-align: left;
+  text-align: start;
   padding: 3px 0;
   white-space: nowrap;
 }
 
 .connection-status-table td {
   color: var(--text-primary);
-  text-align: right;
+  text-align: end;
   font-variant-numeric: tabular-nums;
   padding: 3px 0 3px 16px;
   white-space: nowrap;
@@ -72,7 +72,7 @@
   margin: 0;
   padding: 8px 10px;
   list-style: none;
-  background: var(--input-bg-alpha, rgba(128, 128, 128, 0.1));
+  background: var(--input-bg-alpha);
   border-radius: 6px;
   font-family: var(--font-mono, monospace);
   font-size: 12px;
@@ -103,8 +103,8 @@
 .inline-diff-gutter {
   width: 34px;
   flex-shrink: 0;
-  text-align: right;
-  padding-right: 10px;
+  text-align: end;
+  padding-inline-end: 10px;
   color: var(--text-secondary);
   user-select: none;
 }
@@ -117,12 +117,14 @@
 }
 
 .inline-diff-content .del {
-  background: rgba(244, 67, 54, 0.18);
+  /* Posit red tint (was off-palette Material #F44336@18%). */
+  background: var(--error-bg-subtle);
   text-decoration: line-through;
 }
 
 .inline-diff-content .ins {
-  background: rgba(76, 175, 80, 0.22);
+  /* Posit green tint (was off-palette Material #4CAF50@22%). */
+  background: var(--success-bg-subtle);
 }
 
 /* Mirrors .header-right .connection-indicator in MinimalHeader.css. */
