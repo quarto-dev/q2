@@ -26,3 +26,10 @@
   color: var(--editor-text-dim);
   font-size: 14px;
 }
+
+/* SVG file icons (replaced the emoji glyphs). */
+.new-asset-dialog .file-icon,
+.new-asset-dialog .drop-icon {
+  display: inline-flex;
+  align-items: center;
+}

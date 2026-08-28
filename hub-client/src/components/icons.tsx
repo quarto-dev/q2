@@ -188,6 +188,76 @@ export function MoreIcon({ size = 16 }: IconProps) {
 }
 
 /* ------------------------------------------------------------------ */
+/* File-type icons (FileSidebar rows).                                */
+/* ------------------------------------------------------------------ */
+
+/** Outline paper sheet with the filled Quarto mark (four quadrant
+    slices, per public/quarto-icon.svg) in its body — .qmd/.md sources. */
+export function QmdFileIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M11.4 13.9 L11.4 10.1 A3.8 3.8 0 0 0 7.6 13.9 Z" fill="currentColor" stroke="none" />
+      <path d="M12.6 13.9 L16.4 13.9 A3.8 3.8 0 0 0 12.6 10.1 Z" fill="currentColor" stroke="none" />
+      <path d="M11.4 15.1 L7.6 15.1 A3.8 3.8 0 0 0 11.4 18.9 Z" fill="currentColor" stroke="none" />
+      <path d="M12.6 15.1 L12.6 18.9 A3.8 3.8 0 0 0 16.4 15.1 Z" fill="currentColor" stroke="none" />
+    </StrokeIcon>
+  );
+}
+
+/** Plain paper sheet — generic file. */
+export function FileTextIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+    </StrokeIcon>
+  );
+}
+
+/** Framed picture with sun and mountains — image files. */
+export function ImageFileIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+    </StrokeIcon>
+  );
+}
+
+/** Folder — file-tree directories. */
+export function FolderIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+    </StrokeIcon>
+  );
+}
+
+/** Arrow dropping into a tray — drop-target overlays. */
+export function DownloadIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </StrokeIcon>
+  );
+}
+
+/** Gear — config files (yaml/json). */
+export function GearIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </StrokeIcon>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Layout pictograms (fixed 12×10 viewBox) — view-toggle glyphs.      */
 /* ------------------------------------------------------------------ */
 

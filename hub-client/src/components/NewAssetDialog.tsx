@@ -17,6 +17,7 @@ import {
   type AssetFilePreview,
 } from './fileUpload';
 import ModalDialog from './ModalDialog';
+import { DownloadIcon, FileTextIcon } from './icons';
 import { common, dialogs } from '../strings';
 import './NewAssetDialog.css';
 
@@ -252,7 +253,7 @@ export default function NewAssetDialog({
           <div className={`drop-zone ${isDragOver ? 'drag-over' : ''}`}>
             {previews.length === 0 ? (
               <>
-                <span className="drop-icon">📥</span>
+                <span className="drop-icon"><DownloadIcon size={32} /></span>
                 <p>{dialogs.newAsset.dropZone}</p>
                 <p className="hint">{dialogs.newAsset.dropZoneOr}</p>
                 <button
@@ -277,7 +278,7 @@ export default function NewAssetDialog({
                       {p.previewUrl ? (
                         <img src={p.previewUrl} alt={editedName} />
                       ) : (
-                        <span className="file-icon">📄</span>
+                        <span className="file-icon"><FileTextIcon size={14} /></span>
                       )}
                       <div className="file-info">
                         <input

@@ -121,8 +121,23 @@
 }
 
 .file-icon {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--editor-text-muted);
   flex-shrink: 0;
+}
+
+/* Per-type tints. */
+.file-icon--qmd {
+  color: var(--editor-info);
+}
+
+.file-icon--image {
+  color: var(--editor-success);
+}
+
+.file-icon--config {
+  color: var(--editor-warning);
 }
 
 .file-name {
@@ -163,7 +178,9 @@
 }
 
 .folder-icon {
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--editor-text-dim);
   flex-shrink: 0;
 }
 
