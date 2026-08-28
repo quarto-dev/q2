@@ -369,7 +369,9 @@
   --accent-primary: var(--posit-orange);
   --accent-secondary: var(--posit-blue);
   --error-bg: var(--posit-red);
-  --error-text: #ff8a70;
+  /* #ff9480 clears WCAG 4.5:1 on the --error-bg-subtle composite over
+     --bg-modal with margin: 4.76:1 (the old #ff8a70 was 4.43:1). */
+  --error-text: #ff9480;
   --error-bg-subtle: rgba(219, 89, 59, 0.15);
   --success-bg: var(--posit-teal);
   --success-bg-subtle: rgba(114, 153, 78, 0.22);
