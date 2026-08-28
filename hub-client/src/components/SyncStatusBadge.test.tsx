@@ -53,13 +53,13 @@ describe('SyncStatusBadge', () => {
     expect(screen.getByText('just now')).toBeDefined();
   });
 
-  it('shows Saving locally when the websocket is down', () => {
+  it('shows Offline when the websocket is down', () => {
     mocks.wsReadyState = 3; // CLOSED
     mocks.lastRemoteChangeAt = null;
     render(<SyncStatusBadge scope="project" />);
     const dot = document.querySelector('.sync-status-dot')!;
     expect(dot.className).toContain('yellow');
-    expect(screen.getByText(/Saving locally/)).toBeDefined();
+    expect(screen.getByText(/Offline/)).toBeDefined();
     expect(screen.getByText('not synced yet')).toBeDefined();
   });
 });

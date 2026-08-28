@@ -78,9 +78,8 @@
 .replay-drawer__header {
   display: flex;
   align-items: center;
-  gap: 10px;
   height: 28px;
-  padding: 4px 10px 0;
+  padding: 0 0 0 8px;
   flex-shrink: 0;
 }
 
@@ -93,7 +92,7 @@
   background: none;
   border: none;
   padding: 0;
-  margin: -4px 0 0;
+  margin: 0 8px 0;
   align-self: stretch;
   cursor: pointer;
   min-width: 0;
@@ -117,6 +116,10 @@
   align-items: baseline;
   gap: 8px;
   margin-left: auto;
+  margin-right: 8px;
+  text-overflow: ellipsis;
+  height: 20px;
+  overflow: hidden;
 }
 
 .replay-drawer__position {
@@ -322,7 +325,8 @@
   height: 20px;
   margin: 0 8px;
   padding: 0 8px;
-  background: var(--editor-accent-bg);
+  /* Off state: same surface as the inactive comment-mode toggles. */
+  background: var(--view-toggle-bg);
   border: 1px solid var(--editor-accent-border);
   border-radius: var(--radius-lg);
   color: var(--editor-text-dim);
@@ -435,11 +439,37 @@
    (bd-0rsk07il, GH #445). One badge for the whole group; hidden at
    zero (the element is simply not rendered). Reuses the view-toggle
    palette so it reads as part of the control. */
-/* Document sync-status badge (statusSlot): separated from the Authors
-   pill by a right border spanning the bar. */
+/* Authors pill container: a full-height cell (pill centered inside). */
+.replay-drawer__authors-cell {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Expanded drawer: bottom border on the header's status / authors /
+   comments containers, separating them from the controls row below. */
+.replay-drawer--expanded .sync-status-badge,
+.replay-drawer--expanded .replay-drawer__authors-cell,
+.replay-drawer--expanded .comments-mode-box {
+  border-bottom: 1px solid var(--editor-header-border);
+}
+
+.replay-drawer--expanded .sync-status-badge {
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+/* Document sync-status badge (statusSlot): full-height dividers on
+   both sides, dot on the right so it stays put as the text changes. */
 .replay-drawer .sync-status-badge {
   align-self: stretch;
   border-right: 1px solid var(--editor-header-border);
+  flex-direction: row-reverse;
+}
+
+/* The left divider only when the drawer is expanded (collapsed, the
+   badge blends into the bar). */
+.replay-drawer--expanded .sync-status-badge {
+  border-left: 1px solid var(--editor-header-border);
 }
 
 /* Comments toggle: its own bordered box, each button outlined, with a

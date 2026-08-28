@@ -1303,7 +1303,10 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           }
         >
           {isFullscreenPreview && (
-            <Tooltip content="Exit fullscreen preview">
+            /* block: the tooltip anchor must not generate a box — the
+               button is position: fixed, and an in-flow anchor span
+               would leave an empty line at the top of the pane. */
+            <Tooltip content="Exit fullscreen preview" block>
               <button
                 className="qh-icon-btn boxed fullscreen-close-btn"
                 onClick={handleToggleFullscreenPreview}
@@ -1313,14 +1316,18 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               </button>
             </Tooltip>
           )}
-          <PreviewStatusBar
-            path={currentFile?.path ?? null}
-            executorsOnline={!!executorsOnline}
-            hasExecutableCells={hasExecutableCells(content)}
-            capture={currentFile ? captures?.[currentFile.path] : undefined}
-            onRun={(p) => { onRequestExecution?.(p); }}
-            onClear={(p) => clearCapture(p)}
-          />
+          {/* Hidden in fullscreen: the execution status strip would read
+              as a stray dark bar above the presented document. */}
+          {!isFullscreenPreview && (
+            <PreviewStatusBar
+              path={currentFile?.path ?? null}
+              executorsOnline={!!executorsOnline}
+              hasExecutableCells={hasExecutableCells(content)}
+              capture={currentFile ? captures?.[currentFile.path] : undefined}
+              onRun={(p) => { onRequestExecution?.(p); }}
+              onClear={(p) => clearCapture(p)}
+            />
+          )}
           <PreviewRouter
             content={displayContent}
             currentFile={currentFile}

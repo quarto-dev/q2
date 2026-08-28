@@ -164,6 +164,9 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
     ? 'Authors overlay unavailable for this format'
     : `Authors overlay ${attributionOn ? 'on' : 'off'}`;
   return (
+    // Full-height cell around the pill — border/divider styling lands
+    // here, never on the pill itself.
+    <span className="replay-drawer__authors-cell">
     <Tooltip content={titleText}>
       <button
         type="button"
@@ -181,6 +184,7 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
         <span className="replay-drawer__attribution-label">Authors</span>
       </button>
     </Tooltip>
+    </span>
   );
 }
 

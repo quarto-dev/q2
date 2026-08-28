@@ -469,13 +469,19 @@
      margin + 1px border + ~4px centering in the 36px bar. */
   top: 13px;
   right: 14px;
-  background: var(--editor-header-bg);
-  border-color: var(--editor-header-border);
   z-index: var(--z-modal);
 }
 
-.fullscreen-close-btn:hover {
-  background: var(--view-toggle-hover-bg);
+/* Solid backing + visible border in both themes, hovered or not (it
+   floats over arbitrary preview content). The triple selector outranks
+   .qh-icon-btn.boxed's transparent border and alpha hover. */
+.qh-icon-btn.boxed.fullscreen-close-btn {
+  background: var(--editor-bg);
+  border-color: var(--editor-header-border);
+}
+
+.qh-icon-btn.boxed.fullscreen-close-btn:hover {
+  background: color-mix(in srgb, var(--editor-text-muted) 15%, var(--editor-bg));
 }
 
 .preview-pane iframe {
@@ -578,7 +584,7 @@
   margin: 8px 8px 8px 0;
   background: var(--editor-bg);
   border: 1px solid var(--editor-header-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -629,14 +635,15 @@
 /* Replay mode banner — overlays bottom edge of header */
 .replay-mode-banner {
   position: absolute;
-  bottom: 0;
+  /* Just below the header wrapper (floats over the pane top) instead
+     of overlapping the top bar's bottom edge. */
+  top: 100%;
   left: 0;
   right: 0;
-  background: repeating-linear-gradient(-45deg,
-      var(--success-bg-subtle),
-      var(--success-bg-subtle) 4px,
-      transparent 4px,
-      transparent 8px);
+  /* Solid (it floats over pane content): green mixed onto the editor
+     surface. */
+  background: color-mix(in srgb, var(--posit-green) 15%, var(--editor-bg));
+  border-bottom: 1px solid var(--editor-header-border);
   color: var(--editor-success);
   text-align: center;
   padding: 2px 0;

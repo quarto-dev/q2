@@ -31,9 +31,39 @@
   flex-shrink: 0;
 }
 
+/* Fresh-sync state: the dot pulses — a radial gradient breathing
+   between green (center) and yellow-green (rim). The gradient stop is a
+   registered custom property so the keyframes can interpolate it.
+   (prefers-reduced-motion: the global rule in ui.css collapses all
+   animation durations.) */
+@property --sync-pulse-stop {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 25%;
+}
+
 .sync-status-dot.green {
-  background-color: var(--editor-success);
-  box-shadow: 0 0 4px color-mix(in srgb, var(--editor-success) 60%, transparent);
+  background: radial-gradient(
+    circle,
+    var(--editor-success) var(--sync-pulse-stop),
+    yellowgreen 100%
+  );
+  animation: sync-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes sync-pulse {
+  0%,
+  100% {
+    --sync-pulse-stop: 5%;
+    transform: scale(1);
+    box-shadow: 0 0 2px 0 yellowgreen;
+  }
+
+  50% {
+    --sync-pulse-stop: 75%;
+    transform: scale(1.08);
+    box-shadow: 0 0 4px 1px yellowgreen;
+  }
 }
 
 .sync-status-dot.yellow {

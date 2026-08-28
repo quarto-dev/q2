@@ -9,7 +9,7 @@
  *
  * States:
  * - Disconnected (browser offline, websocket not open, or no peer
- *   handshake): yellow dot, "Saving locally — synced n minutes ago".
+ *   handshake): yellow dot, "Offline — synced n minutes ago".
  * - Connected, sync activity this session within the last 15s (a remote
  *   change received, or a local change the hub confirmed delivered):
  *   green dot, "Synced just now".

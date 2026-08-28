@@ -55,7 +55,7 @@ export const header = {
 /** SyncStatusBadge (project + document bottom bars). */
 export const syncStatus = {
   /** Prefix when disconnected (browser offline / socket down / no peer). */
-  savingLocally: 'Saving locally',
+  savingLocally: 'Offline',
   syncedAgo: (ago: string) => `synced ${ago}`,
   neverSynced: 'not synced yet',
   synced: 'Synced',
