@@ -227,7 +227,7 @@
     min-width: 0;
     max-width: none;
     height: 100%;
-    border-right: none;
+    border-inline-end: none;
   }
 
   .drawer-scrim {
@@ -468,7 +468,7 @@
   /* Where the header's fullscreen button sits in normal mode: 8px tile
      margin + 1px border + ~4px centering in the 36px bar. */
   top: 13px;
-  right: 14px;
+  inset-inline-end: 14px;
   z-index: var(--z-modal);
 }
 
@@ -551,7 +551,7 @@
   width: 100%;
   min-width: 0;
   max-width: none;
-  border-right: none;
+  border-inline-end: none;
   flex: 1;
   min-height: 0;
   /* The column owns the tint: --sidebar-bg is translucent in light

@@ -116,7 +116,7 @@
   align-items: baseline;
   gap: 8px;
   margin-left: auto;
-  margin-right: 8px;
+  margin-inline-end: 8px;
   text-overflow: ellipsis;
   height: 20px;
   overflow: hidden;
@@ -465,21 +465,21 @@
 }
 
 .replay-drawer--expanded .sync-status-badge {
-  border-bottom-left-radius: var(--radius-sm);
+  border-end-start-radius: var(--radius-sm);
 }
 
 /* Document sync-status badge (statusSlot): full-height dividers on
    both sides, dot on the right so it stays put as the text changes. */
 .replay-drawer .sync-status-badge {
   align-self: stretch;
-  border-right: 1px solid var(--editor-header-border);
+  border-inline-end: 1px solid var(--editor-header-border);
   flex-direction: row-reverse;
 }
 
 /* The left divider only when the drawer is expanded (collapsed, the
    badge blends into the bar). */
 .replay-drawer--expanded .sync-status-badge {
-  border-left: 1px solid var(--editor-header-border);
+  border-inline-start: 1px solid var(--editor-header-border);
 }
 
 /* Comments toggle: its own bordered box, each button outlined, with a
@@ -487,7 +487,7 @@
 .comments-mode-box {
   align-self: stretch;
   padding: 1px 8px;
-  border-left: 1px solid var(--editor-header-border);
+  border-inline-start: 1px solid var(--editor-header-border);
   gap: 3px;
 }
 

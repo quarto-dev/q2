@@ -282,6 +282,12 @@
   --sidebar-bg: rgb(227, 234, 241);
   --sidebar-border: var(--border-color);
   --sidebar-section-bg: rgb(207, 221, 235);
+  /* Section-header text: 4.5:1+ on --sidebar-section-bg (the generic
+     dim text is only 3.97:1 there — bd-7byucvr6 follow-up). */
+  --sidebar-section-text: #4a5560;
+  /* Links on the sidebar surface: --accent-secondary is 4.3:1 on
+     --sidebar-bg; the darker ramp step clears 4.5:1 (6.3:1). */
+  --sidebar-link-text: var(--posit-blue-dark-1);
   --sidebar-section-hover: var(--input-bg-alpha-hover);
   --sidebar-drag-bg: #c8d8ea;
   --sidebar-active-accent: var(--posit-teal);
@@ -449,6 +455,9 @@
   --sidebar-bg: rgb(25, 30, 35);
   --sidebar-border: var(--border-color);
   --sidebar-section-bg: rgb(19, 22, 25);
+  /* Dark surfaces: the generic tokens already clear 4.5:1 here. */
+  --sidebar-section-text: var(--editor-text-dim);
+  --sidebar-link-text: var(--accent-secondary);
   --sidebar-section-hover: var(--input-bg-alpha-hover);
   --sidebar-drag-bg: #1a2a4e;
   --sidebar-active-accent: var(--posit-teal);

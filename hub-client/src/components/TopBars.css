@@ -11,7 +11,7 @@
 .top-bars .project-top-bar {
   flex-shrink: 0;
   max-width: 50%;
-  border-right: 1px solid var(--editor-header-border);
+  border-inline-end: 1px solid var(--editor-header-border);
 }
 
 .top-bars .document-top-bar {
@@ -50,7 +50,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-right: 1px solid var(--editor-header-border);
+  border-inline-end: 1px solid var(--editor-header-border);
 }
 
 /* The toggle's square wears the project side's surface color (one tint
@@ -63,7 +63,7 @@
    that read as attached to (hanging from) the bar's bottom border. */
 .document-top-bar .view-toggle-control {
   position: absolute;
-  left: 50%;
+  inset-inline-start: 50%;
   bottom: 0;
   transform: translateX(-50%);
   /* Outline grouping the three buttons, open at the attached bottom
@@ -79,7 +79,7 @@
 /* Dividers between the buttons (the Tooltip anchor spans are the
    control's direct children). */
 .document-top-bar .view-toggle-control .qh-tooltip-anchor+.qh-tooltip-anchor {
-  border-left: 1px solid var(--split-group-border);
+  border-inline-start: 1px solid var(--split-group-border);
 }
 
 .document-top-bar .view-toggle-btn {
@@ -98,7 +98,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-left: 1px solid var(--editor-header-border);
+  border-inline-start: 1px solid var(--editor-header-border);
 }
 
 .document-top-bar {

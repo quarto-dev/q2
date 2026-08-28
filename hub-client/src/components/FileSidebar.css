@@ -96,8 +96,8 @@
   gap: 8px;
   padding: 6px 12px;
   cursor: pointer;
-  border-top-left-radius: var(--radius-md);
-  border-bottom-left-radius: var(--radius-md);
+  border-start-start-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 
