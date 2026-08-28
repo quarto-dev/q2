@@ -207,8 +207,8 @@ function LayoutGlyph({ children }: LayoutGlyphProps) {
 export function LayoutMarkupIcon() {
   return (
     <LayoutGlyph>
-      <rect x="0" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
-      <rect x="9" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
+      <rect x="0.5" y="0.5" width="6" height="9" rx="1" fill="none" stroke="currentColor" />
+      <rect x="9.5" y="0.5" width="2" height="9" rx="1" fill="none" stroke="currentColor" opacity="0.35" />
     </LayoutGlyph>
   );
 }
@@ -217,8 +217,8 @@ export function LayoutMarkupIcon() {
 export function LayoutSplitIcon() {
   return (
     <LayoutGlyph>
-      <rect x="0" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
-      <rect x="7" y="0" width="5" height="10" rx="0.5" fill="currentColor" />
+      <rect x="0.5" y="0.5" width="4" height="9" rx="1" fill="none" stroke="currentColor" />
+      <rect x="7.5" y="0.5" width="4" height="9" rx="1" fill="none" stroke="currentColor" />
     </LayoutGlyph>
   );
 }
@@ -227,8 +227,8 @@ export function LayoutSplitIcon() {
 export function LayoutPreviewIcon() {
   return (
     <LayoutGlyph>
-      <rect x="0" y="0" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.25" />
-      <rect x="5" y="0" width="7" height="10" rx="0.5" fill="currentColor" />
+      <rect x="0.5" y="0.5" width="2" height="9" rx="1" fill="none" stroke="currentColor" opacity="0.35" />
+      <rect x="5.5" y="0.5" width="6" height="9" rx="1" fill="none" stroke="currentColor" />
     </LayoutGlyph>
   );
 }
@@ -237,16 +237,19 @@ export function LayoutPreviewIcon() {
 /* Comments-mode pictograms (fixed 12×10 viewBox) — replay drawer.    */
 /* ------------------------------------------------------------------ */
 
+/* Outline bubbles: geometry inset 0.5px so the 1px stroke stays inside
+   the 12×10 viewBox. */
 const BUBBLE_PATH =
-  'M1 0 h10 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 H5 L2 10 V7 H1 a1 1 0 0 1 -1 -1 V1 a1 1 0 0 1 1 -1 Z';
+  'M1.5 0.5 H10.5 A1 1 0 0 1 11.5 1.5 V5.5 A1 1 0 0 1 10.5 6.5 H4.8 L2.5 8.8 V6.5 H1.5 A1 1 0 0 1 0.5 5.5 V1.5 A1 1 0 0 1 1.5 0.5 Z';
 const TALL_BUBBLE_PATH =
-  'M1 0 h10 a1 1 0 0 1 1 1 v6 a1 1 0 0 1 -1 1 H5 L2 10 V8 H1 a1 1 0 0 1 -1 -1 V1 a1 1 0 0 1 1 -1 Z';
+  'M1.5 0.5 H10.5 A1 1 0 0 1 11.5 1.5 V7 A1 1 0 0 1 10.5 8 H4.8 L2.5 9.9 V8 H1.5 A1 1 0 0 1 0.5 7 V1.5 A1 1 0 0 1 1.5 0.5 Z';
 
-/** Tall comment bubble — "expand all comments". */
+/** Tall comment bubble with a text divider — "expand all comments". */
 export function CommentsExpandIcon() {
   return (
     <LayoutGlyph>
-      <path d={TALL_BUBBLE_PATH} fill="currentColor" />
+      <path d={TALL_BUBBLE_PATH} fill="none" stroke="currentColor" strokeLinejoin="round" />
+      <line x1="0.5" y1="4.25" x2="11.5" y2="4.25" stroke="currentColor" />
     </LayoutGlyph>
   );
 }
@@ -255,7 +258,7 @@ export function CommentsExpandIcon() {
 export function CommentsShowIcon() {
   return (
     <LayoutGlyph>
-      <path d={BUBBLE_PATH} fill="currentColor" />
+      <path d={BUBBLE_PATH} fill="none" stroke="currentColor" strokeLinejoin="round" />
     </LayoutGlyph>
   );
 }
@@ -264,7 +267,7 @@ export function CommentsShowIcon() {
 export function CommentsHideIcon() {
   return (
     <LayoutGlyph>
-      <path d={BUBBLE_PATH} fill="currentColor" opacity="0.25" />
+      <path d={BUBBLE_PATH} fill="none" stroke="currentColor" strokeLinejoin="round" opacity="0.35" />
       <line x1="1" y1="9" x2="11" y2="1" stroke="currentColor" strokeWidth="1.5" />
     </LayoutGlyph>
   );
