@@ -3,7 +3,7 @@
 The hub-client UI is built from a small set of tokens and primitives.
 This page is the contract: follow it when adding or touching UI, and the
 app stays coherent. The enforcement counterparts are `npm run lint:css`
-(off-token values) and the `#/dev/` gallery (visual + keyboard coverage).
+(off-token values) and the `#/dev/` gallery (keyboard + axe coverage).
 
 ## Tokens (`src/theme.css`)
 
@@ -40,8 +40,8 @@ All enforced by `lint:css`.
 ## The gallery (`#/dev/gallery`)
 
 Every primitive renders on the gallery page in its meaningful states, in
-both themes, covered by Playwright visual baselines and axe-core scans
-(`npm run test:visual`). The tokens gallery is `#/dev/tokens`.
+both themes, covered by axe-core scans and behavioral specs
+(`npm run test:harness`). The tokens gallery is `#/dev/tokens`.
 
 ## Adding a component
 
@@ -51,6 +51,6 @@ both themes, covered by Playwright visual baselines and axe-core scans
    build it accessibly (keyboard path, ARIA pattern from the APG) and add
    it here.
 3. Add the component to the gallery in its default/hover/focus/disabled/
-   error states; the visual and axe baselines pick it up from there.
+   error states; the axe baseline picks it up from there.
 4. Every pointer affordance needs a keyboard path; every icon-only control
    needs an `aria-label`; status is never conveyed by color alone.

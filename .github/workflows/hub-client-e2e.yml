@@ -3,14 +3,12 @@ name: Hub-Client E2E Tests
 # Label runs by mode in the Actions UI. `run-name` is evaluated at workflow
 # top level with only the `github`/`inputs` contexts available, so it branches
 # purely on the trigger. Order matters — first truthy arm wins:
-#   - recreate-all-snapshots dispatch → baseline regeneration
 #   - schedule                        → nightly (interactive + smoke-all)
 #   - run-smoke-all dispatch          → on-demand interactive + smoke-all
 #   - everything else (push/PR)       → the fast interactive gate
 run-name: >-
   ${{
-    inputs.recreate-all-snapshots && 'E2E — recreate baselines'
-    || github.event_name == 'schedule' && 'E2E — interactive + smoke-all (nightly)'
+    github.event_name == 'schedule' && 'E2E — interactive + smoke-all (nightly)'
     || inputs.run-smoke-all && 'E2E — interactive + smoke-all'
     || 'E2E — interactive'
   }}
@@ -18,10 +16,6 @@ run-name: >-
 on:
   workflow_dispatch:
     inputs:
-      recreate-all-snapshots:
-        description: 'Delete and recreate ALL visual regression baselines'
-        type: boolean
-        default: false
       run-smoke-all:
         description: 'Also run smoke-all E2E tests (slow, ~80 extra tests, opt-in only)'
         type: boolean
@@ -48,11 +42,6 @@ jobs:
     runs-on: ubuntu-latest
     name: Hub-Client E2E Tests
     if: github.repository == 'quarto-dev/q2'
-
-    # Needed for the "Commit new baselines" step to push back to the
-    # workflow branch. Default GITHUB_TOKEN is read-only.
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout Repo
@@ -164,11 +153,6 @@ jobs:
           cd hub-client
           npx playwright install --with-deps chromium
 
-      # Delete all snapshots if recreating from scratch
-      - name: Delete all snapshots (recreate mode)
-        if: inputs.recreate-all-snapshots == true
-        run: find hub-client/e2e -type d -name '*-snapshots' -exec rm -rf {} + || true
-
       # Run E2E tests — custom specs only (smoke-all excluded by testIgnore)
       - name: Run E2E tests
         run: |
@@ -220,58 +204,13 @@ jobs:
           cd hub-client
           npx playwright test --config playwright.smoke-all.config.ts
 
-      # Run visual regression tests
-      - name: Run visual tests
-        id: visual
-        continue-on-error: true
+      # Dev-harness behavioral tests: keyboard contracts, dialog focus,
+      # axe scans, forced-colors, reduced-motion, viewport reflow. No hub
+      # server needed — the config boots vite dev against #/dev/ routes.
+      - name: Run harness tests
         run: |
           cd hub-client
-          npx playwright test --config playwright.visual.config.ts
-
-      # If visual tests failed, retry with --update-snapshots=missing
-      # This only creates baselines for NEW tests; existing mismatches still fail
-      - name: Retry visual tests (add missing baselines)
-        id: visual-retry
-        if: steps.visual.outcome == 'failure'
-        run: |
-          cd hub-client
-          npx playwright test --config playwright.visual.config.ts --update-snapshots=missing
-
-      # If retry passed (only missing baselines), commit them back.
-      # Use `find` instead of a `**` glob — bash globstar isn't enabled
-      # by default and visual specs sit directly under hub-client/e2e/,
-      # not one directory deeper.
-      - name: Commit new baselines
-        if: steps.visual.outcome == 'failure' && steps.visual-retry.outcome == 'success'
-        env:
-          PR_HEAD_REF: ${{ github.head_ref }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if [ -n "$PR_HEAD_REF" ]; then
-            # PR builds run on a detached merge-commit HEAD, where plain
-            # `git push` fails ("not currently on a branch") — and pushing
-            # the merge commit to the branch would be wrong anyway. Commit
-            # the baselines on top of the real branch tip instead. The
-            # generated PNGs are gitignored, so they survive this checkout.
-            # The default fetch-depth-1 checkout only has the merge commit,
-            # so fetch the head SHA explicitly.
-            git fetch --depth=1 origin "$PR_HEAD_SHA"
-            git checkout -B ci-baseline-commit "$PR_HEAD_SHA"
-          fi
-          find hub-client/e2e -type d -name '*-snapshots' -exec git add -f {} +
-          git diff --cached --quiet || git commit -m "Add missing Playwright visual regression baselines"
-          if [ -n "$PR_HEAD_REF" ]; then
-            git push origin "HEAD:refs/heads/$PR_HEAD_REF"
-          else
-            git push
-          fi
-
-      # Fail the workflow if visual retry also failed (real regression)
-      - name: Fail on visual regression
-        if: steps.visual-retry.outcome == 'failure'
-        run: exit 1
+          npx playwright test --config playwright.harness.config.ts
 
       # sync-test-harness's hub tier spawns `cargo run --bin hub` with a 120s
       # readiness timeout, so it belongs in this workflow rather than
@@ -283,8 +222,8 @@ jobs:
       #
       # Placed last, with `if: always()`, on purpose: this suite spawns servers
       # and waits on ports, and a flake here must not abort the pre-existing
-      # Playwright gate, the smoke-all fixture gate, or the visual-regression
-      # steps above — each of those has a bare `if:` (implicit `success()`), so
+      # Playwright gate, the smoke-all fixture gate, or the harness-test
+      # step above — each of those has a bare `if:` (implicit `success()`), so
       # a non-zero exit from this step would otherwise silently skip all of
       # them. Running last with `always()` still reports this step's own
       # result without gating anything upstream of it. GH #250.

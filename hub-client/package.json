@@ -31,8 +31,7 @@
     "test:wasm:watch": "vitest --config vitest.wasm.config.ts",
     "test:e2e": "npm run build:wasm && VITE_E2E=1 npm run build && playwright test",
     "test:e2e:ui": "npm run build:wasm && VITE_E2E=1 npm run build && playwright test --ui",
-    "test:visual": "playwright test --config playwright.visual.config.ts",
-    "test:visual:update": "playwright test --config playwright.visual.config.ts --update-snapshots=missing",
+    "test:harness": "playwright test --config playwright.harness.config.ts",
     "test:ci": "npm run test && npm run test:integration && npm run test:wasm",
     "test:all": "npm run build:wasm && npm run test && npm run test:integration && npm run test:wasm && npm run test:e2e",
     "bootstrap-test-fixtures": "npx tsx e2e/scripts/regenerate-fixtures.ts"

@@ -23,6 +23,11 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-28
+
+- [`28afc1e1`](https://github.com/quarto-dev/q2/commits/28afc1e1): The inline diff in the connection-status dialog now highlights deleted and inserted text with the app's Posit red and green tints instead of off-palette colours.
+- [`5e7278cf`](https://github.com/quarto-dev/q2/commits/5e7278cf): Setup screens are easier to read in dark mode — the tagline and backup-hint text, and the red error banner shown when the sync server can't be reached during migration, now meet contrast guidelines.
+
 ### 2026-08-27
 
 - [`ff9896c7`](https://github.com/quarto-dev/q2/commits/ff9896c7): The changelog and more-info viewer now follows the app's colour scheme — in dark mode the text is readable light-on-dark (and links use the app's blue) instead of near-invisible dark text on the dark dialog.
