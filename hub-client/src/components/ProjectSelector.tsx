@@ -23,7 +23,6 @@ import './ProjectSelector.css';
 interface Props {
   /** Called when a project is selected, with optional file path override from share link */
   onSelectProject: (project: ProjectEntry, filePathOverride?: string) => void;
-  isConnecting?: boolean;
   error?: string | null;
   /** Called when a new project is created with scaffold files */
   onProjectCreated?: (files: ProjectFile[], title: string, projectType: string, syncServer: string) => void;
@@ -64,7 +63,6 @@ const COLOR_PALETTE = [
 
 export default function ProjectSelector({
   onSelectProject,
-  isConnecting,
   error: connectionError,
   onProjectCreated,
   onSignOut,
@@ -579,7 +577,6 @@ export default function ProjectSelector({
 
         {connectionError && <div className="error">{connectionError}</div>}
         {formError && <div className="error">{formError}</div>}
-        {isConnecting && <div className="connecting">Connecting to sync server...</div>}
 
         <div className="projects-list">
           <h2>Your Projects</h2>

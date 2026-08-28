@@ -915,3 +915,12 @@
 /* Dark mode: the desaturated slate ramp for full-page surfaces now lives in
    theme.css (:root.dark .projects-home, :root.dark .editor-container), shared
    with the editor. */
+
+/* Italic "opening..." beside the name of the project being opened
+   (replaces the old global "Connecting to sync server…" banner). */
+.qh-opening {
+  font-style: italic;
+  opacity: 0.7;
+  margin-left: 0.5em;
+  white-space: nowrap;
+}

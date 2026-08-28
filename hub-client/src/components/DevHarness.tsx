@@ -425,7 +425,6 @@ function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'previ
 /** Shared canned props for the ProjectsHome routes. */
 const fakeProjectsHomeProps = {
   onSelectProject: () => {},
-  isConnecting: false,
   error: null,
   projectSetStatus: 'connected' as const,
   projectSetEntries: FAKE_SET_ENTRIES,

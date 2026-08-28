@@ -65,20 +65,6 @@ import type { StorageKind } from '@quarto/quarto-sync-client';
 import './App.css';
 
 /**
- * Production budget for the initial peer connect. `waitForPeer` resolves the
- * *instant* the peer connects, so in the common (online) case this adds only
- * the real connect latency and lets `connect()` resolve as Online — the header
- * (which mounts only after connect() resolves) then shows Online right away
- * with the *live* document, instead of the 1 ms probe that always resolved
- * offline-first and made the indicator flash Offline → Online. If the connect
- * is slower than this budget the header mounts Offline and flips to Online when
- * the peer lands — the rare tail, and still an improvement on always-first
- * Offline. A genuinely-offline user waits at most this long before cached
- * content appears (bounded regression of offline-first).
- */
-const PRODUCTION_PEER_TIMEOUT_MS = 400;
-
-/**
  * Connect to a sync server and load all file contents into a Map.
  * Shared by every code path that opens a project.
  */
@@ -94,20 +80,19 @@ async function connectAndLoadContents(
   if (import.meta.env.VITE_E2E === '1') {
     actorId = (window as any).__QUARTO_TEST_ACTOR_ID__ as string | undefined ?? actorId;
   }
-  // Production gives the peer a modest budget (PRODUCTION_PEER_TIMEOUT_MS) so
-  // the common (online) open resolves as Online with the live document, rather
-  // than the 1 ms offline-first probe that made the indicator always flash
-  // Offline → Online. waitForPeer resolves the instant the peer connects, so a
-  // fast connection pays only its real latency; a genuinely-offline user waits
-  // at most the budget before cached content appears.
+  // Offline-first: a 1 ms peer probe, so a cached project opens straight
+  // from IndexedDB and the socket lands in the background. (This was
+  // briefly 400 ms so the online indicator wouldn't flash Offline→Online
+  // on open; instant opens won over that cosmetic — see
+  // claude-notes/plans/2026-08-28-instant-project-open.md.)
   //
-  // The smoke-all E2E env always starts with EMPTY storage and must sync every
-  // doc from the (local) server, so it needs a much longer wait: opening before
-  // the socket connects means loadFileDocuments races it — under CI contention
-  // the render-target doc loses, is marked unavailable, and the preview fails
-  // "Path not found" (stage EDITOR_NO_PREVIEW; sometimes the index loses it too
-  // → CONNECT_STALL).
-  const peerTimeoutMs = import.meta.env.VITE_E2E === '1' ? 15000 : PRODUCTION_PEER_TIMEOUT_MS;
+  // The smoke-all E2E env always starts with EMPTY storage and must sync
+  // every doc from the (local) server, so it needs a much longer wait:
+  // opening before the socket connects means loadFileDocuments races it —
+  // under CI contention the render-target doc loses, is marked
+  // unavailable, and the preview fails "Path not found" (stage
+  // EDITOR_NO_PREVIEW; sometimes the index loses it too → CONNECT_STALL).
+  const peerTimeoutMs = import.meta.env.VITE_E2E === '1' ? 15000 : 1;
   // Ephemeral storage mode (bd-sw4xy1vw): the q2 preview embed build
   // keeps the automerge document cache in memory — each preview session
   // is a fresh origin, so a persisted cache could never hit and would
@@ -138,7 +123,6 @@ function App() {
 
   const [project, setProject] = useState<ProjectEntry | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [showSaveToast, setShowSaveToast] = useState(false);
@@ -412,7 +396,6 @@ function App() {
           // Different project - need to load it
           const targetProject = await projectStorage.getProject(route.projectId);
           if (targetProject) {
-            setIsConnecting(true);
             setConnectionError(null);
             try {
               const newActorId = await resolveActorId(targetProject.indexDocId);
@@ -424,8 +407,6 @@ function App() {
             } catch (err) {
               setConnectionError(err instanceof Error ? err.message : String(err));
               navigateToProjectSelector({ replace: true });
-            } finally {
-              setIsConnecting(false);
             }
           } else {
             // Project not found in IndexedDB
@@ -510,7 +491,6 @@ function App() {
           }
         }
 
-        setIsConnecting(true);
         setConnectionError(null);
         try {
           const newActorId = await resolveActorId(targetProject.indexDocId);
@@ -523,8 +503,6 @@ function App() {
           navigateToFile(targetProject.id, share.filePath, { replace: true });
         } catch (err) {
           setConnectionError(err instanceof Error ? err.message : String(err));
-        } finally {
-          setIsConnecting(false);
         }
       };
 
@@ -557,7 +535,6 @@ function App() {
         // URL specifies a project - try to load it
         const targetProject = await projectStorage.getProject(route.projectId);
         if (targetProject) {
-          setIsConnecting(true);
           setConnectionError(null);
           try {
             const newActorId = await resolveActorId(targetProject.indexDocId);
@@ -570,8 +547,6 @@ function App() {
           } catch (err) {
             setConnectionError(err instanceof Error ? err.message : String(err));
             navigateToProjectSelector({ replace: true });
-          } finally {
-            setIsConnecting(false);
           }
         } else if (isEphemeralStorage()) {
           // Ephemeral storage mode (bd-sw4xy1vw) keeps no project
@@ -687,7 +662,6 @@ function App() {
   >(null);
 
   const handleSelectProject = useCallback(async (selectedProject: ProjectEntry, filePathOverride?: string) => {
-    setIsConnecting(true);
     setConnectionError(null);
     setLastOpenAttempt({ project: selectedProject, filePathOverride });
 
@@ -708,8 +682,6 @@ function App() {
       }
     } catch (err) {
       setConnectionError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsConnecting(false);
     }
   }, [navigateToProject, navigateToFile, resolveActorId, screenName, cursorColor]);
 
@@ -734,7 +706,6 @@ function App() {
     _projectType: string,
     syncServer: string
   ) => {
-    setIsConnecting(true);
     setConnectionError(null);
     setLastOpenAttempt(null);
 
@@ -798,8 +769,6 @@ function App() {
       navigateToProject(projectEntry.id, { replace: true });
     } catch (err) {
       setConnectionError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsConnecting(false);
     }
   }, [navigateToProject, resolveActorId, screenName, cursorColor]);
 
@@ -902,7 +871,6 @@ function App() {
           <ProjectsHome
             onSelectProject={handleSelectProject}
             onProjectCreated={handleProjectCreated}
-            isConnecting={isConnecting}
             error={connectionError}
             onRetry={
               lastOpenAttempt
@@ -939,7 +907,6 @@ function App() {
             <ProjectSelector
               onSelectProject={handleSelectProject}
               onProjectCreated={handleProjectCreated}
-              isConnecting={isConnecting}
               error={connectionError}
               onSignOut={AUTH_ENABLED ? logout : undefined}
               authEmail={auth?.email}

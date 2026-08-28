@@ -54,7 +54,6 @@ import './ProjectsHome.css';
 
 interface Props {
   onSelectProject: (project: ProjectEntry, filePathOverride?: string) => void;
-  isConnecting?: boolean;
   error?: string | null;
   /** Re-attempt a failed project open; renders a "Try again" recovery
    *  action on the connection error banner. */
@@ -218,7 +217,6 @@ function parseConnectInput(input: string): { docId: string; server?: string; nam
 
 export default function ProjectsHome({
   onSelectProject,
-  isConnecting,
   error: connectionError,
   onRetry,
   onProjectCreated,
@@ -622,7 +620,17 @@ export default function ProjectsHome({
     },
   }), [draggingId, dropTarget, requestMove, handleDragEnd]);
 
+  // The item being opened, shown as an italic "opening..." beside its
+  // name (replaces the old global "Connecting to sync server…" banner).
+  // Success unmounts this view; failure surfaces connectionError, which
+  // clears the marker below.
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  useEffect(() => {
+    if (connectionError) setOpeningId(null);
+  }, [connectionError]);
+
   const handleOpen = useCallback(async (item: ProjectItem) => {
+    setOpeningId(item.indexDocId);
     // Ensure a local IDB entry exists (URL routing uses local ids)
     let localProject = await projectStorage.getProjectByIndexDocId(item.indexDocId);
     if (!localProject) {
@@ -1337,8 +1345,11 @@ export default function ProjectsHome({
       }}
     >
       <button className="qh-card-body" onClick={() => handleOpen(item)}>
-        <span className={`qh-card-name qh-truncate ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
-          {item.description}
+        <span style={{ display: 'flex', alignItems: 'baseline', minWidth: 0 }}>
+          <span className={`qh-card-name qh-truncate ${isUnnamed(item.description) ? 'unnamed' : ''}`}>
+            {item.description}
+          </span>
+          {openingId === item.indexDocId && <em className="qh-opening">opening...</em>}
         </span>
         <span className="qh-card-footer">
           <span className="qh-card-meta">
@@ -1705,7 +1716,6 @@ export default function ProjectsHome({
           )}
         </div>
       )}
-      {isConnecting && <div className="qh-connecting">Connecting to sync server…</div>}
 
       <main id="main-content" tabIndex={-1} className="qh-main">
         {loadError ? (
@@ -1788,6 +1798,7 @@ export default function ProjectsHome({
                       >
                         {item.description}
                       </button>
+                      {openingId === item.indexDocId && <em className="qh-opening">opening...</em>}
                       {isUnnamed(item.description) && (
                         <button className="qh-link" onClick={() => startRename(item)}>Rename</button>
                       )}

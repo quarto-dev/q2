@@ -1251,6 +1251,11 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               <MonacoEditor
                 // Use key to force remount when switching files (resets editor state cleanly)
                 key={currentFile?.path ?? ''}
+                // Blank fallback: monaco is bundled, so the only wait is the
+                // per-mount editor-instance creation (a frame or two) — the
+                // default "Loading..." text just flashes on every open and
+                // file switch.
+                loading=""
                 height="100%"
                 language={getLanguageForFile(currentFile?.path ?? '')}
                 theme={effectiveTheme === 'dark' ? 'quarto-dark' : 'quarto-light'}
