@@ -921,6 +921,6 @@
 .qh-opening {
   font-style: italic;
   opacity: 0.7;
-  margin-left: 0.5em;
+  margin-inline-start: 0.5em;
   white-space: nowrap;
 }
