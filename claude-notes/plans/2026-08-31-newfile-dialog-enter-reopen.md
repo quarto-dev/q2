@@ -102,16 +102,18 @@ one-off.
 
 ### Phase 1 — tests first (must fail before the fix)
 
-- [ ] **Unit (jsdom)**, in `NewFileDialog.integration.test.tsx`:
+- [x] **Unit (jsdom)**, in `NewFileDialog.integration.test.tsx`:
       jsdom does not synthesize keyboard-activation clicks, so the *reopen*
       cannot reproduce there; instead assert the mechanism directly —
       `fireEvent.keyDown(input, { key: 'Enter' })` returns `false`
       (i.e. `defaultPrevented`) **and** `onCreateTextFile` + `onClose` were
       called. Fails today (fireEvent returns `true`).
-- [ ] **Unit (jsdom), Cancel path**: focus the Cancel button,
+- [x] **Unit (jsdom), Cancel path**: focus the Cancel button,
       `fireEvent.keyDown(cancelButton, { key: 'Enter' })` → expect
-      `onCreateTextFile` **not** called. Fails today.
-- [ ] **Browser-level regression (harness e2e)** — the only tier where the
+      `onCreateTextFile` **not** called. Fails today. (Also added: the
+      Create-button variant — no double-submit — and an empty-filename
+      guard pin; 3 of the 4 failed pre-fix as predicted.)
+- [x] **Browser-level regression (harness e2e)** — the only tier where the
       real mechanism reproduces: add a *stateful* DevHarness route (e.g.
       `dialog-new-file-stateful`) mirroring the Editor wiring — a trigger
       `<button>` that sets `isOpen`, `onClose` clearing it, a visible list of
@@ -126,22 +128,23 @@ one-off.
 
 ### Phase 2 — fix
 
-- [ ] Apply design (A) in `NewFileDialog.handleKeyDown`.
-- [ ] Extend `ModalDialog`'s `onKeyDown` prop docstring with the
+- [x] Apply design (A) in `NewFileDialog.handleKeyDown`.
+- [x] Extend `ModalDialog`'s `onKeyDown` prop docstring with the
       preventDefault-on-close contract (comment-only change).
-- [ ] All Phase-1 tests green.
+- [x] All Phase-1 tests green (19/19 unit, 3/3 harness).
 
 ### Phase 3 — hardening + verification
 
-- [ ] `ShareDialog`: add `e.preventDefault()` to its Enter branch (behavior
-      unchanged today, removes the latent trap). Covered by an assertion in
-      its existing test file if one exists; otherwise a one-line unit test.
+- [x] `ShareDialog`: add `e.preventDefault()` + button-target guard to its
+      Enter branch (behavior unchanged today, removes the latent trap).
+      Two tests added to `ShareDialog.test.tsx` (clipboard stubbed).
 - [ ] `cd hub-client && npm run test:ci` and `npm run build:all` (production
       tsc is stricter — required by CLAUDE.md before claiming done).
-- [ ] End-to-end check per CLAUDE.md: real browser against the dev server —
-      New file → type name → Enter → dialog stays closed, file appears;
-      Tab-to-Cancel → Enter → no file created. (Repro scripts from the
-      investigation session can be re-run; see below.)
+- [x] End-to-end check per CLAUDE.md: real browser against the dev server —
+      New file → type name → Enter → `dialog-count=0`, focus on the trigger,
+      `hello-635.qmd` visible in the sidebar; Cancel-focused Enter →
+      `count=0` files created, dialog closed. (Repro scripts re-run
+      post-fix, 2026-08-31 session.)
 - [ ] Changelog: two-commit workflow — code commit first, then
       `hub-client/changelog.md` entry with the hash.
 

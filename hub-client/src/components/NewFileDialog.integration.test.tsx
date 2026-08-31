@@ -318,6 +318,70 @@ describe('NewFileDialog', () => {
     });
   });
 
+  describe('Enter key handling (GH #635, bd-zcv0iea4)', () => {
+    // The browser's default action for an un-prevented Enter keydown is a
+    // synthesized click on whatever is focused when the default action is
+    // processed. Because closing the dialog restores focus to the trigger
+    // button (ModalDialog's WCAG contract), an un-prevented Enter-submit
+    // reopens the dialog. jsdom performs no keyboard activation, so the
+    // reopen itself can't reproduce here; instead these tests pin the
+    // mechanism: fireEvent returns `!event.defaultPrevented`.
+    it('submits on Enter in the filename input, closes, and prevents the default action', () => {
+      render(<NewFileDialog {...defaultProps} />);
+
+      const filenameInput = screen.getByLabelText('Filename:');
+      fireEvent.change(filenameInput, { target: { value: 'notes.qmd' } });
+      const notPrevented = fireEvent.keyDown(filenameInput, { key: 'Enter' });
+
+      expect(defaultProps.onCreateTextFile).toHaveBeenCalledWith('notes.qmd', '');
+      expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
+      expect(notPrevented).toBe(false);
+    });
+
+    it('does not submit when Enter is pressed on the Cancel button', () => {
+      render(<NewFileDialog {...defaultProps} />);
+
+      const filenameInput = screen.getByLabelText('Filename:');
+      fireEvent.change(filenameInput, { target: { value: 'notes.qmd' } });
+
+      // The user tabs to Cancel and presses Enter: the keydown bubbles to
+      // the dialog container, whose Enter handler must not treat it as a
+      // submit — the button's own (native) activation is the intent.
+      const cancelButton = screen.getByRole('button', { name: 'Cancel' });
+      cancelButton.focus();
+      fireEvent.keyDown(cancelButton, { key: 'Enter' });
+
+      expect(defaultProps.onCreateTextFile).not.toHaveBeenCalled();
+    });
+
+    it('does not double-submit when Enter is pressed on the Create button', () => {
+      render(<NewFileDialog {...defaultProps} />);
+
+      const filenameInput = screen.getByLabelText('Filename:');
+      fireEvent.change(filenameInput, { target: { value: 'notes.qmd' } });
+
+      // Enter on the focused Create button activates it natively (a click,
+      // which jsdom doesn't synthesize); the bubbled keydown must not ALSO
+      // run the submit handler, or real browsers create the file twice.
+      const createButton = screen.getByRole('button', { name: 'Create' });
+      createButton.focus();
+      fireEvent.keyDown(createButton, { key: 'Enter' });
+
+      expect(defaultProps.onCreateTextFile).not.toHaveBeenCalled();
+    });
+
+    it('shows the validation error and stays open on Enter with an empty filename', () => {
+      render(<NewFileDialog {...defaultProps} />);
+
+      const filenameInput = screen.getByLabelText('Filename:');
+      fireEvent.keyDown(filenameInput, { key: 'Enter' });
+
+      expect(defaultProps.onCreateTextFile).not.toHaveBeenCalled();
+      expect(defaultProps.onClose).not.toHaveBeenCalled();
+      expect(screen.getByText('Filename is required')).toBeInTheDocument();
+    });
+  });
+
   describe('accessibility semantics', () => {
     it('exposes role="dialog" with aria-modal and the title as accessible name', () => {
       render(<NewFileDialog {...defaultProps} />);

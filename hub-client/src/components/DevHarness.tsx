@@ -580,6 +580,43 @@ function ReplayHarness() {
   );
 }
 
+/**
+ * Stateful NewFileDialog fixture (GH #635, bd-zcv0iea4): a real trigger
+ * button that owns `isOpen` state plus a visible record of created files,
+ * mirroring the Editor/FileSidebar wiring. Exists because the Enter-submit
+ * reopen bug is a browser-level interaction — close, focus-restore to the
+ * trigger, then the keydown's default-action click — that the static-props
+ * `dialog-new-file` route (and jsdom, which performs no keyboard
+ * activation) cannot express.
+ */
+function NewFileDialogStatefulHarness() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [created, setCreated] = useState<string[]>([]);
+  return (
+    <EditorChrome>
+      <div style={{ padding: 16 }}>
+        <button
+          className="qh-btn small outline new-file-btn"
+          onClick={() => setIsOpen(true)}
+        >
+          New file
+        </button>
+        <ul data-testid="created-files">
+          {created.map((path, i) => (
+            <li key={`${path}-${i}`}>{path}</li>
+          ))}
+        </ul>
+      </div>
+      <NewFileDialog
+        isOpen={isOpen}
+        existingPaths={FAKE_FILES.map((f) => f.path)}
+        onClose={() => setIsOpen(false)}
+        onCreateTextFile={(path) => setCreated((prev) => [...prev, path])}
+      />
+    </EditorChrome>
+  );
+}
+
 function EditorChrome({ children }: { children: React.ReactNode }) {
   return (
     <ViewModeProvider>
@@ -730,6 +767,7 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
       />
     </EditorChrome>
   ),
+  'dialog-new-file-stateful': () => <NewFileDialogStatefulHarness />,
   'dialog-share': () => (
     <EditorChrome>
       <ShareDialog

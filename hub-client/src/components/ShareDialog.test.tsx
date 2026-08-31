@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import ShareDialog from './ShareDialog';
 
 afterEach(cleanup);
@@ -38,5 +38,43 @@ describe('ShareDialog accessibility', () => {
   it('does not render when closed', () => {
     render(<ShareDialog {...defaultProps} isOpen={false} />);
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+describe('ShareDialog Enter handling (GH #635 hardening)', () => {
+  // Same contract as NewFileDialog (see ModalDialog's onKeyDown docs):
+  // prevent Enter's default-action click, and leave button keydowns to
+  // the button's own activation. ShareDialog's close is deferred 500ms
+  // so the reopen bug can't bite today; these tests keep it that way if
+  // the delay ever goes away.
+  const stubClipboard = () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    return writeText;
+  };
+
+  it('copies on Enter in the URL input and prevents the default action', () => {
+    const writeText = stubClipboard();
+    render(<ShareDialog {...defaultProps} />);
+
+    const urlInput = screen.getByDisplayValue(defaultProps.shareableUrl);
+    const notPrevented = fireEvent.keyDown(urlInput, { key: 'Enter' });
+
+    expect(writeText).toHaveBeenCalledWith(defaultProps.shareableUrl);
+    expect(notPrevented).toBe(false);
+  });
+
+  it('does not copy when Enter is pressed on the close button', () => {
+    const writeText = stubClipboard();
+    render(<ShareDialog {...defaultProps} />);
+
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    closeButton.focus();
+    fireEvent.keyDown(closeButton, { key: 'Enter' });
+
+    expect(writeText).not.toHaveBeenCalled();
   });
 });
