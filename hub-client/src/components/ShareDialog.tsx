@@ -76,6 +76,13 @@ export default function ShareDialog({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter') {
+        // Buttons handle their own Enter activation (see the onKeyDown
+        // contract in ModalDialog). The copy path only closes after a
+        // 500ms success-state delay, but prevent the default anyway so
+        // the synthesized click can never land on the restore target if
+        // that delay ever goes away (GH #635 hardening).
+        if (e.target instanceof HTMLButtonElement) return;
+        e.preventDefault();
         handleCopyLink();
       }
     },

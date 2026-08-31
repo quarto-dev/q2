@@ -113,6 +113,14 @@ export default function NewFileDialog({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter') {
+        // Keydowns from a focused button bubble here too; those belong to
+        // the button's own activation (Cancel must not create a file, and
+        // Create must not fire twice).
+        if (e.target instanceof HTMLButtonElement) return;
+        // Un-prevented, Enter's default action is a synthesized click on
+        // whatever is focused after close — the focus-restored trigger
+        // button — which reopens the dialog (GH #635).
+        e.preventDefault();
         handleCreateTextFile();
       }
     },

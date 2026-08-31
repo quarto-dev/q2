@@ -24,7 +24,19 @@ export interface ModalDialogProps {
   onClose: () => void;
   /** Extra class for the dialog element, e.g. 'new-file-dialog'. */
   className?: string;
-  /** Dialog-specific key handling (e.g. Enter to submit). Escape and Tab are owned by ModalDialog. */
+  /**
+   * Dialog-specific key handling (e.g. Enter to submit). Escape and Tab
+   * are owned by ModalDialog.
+   *
+   * Contract for Enter-submit handlers: a handler that synchronously
+   * closes the dialog MUST call `e.preventDefault()`. Enter's default
+   * action is a synthesized click delivered after listeners and
+   * microtasks — by which point the close has run and this component has
+   * restored focus to the trigger, so the un-prevented click lands on
+   * the trigger and reopens the dialog (GH #635). Handlers should also
+   * ignore keydowns whose target is a button, or the button's own
+   * activation runs on top of the submit (Enter on Cancel would submit).
+   */
   onKeyDown?: (e: KeyboardEvent<HTMLDivElement>) => void;
   /** Extra attributes forwarded to the dialog element (e.g. drag/drop handlers). */
   dialogProps?: HTMLAttributes<HTMLDivElement>;
