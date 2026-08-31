@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-08-31
 
+- [`1bb90e78`](https://github.com/quarto-dev/q2/commits/1bb90e78): Pressing Enter in the New File dialog no longer reopens the dialog after creating the file, and pressing Enter on its Cancel button no longer creates the file.
 - [`ccaa8cc9`](https://github.com/quarto-dev/q2/commits/ccaa8cc9): Math rendering now uses KaTeX 0.18.2 everywhere — the sandboxed preview bundle, the hub client, and the CDN link rendering emits for `html-math-method: katex` were all realigned onto one version.
 - [`ec152307`](https://github.com/quarto-dev/q2/commits/ec152307): The "opening…" label beside a project name now uses a writing-direction-aware offset, so it will sit on the correct side under right-to-left languages.
 
