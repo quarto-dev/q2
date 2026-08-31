@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-08-31
+
+- [`ec152307`](https://github.com/quarto-dev/q2/commits/ec152307): The "opening…" label beside a project name now uses a writing-direction-aware offset, so it will sit on the correct side under right-to-left languages.
+
 ### 2026-08-28
 
 - [`6f2ca7ff`](https://github.com/quarto-dev/q2/commits/6f2ca7ff1): The keyboard focus ring in dark mode is now clearly visible on every surface — it was previously too close in color to dark backgrounds to see on dialogs and cards.
