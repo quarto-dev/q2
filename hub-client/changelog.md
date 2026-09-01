@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-01
+
+- [`720c263e`](https://github.com/quarto-dev/q2/commits/720c263e): Collection and document invite links now land on a unified invitation card showing who invited you and a preview of what you're joining, with one click to join or open; document links no longer open the editor silently, joining uses your Google identity instead of a name form, and a one-time welcome banner orients you in the editor.
+
 ### 2026-08-31
 
 - [`1bb90e78`](https://github.com/quarto-dev/q2/commits/1bb90e78): Pressing Enter in the New File dialog no longer reopens the dialog after creating the file, and pressing Enter on its Cancel button no longer creates the file.
