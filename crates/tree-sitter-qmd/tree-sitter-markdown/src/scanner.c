@@ -2846,17 +2846,25 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             // but the pipe_table_row rule's "single cell, no `|`" alternative
             // will otherwise eat `:::` as cell content (3 × pandoc_str).
             //
-            // To avoid that, peek (without mark_end) for a `:::` run followed
-            // by inline whitespace / newline / EOF. If we see one, fall
-            // through to the LINE_ENDING path below so the pipe_table
-            // terminates via its `choice(_newline, _eof)` tail. The parser
-            // then proceeds to a state where FENCED_DIV_END is valid and
-            // parse_fenced_div_marker can emit it on the next scan call —
-            // for bare `:::` outside a fenced div, FENCED_DIV_END is not
-            // valid and the line errors out at a sensible place rather than
-            // silently producing a phantom row.
+            // To avoid that, peek (without mark_end) for a `:::` run. If we
+            // see one, fall through to the LINE_ENDING path below so the
+            // pipe_table terminates via its `choice(_newline, _eof)` tail.
+            // The parser then proceeds to a state where FENCED_DIV_END is
+            // valid and parse_fenced_div_marker can emit it on the next scan
+            // call — for bare `:::` outside a fenced div, FENCED_DIV_END is
+            // not valid and the line errors out at a sensible place rather
+            // than silently producing a phantom row.
             bool next_line_is_fenced_div_marker = false;
+            // Whether the peek below consumed a colon run, and whether that
+            // run opens a block. Both soft-break gates need these because the
+            // peek advances the lexer: after it, `lexer->lookahead` is the
+            // character AFTER the colons, so the gates' own `!= ':'` tests
+            // can no longer see that the line started with one (bd-div-attr-
+            // no-space-ne0fudkw).
+            bool peeked_colon_run = false;
+            bool colon_run_opens_block = false;
             if (lexer->lookahead == ':') {
+                peeked_colon_run = true;
                 int level = 0;
                 // Match parse_fenced_div_marker's unbounded colon-run count.
                 // pandoc allows arbitrary fence widths for nested divs.
@@ -2864,13 +2872,27 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     advance(s, lexer);
                     level++;
                 }
-                if (level >= 3 && (lexer->eof(lexer) ||
-                                   lexer->lookahead == ' ' ||
-                                   lexer->lookahead == '\t' ||
-                                   lexer->lookahead == '\n' ||
-                                   lexer->lookahead == '\r')) {
+                bool followed_by_ws_or_eol = (lexer->eof(lexer) ||
+                                              lexer->lookahead == ' ' ||
+                                              lexer->lookahead == '\t' ||
+                                              lexer->lookahead == '\n' ||
+                                              lexer->lookahead == '\r');
+                // A run of three or more colons is a fenced-div marker
+                // whatever follows it: `:::{.foo}`, `:::foo` and `::: foo`
+                // are all div openers (pandoc and Quarto 1 accept all three),
+                // and a bare `:::` is a closer. Requiring whitespace here
+                // used to make the tight forms invisible to the gates below.
+                if (level >= 3) {
                     next_line_is_fenced_div_marker = true;
                 }
+                // The colon run opens a block when it is a fenced-div marker
+                // or a caption start (`: caption`, matched by
+                // parse_fenced_div_marker's level == 1 branch). Anything else
+                // — `::`, or a single `:` glued to a word — is ordinary text
+                // and must stay inside the paragraph.
+                colon_run_opens_block =
+                    next_line_is_fenced_div_marker ||
+                    (level == 1 && followed_by_ws_or_eol);
                 // No mark_end past the peeked colons: tree-sitter rewinds to
                 // the last mark_end (set at line 2341, post-newline /
                 // pre-indent) between scan calls, so the advance is undone
@@ -2919,8 +2941,22 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             // markers — see OrderedMarkerPeek.
             bool first_starts_with_marker_block = false;
             bool first_marker_interrupts = false;
+            // Set when the line's first character is ':' and the colon run
+            // opens a block. Both gates test this instead of comparing
+            // first_lookahead against ':', because the colon peek above has
+            // already advanced past the run.
+            bool first_starts_with_colon_block = false;
             bool first_peeked = false;
-            if (lexer->lookahead == '`') {
+            if (peeked_colon_run) {
+                // Restore the line's real first character for the gates, and
+                // take the PEEKED emission path so the mark_end below cannot
+                // absorb the colon run into the SOFT_LINE_ENDING token. That
+                // absorption is how `:::{.foo}` after a paragraph used to
+                // vanish from the tree entirely, opening line and all.
+                first_lookahead = ':';
+                first_starts_with_colon_block = colon_run_opens_block;
+                first_peeked = true;
+            } else if (lexer->lookahead == '`') {
                 int level = 0;
                 while (lexer->lookahead == '`' && level < 3) {
                     advance(s, lexer);
@@ -3054,7 +3090,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                  (first_lookahead != '*' || !first_starts_with_star_block) &&
                  !first_starts_with_marker_block &&
                  first_lookahead != '>' &&
-                 first_lookahead != ':' && first_lookahead != '#' &&
+                 !first_starts_with_colon_block && first_lookahead != '#' &&
                  !first_starts_with_fence &&
                  first_lookahead > ' ')) {
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
@@ -3149,6 +3185,8 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             bool second_starts_with_fence;
             bool second_starts_with_star_block;
             bool second_starts_with_marker_block;
+            // Mirrors first_starts_with_colon_block; see gate 1.
+            bool second_starts_with_colon_block;
             // True when a peek (here or in the first gate) advanced the lexer
             // past the line's opening run. Gates the mark_end below.
             bool second_peeked;
@@ -3163,12 +3201,17 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 // s->indentation holds exactly that residual.
                 second_starts_with_marker_block =
                     first_marker_interrupts && s->indentation <= 3;
+                second_starts_with_colon_block = first_starts_with_colon_block;
                 second_peeked = true;
             } else {
                 second_lookahead = lexer->lookahead;
                 second_starts_with_fence = false;
                 second_starts_with_star_block = false;
                 second_starts_with_marker_block = false;
+                // Nothing peeked past a colon run on this path (match_line
+                // only consumes block prefixes like `> `), so the lookahead
+                // still shows the line's first content character.
+                second_starts_with_colon_block = (second_lookahead == ':');
                 second_peeked = false;
                 if (lexer->lookahead == '`') {
                     int level = 0;
@@ -3246,7 +3289,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                  ((second_lookahead != '*' || !second_starts_with_star_block) &&
                   !second_starts_with_marker_block &&
                   second_lookahead != '>' &&
-                  second_lookahead != ':' && second_lookahead != '#' &&
+                  !second_starts_with_colon_block && second_lookahead != '#' &&
                   !second_starts_with_fence &&
                   second_lookahead > ' '))) {
                 s->indentation = 0;
