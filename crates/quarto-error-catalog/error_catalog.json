@@ -1497,6 +1497,13 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-51",
     "since_version": "99.9.9"
   },
+  "Q-2-52": {
+    "subsystem": "markdown",
+    "title": "Shortcode delimiter not separated by a space",
+    "message_template": "A shortcode's delimiters must be separated from its content by whitespace. Write `{{< fa plus >}}` \u2014 a space after `{{<` and a space before `>}}` \u2014 rather than `{{<fa plus>}}`.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-52",
+    "since_version": "99.9.9"
+  },
   "Q-5-27": {
     "subsystem": "project",
     "title": "Invalid `diagnostics:` Entry",

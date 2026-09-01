@@ -36,7 +36,7 @@ pub fn produce_diagnostic_messages(
     assert!(tree_sitter_log.had_errors());
     assert!(!tree_sitter_log.parses.is_empty());
 
-    let mut result: Vec<quarto_error_reporting::DiagnosticMessage> = vec![];
+    let mut result: Vec<(quarto_error_reporting::DiagnosticMessage, bool)> = vec![];
     let mut seen_errors: std::collections::HashSet<(usize, usize)> =
         std::collections::HashSet::new();
 
@@ -61,10 +61,56 @@ pub fn produce_diagnostic_messages(
         }
     }
 
-    // Sort diagnostics by file position (start offset)
-    result.sort_by_key(|diag| diag.location.as_ref().map_or(0, |loc| loc.start_offset()));
+    truncate_after_desynchronizing(result)
+}
 
-    result
+/// Sort diagnostics by position and stop at the first one the corpus marks
+/// as desynchronising.
+///
+/// Some mistakes do not merely fail where they are written; they leave the
+/// parser in a state from which recovery consumes unrelated text. A
+/// shortcode written `{{<fa plus>}}` is one: recovery swallows the opening
+/// `:::` of a div five lines below, and its closing `:::` — correct Quarto
+/// — is then reported as a third parse error. Every error after such a one
+/// is an artefact of the first, so reporting them aims the author at code
+/// that is not wrong.
+///
+/// Errors *before* it are kept. Those were found while the parser was still
+/// synchronised, so they stand on their own — and they are the ones the
+/// author should fix first anyway.
+fn truncate_after_desynchronizing(
+    mut diagnostics: Vec<(quarto_error_reporting::DiagnosticMessage, bool)>,
+) -> Vec<quarto_error_reporting::DiagnosticMessage> {
+    diagnostics.sort_by_key(|(diag, _)| diag.location.as_ref().map_or(0, |loc| loc.start_offset()));
+
+    let cutoff = diagnostics
+        .iter()
+        .position(|(_, desynchronizes)| *desynchronizes)
+        .map_or(diagnostics.len(), |index| index + 1);
+
+    let suppressed = diagnostics.len() - cutoff;
+    let mut kept: Vec<quarto_error_reporting::DiagnosticMessage> = diagnostics
+        .into_iter()
+        .take(cutoff)
+        .map(|(diag, _)| diag)
+        .collect();
+
+    // Say that the list was cut short. Silently reporting one error when
+    // more were found reads as "this is the only problem", and the author
+    // fixes it, re-renders, and meets a fresh error they were given no
+    // reason to expect. No count is given: what was dropped is mostly
+    // recovery debris, and a number would imply more real problems than
+    // there are.
+    if suppressed > 0
+        && let Some(last) = kept.last_mut()
+    {
+        last.hints.push(
+            "Parsing could not continue reliably past this point, so any further errors in this file were not reported. Fix this one and try again."
+                .into(),
+        );
+    }
+
+    kept
 }
 
 fn appears_not_after(
@@ -92,7 +138,8 @@ pub fn diagnostic_score(diag: &DiagnosticMessage) -> usize {
     diag.hints.len() + diag.details.len() + diag.code.as_ref().map_or(0, |_| 1)
 }
 
-/// Convert a parse state error into a structured DiagnosticMessage
+/// Convert a parse state error into a structured DiagnosticMessage,
+/// paired with whether the matched entry declares itself desynchronising.
 fn error_diagnostic_from_parse_state(
     input_bytes: &[u8],
     parse_state: &crate::tree_sitter_log::ProcessMessage,
@@ -101,11 +148,8 @@ fn error_diagnostic_from_parse_state(
     error_table: &[ErrorTableEntry],
     _filename: &str,
     _source_context: &quarto_source_map::SourceContext,
-) -> quarto_error_reporting::DiagnosticMessage {
+) -> (quarto_error_reporting::DiagnosticMessage, bool) {
     use quarto_error_reporting::DiagnosticMessageBuilder;
-
-    // Look up the error entry from the table
-    let error_entry = lookup_error_entry(error_table, parse_state);
 
     // All offset arithmetic operates on `input_bytes` directly.
     // Tree-sitter reports `parse_state.row` / `parse_state.column` as
@@ -117,6 +161,12 @@ fn error_diagnostic_from_parse_state(
 
     let byte_offset = calculate_byte_offset(input_bytes, parse_state.row, parse_state.column);
     let span_end = advance_chars(input_bytes, byte_offset, parse_state.size.max(1));
+
+    // Look up the error entry from the table. Entries may discriminate on
+    // the source text at the error position when the parser state alone
+    // does not tell two mistakes apart — see `lookup_error_entry`.
+    let error_text = source_text_at_error(input_bytes, byte_offset);
+    let error_entry = lookup_error_entry(error_table, parse_state, &error_text);
 
     let start_location =
         offset_to_location_bytes(input_bytes, byte_offset).unwrap_or(quarto_source_map::Location {
@@ -237,16 +287,39 @@ fn error_diagnostic_from_parse_state(
                 builder = builder.add_hint(*hint);
             }
 
-            builder.build()
+            (builder.build(), entry.error_info.desynchronizes)
         })
-        .max_by(|diag1, diag2| diagnostic_score(diag1).cmp(&diagnostic_score(diag2)))
-        .unwrap_or(
+        .max_by(|(diag1, _), (diag2, _)| diagnostic_score(diag1).cmp(&diagnostic_score(diag2)))
+        .unwrap_or_else(|| {
             // Fallback for errors not in the table
-            DiagnosticMessageBuilder::error("Parse error")
-                .with_location(source_info)
-                .problem("unexpected character or token here")
-                .build(),
-        )
+            (
+                DiagnosticMessageBuilder::error("Parse error")
+                    .with_location(source_info)
+                    .problem("unexpected character or token here")
+                    .build(),
+                false,
+            )
+        })
+}
+
+/// The source text a guard is matched against: from the error position
+/// to the end of its line.
+///
+/// One line is enough for every discriminator the corpus needs so far —
+/// the mistakes that share a parser state differ in the few characters
+/// right at the failure — and it keeps the text a guard sees bounded
+/// regardless of how large the document is. Invalid UTF-8 is replaced
+/// rather than rejected, so a guard still gets to run on a file that is
+/// not valid text.
+fn source_text_at_error(input_bytes: &[u8], byte_offset: usize) -> String {
+    let start = byte_offset.min(input_bytes.len());
+    let rest = &input_bytes[start..];
+    let end = rest.iter().position(|&b| b == b'\n').unwrap_or(rest.len());
+    let line = String::from_utf8_lossy(&rest[..end]);
+    // Drop a CRLF's carriage return. Both guards in the corpus today are
+    // `^`-anchored and would not notice, but a `$`-anchored one would
+    // silently never match on a Windows-authored file.
+    line.trim_end_matches('\r').to_owned()
 }
 
 /// Compute a byte offset into `input` given tree-sitter's (row,
@@ -1009,5 +1082,135 @@ mod tests {
         // offset_to_location decided based on chars-from-line-start;
         // for ASCII that's identical to bytes-from-line-start, so 2.
         assert_eq!(location.start_offset(), b"first line\n".len() + 2);
+    }
+
+    /// A synthetic diagnostic at `offset`, carrying `code` so the assertions
+    /// below can name which one survived.
+    fn diagnostic_at(offset: usize, code: &str) -> quarto_error_reporting::DiagnosticMessage {
+        use quarto_error_reporting::DiagnosticMessageBuilder;
+        let location = quarto_source_map::SourceInfo::from_range(
+            quarto_source_map::FileId(0),
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset,
+                    row: 0,
+                    column: offset,
+                },
+                end: quarto_source_map::Location {
+                    offset: offset + 1,
+                    row: 0,
+                    column: offset + 1,
+                },
+            },
+        );
+        DiagnosticMessageBuilder::error("test")
+            .with_location(location)
+            .with_code(code)
+            .problem("test")
+            .build()
+    }
+
+    fn codes_after_truncation(input: Vec<(usize, &str, bool)>) -> Vec<String> {
+        let diagnostics = input
+            .into_iter()
+            .map(|(offset, code, desynchronizes)| (diagnostic_at(offset, code), desynchronizes))
+            .collect();
+        truncate_after_desynchronizing(diagnostics)
+            .into_iter()
+            .map(|diag| diag.code.unwrap_or_default())
+            .collect()
+    }
+
+    fn hints_of(diagnostics: &[quarto_error_reporting::DiagnosticMessage]) -> Vec<String> {
+        diagnostics
+            .last()
+            .map(|diag| diag.hints.iter().map(|h| format!("{h:?}")).collect())
+            .unwrap_or_default()
+    }
+
+    fn truncated(
+        input: Vec<(usize, &str, bool)>,
+    ) -> Vec<quarto_error_reporting::DiagnosticMessage> {
+        truncate_after_desynchronizing(
+            input
+                .into_iter()
+                .map(|(offset, code, desync)| (diagnostic_at(offset, code), desync))
+                .collect(),
+        )
+    }
+
+    /// Cutting the list short is said out loud. An author who sees one
+    /// error, fixes it, and meets another has been misled by silence.
+    #[test]
+    fn truncation_says_that_it_suppressed_something() {
+        let kept = truncated(vec![(0, "A", true), (10, "B", false)]);
+        let hints = hints_of(&kept).join(" ");
+        assert!(
+            hints.contains("not reported"),
+            "the surviving diagnostic should say the list was cut short: {hints}"
+        );
+    }
+
+    /// ...and stays quiet when it dropped nothing, including when the
+    /// desynchronising error is the last one anyway.
+    #[test]
+    fn truncation_is_quiet_when_it_suppressed_nothing() {
+        for input in [
+            vec![(0, "A", false), (10, "B", false)],
+            vec![(0, "A", false), (10, "B", true)],
+        ] {
+            let kept = truncated(input);
+            assert!(
+                hints_of(&kept).is_empty(),
+                "no suppression note is due: {:?}",
+                hints_of(&kept)
+            );
+        }
+    }
+
+    #[test]
+    fn truncation_keeps_everything_when_nothing_desynchronizes() {
+        assert_eq!(
+            codes_after_truncation(vec![(0, "A", false), (10, "B", false), (20, "C", false)]),
+            vec!["A", "B", "C"]
+        );
+    }
+
+    /// The documented half that the integration test does not reach: errors
+    /// found *before* the parser lost its place are still the author's to
+    /// fix, so they survive.
+    #[test]
+    fn truncation_keeps_errors_before_the_desynchronizing_one() {
+        assert_eq!(
+            codes_after_truncation(vec![(0, "A", false), (10, "B", true), (20, "C", false)]),
+            vec!["A", "B"]
+        );
+    }
+
+    #[test]
+    fn truncation_drops_everything_after_a_leading_desynchronizing_error() {
+        assert_eq!(
+            codes_after_truncation(vec![(0, "A", true), (10, "B", false), (20, "C", false)]),
+            vec!["A"]
+        );
+    }
+
+    /// Truncation is by source position, not by the order the parser
+    /// happened to report things in.
+    #[test]
+    fn truncation_sorts_before_cutting() {
+        assert_eq!(
+            codes_after_truncation(vec![(20, "C", false), (0, "A", true), (10, "B", false)]),
+            vec!["A"]
+        );
+    }
+
+    /// The first desynchronising error wins; a later one changes nothing.
+    #[test]
+    fn truncation_stops_at_the_first_desynchronizing_error() {
+        assert_eq!(
+            codes_after_truncation(vec![(0, "A", true), (10, "B", true)]),
+            vec!["A"]
+        );
     }
 }
