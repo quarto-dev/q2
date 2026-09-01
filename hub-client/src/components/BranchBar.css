@@ -74,7 +74,7 @@
 
 .branch-chip-delete:hover {
   opacity: 1;
-  background: rgba(0, 0, 0, 0.15);
+  background: color-mix(in srgb, var(--editor-text) 15%, var(--editor-header-bg));
 }
 
 .branch-bar-actions {
@@ -126,16 +126,16 @@
 }
 
 .branch-merge-btn {
-  background: #2da44e;
-  border-color: #2da44e;
-  color: #fff;
+  background: var(--accent-action-bg);
+  border-color: var(--accent-action-bg);
+  color: var(--text-on-accent);
   font-weight: 600;
 }
 
 .branch-merge-btn:hover:not(:disabled) {
-  background: #2c974b;
-  border-color: #2c974b;
-  color: #fff;
+  background: var(--btn-accent-hover-bg);
+  border-color: var(--btn-accent-hover-bg);
+  color: var(--text-on-accent);
 }
 
 .branch-name-input {
@@ -148,4 +148,9 @@
   color: var(--editor-text);
   font-size: 12px;
   outline: none;
+}
+
+.branch-name-input:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
