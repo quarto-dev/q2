@@ -6,6 +6,7 @@
  * - Error overlay collapsed toggle
  * - Nesting cursor toggle
  * - Rich-text editor toggle
+ * - Document branches toggle (experimental)
  *
  * Preferences only — actions that produce artifacts (Export ZIP, Screenshot
  * Preview) live in the Project tab.
@@ -27,6 +28,7 @@ export default function SettingsTab({
   const [errorOverlayCollapsed, setErrorOverlayCollapsed] = usePreference('errorOverlayCollapsed');
   const [unlockNestingCursor, setUnlockNestingCursor] = usePreference('unlockNestingCursor');
   const [richText, setRichText] = usePreference('richText');
+  const [documentBranches, setDocumentBranches] = usePreference('documentBranches');
 
   return (
     <div className="settings-tab">
@@ -73,6 +75,17 @@ export default function SettingsTab({
           <span className="setting-name">{tabs.settings.richText}</span>
           <span className="setting-description">
             {tabs.settings.richTextDescription}
+          </span>
+        </label>
+        <label className="setting-toggle">
+          <input
+            type="checkbox"
+            checked={documentBranches}
+            onChange={(e) => setDocumentBranches(e.target.checked)}
+          />
+          <span className="setting-name">{tabs.settings.documentBranches}</span>
+          <span className="setting-description">
+            {tabs.settings.documentBranchesDescription}
           </span>
         </label>
       </div>

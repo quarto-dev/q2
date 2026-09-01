@@ -3,7 +3,8 @@
  *
  * Document-scoped chrome heading the document column. Left: sidebar
  * toggle + current file path. Right: fullscreen-preview action.
- * (Sync status lives in the bottom bars' SyncStatusBadge; the
+ * (Sync status lives in the SyncStatusBadge — FILES section for the
+ * project, document bottom bar for the open file; the
  * editor/preview split is resized by dragging the pane divider.)
  */
 

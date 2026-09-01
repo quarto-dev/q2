@@ -32,6 +32,12 @@ export const UserPreferencesSchema = z.object({
    * cleanly (see the regression test in schema.test.ts).
    */
   richText: z.boolean().default(true),
+  /**
+   * Local document branches (fork / compare / merge-to-main) — shows the
+   * BranchBar above the editor. Experimental, default-OFF. `.default(false)`
+   * keeps prefs written before this key existed parsing cleanly.
+   */
+  documentBranches: z.boolean().default(false),
 });
 
 // Infer TypeScript type from schema
@@ -48,6 +54,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   colorScheme: 'auto',
   unlockNestingCursor: true,    // nesting-cursor ON by default (P3.2)
   richText: true,               // rich-text editor ON by default (bd-j1nto6eq)
+  documentBranches: false,      // experimental branch bar OFF by default
 };
 
 // Validation function - returns valid preferences or defaults

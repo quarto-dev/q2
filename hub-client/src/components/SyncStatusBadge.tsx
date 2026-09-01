@@ -1,9 +1,10 @@
 /**
  * Sync Status Badge
  *
- * Dot + status line shown in the project and document bottom bars.
- * `scope: 'project'` watches the project index doc; `scope: 'document'`
- * watches the currently open file's doc. Clicking opens the
+ * Dot + status line shown at the top of the sidebar's FILES section
+ * (`scope: 'project'`, watching the project index doc) and in the
+ * document bottom bar (`scope: 'document'`, watching the currently
+ * open file's doc). Clicking opens the
  * ConnectionStatusDialog (the affordance the old header online/offline
  * indicator provided).
  *
@@ -57,7 +58,11 @@ function agoText(deltaMs: number): string {
 
 interface SyncStatusBadgeProps {
   scope: 'project' | 'document';
-  /** Path of the open file; only used when scope is 'document'. */
+  /**
+   * Path of the open file. Watched when scope is 'document'; either
+   * scope forwards it to the ConnectionStatusDialog so the per-file
+   * column is labeled with the document name.
+   */
   currentFilePath?: string | null;
 }
 
@@ -161,7 +166,7 @@ export default function SyncStatusBadge({ scope, currentFilePath }: SyncStatusBa
       </button>
       {showDialog && (
         <ConnectionStatusDialog
-          currentFilePath={scope === 'document' ? currentFilePath : null}
+          currentFilePath={currentFilePath ?? null}
           onClose={() => setShowDialog(false)}
         />
       )}

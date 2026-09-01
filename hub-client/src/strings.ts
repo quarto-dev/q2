@@ -52,7 +52,7 @@ export const header = {
   noFileSelected: 'No file selected',
 } as const;
 
-/** SyncStatusBadge (project + document bottom bars). */
+/** SyncStatusBadge (FILES section + document bottom bar). */
 export const syncStatus = {
   /** Prefix when disconnected (browser offline / socket down / no peer). */
   savingLocally: 'Offline',
@@ -144,6 +144,7 @@ export const dialogs = {
     connectionLog: 'Connection log',
     lastEphemeralMessage: 'Last ephemeral message received',
     lastRemoteChange: 'Last remote change',
+    lastReadReceipt: 'Last read receipt',
     thisFile: 'This file',
     project: 'Project',
     morePatches: (n: number) => `… and ${n} more`,
@@ -212,6 +213,9 @@ export const tabs = {
     richText: 'Rich-text editor',
     richTextDescription:
       'Edit paragraphs and headings as formatted text (WYSIWYG) instead of raw markdown. Other blocks still use the plain text editor.',
+    documentBranches: 'Document branches (experimental)',
+    documentBranchesDescription:
+      'Fork a private local branch of a document, compare it with main, and merge it back. Branches are not shared with collaborators.',
   },
   about: {
     tagline: 'A collaborative editor for Quarto projects.',

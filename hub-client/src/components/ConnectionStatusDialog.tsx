@@ -295,6 +295,9 @@ export default function ConnectionStatusDialog({
   const WS_STATE_NAMES = ['Connecting', 'Open', 'Closing', 'Closed'];
 
   const s = dialogs.connectionStatus;
+  // Label the file column with the open document's name; "This file"
+  // is only the fallback when no file is open.
+  const fileLabel = currentFilePath?.split('/').pop() || s.thisFile;
   const rows: Array<[string, ReactNode]> = [
     [
       s.browserNetwork,
@@ -319,6 +322,9 @@ export default function ConnectionStatusDialog({
   const statDefs: Array<[string, keyof DocSyncActivity]> = [
     [s.lastEphemeralMessage, 'lastEphemeralMessageAt'],
     [s.lastRemoteChange, 'lastRemoteChangeAt'],
+    // Read receipt: the hub last confirmed heads that include a local
+    // change from this session ("your change got synced").
+    [s.lastReadReceipt, 'lastLocalDeliveredAt'],
   ];
 
   const statCell = (stats: DocSyncActivity | null, key: keyof DocSyncActivity): ReactNode => {
@@ -343,21 +349,21 @@ export default function ConnectionStatusDialog({
           <thead>
             <tr>
               <th />
-              <th>{s.thisFile}</th>
               <th>{s.project}</th>
+              <th>{fileLabel}</th>
             </tr>
           </thead>
           <tbody>
             {statDefs.map(([label, key]) => (
               <tr key={key}>
                 <th>{label}</th>
-                <td>{statCell(fileStats, key)}</td>
                 <td>{statCell(indexStats, key)}</td>
+                <td>{statCell(fileStats, key)}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <RemoteChangeSection title={s.thisFile} change={fileChange} now={now} />
+        <RemoteChangeSection title={fileLabel} change={fileChange} now={now} />
         <RemoteChangeSection title={s.project} change={indexChange} now={now} />
         <div className="connection-status-diff">
           <div className="connection-status-diff-header">{s.connectionLog}</div>
