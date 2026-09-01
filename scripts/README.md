@@ -14,7 +14,7 @@ Two modes available:
 Mirrors the production deployment architecture:
 - Starts the `hub` binary (Rust server) on port 3000
 - Serves the built hub-client on port 8080
-- Serves q2-sandboxed-preview.html on port 8081 (sandboxed, simulates separate domain)
+- Serves the sandboxed renderer dist (index.html + assets + serviceWorker.js) on port 8081 (simulates the separate GitHub Pages origin)
 - Proxies `/auth` and `/ws` requests to the hub server
 - Uses production-like cache headers
 
@@ -51,14 +51,14 @@ Browser → http://127.0.0.1:8080 (Node.js proxy - main app)
   └─ /* → serve from dist/ (no-cache, SPA fallback)
 
 Browser → http://127.0.0.1:8081 (q2-sandboxed-preview server - sandboxed)
-  └─ /q2-sandboxed-preview.html → sandboxed AST renderer (separate origin)
+  └─ / → sandboxed preview renderer dist (separate origin)
   
 hub:3000 (Rust binary) → .local-prod-data/
 ```
 
-**Why q2-sandboxed-preview.html on a separate port?**
+**Why the sandboxed renderer on a separate port?**
 
-In production, q2-sandboxed-preview.html will be served from a separate domain (e.g., `raw.quarto.pub`) for security isolation. The separate port in local-prod simulates this cross-origin setup. The iframe uses `sandbox="allow-scripts allow-same-origin"` and communicates via postMessage.
+In production, the sandboxed renderer is served from a separate origin (GitHub Pages) for security isolation. The separate port in local-prod simulates this cross-origin setup. The iframe uses `sandbox="allow-scripts allow-same-origin"` and communicates via postMessage.
 
 ### Node.js Proxy Mode (Recommended)
 

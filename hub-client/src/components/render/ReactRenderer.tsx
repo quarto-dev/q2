@@ -266,7 +266,11 @@ function ReactRenderer({
           right: 0,
           bottom: 0,
         }}>
-          <Q2SandboxedPreviewIframe astJson={astJson} />
+          <Q2SandboxedPreviewIframe
+            astJson={astJson}
+            currentFilePath={currentFilePath}
+            themeFingerprint={themeFingerprint}
+          />
         </div>
       </ErrorBoundary>
     );

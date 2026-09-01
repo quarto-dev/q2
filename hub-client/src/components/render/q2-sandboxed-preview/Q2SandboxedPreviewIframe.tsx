@@ -1,31 +1,61 @@
 import { useEffect, useRef, useState } from 'react';
+import { vfsReadFile } from '@quarto/preview-runtime';
+import { DEFAULT_CSS_ARTIFACT_PATH } from '@quarto/preview-renderer/types/artifactPaths';
 
 interface Q2SandboxedPreviewIframeProps {
   astJson: string;
+  currentFilePath: string;
+  /**
+   * Three-way theme fingerprint, same semantics as `Q2PreviewIframe`:
+   *  - `string`: render produced a theme. Read the compiled CSS text
+   *    from the VFS and post `{ cssText, fingerprint }`.
+   *  - `null`: render succeeded with no theme intended. Post
+   *    `{ cssText: null, fingerprint: null }` so the iframe drops its
+   *    `<link data-q2-theme>` element.
+   *  - `undefined`: render failed or pre-first-render. Skip the post
+   *    entirely so the iframe keeps its last-good styling.
+   *
+   * Unlike `Q2PreviewIframe`, the CSS travels as **text**, not a blob
+   * URL: blob URLs are scoped to the origin that minted them, so the
+   * cross-origin sandboxed iframe could never fetch a parent-minted
+   * one. The iframe mints its own blob URL from the text.
+   */
+  themeFingerprint?: string | null;
 }
 
 // The sandboxed preview is served from a separate origin (GitHub Pages) so the
 // iframe gets real cross-origin isolation; see
 // .github/workflows/github-pages.md. Set
-// VITE_Q2_SANDBOXED_PREVIEW_URL to override (e.g. 'q2-sandboxed-preview.html'
-// for the same-origin copy in public/).
+// VITE_Q2_SANDBOXED_PREVIEW_URL to override (e.g.
+// 'q2-sandboxed-preview/index.html' for the same-origin copy in public/).
 const Q2_SANDBOXED_PREVIEW_URL = import.meta.env.VITE_Q2_SANDBOXED_PREVIEW_URL || 'https://quarto-dev.github.io/q2/';
 
 /**
- * Simplest possible iframe wrapper: displays JSON.stringified AST
- * in a pre element. No interactivity, no custom components, no navigation.
+ * Iframe wrapper for the sandboxed (cross-origin) preview renderer.
+ *
+ * The iframe bundles the real q2-preview renderer (`@quarto/preview-renderer`
+ * via the quarto-hub-sandboxed-preview project) and talks to this parent
+ * exclusively over postMessage; assets are proxied through the iframe's
+ * service worker (see `quarto-hub-sandboxed-preview/src/serviceWorker.ts`).
  */
-export function Q2SandboxedPreviewIframe({ astJson }: Q2SandboxedPreviewIframeProps) {
+export function Q2SandboxedPreviewIframe({
+  astJson,
+  currentFilePath,
+  themeFingerprint,
+}: Q2SandboxedPreviewIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
+
+  // Dedupe UPDATE_THEME posts; reset on IFRAME_READY (fresh iframe).
+  const lastSentThemeFingerprintRef = useRef<string | null | undefined>(undefined);
 
   // Handle messages from the iframe
   // the requests are sent from `requestVFS` in `registerServiceWorker.ts` in the
   // `quarto-hub-sandboxed-preview` project.
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
-      console.log('message received!!', event.data)
       if (event.data.type === 'IFRAME_READY') {
+        lastSentThemeFingerprintRef.current = undefined;
         setIframeReady(true)
       } else if (event.data.type === 'url' && event.data.path) {
         // Read from VFS and respond
@@ -33,7 +63,7 @@ export function Q2SandboxedPreviewIframe({ astJson }: Q2SandboxedPreviewIframePr
 
         // Determine if this is a binary file based on extension
         // TODO: unify this list of extensions with `shouldRequestFromVFS` in serviceWorker.ts
-        // in the `quarto-hub-sandboxed-preview` project. We should have a standard way to 
+        // in the `quarto-hub-sandboxed-preview` project. We should have a standard way to
         // decide whether or not the preview should be allowed resolve an asset from the VFS.
         const isBinary = /\.(png|jpg|jpeg|gif|pdf|ico|webp|ttf|woff|woff2|zip|wasm)$/i.test(event.data.path);
 
@@ -74,12 +104,33 @@ export function Q2SandboxedPreviewIframe({ astJson }: Q2SandboxedPreviewIframePr
     iframeRef.current.contentWindow.postMessage(
       {
         type: 'UPDATE_AST',
-        payload: { astJson },
+        payload: { astJson, currentFilePath },
       },
       '*'
     );
 
-  }, [iframeReady, astJson]);
+  }, [iframeReady, astJson, currentFilePath]);
+
+  // Send theme CSS text when iframe is ready and fingerprint is known.
+  useEffect(() => {
+    if (!iframeReady || !iframeRef.current?.contentWindow) return;
+    if (themeFingerprint === undefined) return;
+    if (lastSentThemeFingerprintRef.current === themeFingerprint) return;
+
+    let cssText: string | null = null;
+    if (themeFingerprint !== null) {
+      const result = vfsReadFile(DEFAULT_CSS_ARTIFACT_PATH);
+      if (result.success && result.content) {
+        cssText = result.content;
+      }
+    }
+
+    iframeRef.current.contentWindow.postMessage(
+      { type: 'UPDATE_THEME', cssText, fingerprint: themeFingerprint },
+      '*'
+    );
+    lastSentThemeFingerprintRef.current = themeFingerprint;
+  }, [iframeReady, themeFingerprint]);
 
   return (
     <iframe

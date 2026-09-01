@@ -86,34 +86,51 @@ places; everything else is already postMessage + pure React-over-AST-JSON:
 
 ## Phases and work items
 
-### Phase 0 — pipeline parity + test scaffolding
+### Phase 0 — pipeline parity + test scaffolding ✅ (d6df9500a, bd-jgpz4hfq)
 
-- [ ] Test first: hub-client integration test asserting the
-      `q2-sandboxed-preview` format receives post-pipeline AST (highlight
-      spans present, `theme_fingerprint` set) — expect fail.
-- [ ] Rust: `format.rs` `q2-sandboxed-preview` → `("html", Some("preview"))`;
-      check `wasm-quarto-hub-client/src/lib.rs:716` agrees.
-- [ ] TS: add `q2-sandboxed-preview` to `pipelineKindForFormat`.
-- [ ] `cargo nextest run --workspace` + WASM rebuild (`npm run build:wasm`)
-      + test green.
+- [x] Test first: mapping tests on both sides
+      (`test_from_format_string_q2_sandboxed_preview` in format.rs,
+      pipelineKind.test.ts) — verified failing before the fix.
+- [x] Rust: `format.rs` `q2-sandboxed-preview` → `("html", Some("preview"))`;
+      `wasm-quarto-hub-client`'s `coerce_format_for_print` needs no change
+      (printable fallback to html stays correct).
+- [x] TS: add `q2-sandboxed-preview` to `pipelineKindForFormat`.
+- [x] `cargo nextest run --workspace` (39 pre-existing environmental
+      failures, identical with change stashed — pandoc missing on this
+      machine) + `cargo xtask verify --skip-rust-tests` fully green.
 
 ### Phase 1 — real renderer inside the sandboxed bundle
 
-- [ ] Sandboxed project deps/config: React 19, preview-renderer source
-      alias, `resolve.conditions: ['source']`, attribution-CSS virtual
-      plugin, `fs.allow`, drop `viteSingleFile`, emit normal `dist/`
-      (relative `base: './'`).
-- [ ] Copy-and-adapt `entry.tsx` → `src/entry.tsx`: keep `PreviewRoot`,
-      registry, link handlers, Bootstrap/nav script injection (all imported
-      unmodified); replace the 50ms-polling LOAD/UPDATE gate with the
-      promise-ordered dispatcher (copy `iframeMessageDispatch.ts`); theme
-      handler takes CSS **text** and mints a local blob URL.
-- [ ] Delete `basicRenderer.tsx` + toy `App.tsx` (replaced by the entry).
-- [ ] Update deploy targets: GH Pages workflow publishes full `dist/`;
-      `q2-sandboxed-preview-server.mjs` and the `hub-client/public/` copy
-      serve/hold the dist dir; `build:sandboxed` script updated.
-- [ ] Smoke: iframe renders a themed document from a hand-posted
-      `UPDATE_AST` + `UPDATE_THEME` (vitest with jsdom where possible).
+- [x] Sandboxed project deps/config: React 19, preview-renderer source
+      alias (+ `@quarto/preview-runtime` **stub** at
+      `src/stubs/preview-runtime.ts` — the q2-preview barrel drags
+      parent-side WASM-coupled modules into the graph), attribution-CSS
+      virtual plugin, dedupe react/react-dom/katex, drop `viteSingleFile`,
+      emit normal `dist/` with `base: './'`.
+- [x] Copy-and-adapt `entry.tsx` → `src/entry.tsx` (PreviewRoot/registry
+      imported unmodified; promise-ordered dispatcher copied as
+      `iframeMessageDispatch.ts` with `UPDATE_THEME.cssText`; local
+      blob-URL theme minting; SW init gates IFRAME_READY).
+- [x] Delete `basicRenderer.tsx` + toy `App.tsx`; removed stale committed
+      artifacts (`hub-client/public/q2-sandboxed-preview.html`,
+      `hub-client/public/serviceWorker.js`, root leftover); gitignored
+      `hub-client/public/q2-sandboxed-preview/`.
+- [x] Deploy targets: GH Pages workflow adds root `npm ci` + wider path
+      triggers (preview-renderer, resources); dist-dir server script;
+      `build-local-prod.sh` URL → `http://127.0.0.1:8081/`; docs updated
+      (project README, scripts/README, github-pages.md).
+- [x] Parent minimum viable wiring (TDD, tests first, 4 failing → green):
+      `Q2SandboxedPreviewIframe` now takes `currentFilePath` +
+      three-way `themeFingerprint`, posts `UPDATE_THEME {cssText}`;
+      ReactRenderer passes both.
+- [x] Smoke (end-to-end, headless chromium): served
+      `hub-client/public/q2-sandboxed-preview/` via
+      `scripts/q2-sandboxed-preview-server.mjs`, posted
+      `UPDATE_AST {astJson, currentFilePath}` + `UPDATE_THEME {cssText:
+      'h1 { color: rgb(1,2,3) }'}` → observed `<h1>Hello sandbox</h1>`,
+      `<p>Rendered by PreviewRoot.</p>`, computed h1 color
+      `rgb(1, 2, 3)`, `<link data-q2-theme>` present, SW `active`.
+      Output inspected; recorded 2026-09-01.
 
 ### Phase 2 — asset proxying, done properly
 

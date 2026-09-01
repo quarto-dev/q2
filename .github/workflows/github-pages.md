@@ -1,8 +1,10 @@
 # GitHub Pages deployment
 
 `deploy-sandboxed-preview.yml` builds `hub-client/quarto-hub-sandboxed-preview/`
-(`npm ci` + `npm run build`) and publishes its `dist/` — a self-contained
-`index.html` plus `serviceWorker.js` — to **https://quarto-dev.github.io/q2/**,
+(root `npm ci` for the workspace deps the renderer source needs, then
+`npm ci` + `npm run build` inside the package) and publishes its `dist/` —
+`index.html`, hashed `assets/` (renderer bundle, KaTeX fonts), and
+`serviceWorker.js` — to **https://quarto-dev.github.io/q2/**,
 where hub-client's `Q2SandboxedPreviewIframe.tsx` loads it cross-origin as its
 iframe `src` (override with `VITE_Q2_SANDBOXED_PREVIEW_URL`). It runs on any
 push to `main` touching that package, or manually via
