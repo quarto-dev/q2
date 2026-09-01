@@ -23,6 +23,18 @@ async function editorText(page: Page): Promise<string> {
 
 test.describe('BranchBar', () => {
   test('fork, edit branch, switch, merge to main', async ({ page }) => {
+    // BranchBar is behind the experimental, default-OFF `documentBranches`
+    // preference — seed it on before the app boots.
+    await page.addInitScript(() => {
+      localStorage.setItem('quarto-hub:preferences', JSON.stringify({
+        version: 1,
+        scrollSyncEnabled: true,
+        errorOverlayCollapsed: true,
+        colorScheme: 'auto',
+        documentBranches: true,
+      }));
+    });
+
     const serverUrl = getServerUrl();
     const indexDocId = await createProjectOnServer(serverUrl, [
       { path: 'index.qmd', content: DOC_BODY, contentType: 'text' },

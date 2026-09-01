@@ -99,7 +99,7 @@ export default function BranchBar({
       <div className="branch-bar-chips">
         <button
           className={`branch-chip${activeBranchId === null ? ' active' : ''}`}
-          onMouseDown={() => onSwitch(null)}
+          onClick={() => onSwitch(null)}
           disabled={disabled}
           title="Switch to the shared main document"
         >
@@ -109,7 +109,7 @@ export default function BranchBar({
           <button
             key={branch.id}
             className={`branch-chip${activeBranchId === branch.id ? ' active' : ''}`}
-            onMouseDown={() => onSwitch(branch.id)}
+            onClick={() => onSwitch(branch.id)}
             disabled={disabled}
             title="Local branch — not shared with collaborators"
           >
