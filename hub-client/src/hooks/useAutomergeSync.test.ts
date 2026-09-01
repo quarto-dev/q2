@@ -13,6 +13,7 @@ vi.mock('@quarto/preview-runtime', () => ({
   getFileContent: vi.fn(),
   setImmediateFileChangeCallback: vi.fn(),
   diffToEditorChanges: vi.fn(),
+  vfsAddFile: vi.fn(),
 }));
 
 // Mock diffToMonacoEdits
