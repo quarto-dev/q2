@@ -124,8 +124,8 @@ ones (column semantics ×2 implementations, comrak strategy) — and those
 are present as `#[ignore]`/`it.skip` stubs so the suite still *names* the
 missing coverage.
 
-Two rows are named exceptions, not yet paired, and coverage is **not**
-complete until they are:
+Three rows are named exceptions — two pending, one permanent. Coverage is
+**not** complete until the two pending ones are resolved:
 
 - YAML block scalar and XML text/attr are `pass?`/`(unprobed)` — their
   owning strands (`bd-aowdiufr`, `bd-w9imk3bi`) still owe the A test that
