@@ -1141,7 +1141,20 @@ export default function ProjectsHome({
       <MenuItem
         keepOpen
         onSelect={() => copyToClipboard(
-          buildShareableUrl(item.indexDocId, item.syncServer, item.description, 'index.qmd'),
+          buildShareableUrl(item.indexDocId, item.syncServer, item.description, 'index.qmd', {
+            from: userSettings?.userName,
+            preview: item.summary
+              ? {
+                  kind: 'document',
+                  fileName: 'index.qmd',
+                  topFiles: item.summary.topFiles.filter((f) => f !== 'index.qmd').slice(0, 2),
+                  fileCount: item.summary.fileCount,
+                  contributorInitials: item.summary.contributors
+                    .map((c) => initialsFor(c.name))
+                    .slice(0, 4),
+                }
+              : undefined,
+          }),
           item.indexDocId + ':share',
         )}
       >
@@ -1261,16 +1274,46 @@ export default function ProjectsHome({
       summary: e.summary,
     }));
 
-  /** Invite = the collection document's id + server. Nothing else travels. */
-  const buildInviteUrl = (collection: CollectionView): string =>
-    buildFullUrl({
+  /**
+   * Invite = the collection document's id + server, plus (bd-fxdcxbpq) a
+   * display-only preview= built from the cached peek summaries and a
+   * start= target (first project + its first cached file) so the invitee
+   * lands in the editor after joining. Nothing that grants access beyond
+   * the collection id itself travels.
+   */
+  const buildInviteUrl = (collection: CollectionView): string => {
+    const items = collectionItemsOf(collection);
+    const first = items[0];
+    return buildFullUrl({
       type: 'join-collection',
       collectionId: collection.id,
       collectionName: collection.name,
       inviter: userSettings?.userName ?? 'A collaborator',
       syncServer: collection.syncServer,
       entries: [],
+      preview: {
+        kind: 'collection',
+        projects: items.slice(0, 3).map((it) => ({
+          name: it.description || 'Untitled project',
+          topFiles: (it.summary?.topFiles ?? []).slice(0, 1),
+          fileCount: it.summary?.fileCount ?? 0,
+          contributorInitials: (it.summary?.contributors ?? [])
+            .map((c) => initialsFor(c.name))
+            .slice(0, 4),
+        })),
+        totalProjects: items.length,
+        memberFirstNames: peopleOn(collection)
+          .map((p) => p.name.split(/\s+/)[0])
+          .slice(0, 3),
+      },
+      ...(first && {
+        start: {
+          indexDocId: first.indexDocId.replace(/^automerge:/, ''),
+          filePath: first.summary?.topFiles[0] ?? 'index.qmd',
+        },
+      }),
     });
+  };
 
   /** People seen on a collection: you plus the contributor union from the
    * projects' cached summaries. Derived, not a stored member list. */

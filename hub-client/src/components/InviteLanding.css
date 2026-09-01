@@ -1,0 +1,227 @@
+/**
+ * InviteLanding — unified invite landing card (bd-fxdcxbpq).
+ *
+ * Anatomy per design_handoff_invite_landing/: kicker, inviter line, title,
+ * payload preview box, explainer, single CTA. Colors, radii, and type come
+ * from theme.css tokens (the handoff's hexes map 1:1 onto the brand
+ * primitives). No translucent surface colors (.claude/rules/hub-client-theme.md):
+ * tints are derived with opaque color-mix() toward the card surface.
+ */
+
+.il-wrap {
+  /* Fills the viewport on its own: App renders the landing as the whole
+     screen, with no flex parent to grow into. */
+  min-height: 100dvh;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background: var(--bg-subtle);
+}
+
+.il-card {
+  width: 460px;
+  max-width: 100%;
+  background: var(--bg-modal);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: 34px 38px;
+  box-shadow: var(--shadow-3);
+}
+
+.il-kicker {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
+  color: var(--accent-action-text);
+  margin-bottom: 12px;
+}
+
+.il-inviter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.il-inviter strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.il-inviter-avatar,
+.il-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text-on-accent);
+  font-weight: var(--font-weight-bold);
+  flex-shrink: 0;
+}
+
+.il-inviter-avatar {
+  width: 28px;
+  height: 28px;
+  font-size: var(--text-2xs);
+}
+
+.il-title {
+  font-size: 23px;
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
+  margin: 0 0 16px;
+}
+
+/* ---- payload preview (display-only) ---- */
+
+.il-payload {
+  border: 1px solid var(--posit-blue-light-1);
+  border-radius: var(--radius-lg);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.il-payload-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 14px;
+}
+
+.il-payload-row + .il-payload-row,
+.il-payload-footer {
+  border-top: 1px solid var(--posit-blue-light-1);
+}
+
+.il-project {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.il-project-name {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.il-file-summary {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.il-payload-footer {
+  padding: 9px 14px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.il-facepile {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.il-face {
+  width: 19px;
+  height: 19px;
+  font-size: 7px;
+  border: 1.5px solid var(--bg-modal);
+}
+
+.il-face + .il-face {
+  margin-inline-start: -6px;
+}
+
+/* Document thumbnail: subtle line texture + filename chip. */
+.il-doc-thumb {
+  position: relative;
+  height: 74px;
+  margin: 10px 14px 0;
+  border: 1px solid var(--posit-blue-light-1);
+  border-radius: var(--radius-md);
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--bg-modal),
+    var(--bg-modal) 9px,
+    color-mix(in srgb, var(--posit-blue-light-1) 45%, var(--bg-modal)) 9px,
+    color-mix(in srgb, var(--posit-blue-light-1) 45%, var(--bg-modal)) 10px
+  );
+}
+
+.il-doc-chip {
+  position: absolute;
+  inset-inline-start: 10px;
+  bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--posit-blue-light-1);
+  border-radius: var(--radius-xs);
+  padding: 2px 7px;
+}
+
+/* ---- explainer ---- */
+
+.il-explainer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: color-mix(in srgb, var(--posit-blue) 8%, var(--bg-modal));
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  font-size: 11.5px;
+  line-height: var(--leading-base);
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+}
+
+.il-explainer strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.il-explainer-logo {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  filter: var(--logo-filter);
+}
+
+/* ---- CTA (always the last element; nothing renders below it) ---- */
+
+.il-actions {
+  display: flex;
+}
+
+.il-actions .qh-btn {
+  width: 100%;
+  padding: 11px;
+  font-size: var(--text-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
+/* The signed-out slot hosts the provider-rendered Google button (an iframe
+   sized by GIS); center whatever it renders. */
+.il-actions {
+  justify-content: center;
+}
+
+.il-card .qh-error {
+  margin-bottom: 14px;
+}

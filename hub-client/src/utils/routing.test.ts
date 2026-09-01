@@ -11,12 +11,15 @@ import {
   sameFile,
   savePreAuthHash,
   restorePreAuthHash,
+  clearPreAuthHash,
   resolveSyncServerUrl,
   hubPath,
   type Route,
   type ShareRoute,
   type LinkProjectSetRoute,
+  type JoinCollectionRoute,
 } from './routing';
+import type { CollectionInvitePreview, DocumentInvitePreview, InviteStart } from './invitePreview';
 
 describe('parseHashRoute', () => {
   describe('project selector routes', () => {
@@ -810,6 +813,25 @@ describe('savePreAuthHash / restorePreAuthHash', () => {
     expect(mockStorage.has('quarto-hub-pre-auth-hash')).toBe(false);
   });
 
+  it('saves an explicitly passed hash (invite landing after URL scrub)', () => {
+    mockHash = '#/';
+    savePreAuthHash('#/share/abc123?server=wss%3A%2F%2Fs.example');
+
+    expect(mockStorage.get('quarto-hub-pre-auth-hash')).toBe(
+      '#/share/abc123?server=wss%3A%2F%2Fs.example',
+    );
+  });
+
+  it('clearPreAuthHash drops a saved hash so it is never restored (consumed invite)', () => {
+    mockHash = '#/share/abc123';
+    savePreAuthHash();
+    clearPreAuthHash();
+
+    mockHash = '';
+    expect(restorePreAuthHash()).toBeNull();
+    expect(mockHash).toBe('');
+  });
+
   it('returns null when nothing was saved', () => {
     mockHash = '';
     const restored = restorePreAuthHash();
@@ -831,5 +853,189 @@ describe('savePreAuthHash / restorePreAuthHash', () => {
     expect(mockHash).toBe('#/share/4XyZabc123?server=wss%3A%2F%2Fsync.automerge.org');
     // sessionStorage should be clean and not re-saved
     expect(mockStorage.has('quarto-hub-pre-auth-hash')).toBe(false);
+  });
+});
+
+// ============================================================================
+// Invite landing params: from= / preview= / start= (bd-fxdcxbpq)
+// ============================================================================
+
+describe('invite landing params', () => {
+  const documentPreview: DocumentInvitePreview = {
+    kind: 'document',
+    fileName: 'report.qmd',
+    topFiles: ['figures/', 'data.csv'],
+    fileCount: 12,
+    contributorInitials: ['CS', 'JL'],
+  };
+
+  const collectionPreview: CollectionInvitePreview = {
+    kind: 'collection',
+    projects: [
+      { name: 'Quarterly report', topFiles: ['report.qmd'], fileCount: 12, contributorInitials: ['CS', 'JL'] },
+      { name: 'Methods paper', topFiles: ['paper.qmd'], fileCount: 7, contributorInitials: ['JL'] },
+    ],
+    totalProjects: 4,
+    memberFirstNames: ['Carlos', 'Jenny', 'Mine'],
+  };
+
+  const start: InviteStart = {
+    indexDocId: '2Agx7kENjysHSujsVgirvykVKECf',
+    filePath: 'report.qmd',
+  };
+
+  describe('share route', () => {
+    it('round-trips from= and preview=', () => {
+      const route: ShareRoute = {
+        type: 'share',
+        indexDocId: '4XyZabc123',
+        syncServer: 'wss://sync.automerge.org',
+        filePath: 'report.qmd',
+        name: 'Quarterly report',
+        from: 'Carlos Scheidegger',
+        preview: documentPreview,
+      };
+      expect(parseHashRoute(buildHashRoute(route))).toEqual(route);
+    });
+
+    it('legacy share URLs (no new params) parse exactly as before', () => {
+      const legacy =
+        '#/share/4XyZabc123?server=wss%3A%2F%2Fsync.automerge.org&file=report.qmd&name=Quarterly+report';
+      expect(parseHashRoute(legacy)).toEqual({
+        type: 'share',
+        indexDocId: '4XyZabc123',
+        syncServer: 'wss://sync.automerge.org',
+        filePath: 'report.qmd',
+        name: 'Quarterly report',
+      });
+    });
+
+    it('a malformed preview= degrades to undefined, route still parses', () => {
+      const parsed = parseHashRoute(
+        '#/share/4XyZabc123?server=wss%3A%2F%2Fs.example&file=a.qmd&name=P&preview=%25garbage%25',
+      );
+      expect(parsed.type).toBe('share');
+      expect((parsed as ShareRoute).preview).toBeUndefined();
+      expect((parsed as ShareRoute).filePath).toBe('a.qmd');
+    });
+
+    it('buildHashRoute omits from/preview params when the fields are absent', () => {
+      const hash = buildHashRoute({
+        type: 'share',
+        indexDocId: '4XyZabc123',
+        syncServer: 'wss://sync.automerge.org',
+        filePath: 'index.qmd',
+        name: 'P',
+      });
+      expect(hash).not.toContain('from=');
+      expect(hash).not.toContain('preview=');
+    });
+  });
+
+  describe('join-collection route', () => {
+    const base: JoinCollectionRoute = {
+      type: 'join-collection',
+      collectionId: '2Agx7kENjysHSujsVgirvykVKECf',
+      collectionName: 'Team docs',
+      inviter: 'Carlos Scheidegger',
+      syncServer: 'wss://quarto-hub.com/ws',
+      entries: [],
+    };
+
+    it('round-trips preview= and start=', () => {
+      const route: JoinCollectionRoute = { ...base, preview: collectionPreview, start };
+      expect(parseHashRoute(buildHashRoute(route))).toEqual(route);
+    });
+
+    it('legacy join-collection URLs parse exactly as before', () => {
+      const legacy =
+        '#/join-collection/2Agx7kENjysHSujsVgirvykVKECf?name=Team+docs&from=Carlos+Scheidegger&server=wss%3A%2F%2Fquarto-hub.com%2Fws';
+      expect(parseHashRoute(legacy)).toEqual(base);
+    });
+
+    it('malformed preview= and start= degrade to undefined, route still parses', () => {
+      const parsed = parseHashRoute(
+        '#/join-collection/abc?name=T&from=C&server=wss%3A%2F%2Fs&preview=!!bad!!&start=alsobad',
+      ) as JoinCollectionRoute;
+      expect(parsed.type).toBe('join-collection');
+      expect(parsed.preview).toBeUndefined();
+      expect(parsed.start).toBeUndefined();
+      expect(parsed.collectionName).toBe('T');
+    });
+
+    it('buildHashRoute omits preview/start params when the fields are absent', () => {
+      const hash = buildHashRoute(base);
+      expect(hash).not.toContain('preview=');
+      expect(hash).not.toContain('start=');
+    });
+  });
+
+  describe('sender-side URL builders', () => {
+    const originalWindow = globalThis.window;
+
+    beforeAll(() => {
+      // @ts-expect-error - mocking window in node environment
+      globalThis.window = {
+        location: { origin: 'https://example.com', pathname: '/' },
+      };
+    });
+
+    afterAll(() => {
+      // @ts-expect-error - restoring window
+      globalThis.window = originalWindow;
+    });
+
+    it('buildShareableUrl embeds from= and preview= when provided', () => {
+      const url = buildShareableUrl(
+        'automerge:4XyZabc123',
+        'wss://sync.automerge.org',
+        'Quarterly report',
+        'report.qmd',
+        { from: 'Carlos Scheidegger', preview: documentPreview },
+      );
+      const parsed = parseHashRoute(url.slice(url.indexOf('#'))) as ShareRoute;
+      expect(parsed.type).toBe('share');
+      expect(parsed.from).toBe('Carlos Scheidegger');
+      expect(parsed.preview).toEqual(documentPreview);
+      expect(parsed.filePath).toBe('report.qmd');
+    });
+
+    it('buildShareableUrl without opts produces a legacy URL (no new params)', () => {
+      const url = buildShareableUrl('4XyZabc123', 'wss://s.example', 'P', 'index.qmd');
+      expect(url).not.toContain('from=');
+      expect(url).not.toContain('preview=');
+    });
+
+    it('a maximal invite URL stays well under browser URL limits', () => {
+      const longName = 'A quite long project name for testing';
+      const maximal: JoinCollectionRoute = {
+        type: 'join-collection',
+        collectionId: '2Agx7kENjysHSujsVgirvykVKECf',
+        collectionName: 'A fairly long collection name here',
+        inviter: 'Maximiliana Barthological-Winterbottom',
+        syncServer: 'wss://quarto-hub.example.com/some/path/ws',
+        entries: [],
+        preview: {
+          kind: 'collection',
+          projects: Array.from({ length: 3 }, (_, i) => ({
+            name: `${longName} ${i}`,
+            topFiles: ['some/deeply/nested/document-name.qmd', 'another/long/path/data-file.csv'],
+            fileCount: 999,
+            contributorInitials: ['AB', 'CD', 'EF', 'GH'],
+          })),
+          totalProjects: 42,
+          memberFirstNames: ['Maximiliana', 'Bartholomew', 'Wilhelmina'],
+        },
+        start: {
+          indexDocId: '2Agx7kENjysHSujsVgirvykVKECf',
+          filePath: 'some/deeply/nested/document-name.qmd',
+        },
+      };
+      const hash = buildHashRoute(maximal);
+      // Well under the ~2000-char practical URL floor (old IE/proxies) even
+      // before the origin is prepended.
+      expect(hash.length).toBeLessThan(1500);
+      expect(parseHashRoute(hash)).toEqual(maximal);
+    });
   });
 });

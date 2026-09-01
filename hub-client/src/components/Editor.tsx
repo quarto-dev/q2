@@ -1,4 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import type { ReactNode } from 'react';
+import { initialsFor } from '../utils/facepile';
 // Side effects only: bundles Monaco + workers so no runtime CDN fetch occurs.
 import '../monacoSetup';
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react';
@@ -98,6 +100,16 @@ interface Props {
    * Drives the ephemeral-session banner. Absent/false on a real hub.
    */
   sessionEphemeral?: boolean;
+  /**
+   * Host-provided bar rendered under the top bar (bd-fxdcxbpq): the
+   * one-time invite welcome banner. Hidden in fullscreen preview.
+   */
+  banner?: ReactNode;
+  /**
+   * The local user's display name; embedded as `from=` in share links
+   * (bd-fxdcxbpq) so the invite landing can say who shared the document.
+   */
+  userName?: string;
 }
 
 // Map file extension to Monaco language ID
@@ -190,7 +202,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral }: Props) {
+export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral, banner, userName }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
 
@@ -845,13 +857,36 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     setShowShareDialog(true);
   }, []);
 
-  // Build shareable URL for the current file
+  // Build shareable URL for the current file, with the display-only
+  // invite-landing preview (bd-fxdcxbpq): file name, sibling files, and
+  // contributor initials from the index doc's identity map.
   const shareableUrl = currentFile
     ? buildShareableUrl(
         project.indexDocId,
         project.syncServer,
         project.description,
-        currentFile.path
+        currentFile.path,
+        {
+          from: userName,
+          preview: {
+            kind: 'document',
+            fileName: currentFile.path,
+            topFiles: files
+              .filter((f) => f.path !== currentFile.path)
+              .slice(0, 2)
+              .map((f) => f.path),
+            fileCount: files.length,
+            contributorInitials: [
+              ...new Set(
+                [userName, ...Object.values(identities ?? {}).map((i) => i.name)].filter(
+                  (n): n is string => !!n,
+                ),
+              ),
+            ]
+              .map((n) => initialsFor(n))
+              .slice(0, 4),
+          },
+        }
       )
     : undefined;
 
@@ -1238,6 +1273,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         )}
 
         {!isFullscreenPreview && sessionEphemeral && <EphemeralSessionBanner />}
+
+        {/* Invite welcome banner (bd-fxdcxbpq) or other host-provided chrome. */}
+        {!isFullscreenPreview && banner}
 
         {!isFullscreenPreview && unlocatedErrors.length > 0 && (
           <div className="diagnostics-banner">

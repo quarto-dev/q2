@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react'
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
 import ProjectSelector from './components/ProjectSelector';
 import ProjectsHome from './components/ProjectsHome';
-import JoinCollectionLanding from './components/JoinCollectionLanding';
+import InviteLanding from './components/InviteLanding';
+import EditorWelcomeBanner from './components/EditorWelcomeBanner';
 import ProjectSetSetup from './components/ProjectSetSetup';
 
 // Lazy-loaded dev harness — only fetched when navigating to #/dev/... routes.
@@ -34,6 +35,7 @@ import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { readAuthErrorReason } from './auth/authError';
+import { useAuthProvider } from './auth/AuthProvider';
 import {
   connect,
   disconnect,
@@ -57,8 +59,8 @@ import { useSessionKeepAlive } from './hooks/useSessionKeepAlive';
 import { useExecutionChannel } from './hooks/useExecutionChannel';
 import { usePreviewSession } from './hooks/usePreviewSession';
 import { resolveActorId as resolveActorIdRequest } from './services/authService';
-import type { Route, ShareRoute, LinkProjectSetRoute } from './utils/routing';
-import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER, parseHashRoute, hubPath } from './utils/routing';
+import type { Route, ShareRoute, LinkProjectSetRoute, JoinCollectionRoute } from './utils/routing';
+import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER, parseHashRoute, hubPath, savePreAuthHash, clearPreAuthHash, buildHashRoute } from './utils/routing';
 import { isEphemeralStorage } from './services/ephemeralStorage';
 import { fetchPreviewSessionConfig } from './services/previewConfig';
 import type { StorageKind } from '@quarto/quarto-sync-client';
@@ -120,6 +122,7 @@ function App() {
     expireSession,
     applyAuth,
   } = useAuth();
+  const authProvider = useAuthProvider();
 
   const [project, setProject] = useState<ProjectEntry | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -235,6 +238,27 @@ function App() {
   }, [authLoading]);
 
 
+  // Unified invite landing (bd-fxdcxbpq): capture a non-ephemeral share
+  // route once at boot. The share URL is scrubbed from the address bar on
+  // mount as before, but connection now happens on the landing's CTA click
+  // instead of on route load; this state carries the invite until then.
+  // Cleared once the document is opened. Ephemeral preview boots keep the
+  // eager auto-connect path (the preview session is not an invite).
+  const [pendingShare, setPendingShare] = useState<ShareRoute | null>(() => {
+    const bootRoute = parseHashRoute(window.location.hash);
+    return bootRoute.type === 'share' && !bootRoute.ephemeral ? bootRoute : null;
+  });
+  const [inviteJoinState, setInviteJoinState] = useState<'idle' | 'joining'>('idle');
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  // Set after a successful invite join/open; drives the one-time editor
+  // welcome banner (dismissal persists per target id inside the banner).
+  const [welcomeInvite, setWelcomeInvite] = useState<{
+    kind: 'collection' | 'document';
+    targetId: string;
+    targetName: string;
+    inviter: string;
+  } | null>(null);
+
   // Track if we've done the initial URL-based navigation
   const initialLoadRef = useRef(false);
 
@@ -257,6 +281,67 @@ function App() {
     navigateToFile,
   } = useRouting();
 
+  // Find-or-create the local project entry for a shared document, then
+  // connect and open the file. Shared by the invite landing's CTA
+  // (bd-fxdcxbpq), the collection-invite start target, and the ephemeral
+  // preview boot/reload paths. Returns null on success, or the error
+  // message on failure. `quiet` skips the global connectionError (the
+  // invite landing renders the error inside its card); `addToSet: false`
+  // skips the personal project-set entry (a collection invite's start
+  // target already belongs to the joined collection).
+  const connectToSharedProject = useCallback(
+    async (
+      share: { indexDocId: string; syncServer: string; name: string; filePath: string },
+      opts?: { quiet?: boolean; addToSet?: boolean },
+    ): Promise<string | null> => {
+      // Normalize the indexDocId (add 'automerge:' prefix if not present)
+      const normalizedIndexDocId = share.indexDocId.startsWith('automerge:')
+        ? share.indexDocId
+        : `automerge:${share.indexDocId}`;
+
+      // Check if we already have this project locally, or auto-create it
+      let targetProject = await projectStorage.getProjectByIndexDocId(normalizedIndexDocId);
+      if (!targetProject) {
+        targetProject = await projectStorage.addProject(
+          normalizedIndexDocId,
+          share.syncServer,
+          share.name
+        );
+      }
+
+      // Also add to the synced project set (if connected)
+      if (opts?.addToSet !== false && projectSetStateRef.current.status === 'connected') {
+        try {
+          projectSetActions.addProject({
+            indexDocId: normalizedIndexDocId,
+            syncServer: share.syncServer,
+            description: share.name,
+          });
+        } catch {
+          // Non-fatal: project set update failed, but project is in IDB
+        }
+      }
+
+      setConnectionError(null);
+      try {
+        const newActorId = await resolveActorId(targetProject.indexDocId);
+        if (newActorId === null) return 'Your session has expired. Please sign in again.';
+        const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newActorId, screenName, cursorColor);
+        setProject(targetProject);
+        setFiles(loadedFiles);
+        setFileContents(contents);
+
+        navigateToFile(targetProject.id, share.filePath, { replace: true });
+        return null;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!opts?.quiet) setConnectionError(message);
+        return message;
+      }
+    },
+    [projectSetActions, resolveActorId, screenName, cursorColor, navigateToFile],
+  );
+
   // Invite-first onboarding: opening a collection invite establishes a
   // personal root behind the landing screen, so the invitee only ever sees
   // "join Team docs" — never the setup or migration prompts. A browser with a
@@ -266,7 +351,8 @@ function App() {
   // until the root is ready, then Join subscribes to the collection.
   const inviteRootInitiatedRef = useRef(false);
   useEffect(() => {
-    if (route.type !== 'join-collection' || inviteRootInitiatedRef.current) return;
+    const inviteActive = route.type === 'join-collection' || pendingShare !== null;
+    if (!inviteActive || inviteRootInitiatedRef.current) return;
     if (projectSetState.status === 'needs-setup') {
       inviteRootInitiatedRef.current = true;
       projectSetActions.createProjectSet(DEFAULT_SYNC_SERVER);
@@ -277,7 +363,98 @@ function App() {
       projectSetActions.migrateProjects(DEFAULT_SYNC_SERVER);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route.type, projectSetState.status]);
+  }, [route.type, pendingShare, projectSetState.status]);
+
+  // Keep the invite hash reachable across the OAuth round trip: share
+  // URLs are scrubbed from the address bar on mount, so re-save the
+  // reconstructed hash whenever the signed-out landing is showing
+  // (main.tsx saved it at boot, but a stray restore may have consumed it).
+  useEffect(() => {
+    if (AUTH_ENABLED && !auth && !authLoading && pendingShare) {
+      savePreAuthHash(buildHashRoute(pendingShare));
+    }
+  }, [auth, authLoading, pendingShare]);
+
+  // Invite landing CTA (document invite): connect to the shared project
+  // and open the editor on the shared file. Connection deliberately
+  // happens here, on the click, not on route load (bd-fxdcxbpq).
+  const handleShareCta = useCallback(async () => {
+    if (!pendingShare) return;
+    setInviteJoinState('joining');
+    setInviteError(null);
+    const error = await connectToSharedProject(
+      {
+        indexDocId: pendingShare.indexDocId,
+        syncServer: pendingShare.syncServer,
+        name: pendingShare.name,
+        filePath: pendingShare.filePath,
+      },
+      { quiet: true },
+    );
+    if (error) {
+      setInviteError(error);
+      setInviteJoinState('idle');
+      return;
+    }
+    // The invite is consumed — drop the stashed pre-auth hash so a later
+    // visit to the app root doesn't bounce back onto the landing card.
+    clearPreAuthHash();
+    setWelcomeInvite({
+      kind: 'document',
+      targetId: pendingShare.indexDocId,
+      targetName: pendingShare.name,
+      inviter: pendingShare.from ?? 'A collaborator',
+    });
+    setPendingShare(null);
+    setInviteJoinState('idle');
+  }, [pendingShare, connectToSharedProject]);
+
+  // Invite landing CTA (collection invite): subscribe with the identity
+  // from the account (no name/color form), then land in the editor on the
+  // start target when one is present and connectable; otherwise home with
+  // the joined collection visible.
+  const handleCollectionCta = useCallback(
+    async (inviteRoute: JoinCollectionRoute) => {
+      setInviteJoinState('joining');
+      setInviteError(null);
+      try {
+        await projectSetActions.subscribeCollection(
+          inviteRoute.collectionId,
+          inviteRoute.syncServer || DEFAULT_SYNC_SERVER,
+        );
+      } catch (err) {
+        setInviteError(err instanceof Error ? err.message : 'Could not join the collection.');
+        setInviteJoinState('idle');
+        return;
+      }
+      clearPreAuthHash();
+      setWelcomeInvite({
+        kind: 'collection',
+        targetId: inviteRoute.collectionId,
+        targetName: inviteRoute.collectionName,
+        inviter: inviteRoute.inviter,
+      });
+      if (inviteRoute.start) {
+        const startName =
+          inviteRoute.preview?.projects[0]?.name ?? inviteRoute.collectionName;
+        const error = await connectToSharedProject(
+          {
+            indexDocId: inviteRoute.start.indexDocId,
+            syncServer: inviteRoute.syncServer || DEFAULT_SYNC_SERVER,
+            name: startName,
+            filePath: inviteRoute.start.filePath,
+          },
+          { quiet: true, addToSet: false },
+        );
+        setInviteJoinState('idle');
+        if (!error) return; // landed in the editor on the start file
+      } else {
+        setInviteJoinState('idle');
+      }
+      navigateToProjectSelector({ replace: true });
+    },
+    [projectSetActions, connectToSharedProject, navigateToProjectSelector],
+  );
 
   // Ephemeral preview boot (bd-zf4ryvuq): same invite-first pattern as
   // join-collection above. The user asked for a preview, not project
@@ -454,58 +631,6 @@ function App() {
         return;
       }
 
-      // Shared by the share-route branch and the ephemeral
-      // reload-recovery branch below: find-or-create the local project
-      // entry for a shared document, then connect and open the file.
-      const connectToSharedProject = async (share: {
-        indexDocId: string;
-        syncServer: string;
-        name: string;
-        filePath: string;
-      }): Promise<void> => {
-        // Normalize the indexDocId (add 'automerge:' prefix if not present)
-        const normalizedIndexDocId = share.indexDocId.startsWith('automerge:')
-          ? share.indexDocId
-          : `automerge:${share.indexDocId}`;
-
-        // Check if we already have this project locally, or auto-create it
-        let targetProject = await projectStorage.getProjectByIndexDocId(normalizedIndexDocId);
-        if (!targetProject) {
-          targetProject = await projectStorage.addProject(
-            normalizedIndexDocId,
-            share.syncServer,
-            share.name
-          );
-        }
-
-        // Also add to the synced project set (if connected)
-        if (projectSetStateRef.current.status === 'connected') {
-          try {
-            projectSetActions.addProject({
-              indexDocId: normalizedIndexDocId,
-              syncServer: share.syncServer,
-              description: share.name,
-            });
-          } catch {
-            // Non-fatal: project set update failed, but project is in IDB
-          }
-        }
-
-        setConnectionError(null);
-        try {
-          const newActorId = await resolveActorId(targetProject.indexDocId);
-          if (newActorId === null) return;
-          const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newActorId, screenName, cursorColor);
-          setProject(targetProject);
-          setFiles(loadedFiles);
-          setFileContents(contents);
-
-          navigateToFile(targetProject.id, share.filePath, { replace: true });
-        } catch (err) {
-          setConnectionError(err instanceof Error ? err.message : String(err));
-        }
-      };
-
       // Handle shareable link URLs
       if (route.type === 'share') {
         // SECURITY: Immediately clear the URL to prevent indexDocId from appearing
@@ -514,7 +639,15 @@ function App() {
 
         const shareRoute = route as ShareRoute;
 
-        // Validate required fields
+        // Non-ephemeral share links render the InviteLanding card
+        // (bd-fxdcxbpq): connection happens on the CTA click, not here.
+        // The route was captured into pendingShare at boot.
+        if (!shareRoute.ephemeral) {
+          return;
+        }
+
+        // Ephemeral preview boots keep the eager connect: the user asked
+        // for a preview session, not an invite.
         if (!shareRoute.syncServer || !shareRoute.filePath || !shareRoute.name) {
           setConnectionError(
             'This share link is incomplete. Please ask the sender to share a new link.'
@@ -577,7 +710,7 @@ function App() {
     };
 
     loadFromUrl();
-  }, [route, navigateToProjectSelector, navigateToProject, navigateToFile]);
+  }, [route, navigateToProjectSelector, navigateToProject, navigateToFile, connectToSharedProject]);
 
   // Disconnect sync when auth is lost (token expired or user logged out).
   // Without this, the WebSocket adapter keeps retrying with an expired cookie
@@ -783,6 +916,51 @@ function App() {
   }
 
   if (AUTH_ENABLED && !auth) {
+    // Invite routes render the InviteLanding card instead of the generic
+    // login screen (bd-fxdcxbpq): who invited you, what to, and a single
+    // Google CTA. The OAuth round trip returns to the same invite URL via
+    // the pre-auth hash save/restore, then shows the signed-in variant.
+    const signInCta = (
+      <authProvider.SignInButton
+        loginUri={window.location.origin + hubPath('/auth/callback')}
+        text="continue_with"
+      />
+    );
+    if (pendingShare) {
+      const incomplete =
+        !pendingShare.syncServer || !pendingShare.filePath || !pendingShare.name;
+      return (
+        <InviteLanding
+          kind="document"
+          inviter={pendingShare.from ?? 'A collaborator'}
+          title={pendingShare.name || 'Shared document'}
+          preview={pendingShare.preview}
+          signedIn={false}
+          signInCta={signInCta}
+          joinState="idle"
+          error={
+            incomplete
+              ? 'This share link is incomplete. Please ask the sender to share a new link.'
+              : null
+          }
+          onCta={() => {}}
+        />
+      );
+    }
+    if (route.type === 'join-collection') {
+      return (
+        <InviteLanding
+          kind="collection"
+          inviter={route.inviter}
+          title={route.collectionName}
+          preview={route.preview}
+          signedIn={false}
+          signInCta={signInCta}
+          joinState="idle"
+          onCta={() => {}}
+        />
+      );
+    }
     return (
       <LoginScreen
         errorReason={authErrorReason}
@@ -808,17 +986,49 @@ function App() {
     return <DevHarnessLazy page={route.page} />;
   }
 
-  // Collection invite landing (explore/projects-collections-ui). Always shown
-  // for an invite route, ahead of the setup/migration screens: the effect
-  // above establishes the personal root (creating or silently migrating) so
-  // the invitee only ever sees "join <collection>", never onboarding prompts.
+  // Invite landings (bd-fxdcxbpq). Always shown for an invite route, ahead
+  // of the setup/migration screens: the effect above establishes the
+  // personal root (creating or silently migrating) so the invitee only
+  // ever sees the invite card, never onboarding prompts. The CTA stays
+  // disabled until the root is connected (was "Connecting…" previously).
   if (route.type === 'join-collection') {
     return (
-      <JoinCollectionLanding
-        route={route}
-        status={projectSetState.status}
-        onSubscribe={projectSetActions.subscribeCollection}
-        onDone={() => navigateToProjectSelector({ replace: true })}
+      <InviteLanding
+        kind="collection"
+        inviter={route.inviter}
+        title={route.collectionName}
+        preview={route.preview}
+        signedIn={true}
+        startName={route.start ? route.preview?.projects[0]?.name : undefined}
+        joinState={inviteJoinState}
+        ctaDisabled={projectSetState.status !== 'connected'}
+        error={inviteError}
+        onCta={() => void handleCollectionCta(route)}
+      />
+    );
+  }
+
+  // Document invite landing: shown until the CTA connects and opens the
+  // editor (share routes no longer auto-connect on load).
+  if (pendingShare && !project) {
+    const incomplete =
+      !pendingShare.syncServer || !pendingShare.filePath || !pendingShare.name;
+    return (
+      <InviteLanding
+        kind="document"
+        inviter={pendingShare.from ?? 'A collaborator'}
+        title={pendingShare.name || 'Shared document'}
+        preview={pendingShare.preview}
+        signedIn={true}
+        joinState={inviteJoinState}
+        ctaDisabled={incomplete}
+        error={
+          inviteError ??
+          (incomplete
+            ? 'This share link is incomplete. Please ask the sender to share a new link.'
+            : null)
+        }
+        onCta={() => void handleShareCta()}
       />
     );
   }
@@ -950,6 +1160,22 @@ function App() {
               onRequestExecution={requestExecution}
               isOnline={isOnline}
               sessionEphemeral={previewSession?.allowEdit === false}
+              userName={screenName}
+              banner={
+                welcomeInvite && screenName ? (
+                  <EditorWelcomeBanner
+                    kind={welcomeInvite.kind}
+                    targetId={welcomeInvite.targetId}
+                    targetName={welcomeInvite.targetName}
+                    inviter={welcomeInvite.inviter}
+                    userName={screenName}
+                    onRename={async (name) => {
+                      const updated = await updateUserName(name);
+                      setScreenName(updated.userName);
+                    }}
+                  />
+                ) : undefined
+              }
             />
           </ErrorBoundary>
         </ViewModeProvider>
