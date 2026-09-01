@@ -30,7 +30,9 @@ reported offset still indexes the original bytes.*
 ## Coverage matrix
 
 Legend — B-now: `pass` (already correct, A==B), `FAIL` (red until fix),
-`ignore` (decision-gated).
+`ignore` (decision-gated), `pass?`/`(unprobed)` (owning strand has not yet
+written or run the A test to confirm — tracked as an open verification
+step, not a fourth bucket).
 
 ### Readers / ingress
 
@@ -39,7 +41,7 @@ Legend — B-now: `pass` (already correct, A==B), `FAIL` (red until fix),
 | tree-sitter parse | `scanner.c` | CRLF → byte-accurate `Point`/`Range` | offsets index original bytes | pass | (guard) `bd-tuf04qgu` | pampa |
 | BOM ingress | `readers/qmd.rs` | BOM counted, not leaked | offsets valid under leading BOM | pass | (guard) `bd-tuf04qgu` | pampa |
 | fenced code strip | `treesitter_utils/fenced_code_block.rs:70` | lone `\r` left in CodeBlock/RawBlock | full `\r\n` unit consumed, internal CRLF intact | FAIL | `bd-xyn4kk3k` | pampa |
-| native string quoting (read-back via writer) | — | see native writer | — | — | `bd-ske10iyd` | pampa |
+| native string quoting (read-back via writer) | — | see native writer row | — | n/a (duplicate of native writer row) | `bd-ske10iyd` | pampa |
 | inline-math soft-break | `treesitter.rs:476` | rejoined `\n` (normalized) | rejoined with original convention | FAIL | `bd-qmtp61ms` | pampa |
 | `strip_continuation_prefix` | `treesitter.rs:422,428` | split/rejoin `\n` (normalized) | original convention preserved | FAIL | `bd-qmtp61ms` | pampa |
 | bare-CR-at-EOF injection | `main.rs:217`, `qmd.rs:79` | `ends_with('\n')`-only → appends `\n` after lone CR | inject matching convention (or none) | FAIL | `bd-qmtp61ms` | pampa |
@@ -93,10 +95,12 @@ Legend — B-now: `pass` (already correct, A==B), `FAIL` (red until fix),
   documenting it as intentional so a future reader doesn't "fix" it. Fold
   into `bd-tuf04qgu`.
 - **G4 — already-correct boundaries need explicit guards.** tree-sitter,
-  BOM, grid-table, json `\r` escape, hub verbatim flow are all correct
-  today and have *no strand*. They are pure regression guards and must be
-  listed as A==B assertions owned by `bd-tuf04qgu`, or a silent regression
-  could reintroduce a bug with nothing to catch it.
+  BOM, grid-table, and json `\r` escape are all correct today and have *no
+  strand*. (Hub verbatim flow is the same kind of already-correct
+  boundary, but is already covered — see G2 — by `bd-5im5ey38`.) The
+  remaining four are pure regression guards and must be listed as A==B
+  assertions owned by `bd-tuf04qgu`, or a silent regression could
+  reintroduce a bug with nothing to catch it.
 
 ## Build order (once approved)
 
@@ -117,5 +121,11 @@ Every row above has an A and a B and a named owner (or a flagged gap). The
 only B tests that cannot be authored as red-now are the three
 decision-gated ones (column semantics ×2 implementations, comrak strategy)
 — and those are present as `#[ignore]`/`it.skip` stubs so the suite still
-*names* the missing coverage. With G1–G4 resolved, the harness covers
-every identified I/O boundary in both buckets.
+*names* the missing coverage. Two named exceptions to the A/B pairing:
+YAML block scalar and XML text/attr are `pass?`/`(unprobed)` — their owning
+strands (`bd-aowdiufr`, `bd-w9imk3bi`) still owe the A test that confirms
+the row before it counts as a real `pass`; and Lua `*l` strip has no B
+target because it is characterization-only by design (G3), not a gap in
+Windows CRLF support. With G1–G4 resolved and those two exceptions tracked
+by their owning strands, the harness covers every identified I/O boundary
+in both buckets.

@@ -105,7 +105,7 @@ already maintains the correction-map-style positions for us.
   proven but fiddly — exactly the kind of subtle offset bug q2 is trying
   to avoid by preferring strategy 1.
 
-## comrak (strategy 3, already in our tree) — DeepWiki, needs source confirm
+## comrak (strategy 3, already in our tree) — source-confirmed
 
 - Our `readers/commonmark.rs` delegates to comrak. comrak normalizes
   CRLF→LF internally per the **CommonMark spec mandate** (spec §2.1
@@ -228,6 +228,7 @@ this if we adopt it for the offset↔position layer.
   `App/Opt.hs`, `App.hs`, `CommandLineOptions.hs`); DeepWiki jgm/pandoc.
 - rustc: rust-lang/rust#65029, PR #65074, #149568;
   `rustc_span::SourceFile`.
-- comrak: DeepWiki kivikakk/comrak (source confirmation still TODO).
+- comrak: DeepWiki kivikakk/comrak; source-confirmed at
+  `comrak-0.52.0/src/parser/mod.rs:205-211`.
 - Crates: line-index (rust-analyzer), line-ending, normalize-line-endings,
   newline_normalizer (crates.io / lib.rs).
