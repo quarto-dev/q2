@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-01
+
+- [`41da392c`](https://github.com/quarto-dev/q2/commits/41da392c): Branch chips in the experimental branch bar now activate on click and via the keyboard, and deleting a branch no longer also switches to it.
+
 ### 2026-08-31
 
 - [`1bb90e78`](https://github.com/quarto-dev/q2/commits/1bb90e78): Pressing Enter in the New File dialog no longer reopens the dialog after creating the file, and pressing Enter on its Cancel button no longer creates the file.
