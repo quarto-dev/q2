@@ -646,7 +646,9 @@
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 2px;
-  z-index: var(--z-raised);
+  /* Must clear the active preview iframe (--z-raised, later in DOM order),
+     which otherwise paints over the banner's preview-pane half. */
+  z-index: var(--z-sticky);
 }
 
 /* Monaco editor overrides */
