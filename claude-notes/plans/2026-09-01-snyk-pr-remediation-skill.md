@@ -145,9 +145,12 @@ Verification for the katex case:
       pre-existing, filed as bd-v51cly8i, unrelated to katex.
 - [x] hub-client changelog two-commit update (`8d584e04`; `npm run
       test:wasm` gate passes)
-- [ ] Ask for push approval; push; confirm CI on #637 matches main's
-      status (Test Suite green; TS suite red only with main's own
-      pre-existing failures, bd-v51cly8i)
+- [x] Pushed (user-approved) and confirmed **fully green**: PR #637 at
+      `eb024ad7` passes 10/10 checks, and main at `859d37ad` is green on
+      all three workflows (Test Suite, TS Test Suite, Hub-Client E2E) —
+      main had been red on the latter two since 132c3ad3. bd-v51cly8i
+      closed. Remaining: user merges #637, then close bd-t8bwkr64 and
+      bd-s36g9dav, and remove `.worktrees/snyk-pr-637`.
 - [x] Fold learnings back into the skill: failure-attribution rule
       (compare against origin/main before blaming the upgrade) and
       out-of-gate suite check (preview-renderer `test:integration`)
@@ -174,6 +177,14 @@ Verification for the katex case:
       preference (the Hub-Client E2E redness). Verified: hub-client
       `test:ci` fully green, `branch-bar.spec.ts` passes locally against
       a real hub, `build:all` green. Strand closes after push + green CI.
+- [x] **Fourth defect** (surfaced only when CI ran the pushed fix):
+      `BranchBar.css` had 8 `lint:css` violations, and the CSS-lint step
+      fails *before* vitest in the same CI job (bd-u7zj5p9w masking) while
+      being covered by neither `test:ci` nor `cargo xtask verify`. Fixed
+      in `a4c3fb9c` (accent-action tokens, opaque color-mix, focus ring);
+      skill's verify step now includes `npm run lint:css`. Also filed
+      bd-o1f58huc: hub-client eslint is red and gated nowhere (e2e spec
+      debt).
 
 ## Facts for quick reference
 

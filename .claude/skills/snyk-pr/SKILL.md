@@ -127,6 +127,9 @@ cargo nextest run -p quarto-core -E 'test(katex_cdn_version_matches_npm_pin)'
 cargo build --workspace && cargo nextest run --workspace
 # hub-client touched => production build (stricter than tsc --noEmit)
 cd hub-client && npm run build:all
+# hub-client touched => CSS lint (a CI gate that neither test:ci nor
+# cargo xtask verify runs — it red-flagged main for days unnoticed)
+npm run lint:css
 # dirty-tree trap: a fresh root install must not modify tracked files
 npm install && git status --porcelain
 ```
