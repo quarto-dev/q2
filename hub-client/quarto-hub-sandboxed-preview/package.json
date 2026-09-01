@@ -13,7 +13,7 @@
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "katex": "0.18.2"
+    "katex": "0.18.4"
   },
   "devDependencies": {
     "@types/katex": "^0.16.7",
