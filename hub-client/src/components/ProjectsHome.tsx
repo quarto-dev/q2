@@ -518,13 +518,31 @@ export default function ProjectsHome({
   }, [collections]);
 
   const entryFor = useCallback((indexDocId: string): Omit<ProjectSetEntry, 'addedAt' | 'lastAccessed'> | null => {
+    // Carry the cached peek summary along with the identity fields:
+    // dropping it here left collection copies with no file counts until
+    // the project's next open, so invite previews showed "0 files" for
+    // populated projects (bd-fxdcxbpq follow-up).
     const item = byId.get(indexDocId)
       ?? byId.get(indexDocId.replace(/^automerge:/, ''))
       ?? byId.get(`automerge:${indexDocId}`);
-    if (item) return { indexDocId: item.indexDocId, syncServer: item.syncServer, description: item.description };
+    if (item) {
+      return {
+        indexDocId: item.indexDocId,
+        syncServer: item.syncServer,
+        description: item.description,
+        ...(item.summary && { summary: item.summary }),
+      };
+    }
     for (const c of collections) {
       const e = c.entries.find((en) => en.indexDocId.replace(/^automerge:/, '') === indexDocId.replace(/^automerge:/, ''));
-      if (e) return { indexDocId: e.indexDocId, syncServer: e.syncServer, description: e.description };
+      if (e) {
+        return {
+          indexDocId: e.indexDocId,
+          syncServer: e.syncServer,
+          description: e.description,
+          ...(e.summary && { summary: e.summary }),
+        };
+      }
     }
     return null;
   }, [byId, collections]);
