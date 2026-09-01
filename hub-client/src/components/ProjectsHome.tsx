@@ -1640,11 +1640,14 @@ export default function ProjectsHome({
     <div className="projects-home">
       <header className="qh-header">
         <div className="qh-logo">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="3.5" rx="1" stroke="var(--posit-teal)" strokeWidth="1.8" />
-            <rect x="3" y="10.2" width="18" height="3.5" rx="1" stroke="var(--posit-teal)" strokeWidth="1.8" />
-            <rect x="3" y="16.5" width="11" height="3.5" rx="1" stroke="var(--posit-teal)" strokeWidth="1.8" />
-          </svg>
+          <img
+            src="/quarto-icon.svg"
+            alt=""
+            width="20"
+            height="20"
+            style={{ filter: 'var(--logo-filter)' }}
+            aria-hidden="true"
+          />
           <span>Quarto Hub</span>
         </div>
         <div className="qh-search">
