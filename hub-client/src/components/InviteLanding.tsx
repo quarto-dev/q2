@@ -99,17 +99,27 @@ function DocumentPayload({ preview }: { preview: DocumentInvitePreview }) {
   );
 }
 
+// Signed-in CTA: no sign-in friction left, so the verb is simply "Open"
+// for both kinds (the join happens implicitly for collections). The
+// "join to collaborate" framing is reserved for the signed-out state,
+// where the user is about to go through Google sign-in for the first time.
 function ctaLabel(props: InviteLandingProps): string {
   const { kind, joinState, preview, title } = props;
   if (joinState === 'joining') {
-    return kind === 'collection' ? 'Joining…' : 'Opening…';
+    return 'Opening…';
   }
   if (kind === 'collection') {
-    // The invite is to the collection: joining lands on the home screen
-    // with the collection at the top, never a specific document.
-    return preview ? `Join ${title}` : 'Join collection';
+    return preview ? `Open ${title}` : 'Open collection';
   }
   return preview ? `Open ${title}` : 'Open document';
+}
+
+/** Signed-out lead-in above the Google button: the concrete thing they
+ * are joining — the file for a document invite, the collection otherwise. */
+function signInLeadTarget(props: InviteLandingProps): string {
+  const { kind, preview, title } = props;
+  if (kind === 'document' && preview?.kind === 'document') return preview.fileName;
+  return title;
 }
 
 export default function InviteLanding(props: InviteLandingProps) {
@@ -156,7 +166,10 @@ export default function InviteLanding(props: InviteLandingProps) {
               {ctaLabel(props)}
             </button>
           ) : (
-            signInCta
+            <>
+              <div className="il-signin-lead">Join to collaborate on {signInLeadTarget(props)}</div>
+              {signInCta}
+            </>
           )}
         </div>
       </div>

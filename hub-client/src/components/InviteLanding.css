@@ -216,10 +216,19 @@
   gap: 9px;
 }
 
-/* The signed-out slot hosts the provider-rendered Google button (an iframe
-   sized by GIS); center whatever it renders. */
+/* The signed-out slot hosts a lead-in line above the provider-rendered
+   Google button (an iframe sized by GIS); stack and center them. */
 .il-actions {
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 10px;
+}
+
+.il-signin-lead {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
 }
 
 .il-card .qh-error {

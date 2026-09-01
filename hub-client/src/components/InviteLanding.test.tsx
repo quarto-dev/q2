@@ -134,14 +134,25 @@ describe('InviteLanding CTA matrix', () => {
     expect(screen.queryByRole('button', { name: /join|open/i })).toBeNull();
   });
 
-  it('signed out + document: same provider sign-in node', () => {
+  it('signed out + collection: "Join to collaborate on <collection>" leads into the sign-in button', () => {
+    renderLanding({ preview: collectionPreview });
+    expect(screen.getByText('Join to collaborate on Team docs')).toBeTruthy();
+  });
+
+  it('signed out + document: lead-in names the file from the preview', () => {
     renderLanding({ kind: 'document', title: 'Quarterly report', preview: documentPreview });
+    expect(screen.getByText('Join to collaborate on report.qmd')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeTruthy();
   });
 
-  it('signed in + collection: "Join <collection name>" (the invite is to the collection, not a document)', () => {
+  it('signed out + document legacy (no preview): lead-in falls back to the title', () => {
+    renderLanding({ kind: 'document', title: 'Quarterly report' });
+    expect(screen.getByText('Join to collaborate on Quarterly report')).toBeTruthy();
+  });
+
+  it('signed in + collection: "Open <collection name>" (no sign-in friction, so the verb is just open)', () => {
     renderLanding({ signedIn: true, preview: collectionPreview });
-    expect(screen.getByRole('button', { name: 'Join Team docs' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open Team docs' })).toBeTruthy();
   });
 
   it('signed in + document: "Open <title>"', () => {
@@ -158,7 +169,7 @@ describe('InviteLanding CTA matrix', () => {
 
   it('signed in legacy links (no preview) use generic CTA text', () => {
     renderLanding({ signedIn: true });
-    expect(screen.getByRole('button', { name: 'Join collection' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open collection' })).toBeTruthy();
     cleanup();
     renderLanding({ kind: 'document', title: 'Quarterly report', signedIn: true });
     expect(screen.getByRole('button', { name: 'Open document' })).toBeTruthy();
@@ -171,7 +182,7 @@ describe('InviteLanding CTA matrix', () => {
 
   it('clicking the CTA fires onCta once', () => {
     const { onCta } = renderLanding({ signedIn: true, preview: collectionPreview });
-    screen.getByRole('button', { name: 'Join Team docs' }).click();
+    screen.getByRole('button', { name: 'Open Team docs' }).click();
     expect(onCta).toHaveBeenCalledTimes(1);
   });
 
@@ -179,7 +190,7 @@ describe('InviteLanding CTA matrix', () => {
     renderLanding({ signedIn: true, preview: collectionPreview, joinState: 'joining' });
     const button = screen.getByRole('button');
     expect(button.hasAttribute('disabled')).toBe(true);
-    expect(button.textContent).toMatch(/Joining/);
+    expect(button.textContent).toMatch(/Opening/);
   });
 
   it('renders an error inside the card when one is passed', () => {
