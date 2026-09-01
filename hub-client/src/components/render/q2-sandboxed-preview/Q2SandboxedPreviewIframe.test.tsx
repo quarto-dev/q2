@@ -15,6 +15,16 @@ vi.mock('@quarto/preview-runtime', () => ({
   })),
 }));
 
+// The service-worker asset proxy resolves through the parent's WASM VFS.
+vi.mock('wasm-quarto-hub-client', () => ({
+  vfs_read_file: vi.fn((path: string) =>
+    JSON.stringify({ success: true, content: `text of ${path}` }),
+  ),
+  vfs_read_binary_file: vi.fn((path: string) =>
+    JSON.stringify({ success: true, content: `base64-of-${path}` }),
+  ),
+}));
+
 function renderIframe(props: Partial<Parameters<typeof Q2SandboxedPreviewIframe>[0]> = {}) {
   render(
     <Q2SandboxedPreviewIframe
@@ -64,6 +74,50 @@ describe('Q2SandboxedPreviewIframe', () => {
       const payload = (updateAst![0] as { payload: Record<string, unknown> }).payload;
       expect(payload.astJson).toBe('{"blocks":[]}');
       expect(payload.currentFilePath).toBe('docs/page.qmd');
+    });
+  });
+
+  it('ships a proxy-URL asset manifest in the UPDATE_AST payload', async () => {
+    const astJson = JSON.stringify({
+      blocks: [
+        { t: 'Para', c: [{ t: 'Image', c: [['', [], []], [], ['images/pic.png', '']] }] },
+      ],
+    });
+    const { postMessage } = renderIframe({ astJson, currentFilePath: '/project/sub/doc.qmd' });
+    signalIframeReady();
+
+    await waitFor(() => {
+      const updateAst = postMessage.mock.calls.find(
+        ([msg]) => (msg as { type?: string }).type === 'UPDATE_AST',
+      );
+      expect(updateAst).toBeDefined();
+      const payload = (updateAst![0] as { payload: Record<string, unknown> }).payload;
+      expect(payload.assetManifest).toEqual({
+        'images/pic.png': '__q2_vfs__/project/sub/images/pic.png',
+      });
+    });
+  });
+
+  it('answers a url request with a url_response carrying the same request id', async () => {
+    const { postMessage } = renderIframe();
+    signalIframeReady();
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'url', id: 'req-42', path: 'project/sub/images/pic.png' },
+      }),
+    );
+
+    await waitFor(() => {
+      const response = postMessage.mock.calls.find(
+        ([msg]) => (msg as { type?: string }).type === 'url_response',
+      );
+      expect(response).toBeDefined();
+      const msg = response![0] as Record<string, unknown>;
+      expect(msg.id).toBe('req-42');
+      expect(msg.success).toBe(true);
+      expect(msg.isBinary).toBe(true);
+      expect(msg.content).toBe('base64-of-project/sub/images/pic.png');
     });
   });
 

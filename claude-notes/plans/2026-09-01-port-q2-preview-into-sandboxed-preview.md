@@ -134,21 +134,41 @@ places; everything else is already postMessage + pure React-over-AST-JSON:
 
 ### Phase 2 — asset proxying, done properly
 
-- [ ] Test first: SW unit tests for path forwarding (full pathname, no
-      basename stripping; two same-named images in different dirs), MIME
-      table, allowlist, request-id matching + timeout.
-- [ ] Shared `assetPolicy.ts` (single extension/interception policy)
-      used by SW, iframe bridge, and parent responder.
-- [ ] SW: intercept same-origin GETs *except* `/assets/*`, the page, and
-      `serviceWorker.js`; forward full path + `currentFilePath` context;
-      request ids; listener cleanup.
-- [ ] Parent responder: resolve project-relative paths the same way
-      `assetWalker.ts` does (`resolveRelativePath`), read via
-      `vfs_read_file`/`vfs_read_binary_file`, respond keyed by request id.
-- [ ] Theme fonts: verify CSS `url()` refs round-trip through the SW.
-- [ ] Asset manifest: sandboxed manifest maps `origPath → origPath`
-      (identity) so `<img>` fetches hit the SW; external URLs pass through
-      as today.
+Design refinement over the original sketch: instead of extension-guessing
+interception, proxied assets live in an explicit **page-relative namespace**
+`__q2_vfs__/<resolved VFS path>`. The parent resolves image targets against
+`currentFilePath` at manifest-build time (mirroring `assetWalker`'s
+resolution exactly), so the full resolved path rides in the URL — in-scope
+under `/q2/` on Pages, immune to basename collisions, and app assets
+(`assets/*`, fonts, the page) are never touched.
+
+- [x] Tests first (19 new, red → green): proxy URL round-trip (subdirs,
+      spaces, basename-collision regression), namespace misses, binary
+      classification, MIME table, CSS `url()` rewriting, manifest
+      resolution (`../`, root-absolute, external skip), parent responder
+      id correlation, manifest-in-payload.
+- [x] Shared `quarto-hub-sandboxed-preview/src/assetPolicy.ts` used by the
+      SW, the page bridge, and the parent responder (kills the skewed-list
+      TODO pair).
+- [x] SW rework: intercepts only `__q2_vfs__` GETs; one persistent message
+      listener + request-id map (fixes per-request listener leak); 10s
+      timeout → 504; miss → 404; text vs binary bodies.
+- [x] Page bridge rework: full-path forwarding (no basename stripping),
+      id-correlated with timeout + listener cleanup.
+- [x] Parent responder: id-keyed `url`/`url_response`, shared
+      `isBinaryPath`; ships `buildProxyAssetManifest(astJson,
+      currentFilePath)` in the UPDATE_AST payload (no VFS reads at
+      manifest time — bytes on demand).
+- [x] Theme fonts: `rewriteThemeCssUrls` rewrites relative `url()` refs in
+      the posted theme CSS into the proxy namespace against
+      `.quarto/project-artifacts` (q2-preview loses these entirely;
+      absolute/data:/blob:/# refs untouched).
+- [x] End-to-end smoke (headless chromium, harness parent on :8098,
+      renderer iframe on :8099): AST with `images/pic.png` +
+      manifest entry → `<img src="__q2_vfs__/project/sub/images/pic.png">`
+      → SW intercept → bridge request `project/sub/images/pic.png` →
+      harness returns PNG bytes → image decodes at natural size 1×1.
+      Output inspected; recorded 2026-09-01.
 
 ### Phase 3 — parent feature parity (scroll sync, click-to-line)
 

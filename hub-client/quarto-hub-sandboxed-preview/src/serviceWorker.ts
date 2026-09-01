@@ -1,24 +1,20 @@
 /// <reference lib="webworker" />
 declare var self: ServiceWorkerGlobalScope;
 
-console.log('sandboxed preview service worker started')
+import {
+    isBinaryPath,
+    mimeTypeFor,
+    vfsPathForRequestUrl,
+} from './assetPolicy';
 
-// Caching/offline support disabled for now — the service worker only proxies assets.
-// const clearCache = async (cache: Cache) => Promise.all((await cache.keys()).map(k => cache.delete(k)))
+// Caching/offline support disabled for now (commit 103af4445) — the
+// service worker only proxies document assets out of the parent's VFS.
+// Everything outside the __q2_vfs__ namespace (the page, assets/*,
+// serviceWorker.js, KaTeX fonts) falls through to the network.
 
-// Cache sandboxed preview for offline
-// const precacheFilepaths = ['./', './serviceWorker.js']
-// const cacheName = 'previewOffline'
-self.addEventListener("install", async () => {
-    // e.waitUntil(
-    //     (async () => {
-    //         const cache = await caches.open(cacheName);
-    //         await clearCache(cache)
-    //         await cache.addAll(precacheFilepaths);
-    //     })(),
-    // );
-    console.log('done installing sandboxed preview service worker')
-    //console.log('heres the precache:', await (await caches.open(cacheName)).keys())
+self.addEventListener('install', () => {
+    // Activate updated workers without waiting for old clients to close.
+    void self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
@@ -31,83 +27,86 @@ const base64StrToBinary = (base64Data: string) => {
     for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
     }
-    return bytes
-}
-
-const getMimeType = (filename: string) => {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    const mimeTypes: { [key: string]: string } = {
-        'png': 'image/png',
-        'jpg': 'image/jpeg',
-        'jpeg': 'image/jpeg',
-        'gif': 'image/gif',
-        'svg': 'image/svg+xml',
-        'webp': 'image/webp',
-        'ico': 'image/x-icon',
-        'pdf': 'application/pdf',
-        'html': 'text/html',
-        'css': 'text/css',
-        'js': 'application/javascript',
-        'json': 'application/json',
-        'wasm': 'application/wasm',
-        'ttf': 'font/ttf',
-        'woff': 'font/woff',
-        'woff2': 'font/woff2',
-    };
-    return mimeTypes[ext || ''] || 'application/octet-stream';
+    return bytes;
 };
 
-// forward fetch request over postmessage
-const requestIframeToRequestFromVFS = (event: FetchEvent) => new Promise<Response>(async resolve => {
-    const url = event.request.url
-    const client = await self.clients.get(event.clientId)
+interface VfsResponseMessage {
+    type: 'response';
+    id: string;
+    success: boolean;
+    content?: string;
+    error?: string;
+    isBinary?: boolean;
+}
 
-    // wait for a single response
-    const listener = (event: ExtendableMessageEvent) => {
-        const data = event.data
-        if (data.type === 'response' && data.url === url) {
-            console.log("RESOLVING TO", data)
-            resolve(new Response(
-                base64StrToBinary(data.content),
-                {
-                    status: 200,
-                    headers: { 'Content-Type': getMimeType(url) }
-                }
-            ))
-            self.removeEventListener('message', listener)
-        }
+/** In-flight proxy requests, keyed by request id. */
+const pending = new Map<string, (msg: VfsResponseMessage) => void>();
+
+// One persistent listener resolves whichever request a response belongs
+// to — the old implementation registered (and could leak) one listener
+// per request.
+self.addEventListener('message', (event: ExtendableMessageEvent) => {
+    const data = event.data as VfsResponseMessage | undefined;
+    if (!data || data.type !== 'response' || typeof data.id !== 'string') return;
+    const resolve = pending.get(data.id);
+    if (resolve) {
+        pending.delete(data.id);
+        resolve(data);
     }
-    self.addEventListener('message', listener);
-    client!.postMessage({ type: 'request', url })
-})
+});
 
-// TODO: unify this list of extensions with `isBinary` in Q2SandboxedPreviewIframe.tsx. 
-// We should have a standard way to decide whether or not the preview should be allowed 
-// resolve an asset from the VFS.
-const shouldRequestFromVFS = (url: string) => url.endsWith('gif') || url.endsWith('png') || url.endsWith('jpg')
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * Forward a __q2_vfs__ fetch to the page (which relays it to the parent
+ * over postMessage), and synthesize an HTTP response from the bytes that
+ * come back.
+ */
+const proxyVfsRequest = (event: FetchEvent, vfsPath: string): Promise<Response> =>
+    new Promise<Response>((resolve) => {
+        const id = crypto.randomUUID();
+
+        const timeout = setTimeout(() => {
+            pending.delete(id);
+            resolve(new Response(`VFS proxy timeout for ${vfsPath}`, { status: 504 }));
+        }, REQUEST_TIMEOUT_MS);
+
+        pending.set(id, (msg) => {
+            clearTimeout(timeout);
+            if (!msg.success || msg.content === undefined) {
+                resolve(new Response(msg.error ?? 'Not found in VFS', { status: 404 }));
+                return;
+            }
+            const body: BodyInit = msg.isBinary
+                ? base64StrToBinary(msg.content)
+                : msg.content;
+            resolve(new Response(body, {
+                status: 200,
+                headers: { 'Content-Type': mimeTypeFor(vfsPath) },
+            }));
+        });
+
+        void (async () => {
+            const client = await self.clients.get(event.clientId);
+            if (!client) {
+                const entry = pending.get(id);
+                pending.delete(id);
+                clearTimeout(timeout);
+                if (entry) resolve(new Response('No client for VFS proxy request', { status: 502 }));
+                return;
+            }
+            client.postMessage({
+                type: 'request',
+                id,
+                vfsPath,
+                isBinary: isBinaryPath(vfsPath),
+            });
+        })();
+    });
 
 self.addEventListener('fetch', function (event) {
-    console.log("REQUEST:", event.clientId, event.request.url);
     if (event.request.method !== 'GET') return;
-
-    if (shouldRequestFromVFS(event.request.url)) {
-        event.respondWith(requestIframeToRequestFromVFS(event))
-    }
-    // Caching disabled for now — non-VFS requests fall through to the network.
-    // } else { // cache asset or fetch cached asset
-    //     event.respondWith(
-    //         (async () => {
-    //             const r = await caches.match(event.request);
-    //             console.log(`[Service Worker] Fetching resource: ${event.request.url} ${r}`);
-    //             if (r) {
-    //                 return r;
-    //             }
-    //             const response = await fetch(event.request);
-    //             const cache = await caches.open(cacheName);
-    //             console.log(`[Service Worker] Caching new resource: ${event.request.url}`, event.request);
-    //             cache.put(event.request, response.clone());
-    //             return response;
-    //         })(),
-    //     );
-    // }
-})
+    const vfsPath = vfsPathForRequestUrl(event.request.url);
+    if (vfsPath === null) return; // app asset / page — network as usual
+    event.respondWith(proxyVfsRequest(event, vfsPath));
+});

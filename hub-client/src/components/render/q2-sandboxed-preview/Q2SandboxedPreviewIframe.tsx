@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { vfsReadFile } from '@quarto/preview-runtime';
 import { DEFAULT_CSS_ARTIFACT_PATH } from '@quarto/preview-renderer/types/artifactPaths';
+import { isBinaryPath } from '../../../../quarto-hub-sandboxed-preview/src/assetPolicy';
+import { buildProxyAssetManifest } from './proxyAssetManifest';
 
 interface Q2SandboxedPreviewIframeProps {
   astJson: string;
@@ -58,15 +60,14 @@ export function Q2SandboxedPreviewIframe({
         lastSentThemeFingerprintRef.current = undefined;
         setIframeReady(true)
       } else if (event.data.type === 'url' && event.data.path) {
-        // Read from VFS and respond
+        // Read from VFS and respond. `path` is the fully-resolved VFS path
+        // extracted from the __q2_vfs__ proxy URL (the parent resolved it
+        // against currentFilePath when it built the asset manifest, or the
+        // theme-CSS rewriter resolved it against the artifact dir); `id`
+        // correlates the response with the requesting fetch.
         const wasm = await import('wasm-quarto-hub-client');
 
-        // Determine if this is a binary file based on extension
-        // TODO: unify this list of extensions with `shouldRequestFromVFS` in serviceWorker.ts
-        // in the `quarto-hub-sandboxed-preview` project. We should have a standard way to
-        // decide whether or not the preview should be allowed resolve an asset from the VFS.
-        const isBinary = /\.(png|jpg|jpeg|gif|pdf|ico|webp|ttf|woff|woff2|zip|wasm)$/i.test(event.data.path);
-
+        const isBinary = isBinaryPath(event.data.path);
         const resultJson = isBinary
           ? wasm.vfs_read_binary_file(event.data.path)
           : wasm.vfs_read_file(event.data.path);
@@ -81,6 +82,7 @@ export function Q2SandboxedPreviewIframe({
           iframeRef.current.contentWindow.postMessage(
             {
               type: 'url_response',
+              id: event.data.id,
               path: event.data.path,
               success: result.success,
               content: result.content,
@@ -97,19 +99,28 @@ export function Q2SandboxedPreviewIframe({
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  // Send AST updates when iframe is ready
+  // Proxy-URL asset manifest, rebuilt when the AST or document changes.
+  // Cheap (no VFS reads — bytes are fetched on demand through the
+  // service worker), but memoized so unrelated re-renders don't re-walk.
+  const assetManifest = useMemo(
+    () => buildProxyAssetManifest(astJson, currentFilePath),
+    [astJson, currentFilePath],
+  );
+
+  // Send AST updates when iframe is ready. The manifest piggybacks on the
+  // AST payload so an Image can never render before its manifest entry.
   useEffect(() => {
     if (!iframeReady || !iframeRef.current?.contentWindow) return;
 
     iframeRef.current.contentWindow.postMessage(
       {
         type: 'UPDATE_AST',
-        payload: { astJson, currentFilePath },
+        payload: { astJson, currentFilePath, assetManifest },
       },
       '*'
     );
 
-  }, [iframeReady, astJson, currentFilePath]);
+  }, [iframeReady, astJson, currentFilePath, assetManifest]);
 
   // Send theme CSS text when iframe is ready and fingerprint is known.
   useEffect(() => {

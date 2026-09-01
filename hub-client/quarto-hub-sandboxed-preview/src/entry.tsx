@@ -81,6 +81,12 @@ import {
 import { PreviewRoot } from '@quarto/preview-renderer/q2-preview/PreviewRoot';
 import { makeIframeMessageDispatcher } from './iframeMessageDispatch';
 import { init as initServiceWorker } from './registerServiceWorker';
+import { rewriteThemeCssUrls } from './assetPolicy';
+
+// Directory the compiled theme artifact lives in on the VFS
+// (DEFAULT_CSS_ARTIFACT_PATH's dir) — relative url() refs in the CSS are
+// rewritten into the __q2_vfs__ proxy namespace against it.
+const THEME_CSS_VFS_DIR = '.quarto/project-artifacts';
 
 // Renderer-surface global for user TSX overrides, identical to the
 // q2-preview entry's (the surface is part of the render-components
@@ -215,7 +221,10 @@ function applyThemeText(cssText: string | null): void {
         if (link) link.remove();
         return;
     }
-    const blob = new Blob([cssText], { type: 'text/css' });
+    // Rewrite relative url() refs (fonts, background images) into the
+    // service-worker proxy namespace: a blob-URL stylesheet has an opaque
+    // base, so they would otherwise resolve nowhere.
+    const blob = new Blob([rewriteThemeCssUrls(cssText, THEME_CSS_VFS_DIR)], { type: 'text/css' });
     currentThemeBlobUrl = URL.createObjectURL(blob);
     if (!link) {
         link = document.createElement('link');

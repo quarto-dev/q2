@@ -1,27 +1,52 @@
-// sends a request (from the preview in the iframe) to the authoring app
-// with type `'url'` and expects a single response with type `'url_reponse'`.
-// The response comes from Q2SandboxedPreviewIframe.tsx
-const requestVFS = (path: string) => {
-    const ret = new Promise((resolve, reject) => {
-        const handleMessage = (event: MessageEvent) => {
-            if (event.data.type === 'url_response' && event.data.path === path) {
-                window.removeEventListener('message', handleMessage);
-                console.log('received VFS request for ', path, event.data)
+/**
+ * Page-side half of the asset-proxy chain: registers the service worker
+ * and bridges its VFS requests to the parent window.
+ *
+ *   SW  ──{type:'request', id, vfsPath}──▶  this page
+ *   this page  ──{type:'url', id, path}──▶  parent (Q2SandboxedPreviewIframe)
+ *   parent  ──{type:'url_response', id, …}──▶  this page
+ *   this page  ──{type:'response', id, …}──▶  SW controller
+ *
+ * Requests are correlated by id (never by path/url — two concurrent
+ * fetches of the same path must not steal each other's responses), and
+ * every await has a timeout so a lost message can't leak a listener.
+ */
 
-                if (event.data.success === true) resolve(event.data.content)
-                else reject(event.data.error)
+interface UrlResponseMessage {
+    type: 'url_response';
+    id: string;
+    path: string;
+    success: boolean;
+    content?: string;
+    error?: string;
+    isBinary?: boolean;
+}
+
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/** Ask the parent for a VFS file; resolves with the url_response fields. */
+const requestVFS = (id: string, path: string): Promise<UrlResponseMessage> =>
+    new Promise((resolve, reject) => {
+        const handleMessage = (event: MessageEvent) => {
+            const data = event.data as UrlResponseMessage | undefined;
+            if (data?.type === 'url_response' && data.id === id) {
+                window.removeEventListener('message', handleMessage);
+                clearTimeout(timeout);
+                resolve(data);
             }
         };
+        const timeout = setTimeout(() => {
+            window.removeEventListener('message', handleMessage);
+            reject(new Error(`VFS request timed out: ${path}`));
+        }, REQUEST_TIMEOUT_MS);
         window.addEventListener('message', handleMessage);
-    })
-    window.parent.postMessage({ type: 'url', path }, '*');
-    return ret
-}
+        window.parent.postMessage({ type: 'url', id, path }, '*');
+    });
 
 export const init = async () => {
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller === null) {
         try {
-            const registration = await navigator.serviceWorker.register('serviceWorker.js')
+            const registration = await navigator.serviceWorker.register('serviceWorker.js');
             // wait for page to be claimed so that the controller is working
             await new Promise((resolve) => {
                 navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true });
@@ -34,18 +59,30 @@ export const init = async () => {
 
     // this should be guaranteed by the setup above
     if (navigator.serviceWorker.controller) {
-        // set up communication with SW
+        // Relay SW requests to the parent and responses back to the SW.
         navigator.serviceWorker.addEventListener('message', async (event) => {
-            console.log('fulfilling request', event.data)
-            if (event.data?.type === 'request') {
-                const modifiedUrl = event.data.url.split('/').at(-1)
+            const data = event.data as
+                | { type: 'request'; id: string; vfsPath: string }
+                | undefined;
+            if (data?.type !== 'request') return;
 
-                const content = await requestVFS(modifiedUrl)
+            try {
+                const response = await requestVFS(data.id, data.vfsPath);
                 navigator.serviceWorker.controller!.postMessage({
                     type: 'response',
-                    url: event.data.url,
-                    content,
-                })
+                    id: data.id,
+                    success: response.success,
+                    content: response.content,
+                    error: response.error,
+                    isBinary: response.isBinary,
+                });
+            } catch (err) {
+                navigator.serviceWorker.controller!.postMessage({
+                    type: 'response',
+                    id: data.id,
+                    success: false,
+                    error: err instanceof Error ? err.message : String(err),
+                });
             }
         });
     }
