@@ -1566,7 +1566,11 @@ export default function ProjectsHome({
           {membersFor === collection.id && renderMembersPopover(collection)}
           {openMenu === menuKey && (
             <Menu className="qh-menu-right" onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label={`Actions for ${collection.name}`}>
-              <MenuItem onSelect={() => { setOpenMenu(null); setMembersFor(collection.id); }}>
+              {/* keepOpen: the activation must not reach the Menu root's
+                  closer — its onClose (closeAllMenus) also resets membersFor,
+                  which would cancel the popover in the same React batch it
+                  was requested. The onSelect closes the menu itself. */}
+              <MenuItem keepOpen onSelect={() => { setOpenMenu(null); setMembersFor(collection.id); }}>
                 People &amp; invite…
               </MenuItem>
               <MenuItem
