@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-01
+
+- [`e4a72819`](https://github.com/quarto-dev/q2/commits/e4a72819): Math rendering upgraded to KaTeX 0.18.4 everywhere — the sandboxed preview bundle, the hub client, and the CDN link rendering emits for `html-math-method: katex` stay aligned on one version.
+
 ### 2026-08-31
 
 - [`1bb90e78`](https://github.com/quarto-dev/q2/commits/1bb90e78): Pressing Enter in the New File dialog no longer reopens the dialog after creating the file, and pressing Enter on its Cancel button no longer creates the file.
