@@ -740,7 +740,6 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
       title="Team docs"
       preview={FAKE_COLLECTION_PREVIEW}
       signedIn={true}
-      startName="Quarterly report"
       joinState="idle"
       onCta={noop}
     />

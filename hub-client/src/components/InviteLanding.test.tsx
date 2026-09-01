@@ -139,18 +139,7 @@ describe('InviteLanding CTA matrix', () => {
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeTruthy();
   });
 
-  it('signed in + collection with a start target: "Join and open <start name>"', () => {
-    renderLanding({
-      signedIn: true,
-      preview: collectionPreview,
-      startName: 'Quarterly report',
-    });
-    expect(
-      screen.getByRole('button', { name: 'Join and open Quarterly report' }),
-    ).toBeTruthy();
-  });
-
-  it('signed in + collection without a start target: "Join <collection name>"', () => {
+  it('signed in + collection: "Join <collection name>" (the invite is to the collection, not a document)', () => {
     renderLanding({ signedIn: true, preview: collectionPreview });
     expect(screen.getByRole('button', { name: 'Join Team docs' })).toBeTruthy();
   });

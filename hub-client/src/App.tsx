@@ -258,6 +258,10 @@ function App() {
     targetName: string;
     inviter: string;
   } | null>(null);
+  // Set after joining a collection via an invite: the home screen sorts
+  // this collection to the top so the invitee lands looking at what they
+  // just accepted. Session-scoped on purpose.
+  const [promotedCollectionId, setPromotedCollectionId] = useState<string | null>(null);
 
   // Track if we've done the initial URL-based navigation
   const initialLoadRef = useRef(false);
@@ -410,9 +414,10 @@ function App() {
   }, [pendingShare, connectToSharedProject]);
 
   // Invite landing CTA (collection invite): subscribe with the identity
-  // from the account (no name/color form), then land in the editor on the
-  // start target when one is present and connectable; otherwise home with
-  // the joined collection visible.
+  // from the account (no name/color form), then land on the home screen
+  // with the joined collection promoted to the top — the invite was to
+  // the collection, not to any particular document. The welcome banner
+  // shows later, on the first project opened from that collection.
   const handleCollectionCta = useCallback(
     async (inviteRoute: JoinCollectionRoute) => {
       setInviteJoinState('joining');
@@ -434,26 +439,11 @@ function App() {
         targetName: inviteRoute.collectionName,
         inviter: inviteRoute.inviter,
       });
-      if (inviteRoute.start) {
-        const startName =
-          inviteRoute.preview?.projects[0]?.name ?? inviteRoute.collectionName;
-        const error = await connectToSharedProject(
-          {
-            indexDocId: inviteRoute.start.indexDocId,
-            syncServer: inviteRoute.syncServer || DEFAULT_SYNC_SERVER,
-            name: startName,
-            filePath: inviteRoute.start.filePath,
-          },
-          { quiet: true, addToSet: false },
-        );
-        setInviteJoinState('idle');
-        if (!error) return; // landed in the editor on the start file
-      } else {
-        setInviteJoinState('idle');
-      }
+      setPromotedCollectionId(inviteRoute.collectionId);
+      setInviteJoinState('idle');
       navigateToProjectSelector({ replace: true });
     },
-    [projectSetActions, connectToSharedProject, navigateToProjectSelector],
+    [projectSetActions, navigateToProjectSelector],
   );
 
   // Ephemeral preview boot (bd-zf4ryvuq): same invite-first pattern as
@@ -905,6 +895,23 @@ function App() {
     }
   }, [navigateToProject, resolveActorId, screenName, cursorColor]);
 
+  // Whether the welcome banner belongs on the currently open project: a
+  // document invite's banner only on that document's project; a collection
+  // invite's banner on the first project opened from that collection.
+  const welcomeMatchesProject = (
+    invite: { kind: 'collection' | 'document'; targetId: string },
+    proj: ProjectEntry,
+  ): boolean => {
+    const bare = (id: string) => id.replace(/^automerge:/, '');
+    if (invite.kind === 'document') {
+      return bare(invite.targetId) === bare(proj.indexDocId);
+    }
+    const collection = projectSetState.collections.find(
+      (c) => bare(c.docId) === bare(invite.targetId),
+    );
+    return !!collection?.entries.some((e) => bare(e.indexDocId) === bare(proj.indexDocId));
+  };
+
   // Auth gate: when auth is enabled, require login before showing the app.
   // Show a loading spinner while checking auth status to avoid login flash.
   if (AUTH_ENABLED && authLoading) {
@@ -999,7 +1006,6 @@ function App() {
         title={route.collectionName}
         preview={route.preview}
         signedIn={true}
-        startName={route.start ? route.preview?.projects[0]?.name : undefined}
         joinState={inviteJoinState}
         ctaDisabled={projectSetState.status !== 'connected'}
         error={inviteError}
@@ -1104,6 +1110,7 @@ function App() {
             onRenameProject={projectSetActions.updateProjectDescription}
             onUpdateProjectSummary={projectSetActions.updateProjectSummary}
             collections={projectSetState.collections}
+            promoteCollectionId={promotedCollectionId ?? undefined}
             onCreateCollection={projectSetActions.createCollection}
             onUnsubscribeCollection={projectSetActions.unsubscribeCollection}
             onRenameCollection={projectSetActions.renameCollection}
@@ -1162,7 +1169,7 @@ function App() {
               sessionEphemeral={previewSession?.allowEdit === false}
               userName={screenName}
               banner={
-                welcomeInvite && screenName ? (
+                welcomeInvite && screenName && welcomeMatchesProject(welcomeInvite, project) ? (
                   <EditorWelcomeBanner
                     kind={welcomeInvite.kind}
                     targetId={welcomeInvite.targetId}

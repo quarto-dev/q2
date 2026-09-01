@@ -31,8 +31,6 @@ export interface InviteLandingProps {
    * GIS-minted credentials, so a custom Google button cannot work.
    */
   signInCta?: ReactNode;
-  /** Name of the post-join start target, for CTA copy (collection only). */
-  startName?: string;
   joinState: 'idle' | 'joining';
   /** Disable the signed-in CTA (e.g. while the personal root connects). */
   ctaDisabled?: boolean;
@@ -102,12 +100,13 @@ function DocumentPayload({ preview }: { preview: DocumentInvitePreview }) {
 }
 
 function ctaLabel(props: InviteLandingProps): string {
-  const { kind, joinState, preview, startName, title } = props;
+  const { kind, joinState, preview, title } = props;
   if (joinState === 'joining') {
     return kind === 'collection' ? 'Joining…' : 'Opening…';
   }
   if (kind === 'collection') {
-    if (startName) return `Join and open ${startName}`;
+    // The invite is to the collection: joining lands on the home screen
+    // with the collection at the top, never a specific document.
     return preview ? `Join ${title}` : 'Join collection';
   }
   return preview ? `Open ${title}` : 'Open document';

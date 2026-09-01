@@ -63,8 +63,8 @@ export default function EditorWelcomeBanner({
       <span className="ewb-text">
         {kind === 'collection' ? (
           <>
-            Welcome to <strong>{targetName}</strong> — {inviter} suggested starting here. You're
-            editing live as <strong>{userName}</strong>.
+            Welcome to <strong>{targetName}</strong> — {inviter} invited you. You're editing live
+            as <strong>{userName}</strong>.
           </>
         ) : (
           <>

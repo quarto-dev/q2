@@ -44,7 +44,10 @@ describe('EditorWelcomeBanner', () => {
     const banner = screen.getByTestId('editor-welcome-banner');
     expect(banner.textContent).toContain('Welcome to');
     expect(banner.textContent).toContain('Team docs');
-    expect(banner.textContent).toContain('Carlos suggested starting here.');
+    // The invite lands on the home screen, not a start document, so the
+    // banner credits the inviter without claiming they "suggested" this file.
+    expect(banner.textContent).toContain('Carlos invited you.');
+    expect(banner.textContent).not.toContain('suggested starting here');
     expect(banner.textContent).toContain("You're editing live as");
     expect(banner.textContent).toContain('Amy Mora');
   });

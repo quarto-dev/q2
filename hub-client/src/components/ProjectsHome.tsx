@@ -82,6 +82,12 @@ interface Props {
   onUpdateProjectSummary?: (indexDocId: string, summary: ProjectSetEntrySummary) => void;
   /** All connected collections, root first (from useCollectionSets). */
   collections?: CollectionSnapshot[];
+  /**
+   * Sort this collection's section to the top (bd-fxdcxbpq): set after
+   * joining a collection via an invite so the invitee lands looking at
+   * what they just accepted.
+   */
+  promoteCollectionId?: string;
   onCreateCollection?: (name: string) => Promise<string>;
   onUnsubscribeCollection?: (collectionDocId: string) => Promise<void>;
   onRenameCollection?: (collectionDocId: string, name: string) => void;
@@ -237,6 +243,7 @@ export default function ProjectsHome({
   onRenameProject,
   onUpdateProjectSummary,
   collections: collectionsProp,
+  promoteCollectionId,
   onCreateCollection,
   onUnsubscribeCollection,
   onRenameCollection,
@@ -322,19 +329,26 @@ export default function ProjectsHome({
   // first). The root is the personal superset; the sections on this page
   // render the non-root collections, and "Everything else" is computed as
   // root entries not present in any of them.
-  const collectionViews: CollectionView[] = useMemo(
-    () =>
-      (collectionsProp ?? [])
-        .filter((c) => !c.isRoot)
-        .map((c) => ({
-          id: c.docId,
-          name: c.name ?? 'Untitled collection',
-          syncServer: c.syncServer,
-          entries: c.entries,
-          projectIds: c.entries.map((e) => e.indexDocId.replace(/^automerge:/, '')),
-        })),
-    [collectionsProp],
-  );
+  const collectionViews: CollectionView[] = useMemo(() => {
+    const views = (collectionsProp ?? [])
+      .filter((c) => !c.isRoot)
+      .map((c) => ({
+        id: c.docId,
+        name: c.name ?? 'Untitled collection',
+        syncServer: c.syncServer,
+        entries: c.entries,
+        projectIds: c.entries.map((e) => e.indexDocId.replace(/^automerge:/, '')),
+      }));
+    // A just-joined collection sorts to the top (stable otherwise) so the
+    // invitee lands looking at what they accepted (bd-fxdcxbpq).
+    if (promoteCollectionId) {
+      const bare = promoteCollectionId.replace(/^automerge:/, '');
+      views.sort((a, b) =>
+        Number(b.id.replace(/^automerge:/, '') === bare) -
+        Number(a.id.replace(/^automerge:/, '') === bare));
+    }
+    return views;
+  }, [collectionsProp, promoteCollectionId]);
   const collections = collectionViews;
   // Which collection's members-and-invite popover is open
   const [membersFor, setMembersFor] = useState<string | null>(null);
@@ -1294,14 +1308,14 @@ export default function ProjectsHome({
 
   /**
    * Invite = the collection document's id + server, plus (bd-fxdcxbpq) a
-   * display-only preview= built from the cached peek summaries and a
-   * start= target (first project + its first cached file) so the invitee
-   * lands in the editor after joining. Nothing that grants access beyond
-   * the collection id itself travels.
+   * display-only preview= built from the cached peek summaries. Joining
+   * lands on the home screen with the collection promoted to the top —
+   * the invite is to the collection, so no start= document is emitted
+   * (the parser still tolerates start= on links already in the wild).
+   * Nothing that grants access beyond the collection id itself travels.
    */
   const buildInviteUrl = (collection: CollectionView): string => {
     const items = collectionItemsOf(collection);
-    const first = items[0];
     return buildFullUrl({
       type: 'join-collection',
       collectionId: collection.id,
@@ -1324,12 +1338,6 @@ export default function ProjectsHome({
           .map((p) => p.name.split(/\s+/)[0])
           .slice(0, 3),
       },
-      ...(first && {
-        start: {
-          indexDocId: first.indexDocId.replace(/^automerge:/, ''),
-          filePath: first.summary?.topFiles[0] ?? 'index.qmd',
-        },
-      }),
     });
   };
 
