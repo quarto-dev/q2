@@ -558,9 +558,8 @@
   background: transparent;
 }
 
-/* Same single-layer rule for the bars inside the column. */
-.project-column .project-top-bar,
-.project-column .project-bottom-bar {
+/* Same single-layer rule for the top bar inside the column. */
+.project-column .project-top-bar {
   background: transparent;
 }
 
@@ -606,18 +605,16 @@
 
 }
 
-/* Project bottom bar: sync-status badge for the project index doc;
-   mirrors the replay drawer's collapsed height so the two bottom bars
-   read as one row. */
-.project-bottom-bar {
+/* Sync-status badge for the project index doc, at the top of the
+   FILES section (above the file-tree toolbar). */
+.files-sync-status {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   min-height: 28px;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  /* Match the sidebar background (same as .project-top-bar). */
-  background: var(--sidebar-bg);
-  border-top: 1px solid var(--editor-header-border);
+  /* Badge's own 8px padding + 4px lines up with the 12px file rows. */
+  padding-inline: 4px;
+  border-bottom: 1px solid var(--sidebar-border);
 }
 
 /* Document bottom bar: the replay drawer (which hosts the document

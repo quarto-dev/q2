@@ -52,7 +52,7 @@ export const header = {
   noFileSelected: 'No file selected',
 } as const;
 
-/** SyncStatusBadge (project + document bottom bars). */
+/** SyncStatusBadge (FILES section + document bottom bar). */
 export const syncStatus = {
   /** Prefix when disconnected (browser offline / socket down / no peer). */
   savingLocally: 'Offline',
@@ -144,6 +144,7 @@ export const dialogs = {
     connectionLog: 'Connection log',
     lastEphemeralMessage: 'Last ephemeral message received',
     lastRemoteChange: 'Last remote change',
+    lastReadReceipt: 'Last read receipt',
     thisFile: 'This file',
     project: 'Project',
     morePatches: (n: number) => `… and ${n} more`,

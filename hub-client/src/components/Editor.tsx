@@ -1133,8 +1133,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   return (
     <div className="editor-container">
       <div className="editor-columns">
-        {/* Project column: project-scoped chrome (top bar, sidebar, bottom
-            bar). The whole column is inside SidebarDrawer, so at ≤900px
+        {/* Project column: project-scoped chrome (top bar, sidebar).
+            The whole column is inside SidebarDrawer, so at ≤900px
             it becomes the off-canvas drawer in one piece. */}
         {!isFullscreenPreview && (
           <SidebarDrawer drawer={sidebarDrawer}>
@@ -1149,20 +1149,25 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               switch (activeTab) {
                 case 'files':
                   return (
-                    <FileSidebar
-                      files={files}
-                      currentFile={currentFile}
-                      onSelectFile={handleSelectFile}
-                      onNewFile={handleNewFile}
-                      onUploadFiles={handleUploadFiles}
-                      onDeleteFile={handleDeleteFile}
-                      onRenameFile={handleRenameFile}
-                      onOpenInNewTab={handleOpenInNewTab}
-                      onCopyLink={handleCopyLink}
-                      currentFormat={currentFormat}
-                      searchFiles={searchFiles}
-                      fileContents={fileContents}
-                    />
+                    <>
+                      <div className="files-sync-status">
+                        <SyncStatusBadge scope="project" />
+                      </div>
+                      <FileSidebar
+                        files={files}
+                        currentFile={currentFile}
+                        onSelectFile={handleSelectFile}
+                        onNewFile={handleNewFile}
+                        onUploadFiles={handleUploadFiles}
+                        onDeleteFile={handleDeleteFile}
+                        onRenameFile={handleRenameFile}
+                        onOpenInNewTab={handleOpenInNewTab}
+                        onCopyLink={handleCopyLink}
+                        currentFormat={currentFormat}
+                        searchFiles={searchFiles}
+                        fileContents={fileContents}
+                      />
+                    </>
                   );
                 case 'outline':
                   return (
@@ -1205,9 +1210,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               }
             }}
           </SidebarTabs>
-            <div className="project-bottom-bar">
-              <SyncStatusBadge scope="project" />
-            </div>
           </div>
           </SidebarDrawer>
         )}

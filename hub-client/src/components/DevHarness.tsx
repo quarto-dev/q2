@@ -388,7 +388,6 @@ function EditorShellHarness({ viewMode }: { viewMode: 'markup' | 'both' | 'previ
               onShare={() => setLastAction('share')}
             />
             <StatefulSidebarSections />
-            <div className="project-bottom-bar" />
           </div>
         </SidebarDrawer>
         <div className="document-column">
@@ -659,8 +658,8 @@ const FAKE_CONNECTION_STATUS: ConnectionStatusHarnessData = {
     lastSyncMessageAt: FIXED_NOW_MS - 5_000,
     lastEphemeralMessageAt: FIXED_NOW_MS - 3_600_000,
     lastRemoteChangeAt: FIXED_NOW_MS - 720_000,
-    lastLocalChangeAt: null,
-    lastLocalDeliveredAt: null,
+    lastLocalChangeAt: FIXED_NOW_MS - 300_000,
+    lastLocalDeliveredAt: FIXED_NOW_MS - 299_000,
   },
   // beforeText/afterText render the inline character diff (del/ins spans).
   fileChange: {
