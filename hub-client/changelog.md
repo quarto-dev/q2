@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-01
 
+- [`40a4a5e2`](https://github.com/quarto-dev/q2/commits/40a4a5e2): Invite cards now say "Join to collaborate on …" above the Google sign-in button when you're signed out, and simply "Open …" when you're already signed in.
 - [`f0b5ac14`](https://github.com/quarto-dev/q2/commits/f0b5ac14): Joining a collection invite now lands on the projects home screen with the joined collection at the top, instead of opening a document's editor; the welcome banner appears on the first project you open from that collection.
 - [`1b07531b`](https://github.com/quarto-dev/q2/commits/1b07531b): Adding a project to a collection now carries its cached file counts and contributors along, so collection cards and invite previews no longer show "0 files" for a populated project until its next open.
 - [`720c263e`](https://github.com/quarto-dev/q2/commits/720c263e): Collection and document invite links now land on a unified invitation card showing who invited you and a preview of what you're joining, with one click to join or open; document links no longer open the editor silently, joining uses your Google identity instead of a name form, and a one-time welcome banner orients you in the editor.
