@@ -166,6 +166,14 @@ Verification for the katex case:
       main — `useAutomergeSync.test.ts` mock missing `vfsAddFile` (28
       tests) + one BranchBar test; likely from the doc-branching work
       (132c3ad3).
+- [x] **Fixed bd-v51cly8i** on main (`41da392c` + changelog `05fa2f1d`),
+      three defects from 132c3ad3: the missing `vfsAddFile` mock export;
+      BranchBar chips on `onMouseDown` (also broke keyboard switching and
+      made delete-× switch branches in a real browser) → `onClick`; and
+      the E2E spec never enabling the default-off `documentBranches`
+      preference (the Hub-Client E2E redness). Verified: hub-client
+      `test:ci` fully green, `branch-bar.spec.ts` passes locally against
+      a real hub, `build:all` green. Strand closes after push + green CI.
 
 ## Facts for quick reference
 
