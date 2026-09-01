@@ -58,7 +58,11 @@ function agoText(deltaMs: number): string {
 
 interface SyncStatusBadgeProps {
   scope: 'project' | 'document';
-  /** Path of the open file; only used when scope is 'document'. */
+  /**
+   * Path of the open file. Watched when scope is 'document'; either
+   * scope forwards it to the ConnectionStatusDialog so the per-file
+   * column is labeled with the document name.
+   */
   currentFilePath?: string | null;
 }
 
@@ -162,7 +166,7 @@ export default function SyncStatusBadge({ scope, currentFilePath }: SyncStatusBa
       </button>
       {showDialog && (
         <ConnectionStatusDialog
-          currentFilePath={scope === 'document' ? currentFilePath : null}
+          currentFilePath={currentFilePath ?? null}
           onClose={() => setShowDialog(false)}
         />
       )}

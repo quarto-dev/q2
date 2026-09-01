@@ -1151,7 +1151,10 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                   return (
                     <>
                       <div className="files-sync-status">
-                        <SyncStatusBadge scope="project" />
+                        <SyncStatusBadge
+                          scope="project"
+                          currentFilePath={currentFile?.path ?? null}
+                        />
                       </div>
                       <FileSidebar
                         files={files}
