@@ -117,15 +117,23 @@ step, not a fourth bucket).
 
 ## What "everything" means here
 
-Every row above has an A and a B and a named owner (or a flagged gap). The
-only B tests that cannot be authored as red-now are the three
-decision-gated ones (column semantics ×2 implementations, comrak strategy)
-— and those are present as `#[ignore]`/`it.skip` stubs so the suite still
-*names* the missing coverage. Two named exceptions to the A/B pairing:
-YAML block scalar and XML text/attr are `pass?`/`(unprobed)` — their owning
-strands (`bd-aowdiufr`, `bd-w9imk3bi`) still owe the A test that confirms
-the row before it counts as a real `pass`; and Lua `*l` strip has no B
-target because it is characterization-only by design (G3), not a gap in
-Windows CRLF support. With G1–G4 resolved and those two exceptions tracked
-by their owning strands, the harness covers every identified I/O boundary
-in both buckets.
+Every row above is either **paired** (has an A and a B) or a **named
+exception**, and every row has a named owner (or a flagged gap). The only
+B tests that cannot be authored as red-now are the three decision-gated
+ones (column semantics ×2 implementations, comrak strategy) — and those
+are present as `#[ignore]`/`it.skip` stubs so the suite still *names* the
+missing coverage.
+
+Two rows are named exceptions, not yet paired, and coverage is **not**
+complete until they are:
+
+- YAML block scalar and XML text/attr are `pass?`/`(unprobed)` — their
+  owning strands (`bd-aowdiufr`, `bd-w9imk3bi`) still owe the A test that
+  confirms the row. Until that A test exists and passes, these rows are
+  outstanding work, not coverage.
+- Lua `*l` strip is, by design, outside B-bucket coverage: it documents
+  intentional behavior (G3), not a Windows CRLF gap, so it has no B
+  target and never will.
+
+So the harness reaches full coverage of every identified I/O boundary once
+G1–G4 are resolved *and* the YAML/XML A tests land and pass — not before.
