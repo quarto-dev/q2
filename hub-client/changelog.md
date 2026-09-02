@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-02
+
+- [`ee47e8ec`](https://github.com/quarto-dev/q2/commits/ee47e8ec): Fix `render-components:` custom TSX overrides silently not loading for revealjs presentations.
+
 ### 2026-09-01
 
 - [`a4c3fb9c`](https://github.com/quarto-dev/q2/commits/a4c3fb9c): The experimental branch bar's Merge button now uses the app's standard accent color in both themes, and its branch-name input shows the standard keyboard focus ring.
