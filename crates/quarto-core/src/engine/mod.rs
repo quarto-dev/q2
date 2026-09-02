@@ -59,6 +59,7 @@ mod context;
 mod detection;
 mod error;
 mod markdown;
+pub mod nested_cell_mask;
 pub mod preview_record;
 mod registry;
 mod replay;

@@ -2041,6 +2041,72 @@ mod tests {
         );
     }
 
+    /// T22 (hunk H8): mask must be applied **inside** the per-engine loop,
+    /// once per iteration, not once before the loop starts. `fixture-a`'s
+    /// spliced-in result introduces a *brand-new* display block (a
+    /// `markdown`-classed block containing a nested `{r}` opener) that did
+    /// not exist in the original AST handed to the stage — only a
+    /// per-iteration mask (re-run against the reconciled `ast` before each
+    /// `serialize_ast_to_qmd` call) catches it before `fixture-b` runs.
+    /// Hoisting the mask out of the loop (reverting H8) would mask once
+    /// against the *original* AST, before fixture-a's block exists, leaving
+    /// fixture-b's input unmasked — this test goes RED under that revert.
+    /// It is RED today too: nothing masks anything yet, so fixture-b
+    /// receives the raw `{r}` opener unchanged.
+    ///
+    /// `FixtureEngine` is extended with a test-only `received_inputs()`
+    /// handle (see `engine/fixture.rs`) so this test can inspect what the
+    /// second engine actually received — `ExecuteResult` alone only carries
+    /// what an engine *produced*, not what it was *given*.
+    #[tokio::test]
+    async fn test_second_engine_in_sequence_receives_masked_nested_fence() {
+        use crate::engine::FixtureEngine;
+
+        let fixture_a = FixtureEngine::with_results(
+            "fixture-a",
+            vec!["````markdown\n```{r}\n1 + 1\n```\n````".to_string()],
+        );
+        let fixture_b =
+            FixtureEngine::with_results("fixture-b", vec!["Final output from B.".to_string()]);
+        let received_by_b = fixture_b.received_inputs();
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(fixture_a));
+        registry.register(Arc::new(fixture_b));
+
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+
+        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\n```{fixture-a}\nseed\n```\n\n```{fixture-b}\nseed-b\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        let input = PipelineData::DocumentAst(doc_ast);
+        let _output = stage.run(input, &mut ctx).await.unwrap();
+
+        let received = received_by_b
+            .lock()
+            .expect("received_inputs mutex poisoned");
+        assert_eq!(
+            received.len(),
+            1,
+            "fixture-b should run exactly once; got {received:?}"
+        );
+        let second_input = &received[0];
+
+        assert!(
+            second_input.contains("q2-nested-executable"),
+            "the display block fixture-a introduced must be masked before \
+             fixture-b runs — mask must be reapplied every loop iteration, \
+             not hoisted out of it; fixture-b received:\n{second_input}"
+        );
+        assert!(
+            !second_input.contains("```{r}"),
+            "the raw `{{r}}` opener must not survive unmasked into \
+             fixture-b's input; fixture-b received:\n{second_input}"
+        );
+    }
+
     /// FileId coherence across a two-engine sequence: kept original blocks
     /// keep `FileId(0)` (the `.qmd`), blocks produced by the first engine
     /// get `FileId(1)` (its intermediate), and blocks produced by the
@@ -3059,6 +3125,173 @@ mod tests {
             DEFAULT_EXECUTE_TIMEOUT.as_secs(),
             300,
             "DEFAULT_EXECUTE_TIMEOUT must be 300 s"
+        );
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // nested-cell-masking plan, T19 (hunk H5)
+    // ──────────────────────────────────────────────────────────────
+
+    /// Return `true` when `Rscript` is on PATH. Copied from
+    /// `tests/integration/marimo_engine_e2e.rs:76-82` per the task brief —
+    /// T19 must run *in-crate* (Controller ruling R7: `reconciliation_plan`
+    /// is a stage-local, not observable through a render, so this test
+    /// drives `EngineExecutionStage` directly rather than living in
+    /// `tests/integration/`), and the integration file's helper isn't
+    /// reachable from here.
+    fn rscript_available() -> bool {
+        std::process::Command::new("Rscript")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    }
+
+    /// Return `true` when the R `knitr` package is installed. Copied from
+    /// `tests/integration/marimo_engine_e2e.rs:84-94` — gating on
+    /// `KnitrEngine::is_available()` alone is insufficient, since it only
+    /// checks for the `Rscript` binary, not the package.
+    fn knitr_r_package_available() -> bool {
+        std::process::Command::new("Rscript")
+            .args([
+                "-e",
+                "if (!requireNamespace(\"knitr\", quietly = TRUE)) quit(status = 1)",
+            ])
+            .output()
+            .is_ok_and(|o| o.status.success())
+    }
+
+    /// T19 (hunk H5): the display block must survive `reconcile` unchanged
+    /// — i.e. keep the original `.qmd`'s FileId — after a real knitr run
+    /// over a document with both a live `{r}` cell and a displayed one.
+    ///
+    /// **Controller ruling (R7), superseding the plan's tier for this row.**
+    /// The plan lists T19 as a render-tier test asserting "the block lands
+    /// in `blocks_kept`" — not observable from a render, since
+    /// `reconciliation_plan` is a local inside this stage's `run` (never on
+    /// its output). So this test runs `EngineExecutionStage` directly and
+    /// inspects the reconciled AST's `SourceInfo`, following
+    /// `test_engine_execution_remaps_new_blocks_to_intermediate`'s idiom: a
+    /// *kept* block resolves to FileId(0) (the original `.qmd`); a
+    /// *replaced* one inherits the engine's `.rmarkdown` intermediate's
+    /// FileId instead.
+    ///
+    /// **Why this matters (spec, "Reconcile — why byte-exactness is
+    /// load-bearing"):** if `unmask` drifts by a single byte restoring the
+    /// masked opener, reconcile treats the display block as *changed* and
+    /// **replaces** it — silently attributing the author's own example to a
+    /// temp file. Revert **H5** (byte-exact whitespace/backtick-width
+    /// replay in `unmask`) and this goes RED. It is RED today too: nothing
+    /// masks or unmasks anything yet, so the live `{r}` cell dispatches
+    /// knitr *over the raw, unmasked nested `{r}` opener* — knitr's own
+    /// chunk-begin pattern (`^[\t >]*```{r}`) matches it and executes it as
+    /// a second cell, which both defeats the "display, don't execute"
+    /// contract this plan exists to fix and (separately) changes the
+    /// reconciled AST's block count/shape enough that this test's
+    /// find-the-display-block step legitimately fails to find an
+    /// *unexecuted* display block at all.
+    ///
+    /// Gated on Rscript **and** the R `knitr` package, following the idiom
+    /// of `tests/integration/marimo_engine_e2e.rs:989`: skip *loudly* on a
+    /// machine that lacks them. No workflow in this repo installs R (see the
+    /// plan's Documentation section), so this row is exercised on developer
+    /// machines and not in CI — the printed `SKIP:` line is the signal that
+    /// the row went unproven, which is why it names the row and says so.
+    #[tokio::test]
+    async fn test_display_block_survives_reconcile_unchanged() {
+        if !rscript_available() {
+            eprintln!(
+                "SKIP: Rscript not on PATH — T19 \
+                 test_display_block_survives_reconcile_unchanged (a skip here is a \
+                 signal that the row went unproven, not a pass)"
+            );
+            return;
+        }
+        if !knitr_r_package_available() {
+            eprintln!(
+                "SKIP: R package 'knitr' not installed — T19 \
+                 test_display_block_survives_reconcile_unchanged (a skip here is a \
+                 signal that the row went unproven, not a pass)"
+            );
+            return;
+        }
+
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectContext};
+        use quarto_pandoc_types::Block;
+        use quarto_source_map::FileId;
+        use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let qmd_path = dir.path().join("doc.qmd");
+        // A live cell (so knitr enters the sequence at all — AST-based
+        // resolution declines to start an engine for a doc whose only
+        // `{r}` fence is displayed) plus a displayed one, marked with a
+        // string ("nested-marker") that can only appear in the *source*,
+        // never in knitr's output, so finding the block by its text proves
+        // it was never executed.
+        let content = "---\ntitle: T19\n---\n\n\
+             ```{r}\n1 + 1\n```\n\n\
+             ````markdown\n```{r}\ncat(\"nested-marker\")\n```\n````\n";
+        std::fs::write(&qmd_path, content).expect("write fixture");
+
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let project = ProjectContext::discover(&qmd_path, runtime.as_ref())
+            .expect("discover single-file project");
+        let document = DocumentInfo::from_path(&qmd_path);
+        let format = Format::html();
+        let mut ctx =
+            StageContext::new(runtime, format, project, document).expect("StageContext::new");
+
+        let path_str = qmd_path.to_string_lossy().into_owned();
+        let doc_ast = parse_qmd_to_ast(content.as_bytes(), &path_str);
+
+        let stage = EngineExecutionStage::new();
+        let input = PipelineData::DocumentAst(doc_ast);
+        let output = stage
+            .run(input, &mut ctx)
+            .await
+            .expect("EngineExecutionStage::run over a real knitr document");
+        let result = output.into_document_ast().expect("DocumentAst");
+
+        // The intermediate (.rmarkdown) slot: any filename in the merged
+        // context other than the original .qmd's.
+        let intermediate_id = result
+            .ast_context
+            .filenames
+            .iter()
+            .position(|f| f != &path_str)
+            .map(FileId)
+            .expect("expected a knitr .rmarkdown intermediate file slot");
+
+        let display_block_source_info = result
+            .ast
+            .blocks
+            .iter()
+            .find_map(|b| match b {
+                Block::CodeBlock(cb) if cb.text.contains("nested-marker") => {
+                    Some(cb.source_info.clone())
+                }
+                _ => None,
+            })
+            .expect(
+                "expected the display block (containing the never-executed \
+                 nested-marker source line) to survive in the reconciled AST",
+            );
+
+        let mut ids = std::collections::HashSet::new();
+        display_block_source_info.collect_file_ids(&mut ids);
+
+        assert!(
+            ids.contains(&FileId(0)),
+            "display block must resolve to the original .qmd's FileId(0) \
+             (i.e. reconcile kept it, not replaced it); got {ids:?}"
+        );
+        assert!(
+            !ids.contains(&intermediate_id),
+            "display block must NOT resolve to the .rmarkdown intermediate \
+             FileId({intermediate_id:?}) — that would mean reconcile \
+             replaced it, attributing the author's own example to a temp \
+             file; got {ids:?}"
         );
     }
 }

@@ -518,6 +518,52 @@ mod tests {
         );
     }
 
+    /// T20 (hunk H10): `compute_input_qmd` must mask executable fence
+    /// openers nested inside a *displayed* code block — the same masked
+    /// bytes the engine-execution loop hands to the engine as `input_qmd`
+    /// (once H8 lands there too). `compute_input_qmd_matches_capture_input_qmd`
+    /// above uses a fixture with **no** display block, so it stays green
+    /// through a regression here; this fixture adds one, closing that gap.
+    ///
+    /// The first assertion (masked marker present) is what makes this test
+    /// genuinely red today: neither `compute_input_qmd` nor `record_capture`
+    /// masks anything yet, so today's bytes carry the bare `{r}` opener, not
+    /// `q2-nested-executable`. The second assertion protects the
+    /// fully-implemented invariant (compute == capture) once H8 and H10 both
+    /// land.
+    #[tokio::test]
+    async fn compute_input_qmd_masks_nested_display_fence() {
+        let (_tmp, path, project, runtime) = fixture(
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nSENTINEL\n```\n\n```markdown\n```{r}\n1 + 1\n```\n```\n",
+        );
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(PassthroughTestEngine));
+
+        let captures = record_capture(&path, &project, runtime.clone(), Some(Arc::new(registry)))
+            .await
+            .expect("record_capture");
+        let capture = captures.first().expect("capture present");
+
+        let computed = compute_input_qmd(&path, &project, runtime)
+            .await
+            .expect("compute_input_qmd");
+        let computed_str = String::from_utf8(computed).expect("UTF-8");
+
+        assert!(
+            computed_str.contains("q2-nested-executable"),
+            "compute_input_qmd must mask the nested `{{r}}` opener inside the \
+             display block so quarto-preview's staleness compare and cache key \
+             see masked bytes (spec: \"The engine capture — asymmetric, by \
+             necessity\"); got:\n{computed_str}"
+        );
+        assert_eq!(
+            computed_str, capture.input_qmd,
+            "compute_input_qmd must yield the same (masked) bytes the engine \
+             receives, even for docs with a display block"
+        );
+    }
+
     #[tokio::test]
     async fn compute_input_qmd_is_stable_for_equal_inputs() {
         // Plan §C.2 unit test #1: "the canonicalization function
