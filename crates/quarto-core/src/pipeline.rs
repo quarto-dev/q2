@@ -79,11 +79,11 @@ use crate::transforms::{
     MermaidRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
     NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
-    SectionizeTransform, ShortcodeResolveTransform, SidebarGenerateTransform,
-    SidebarRenderTransform, TableBootstrapClassTransform, TheoremSugarTransform,
-    TitleBannerTransform, TitleBlockTransform, TocGenerateTransform, TocLocationTransform,
-    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
-    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
+    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
+    TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -1493,6 +1493,18 @@ pub fn build_transform_pipeline(
     // user-filter slot inserted before AttributionRender still sees the
     // un-enriched class list. Idempotent.
     pipeline.push(Box::new(TableBootstrapClassTransform::new()));
+
+    // bd-images-no-max-width-e5ywgnma: tag body images with Bootstrap's
+    // `img-fluid` so an image the author never sized is capped at its
+    // container's width instead of laying out at intrinsic pixel width
+    // (matches Quarto 1's `quarto-post/responsive.lua`). Sits next to
+    // the table pass above for the same reason it runs late: every
+    // upstream transform has finished producing images by now, so
+    // crossref-rendered figures are tagged too. Chrome emitted as raw
+    // HTML (listing thumbnails, navbar logos) is not in `ast.blocks`
+    // and stays untagged, as in Quarto 1. Idempotent, and self-gated
+    // to HTML formats excluding revealjs and `minimal: true`.
+    pipeline.push(Box::new(ResponsiveImageTransform::new()));
 
     // llms markdown capture (bd-llms-txt-unimplemented-oih6z6j7).
     // Runs after every content-mutating transform — crossref-render

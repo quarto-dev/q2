@@ -76,6 +76,7 @@ pub mod render_to_html_captures;
 pub mod render_to_html_user_grammars;
 pub mod replay_engine;
 pub mod repo_actions_pipeline;
+pub mod responsive_images_pipeline;
 pub mod revealjs_features;
 pub mod revealjs_format;
 pub mod secondary_nav_pipeline;
