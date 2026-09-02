@@ -191,16 +191,28 @@ $endfor$
 ///   exists (same transform); gates the `<header>` emission
 /// - `$date$` - publication date
 /// - `$abstract$` - document abstract (rendered as HTML blocks)
-/// - `$body-classes$` - CSS classes for body element. When set, replaces
-///   the `fullcontent` default entirely. Typically computed by
-///   `SidebarRenderTransform` (which writes `rendered.navigation.body-classes`)
-///   and copied into `body-classes` by `render_with_compiled_template`,
-///   but a user filter or template variable can override it. When unset
-///   and `rendered.navigation.toc` is present, `render_with_compiled_template`
-///   sets it to the empty string so the body falls through to the default
-///   (no-class) wide layout — needed because `fullcontent` allocates only
-///   `0.14*margin-width` for the right margin and squashes a TOC to ~70px.
-///   Mirrors TS Quarto's `format-html-bootstrap.ts` body-class logic.
+/// - `$body-classes$` - CSS classes for body element. A top-level
+///   `body-classes` supplied by the author or a filter is kept
+///   wholesale and suppresses the compose below. Otherwise
+///   `render_with_compiled_template` accumulates: the structural base
+///   from `rendered.navigation.body-classes` (written by
+///   `SidebarRenderTransform`, e.g. `nav-sidebar docked`), then
+///   `fullcontent` when nothing occupies the right margin, then
+///   `nav-fixed` when a navbar is rendered, then the color-mode class.
+///   `fullcontent` shrinks the right margin to near-nothing (to
+///   `0.14*margin-width` per segment without a sidebar; to zero in the
+///   docked/floating variants), so it is withheld whenever a TOC or
+///   margin categories render there — and under `page-layout: full`,
+///   where `$main-column$` is the remedy instead. Mirrors TS Quarto's
+///   `format-html-bootstrap.ts` body-class logic.
+/// - `$main-column$` - grid column class for `<main>` and the banner
+///   title, set only under `page-layout: full`: one of `column-body`,
+///   `column-page-right`, `column-page-left` or `column-page`,
+///   chosen from whether the left sidebar and the right margin
+///   actually carry content. Q2's port of Q1's `suggestColumn` /
+///   `setMainColumn`; computed in `render_with_compiled_template` and
+///   never author-settable. Unset on every other layout, where
+///   `<main>` stays bare and `$body-classes$` carries the remedy.
 /// - `$page-layout$` - page layout type (article, full, etc.)
 /// - `$version$` - Quarto version for generator meta tag
 /// - `$rendered.navigation.toc$` - Rendered TOC HTML (if toc: true)
@@ -321,7 +333,7 @@ $endif$
 $endif$
 $endif$
 
-<main class="content$if(rendered.title-block-banner)$ quarto-banner-title-block$endif$" id="quarto-document-content">
+<main class="content$if(main-column)$ $main-column$$endif$$if(rendered.title-block-banner)$ quarto-banner-title-block$endif$" id="quarto-document-content">
 
 $if(rendered.title-block-banner)$
 $else$
@@ -427,7 +439,7 @@ $endif$
 $elseif(rendered.title-block-banner)$
 <header id="title-block-header" class="quarto-title-block default page-columns page-full$if(quarto-template-params.banner-header-class)$ $quarto-template-params.banner-header-class$$endif$">
 <div class="quarto-title-banner page-columns page-full">
-<div class="quarto-title column-body">
+<div class="quarto-title $if(main-column)$$main-column$$else$column-body$endif$">
 $if(rendered.navigation.breadcrumbs)$
 $rendered.navigation.breadcrumbs$
 $endif$
@@ -820,6 +832,10 @@ pub fn render_with_compiled_template(
             "header-includes",
             "include-before",
             "include-after",
+            // Computed below from `page-layout` + margin occupancy;
+            // Q1 offers no author override, so a stray metadata key
+            // must not reach `$main-column$`.
+            "main-column",
         ],
     );
 
@@ -932,18 +948,25 @@ pub fn render_with_compiled_template(
     //   2. `rendered.navigation.body-classes` (written by
     //      `SidebarRenderTransform`, e.g. `"nav-sidebar floating"`) —
     //      promoted to the top-level template variable. See bd-mgoh.
-    //   3. TOC present but no sidebar → empty class. The body falls
-    //      through to the default (no-class) wide grid, whose right
-    //      margin column is `minmax(0.3*mw, 0.58*mw)` and has room for
-    //      the TOC.
-    //   4. Otherwise → `"fullcontent"`. That mixin's margin-seg{1,2}
-    //      sum to only `0.28 * margin-width` (~70px at the default
-    //      250px), which is intentional for content-heavy pages with
-    //      no TOC — but would squash a TOC if one were present, which
-    //      is why case (3) exists.
+    //   3. no sidebar → empty base. The body falls through to the
+    //      default (no-class) wide grid, whose right margin column is
+    //      `minmax(0.3*mw, 0.58*mw)` and has room for a TOC.
     //
     // Onto the structural base, in order:
     //
+    //   - `fullcontent` when nothing occupies the right margin
+    //     (bd-no-toc-reserves-margin-column-s8nonx0w). How much it
+    //     reclaims depends on the variant: without a sidebar,
+    //     `page-columns-fullcontent-wide` shrinks margin-seg{1,2} to
+    //     `0.14 * margin-width` each (~70px combined at the default
+    //     250px); with one, `page-columns-{docked,floating}-fullcontent-wide`
+    //     collapse `body-end body-end-outset page-end-inset page-end`
+    //     to a single grid line, so the margin tracks go to zero. Either
+    //     way it is what we want for a page with no TOC and would squash
+    //     a TOC if one were present. It is orthogonal to the structural
+    //     base — Q1 `classList.add`s it on top of the navigation
+    //     postprocessor's classes, so a page in a sidebar gets
+    //     `nav-sidebar docked … fullcontent`.
     //   - `nav-fixed` when a navbar is rendered (bd-ersobfbt): the
     //     header is `fixed-top`, and `body.nav-fixed { padding-top }`
     //     is the pre-JS anti-flash compensation for it. Same condition
@@ -961,19 +984,119 @@ pub fn render_with_compiled_template(
     // Mirrors TS Quarto's body-class logic in
     // `src/format/html/format-html-bootstrap.ts` plus the
     // `website-navigation.ts` postprocessor classes.
+    // Which margins the page actually fills
+    // (bd-no-toc-reserves-margin-column-s8nonx0w). Q1 answers this by
+    // querying the rendered DOM (`format-html-bootstrap.ts`); Q2 has no
+    // DOM pass, so the same facts come from the `rendered.navigation.*`
+    // keys that gate the sidebars in the markup above.
+    let has_toc = meta
+        .get_path(&["rendered", "navigation", "toc"])
+        .and_then(|v| v.as_plain_text())
+        .is_some_and(|s| !s.is_empty());
+    let has_margin_categories = meta
+        .get_path(&["rendered", "navigation", "margin_categories"])
+        .and_then(|v| v.as_plain_text())
+        .is_some_and(|s| !s.is_empty());
+    let toc_relocated = meta
+        .get_path(&["rendered", "navigation", "toc-relocated"])
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let page_layout_full = meta
+        .get("page-layout")
+        .and_then(|v| v.as_plain_text())
+        .is_some_and(|s| s == "full");
+
+    // `page-layout: full` widens `<main>` across whichever margins are
+    // free, via Q1's `suggestColumn` / `setMainColumn`
+    // (`format-html-bootstrap.ts:1008-1019` and `:1959-1983`). The
+    // preview's twin is `suggestMainColumn` in
+    // `ts-packages/preview-renderer/src/q2-preview/mainColumn.ts`; keep
+    // the two in sync. Unlike
+    // the `fullcontent` decision below, this one follows where the TOC
+    // is actually *rendered*: a relocated TOC (`toc-location: left` or
+    // `body`) leaves the right margin free and so must not count as
+    // right-margin content.
+    //
+    // Q1 also consults authored `.column-*` / `.margin-caption` /
+    // `.margin-ref` elements in the body. Q2 has no margin-column
+    // layout feature yet — nothing in the pipeline places content there
+    // — so that input has no Q2 equivalent to read.
+    //
+    // The suggestion is applied to `<main>` and to the banner title
+    // (`div.quarto-title`, TITLE_BLOCK_PARTIAL), which must track it:
+    // `.page-columns > *` and `.page-columns .column-body` resolve to
+    // the same `body-content-start / body-content-end` tracks
+    // (`_bootstrap-rules.scss`), so an unmoved banner would fall out of
+    // alignment with a moved `<main>` — visible on the default blog
+    // scaffold, which is `page-layout: full` + `title-block-banner`.
+    // Q1 keeps them together for the same reason: its `setMainColumn`
+    // selector list includes `.quarto-title-banner .quarto-title`.
+    //
+    // Q1's `setMainColumn` selector list has six entries; here is how
+    // each lands in Q2. Set explicitly: `main.content` (below) and
+    // `.quarto-title-banner .quarto-title` (TITLE_BLOCK_PARTIAL).
+    // Covered structurally, because Q2 emits them *inside* `<main>` and
+    // they inherit its box: `.page-navigation`, and the non-banner
+    // title block with its `.quarto-title-meta{,-author}` grids.
+    // Not applicable: `div[class^=quarto-about-]` — Q2 has no about
+    // pages. That leaves exactly one gap: in banner mode
+    // `$title-metadata()$` renders inside `header#title-block-header`,
+    // which sits outside `#quarto-content`, and carries no column class
+    // in Q2 at all — so there is nothing to rewrite there today.
+    //
+    // Scope: `has_toc` means "the rendered TOC HTML is non-empty",
+    // whereas Q1's `suggestColumn` asks `hasContents(kMarginSidebarId)`,
+    // which is true for a `nav#TOC` element even with no entries. So a
+    // `toc: true` page with no headings reads as right-margin-free here
+    // and right-margin-used in Q1. That is the same deliberate
+    // divergence the strand scopes out for `fullcontent` (the `404.html`
+    // case, where Q2 is arguably the more correct of the two); this
+    // extends it to the column suggestion.
+    if page_layout_full {
+        // `toc-left` is the *standalone* regime's flag
+        // (`TocLocationTransform`); a website page with
+        // `toc-location: left` gets `toc-in-sidebar` instead and the TOC
+        // is merged into `rendered.navigation.sidebar` by
+        // `SidebarRenderTransform` (which synthesizes a TOC-only
+        // floating sidebar when no nav sidebar is configured). That case
+        // is therefore already covered by the `sidebar` term below.
+        let left_toc = has_toc
+            && toc_relocated
+            && meta
+                .get_path(&["rendered", "navigation", "toc-left"])
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+        let left_used = left_toc
+            || meta
+                .get_path(&["rendered", "navigation", "sidebar"])
+                .and_then(|v| v.as_plain_text())
+                .is_some_and(|s| !s.is_empty());
+        // `#quarto-margin-sidebar` carries content only when the TOC
+        // lands there, or when listing categories do.
+        let right_used = has_margin_categories || (has_toc && !toc_relocated);
+        let column = match (left_used, right_used) {
+            (true, true) => "column-body",
+            (true, false) => "column-page-right",
+            (false, true) => "column-page-left",
+            (false, false) => "column-page",
+        };
+        ctx.insert("main-column", TemplateValue::String(column.to_string()));
+    }
+
     if ctx.get("body-classes").is_none() {
-        let from_meta = meta
-            .get_path(&["rendered", "navigation", "body-classes"])
-            .and_then(|v| v.as_plain_text());
-        let has_toc = meta
-            .get_path(&["rendered", "navigation", "toc"])
-            .and_then(|v| v.as_plain_text())
-            .is_some_and(|s| !s.is_empty());
         let mut classes: Vec<String> = Vec::new();
-        match (from_meta, has_toc) {
-            (Some(s), _) if !s.is_empty() => classes.push(s),
-            (Some(_), _) | (None, true) => {}
-            (None, false) => classes.push("fullcontent".to_string()),
+        if let Some(base) = meta
+            .get_path(&["rendered", "navigation", "body-classes"])
+            .and_then(|v| v.as_plain_text())
+            .filter(|s| !s.is_empty())
+        {
+            classes.push(base);
+        }
+        // Q1: `!hasRightContent && !hasMarginContent && !hasToc`. Under
+        // `page-layout: full` the main-column suggestion above is the
+        // remedy instead — Q1 takes one route or the other, never both.
+        if !has_toc && !has_margin_categories && !page_layout_full {
+            classes.push("fullcontent".to_string());
         }
         let navbar_rendered = meta
             .get_path(&["rendered", "navigation", "navbar"])
@@ -2449,7 +2572,10 @@ mod tests {
             render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
 
         assert!(
-            html.contains("<body class=\"docked quarto-light\">"),
+            // No TOC and no margin content, so the structural base also
+            // picks up `fullcontent` since
+            // bd-no-toc-reserves-margin-column-s8nonx0w.
+            html.contains("<body class=\"docked fullcontent quarto-light\">"),
             "expected user body-classes + quarto-light; got: {}",
             &html[..html.len().min(800)]
         );
@@ -2484,10 +2610,13 @@ mod tests {
     }
 
     /// bd-ersobfbt: `nav-fixed` accumulates onto sidebar-produced body
-    /// classes rather than replacing them — a site with both a sidebar
-    /// and a navbar gets `nav-sidebar floating nav-fixed quarto-light`
-    /// (matching Q1's postprocessor, which classList.add's nav-sidebar,
-    /// floating, then nav-fixed).
+    /// classes rather than replacing them (matching Q1's postprocessor,
+    /// which classList.add's nav-sidebar, floating, then nav-fixed).
+    ///
+    /// This fixture renders no TOC and no margin content, so since
+    /// bd-no-toc-reserves-margin-column-s8nonx0w it also picks up
+    /// `fullcontent` — the class that used to be unreachable for any
+    /// page in a sidebar.
     #[test]
     fn test_full_template_nav_fixed_composes_with_sidebar_body_classes() {
         let template = full_html_template().unwrap();
@@ -2505,9 +2634,374 @@ mod tests {
             render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
 
         assert!(
-            html.contains("<body class=\"nav-sidebar floating nav-fixed quarto-light\">"),
+            html.contains(
+                "<body class=\"nav-sidebar floating fullcontent nav-fixed quarto-light\">"
+            ),
             "nav-fixed must accumulate onto sidebar body classes; got: {}",
             &html[..html.len().min(800)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w GAP 1: `fullcontent`
+    /// and the sidebar-supplied structural classes are orthogonal.
+    /// Q1 decides `fullcontent` purely on whether the right margin has
+    /// content (`format-html-bootstrap.ts:1044-1071`) and `classList.add`s
+    /// it on top of whatever the navigation postprocessor already put
+    /// there, producing `nav-sidebar docked nav-fixed fullcontent`.
+    /// Q2 used to `match` on `(from_meta, has_toc)`, so a page in a
+    /// sidebar could never reach the `fullcontent` arm and kept ~150-200px
+    /// of empty right margin reserved.
+    #[test]
+    fn test_full_template_fullcontent_composes_with_sidebar_body_classes() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["rendered", "navigation", "body-classes"],
+            ConfigValue::new_string("nav-sidebar docked", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "navbar"],
+            ConfigValue::new_string("<nav class=\"navbar\">N</nav>", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<body class=\"nav-sidebar docked fullcontent nav-fixed quarto-light\">"),
+            "a sidebar page with no TOC must still get `fullcontent`; got: {}",
+            &html[..html.len().min(800)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w GAP 1 (negative): a
+    /// sidebar page that *does* render a TOC occupies the right margin,
+    /// so `fullcontent` must stay off — the same rule that already held
+    /// for sidebar-less pages.
+    #[test]
+    fn test_full_template_no_fullcontent_with_sidebar_and_toc() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["rendered", "navigation", "body-classes"],
+            ConfigValue::new_string("nav-sidebar docked", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "toc"],
+            ConfigValue::new_string("<ul><li>x</li></ul>", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<body class=\"nav-sidebar docked quarto-light\">"),
+            "a sidebar page with a TOC keeps the default wide-margin grid; got: {}",
+            &html[..html.len().min(800)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w GAP 1: the TOC is not
+    /// the only thing that can occupy the right margin. Listing
+    /// categories render into `#quarto-margin-sidebar` too, so a page
+    /// with `toc: false` plus margin categories must not collapse the
+    /// column out from under them. Q1's condition is
+    /// `!hasRightContent && !hasMarginContent && !hasToc`.
+    #[test]
+    fn test_full_template_no_fullcontent_with_margin_categories() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["rendered", "navigation", "margin_categories"],
+            ConfigValue::new_string(
+                "<div class=\"quarto-listing-category\">C</div>",
+                dummy_source_info(),
+            ),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<body class=\"quarto-light\">"),
+            "margin categories occupy the right margin, so no `fullcontent`; got: {}",
+            &html[..html.len().min(800)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w GAP 2: under
+    /// `page-layout: full` the left sidebar is occupied and the right
+    /// margin is not, so `<main>` spans from the content start to the
+    /// page end (Q1's `suggestColumn` → `column-page-right`). The body
+    /// keeps the default grid: Q1 applies one remedy or the other, never
+    /// both.
+    #[test]
+    fn test_full_template_full_layout_main_column_page_right() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["page-layout"],
+            ConfigValue::new_string("full", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "body-classes"],
+            ConfigValue::new_string("nav-sidebar docked", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "sidebar"],
+            ConfigValue::new_string("<nav id=\"quarto-sidebar\">S</nav>", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<main class=\"content column-page-right\""),
+            "full layout with an occupied left margin only → column-page-right; got: {}",
+            &html[..html.len().min(2000)]
+        );
+        assert!(
+            html.contains("<body class=\"nav-sidebar docked quarto-light\">"),
+            "full layout takes the main-column remedy, not `fullcontent`; got: {}",
+            &html[..html.len().min(800)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w GAP 2: neither margin
+    /// occupied → `<main>` spans the whole page.
+    #[test]
+    fn test_full_template_full_layout_main_column_page() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["page-layout"],
+            ConfigValue::new_string("full", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<main class=\"content column-page\""),
+            "full layout with both margins free → column-page; got: {}",
+            &html[..html.len().min(2000)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w GAP 2: both margins
+    /// occupied → `<main>` stays in the body column.
+    #[test]
+    fn test_full_template_full_layout_main_column_body() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["page-layout"],
+            ConfigValue::new_string("full", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "sidebar"],
+            ConfigValue::new_string("<nav id=\"quarto-sidebar\">S</nav>", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "toc"],
+            ConfigValue::new_string("<ul><li>x</li></ul>", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<main class=\"content column-body\""),
+            "full layout with both margins occupied → column-body; got: {}",
+            &html[..html.len().min(2000)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w GAP 2: right margin
+    /// occupied and left free → `<main>` spans leftward.
+    #[test]
+    fn test_full_template_full_layout_main_column_page_left() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["page-layout"],
+            ConfigValue::new_string("full", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "toc"],
+            ConfigValue::new_string("<ul><li>x</li></ul>", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<main class=\"content column-page-left\""),
+            "full layout with an occupied right margin only → column-page-left; got: {}",
+            &html[..html.len().min(2000)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w GAP 2: a relocated TOC
+    /// (`toc-location: left`) leaves the right margin free and occupies
+    /// the left one, so the column suggestion follows the *rendered*
+    /// placement rather than the mere presence of a TOC.
+    #[test]
+    fn test_full_template_full_layout_main_column_with_left_toc() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["page-layout"],
+            ConfigValue::new_string("full", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "toc"],
+            ConfigValue::new_string("<ul><li>x</li></ul>", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "toc-relocated"],
+            ConfigValue::new_bool(true, dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "toc-left"],
+            ConfigValue::new_bool(true, dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<main class=\"content column-page-right\""),
+            "a left-relocated TOC occupies the left margin only; got: {}",
+            &html[..html.len().min(2000)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w GAP 2 (negative): the
+    /// column suggestion is a `page-layout: full` feature. An article
+    /// page keeps a bare `main.content` and reclaims the margin through
+    /// `fullcontent` on the body instead.
+    #[test]
+    fn test_full_template_article_layout_sets_no_main_column() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["rendered", "navigation", "sidebar"],
+            ConfigValue::new_string("<nav id=\"quarto-sidebar\">S</nav>", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<main class=\"content\""),
+            "article layout leaves `<main>` uncolumned; got: {}",
+            &html[..html.len().min(2000)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w: the banner title must
+    /// track `<main>`'s suggested column. `.page-columns > *` and
+    /// `.page-columns .column-body` resolve to the same
+    /// `body-content-start / body-content-end` tracks, so a banner left
+    /// at `column-body` while `<main>` moves would be visibly
+    /// misaligned — and the default blog scaffold
+    /// (`quarto-project-create`'s `website/blog/index.qmd.template`) is
+    /// exactly `page-layout: full` + `title-block-banner` + margin
+    /// categories. Q1 keeps the pair together via `setMainColumn`'s
+    /// `.quarto-title-banner .quarto-title` selector.
+    #[test]
+    fn test_full_template_banner_title_tracks_main_column() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["page-layout"],
+            ConfigValue::new_string("full", dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "has-title-block"],
+            ConfigValue::new_bool(true, dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "title-block-banner"],
+            ConfigValue::new_bool(true, dummy_source_info()),
+        );
+        // Listing categories occupy the right margin; the left is free.
+        meta.insert_path(
+            &["rendered", "navigation", "margin_categories"],
+            ConfigValue::new_string(
+                "<div class=\"quarto-listing-category\">C</div>",
+                dummy_source_info(),
+            ),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<main class=\"content column-page-left"),
+            "right margin occupied, left free → column-page-left; got: {}",
+            &html[..html.len().min(2000)]
+        );
+        assert!(
+            html.contains("<div class=\"quarto-title column-page-left\">"),
+            "banner title must carry the same column as `<main>`; got: {}",
+            &html[..html.len().min(2000)]
+        );
+        assert!(
+            !html.contains("<div class=\"quarto-title column-body\">"),
+            "banner title must not stay at column-body under full layout; got: {}",
+            &html[..html.len().min(2000)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w: on every other layout
+    /// the banner keeps Q1's `column-body`, since `$main-column$` is
+    /// unset and the `$else$` branch supplies the default.
+    #[test]
+    fn test_full_template_banner_title_column_body_on_article_layout() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["rendered", "has-title-block"],
+            ConfigValue::new_bool(true, dummy_source_info()),
+        );
+        meta.insert_path(
+            &["rendered", "title-block-banner"],
+            ConfigValue::new_bool(true, dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<div class=\"quarto-title column-body\">"),
+            "article layout keeps the banner at column-body; got: {}",
+            &html[..html.len().min(2000)]
+        );
+    }
+
+    /// bd-no-toc-reserves-margin-column-s8nonx0w: `main-column` is
+    /// computed, never author-settable — it is excluded from the
+    /// metadata copied into the template context, so a stray front
+    /// matter key cannot reach `$main-column$`. (Q1 offers no such
+    /// override.)
+    #[test]
+    fn test_full_template_main_column_not_settable_from_metadata() {
+        let template = full_html_template().unwrap();
+        let mut meta = ConfigValue::null(dummy_source_info());
+        meta.insert_path(
+            &["main-column"],
+            ConfigValue::new_string("column-screen", dummy_source_info()),
+        );
+
+        let (html, _diags) =
+            render_with_compiled_template(&template, "<p>Content</p>", &meta, &[], &[]).unwrap();
+
+        assert!(
+            html.contains("<main class=\"content\""),
+            "author metadata must not reach `$main-column$`; got: {}",
+            &html[..html.len().min(2000)]
         );
     }
 

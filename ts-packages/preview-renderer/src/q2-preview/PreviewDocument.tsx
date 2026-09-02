@@ -20,6 +20,7 @@ import {
     HeaderIncludesEffect,
 } from './chromeSlots';
 import { useBlockEditHover } from './useBlockEditHover';
+import { suggestMainColumn } from './mainColumn';
 
 /**
  * bd-elgxx (D6 react): mirror of Rust
@@ -102,13 +103,19 @@ export const PreviewDocument = ({
     //      `SidebarRenderTransform` (e.g. `nav-sidebar floating`,
     //      `nav-sidebar docked`) — required for Bootstrap's
     //      sidebar-aware grid layout to take effect.
-    //   3. TOC rendered but no sidebar → empty class. Falls through
-    //      to the default (no-class) wide grid, whose right margin
-    //      column is `minmax(0.3*mw, 0.58*mw)` and has room for the
-    //      TOC. The `fullcontent` mixin's margin column is only
-    //      `0.28*mw` (~70px at the default 250px) and squashes a TOC.
-    //   4. Otherwise → literal `fullcontent`.
-    // Onto the structural base: `nav-fixed` when a navbar is rendered
+    //   3. no sidebar → empty base. Falls through to the default
+    //      (no-class) wide grid, whose right margin column is
+    //      `minmax(0.3*mw, 0.58*mw)` and has room for a TOC.
+    // Onto the structural base: `fullcontent` when nothing occupies
+    // the right margin — the TOC, listing categories in the margin, or
+    // the `page-layout: full` main-column remedy below
+    // (bd-no-toc-reserves-margin-column-s8nonx0w). It is orthogonal to
+    // the structural base, so it appends rather than replaces: a page
+    // in a sidebar gets `nav-sidebar docked … fullcontent`. The
+    // `fullcontent` mixin shrinks the right margin to ~70px without a
+    // sidebar (`0.14*mw` per segment) and to zero in the docked/floating
+    // variants; either would squash a TOC.
+    // Then: `nav-fixed` when a navbar is rendered
     // (bd-ersobfbt — the `#quarto-header` is `fixed-top`, and
     // `body.nav-fixed { padding-top }` is its pre-JS compensation;
     // same condition as Q1's postprocessor and the Rust compose in
@@ -125,10 +132,22 @@ export const PreviewDocument = ({
         getMetaPath(meta, ['rendered', 'navigation', 'toc']),
     );
     const hasToc = tocRendered !== undefined && tocRendered !== '';
+    const marginCategoriesHtml = extractMetaString(
+        getMetaPath(meta, ['rendered', 'navigation', 'margin_categories']),
+    );
+    const hasMarginCategories =
+        marginCategoriesHtml !== undefined && marginCategoriesHtml !== '';
+    const pageLayoutFull = pageLayout === 'full';
     const structuralBodyClasses =
         userBodyClasses ??
-        renderedBodyClasses ??
-        (hasToc ? '' : 'fullcontent');
+        [
+            renderedBodyClasses,
+            !hasToc && !hasMarginCategories && !pageLayoutFull
+                ? 'fullcontent'
+                : undefined,
+        ]
+            .filter((c): c is string => c !== undefined && c !== '')
+            .join(' ');
     const composedBodyClasses =
         userBodyClasses === undefined && navbarHtml
             ? [structuralBodyClasses, 'nav-fixed']
@@ -195,6 +214,10 @@ export const PreviewDocument = ({
     const pageNavHtml = extractMetaString(
         getMetaPath(meta, ['rendered', 'navigation', 'page_navigation']),
     );
+    // Q2's port of Q1's `suggestColumn` / `setMainColumn`, shared with
+    // `PreviewTitleBlock` so the banner title tracks `<main>`. Mirrors
+    // the Rust `$main-column$` computation in template.rs.
+    const mainColumn = suggestMainColumn(meta);
     const tocHtml = extractMetaString(
         getMetaPath(meta, ['rendered', 'navigation', 'toc']),
     );
@@ -363,7 +386,7 @@ export const PreviewDocument = ({
                 {tocHtml ? <TocSlot html={tocHtml} titleHtml={tocTitleHtml} /> : null}
 
                 <main
-                    className={`content${bannerTitleBlock ? ' quarto-banner-title-block' : ''}`}
+                    className={`content${mainColumn ? ` ${mainColumn}` : ''}${bannerTitleBlock ? ' quarto-banner-title-block' : ''}`}
                     id="quarto-document-content"
                 >
                     {!bannerTitleBlock ? (
