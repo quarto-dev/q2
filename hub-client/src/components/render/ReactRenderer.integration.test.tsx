@@ -300,6 +300,35 @@ describe('ReactRenderer render-components gate (Plan 2A item 13)', () => {
     });
   });
 
+  it('extracts customComponentsCode for revealjs format', () => {
+    // revealjs renders through the same Q2PreviewIframe/dispatcher tree as
+    // q2-preview (see ReactRenderer format routing describe block above),
+    // so render-components: must apply there too. The gate at the top of
+    // customComponentsCode's useMemo previously only allowed
+    // 'q2-debug' | 'q2-preview', silently skipping revealjs documents even
+    // though revealjs converged onto this same tree (bd-vwp4y5ku) — that
+    // convergence just never extended to this particular gate.
+    const fileContents = new Map([
+      ['elliot/simple.tsx', 'export const Para = () => null;'],
+    ]);
+
+    render(
+      <ReactRenderer
+        astJson={astWithRenderComponents(['/elliot/simple.tsx'])}
+        currentFilePath="elliot/index.qmd"
+        files={[]}
+        fileContents={fileContents}
+        onNavigateToDocument={() => {}}
+        setAst={() => {}}
+        format="revealjs"
+      />,
+    );
+
+    expect(lastCapturedPreviewCode()).toEqual({
+      '/elliot/simple.tsx': 'JS:export const Para = () => null;',
+    });
+  });
+
   it('q2-debug behavior unchanged (regression baseline)', () => {
     const fileContents = new Map([
       ['elliot/simple.tsx', 'export const Para = () => null;'],
