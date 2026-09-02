@@ -23,5 +23,6 @@ pub mod q_2_26;
 pub mod q_2_28;
 pub mod q_2_33;
 pub mod q_2_5;
+pub mod q_2_52;
 pub mod q_2_7;
 pub mod reference_links;
