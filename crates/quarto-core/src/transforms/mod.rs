@@ -73,6 +73,7 @@ mod proof;
 mod reference_link_diagnostics;
 mod repo_actions_render;
 mod resource_collector;
+mod responsive_image;
 mod secondary_nav_render;
 // Fixed-header JS shipping (bd-ersobfbt). Native-only: the preview
 // excludes ApplyTemplateStage (no <script> emission) and injects the
@@ -149,6 +150,7 @@ pub use quarto_nav_js::QuartoNavJsTransform;
 pub use reference_link_diagnostics::ReferenceLinkDiagnosticsTransform;
 pub use repo_actions_render::RepoActionsRenderTransform;
 pub use resource_collector::{ResourceCollectorTransform, collect_referenced_asset_urls};
+pub use responsive_image::ResponsiveImageTransform;
 pub use secondary_nav_render::SecondaryNavRenderTransform;
 pub use sectionize::SectionizeTransform;
 pub(crate) use shortcode_resolve::code_shortcode_opt_out;
