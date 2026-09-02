@@ -1,0 +1,434 @@
+{
+  "code": "Q-2-52",
+  "title": "Shortcode delimiter not separated by a space",
+  "message": "A shortcode's delimiters must be separated from its content by whitespace. Write `{{< fa plus >}}` — a space after `{{<` and a space before `>}}` — rather than `{{<fa plus>}}`.",
+  "notes": [],
+  "hints": [
+    "Both delimiters need the space. Adding it to only one of them leaves the shortcode unparseable.",
+    "Quarto 1 accepted the tight spelling because it matched shortcodes with a regular expression. Quarto 2 parses them, and requires the space so that `{{` stays unambiguous with template syntaxes such as Jinja and Handlebars.",
+    "`qmd-syntax-helper convert -r q-2-52 -i <file>` rewrites both delimiters for you."
+  ],
+  "desynchronizes": true,
+  "cases": [
+    {
+      "name": "opening-delimiter",
+      "description": "No space after `{{<`. This is the spelling Quarto 1 projects arrive with; the Positron docs had seven occurrences in one file.",
+      "content": "Click the {{<fa plus >}} icon.\n",
+      "captures": []
+    },
+    {
+      "name": "opening-delimiter-in-inline-container",
+      "description": "The opening delimiter is consumed in the *enclosing* inline container's parser state, so unlike the closing delimiter it needs a case per container. Each prefix/suffix pair below reaches a distinct LR state; the four editorial spellings share one, and link text, image alt text and bracketed span text share another.",
+      "content": "{{<fa>}}",
+      "captures": [],
+      "prefixesAndSuffixes": [
+        [
+          "*",
+          "*"
+        ],
+        [
+          "**",
+          "**"
+        ],
+        [
+          "_",
+          "_"
+        ],
+        [
+          "__",
+          "__"
+        ],
+        [
+          "~~",
+          "~~"
+        ],
+        [
+          "^",
+          "^"
+        ],
+        [
+          "~",
+          "~"
+        ],
+        [
+          "\"",
+          "\""
+        ],
+        [
+          "'",
+          "'"
+        ],
+        [
+          "^[",
+          "]"
+        ],
+        [
+          "[",
+          "](https://example.com)"
+        ],
+        [
+          "![",
+          "](image.png)"
+        ],
+        [
+          "[",
+          "]{.class}"
+        ],
+        [
+          "[!! ",
+          "]"
+        ]
+      ]
+    },
+    {
+      "name": "opening-delimiter-in-table-header-cell",
+      "description": "Pipe-table cells are built on `_line_with_maybe_spaces`, a sibling of the `_inlines` every other inline container wraps, so they reach their own states — one for header cells, one for body cells.",
+      "content": "| {{<fa>}} | b |\n|---|---|\n| a | y |\n",
+      "captures": []
+    },
+    {
+      "name": "opening-delimiter-in-table-body-cell",
+      "description": "The body-cell state, distinct from the header-cell state above.",
+      "content": "| a | b |\n|---|---|\n| {{<fa>}} | y |\n",
+      "captures": []
+    },
+    {
+      "name": "escaped-opening-delimiter",
+      "description": "The escaped spelling `{{{< ... >}}}` takes the separator too, and its opening delimiter reaches its own state. Its *closing* delimiter needs no case of its own: by then the parser is inside the shortcode, in the same state the unescaped form reaches, and the guard matches `>}}}` as readily as `>}}`.",
+      "content": "Show the {{{<fa plus >}}} syntax.\n",
+      "captures": []
+    },
+    {
+      "name": "escaped-opening-delimiter-in-inline-container",
+      "description": "One state per enclosing inline container, as for the unescaped opening delimiter.",
+      "content": "{{{<fa>}}}",
+      "captures": [],
+      "prefixesAndSuffixes": [
+        [
+          "*",
+          "*"
+        ],
+        [
+          "**",
+          "**"
+        ],
+        [
+          "_",
+          "_"
+        ],
+        [
+          "__",
+          "__"
+        ],
+        [
+          "~~",
+          "~~"
+        ],
+        [
+          "^",
+          "^"
+        ],
+        [
+          "~",
+          "~"
+        ],
+        [
+          "\"",
+          "\""
+        ],
+        [
+          "'",
+          "'"
+        ],
+        [
+          "^[",
+          "]"
+        ],
+        [
+          "[",
+          "](https://example.com)"
+        ],
+        [
+          "![",
+          "](image.png)"
+        ],
+        [
+          "[",
+          "]{.class}"
+        ],
+        [
+          "[!! ",
+          "]"
+        ]
+      ]
+    },
+    {
+      "name": "escaped-opening-delimiter-in-table-header-cell",
+      "description": "Pipe-table header cell.",
+      "content": "| {{{<fa>}}} | b |\n|---|---|\n| a | y |\n",
+      "captures": []
+    },
+    {
+      "name": "escaped-opening-delimiter-in-table-body-cell",
+      "description": "Pipe-table body cell, a distinct state from the header cell.",
+      "content": "| a | b |\n|---|---|\n| {{{<fa>}}} | y |\n",
+      "captures": []
+    },
+    {
+      "name": "closing-delimiter-after-name-only",
+      "description": "A shortcode with no arguments. Unlike every other closing-delimiter spelling, this one is container-dependent: with nothing after the name the parser has not committed to the shortcode's argument list, so the state still follows the enclosing inline container.",
+      "content": "Click the {{< fa>}} icon.\n",
+      "captures": []
+    },
+    {
+      "name": "closing-delimiter-after-name-only-in-inline-container",
+      "description": "The container family of the case above.",
+      "content": "{{< fa>}}",
+      "captures": [],
+      "prefixesAndSuffixes": [
+        [
+          "*",
+          "*"
+        ],
+        [
+          "**",
+          "**"
+        ],
+        [
+          "_",
+          "_"
+        ],
+        [
+          "__",
+          "__"
+        ],
+        [
+          "~~",
+          "~~"
+        ],
+        [
+          "^",
+          "^"
+        ],
+        [
+          "~",
+          "~"
+        ],
+        [
+          "\"",
+          "\""
+        ],
+        [
+          "'",
+          "'"
+        ],
+        [
+          "^[",
+          "]"
+        ],
+        [
+          "[",
+          "](https://example.com)"
+        ],
+        [
+          "![",
+          "](image.png)"
+        ],
+        [
+          "[",
+          "]{.class}"
+        ],
+        [
+          "[!! ",
+          "]"
+        ]
+      ]
+    },
+    {
+      "name": "escaped-closing-delimiter-after-name-only",
+      "description": "The escaped spelling of the no-argument form; its own state family again.",
+      "content": "Show the {{{< fa>}}} syntax.\n",
+      "captures": []
+    },
+    {
+      "name": "escaped-closing-delimiter-after-name-only-in-inline-container",
+      "description": "The container family of the case above.",
+      "content": "{{{< fa>}}}",
+      "captures": [],
+      "prefixesAndSuffixes": [
+        [
+          "*",
+          "*"
+        ],
+        [
+          "**",
+          "**"
+        ],
+        [
+          "_",
+          "_"
+        ],
+        [
+          "__",
+          "__"
+        ],
+        [
+          "~~",
+          "~~"
+        ],
+        [
+          "^",
+          "^"
+        ],
+        [
+          "~",
+          "~"
+        ],
+        [
+          "\"",
+          "\""
+        ],
+        [
+          "'",
+          "'"
+        ],
+        [
+          "^[",
+          "]"
+        ],
+        [
+          "[",
+          "](https://example.com)"
+        ],
+        [
+          "![",
+          "](image.png)"
+        ],
+        [
+          "[",
+          "]{.class}"
+        ],
+        [
+          "[!! ",
+          "]"
+        ]
+      ]
+    },
+    {
+      "name": "closing-delimiter-after-non-language-specifier-value",
+      "description": "An unquoted argument that the external `_language_specifier_token` scanner does not claim — anything not starting with an ASCII letter or digit, and anything non-ASCII — is produced by the `shortcode_naked_string` regex instead, and reaches its own state. `{{< fa größe>}}`, `{{< fa /path/x>}}` and `{{< fa k=größe>}}` all land here.",
+      "content": "Click the {{< fa /path/x>}} icon.\n",
+      "captures": []
+    },
+    {
+      "name": "closing-delimiter-after-name-only-in-table-header-cell",
+      "description": "The no-argument closing delimiter is container-dependent, and pipe-table cells are not reachable by wrapping a line in a prefix and suffix, so the two cell states need cases of their own.",
+      "content": "| {{< fa>}} | b |\n|---|---|\n| a | y |\n",
+      "captures": []
+    },
+    {
+      "name": "closing-delimiter-after-name-only-in-table-body-cell",
+      "description": "The body-cell state, distinct from the header-cell state above.",
+      "content": "| a | b |\n|---|---|\n| {{< fa>}} | y |\n",
+      "captures": []
+    },
+    {
+      "name": "escaped-closing-delimiter-after-name-only-in-table-header-cell",
+      "description": "The escaped spelling in a header cell.",
+      "content": "| {{{< fa>}}} | b |\n|---|---|\n| a | y |\n",
+      "captures": []
+    },
+    {
+      "name": "escaped-closing-delimiter-after-name-only-in-table-body-cell",
+      "description": "The escaped spelling in a body cell.",
+      "content": "| a | b |\n|---|---|\n| {{{< fa>}}} | y |\n",
+      "captures": []
+    },
+    {
+      "name": "closing-delimiter-after-single-quoted-value",
+      "description": "A single-quoted argument. The scanner has a separate token for single-character quoted content, so `'q'` and `'quoted'` reach different states and both need a case.",
+      "content": "Click the {{< fa 'quoted'>}} icon.\n",
+      "captures": []
+    },
+    {
+      "name": "closing-delimiter-after-one-character-single-quoted-value",
+      "description": "The single-character spelling of the case above.",
+      "content": "Click the {{< fa 'q'>}} icon.\n",
+      "captures": []
+    },
+    {
+      "name": "closing-delimiter-after-one-character-double-quoted-value",
+      "description": "The single-character spelling of `closing-delimiter-after-quoted-value`.",
+      "content": "Click the {{< fa \"q\">}} icon.\n",
+      "captures": []
+    },
+    {
+      "name": "closing-delimiter-after-nested-shortcode",
+      "description": "A shortcode used as another shortcode's argument. The escaped outer spelling (`{{{< fa {{< b >}}>}}}`) reaches this same state. An *escaped* shortcode cannot be an argument at all — `_shortcode_value` admits `shortcode`, not `shortcode_escaped` — so `{{{< fa {{{< b >}}} >}}}` fails whether or not the space is there, and is deliberately not claimed here.",
+      "content": "Click the {{< fa {{< b >}}>}} icon.\n",
+      "captures": []
+    },
+    {
+      "name": "escaped-closing-delimiter-after-keyword-value",
+      "description": "An escaped shortcode ending in a keyword argument. The unescaped spelling shares its state with the positional form; the escaped one does not, and it blames the argument's value rather than the delimiter. That state is shared with Q-2-28 (a line break before `>}}}`), so this case is guarded on the delimiter following the value with no whitespace between — which is exactly what distinguishes the two.",
+      "content": "Show the {{{< fa k=v>}}} syntax.\n",
+      "captures": [],
+      "guard": "^[^\\s]*>\\}\\}"
+    },
+    {
+      "name": "nested-shortcode-opening-delimiter",
+      "description": "A shortcode used as another shortcode's argument has its own state for the inner opening delimiter. Container-independent, and shared with the escaped outer spelling. Once the inner shortcode has an argument of its own the closing delimiter collapses to `closing-delimiter`'s state.",
+      "content": "Click the {{< fa {{<b >}} >}} icon.\n",
+      "captures": []
+    },
+    {
+      "name": "nested-shortcode-closing-delimiter",
+      "description": "The inner closing delimiter of a nested shortcode.",
+      "content": "Click the {{< fa {{< b>}} >}} icon.\n",
+      "captures": []
+    },
+    {
+      "name": "opening-delimiter-in-double-quoted-attribute-value",
+      "description": "A shortcode inside an attribute value. The quoting style changes the state, so both spellings need a case.",
+      "content": "A [x]{data-a=\"{{<fa>}}\"} b\n",
+      "captures": []
+    },
+    {
+      "name": "opening-delimiter-in-single-quoted-attribute-value",
+      "description": "The single-quoted spelling of the case above.",
+      "content": "A [x]{data-a='{{<fa>}}'} b\n",
+      "captures": []
+    },
+    {
+      "name": "closing-delimiter-in-attribute-value",
+      "description": "The closing delimiter inside an attribute value, before the shortcode takes any argument.",
+      "content": "A [x]{data-a=\"{{< fa>}}\"} b\n",
+      "captures": []
+    },
+    {
+      "name": "opening-delimiter-in-link-destination",
+      "description": "A shortcode used to build a link or image destination. One state covers links, images and destinations where the shortcode is only part of the path.",
+      "content": "A [x]({{<fa>}}) b\n",
+      "captures": []
+    },
+    {
+      "name": "closing-delimiter-in-link-destination",
+      "description": "The closing delimiter inside a link destination, before the shortcode takes any argument.",
+      "content": "A [x]({{< fa>}}) b\n",
+      "captures": []
+    },
+    {
+      "name": "closing-delimiter",
+      "description": "No space before `>}}`, after an unquoted argument. This state is shared with Q-2-34 (an unquoted value that starts with a digit), which fails on the same lookahead in the same state, so this case is guarded: it claims the state only when the error is *at* the closing delimiter. `{{< fa 2plus>}}` has both faults and stays with Q-2-34, which is the earlier and more specific of the two. Unlike the opening delimiter, the parser is already inside the shortcode here, so one case covers every inline container.",
+      "content": "Click the {{< fa plus>}} icon.\n",
+      "captures": [],
+      "guard": "^>\\}\\}"
+    },
+    {
+      "name": "closing-delimiter-after-quoted-value",
+      "description": "No space before `>}}`, after a quoted argument. A different state from the unquoted form — and the spelling an author reaches for when Q-2-34 tells them to quote the value.",
+      "content": "Click the {{< fa \"plus\">}} icon.\n",
+      "captures": []
+    }
+  ]
+}

@@ -5257,6 +5257,7 @@ dependencies = [
  "quarto-error-message-macros",
  "quarto-error-reporting",
  "quarto-source-map",
+ "regex",
  "serde",
  "serde_json",
  "tree-sitter",
