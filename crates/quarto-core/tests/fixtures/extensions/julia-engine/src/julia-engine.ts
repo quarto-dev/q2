@@ -30,6 +30,7 @@ import type {
 // unit-testable independent of the socket)
 import {
   type CloseCommandWriter,
+  errorRunClose,
   postRunClose,
   preRunClose,
 } from "./worker-close.ts";
@@ -722,25 +723,40 @@ async function executeJulia(
 
   const sourceRanges = buildSourceRanges(options.target.markdown);
 
-  const response = await writeJuliaCommand(
-    conn,
-    { type: "run", content: { file, options, sourceRanges } },
-    transportOptions.key,
-    options,
-    (update: ProgressUpdate) => {
-      const n = update.nChunks.toString();
-      const i = update.chunkIndex.toString();
-      const i_padded = `${" ".repeat(n.length - i.length)}${i}`;
-      const ncols = getConsoleColumns() ?? 80;
-      const firstPart = `Running [${i_padded}/${n}] at line ${update.line}:  `;
-      const firstPartLength = firstPart.length;
-      const sigLine = firstSignificantLine(
-        update.source,
-        Math.max(0, ncols - firstPartLength),
+  let response;
+  try {
+    response = await writeJuliaCommand(
+      conn,
+      { type: "run", content: { file, options, sourceRanges } },
+      transportOptions.key,
+      options,
+      (update: ProgressUpdate) => {
+        const n = update.nChunks.toString();
+        const i = update.chunkIndex.toString();
+        const i_padded = `${" ".repeat(n.length - i.length)}${i}`;
+        const ncols = getConsoleColumns() ?? 80;
+        const firstPart = `Running [${i_padded}/${n}] at line ${update.line}:  `;
+        const firstPartLength = firstPart.length;
+        const sigLine = firstSignificantLine(
+          update.source,
+          Math.max(0, ncols - firstPartLength),
+        );
+        quarto.console.info(`${firstPart}${sigLine}`);
+      },
+    );
+  } catch (e) {
+    // A failed run must still close the oneShot worker, or it leaks on the
+    // shared control server (and blocks the server's idle timeout). Best
+    // effort — the run error rethrown below is the diagnostic that matters.
+    if (options.oneShot) {
+      await errorRunClose(
+        writeCloseCommand,
+        file,
+        (message) => quarto.console.warning(message),
       );
-      quarto.console.info(`${firstPart}${sigLine}`);
-    },
-  );
+    }
+    throw e;
+  }
 
   if (options.oneShot) {
     await postRunClose(
