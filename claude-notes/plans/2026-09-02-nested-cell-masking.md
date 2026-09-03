@@ -813,7 +813,63 @@ surrounding context), not inferred from a clean exit code.
 
 ### Phase 7 — Wrap up
 
-- [ ] `cargo nextest run --workspace`, delta accounted for against the live baseline
-- [ ] `cargo xtask verify --skip-hub-build --skip-hub-tests`
-- [ ] Reconcile this checklist against what landed; commit
-- [ ] Comment the outcome on the strand
+- [x] `cargo nextest run --workspace`, delta accounted for against the live baseline
+- [x] `cargo xtask verify` (full, no skip flags — **corrected from an earlier
+      draft of this item that read `--skip-hub-build --skip-hub-tests`**; per
+      CLAUDE.md's Git Push Policy, the full run is required "when the WASM leg
+      could be affected (any change under `quarto-core`, `quarto-pandoc-types`,
+      or anything else hub-client depends on)", and this plan's entire
+      implementation is in `quarto-core`. The skip-flag form would never have
+      compiled `quarto-core` to `wasm32-unknown-unknown` and would have shipped
+      a broken hub build undetected — see Phase 7 findings below)
+- [x] Reconcile this checklist against what landed; commit
+- [x] Comment the outcome on the strand
+
+**Phase 7 findings (2026-09-03).**
+
+*The WASM leg is not optional — the skip-flag form of this item was wrong.*
+The full `cargo xtask verify` turned the branch red at the hub-build leg.
+`nested_cell_mask.rs` uses `regex::Regex`, but `quarto-core`'s `Cargo.toml`
+declared `regex` only under
+`[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` — a native-only
+dependency for a module the WASM preview pipeline also runs, since it must
+mask displayed cells too. Fixed by making the declaration unconditional,
+which costs nothing in payload: `pampa` already declares `regex`
+unconditionally and `quarto-core` depends on `pampa` unconditionally, so
+regex was already compiled into the WASM image. Had the item kept its
+original `--skip-hub-build --skip-hub-tests` form, `quarto-core` would never
+have been compiled to `wasm32-unknown-unknown` and this would have shipped
+as a broken hub build.
+
+*Gate results.* `cargo xtask verify` — full, no skip flags —
+passed all **14 steps** on this branch rebased onto `b93c62c74`
+(`.scratch/phase7-verify-rebased.log`). Its step 5 is the workspace test run:
+**13621 passed, 199 skipped, 0 failed** (480.7s). The hub-build leg left the
+worktree clean, reproducing the committed sandboxed-preview bundles
+byte-for-byte.
+
+*Baseline delta, accounted.* Phase 0 measured the live baseline at **13550
+passed, 199 skipped** against base `85e98fb02`. `main` has since advanced two
+commits — `f14cd4963` (no-TOC margin column, +12 tests) and `9ad1d4420` (body
+image width, +28 tests) — moving the live baseline to **13590**. This branch
+contributes **31** tests: 17 unit/writer-tier in the module, 9 render-tier, 4
+capture-tier (engine-execution ×2, preview-record, hub-provider), and 1 in the
+jupyter text engine. 13590 + 31 = **13621**, which is exactly the run above. No stray or duplicated
+tests.
+
+*Checklist audit.* Every `- [x]` in Phases 0–6 was re-checked against the
+tree rather than trusted: the pinned `mask`/`unmask` signatures
+(`nested_cell_mask.rs:128,166`), all eight container arms of the walker, and
+each named test of Phases 1, 3 and 4 exist as the plan describes. T14 lives
+in `engine/jupyter/text_execute.rs`, not the module, which the seam table
+already says.
+
+*Scope note.* The hub-build leg also regenerated two checked-in artifacts of
+`hub-client/quarto-hub-sandboxed-preview` that were stale on `main` — the
+service worker still carried an offline cache its source had dropped, and the
+sandboxed-preview bundle embedded KaTeX 0.18.2 against a lockfile pinning
+0.18.4. Unrelated to this plan; landed directly on `main` as `546fdd374` +
+`b93c62c74` rather than riding this branch. The recurring failure mode — a
+committed bundle rebuilt from stale `node_modules`, with nothing reconciling
+the embedded version against the pin — is **bd-jhe3xnq9**, filed out of this
+plan's scope rather than absorbed into it.
