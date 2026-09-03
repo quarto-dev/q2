@@ -69,3 +69,41 @@ export async function postRunClose(
     );
   }
 }
+
+// Error-path close (julia-engine.ts oneShot cleanup when the run FAILED).
+// Without this, the throw skips the post-run close and the file's worker
+// leaks on the shared control server — forever, since nothing ever runs that
+// file again (and open workers also block the server's idle timeout).
+//
+// Semantics: best-effort, never throws.
+// - Plain close first: the common failure is QNR reporting a cell error
+//   in-band, after which the worker is idle and healthy.
+// - Busy → forceclose: a transport-level failure can leave the worker still
+//   running; we are abandoning it either way, and reclaiming it now prevents
+//   creating the abandoned-busy state preRunClose has to recover from later.
+// - Any remaining failure warns instead of throwing — deliberate asymmetry
+//   with preRunClose's forceclose-propagates contract, because here a real
+//   diagnostic (the run error) is already in flight and a cleanup failure
+//   must not mask it.
+export async function errorRunClose(
+  writeCommand: CloseCommandWriter,
+  file: string,
+  warn: (message: string) => void,
+): Promise<void> {
+  try {
+    try {
+      await writeCommand({ type: "close", content: { file } });
+    } catch (e) {
+      if (isWorkerBusyError(e)) {
+        await writeCommand({ type: "forceclose", content: { file } });
+      } else {
+        throw e;
+      }
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    warn(
+      `Julia worker close after a failed run also failed; the worker may be leaked.\n${message}`,
+    );
+  }
+}
