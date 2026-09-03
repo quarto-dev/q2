@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-02
+
+- [`ea9b46ec`](https://github.com/quarto-dev/q2/commits/ea9b46ec): Invite cards and the editor welcome banner now render correctly in dark mode — the preview box's dividers were drawn in a light-only brand color, which showed as near-white grid lines on the dark card, and several surfaces were painted with translucent tints.
+
 ### 2026-09-01
 
 - [`027b4d15`](https://github.com/quarto-dev/q2/commits/027b4d15): The "People & invite…" item in a collection's actions menu now opens the members and invite popover; previously the click was silently swallowed.
