@@ -953,8 +953,76 @@ pub fn transform_divs(doc: Pandoc, error_collector: &mut DiagnosticCollector) ->
     topdown_traverse(doc, &mut filter, &mut ctx)
 }
 
+/// Is `line` a fence opener carrying Quarto 1's doubled-brace escape?
+///
+/// This is the narrow predicate `^\s*`{3,}\{\{` — a line that is *itself* a
+/// fence opener whose info string starts with doubled braces. Matching the
+/// opener **position** rather than "the body contains `{{`" is what keeps the
+/// false-positive surface empty: the Jinja/template counter-case that shaped
+/// the original design (`{{ name }}`, `{{ request.headers[...] }}`) always
+/// sits on ordinary content lines, never at an opener.
+fn is_doubled_brace_fence_opener(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    let backticks = trimmed.bytes().take_while(|b| *b == b'`').count();
+    backticks >= 3 && trimmed[backticks..].starts_with("{{")
+}
+
+/// The language named by a doubled-brace opener line, e.g. `python` for
+/// ```` ```{{python}} ````. Returns `None` when the braces wrap something
+/// that is not a bare identifier-ish token, in which case the caller falls
+/// back to generic advice.
+fn doubled_brace_opener_language(line: &str) -> Option<String> {
+    let trimmed = line.trim_start();
+    let backticks = trimmed.bytes().take_while(|b| *b == b'`').count();
+    let info = trimmed[backticks..].trim_end();
+    let lang = info.trim_start_matches('{').trim_end_matches('}');
+    if lang.is_empty() || lang.contains(['{', '}', '`']) || lang.contains(char::is_whitespace) {
+        None
+    } else {
+        Some(lang.to_string())
+    }
+}
+
+/// The block's byte range **in this parse's own input buffer**, or `None`
+/// when the span is not a direct slice of it.
+///
+/// `resolve_byte_range` is deliberately *not* used here. Under a recursive
+/// parse of an embedded string (config values, `!md` metadata, Lua-filter
+/// config values) spans are rerooted through a parent `SourceInfo`, and
+/// resolving would compose the offsets into the **parent's** file — a
+/// different buffer from the `input_bytes` we are about to index, which
+/// would slice unrelated text and point the diagnostic at the wrong place.
+/// The uncomposed `start_offset`/`end_offset` are the offsets into this
+/// parse's input in both cases.
+fn parse_local_range(info: &SourceInfo) -> Option<(usize, usize)> {
+    match info {
+        SourceInfo::Original {
+            start_offset,
+            end_offset,
+            ..
+        }
+        | SourceInfo::Substring {
+            start_offset,
+            end_offset,
+            ..
+        } => Some((*start_offset, *end_offset)),
+        // Concat/Generated have no single contiguous slice of the input.
+        SourceInfo::Concat { .. } | SourceInfo::Generated { .. } => None,
+    }
+}
+
 /// Apply post-processing transformations to the Pandoc AST
-pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Result<Pandoc, ()> {
+///
+/// `input_bytes` is the document text the AST's offsets are relative to. It
+/// is needed to locate diagnostics *inside* a block's body — a `CodeBlock`
+/// carries its body in `text`, but `text` has no offset relationship to the
+/// block's span (the span includes the fence lines), so pointing at a body
+/// line means reading the block's own source slice.
+pub fn postprocess(
+    doc: Pandoc,
+    input_bytes: &[u8],
+    error_collector: &mut DiagnosticCollector,
+) -> Result<Pandoc, ()> {
     let result = {
         // Wrap error_collector in RefCell for interior mutability across multiple closures
         let error_collector_ref = RefCell::new(error_collector);
@@ -1149,6 +1217,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
             // (bd-escaped-executable-fence-uuvv37pk); the block is left as-is
             // and renders as literal code.
             .with_code_block(|code_block, _ctx| {
+                let mut warned = false;
                 for (i, class) in code_block.attr.1.iter().enumerate() {
                     if !class.starts_with("{{") {
                         continue;
@@ -1181,8 +1250,88 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         )
                         .build(),
                     );
+                    warned = true;
                     break;
                 }
+
+                // Second site: a doubled-brace opener *nested inside* a
+                // display fence. This is the form the real corpus uses --- the
+                // escape exists to SHOW a cell without running it, and showing
+                // a cell means wrapping it in an outer fence, so the escape
+                // essentially only ever appears nested. Measured on the Posit
+                // Connect docs port: 61 openers in 7 files, 61 of 61 nested,
+                // 0 top level (bd-q250-nested-fence-blind-spot-t68z1lsw).
+                //
+                // Nested openers are fence *content*, so they never become a
+                // class and the loop above cannot see them. We scan the
+                // block's own source slice rather than `code_block.text`
+                // because an offset into `text` has no relationship to the
+                // block's span --- the span includes the fence lines --- and a
+                // confidently wrong location is worse than none.
+                //
+                // The scan is deliberately NOT gated on the outer block's
+                // language. Gating on `markdown` would be tighter in
+                // principle, but on the measured corpus it selects exactly the
+                // same set, and an author who writes a doubled-brace opener
+                // inside a `text` or unlabelled display fence has the same
+                // problem.
+                if !warned
+                    && let Some((start, end)) = parse_local_range(&code_block.source_info)
+                    && let Some(block_src) = input_bytes.get(start..end)
+                    && let Ok(block_src) = std::str::from_utf8(block_src)
+                {
+                    // Skip the block's own opening fence line: if *it* carried
+                    // doubled braces the class loop above already reported it.
+                    let body_start = match block_src.find('\n') {
+                        Some(nl) => nl + 1,
+                        None => block_src.len(),
+                    };
+                    let mut offset = body_start;
+                    for line in block_src[body_start..].split_inclusive('\n') {
+                        let line_text = line.strip_suffix('\n').unwrap_or(line);
+                        if is_doubled_brace_fence_opener(line_text) {
+                            let lang = doubled_brace_opener_language(line_text);
+                            let execute_hint = match &lang {
+                                Some(lang) => format!(
+                                    "Write single braces: `{{{}}}`. The enclosing display block already shows the cell verbatim, so it will not run.",
+                                    lang
+                                ),
+                                None => "Write the language with single braces, e.g. `{python}`. The enclosing display block already shows the cell verbatim, so it will not run.".to_string(),
+                            };
+                            error_collector_ref.borrow_mut().add(
+                                DiagnosticMessageBuilder::warning(
+                                    "Doubled curly braces are not supported",
+                                )
+                                .with_code("Q-2-50")
+                                .with_location(SourceInfo::substring(
+                                    code_block.source_info.clone(),
+                                    offset,
+                                    offset + line_text.len(),
+                                ))
+                                // The opener is NOT wrapped in backticks here:
+                                // it begins with backticks itself, and nesting
+                                // them renders as ````{{python}}` --- noise
+                                // exactly where the message needs to be clear.
+                                // The snippet underlines the line anyway.
+                                .problem(format!(
+                                    "Quarto 2 does not treat doubled curly braces as an escape, so the opener {} is displayed exactly as written; readers are shown a fence opener that is not valid Quarto syntax.",
+                                    line_text.trim()
+                                ))
+                                .add_hint(execute_hint)
+                                .add_hint(
+                                    "Quarto 1 doubled the braces to keep a displayed cell from running. Quarto 2 does not need the escape: a fenced block's contents are displayed verbatim.",
+                                )
+                                .build(),
+                            );
+                            // One warning per block, matching the class path:
+                            // a page showing several cells should not produce
+                            // a wall of identical diagnostics.
+                            break;
+                        }
+                        offset += line.len();
+                    }
+                }
+
                 Unchanged(code_block)
             })
             // Remove single empty spans from bullet list items

@@ -1760,7 +1760,7 @@ pub fn treesitter_to_pandoc<T: Write>(
         );
         return Err(vec![diagnostic]);
     };
-    let result = match postprocess(pandoc, error_collector) {
+    let result = match postprocess(pandoc, input_bytes, error_collector) {
         Ok(doc) => doc,
         Err(()) => {
             // Postprocess found errors, return the diagnostics from the collector
