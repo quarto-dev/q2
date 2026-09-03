@@ -243,12 +243,19 @@ fn test_block_level_html_elements() {
     );
 
     use pampa::pandoc::Block;
+    // The tags stay raw and `content` is parsed between them, so the first
+    // block quotes just the opening tag rather than the whole element
+    // (bd-block-html-adjacent-markdown-unparsed-0qnjuwuy).
     match &pandoc.blocks[0] {
         Block::RawBlock(r) => {
             assert_eq!(r.format, "html");
-            assert_eq!(r.text, "<div>content</div>");
+            assert_eq!(r.text, "<div>");
         }
         other => panic!("Expected a RawBlock, got {:?}", other),
+    }
+    match &pandoc.blocks[2] {
+        Block::RawBlock(r) => assert_eq!(r.text, "</div>"),
+        other => panic!("Expected the closing tag as a RawBlock, got {:?}", other),
     }
 }
 
