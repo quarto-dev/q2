@@ -19,9 +19,13 @@ categories:
 An `{{{< include >}}}` shortcode names a file that is already part of
 the chain of includes being expanded — either the file includes
 itself, or two or more files include each other in a loop. Expanding
-the include would never terminate, so Quarto skips it: the cyclic
-include contributes nothing to the output, and the rest of the
-document renders normally.
+the include would never terminate, so Quarto cannot supply the
+content it asks for.
+
+The document therefore **fails to render**, and no output file is
+written for it. A page written without the included content would
+look complete while quietly missing a section, so Quarto reports the
+problem instead of shipping the hole.
 
 ## Why this happens
 

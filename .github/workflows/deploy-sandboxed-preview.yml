@@ -1,0 +1,59 @@
+name: Deploy sandboxed preview to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'hub-client/quarto-hub-sandboxed-preview/**'
+      - '.github/workflows/deploy-sandboxed-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment; don't cancel in-progress runs.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: hub-client/quarto-hub-sandboxed-preview/package-lock.json
+
+      # This package is deliberately a standalone npm project (own lockfile),
+      # not part of the root npm workspaces — install inside it.
+      - name: Install dependencies
+        run: npm ci
+        working-directory: hub-client/quarto-hub-sandboxed-preview
+
+      - name: Build
+        run: npm run build
+        working-directory: hub-client/quarto-hub-sandboxed-preview
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: hub-client/quarto-hub-sandboxed-preview/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

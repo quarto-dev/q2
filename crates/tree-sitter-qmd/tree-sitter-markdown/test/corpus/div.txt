@@ -101,3 +101,84 @@ div.txt: 5 Interruption closes many many blocks
                       (pandoc_paragraph
                         (pandoc_str)
                         (block_continuation)))))))))))
+================================================================================
+div.txt: 6 No whitespace after the colons, attribute block, after a paragraph
+================================================================================
+Before.
+
+:::{.foo}
+Inside.
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str))
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_class)))
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (block_continuation)))))
+
+================================================================================
+div.txt: 7 No whitespace after the colons, bare info string
+================================================================================
+Before.
+
+:::foo
+Inside.
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str))
+        (pandoc_div
+          (info_string)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (block_continuation)))))
+
+================================================================================
+div.txt: 8 No whitespace and no closing fence
+================================================================================
+Before.
+
+:::{.myclass}
+Inside.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str))
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_class)))
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)))))
+
+================================================================================
+div.txt: 9 A colon run that opens no block stays in the paragraph
+================================================================================
+Before.
+
+:hello
+::world
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str))
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_soft_break)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str))))

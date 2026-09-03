@@ -119,7 +119,7 @@ pub use stages::{
     IncludeResolveStage, LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage,
     MathJsStage, MetadataMergeStage, ParseDocumentStage, PreEngineSugaringStage,
     RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage, UnwrapProfileStage,
-    UserFiltersStage,
+    UserFiltersStage, expand_document_includes,
 };
 
 // Re-export the trace_event macro

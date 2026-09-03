@@ -198,12 +198,17 @@ function ReactRenderer({
   );
 
   // Extract component paths - only recompute when the list of paths
-  // changes. The gate covers both q2-debug and q2-preview because both
-  // load user TSX overrides via the iframe's
+  // changes. The gate covers q2-debug, q2-preview, and revealjs because
+  // all three load user TSX overrides via the iframe's
   // `LOAD_CUSTOM_COMPONENTS` postMessage handler. Plan 2A item 13
-  // extended the q2-debug-only gate to also include q2-preview.
+  // extended the q2-debug-only gate to also include q2-preview. revealjs
+  // later converged onto the same Q2PreviewIframe tree (bd-vwp4y5ku), but
+  // this gate wasn't updated to match, so render-components: silently
+  // never loaded for revealjs documents in Hub, even though the CLI's
+  // q2-preview-spa has no such gate at all. That gap itself isn't tracked
+  // under any strand as of this fix.
   const componentPathsKey = useMemo(() => {
-    if (format !== 'q2-debug' && format !== 'q2-preview') {
+    if (format !== 'q2-debug' && format !== 'q2-preview' && format !== 'revealjs') {
       return '';
     }
 

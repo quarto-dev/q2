@@ -21,6 +21,28 @@
 //! directory (at every nesting level); a leading `/` is
 //! **project-root-relative** per the Quarto path convention
 //! (bd-w9koo1i2, see [`resolve_include_target`]).
+//!
+//! **An include that cannot supply its content fails the document.**
+//! A missing target, an unparseable target, or an include cycle leaves
+//! a hole where the included content should be. The failed block is
+//! still removed from the AST — that is the bd-qpvoamvu fix, and it
+//! keeps a dead shortcode from being misreported downstream — but the
+//! stage then returns the collected diagnostics as an error, so no
+//! output is written for a document that is missing content it asked
+//! for (bd-include-parse-failure-dropped-u4rdjxru). It matches what q2
+//! already does when the same parse error is written inline on the page
+//! instead of one file away. Expansion continues after a failure so that
+//! every broken include in the document is reported in one pass, not one
+//! per re-render.
+//!
+//! Quarto 1 reaches a comparable outcome for a *missing* target
+//! (`Include directive failed`, no output), though it aborts the whole
+//! project rather than the page. Its circular-include path only gets
+//! there by crashing — `standaloneInclude` checks the resolved path
+//! against a list it fills with raw filenames, so the guard never fires
+//! and the recursion overflows the stack. Do not read Q1 as a designed
+//! precedent for the cycle case; the argument for it here is internal
+//! consistency (see the plan's D2/D3).
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -33,6 +55,7 @@ use quarto_pandoc_types::{Block, Inline};
 use quarto_source_map::SourceInfo;
 
 use crate::document_profile::IncludeEntry;
+use crate::error::ParseError;
 use crate::stage::data::DocumentAst;
 use crate::stage::{PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext};
 
@@ -77,43 +100,66 @@ impl PipelineStage for IncludeExpansionStage {
             ));
         };
 
-        let mut include_stack = HashSet::new();
-        let doc_path = doc.path.clone();
-        include_stack.insert(doc_path.clone());
-
-        let injected_file_ids =
-            expand_includes_in_blocks(&mut doc, ctx, &doc_path, &mut include_stack)?;
-
-        // Post-expansion invariant (bd-duplicate-heading-ids-mou5z7ux):
-        // auto-generated ids of include-injected headers are unique
-        // against the whole document, via pandoc's `uniqueIdent` probe.
-        // Only injected headers are ever renamed — ids assigned before
-        // this stage (the reader's per-parse dedup) are stable, so the
-        // stage is a strict no-op on documents without includes, and a
-        // future post-engine pass can re-run the same routine scoped to
-        // engine-inserted headers without invalidating ids downstream
-        // consumers (DocumentProfileStage's outline, cross-doc links)
-        // have already observed (bd-4qjl87ax). Known gap, by that same
-        // decision: a heading emitted by a code cell can still collide
-        // (engines run after this stage).
-        if !injected_file_ids.is_empty() {
-            let ast = std::mem::replace(
-                &mut doc.ast,
-                quarto_pandoc_types::pandoc::Pandoc {
-                    meta: quarto_pandoc_types::config_value::ConfigValue::default(),
-                    blocks: Vec::new(),
-                },
-            );
-            doc.ast = pampa::utils::autoid::dedup_scoped_heading_ids(ast, |header| {
-                header
-                    .source_info
-                    .root_file_id()
-                    .is_some_and(|id| injected_file_ids.contains(&id))
-            });
-        }
+        expand_document_includes(&mut doc, ctx)?;
 
         Ok(PipelineData::DocumentAst(doc))
     }
+}
+
+/// Expand every include in `doc`, in place.
+///
+/// This is the stage's whole body, factored out so a caller can keep the
+/// document when expansion fails. `Err` means an include could not
+/// supply its content (see the module docs), but `doc` is fully walked
+/// either way and its `recorded_includes` side-channel is populated with
+/// every file the walk touched — including the one that failed.
+///
+/// That distinction is what a **dependency collector** needs. `q2
+/// preview` derives its watch/sync set from `recorded_includes`
+/// (`quarto_preview::config::resolve_single_file_deps`), and a document
+/// with a broken include is exactly when the author is editing the
+/// included file: dropping it from the watch set would mean the fix
+/// never re-triggers a render. Such a caller runs this function and
+/// ignores the `Err`; the render pipeline propagates it.
+pub fn expand_document_includes(
+    doc: &mut DocumentAst,
+    ctx: &mut StageContext,
+) -> Result<(), PipelineError> {
+    let mut include_stack = HashSet::new();
+    let doc_path = doc.path.clone();
+    include_stack.insert(doc_path.clone());
+
+    let injected_file_ids = expand_includes_in_blocks(doc, ctx, &doc_path, &mut include_stack)?;
+
+    // Post-expansion invariant (bd-duplicate-heading-ids-mou5z7ux):
+    // auto-generated ids of include-injected headers are unique
+    // against the whole document, via pandoc's `uniqueIdent` probe.
+    // Only injected headers are ever renamed — ids assigned before
+    // this stage (the reader's per-parse dedup) are stable, so the
+    // stage is a strict no-op on documents without includes, and a
+    // future post-engine pass can re-run the same routine scoped to
+    // engine-inserted headers without invalidating ids downstream
+    // consumers (DocumentProfileStage's outline, cross-doc links)
+    // have already observed (bd-4qjl87ax). Known gap, by that same
+    // decision: a heading emitted by a code cell can still collide
+    // (engines run after this stage).
+    if !injected_file_ids.is_empty() {
+        let ast = std::mem::replace(
+            &mut doc.ast,
+            quarto_pandoc_types::pandoc::Pandoc {
+                meta: quarto_pandoc_types::config_value::ConfigValue::default(),
+                blocks: Vec::new(),
+            },
+        );
+        doc.ast = pampa::utils::autoid::dedup_scoped_heading_ids(ast, |header| {
+            header
+                .source_info
+                .root_file_id()
+                .is_some_and(|id| injected_file_ids.contains(&id))
+        });
+    }
+
+    Ok(())
 }
 
 /// Document-level entry point: expand include shortcodes at every
@@ -139,15 +185,34 @@ fn expand_includes_in_blocks(
         ..
     } = doc;
     let mut injected_file_ids = HashSet::new();
-    let mut expander = IncludeExpander {
-        ctx,
-        ast_context,
-        source_context,
-        recorded_includes,
-        include_stack,
-        injected_file_ids: &mut injected_file_ids,
-    };
-    expander.expand_blocks(&mut ast.blocks, current_file)?;
+    let mut unresolved = false;
+    {
+        let mut expander = IncludeExpander {
+            ctx: &mut *ctx,
+            ast_context,
+            source_context: &mut *source_context,
+            recorded_includes,
+            include_stack,
+            injected_file_ids: &mut injected_file_ids,
+            unresolved: &mut unresolved,
+        };
+        expander.expand_blocks(&mut ast.blocks, current_file)?;
+    }
+
+    if unresolved {
+        // Carry every diagnostic collected so far — the include
+        // failures plus anything earlier stages reported — out through
+        // the error, together with the document's own `SourceContext`.
+        // `Structured` is the variant that keeps that context, which is
+        // what lets ariadne draw the snippet inside the *included*
+        // file rather than only at the include site.
+        let diagnostics = std::mem::take(&mut ctx.diagnostics);
+        return Err(PipelineError::Structured(ParseError::new(
+            diagnostics,
+            source_context.clone(),
+        )));
+    }
+
     Ok(injected_file_ids)
 }
 
@@ -169,6 +234,13 @@ struct IncludeExpander<'a> {
     /// injected by this stage (bd-duplicate-heading-ids-mou5z7ux).
     /// Lookup-only set — never iterated.
     injected_file_ids: &'a mut HashSet<quarto_source_map::FileId>,
+    /// Set when an include could not supply its content — a cycle, an
+    /// unreadable target, or one that failed to parse. The walk runs
+    /// to completion regardless (so one pass reports every broken
+    /// include); [`expand_includes_in_blocks`] turns the flag into the
+    /// stage's error afterwards
+    /// (bd-include-parse-failure-dropped-u4rdjxru).
+    unresolved: &'a mut bool,
 }
 
 impl IncludeExpander<'_> {
@@ -214,7 +286,7 @@ impl IncludeExpander<'_> {
             // Check for circular includes
             if self.include_stack.contains(&canonical) {
                 self.ctx.diagnostics.push(
-                    quarto_error_reporting::DiagnosticMessageBuilder::warning("Circular include")
+                    quarto_error_reporting::DiagnosticMessageBuilder::error("Circular include")
                         .with_code("Q-17-1")
                         .with_location(blocks[i].source_info().clone())
                         .problem(format!(
@@ -227,7 +299,9 @@ impl IncludeExpander<'_> {
                 // Remove the failed include's paragraph: the failure is
                 // reported; leaving the shortcode in the AST would make
                 // the shortcode-resolve transform misreport it as an
-                // unknown shortcode (bd-qpvoamvu).
+                // unknown shortcode (bd-qpvoamvu). The document still
+                // fails — see the module docs.
+                *self.unresolved = true;
                 blocks.remove(i);
                 continue;
             }
@@ -237,7 +311,7 @@ impl IncludeExpander<'_> {
                 Ok(bytes) => bytes,
                 Err(e) => {
                     self.ctx.diagnostics.push(
-                        quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                        quarto_error_reporting::DiagnosticMessageBuilder::error(
                             "Include file not found",
                         )
                         .with_code("Q-17-2")
@@ -251,6 +325,7 @@ impl IncludeExpander<'_> {
                     );
                     // See the circular-include arm for why the block is
                     // removed rather than skipped.
+                    *self.unresolved = true;
                     blocks.remove(i);
                     continue;
                 }
@@ -321,6 +396,7 @@ impl IncludeExpander<'_> {
 
                     // See the circular-include arm for why the block is
                     // removed rather than skipped.
+                    *self.unresolved = true;
                     blocks.remove(i);
                     continue;
                 }
@@ -446,9 +522,12 @@ impl IncludeExpander<'_> {
     /// opt-out cannot fire here (the engine writes that class later),
     /// but `shortcodes="false"` is authored and does.
     ///
-    /// Errors are non-fatal: a diagnostic is pushed and the offending
-    /// line is dropped. Dropping rather than leaving it matters for the
-    /// same `?include` reason.
+    /// A target that cannot be read, or one that would recurse, drops
+    /// the offending line — dropping rather than leaving it matters for
+    /// the same `?include` reason — and fails the document, exactly as
+    /// a block-position include does. A listing whose source is missing
+    /// is the same silent hole as a missing block include; the two
+    /// arms emit the same codes and so must carry the same severity.
     fn expand_code_fence(
         &mut self,
         code_block: &mut quarto_pandoc_types::block::CodeBlock,
@@ -489,7 +568,7 @@ impl IncludeExpander<'_> {
             // forever: the spliced copy carries the same include line.
             if self.include_stack.contains(&canonical) {
                 self.ctx.diagnostics.push(
-                    quarto_error_reporting::DiagnosticMessageBuilder::warning("Circular include")
+                    quarto_error_reporting::DiagnosticMessageBuilder::error("Circular include")
                         .with_code("Q-17-1")
                         .with_location(location.clone())
                         .problem(format!(
@@ -499,6 +578,7 @@ impl IncludeExpander<'_> {
                         .add_hint("Check for files that include each other, directly or indirectly")
                         .build(),
                 );
+                *self.unresolved = true;
                 replacements.push((line_idx, None));
                 continue;
             }
@@ -524,7 +604,7 @@ impl IncludeExpander<'_> {
                 }
                 Err(e) => {
                     self.ctx.diagnostics.push(
-                        quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                        quarto_error_reporting::DiagnosticMessageBuilder::error(
                             "Include file not found",
                         )
                         .with_code("Q-17-2")
@@ -536,6 +616,7 @@ impl IncludeExpander<'_> {
                         ))
                         .build(),
                     );
+                    *self.unresolved = true;
                     replacements.push((line_idx, None));
                 }
             }
@@ -1392,53 +1473,30 @@ mod tests {
 
     #[test]
     fn missing_file_produces_diagnostic() {
-        let runtime = Arc::new(MockFileRuntime::new(vec![]));
-        let mut ctx = make_stage_context(runtime);
+        let (_doc, _ctx, result) = try_expand("{{< include nonexistent.qmd >}}", vec![]);
+        let error = failure(result);
 
-        let mut doc = parse_to_doc_ast("{{< include nonexistent.qmd >}}", "/project/doc.qmd");
-
-        let mut include_stack = HashSet::new();
-        include_stack.insert(PathBuf::from("/project/doc.qmd"));
-
-        expand_includes_in_blocks(
-            &mut doc,
-            &mut ctx,
-            &PathBuf::from("/project/doc.qmd"),
-            &mut include_stack,
-        )
-        .unwrap();
-
-        assert_eq!(ctx.diagnostics.len(), 1);
-        assert!(ctx.diagnostics[0].title.contains("not found"));
+        assert_eq!(error.diagnostics.len(), 1);
+        assert!(error.diagnostics[0].title.contains("not found"));
     }
 
     #[test]
     fn circular_include_produces_diagnostic() {
         // doc.qmd includes circular.qmd, which includes doc.qmd
-        let runtime = Arc::new(MockFileRuntime::new(vec![(
-            "/project/circular.qmd",
-            "{{< include doc.qmd >}}",
-        )]));
-        let mut ctx = make_stage_context(runtime);
-
-        let mut doc = parse_to_doc_ast("{{< include circular.qmd >}}", "/project/doc.qmd");
-
-        let mut include_stack = HashSet::new();
-        include_stack.insert(PathBuf::from("/project/doc.qmd"));
-
-        expand_includes_in_blocks(
-            &mut doc,
-            &mut ctx,
-            &PathBuf::from("/project/doc.qmd"),
-            &mut include_stack,
-        )
-        .unwrap();
+        let (_doc, _ctx, result) = try_expand(
+            "{{< include circular.qmd >}}",
+            vec![("/project/circular.qmd", "{{< include doc.qmd >}}")],
+        );
+        let error = failure(result);
 
         // Should have a circular include diagnostic
         assert!(
-            ctx.diagnostics.iter().any(|d| d.title.contains("Circular")),
+            error
+                .diagnostics
+                .iter()
+                .any(|d| d.title.contains("Circular")),
             "Expected circular include diagnostic, got: {:?}",
-            ctx.diagnostics
+            error.diagnostics
         );
     }
 
@@ -1606,28 +1664,12 @@ mod tests {
     }
 
     #[test]
-    fn parse_error_include_removes_block_and_surfaces_inner_diagnostics() {
-        let runtime = Arc::new(MockFileRuntime::new(vec![(
-            "/project/bad.qmd",
-            UNPARSEABLE_QMD,
-        )]));
-        let mut ctx = make_stage_context(runtime);
-
-        let mut doc = parse_to_doc_ast(
+    fn parse_error_include_fails_and_surfaces_inner_diagnostics() {
+        let (doc, _ctx, result) = try_expand(
             "Before\n\n{{< include bad.qmd >}}\n\nAfter",
-            "/project/doc.qmd",
+            vec![("/project/bad.qmd", UNPARSEABLE_QMD)],
         );
-
-        let mut include_stack = HashSet::new();
-        include_stack.insert(PathBuf::from("/project/doc.qmd"));
-
-        expand_includes_in_blocks(
-            &mut doc,
-            &mut ctx,
-            &PathBuf::from("/project/doc.qmd"),
-            &mut include_stack,
-        )
-        .unwrap();
+        let error = failure(result);
 
         // The failed include's paragraph is removed: only Before/After
         // remain, and no include shortcode survives to later transforms.
@@ -1641,20 +1683,22 @@ mod tests {
 
         // Wrapper first, then the included file's own diagnostics.
         assert!(
-            ctx.diagnostics.len() >= 2,
+            error.diagnostics.len() >= 2,
             "expected wrapper + inner diagnostics, got: {:?}",
-            ctx.diagnostics
+            error.diagnostics
         );
-        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-17-3"));
+        assert_eq!(error.diagnostics[0].code.as_deref(), Some("Q-17-3"));
 
         // The inner diagnostic's location must resolve — through the
-        // parent document's SourceContext — to the included file.
-        let inner = &ctx.diagnostics[1];
+        // SourceContext the error carries — to the included file. This
+        // is why the failure travels as `Structured` and not as a bare
+        // stage error.
+        let inner = &error.diagnostics[1];
         let loc = inner.location.as_ref().expect("inner has a location");
         let mapped = loc
-            .map_offset(0, &doc.source_context)
-            .expect("inner location resolves in the parent SourceContext");
-        let file = doc
+            .map_offset(0, &error.source_context)
+            .expect("inner location resolves in the error's SourceContext");
+        let file = error
             .source_context
             .get_file(mapped.file_id)
             .expect("mapped file registered");
@@ -1676,28 +1720,18 @@ mod tests {
     }
 
     #[test]
-    fn missing_include_removes_block() {
-        let runtime = Arc::new(MockFileRuntime::new(vec![]));
-        let mut ctx = make_stage_context(runtime);
+    fn missing_include_fails_and_removes_block() {
+        let (doc, _ctx, result) =
+            try_expand("Before\n\n{{< include nonexistent.qmd >}}\n\nAfter", vec![]);
+        let error = failure(result);
 
-        let mut doc = parse_to_doc_ast(
-            "Before\n\n{{< include nonexistent.qmd >}}\n\nAfter",
-            "/project/doc.qmd",
+        assert_eq!(failure_codes(&error), vec!["Q-17-2".to_string()]);
+        // Error, not warning: the page would otherwise ship missing the
+        // content it asked for, and a warning can be suppressed.
+        assert_eq!(
+            error.diagnostics[0].kind,
+            quarto_error_reporting::DiagnosticKind::Error
         );
-
-        let mut include_stack = HashSet::new();
-        include_stack.insert(PathBuf::from("/project/doc.qmd"));
-
-        expand_includes_in_blocks(
-            &mut doc,
-            &mut ctx,
-            &PathBuf::from("/project/doc.qmd"),
-            &mut include_stack,
-        )
-        .unwrap();
-
-        assert_eq!(ctx.diagnostics.len(), 1);
-        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-17-2"));
         assert_eq!(
             doc.ast.blocks.len(),
             2,
@@ -1708,32 +1742,55 @@ mod tests {
     }
 
     #[test]
-    fn circular_include_removes_block() {
-        let runtime = Arc::new(MockFileRuntime::new(vec![(
-            "/project/circular.qmd",
-            "In the loop\n\n{{< include doc.qmd >}}",
-        )]));
-        let mut ctx = make_stage_context(runtime);
+    fn circular_include_fails_and_removes_block() {
+        let (doc, _ctx, result) = try_expand(
+            "{{< include circular.qmd >}}",
+            vec![(
+                "/project/circular.qmd",
+                "In the loop\n\n{{< include doc.qmd >}}",
+            )],
+        );
+        let error = failure(result);
 
-        let mut doc = parse_to_doc_ast("{{< include circular.qmd >}}", "/project/doc.qmd");
-
-        let mut include_stack = HashSet::new();
-        include_stack.insert(PathBuf::from("/project/doc.qmd"));
-
-        expand_includes_in_blocks(
-            &mut doc,
-            &mut ctx,
-            &PathBuf::from("/project/doc.qmd"),
-            &mut include_stack,
-        )
-        .unwrap();
-
-        assert_eq!(ctx.diagnostics.len(), 1);
-        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-17-1"));
+        assert_eq!(failure_codes(&error), vec!["Q-17-1".to_string()]);
+        assert_eq!(
+            error.diagnostics[0].kind,
+            quarto_error_reporting::DiagnosticKind::Error
+        );
         assert!(
             !has_include_shortcode_block(&doc.ast.blocks),
             "the cyclic include block must be removed, got {:?}",
             doc.ast.blocks
+        );
+    }
+
+    #[test]
+    fn every_broken_include_is_reported_in_one_pass() {
+        // Expansion runs to completion after a failure so that a
+        // document with several broken includes reports all of them,
+        // rather than one per re-render.
+        let (_doc, _ctx, result) = try_expand(
+            "{{< include gone-a.qmd >}}\n\n{{< include gone-b.qmd >}}",
+            vec![],
+        );
+        let error = failure(result);
+        assert_eq!(
+            failure_codes(&error),
+            vec!["Q-17-2".to_string(), "Q-17-2".to_string()]
+        );
+    }
+
+    #[test]
+    fn working_include_does_not_fail_the_document() {
+        let (doc, ctx, result) = try_expand(
+            "Before\n\n{{< include good.qmd >}}\n\nAfter",
+            vec![("/project/good.qmd", "Included content\n")],
+        );
+        assert!(result.is_ok(), "a resolvable include must not fail");
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+        assert_eq!(
+            texts(&doc.ast.blocks),
+            vec!["Before", "Included content", "After"]
         );
     }
 
@@ -1749,6 +1806,23 @@ mod tests {
     const WARNING_QMD: &str = "<div>\n\nhello\n\n</div>\n";
 
     fn expand(main: &str, files: Vec<(&str, &str)>) -> (DocumentAst, StageContext) {
+        let (doc, ctx, result) = try_expand(main, files);
+        result.expect("expansion succeeds");
+        (doc, ctx)
+    }
+
+    /// `expand` without the success expectation. The AST is still fully
+    /// walked and mutated when expansion fails, so the block-removal
+    /// contract (bd-qpvoamvu) stays assertable alongside the failure.
+    #[allow(clippy::type_complexity)]
+    fn try_expand(
+        main: &str,
+        files: Vec<(&str, &str)>,
+    ) -> (
+        DocumentAst,
+        StageContext,
+        Result<HashSet<quarto_source_map::FileId>, PipelineError>,
+    ) {
         let runtime = Arc::new(MockFileRuntime::new(files));
         let mut ctx = make_stage_context(runtime);
         let mut doc = parse_to_doc_ast(main, "/project/doc.qmd");
@@ -1756,14 +1830,32 @@ mod tests {
         let mut include_stack = HashSet::new();
         include_stack.insert(PathBuf::from("/project/doc.qmd"));
 
-        expand_includes_in_blocks(
+        let result = expand_includes_in_blocks(
             &mut doc,
             &mut ctx,
             &PathBuf::from("/project/doc.qmd"),
             &mut include_stack,
-        )
-        .unwrap();
-        (doc, ctx)
+        );
+        (doc, ctx, result)
+    }
+
+    /// The diagnostics a failed expansion carries out through its
+    /// error, which is where they live now that they no longer stay on
+    /// the context (bd-include-parse-failure-dropped-u4rdjxru).
+    fn failure(result: Result<HashSet<quarto_source_map::FileId>, PipelineError>) -> ParseError {
+        match result {
+            Err(PipelineError::Structured(parse_error)) => parse_error,
+            Err(other) => panic!("expected a structured error, got {other:?}"),
+            Ok(_) => panic!("expected expansion to fail"),
+        }
+    }
+
+    fn failure_codes(error: &ParseError) -> Vec<String> {
+        error
+            .diagnostics
+            .iter()
+            .filter_map(|d| d.code.clone())
+            .collect()
     }
 
     /// Collapse a block to its plain-text content (Str/Space only) for
@@ -1898,12 +1990,12 @@ mod tests {
     fn cycle_through_container_reports_and_removes() {
         // doc → (div) loop.qmd → doc: the cyclic include is removed
         // from loop.qmd's spliced blocks, inside the div.
-        let (doc, ctx) = expand(
+        let (doc, _ctx, result) = try_expand(
             "::: {.d}\n{{< include loop.qmd >}}\n:::",
             vec![("/project/loop.qmd", "{{< include doc.qmd >}}")],
         );
-        assert_eq!(ctx.diagnostics.len(), 1, "{:?}", ctx.diagnostics);
-        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-17-1"));
+        let error = failure(result);
+        assert_eq!(failure_codes(&error), vec!["Q-17-1".to_string()]);
         let Block::Div(div) = &doc.ast.blocks[0] else {
             panic!("expected Div, got {:?}", doc.ast.blocks[0]);
         };
@@ -1916,16 +2008,17 @@ mod tests {
 
     #[test]
     fn parse_error_inside_div_reports_and_removes() {
-        let (doc, ctx) = expand(
+        let (doc, _ctx, result) = try_expand(
             "::: {.d}\n{{< include bad.qmd >}}\n:::",
             vec![("/project/bad.qmd", UNPARSEABLE_QMD)],
         );
+        let error = failure(result);
         assert!(
-            ctx.diagnostics.len() >= 2,
+            error.diagnostics.len() >= 2,
             "expected wrapper + inner diagnostics, got {:?}",
-            ctx.diagnostics
+            error.diagnostics
         );
-        assert_eq!(ctx.diagnostics[0].code.as_deref(), Some("Q-17-3"));
+        assert_eq!(error.diagnostics[0].code.as_deref(), Some("Q-17-3"));
         let Block::Div(div) = &doc.ast.blocks[0] else {
             panic!("expected Div, got {:?}", doc.ast.blocks[0]);
         };
@@ -2123,14 +2216,11 @@ mod tests {
     }
 
     #[test]
-    fn code_fence_include_missing_file_reports_and_drops_line() {
-        let (doc, ctx) = expand("```{.python}\nkept\n{{< include gone.py >}}\n```", vec![]);
-        let codes: Vec<_> = ctx
-            .diagnostics
-            .iter()
-            .filter_map(|d| d.code.clone())
-            .collect();
-        assert_eq!(codes, vec!["Q-17-2".to_string()]);
+    fn code_fence_include_missing_file_fails_and_drops_line() {
+        let (doc, _ctx, result) =
+            try_expand("```{.python}\nkept\n{{< include gone.py >}}\n```", vec![]);
+        let error = failure(result);
+        assert_eq!(failure_codes(&error), vec!["Q-17-2".to_string()]);
         // The unresolved shortcode must not survive into the fence:
         // ShortcodeResolveTransform would later render it as the
         // `?include` token this strand exists to remove.
@@ -2200,22 +2290,18 @@ mod tests {
     }
 
     #[test]
-    fn code_fence_include_cycle_reports_and_drops_line() {
+    fn code_fence_include_cycle_fails_and_drops_line() {
         // A file that embeds itself as a listing would recurse forever:
         // the spliced copy carries the same include line.
-        let (doc, ctx) = expand(
+        let (doc, _ctx, result) = try_expand(
             "```{.markdown}\n{{< include a.qmd >}}\n```",
             vec![
                 ("/project/a.qmd", "A-TOP\n{{< include b.qmd >}}\n"),
                 ("/project/b.qmd", "B-TOP\n{{< include a.qmd >}}\n"),
             ],
         );
-        let codes: Vec<_> = ctx
-            .diagnostics
-            .iter()
-            .filter_map(|d| d.code.clone())
-            .collect();
-        assert_eq!(codes, vec!["Q-17-1".to_string()]);
+        let error = failure(result);
+        assert_eq!(failure_codes(&error), vec!["Q-17-1".to_string()]);
         // Expansion stops at the cycle; the offending line is dropped
         // rather than left to become `?include`.
         assert_eq!(first_code_text(&doc.ast.blocks), "A-TOP\nB-TOP");
@@ -2224,16 +2310,12 @@ mod tests {
     #[test]
     fn code_fence_include_of_self_reports_cycle() {
         // The document itself is already on the include stack.
-        let (doc, ctx) = expand(
+        let (doc, _ctx, result) = try_expand(
             "```{.markdown}\n{{< include doc.qmd >}}\n```",
             vec![("/project/doc.qmd", "anything\n")],
         );
-        let codes: Vec<_> = ctx
-            .diagnostics
-            .iter()
-            .filter_map(|d| d.code.clone())
-            .collect();
-        assert_eq!(codes, vec!["Q-17-1".to_string()]);
+        let error = failure(result);
+        assert_eq!(failure_codes(&error), vec!["Q-17-1".to_string()]);
         assert_eq!(first_code_text(&doc.ast.blocks), "");
     }
 

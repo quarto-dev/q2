@@ -1105,6 +1105,13 @@
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-24",
     "since_version": "99.9.9"
   },
+  "Q-12-25": {
+    "subsystem": "listing",
+    "title": "Listing Id Collides With Section Id",
+    "message_template": "A listing's `id` is also the id of a section on the page. Both elements claim the same HTML anchor.",
+    "docs_url": "https://quarto.org/docs/errors/listing/Q-12-25",
+    "since_version": "99.9.9"
+  },
   "Q-13-1": {
     "subsystem": "navigation",
     "title": "Sidebar references missing document",
@@ -1381,21 +1388,21 @@
   "Q-17-1": {
     "subsystem": "include",
     "title": "Circular Include",
-    "message_template": "An `{{< include >}}` chain leads back to a file that is already being included, directly or indirectly. The cyclic include is skipped and its content is omitted from the output. Break the cycle by removing one of the includes in the chain.",
+    "message_template": "An `{{< include >}}` chain leads back to a file that is already being included, directly or indirectly. The cyclic include cannot supply any content, so the document fails to render rather than being written with the content missing. Break the cycle by removing one of the includes in the chain.",
     "docs_url": "https://quarto.org/docs/errors/include/Q-17-1",
     "since_version": "99.9.9"
   },
   "Q-17-2": {
     "subsystem": "include",
     "title": "Include File Not Found",
-    "message_template": "The file named by an `{{< include >}}` shortcode could not be read. The include is skipped and its content is omitted from the output. The path is resolved relative to the directory of the file containing the shortcode — check it for typos and check that the file exists.",
+    "message_template": "The file named by an `{{< include >}}` shortcode could not be read. Its content cannot be supplied, so the document fails to render rather than being written with the content missing. The path is resolved relative to the directory of the file containing the shortcode — check it for typos and check that the file exists.",
     "docs_url": "https://quarto.org/docs/errors/include/Q-17-2",
     "since_version": "99.9.9"
   },
   "Q-17-3": {
     "subsystem": "include",
     "title": "Include File Parse Error",
-    "message_template": "The file named by an `{{< include >}}` shortcode was read but could not be parsed as qmd. The include is skipped and its content is omitted from the output. The included file's own parse errors are reported alongside this one — fix those and the include will succeed.",
+    "message_template": "The file named by an `{{< include >}}` shortcode was read but could not be parsed as qmd. Its content cannot be supplied, so the document fails to render rather than being written with the content missing. The included file's own parse errors are reported alongside this one — fix those and the include will succeed.",
     "docs_url": "https://quarto.org/docs/errors/include/Q-17-3",
     "since_version": "99.9.9"
   },
@@ -1495,6 +1502,13 @@
     "title": "Engine claim on a Quarto-owned file type ignored",
     "message_template": "An engine extension claimed `.qmd`, `.md`, `.markdown`, or an extension-less input. Quarto handles markdown natively, so the claim is ignored and the file is rendered by Quarto's own parser.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-51",
+    "since_version": "99.9.9"
+  },
+  "Q-2-52": {
+    "subsystem": "markdown",
+    "title": "Shortcode delimiter not separated by a space",
+    "message_template": "A shortcode's delimiters must be separated from its content by whitespace. Write `{{< fa plus >}}` — a space after `{{<` and a space before `>}}` — rather than `{{<fa plus>}}`.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-52",
     "since_version": "99.9.9"
   },
   "Q-5-27": {

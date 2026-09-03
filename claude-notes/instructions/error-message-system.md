@@ -8,7 +8,7 @@ This document consolidates everything you need to know about the error message s
 ## Table of Contents
 
 1. [System Overview](#system-overview)
-2. [File Structure](#file-structure)
+2. [File Structure](#file-structure) — including [`guard`](#discriminating-two-errors-in-one-state-guard) and [`desynchronizes`](#suppressing-a-cascade-desynchronizes)
 3. [Adding New Error Messages](#adding-new-error-messages)
 4. [Adding New Test Cases to Existing Errors](#adding-new-test-cases-to-existing-errors)
 5. [Technical Details](#technical-details)
@@ -186,6 +186,57 @@ The build script processes variants in this order (mutually exclusive):
 4. **None**: If none present, only the base case is generated
 
 **Important**: Don't mix `prefixesAndSuffixes` with `prefixes`/`suffixes` - the build script uses the first one it finds.
+
+### Discriminating Two Errors in One State: `guard`
+
+`(parse state, lookahead symbol)` is sometimes not fine enough. `{{< fa
+plus>}}` (a missing space before the closing delimiter) and `{{< fa 2plus
+>}}` (a value that starts with a digit) fail in the *same* state on the
+*same* lookahead, but they are different mistakes with different remedies.
+Before `Q-2-52` existed, whichever code owned the state answered for both.
+
+A case may therefore carry a `guard`: a regular expression matched against
+the source text from the error position to the end of its line.
+
+```json
+{
+  "name": "closing-delimiter",
+  "content": "Click the {{< fa plus>}} icon.\n",
+  "captures": [],
+  "guard": "^>\\}\\}"
+}
+```
+
+Selection is by **specificity**: entries whose guard rejects the text drop
+out, and if any guarded entry survives, the unguarded ones drop out too. A
+guard that fails to compile admits nothing, so a typo means "never fires"
+rather than "always fires".
+
+`guard` is **per case, never per code**. One code usually covers several
+spellings that fail in different states, and typically only one of them is
+contended; a code-level default would apply "guarded beats unguarded" to
+every case, including the ones that should claim their state outright.
+
+Reach for a guard only when a state is genuinely contended. Prefer finding
+a distinct state first — quoting the value above (`{{< fa "plus">}}`)
+reaches its own state and needs no guard.
+
+### Suppressing a Cascade: `desynchronizes`
+
+Some errors do not merely fail where they are written. Recovery from a
+tight `{{<` consumes the opening `:::` of a div several lines below,
+reading it as three `pipe_table_align_left` tokens — and the div's closing
+`:::`, which is correct Quarto, is then reported as a further parse error.
+
+Set `"desynchronizes": true` at the **top level** of a `Q-*.json` to declare
+that this error leaves the parser desynchronised. Diagnostics are sorted by
+position and everything *after* the first such error is dropped, with a note
+on the surviving diagnostic saying the list was cut short. Errors *before*
+it are kept, since they were found while the parser was still synchronised.
+
+Unlike `guard`, this is per code rather than per case, and deliberately so:
+every spelling of a missing separator wrecks the parse the same way, and a
+code whose spellings differed on this point would be better split in two.
 
 ### Duplicate Detection
 

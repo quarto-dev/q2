@@ -4,9 +4,12 @@ interface Q2SandboxedPreviewIframeProps {
   astJson: string;
 }
 
-// In production, q2-sandboxed-preview.html is served from a separate domain for sandboxing.
-// In dev/local-prod, it uses a different port.
-const Q2_SANDBOXED_PREVIEW_URL = import.meta.env.VITE_Q2_SANDBOXED_PREVIEW_URL || 'q2-sandboxed-preview.html';
+// The sandboxed preview is served from a separate origin (GitHub Pages) so the
+// iframe gets real cross-origin isolation; see
+// .github/workflows/github-pages.md. Set
+// VITE_Q2_SANDBOXED_PREVIEW_URL to override (e.g. 'q2-sandboxed-preview.html'
+// for the same-origin copy in public/).
+const Q2_SANDBOXED_PREVIEW_URL = import.meta.env.VITE_Q2_SANDBOXED_PREVIEW_URL || 'https://quarto-dev.github.io/q2/';
 
 /**
  * Simplest possible iframe wrapper: displays JSON.stringified AST

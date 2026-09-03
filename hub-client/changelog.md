@@ -23,9 +23,14 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
-### 2026-09-02
+### 2026-09-03
 
 - [`ea9b46ec`](https://github.com/quarto-dev/q2/commits/ea9b46ec): Invite cards and the editor welcome banner now render correctly in dark mode — the preview box's dividers were drawn in a light-only brand color, which showed as near-white grid lines on the dark card, and several surfaces were painted with translucent tints.
+- [`546fdd37`](https://github.com/quarto-dev/q2/commits/546fdd37): The sandboxed preview bundle is rebuilt from its current sources — math rendering there is back on KaTeX 0.18.4, which a later bundle rebuild had quietly reverted to 0.18.2, and the preview's service worker no longer caches assets for offline use.
+
+### 2026-09-02
+
+- [`ee47e8ec`](https://github.com/quarto-dev/q2/commits/ee47e8ec): Fix `render-components:` custom TSX overrides silently not loading for revealjs presentations.
 
 ### 2026-09-01
 
@@ -35,6 +40,9 @@ WASM rebuild is needed for a changelog-only edit.
 - [`f0b5ac14`](https://github.com/quarto-dev/q2/commits/f0b5ac14): Joining a collection invite now lands on the projects home screen with the joined collection at the top, instead of opening a document's editor; the welcome banner appears on the first project you open from that collection.
 - [`1b07531b`](https://github.com/quarto-dev/q2/commits/1b07531b): Adding a project to a collection now carries its cached file counts and contributors along, so collection cards and invite previews no longer show "0 files" for a populated project until its next open.
 - [`720c263e`](https://github.com/quarto-dev/q2/commits/720c263e): Collection and document invite links now land on a unified invitation card showing who invited you and a preview of what you're joining, with one click to join or open; document links no longer open the editor silently, joining uses your Google identity instead of a name form, and a one-time welcome banner orients you in the editor.
+- [`a4c3fb9c`](https://github.com/quarto-dev/q2/commits/a4c3fb9c): The experimental branch bar's Merge button now uses the app's standard accent color in both themes, and its branch-name input shows the standard keyboard focus ring.
+- [`41da392c`](https://github.com/quarto-dev/q2/commits/41da392c): Branch chips in the experimental branch bar now activate on click and via the keyboard, and deleting a branch no longer also switches to it.
+- [`e4a72819`](https://github.com/quarto-dev/q2/commits/e4a72819): Math rendering upgraded to KaTeX 0.18.4 everywhere — the sandboxed preview bundle, the hub client, and the CDN link rendering emits for `html-math-method: katex` stay aligned on one version.
 
 ### 2026-08-31
 

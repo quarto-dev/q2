@@ -850,6 +850,12 @@ fn write_rawblock(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io:
     // Only output raw content if it's for markdown format
     if rawblock.format == "markdown" {
         write!(buf, "{}", rawblock.text)?;
+    } else if rawblock.format == "html" && is_html_comment(&rawblock.text) {
+        // HTML comments are emitted in native syntax, matching write_rawinline
+        // (bd-1066). A comment on its own line is now lifted to a RawBlock
+        // rather than a Paragraph of RawInlines, so the block writer needs the
+        // same case or the comment round-trips as a ```{=html} fence.
+        writeln!(buf, "{}", rawblock.text)?;
     } else {
         // For other formats, use fenced raw block notation with `=` prefix
         writeln!(buf, "```{{={}}}", rawblock.format)?;

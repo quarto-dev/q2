@@ -167,8 +167,10 @@ describe('q2-preview nav-fixed body class (bd-ersobfbt)', () => {
                 'body-classes': ms('nav-sidebar floating'),
             }),
         );
+        // No TOC and no margin content, so `fullcontent` composes on
+        // top since bd-no-toc-reserves-margin-column-s8nonx0w.
         expect(document.body.className).toBe(
-            'nav-sidebar floating nav-fixed quarto-light',
+            'nav-sidebar floating fullcontent nav-fixed quarto-light',
         );
     });
 

@@ -162,6 +162,7 @@ website:
             - errors/markdown/Q-2-49.qmd
             - errors/markdown/Q-2-50.qmd
             - errors/markdown/Q-2-51.qmd
+            - errors/markdown/Q-2-52.qmd
         - section: "writer"
           contents:
             - errors/writer/Q-3-1.qmd
@@ -213,6 +214,7 @@ website:
             - errors/listing/Q-12-22.qmd
             - errors/listing/Q-12-23.qmd
             - errors/listing/Q-12-24.qmd
+            - errors/listing/Q-12-25.qmd
         - section: "xml"
           contents:
             - errors/xml/Q-9-1.qmd

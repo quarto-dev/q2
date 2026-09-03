@@ -3,19 +3,20 @@ declare var self: ServiceWorkerGlobalScope;
 
 console.log('sandboxed preview service worker started')
 
-const clearCache = async (cache: Cache) => Promise.all((await cache.keys()).map(k => cache.delete(k)))
+// Caching/offline support disabled for now — the service worker only proxies assets.
+// const clearCache = async (cache: Cache) => Promise.all((await cache.keys()).map(k => cache.delete(k)))
 
 // Cache sandboxed preview for offline
-const precacheFilepaths = ['./', './serviceWorker.js']
-const cacheName = 'previewOffline'
-self.addEventListener("install", async (e) => {
-    e.waitUntil(
-        (async () => {
-            const cache = await caches.open(cacheName);
-            await clearCache(cache)
-            await cache.addAll(precacheFilepaths);
-        })(),
-    );
+// const precacheFilepaths = ['./', './serviceWorker.js']
+// const cacheName = 'previewOffline'
+self.addEventListener("install", async () => {
+    // e.waitUntil(
+    //     (async () => {
+    //         const cache = await caches.open(cacheName);
+    //         await clearCache(cache)
+    //         await cache.addAll(precacheFilepaths);
+    //     })(),
+    // );
     console.log('done installing sandboxed preview service worker')
     //console.log('heres the precache:', await (await caches.open(cacheName)).keys())
 });
@@ -91,20 +92,22 @@ self.addEventListener('fetch', function (event) {
 
     if (shouldRequestFromVFS(event.request.url)) {
         event.respondWith(requestIframeToRequestFromVFS(event))
-    } else { // cache asset or fetch cached asset
-        event.respondWith(
-            (async () => {
-                const r = await caches.match(event.request);
-                console.log(`[Service Worker] Fetching resource: ${event.request.url} ${r}`);
-                if (r) {
-                    return r;
-                }
-                const response = await fetch(event.request);
-                const cache = await caches.open(cacheName);
-                console.log(`[Service Worker] Caching new resource: ${event.request.url}`, event.request);
-                cache.put(event.request, response.clone());
-                return response;
-            })(),
-        );
     }
+    // Caching disabled for now — non-VFS requests fall through to the network.
+    // } else { // cache asset or fetch cached asset
+    //     event.respondWith(
+    //         (async () => {
+    //             const r = await caches.match(event.request);
+    //             console.log(`[Service Worker] Fetching resource: ${event.request.url} ${r}`);
+    //             if (r) {
+    //                 return r;
+    //             }
+    //             const response = await fetch(event.request);
+    //             const cache = await caches.open(cacheName);
+    //             console.log(`[Service Worker] Caching new resource: ${event.request.url}`, event.request);
+    //             cache.put(event.request, response.clone());
+    //             return response;
+    //         })(),
+    //     );
+    // }
 })
