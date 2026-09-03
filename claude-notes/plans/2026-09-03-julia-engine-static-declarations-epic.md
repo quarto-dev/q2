@@ -1,4 +1,13 @@
-# Julia engine: upstream fixes + static engine declarations (epic, DRAFT)
+# Julia engine: upstream fixes, static declarations, and bundling in q2 (epic, DRAFT)
+
+> ## ⚠️ PROVISIONAL — NEEDS REVIEW
+>
+> This is a **first-pass draft written from research, not from a decision**. The
+> sequencing, the scope, and the assignment of work to PRs are all proposals and
+> have **not been agreed with anyone** — including PumasAI, who own the
+> extension. Several load-bearing steps depend on external parties and external
+> release timelines. Nothing here should be treated as settled, and no part of
+> it has been started. **Review before acting on any of it.**
 
 **Status:** preliminary draft — research done, not scoped into tasks, not started.
 **Author context:** written 2026-09-03 off the back of the worker-leak
@@ -7,17 +16,21 @@ to upstream yet.
 
 ## Overview
 
-Two things want to go upstream to `PumasAI/quarto-julia-engine`, and they have
-very different risk profiles:
+Three workstreams, in increasing order of risk and dependency:
 
 1. **The worker-leak bug fix** (plus two sibling fixes) — pure bug fixing,
    Q1-compatible, no schema implications.
 2. **The static engine declarations** in `_extension.yml` (`name:`, `claims:`,
    `file-extensions:`) that let Quarto 2 resolve the engine in **pass 1 without
    loading it**. These are *rejected by Quarto 1 today* and cannot land alone.
+3. **Bundling the julia engine into q2** as a vendored subtree, so `q2` ships
+   with Julia support instead of requiring a separate extension install. This
+   needs the engine's q2-flavoured declarations to exist somewhere stable
+   first — i.e. it follows (2).
 
-The second is blocked on a `quarto-cli` schema change, which is why this is an
-epic rather than a PR.
+(2) is blocked on a `quarto-cli` schema change **and on that change reaching a
+stable Quarto release**, which is why this is an epic rather than a PR. (1) is
+independent and can go immediately.
 
 ## Key research findings
 
@@ -131,7 +144,82 @@ q2 parses `quarto-required` into `Extension` but never compares it
 (`ts_engine.rs:2901` — "carrier (inert in 1c)"). So bumping it constrains **Q1
 users only**; q2 is unaffected either way.
 
+### F8 — bundling: q2 already has the runtime hook; the gap is maintenance
+
+Quarto 1 vendors whole extension repos as **git subtrees** under
+`src/resources/extension-subtrees/<name>/`, kept in sync by a hidden dev
+command (`src/command/dev-call/pull-git-subtree/cmd.ts`). That command is a thin
+wrapper over `git subtree add/pull --squash`, with a hard-coded `SUBTREES` table:
+
+```ts
+{ name: "julia-engine",
+  prefix: "src/resources/extension-subtrees/julia-engine",
+  remoteUrl: "https://github.com/PumasAI/quarto-julia-engine.git",
+  remoteBranch: "main" }
+```
+
+It finds the last split via `git log --grep="git-subtree-dir: <prefix>$"`, falls
+back to `subtree add` when the prefix is new, and no-ops when there are no new
+commits. Requires `QUARTO_ROOT`. Discovery side (`extension/extension.ts:680-695`):
+extension lookup falls back to scanning
+`resourcePath("extension-subtrees")/*/_extensions/<name>`, a **separate root**
+from `resourcePath("extensions")`.
+
+**q2 already has the equivalent runtime machinery.** `builtin_extensions_path()`
+(`extension/mod.rs:43-80`) embeds `resources/extensions/` via `include_dir!`,
+lazily extracts it to a temp dir through `ResourceBundle`, and has a WASM VFS
+variant; `discover_extensions` takes a `builtin_extensions_dir` that is
+**scanned first**, and it is already wired up from `project/mod.rs:2206` and
+`stage/context.rs:298`. So there is **no discovery work to port** — an extension
+dropped into the embedded bundle is found automatically.
+
+**Sizes matter for the layout decision:**
+
+| | size |
+|---|---|
+| `resources/extensions/` today (7 bundled extensions) | 712K |
+| julia-engine `_extensions/` payload (what must ship) | **68K** |
+| julia-engine **whole repo** (tests, `.github`, `src`, docs) | **14M** |
+
+Q1's subtree vendors the *entire* repo. Embedding that wholesale via
+`include_dir!` would put 14M of tests and CI config into every `q2` binary. So
+q2 should subtree the full repo into `resources/extension-subtrees/julia-engine/`
+(git cost only, mirroring Q1) but point `include_dir!` at just its
+`_extensions/` subdirectory — 68K in the binary. **Open: is 14M in q2's git
+history acceptable, or should we vendor a curated copy instead and give up
+`git subtree`'s merge tracking?**
+
+The genuinely new work is therefore the **maintenance command**, not the
+runtime: port `pull-git-subtree` as `cargo xtask pull-extension-subtree`. xtask
+is the right home — it already hosts every comparable maintenance/build task
+(`build_agents_docs`, `build_hub_mcp_bundle`, `braid_snapshot`, …).
+
+**Synergy with the fixture-drift problem:** if the bundled copy is subtreed from
+the **q2 branch** (which carries the static declarations), then the bundled
+extension already has `claims:` — q2 gets pass-1 static resolution for Julia out
+of the box, and the hand-maintained test fixture could potentially be replaced
+by (or derived from) the bundled copy, retiring the fork-drift item in Step 4.
+
+*Not yet investigated:* `filterBundledSubtreeEngines` (`extension.ts:734`, used
+at `render/pandoc.ts:446,1324`) strips bundled subtree engines out of the
+metadata `engines` array handed to pandoc. Whether q2 needs an analogue depends
+on how q2 surfaces `engines` in metadata — not traced.
+
 ## Proposed sequence
+
+### Step 0 — talk to Julius first
+
+Before any of the below: **discuss with Julius Krumbiegel / PumasAI.** Steps 1
+and 2b add Quarto-2-only surface to *their* extension and constrain *their*
+`quarto-required`. The conversation should cover:
+
+- whether they are willing to carry q2-only keys at all (and if so, whether in
+  `main` or only on a branch),
+- the `quarto-required` bump and its cost to their users (see Step 2b),
+- the offer in Step 2c (a q2 branch), which may be the outcome they prefer.
+
+This gates 2b entirely and may change its shape. Do it early — it is cheap and
+it is the step most likely to invalidate the rest of the plan.
 
 ### Step 1 — quarto-cli: loosen the `external-engine` schema
 
@@ -145,34 +233,54 @@ Notes:
   regenerated file. *Open: exact regeneration command — not yet confirmed.*
 - Decide whether to type the keys properly (better errors, more review surface)
   or accept them loosely.
-- Land it, then get it into a **prerelease** so downstream can depend on it.
 
-### Step 2 — quarto-julia-engine: two PRs
+**Then wait for a full, stable Quarto release carrying it.** *(Revised — an
+earlier draft targeted a prerelease.)* A published extension whose
+`quarto-required` names a prerelease would refuse to install for ordinary users
+on stable Quarto, which is not something we should ask PumasAI to ship. This
+makes the epic's critical path a **release cycle**, not weeks — which is exactly
+why Step 2c exists.
 
-**(a) The bug fix.** Three commits currently on `q2-close-busy-fix` (rebased
-onto upstream v0.2.1, bundle verified in sync):
+### Step 2 — quarto-julia-engine
+
+**(a) The bug fix — ready now, no dependencies.** Three commits currently on
+`q2-close-busy-fix` (rebased onto upstream v0.2.1, bundle verified in sync):
 
 - `b881e69` redirect the detached server's stdio to devnull
 - `f7c9bfc` recover from a busy/failed oneShot worker close
 - `4e6bc27` close the oneShot worker when the run fails (the leak)
 
-Fully Q1-compatible; no schema dependency; can go **immediately**, independent of
-everything else. Needs a CHANGELOG entry (enforced).
+Fully Q1-compatible; no schema dependency; independent of everything else above
+and below. Needs a CHANGELOG entry (enforced by `EnforceChangelog.yml`).
 
 *Open: one PR or three?* They are independently reviewable and the leak fix is
 the one with hard evidence.
 
-**(b) The static declarations.** Adds the `name:`/`claims:`/`file-extensions:`
-block, and must additionally:
-- bump `quarto-required:` to the step-1 prerelease,
-- bump `QUARTO_CLI_REV` in `ci.yml` to the schema-change commit,
+**(b) The static declarations — gated on Step 1 shipping in a stable release.**
+Adds the `name:`/`claims:`/`file-extensions:` block, and must additionally:
+- bump `quarto-required:` to the **stable** release from Step 1,
+- bump `QUARTO_CLI_REV` in `ci.yml` to a commit containing the schema change,
 - add a CHANGELOG entry,
 - explain F2 (accept-and-ignore, not a Q1 behavior change) and F3
-  (`file-extensions` ≠ `validExtensions`) in the PR body.
+  (`file-extensions` != `validExtensions`) in the PR body.
 
-**Risk:** requiring a *prerelease* in a published extension's
-`quarto-required` is user-hostile — it would make the extension refuse to
-install on stable Quarto. See open question Q2.
+**(c) Offer a q2 branch on `PumasAI/quarto-julia-engine` — the unblocker.**
+Because 2b waits on a release cycle, offer to maintain a **branch** on the
+upstream repo (name TBD, e.g. `q2`) carrying the static declarations, so people
+who want to try **Julia in Quarto 2 before it ships** can point at it. This:
+
+- gives early adopters a real, upstream-hosted path with no prerelease
+  `quarto-required` and no fork of record,
+- gives q2 a **stable remote to subtree from** for Step 5 (see F8) — the
+  bundled copy would track this branch, not `main`,
+- keeps `main` clean and Q1-only until Step 1's schema change is stable,
+  which is likely what PumasAI would prefer anyway,
+- lets us validate the declarations against real users before asking for them
+  in `main`.
+
+*Open: does the branch live on PumasAI (preferred — upstream-hosted, discoverable)
+or on the `gordonwoodhull` fork (no permission needed)? This is part of the
+Step 0 conversation.*
 
 ### Step 3 — q2: fix the static-claim case sensitivity (F5)
 
@@ -189,7 +297,44 @@ Independent of upstream; can land any time. Options:
 TDD: a failing test with a `{Julia}` cell against a static `claims: {julia: ...}`
 registry, RED before the fix.
 
-### Step 4 — what else belongs (candidates, not yet decided)
+### Step 4 — q2: bundle the julia engine as a vendored subtree
+
+**Goal:** `q2` ships with Julia support built in — no separate extension
+install. Gated on Step 2c (a stable branch to subtree from). See **F8** for the
+research; the headline is that q2 **already has the discovery + embedding
+machinery**, so this is mostly maintenance tooling, not a port.
+
+Work items (first pass, not scoped):
+
+- **Vendor the subtree.** `git subtree add --squash` the Step 2c branch into
+  `resources/extension-subtrees/julia-engine/`, mirroring Q1's layout. Decide
+  the git-history cost first (14M — see F8 open question).
+- **Embed only the payload.** Point a second `include_dir!` at
+  `resources/extension-subtrees/julia-engine/_extensions` (68K), not at the
+  subtree root, and expose it through the existing `ResourceBundle` /
+  `builtin_extensions_path()` path. *Open: does `builtin_extensions_path`
+  return one dir (requiring the subtree payload to be merged into the existing
+  bundle) or should discovery accept a list of builtin roots, mirroring Q1's
+  two separate roots?* — this is the main design decision in Step 5.
+- **Port the maintenance command** as `cargo xtask pull-extension-subtree`
+  (Q1: `src/command/dev-call/pull-git-subtree/cmd.ts`): a `SUBTREES` table, last-split
+  detection via `git log --grep="git-subtree-dir: <prefix>$"`, `subtree add`
+  when the prefix is new, `subtree pull --squash` otherwise, no-op when there
+  are no new commits. Drop the `QUARTO_ROOT` env dependency — xtask already
+  knows the repo root.
+- **Decide the fixture's future.** If the bundled copy carries the static
+  declarations, the hand-maintained fixture fork may be replaceable by (or
+  derivable from) the bundled copy — which would retire the drift item in
+  Step 5. Needs care: the julia e2e tests deliberately copy the fixture into a
+  temp project.
+- **Runtime prerequisites.** Bundling ships the engine, not Julia itself:
+  QuartoNotebookRunner still instantiates on first use (network), and the
+  engine host still needs Deno. Worth an explicit UX decision about what
+  `q2` does on a machine with no Julia.
+- *Not investigated:* whether q2 needs an analogue of
+  `filterBundledSubtreeEngines` (F8).
+
+### Step 5 — what else belongs (candidates, not yet decided)
 
 - **Fixture drift management.** The q2 fixture is a hand-maintained fork
   (`claude-notes/plans/2026-04-16-julia-validation.md`). After this epic it
@@ -217,13 +362,20 @@ registry, RED before the fix.
   property schemas) or just stop being `closed`? Typing them documents the
   contract and gives good errors, but invites the question "what does Quarto 1
   do with these?" — to which the answer is "nothing" (F2).
-- **Q2.** Is requiring a prerelease in upstream's `quarto-required` acceptable
-  to PumasAI at all? If not, PR 2b probably has to **wait for a stable Quarto
-  release** carrying the schema change — which changes the epic's timeline from
-  weeks to a release cycle. This is the single biggest scheduling risk.
-- **Q3.** Has any of this been discussed with PumasAI / jkrumbiegel? Adding
-  Quarto-2-only keys to *their* extension needs buy-in, and the answer changes
-  how PR 2b should be pitched.
+- **Q2.** *(Resolved in this revision — target a stable release, not a
+  prerelease.)* Remaining: how long is that cycle, and does it change what we
+  do in the meantime beyond Step 2c?
+- **Q3.** Step 0: what does Julius say? Everything in Step 2 is contingent on
+  it. Specifically: q2-only keys in `main` or only on a branch; who hosts the
+  Step 2c branch; and are they willing to bump `quarto-required` at all.
+- **Q7.** Step 4 layout: one builtin-extensions root (merge the subtree payload
+  into the existing embedded bundle) or teach discovery a **list** of builtin
+  roots (mirroring Q1's separate `extensions` / `extension-subtrees` roots)?
+- **Q8.** Is 14M of vendored repo acceptable in q2's git history for the sake of
+  `git subtree`'s merge tracking, or do we vendor a curated 68K copy and accept
+  manual syncing?
+- **Q9.** Once Julia is bundled, what is the story on a machine without Julia
+  installed — silent fallback to jupyter, or a diagnostic?
 - **Q4.** PR 2a: one PR or three?
 - **Q5.** Does q2 want the fixture to track upstream mechanically (refresh
   script + drift lint) or stay a hand-maintained fork?
