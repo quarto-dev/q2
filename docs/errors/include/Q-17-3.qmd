@@ -17,8 +17,13 @@ categories:
 ## What this means
 
 An `{{{< include >}}}` shortcode names a file that exists and was
-read, but the file's content is not valid qmd. The include is
-skipped: its content is omitted from the output.
+read, but the file's content is not valid qmd, so the content the
+include asks for cannot be supplied.
+
+The document therefore **fails to render**, and no output file is
+written for it — the same outcome the identical parse error would
+get if it were written directly on the page instead of one file
+away.
 
 This error is a *wrapper*: it marks the include site in the
 including document, and the included file's own parse errors are
