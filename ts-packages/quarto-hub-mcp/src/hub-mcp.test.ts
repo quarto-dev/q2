@@ -41,6 +41,7 @@ describe('MCP protocol', () => {
       'create_file',
       'create_project',
       'delete_file',
+      'get_errors',
       'list_files',
       'patch_file',
       'read_file',
@@ -80,6 +81,15 @@ describe('MCP protocol', () => {
     });
   });
 
+  it('lists the fix_errors prompt and expands it over the protocol', async () => {
+    const prompts = await client.listPrompts();
+    expect(prompts.map((p) => p.name)).toContain('fix_errors');
+
+    const res = await client.getPrompt('fix_errors', { project: 'automerge:xyz' });
+    expect(res.messages[0]!.content.text).toContain('automerge:xyz');
+    expect(res.messages[0]!.content.text).toContain('get_errors');
+  });
+
   // A share URL whose server= names a hub other than this server's configured
   // one (--server wss://dummy.example.com) must error *before* connecting, so no
   // network is needed here. (bd-m4slev7a)
@@ -113,6 +123,7 @@ describe('MCP protocol (read-only mode)', () => {
     const names = tools.map(t => t.name).sort();
     expect(names).toEqual([
       'connect_project',
+      'get_errors',
       'list_files',
       'read_file',
       'wait_for_change',
