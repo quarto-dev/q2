@@ -4,8 +4,22 @@
  */
 
 use quarto_pandoc_types::{Block, CodeBlock, Pandoc};
+use quarto_source_map::{Anchor, AnchorRole, By, SourceInfo};
 use regex::Regex;
+use smallvec::smallvec;
+use std::sync::Arc;
 use std::sync::LazyLock;
+
+/// `by.kind` for every `SourceInfo::Generated` node this module produces
+/// (spec § Provenance, pinned normative string — T15/T17 assert it verbatim).
+const GENERATED_BY_KIND: &str = "nested-cell-mask";
+
+/// `AnchorRole::Other` tag for the anchor pointing back at a masked block's
+/// pre-mask `SourceInfo` (spec § Provenance). Deliberately `Other`, not
+/// `Invocation`: `SourceInfo::preimage_in`'s `Generated` arm only walks
+/// `Invocation` anchors, so this anchor is provably inert to any
+/// byte-copying writer — see the module doc's Provenance section.
+const ORIGIN_ANCHOR_ROLE: &str = "nested-cell-mask/origin";
 
 /// The class that marks a masked opener as ours, and the sole thing `unmask`
 /// looks for. Never emitted by an author writing their own `{.lang}`.
@@ -89,14 +103,64 @@ static UNMASK_OPENER_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// the epic when an assembler restores from retained bytes rather than by
 /// matching. Not fixed here; not tested here (a test would pin behaviour
 /// this plan intends to change).
+///
+/// ## Provenance (spec § Provenance)
+///
+/// Masked text is longer than its source, and the qmd writer's map is
+/// output-indexed per top-level block — so a changed block's own
+/// `SourceInfo` would silently resolve offsets past its end into the next
+/// block's source text if left `Original`. `mask` stamps every block it
+/// actually rewrites, and separately its **top-level ancestor** (the writer's
+/// piece loop is top-level-only), with `SourceInfo::Generated { by.kind:
+/// "nested-cell-mask", from: [Other("nested-cell-mask/origin")] }` so
+/// `map_offset` returns "location unknown" instead of a confidently wrong
+/// offset. See `mark_generated` below.
+///
+/// ## Interaction with QuartoNotebookRunner (do not mitigate here — bd-quydz82t)
+///
+/// A document whose sole top-level block is a container with both a live
+/// executable cell and a nested display block ends up with that lone
+/// top-level piece marked `Generated`, so every offset in it — including the
+/// live cell's — maps to `None`. That can starve a downstream engine
+/// (QuartoNotebookRunner) of `sourceRanges` it doesn't expect to be empty.
+/// This is `build_source_map`'s contract to defend, not this mask's job:
+/// the ancestor rule here is deliberate and unconditional. See bd-quydz82t.
 pub fn mask(doc: &mut Pandoc) -> Vec<usize> {
     let mut changed = Vec::new();
     for (idx, block) in doc.blocks.iter_mut().enumerate() {
+        let original = block.source_info().clone();
         if mask_block(block) {
+            // `mask_block`'s direct-CodeBlock branch already stamps `block`
+            // itself when the top-level block *is* the changed CodeBlock
+            // (T15). Otherwise `block` is a container ancestor (Div, List,
+            // ...) whose own SourceInfo is still Original even though a
+            // descendant changed — stamp it now using the pre-mutation
+            // original, so the writer's top-level-only piece loop sees
+            // Generated for the whole ancestor's piece (T17).
+            if !matches!(block.source_info(), SourceInfo::Generated { .. }) {
+                mark_generated(block, original);
+            }
             changed.push(idx);
         }
     }
     changed
+}
+
+/// Stamp `block`'s `SourceInfo` as `Generated`, anchored back at `original`
+/// (the block's pre-mask `SourceInfo`) via an `Other("nested-cell-mask/origin")`
+/// anchor. `Other` rather than `Invocation` is deliberate — see the module
+/// doc's Provenance section and the spec.
+fn mark_generated(block: &mut Block, original: SourceInfo) {
+    *block.source_info_mut() = SourceInfo::Generated {
+        by: By {
+            kind: GENERATED_BY_KIND.to_string(),
+            data: serde_json::Value::Null,
+        },
+        from: smallvec![Anchor {
+            role: AnchorRole::Other(ORIGIN_ANCHOR_ROLE.to_string()),
+            source_info: Arc::new(original),
+        }],
+    };
 }
 
 pub fn unmask(s: &str) -> String {
@@ -138,10 +202,19 @@ fn mask_block(block: &mut Block) -> bool {
         if !is_in_scope_for_masking(block) {
             return false;
         }
+        let original = block.source_info().clone();
         let Block::CodeBlock(cb) = block else {
             unreachable!("matched CodeBlock above");
         };
-        return mask_code_block_text(cb);
+        if !mask_code_block_text(cb) {
+            return false;
+        }
+        // This block's own text changed — stamp its SourceInfo directly
+        // (spec § Provenance). If this CodeBlock is itself the top-level
+        // block, `mask`'s caller sees it already Generated and skips its
+        // own ancestor-stamping step.
+        mark_generated(block, original);
+        return true;
     }
 
     match block {
