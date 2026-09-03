@@ -1,7 +1,10 @@
 /**
  * EditorWelcomeBanner — tinted one-time welcome bar under the editor
- * toolbar (bd-fxdcxbpq). Tint is an opaque color-mix toward the editor
- * surface per .claude/rules/hub-client-theme.md.
+ * toolbar (bd-fxdcxbpq). The tint mixes toward --editor-bg, the opaque
+ * semantic surface this bar sits above; mixing toward --bg-subtle left it
+ * translucent in both themes, against
+ * .claude/rules/hub-client-theme.md. Pinned by
+ * e2e/invite-landing-theme.harness.spec.ts.
  */
 
 .ewb {
@@ -9,7 +12,7 @@
   align-items: center;
   gap: var(--space-3);
   padding: 8px 14px;
-  background: color-mix(in srgb, var(--posit-blue) 8%, var(--bg-subtle));
+  background: color-mix(in srgb, var(--posit-blue) 8%, var(--editor-bg));
   border-bottom: 1px solid var(--border-color);
   font-size: var(--text-base);
   color: var(--text-secondary);

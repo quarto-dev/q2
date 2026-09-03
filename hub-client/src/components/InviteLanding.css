@@ -3,9 +3,12 @@
  *
  * Anatomy per design_handoff_invite_landing/: kicker, inviter line, title,
  * payload preview box, explainer, single CTA. Colors, radii, and type come
- * from theme.css tokens (the handoff's hexes map 1:1 onto the brand
- * primitives). No translucent surface colors (.claude/rules/hub-client-theme.md):
- * tints are derived with opaque color-mix() toward the card surface.
+ * from theme.css's *semantic* layer, never the brand primitives: the
+ * handoff's hexes happen to equal the light-mode primitives, but those do
+ * not flip with the theme, so consuming them directly put near-white grid
+ * lines on the dark card. Surfaces are opaque in every theme
+ * (.claude/rules/hub-client-theme.md); tints and dividers are derived with
+ * opaque color-mix(). Pinned by e2e/invite-landing-theme.harness.spec.ts.
  */
 
 .il-wrap {
@@ -17,7 +20,18 @@
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
-  background: var(--bg-subtle);
+
+  /* Surfaces and dividers are derived from the *semantic* --border-color
+     so they follow the theme, and mixed toward an opaque surface so
+     nothing composites (see .claude/rules/hub-client-theme.md). Deriving
+     the divider at 50% reproduces the handoff's #D1DBE5 in light mode to
+     within a channel, and yields a hairline — not the near-white grid
+     the light-mode primitive produced — on the dark card. */
+  --il-divider: color-mix(in srgb, var(--border-color) 50%, var(--bg-modal));
+  --il-rule: color-mix(in srgb, var(--border-color) 25%, var(--bg-modal));
+
+  /* A page surface a touch off the card, opaque in every theme. */
+  background: color-mix(in srgb, var(--border-color) 14%, var(--bg-modal));
 }
 
 .il-card {
@@ -80,7 +94,7 @@
 /* ---- payload preview (display-only) ---- */
 
 .il-payload {
-  border: 1px solid var(--posit-blue-light-1);
+  border: 1px solid var(--il-divider);
   border-radius: var(--radius-lg);
   margin-bottom: 16px;
   overflow: hidden;
@@ -96,7 +110,7 @@
 
 .il-payload-row + .il-payload-row,
 .il-payload-footer {
-  border-top: 1px solid var(--posit-blue-light-1);
+  border-top: 1px solid var(--il-divider);
 }
 
 .il-project {
@@ -148,14 +162,14 @@
   position: relative;
   height: 74px;
   margin: 10px 14px 0;
-  border: 1px solid var(--posit-blue-light-1);
+  border: 1px solid var(--il-divider);
   border-radius: var(--radius-md);
   background: repeating-linear-gradient(
     to bottom,
     var(--bg-modal),
     var(--bg-modal) 9px,
-    color-mix(in srgb, var(--posit-blue-light-1) 45%, var(--bg-modal)) 9px,
-    color-mix(in srgb, var(--posit-blue-light-1) 45%, var(--bg-modal)) 10px
+    var(--il-rule) 9px,
+    var(--il-rule) 10px
   );
 }
 
@@ -166,8 +180,10 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--text-primary);
-  background: var(--bg-subtle);
-  border: 1px solid var(--posit-blue-light-1);
+  /* Opaque card surface, so the chip reads as a solid label sitting on
+     the ruled paper rather than tinting the rules beneath it. */
+  background: var(--bg-modal);
+  border: 1px solid var(--il-divider);
   border-radius: var(--radius-xs);
   padding: 2px 7px;
 }
@@ -202,8 +218,15 @@
 
 /* ---- CTA (always the last element; nothing renders below it) ---- */
 
+/* When signed out this slot hosts a lead-in line above the
+   provider-rendered Google button (an iframe sized by GIS), so it
+   stacks and centers; signed in it holds the single primary button. */
 .il-actions {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 
 .il-actions .qh-btn {
@@ -214,15 +237,6 @@
   align-items: center;
   justify-content: center;
   gap: 9px;
-}
-
-/* The signed-out slot hosts a lead-in line above the provider-rendered
-   Google button (an iframe sized by GIS); stack and center them. */
-.il-actions {
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
 }
 
 .il-signin-lead {
