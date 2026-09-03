@@ -577,13 +577,43 @@ forward: T1, T2, T4–T8, T19, T20, T22 in `quarto-core`, plus T21 in
 
 ### Phase 4 — Wire the seam
 
-- [ ] Mask the clone inside the per-engine loop, before `serialize_ast_to_qmd`; unmask `result.markdown` before the capture emit
-- [ ] `compute_input_qmd` masks; `write_review_file` unmasks before writing the consent artifact
-- [ ] Test: `compute_input_qmd` bytes equal `capture.input_qmd` for a document **containing a display block** — the gap in the existing invariant fixture
-- [ ] Test: `write_review_file`'s output contains `{r}` and not the marker
-- [ ] Test: the display block lands in `blocks_kept` and retains its original source_info (not the intermediate's)
-- [ ] Test: two engines in sequence both receive masked input
-- [ ] Phase 1 render-level tests green
+- [x] Mask the clone inside the per-engine loop, before `serialize_ast_to_qmd`; unmask `result.markdown` before the capture emit
+- [x] `compute_input_qmd` masks; `write_review_file` unmasks before writing the consent artifact
+- [x] Test: `compute_input_qmd` bytes equal `capture.input_qmd` for a document **containing a display block** — the gap in the existing invariant fixture
+- [x] Test: `write_review_file`'s output contains `{r}` and not the marker
+- [x] Test: the display block lands in `blocks_kept` and retains its original source_info (not the intermediate's)
+- [x] Test: two engines in sequence both receive masked input
+- [x] Phase 1 render-level tests green
+
+**Phase 4 findings (2026-09-03).** The seam is wired at four sites across three crates
+(`engine_execution.rs`, `preview_record.rs`, `quarto-hub-provider/execute.rs`), 46 insertions
+total, no test edited. `EngineExecutionStage` masks a **clone** of the AST *inside* the
+per-engine loop, per iteration, before `serialize_ast_to_qmd`, and unmasks `result.markdown`
+immediately after `engine.execute()` — before the capture emit, the reparse and reconcile. The
+capture's `input_qmd` stays masked, so `ReplayEngine`'s byte-compare still holds.
+`compute_input_qmd` masks before serializing, which covers *both* its masked-wanting consumers
+(the staleness compare in `capture_driver.rs` and the cache key in `cache.rs`) with no change at
+either site; `write_review_file` unmasks those bytes before writing the operator-facing consent
+artifact.
+
+*The four test bullets above are satisfied by frozen tests, not new ones* (controller ruling
+R2): they restate T20, T21, T19 and T22, which Phase 1 already wrote. No duplicates were added.
+
+*Result:* **every test in the plan is now green.** `quarto-core` 4329/4329/0/31,
+`quarto-preview` 145/145/0/1, `quarto-hub-provider` 40/40/0/4. Workspace phase boundary:
+**13581 run / 13581 passed / 0 failed / 199 skipped** — +11 passed / −11 failed against the
+Phase-3 baseline, exactly the eleven target rows, with run and skip counts unchanged and no
+other crate moved. Against the pre-plan live baseline of 13550 passed / 199 skipped, the branch
+adds 31 tests and no failures.
+
+*Process defect found here, worth recording because it nearly lost this reconciliation.* The
+SDD scratch directory held a `phases.md` — a copy of this section taken at setup — and a
+`spec.md` copy of everything above it. Both were **stale snapshots** that never tracked this
+document's amendments (T8's fixture, vacuity note 2, T23/T24, the normative `by.kind`). Task 7
+ticked the *copy*, so its reconciliation landed in gitignored scratch and would have vanished
+with the workspace. The implementer noticed the copy showed Phases 0–3 unchecked and flagged it
+rather than backfilling, which is what surfaced it. Both copies are now neutralized and this
+file is the single checklist of record.
 
 ### Phase 5 — Documentation
 

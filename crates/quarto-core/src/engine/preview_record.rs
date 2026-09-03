@@ -230,11 +230,21 @@ pub async fn compute_input_qmd(
     let input = PipelineData::LoadedSource(LoadedSource::new(path.to_path_buf(), content));
     let final_data = pipeline.run(input, &mut ctx).await?;
 
-    let doc_ast = final_data.into_document_ast().ok_or_else(|| {
+    let mut doc_ast = final_data.into_document_ast().ok_or_else(|| {
         PipelineError::other(
             "pre-engine pipeline did not produce DocumentAst — unexpected output kind".to_string(),
         )
     })?;
+
+    // nested-cell-masking (spec § "The engine capture — asymmetric, by
+    // necessity" / `compute_input_qmd`'s three-consumer table): these bytes
+    // must match what `EngineExecutionStage` hands the engine as
+    // `input_qmd` — masked. The two consumers that read this function's
+    // output directly (the staleness compare in `capture_driver.rs` and the
+    // cache key in `cache.rs`) both want masked bytes; only
+    // `write_review_file` (`quarto-hub-provider/src/execute.rs`) unmasks,
+    // and it does so itself after calling this function.
+    crate::engine::nested_cell_mask::mask(&mut doc_ast.ast);
 
     let mut buf = Vec::new();
     pampa::writers::qmd::write(&doc_ast.ast, &mut buf).map_err(|diagnostics| {
