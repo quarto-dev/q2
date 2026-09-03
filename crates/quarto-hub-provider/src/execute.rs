@@ -392,6 +392,15 @@ async fn write_review_file(
     let bytes = compute_input_qmd(abs_path, project, runtime)
         .await
         .map_err(|e| format!("computing the resolved document for review: {e}"))?;
+    // nested-cell-masking (spec § "The engine capture — asymmetric, by
+    // necessity" / `compute_input_qmd`'s three-consumer table): this is the
+    // one security-facing consumer — the artifact a human operator reads
+    // before consenting to execution — so, unlike the staleness compare and
+    // cache key, it must show the author's own `{r}`, not the internal
+    // mask marker. `compute_input_qmd` returns masked bytes; unmask them
+    // here before writing.
+    let text = String::from_utf8_lossy(&bytes);
+    let unmasked = quarto_core::engine::nested_cell_mask::unmask(&text);
 
     let base = Path::new(rel_path).file_name().map_or_else(
         || std::ffi::OsString::from("document"),
@@ -401,7 +410,7 @@ async fn write_review_file(
     file_name.push(".resolved.qmd");
     let review_file = review_dir.join(file_name);
 
-    std::fs::write(&review_file, &bytes)
+    std::fs::write(&review_file, &unmasked)
         .map_err(|e| format!("writing the review file {}: {e}", review_file.display()))?;
     Ok(review_file)
 }

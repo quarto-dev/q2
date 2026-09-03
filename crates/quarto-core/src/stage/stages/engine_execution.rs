@@ -428,8 +428,23 @@ impl PipelineStage for EngineExecutionStage {
         let multi_engine = to_run.len() > 1;
 
         for (run_index, (engine, engine_config)) in to_run.into_iter().enumerate() {
-            // Serialize the current AST to QMD for this engine.
-            let (qmd, qmd_source_info) = serialize_ast_to_qmd(&ast)?;
+            // nested-cell-masking (spec § Approach): mask executable-fence
+            // openers nested inside markdown-displaying blocks before this
+            // engine ever sees them, on a clone of `ast` — never `ast`
+            // itself, since `reconcile` below needs the unmasked original.
+            // Re-run every iteration (T22): `ast` is reconciled and
+            // re-serialized each time, and a second engine in the sequence
+            // can see a display block a *prior* engine just introduced
+            // (e.g. spliced-in preview results), so masking once before the
+            // loop would leave it unprotected.
+            let mut masked_ast = ast.clone();
+            crate::engine::nested_cell_mask::mask(&mut masked_ast);
+
+            // Serialize the masked AST to QMD for this engine. Every engine
+            // goes through this one call, so knitr, q2's jupyter text
+            // engine, and TS extensions are all covered with no per-engine
+            // work.
+            let (qmd, qmd_source_info) = serialize_ast_to_qmd(&masked_ast)?;
             trace_event!(
                 ctx,
                 EventLevel::Debug,
@@ -494,6 +509,14 @@ impl PipelineStage for EngineExecutionStage {
             let mut result = engine
                 .execute(&qmd, &exec_context)
                 .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+            // nested-cell-masking (spec § "The engine capture — asymmetric,
+            // by necessity"): unmask does not need the AST — the marker is
+            // self-identifying — so it runs textually over the engine's
+            // returned markdown. Restore it before anything downstream
+            // (the capture emit's `result_json`, the reparse, reconcile)
+            // ever sees it, so a masked marker never reaches the reparsed
+            // AST or `q2 preview`'s spliced-in `result.markdown`.
+            result.markdown = crate::engine::nested_cell_mask::unmask(&result.markdown);
             trace_event!(
                 ctx,
                 EventLevel::Debug,
