@@ -16,7 +16,7 @@ import {
   MAX_PREVIEW_PROJECTS,
   MAX_PREVIEW_FILES,
 } from './invitePreview';
-import type { CollectionInvitePreview, DocumentInvitePreview, InviteStart } from './invitePreview';
+import type { CollectionInvitePreview, ProjectInvitePreview, InviteStart } from './invitePreview';
 
 const collectionPreview: CollectionInvitePreview = {
   kind: 'collection',
@@ -28,8 +28,8 @@ const collectionPreview: CollectionInvitePreview = {
   memberFirstNames: ['Carlos', 'Jenny', 'Mine'],
 };
 
-const documentPreview: DocumentInvitePreview = {
-  kind: 'document',
+const projectPreview: ProjectInvitePreview = {
+  kind: 'project',
   fileName: 'report.qmd',
   topFiles: ['figures/', 'data.csv'],
   fileCount: 12,
@@ -42,13 +42,30 @@ describe('invite preview codec', () => {
     expect(decodeInvitePreview(encoded)).toEqual(collectionPreview);
   });
 
-  it('round-trips a document preview', () => {
-    const encoded = encodeInvitePreview(documentPreview);
-    expect(decodeInvitePreview(encoded)).toEqual(documentPreview);
+  it('round-trips a project preview', () => {
+    const encoded = encodeInvitePreview(projectPreview);
+    expect(decodeInvitePreview(encoded)).toEqual(projectPreview);
+  });
+
+  it('decodes the earlier "d" project marker, so links made while dogfooding still resolve', () => {
+    const legacy = Buffer.from(
+      JSON.stringify({ v: 1, k: 'd', f: 'report.qmd', s: ['figures/'], c: 12, i: ['CS'] }),
+    )
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    expect(decodeInvitePreview(legacy)).toEqual({
+      kind: 'project',
+      fileName: 'report.qmd',
+      topFiles: ['figures/'],
+      fileCount: 12,
+      contributorInitials: ['CS'],
+    });
   });
 
   it('produces URL-safe output (base64url, no padding/escaping needed)', () => {
-    for (const p of [collectionPreview, documentPreview]) {
+    for (const p of [collectionPreview, projectPreview]) {
       const encoded = encodeInvitePreview(p);
       expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
       // Survives a URLSearchParams round-trip unchanged.

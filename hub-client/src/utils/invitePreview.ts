@@ -41,17 +41,22 @@ export interface CollectionInvitePreview {
   memberFirstNames: string[];
 }
 
-export interface DocumentInvitePreview {
-  kind: 'document';
-  /** File name shown in the thumbnail chip. */
+/**
+ * A `#/share/…` invite grants access to a whole *project* (the index
+ * document); the file is only where the editor opens. The preview
+ * therefore describes the project's contents, not one document.
+ */
+export interface ProjectInvitePreview {
+  kind: 'project';
+  /** The file the invite opens at; listed first among the contents. */
   fileName: string;
-  /** Up to MAX_PREVIEW_FILES representative sibling paths. */
+  /** Up to MAX_PREVIEW_FILES other paths in the project. */
   topFiles: string[];
   fileCount: number;
   contributorInitials: string[];
 }
 
-export type InvitePreview = CollectionInvitePreview | DocumentInvitePreview;
+export type InvitePreview = CollectionInvitePreview | ProjectInvitePreview;
 
 /** Post-join navigation target for collection invites. */
 export interface InviteStart {
@@ -120,7 +125,7 @@ export function encodeInvitePreview(preview: InvitePreview): string {
   return toBase64Url(
     JSON.stringify({
       v: WIRE_VERSION,
-      k: 'd',
+      k: 'p',
       f: preview.fileName,
       s: preview.topFiles.slice(0, MAX_PREVIEW_FILES),
       c: preview.fileCount,
@@ -163,12 +168,15 @@ export function decodeInvitePreview(value: string | null | undefined): InvitePre
     return { kind: 'collection', projects, totalProjects: wire.t, memberFirstNames: wire.m };
   }
 
-  if (wire.k === 'd') {
+  // 'p' is the current project marker; 'd' is the short-lived 'document'
+  // spelling from this feature's own development, accepted so links
+  // generated while dogfooding keep resolving.
+  if (wire.k === 'p' || wire.k === 'd') {
     if (typeof wire.f !== 'string' || !isStringArray(wire.s) || typeof wire.c !== 'number' || !isStringArray(wire.i)) {
       return undefined;
     }
     return {
-      kind: 'document',
+      kind: 'project',
       fileName: wire.f,
       topFiles: wire.s.slice(0, MAX_PREVIEW_FILES),
       fileCount: wire.c,

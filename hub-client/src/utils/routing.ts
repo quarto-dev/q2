@@ -27,7 +27,7 @@ import {
   encodeInvitePreview,
   encodeInviteStart,
 } from './invitePreview';
-import type { CollectionInvitePreview, DocumentInvitePreview, InviteStart } from './invitePreview';
+import type { CollectionInvitePreview, ProjectInvitePreview, InviteStart } from './invitePreview';
 
 /** * Prefix a path with the hub's mount base path, if any. */
 export function hubPath(path: string): string {
@@ -125,7 +125,7 @@ export interface ShareRoute {
   /** Display name of the person who sent the invite (bd-fxdcxbpq). */
   from?: string;
   /** Display-only invite preview payload; absent on legacy links. */
-  preview?: DocumentInvitePreview;
+  preview?: ProjectInvitePreview;
 }
 
 /**
@@ -266,7 +266,7 @@ export function parseHashRoute(hash: string): Route {
       name: nameParam ? decodeURIComponent(nameParam) : '',
       ...(ephemeral && { ephemeral: true }),
       ...(from && { from }),
-      ...(preview?.kind === 'document' && { preview }),
+      ...(preview?.kind === 'project' && { preview }),
     };
   }
 
@@ -467,7 +467,7 @@ export function buildShareableUrl(
     /** Sender display name, shown on the invite landing (bd-fxdcxbpq). */
     from?: string;
     /** Display-only preview payload for the invite landing. */
-    preview?: DocumentInvitePreview;
+    preview?: ProjectInvitePreview;
   }
 ): string {
   // Remove 'automerge:' prefix if present (we store it without prefix in URLs)

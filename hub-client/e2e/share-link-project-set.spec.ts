@@ -151,7 +151,7 @@ test.describe('Share link → synced project set', () => {
           .toBe(false);
         await expect(page.getByTestId('invite-landing-card')).toBeVisible();
         // No preview payload in a legacy share URL → generic CTA text.
-        await page.getByRole('button', { name: 'Open document' }).click();
+        await page.getByRole('button', { name: 'Open project' }).click();
 
         // The CTA connects and opens the editor on the shared file.
         await expect
@@ -215,7 +215,7 @@ test.describe('Share link → synced project set', () => {
 
         // Connection (and the IDB entry) now happens on the landing's CTA
         // click, not on load (bd-fxdcxbpq).
-        await sharePage.getByRole('button', { name: 'Open document' }).click();
+        await sharePage.getByRole('button', { name: 'Open project' }).click();
 
         // Poll IDB directly until the CTA handler has persisted the entry.
         await expect

@@ -2,7 +2,7 @@
  * Tests for EditorWelcomeBanner (bd-fxdcxbpq) — the one-time welcome bar
  * shown under the editor toolbar after arriving via an invite.
  *
- * Pins: copy for the collection and document variants, the "Change name"
+ * Pins: copy for the collection and project variants, the "Change name"
  * affordance, and per-target dismissal persisted in localStorage so the
  * banner shows exactly once per collection/project.
  *
@@ -52,11 +52,12 @@ describe('EditorWelcomeBanner', () => {
     expect(banner.textContent).toContain('Amy Mora');
   });
 
-  it('document variant: shared-document copy', () => {
-    renderBanner({ kind: 'document' });
+  it('project variant: names the shared project rather than "this document"', () => {
+    renderBanner({ kind: 'project', targetName: 'Quarterly report' });
     const banner = screen.getByTestId('editor-welcome-banner');
     expect(banner.textContent).toContain('Carlos');
-    expect(banner.textContent).toContain('shared this document with you.');
+    expect(banner.textContent).toContain('shared Quarterly report with you.');
+    expect(banner.textContent).not.toContain('this document');
     expect(banner.textContent).toContain("You're editing live as");
     expect(banner.textContent).toContain('Amy Mora');
   });

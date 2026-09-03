@@ -31,7 +31,7 @@ import DevTokensPage from './DevTokensPage';
 import DevGalleryPage from './DevGalleryPage';
 import InviteLanding from './InviteLanding';
 import EditorWelcomeBanner from './EditorWelcomeBanner';
-import type { CollectionInvitePreview, DocumentInvitePreview } from '../utils/invitePreview';
+import type { CollectionInvitePreview, ProjectInvitePreview } from '../utils/invitePreview';
 import AboutTab from './tabs/AboutTab';
 import ReplayDrawer from './ReplayDrawer';
 import { PreviewStatusBar } from './render/PreviewStatusBar';
@@ -712,12 +712,21 @@ const FAKE_COLLECTION_PREVIEW: CollectionInvitePreview = {
   memberFirstNames: ['Carlos', 'Jenny', 'Mine'],
 };
 
-const FAKE_DOCUMENT_PREVIEW: DocumentInvitePreview = {
-  kind: 'document',
+const FAKE_PROJECT_PREVIEW: ProjectInvitePreview = {
+  kind: 'project',
   fileName: 'report.qmd',
   topFiles: ['figures/', 'data.csv'],
   fileCount: 12,
   contributorInitials: ['CS', 'JL'],
+};
+
+/** A project holding only the invited file: the payload box is omitted. */
+const FAKE_SINGLE_FILE_PREVIEW: ProjectInvitePreview = {
+  kind: 'project',
+  fileName: 'notes.qmd',
+  topFiles: [],
+  fileCount: 1,
+  contributorInitials: ['CS'],
 };
 
 const DEV_PAGES: Record<string, () => React.ReactNode> = {
@@ -754,24 +763,35 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
       onCta={noop}
     />
   ),
-  'invite-landing-document': () => (
+  'invite-landing-project': () => (
     <InviteLanding
-      kind="document"
+      kind="project"
       inviter="Carlos Scheidegger"
       title="Quarterly report"
-      preview={FAKE_DOCUMENT_PREVIEW}
+      preview={FAKE_PROJECT_PREVIEW}
       signedIn={false}
       signInCta={<FakeGoogleCta />}
       joinState="idle"
       onCta={noop}
     />
   ),
-  'invite-landing-document-signed-in': () => (
+  'invite-landing-project-signed-in': () => (
     <InviteLanding
-      kind="document"
+      kind="project"
       inviter="Carlos Scheidegger"
       title="Quarterly report"
-      preview={FAKE_DOCUMENT_PREVIEW}
+      preview={FAKE_PROJECT_PREVIEW}
+      signedIn={true}
+      joinState="idle"
+      onCta={noop}
+    />
+  ),
+  'invite-landing-project-single-file': () => (
+    <InviteLanding
+      kind="project"
+      inviter="Carlos Scheidegger"
+      title="Meeting notes"
+      preview={FAKE_SINGLE_FILE_PREVIEW}
       signedIn={true}
       joinState="idle"
       onCta={noop}

@@ -74,17 +74,22 @@ for (const theme of THEMES) {
   test(`invite landing (${theme}): payload dividers stay subtle against the card`, async ({
     page,
   }) => {
-    await bootHarness(page, 'invite-landing-document-signed-in', '.il-card', theme);
+    // The collection card is the richer payload: an outer box plus row
+    // dividers, so it exercises every derived divider on these components.
+    await bootHarness(page, 'invite-landing-collection-signed-in', '.il-card', theme);
 
     const surface = await styleOf(page.locator('.il-card'), 'background-color');
     const payloadBorder = await styleOf(page.locator('.il-payload'), 'border-top-color');
-    const thumbBorder = await styleOf(page.locator('.il-doc-thumb'), 'border-top-color');
-    const chipBorder = await styleOf(page.locator('.il-doc-chip'), 'border-top-color');
+    const rowDivider = await styleOf(
+      page.locator('.il-payload-row').nth(1),
+      'border-top-color',
+    );
+    const footerDivider = await styleOf(page.locator('.il-payload-footer'), 'border-top-color');
 
     for (const [label, color] of [
       ['payload box', payloadBorder],
-      ['document thumbnail', thumbBorder],
-      ['filename chip', chipBorder],
+      ['payload row', rowDivider],
+      ['payload footer', footerDivider],
     ] as const) {
       expect(
         contrast(color, surface),
@@ -94,12 +99,12 @@ for (const theme of THEMES) {
   });
 
   test(`invite landing (${theme}): every painted surface is opaque`, async ({ page }) => {
-    await bootHarness(page, 'invite-landing-document-signed-in', '.il-card', theme);
+    await bootHarness(page, 'invite-landing-collection-signed-in', '.il-card', theme);
 
     // A surface either paints nothing (alpha 0 — .il-payload deliberately
     // shows the card through) or paints opaquely. A fractional alpha is
     // the composited-tint defect this pins.
-    for (const selector of ['.il-wrap', '.il-card', '.il-payload', '.il-explainer', '.il-doc-chip']) {
+    for (const selector of ['.il-wrap', '.il-card', '.il-payload', '.il-explainer']) {
       const bg = await styleOf(page.locator(selector), 'background-color');
       const { a } = parseColor(bg);
       expect(

@@ -19,7 +19,7 @@ import {
   type LinkProjectSetRoute,
   type JoinCollectionRoute,
 } from './routing';
-import type { CollectionInvitePreview, DocumentInvitePreview, InviteStart } from './invitePreview';
+import type { CollectionInvitePreview, ProjectInvitePreview, InviteStart } from './invitePreview';
 
 describe('parseHashRoute', () => {
   describe('project selector routes', () => {
@@ -861,8 +861,8 @@ describe('savePreAuthHash / restorePreAuthHash', () => {
 // ============================================================================
 
 describe('invite landing params', () => {
-  const documentPreview: DocumentInvitePreview = {
-    kind: 'document',
+  const projectPreview: ProjectInvitePreview = {
+    kind: 'project',
     fileName: 'report.qmd',
     topFiles: ['figures/', 'data.csv'],
     fileCount: 12,
@@ -893,7 +893,7 @@ describe('invite landing params', () => {
         filePath: 'report.qmd',
         name: 'Quarterly report',
         from: 'Carlos Scheidegger',
-        preview: documentPreview,
+        preview: projectPreview,
       };
       expect(parseHashRoute(buildHashRoute(route))).toEqual(route);
     });
@@ -991,12 +991,12 @@ describe('invite landing params', () => {
         'wss://sync.automerge.org',
         'Quarterly report',
         'report.qmd',
-        { from: 'Carlos Scheidegger', preview: documentPreview },
+        { from: 'Carlos Scheidegger', preview: projectPreview },
       );
       const parsed = parseHashRoute(url.slice(url.indexOf('#'))) as ShareRoute;
       expect(parsed.type).toBe('share');
       expect(parsed.from).toBe('Carlos Scheidegger');
-      expect(parsed.preview).toEqual(documentPreview);
+      expect(parsed.preview).toEqual(projectPreview);
       expect(parsed.filePath).toBe('report.qmd');
     });
 

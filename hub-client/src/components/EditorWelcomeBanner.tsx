@@ -14,10 +14,10 @@ import './EditorWelcomeBanner.css';
 export const WELCOME_DISMISSED_KEY_PREFIX = 'qh-invite-welcome-dismissed:';
 
 export interface EditorWelcomeBannerProps {
-  kind: 'collection' | 'document';
+  kind: 'collection' | 'project';
   /** Doc id of the joined collection or shared project (dismissal key). */
   targetId: string;
-  /** Collection name (collection variant copy). */
+  /** Name of the collection or project the invite was to. */
   targetName: string;
   /** Display name of the person who sent the invite. */
   inviter: string;
@@ -68,8 +68,8 @@ export default function EditorWelcomeBanner({
           </>
         ) : (
           <>
-            <strong>{inviter}</strong> shared this document with you. You're editing live as{' '}
-            <strong>{userName}</strong>.
+            <strong>{inviter}</strong> shared <strong>{targetName}</strong> with you. You're
+            editing live as <strong>{userName}</strong>.
           </>
         )}
       </span>

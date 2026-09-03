@@ -1177,7 +1177,7 @@ export default function ProjectsHome({
             from: userSettings?.userName,
             preview: item.summary
               ? {
-                  kind: 'document',
+                  kind: 'project',
                   fileName: 'index.qmd',
                   topFiles: item.summary.topFiles.filter((f) => f !== 'index.qmd').slice(0, 2),
                   fileCount: item.summary.fileCount,

@@ -1,6 +1,11 @@
 /**
- * InviteLanding — the unified landing card for collection and document
+ * InviteLanding — the unified landing card for collection and project
  * invites (bd-fxdcxbpq, design_handoff_invite_landing/).
+ *
+ * A `#/share/…` link grants access to a whole project (the index
+ * document) and merely opens at one file, so it is framed as a PROJECT
+ * INVITATION throughout; only the collection card speaks of projects
+ * inside it.
  *
  * One layout for both invite kinds: kicker → inviter line → title →
  * display-only payload preview → what-is-QuartoHub explainer → a single CTA,
@@ -12,12 +17,12 @@
 
 import './InviteLanding.css';
 import type { ReactNode } from 'react';
-import type { CollectionInvitePreview, DocumentInvitePreview, InvitePreview } from '../utils/invitePreview';
+import type { CollectionInvitePreview, ProjectInvitePreview, InvitePreview } from '../utils/invitePreview';
 import { generateColorFromId } from '../services/storage/utils';
 import { initialsFor } from '../utils/facepile';
 
 export interface InviteLandingProps {
-  kind: 'collection' | 'document';
+  kind: 'collection' | 'project';
   /** Display name of the person who sent the invite. */
   inviter: string;
   /** Collection or project name. */
@@ -57,8 +62,9 @@ function Facepile({ initials }: { initials: string[] }) {
   );
 }
 
+/** "report.qmd · 12 files" — the count is pluralized, so never "1 files". */
 function fileSummary(topFiles: string[], fileCount: number): string {
-  return [...topFiles, `${fileCount} files`].join(' · ');
+  return [...topFiles, `${fileCount} ${fileCount === 1 ? 'file' : 'files'}`].join(' · ');
 }
 
 function CollectionPayload({ preview }: { preview: CollectionInvitePreview }) {
@@ -85,14 +91,24 @@ function CollectionPayload({ preview }: { preview: CollectionInvitePreview }) {
   );
 }
 
-function DocumentPayload({ preview }: { preview: DocumentInvitePreview }) {
+/**
+ * A project invite's payload lists what is in the project — the file the
+ * invite opens at, then other paths, then the total — which is the
+ * project-level analogue of the collection card listing its projects.
+ *
+ * With a single file there is nothing to list: the card's title already
+ * names the project, so this renders nothing rather than a box holding a
+ * lone count (the ruled-paper thumbnail this replaced was decoration —
+ * `preview=` never carries document content, so it could only ever draw
+ * an empty page).
+ */
+function ProjectPayload({ preview }: { preview: ProjectInvitePreview }) {
+  if (preview.fileCount <= 1) return null;
+  const files = [preview.fileName, ...preview.topFiles].filter(Boolean);
   return (
     <div className="il-payload" data-testid="invite-payload-preview">
-      <div className="il-doc-thumb">
-        <span className="il-doc-chip mono">{preview.fileName}</span>
-      </div>
       <div className="il-payload-row">
-        <span className="il-file-summary mono">{fileSummary(preview.topFiles, preview.fileCount)}</span>
+        <span className="il-file-summary mono">{fileSummary(files, preview.fileCount)}</span>
         <Facepile initials={preview.contributorInitials} />
       </div>
     </div>
@@ -111,15 +127,7 @@ function ctaLabel(props: InviteLandingProps): string {
   if (kind === 'collection') {
     return preview ? `Open ${title}` : 'Open collection';
   }
-  return preview ? `Open ${title}` : 'Open document';
-}
-
-/** Signed-out lead-in above the Google button: the concrete thing they
- * are joining — the file for a document invite, the collection otherwise. */
-function signInLeadTarget(props: InviteLandingProps): string {
-  const { kind, preview, title } = props;
-  if (kind === 'document' && preview?.kind === 'document') return preview.fileName;
-  return title;
+  return preview ? `Open ${title}` : 'Open project';
 }
 
 export default function InviteLanding(props: InviteLandingProps) {
@@ -130,7 +138,7 @@ export default function InviteLanding(props: InviteLandingProps) {
     <div className="il-wrap">
       <div className="il-card" data-testid="invite-landing-card">
         <div className="il-kicker">
-          {kind === 'collection' ? 'COLLECTION INVITATION' : 'DOCUMENT INVITATION'}
+          {kind === 'collection' ? 'COLLECTION INVITATION' : 'PROJECT INVITATION'}
         </div>
         <div className="il-inviter">
           <span
@@ -147,7 +155,7 @@ export default function InviteLanding(props: InviteLandingProps) {
         </div>
         <h1 className="il-title">{title}</h1>
         {preview?.kind === 'collection' && <CollectionPayload preview={preview} />}
-        {preview?.kind === 'document' && <DocumentPayload preview={preview} />}
+        {preview?.kind === 'project' && <ProjectPayload preview={preview} />}
         <div className="il-explainer">
           <img className="il-explainer-logo" src="/quarto-icon.svg" alt="" />
           <span>
@@ -167,7 +175,10 @@ export default function InviteLanding(props: InviteLandingProps) {
             </button>
           ) : (
             <>
-              <div className="il-signin-lead">Join to collaborate on {signInLeadTarget(props)}</div>
+              {/* The invite is to the project (or collection) the title
+                  names — never to one file, even though a project invite
+                  opens at one. */}
+              <div className="il-signin-lead">Join to collaborate on {title}</div>
               {signInCta}
             </>
           )}

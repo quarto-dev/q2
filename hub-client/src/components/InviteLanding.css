@@ -28,7 +28,6 @@
      within a channel, and yields a hairline — not the near-white grid
      the light-mode primitive produced — on the dark card. */
   --il-divider: color-mix(in srgb, var(--border-color) 50%, var(--bg-modal));
-  --il-rule: color-mix(in srgb, var(--border-color) 25%, var(--bg-modal));
 
   /* A page surface a touch off the card, opaque in every theme. */
   background: color-mix(in srgb, var(--border-color) 14%, var(--bg-modal));
@@ -155,37 +154,6 @@
 
 .il-face + .il-face {
   margin-inline-start: -6px;
-}
-
-/* Document thumbnail: subtle line texture + filename chip. */
-.il-doc-thumb {
-  position: relative;
-  height: 74px;
-  margin: 10px 14px 0;
-  border: 1px solid var(--il-divider);
-  border-radius: var(--radius-md);
-  background: repeating-linear-gradient(
-    to bottom,
-    var(--bg-modal),
-    var(--bg-modal) 9px,
-    var(--il-rule) 9px,
-    var(--il-rule) 10px
-  );
-}
-
-.il-doc-chip {
-  position: absolute;
-  inset-inline-start: 10px;
-  bottom: 8px;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-primary);
-  /* Opaque card surface, so the chip reads as a solid label sitting on
-     the ruled paper rather than tinting the rules beneath it. */
-  background: var(--bg-modal);
-  border: 1px solid var(--il-divider);
-  border-radius: var(--radius-xs);
-  padding: 2px 7px;
 }
 
 /* ---- explainer ---- */

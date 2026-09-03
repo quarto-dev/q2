@@ -1,6 +1,6 @@
 /**
  * Tests for InviteLanding (bd-fxdcxbpq) — the unified landing card for
- * collection (#/join-collection/…) and document (#/share/…) invites.
+ * collection (#/join-collection/…) and project (#/share/…) invites.
  *
  * Pins the card contract from design_handoff_invite_landing/README.md:
  * kicker → inviter line → title → payload preview → explainer → single CTA,
@@ -13,7 +13,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import InviteLanding from './InviteLanding';
-import type { CollectionInvitePreview, DocumentInvitePreview } from '../utils/invitePreview';
+import type { CollectionInvitePreview, ProjectInvitePreview } from '../utils/invitePreview';
 
 afterEach(cleanup);
 
@@ -27,8 +27,8 @@ const collectionPreview: CollectionInvitePreview = {
   memberFirstNames: ['Carlos', 'Jenny', 'Mine'],
 };
 
-const documentPreview: DocumentInvitePreview = {
-  kind: 'document',
+const projectPreview: ProjectInvitePreview = {
+  kind: 'project',
   fileName: 'report.qmd',
   topFiles: ['figures/', 'data.csv'],
   fileCount: 12,
@@ -69,13 +69,15 @@ describe('InviteLanding card anatomy', () => {
     expect(screen.getByRole('heading', { name: 'Team docs' })).toBeTruthy();
   });
 
-  it('document invite shows the document kicker and "invited you to edit"', () => {
+  it('project invite shows the project kicker and "invited you to edit"', () => {
     renderLanding({
-      kind: 'document',
+      kind: 'project',
       title: 'Quarterly report',
-      preview: documentPreview,
+      preview: projectPreview,
     });
-    expect(screen.getByText('DOCUMENT INVITATION')).toBeTruthy();
+    // A #/share/ link grants the whole project, so it is a project
+    // invitation even though it opens at one file.
+    expect(screen.getByText('PROJECT INVITATION')).toBeTruthy();
     expect(screen.getByText(/invited you to edit/)).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Quarterly report' })).toBeTruthy();
   });
@@ -115,10 +117,48 @@ describe('InviteLanding payload preview', () => {
     ).toBeTruthy();
   });
 
-  it('document preview shows the filename chip and file summary row', () => {
-    renderLanding({ kind: 'document', title: 'Quarterly report', preview: documentPreview });
-    expect(screen.getByText('report.qmd')).toBeTruthy();
-    expect(screen.getByText(/figures\/ · data\.csv · 12 files/)).toBeTruthy();
+  it('project preview lists the contents, opened file first, with a pluralized total', () => {
+    renderLanding({ kind: 'project', title: 'Quarterly report', preview: projectPreview });
+    expect(
+      screen.getByText('report.qmd · figures/ · data.csv · 12 files'),
+    ).toBeTruthy();
+  });
+
+  it('project preview omits the payload box when the project holds only the invited file', () => {
+    // Nothing to list, and the title already names the project — a box
+    // containing just "1 file" reads as an empty placeholder.
+    renderLanding({
+      kind: 'project',
+      title: 'Meeting notes',
+      preview: { kind: 'project', fileName: 'notes.qmd', topFiles: [], fileCount: 1, contributorInitials: ['CS'] },
+    });
+    expect(screen.queryByTestId('invite-payload-preview')).toBeNull();
+    expect(screen.queryByText(/1 files?/)).toBeNull();
+    // The card still reads as a complete invitation.
+    expect(screen.getByText('PROJECT INVITATION')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Meeting notes' })).toBeTruthy();
+  });
+
+  it('collection rows pluralize a single-file project', () => {
+    renderLanding({
+      preview: {
+        kind: 'collection',
+        projects: [{ name: 'Notes', topFiles: ['notes.qmd'], fileCount: 1, contributorInitials: ['CS'] }],
+        totalProjects: 1,
+        memberFirstNames: ['Carlos'],
+      },
+    });
+    expect(screen.getByText('notes.qmd · 1 file')).toBeTruthy();
+  });
+
+  it('renders no document thumbnail (preview payloads never carry content)', () => {
+    const { container } = renderLanding({
+      kind: 'project',
+      title: 'Quarterly report',
+      preview: projectPreview,
+    });
+    expect(container.querySelector('.il-doc-thumb')).toBeNull();
+    expect(container.querySelector('.il-doc-chip')).toBeNull();
   });
 
   it('skips the payload block entirely when preview is absent (legacy links)', () => {
@@ -139,14 +179,15 @@ describe('InviteLanding CTA matrix', () => {
     expect(screen.getByText('Join to collaborate on Team docs')).toBeTruthy();
   });
 
-  it('signed out + document: lead-in names the file from the preview', () => {
-    renderLanding({ kind: 'document', title: 'Quarterly report', preview: documentPreview });
-    expect(screen.getByText('Join to collaborate on report.qmd')).toBeTruthy();
+  it('signed out + project: the lead-in names the project, never the file it opens at', () => {
+    renderLanding({ kind: 'project', title: 'Quarterly report', preview: projectPreview });
+    expect(screen.getByText('Join to collaborate on Quarterly report')).toBeTruthy();
+    expect(screen.queryByText(/Join to collaborate on report\.qmd/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeTruthy();
   });
 
-  it('signed out + document legacy (no preview): lead-in falls back to the title', () => {
-    renderLanding({ kind: 'document', title: 'Quarterly report' });
+  it('signed out + project legacy (no preview): lead-in still names the project', () => {
+    renderLanding({ kind: 'project', title: 'Quarterly report' });
     expect(screen.getByText('Join to collaborate on Quarterly report')).toBeTruthy();
   });
 
@@ -157,10 +198,10 @@ describe('InviteLanding CTA matrix', () => {
 
   it('signed in + document: "Open <title>"', () => {
     renderLanding({
-      kind: 'document',
+      kind: 'project',
       title: 'Quarterly report',
       signedIn: true,
-      preview: documentPreview,
+      preview: projectPreview,
     });
     expect(
       screen.getByRole('button', { name: 'Open Quarterly report' }),
@@ -171,8 +212,8 @@ describe('InviteLanding CTA matrix', () => {
     renderLanding({ signedIn: true });
     expect(screen.getByRole('button', { name: 'Open collection' })).toBeTruthy();
     cleanup();
-    renderLanding({ kind: 'document', title: 'Quarterly report', signedIn: true });
-    expect(screen.getByRole('button', { name: 'Open document' })).toBeTruthy();
+    renderLanding({ kind: 'project', title: 'Quarterly report', signedIn: true });
+    expect(screen.getByRole('button', { name: 'Open project' })).toBeTruthy();
   });
 
   it('there is exactly one button in the card', () => {

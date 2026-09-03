@@ -869,7 +869,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         {
           from: userName,
           preview: {
-            kind: 'document',
+            kind: 'project',
             fileName: currentFile.path,
             topFiles: files
               .filter((f) => f.path !== currentFile.path)

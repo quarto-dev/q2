@@ -253,7 +253,7 @@ function App() {
   // Set after a successful invite join/open; drives the one-time editor
   // welcome banner (dismissal persists per target id inside the banner).
   const [welcomeInvite, setWelcomeInvite] = useState<{
-    kind: 'collection' | 'document';
+    kind: 'collection' | 'project';
     targetId: string;
     targetName: string;
     inviter: string;
@@ -379,7 +379,7 @@ function App() {
     }
   }, [auth, authLoading, pendingShare]);
 
-  // Invite landing CTA (document invite): connect to the shared project
+  // Invite landing CTA (project invite): connect to the shared project
   // and open the editor on the shared file. Connection deliberately
   // happens here, on the click, not on route load (bd-fxdcxbpq).
   const handleShareCta = useCallback(async () => {
@@ -404,7 +404,7 @@ function App() {
     // visit to the app root doesn't bounce back onto the landing card.
     clearPreAuthHash();
     setWelcomeInvite({
-      kind: 'document',
+      kind: 'project',
       targetId: pendingShare.indexDocId,
       targetName: pendingShare.name,
       inviter: pendingShare.from ?? 'A collaborator',
@@ -896,14 +896,14 @@ function App() {
   }, [navigateToProject, resolveActorId, screenName, cursorColor]);
 
   // Whether the welcome banner belongs on the currently open project: a
-  // document invite's banner only on that document's project; a collection
+  // project invite's banner only on that project; a collection
   // invite's banner on the first project opened from that collection.
   const welcomeMatchesProject = (
-    invite: { kind: 'collection' | 'document'; targetId: string },
+    invite: { kind: 'collection' | 'project'; targetId: string },
     proj: ProjectEntry,
   ): boolean => {
     const bare = (id: string) => id.replace(/^automerge:/, '');
-    if (invite.kind === 'document') {
+    if (invite.kind === 'project') {
       return bare(invite.targetId) === bare(proj.indexDocId);
     }
     const collection = projectSetState.collections.find(
@@ -938,9 +938,9 @@ function App() {
         !pendingShare.syncServer || !pendingShare.filePath || !pendingShare.name;
       return (
         <InviteLanding
-          kind="document"
+          kind="project"
           inviter={pendingShare.from ?? 'A collaborator'}
-          title={pendingShare.name || 'Shared document'}
+          title={pendingShare.name || 'Shared project'}
           preview={pendingShare.preview}
           signedIn={false}
           signInCta={signInCta}
@@ -1021,9 +1021,9 @@ function App() {
       !pendingShare.syncServer || !pendingShare.filePath || !pendingShare.name;
     return (
       <InviteLanding
-        kind="document"
+        kind="project"
         inviter={pendingShare.from ?? 'A collaborator'}
-        title={pendingShare.name || 'Shared document'}
+        title={pendingShare.name || 'Shared project'}
         preview={pendingShare.preview}
         signedIn={true}
         joinState={inviteJoinState}
