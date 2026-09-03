@@ -1105,6 +1105,13 @@
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-24",
     "since_version": "99.9.9"
   },
+  "Q-12-25": {
+    "subsystem": "listing",
+    "title": "Listing Id Collides With Section Id",
+    "message_template": "A listing's `id` is also the id of a section on the page. Both elements claim the same HTML anchor.",
+    "docs_url": "https://quarto.org/docs/errors/listing/Q-12-25",
+    "since_version": "99.9.9"
+  },
   "Q-13-1": {
     "subsystem": "navigation",
     "title": "Sidebar references missing document",
@@ -1500,7 +1507,7 @@
   "Q-2-52": {
     "subsystem": "markdown",
     "title": "Shortcode delimiter not separated by a space",
-    "message_template": "A shortcode's delimiters must be separated from its content by whitespace. Write `{{< fa plus >}}` \u2014 a space after `{{<` and a space before `>}}` \u2014 rather than `{{<fa plus>}}`.",
+    "message_template": "A shortcode's delimiters must be separated from its content by whitespace. Write `{{< fa plus >}}` — a space after `{{<` and a space before `>}}` — rather than `{{<fa plus>}}`.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-52",
     "since_version": "99.9.9"
   },
