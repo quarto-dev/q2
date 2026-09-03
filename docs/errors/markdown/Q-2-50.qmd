@@ -7,6 +7,13 @@ status: stub
 since: "99.9.9"
 categories:
   - markdown
+diagnostics:
+  # This page teaches the Quarto 1 idiom, so its "Bad input" example is a
+  # doubled-brace opener on purpose. Without this the page reports the very
+  # warning it documents.
+  Q-2-50:
+    level: off
+    reason: "This page documents the Quarto 1 doubled-brace idiom; its examples are deliberate."
 ---
 
 # `Q-2-50` — Doubled curly braces are not supported
