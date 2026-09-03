@@ -76,7 +76,10 @@ A robust parser for QMD documents will enable more robust treatment in editors, 
 These are non-exhaustive and will only list intentional differences.
 We will, aspirationally, treat unintentional differences as bugs.
 
-- no naked HTML support: use `{=html}` raw blocks an inlines
+- no naked HTML support: use `{=html}` raw blocks an inlines. It is accepted
+  with a `Q-2-9` warning; markdown inside it is parsed, but `<div>`/`<span>`
+  are not promoted to `Div`/`Span` nodes, so their contents are not wrapped
+  in `<p>`. See dev-docs/syntax-notes.md "No naked HTML support".
 - no grid tables: use `{<markdown}`, [list tables](https://github.com/pandoc-ext/list-table), or Quarto's [HTML-as-table-AST mode](https://quarto.org/docs/authoring/tables.html#html-tables)
 
 ## Syntax escape hatches
