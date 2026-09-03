@@ -2,14 +2,91 @@
 title: Computations
 ---
 
-TBD.
+## Overview
+
+A Quarto document can contain **executable cells**: fenced code blocks whose
+info string is a language name wrapped in braces. Quarto hands each cell to
+an [engine](engines.qmd), runs it, and splices the results into the rendered
+document. For example, a cell written like this:
+
+````markdown
+```{r}
+sum(1:10)
+```
+````
+
+would, if run, produce `55` underneath it in the rendered page. (This page
+only *shows* cells like this one — see the next section — so nothing on it
+actually runs.)
 
 ## Displaying code cells without running them
 
-To show readers an executable cell — for example, in a document that
-teaches Quarto itself — wrap the cell in a fenced code block with more
-backticks:
+Writing *about* Quarto means showing readers what a cell looks like without
+running it — for example, in a tutorial or in this documentation. The rule is
+the ordinary Markdown one: **a fenced code block is displayed verbatim**, so a
+cell written inside one is shown, not executed.
 
+To display the cell above instead of running it, wrap it in a fence with
+*more backticks* than the cell uses:
+
+`````markdown
+````markdown
+```{r}
+sum(1:10)
+```
+````
+`````
+
+which renders as:
+
+````markdown
+```{r}
+sum(1:10)
+```
+````
+
+The braces stay single. Nothing about the inner cell changes — it is shown
+exactly as an author would type it, which is the point: a reader can copy it
+straight into their own document.
+
+### The outer fence must be longer
+
+Markdown decides where a fenced code block ends by matching the length of its
+opening fence. So the wrapping fence only needs to be *longer* than the
+longest run of backticks inside it — one backtick longer is enough. A cell
+written with the ordinary three backticks is displayed by wrapping it in four;
+if the content being displayed already contains a four-backtick fence, wrap
+that in five, and so on.
+
+### Cell options are displayed too
+
+Options on the fence header, and Quarto's `#|` comment options, are part of
+the cell and are displayed along with it — nothing needs to be stripped or
+adjusted. A fence-header option:
+
+````markdown
+```{r, echo=FALSE}
+plot(1:10)
+```
+````
+
+and a `#|` comment option:
+
+````markdown
+```{r}
+#| echo: false
+#| label: fig-example
+plot(1:10)
+```
+````
+
+### Displaying a block that itself displays a cell
+
+The same rule applies at any depth: each layer's fence just needs to be
+longer than the longest fence nested inside it. To show a document like this
+page — one that itself displays a cell — add one more layer of backticks:
+
+``````markdown
 `````markdown
 ````markdown
 ```{python}
@@ -17,9 +94,7 @@ backticks:
 ```
 ````
 `````
-
-Fenced code blocks are displayed verbatim, so the inner cell is shown
-exactly as written (single braces and all) and is not executed.
+``````
 
 ::: callout-note
 ## Migrating from Quarto 1

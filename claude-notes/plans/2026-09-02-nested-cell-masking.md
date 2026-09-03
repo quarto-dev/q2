@@ -617,15 +617,199 @@ file is the single checklist of record.
 
 ### Phase 5 — Documentation
 
-- [ ] Expand `docs/guides/authoring/computations.qmd`: the rule, the nesting requirement, cell options, deeper nesting, and the existing Quarto 1 migration callout
-- [ ] No live executable cell on the page (see **Documentation** above)
-- [ ] `cargo run --bin q2 -- render docs/` succeeds and the page's own displayed examples render verbatim
-- [ ] Check the page against `cargo xtask lint` (error-docs rules touch `docs/`)
+- [x] Expand `docs/guides/authoring/computations.qmd`: the rule, the nesting requirement, cell options, deeper nesting, and the existing Quarto 1 migration callout
+- [x] No live executable cell on the page (see **Documentation** above)
+- [x] `cargo run --bin q2 -- render docs/` succeeds and the page's own displayed examples render verbatim
+- [x] Check the page against `cargo xtask lint` (error-docs rules touch `docs/`)
+
+**Phase 5 findings (2026-09-03).** `docs/guides/authoring/computations.qmd` grew from a 35-line
+`TBD.` stub to 103 lines covering: the Overview (what an executable cell is, with a `{r}` example
+described only hypothetically — "would, if run, produce `55`" — never asserted as actually run on
+this page); the display rule (fenced code blocks are verbatim); the outer-fence-must-be-longer
+rule; cell options (`#|` comments) displayed along with the cell; deeper nesting (a block that
+itself displays a cell, using the page's own structure as the example); and the pre-existing
+Quarto 1 / `Q-2-50` migration callout, left untouched. No fence on the page opens at top level —
+every `{r}`/`{python}` opener is nested inside a display fence, so the page has zero live
+executable cells, per the hard constraint (`docs/` is rendered only in the release workflow,
+which installs no R/Python/Jupyter/Julia; an unavailable engine is a hard error, not a fallback).
+
+Rebuilt `q2` from clean (`cargo build --bin q2`, 1m40s) before rendering — the specific hazard
+Phase 0 exists to guard against. `cargo run --bin q2 -- render docs/` → **268 of 268 files
+rendered, 36 warnings**, none mentioning `computations.qmd`; the warnings are pre-existing
+(missing images on unrelated pages, tracked separately, not this page's concern). Inspected
+`docs/_site/guides/authoring/computations.html` directly: `grep -c 'q2-nested-executable'` → 0,
+`grep -c 'class="cell'` → 0, and every `{r}`/`{python}` example appears verbatim inside
+`<pre class="markdown code-with-copy">` with single braces intact, e.g.:
+
+```html
+<pre class="markdown code-with-copy"><code>```{r}
+sum(1:10)
+```</code></pre>
+```
+
+This is the page proving Q-2-50's hint true: the escape hatch the hint describes is the same
+construct this page uses to document itself, and the rendered output shows it working.
+
+`cargo xtask lint` → **all checks passed, 1065 files checked** (the `error-docs-*` repo-level
+checks run unconditionally as part of `run_check`, independent of the "Running lint checks on
+.../crates" banner; this page adds no error catalog entry, so nothing new for them to check).
+
+This page was authored by a prior implementer (task 8) before going unresponsive; this phase's
+verification — build, render, HTML inspection, lint, and this reconciliation — was done by a
+follow-up session which read the page but did not rewrite it. One wording point was checked
+against the brief's editorial callout (Overview's "would, if run, produce `55`" phrasing already
+reads unambiguously conditional — nothing to change).
+
+**Fix round 1 (2026-09-03).** Review found the "Cell options are displayed too" section asserted
+both fence-header options and `#|` comment options are displayed, but only demonstrated the `#|`
+form — the fence-header form (` ```{r, echo=FALSE} `), the plan's own worked example for the
+transform and the exact case T4 tests (`echo=FALSE` is where the bug was worst: it consumed the
+author's source entirely), was asserted in prose but never shown. Added a short fence-header
+example (` ```{r, echo=FALSE}\nplot(1:10)\n``` `) immediately before the existing `#|` example, no
+other changes. Re-verified: `cargo run --bin q2 -- render docs/` → 268/268, 36 warnings (same
+pre-existing set, none on this page); `cargo xtask lint` → all checks passed, 1065 files. Inspected
+the new example in `docs/_site/guides/authoring/computations.html`: renders verbatim inside
+`<pre class="markdown code-with-copy">` with `echo=FALSE` intact, and the section still has 0
+`.cell` divs and 0 `q2-nested-executable` occurrences.
 
 ### Phase 6 — End-to-end verification
 
-- [ ] `q2 render` each fixture through the real binary; inspect the HTML; record the exact invocations and observed output in this plan, per CLAUDE.md
-- [ ] Confirm a real cell still executes and highlights in the same document
+- [x] `q2 render` each fixture through the real binary; inspect the HTML; record the exact invocations and observed output in this plan, per CLAUDE.md
+- [x] Confirm a real cell still executes and highlights in the same document
+
+**Rebuilt first:** `cargo build --bin q2` (fresh compile after the previous commit, `Finished
+dev profile ... in 46.85s`) — confirmed not stale before measuring, per CLAUDE.md's two logged
+incidents of stale-binary measurement.
+
+For each fixture below the invocation is `cargo run --bin q2 -- render .scratch/nested/<name>.qmd`
+(exit 0 in every case), followed by direct inspection of the produced `.scratch/nested/<name>.html`
+(grep counts plus reading the surrounding markup with a short Python snippet — not inferred from
+absence of errors).
+
+**r1.qmd** — baseline (pre-fix, task-0-report.md): `REAL-CELL-RAN`=2, `DISPLAY-BLOCK-RAN`=2 (wrong,
+displayed example executed), `DISPLAY-OPTS-RAN`=1 (wrong, author's `echo=FALSE` source vanished,
+only output left). After the fix: `REAL-CELL-RAN`=2 (unchanged — one syntax-highlighted source
+span + one `.cell-output-stdout` block, both correct), `DISPLAY-BLOCK-RAN`=1 (the marker now
+appears exactly once, as literal text inside `<pre class="markdown code-with-copy">`, not
+executed), `DISPLAY-OPTS-RAN`=1 (same count as baseline but for the opposite, correct reason — the
+author's full source `` ```{r, echo=FALSE}\ncat("DISPLAY-OPTS-RAN\n")\n``` `` is now shown verbatim
+instead of being replaced by knitr output). Inspected snippet:
+
+```html
+<p>A displayed example the reader should see verbatim:</p>
+<div class="code-copy-outer-scaffold">
+<pre class="markdown code-with-copy"><code>```{r}
+cat(&quot;DISPLAY-BLOCK-RAN\n&quot;)
+```</code></pre>
+```
+
+The `DISPLAY-OPTS-RAN` count alone (1 before, 1 after) is worthless as a discriminator — before
+the fix it was output-only with the source consumed; after, it is source-only with nothing run.
+What actually discriminates the two states is that the author's fence header is now visible at all
+(`r1.html:51-54`):
+
+```html
+<pre class="markdown code-with-copy"><code>```{r, echo=FALSE}
+cat(&quot;DISPLAY-OPTS-RAN\n&quot;)
+```</code></pre>
+```
+
+`echo=FALSE` could not appear in the output before the fix, because knitr consumed the source
+entirely — its presence here is the evidence, not the marker-count coincidence.
+
+**pyfail.qmd** — baseline: whole render hard-failed (`Execution halted`, `Error: Execution failed
+in knitr: R process failed`, reticulate's `python_not_found`), because knitr handed the displayed
+`{python}` example to reticulate. After the fix: exit 0, no error. The real `{r}` cell still
+executes and highlights (`REAL` appears twice: once inside `<span class="hl-function">cat</span>`
+source highlighting, once in `.cell-output-stdout`). The displayed `{python}` fence renders as
+inert verbatim text and is never handed to any engine:
+
+```html
+<div class="code-copy-outer-scaffold">
+<pre class="markdown code-with-copy"><code>```{python}
+1 + 1
+```</code></pre>
+```
+
+**bq.qmd** — baseline: the blockquoted display block rendered **empty** and two `.cell` divs were
+emitted (`grep -c 'class="cell"'` → 2; the nested cell escaped the blockquote and rendered as its
+own sibling cell). After the fix: `grep -c 'class="cell"'` → **1** (only the real top-level cell),
+and the blockquote is non-empty, holding the author's verbatim `{r}` source:
+
+```html
+<blockquote>
+<div class="code-copy-outer-scaffold">
+<pre class="markdown code-with-copy"><code>```{r}
+cat(&quot;IN-QUOTE\n&quot;)
+```</code></pre>
+</div>
+</blockquote>
+```
+
+**shapes.qmd** (whitespace/backtick-width/nesting shapes, not in the pre-fix baseline table — new
+coverage) — bare display fence (no backtick-fence wrapper, just a plain fenced code block with no
+info-string annotation), a nested display fence indented inside a list item, and a doubled-brace
+`{{python}}` shortcode-style opener. All three markers (`BARE`, `INDENTED`, `DOUBLED`) appear
+exactly once each, as literal verbatim text, never executed, e.g. the indented case stays nested
+correctly inside its `<li>`:
+
+```html
+<li>item
+<div class="code-copy-outer-scaffold">
+<pre class="markdown code-with-copy"><code>```{r}
+cat(&quot;INDENTED\n&quot;)
+```</code></pre>
+```
+
+`REAL`=2 in the same document, confirming the real cell executes and highlights alongside three
+different nested-display shapes.
+
+**stress.qmd** (whitespace/collision stress cases, not in the pre-fix baseline table — new
+coverage) — `SPACE-BEFORE-BRACE`, `TRAILING-WS`, `AUTHOR-DOTTED`, `NESTED-PY` all appear exactly
+once each, verbatim and unexecuted, e.g. the author's own dotted-class fence (`` ```{.r} ``) is
+left byte-for-byte untouched:
+
+```html
+<pre class="markdown code-with-copy"><code>```{.r}
+cat(&quot;AUTHOR-DOTTED\n&quot;)
+```</code></pre>
+```
+
+The final case in this fixture — "Author writes our marker verbatim (collision probe)",
+`` ```{.r q2-nested-executable} `` — is the one documented, deliberately-accepted limitation in
+`crates/quarto-core/src/engine/nested_cell_mask.rs`'s module doc ("Known limitation": `unmask`
+pattern-matches on the marker text; an author who writes it verbatim inside a display block gets
+it rewritten as if it were one of ours; "measured negligible in practice... not fixed here; not
+tested here"). Confirmed exactly that behaviour and nothing worse: the fence header is rewritten
+from `` ```{.r q2-nested-executable} `` to `` ```{r} ``, but `COLLISION` itself still appears
+exactly once (never executed, never duplicated), and the marker string does not leak into the
+final HTML — `unmask` consumes its own trigger text as part of the rewrite. This is pre-existing,
+already-scoped-out behaviour, not a regression introduced by this phase; it is not re-opened here.
+Inspected snippet showing the source's `{.r q2-nested-executable}` rewritten to `` ```{r} ``
+(`stress.html:63-69`), so the actual behaviour is on record rather than only a characterisation
+of it:
+
+```html
+<p>Author writes our marker verbatim (collision probe):</p>
+<div class="code-copy-outer-scaffold">
+<pre class="markdown code-with-copy"><code>```{r}
+cat(&quot;COLLISION\n&quot;)
+```</code></pre>
+```
+
+**Marker-leak check (all five fixtures):** `grep -c q2-nested-executable <name>.html` → **0** in
+every case (`r1`, `pyfail`, `bq`, `shapes`, `stress`). The mask marker never reaches a reader,
+including on the stress fixture that writes the marker string as literal author text.
+
+**Real-cell-still-works check:** every fixture with a real top-level cell (`r1`, `pyfail`, `bq`,
+`shapes`, `stress`) shows `REAL`/`REAL-CELL-RAN` twice — once inside `<span class="hl-function">`
+(or equivalent highlighted-source spans) confirming syntax highlighting ran, once inside
+`.cell-output-stdout` confirming execution ran — in the same document as one or more masked
+display blocks. Under-masking (the pre-fix bug) and over-masking (marker leakage, or the real cell
+itself getting masked) are both absent.
+
+All HTML was read directly (via `grep -c` counts plus short inline Python snippets printing
+surrounding context), not inferred from a clean exit code.
 
 ### Phase 7 — Wrap up
 
