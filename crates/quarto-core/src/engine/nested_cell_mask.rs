@@ -3,7 +3,53 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use quarto_pandoc_types::Pandoc;
+use quarto_pandoc_types::{Block, CodeBlock, Pandoc};
+use regex::Regex;
+use std::sync::LazyLock;
+
+/// The class that marks a masked opener as ours, and the sole thing `unmask`
+/// looks for. Never emitted by an author writing their own `{.lang}`.
+const MASK_MARKER: &str = "q2-nested-executable";
+
+/// Matches a whole line that is an executable-fence *opener*: optional
+/// leading whitespace (indentation), a run of 3+ backticks, optional
+/// whitespace, a brace-delimited info string whose first character is
+/// alphanumeric/underscore (the union of what knitr, q2's jupyter text
+/// engine, and the TS `breakQuartoMd` partitioner all accept), optional
+/// trailing whitespace, end of line.
+///
+/// Deliberately excludes:
+/// - `{{lang}}` (doubled brace): the char after `{` is `{`, not
+///   `[A-Za-z0-9_]` — T10.
+/// - `{.lang}` (an author's own dot-class): the char after `{` is `.` —
+///   T11 relies on `unmask`'s marker check, but `mask` itself also never
+///   matches a dot-prefixed opener, so it can't double-mask one.
+/// - `{=lang}` (raw-format openers): `=` is not in the allowed first-char set.
+///
+/// `(?m)` makes `^`/`$` match at line boundaries within the block's `text`,
+/// not just the start/end of the whole string. `R` additionally puts `$`
+/// (and `^`) in CRLF mode, so `\r\n`-terminated lines are recognized as
+/// line boundaries too — without it, `$` only ever matches before a bare
+/// `\n`, so a `\r\n`-saved file (or any Windows checkout) leaves every
+/// trailing `\r` unconsumed, the line never matches, and masking silently
+/// becomes a no-op (T23).
+static MASK_OPENER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?mR)^([ \t]*)(`{3,})([ \t]*)\{([A-Za-z0-9_]+)([^}\r\n]*)\}([ \t]*)$")
+        .expect("MASK_OPENER_RE must compile")
+});
+
+/// Matches a masked opener anywhere in a string — **not** anchored to line
+/// start, so a blockquote's `> ` prefix (which `unmask` sees but `mask`
+/// never does — see module doc) doesn't prevent the match (H4). Captures
+/// the language and the verbatim "rest" (e.g. `, echo=FALSE`) that `mask`
+/// preserved unchanged.
+static UNMASK_OPENER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(
+        r"\{{\.([A-Za-z0-9_]+) {}([^}}\r\n]*)\}}",
+        regex::escape(MASK_MARKER)
+    ))
+    .expect("UNMASK_OPENER_RE must compile")
+});
 
 /// Rewrite executable fence openers that appear *inside* a markdown-displaying
 /// code block so no engine's cell scanner claims them, and restore them
@@ -33,13 +79,176 @@ use quarto_pandoc_types::Pandoc;
 /// question) — at that point a widened classes conjunct could admit a real
 /// executable cell whose language happens to also be a display-class name,
 /// and only the `engine_cell_lang` check would still exclude it.
+///
+/// ## Known limitation
+///
+/// `unmask` pattern-matches on the `q2-nested-executable` marker text. An
+/// author who writes that string verbatim inside a display block — not as
+/// an opener, just as prose or code — gets it rewritten by `unmask` as if
+/// it were one of ours. Measured negligible in practice; removed later in
+/// the epic when an assembler restores from retained bytes rather than by
+/// matching. Not fixed here; not tested here (a test would pin behaviour
+/// this plan intends to change).
 pub fn mask(doc: &mut Pandoc) -> Vec<usize> {
-    let _ = doc;
-    unimplemented!("mask: task 5")
+    let mut changed = Vec::new();
+    for (idx, block) in doc.blocks.iter_mut().enumerate() {
+        if mask_block(block) {
+            changed.push(idx);
+        }
+    }
+    changed
 }
+
 pub fn unmask(s: &str) -> String {
-    let _ = s;
-    unimplemented!("unmask: task 5")
+    UNMASK_OPENER_RE.replace_all(s, "{$1$2}").into_owned()
+}
+
+/// True iff `block` is a `CodeBlock` eligible for masking: attr classes
+/// empty or exactly `["markdown"]`, and not itself a genuine executable
+/// cell (H2). See the module doc for why the `engine_cell_lang` conjunct is
+/// kept even though it is currently implied by the classes conjunct.
+fn is_in_scope_for_masking(block: &Block) -> bool {
+    let Block::CodeBlock(cb) = block else {
+        return false;
+    };
+    let classes = &cb.attr.1;
+    let classes_ok = classes.is_empty() || (classes.len() == 1 && classes[0] == "markdown");
+    classes_ok && crate::engine::capture_splice::engine_cell_lang(block).is_none()
+}
+
+/// Rewrite every masking-eligible fence opener in `cb.text`. Returns
+/// whether anything actually changed.
+fn mask_code_block_text(cb: &mut CodeBlock) -> bool {
+    let replacement = "${1}${2}${3}{.${4} ".to_string() + MASK_MARKER + "${5}}${6}";
+    let new_text = MASK_OPENER_RE.replace_all(&cb.text, replacement.as_str());
+    if new_text == cb.text {
+        false
+    } else {
+        cb.text = new_text.into_owned();
+        true
+    }
+}
+
+/// Recurse into `block`, masking any in-scope nested `CodeBlock`s in place.
+/// Returns whether `block` itself, or anything nested inside it, changed —
+/// the top-level caller uses this to report the *ancestor's* index (H7),
+/// since the qmd writer's piece loop is top-level-only.
+fn mask_block(block: &mut Block) -> bool {
+    if let Block::CodeBlock(_) = block {
+        if !is_in_scope_for_masking(block) {
+            return false;
+        }
+        let Block::CodeBlock(cb) = block else {
+            unreachable!("matched CodeBlock above");
+        };
+        return mask_code_block_text(cb);
+    }
+
+    match block {
+        // Out of scope, deliberately (spec § Scope): masking a RawBlock's
+        // `{=markdown}` text would free its nested cell as a genuine
+        // top-level cell once the writer emits the RawBlock unfenced.
+        Block::RawBlock(_) => false,
+        Block::BlockQuote(b) => mask_blocks(&mut b.content),
+        Block::Div(b) => mask_blocks(&mut b.content),
+        Block::OrderedList(b) => {
+            let mut changed = false;
+            for item in &mut b.content {
+                changed |= mask_blocks(item);
+            }
+            changed
+        }
+        Block::BulletList(b) => {
+            let mut changed = false;
+            for item in &mut b.content {
+                changed |= mask_blocks(item);
+            }
+            changed
+        }
+        Block::DefinitionList(b) => {
+            let mut changed = false;
+            for (_term, defs) in &mut b.content {
+                for item in defs {
+                    changed |= mask_blocks(item);
+                }
+            }
+            changed
+        }
+        Block::Table(t) => mask_table(t),
+        Block::Figure(f) => {
+            let mut changed = mask_blocks(&mut f.content);
+            if let Some(long) = f.caption.long.as_mut() {
+                changed |= mask_blocks(long);
+            }
+            changed
+        }
+        Block::NoteDefinitionFencedBlock(b) => mask_blocks(&mut b.content),
+        Block::Custom(c) => mask_custom(c),
+        _ => false,
+    }
+}
+
+/// Mask every block in a container's block list; returns whether any of
+/// them (or their descendants) changed. Does not short-circuit — every
+/// element is visited regardless of earlier results, since masking has
+/// side effects on each element independently.
+fn mask_blocks(blocks: &mut [Block]) -> bool {
+    let mut changed = false;
+    for block in blocks.iter_mut() {
+        if mask_block(block) {
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn mask_table(table: &mut quarto_pandoc_types::Table) -> bool {
+    let mut changed = false;
+    // T24: the table's own long-form caption, mirroring the Figure arm above
+    // (`Caption.long: Option<Blocks>` — same type as Figure's caption).
+    if let Some(long) = table.caption.long.as_mut() {
+        changed |= mask_blocks(long);
+    }
+    for row in &mut table.head.rows {
+        changed |= mask_row(row);
+    }
+    for body in &mut table.bodies {
+        for row in &mut body.head {
+            changed |= mask_row(row);
+        }
+        for row in &mut body.body {
+            changed |= mask_row(row);
+        }
+    }
+    for row in &mut table.foot.rows {
+        changed |= mask_row(row);
+    }
+    changed
+}
+
+fn mask_row(row: &mut quarto_pandoc_types::Row) -> bool {
+    let mut changed = false;
+    for cell in &mut row.cells {
+        changed |= mask_blocks(&mut cell.content);
+    }
+    changed
+}
+
+fn mask_custom(custom: &mut quarto_pandoc_types::CustomNode) -> bool {
+    let mut changed = false;
+    for slot in custom.slots.values_mut() {
+        match slot {
+            quarto_pandoc_types::Slot::Block(b) => {
+                changed |= mask_block(b);
+            }
+            quarto_pandoc_types::Slot::Blocks(bs) => {
+                changed |= mask_blocks(bs);
+            }
+            // Inline/Inlines slots can't contain a CodeBlock.
+            quarto_pandoc_types::Slot::Inline(_) | quarto_pandoc_types::Slot::Inlines(_) => {}
+        }
+    }
+    changed
 }
 
 #[cfg(test)]
@@ -533,6 +742,102 @@ mod tests {
             before_pairs, after_pairs,
             "piece (offset_in_concat, length) pairs must be identical to the unmasked run \
              when no block is in scope for masking"
+        );
+    }
+
+    // ── T23 (MASK_OPENER_RE's `R` flag): a CRLF-authored display block must
+    // still be masked, and unmask must restore every `\r\n` byte-exactly.
+    // Built with explicit `\r\n` escapes (not relying on the source file's
+    // own line endings) so the fixture is CRLF regardless of how this file
+    // is checked out. Reverting the `R` flag back to plain `(?m)` leaves
+    // the fence's trailing `\r` unconsumed by `[ \t]*$`, so the opener line
+    // never matches `$` and `mask` silently becomes a no-op — `changed`
+    // comes back empty and `assert_mask_unmask_roundtrip`'s first
+    // assertion catches it directly.
+    #[test]
+    fn t23_crlf_display_block_round_trips_byte_exactly() {
+        let qmd = "````markdown\r\n```{r}\r\ncat(\"x\")\r\n```\r\n````\r\n";
+        assert_mask_unmask_roundtrip(qmd, "CRLF display block");
+    }
+
+    // ── T24 (mask_table's caption recursion): a display block nested
+    // inside a table's long-form caption must also be masked.
+    // `Table.caption` is the same `Caption` type `Figure.caption` uses
+    // (`table.rs` vs `block.rs`), and the `Figure` arm already walks
+    // `caption.long` — this guards that `mask_table` does too. Built
+    // directly as a `Pandoc`/`Table` (rather than parsed from qmd) since
+    // the qmd surface syntax for a table's block-level long caption isn't
+    // needed to exercise the walker itself, mirroring the
+    // `quarto-ast-reconcile` test suite's own `make_table` helper.
+    #[test]
+    fn t24_display_block_in_table_long_caption_is_masked() {
+        let source = quarto_source_map::SourceInfo::original(quarto_source_map::FileId(0), 0, 1);
+        let attr = || quarto_pandoc_types::empty_attr();
+        let attr_source = quarto_pandoc_types::AttrSourceInfo::empty;
+
+        let display_block = Block::CodeBlock(CodeBlock {
+            attr: attr(),
+            text: "```{r}\ncat(\"x\")\n```".to_string(),
+            source_info: source.clone(),
+            attr_source: attr_source(),
+        });
+
+        let table = Block::Table(quarto_pandoc_types::Table {
+            attr: attr(),
+            caption: quarto_pandoc_types::Caption {
+                short: None,
+                long: Some(vec![display_block]),
+                source_info: source.clone(),
+            },
+            colspec: vec![(
+                quarto_pandoc_types::Alignment::Default,
+                quarto_pandoc_types::ColWidth::Default,
+            )],
+            head: quarto_pandoc_types::TableHead {
+                attr: attr(),
+                rows: vec![],
+                source_info: source.clone(),
+                attr_source: attr_source(),
+            },
+            bodies: vec![],
+            foot: quarto_pandoc_types::TableFoot {
+                attr: attr(),
+                rows: vec![],
+                source_info: source.clone(),
+                attr_source: attr_source(),
+            },
+            source_info: source.clone(),
+            attr_source: attr_source(),
+        });
+
+        let mut doc = Pandoc {
+            blocks: vec![table],
+            ..Default::default()
+        };
+
+        let changed = mask(&mut doc);
+        assert_eq!(
+            changed,
+            vec![0],
+            "the table's top-level index must be reported as changed when its \
+             caption's display block is masked"
+        );
+
+        let Block::Table(t) = &doc.blocks[0] else {
+            panic!("fixture must remain a Table, got: {:?}", doc.blocks[0]);
+        };
+        let long = t
+            .caption
+            .long
+            .as_ref()
+            .expect("caption.long must survive masking");
+        let Block::CodeBlock(cb) = &long[0] else {
+            panic!("caption.long[0] must remain a CodeBlock, got: {long:?}");
+        };
+        assert!(
+            cb.text.contains("q2-nested-executable"),
+            "the display block inside the table's long caption must be masked, got: {}",
+            cb.text
         );
     }
 }
