@@ -16,7 +16,7 @@ export type CloseCommandWriter = (
 ) => Promise<unknown>;
 
 // A close fails with "worker is busy" when the file's worker is still running
-// (QNR does not interrupt a running task on a plain close). See task-p0-report.md.
+// (QNR does not interrupt a running task on a plain close).
 export function isWorkerBusyError(e: unknown): boolean {
   return e instanceof Error && /worker is busy/i.test(e.message);
 }
@@ -24,13 +24,14 @@ export function isWorkerBusyError(e: unknown): boolean {
 // Pre-run close (julia-engine.ts oneShot / daemon-restart path). If the file's
 // worker is busy we recover with a forceclose rather than surfacing the bare
 // protocol error: the busy worker is an ABANDONED one (a prior client vanished
-// mid-run and left the shared server's worker orphaned — the Bug A scenario),
-// and forceclose reclaims the file so this fresh render can proceed.
+// mid-run and left the shared server's worker orphaned), and forceclose
+// reclaims the file so this fresh render can proceed.
 //
-// CAVEAT (documented for the upstream PR, deliberately not special-cased here):
-// a worker busy serving a *live concurrent* render on a shared server would also
-// be force-closed, killing legitimate work. Distinguishing abandoned-vs-live is
-// the deeper oneShot-server-reuse design question — see the q2 compat log.
+// CAVEAT (deliberately documented rather than special-cased): a worker busy
+// serving a *live concurrent* render on a shared server would also be
+// force-closed, killing legitimate work. Distinguishing abandoned-vs-live
+// workers is part of the wider question of whether a oneShot render should
+// reuse a daemon-started server at all.
 export async function preRunClose(
   writeCommand: CloseCommandWriter,
   file: string,
