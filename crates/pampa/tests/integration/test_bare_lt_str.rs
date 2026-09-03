@@ -180,13 +180,19 @@ fn html_element_with_whitespace_before_gt_still_parses_as_raw_html() {
     // Regression guard for bd-ly83qewg: `<div >` is a valid open tag
     // (whitespace before `>` is allowed by the HTML spec); only whitespace
     // immediately after `<` disqualifies.
+    //
+    // The subject here is the *lexer*. `div` is a block-level name and this
+    // tag opens the line, so the reader lifts it out of the paragraph into a
+    // RawBlock (bd-block-html-wrapped-in-p-w8qebxig) — which is just as good
+    // a witness that the scanner recognised it as raw HTML.
     let pandoc = parse_qmd("<div >\n");
-    let inlines = first_paragraph_inlines(&pandoc);
-    assert!(
-        matches!(inlines[0], Inline::RawInline(_)),
-        "expected RawInline, got: {:?}",
-        inlines
-    );
+    match &pandoc.blocks[0] {
+        Block::RawBlock(r) => {
+            assert_eq!(r.format, "html");
+            assert!(r.text.contains("<div"), "got: {:?}", r);
+        }
+        other => panic!("expected RawBlock html, got: {:?}", other),
+    }
 }
 
 #[test]
@@ -233,18 +239,35 @@ fn autolink_still_parses_as_link() {
 
 #[test]
 fn html_comment_still_parses_as_raw_html_comment() {
-    // Regression: HTML comment unchanged — emitted as a RawInline with
-    // format "html".
+    // Regression: HTML comment unchanged — still raw HTML with format "html".
+    //
+    // A comment on its own line is now a RawBlock rather than a paragraph
+    // holding one RawInline (bd-block-html-wrapped-in-p-w8qebxig); the lexing
+    // this guards is unaffected. See `comment_in_running_text_stays_inline`
+    // below for the inline half.
     let pandoc = parse_qmd("<!-- c -->\n");
-    let inlines = first_paragraph_inlines(&pandoc);
-    assert_eq!(inlines.len(), 1);
-    match &inlines[0] {
-        Inline::RawInline(r) => {
+    match &pandoc.blocks[0] {
+        Block::RawBlock(r) => {
             assert_eq!(r.format, "html");
             assert!(r.text.contains("<!--"), "got: {:?}", r);
         }
-        other => panic!("expected RawInline html comment, got: {:?}", other),
+        other => panic!("expected RawBlock html comment, got: {:?}", other),
     }
+}
+
+#[test]
+fn comment_in_running_text_stays_inline() {
+    // The inline half of the case above: a comment that does not open a line
+    // stays a RawInline inside its paragraph.
+    let pandoc = parse_qmd("text <!-- c --> more\n");
+    let inlines = first_paragraph_inlines(&pandoc);
+    assert!(
+        inlines
+            .iter()
+            .any(|i| matches!(i, Inline::RawInline(r) if r.text.contains("<!--"))),
+        "expected an inline html comment, got: {:?}",
+        inlines
+    );
 }
 
 #[test]
