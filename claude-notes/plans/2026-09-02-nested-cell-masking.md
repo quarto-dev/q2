@@ -304,6 +304,8 @@ assertions and harness are frozen — never edited to go green.
 | H9 | `unmask(result.markdown)` runs **before** the capture emit |
 | H10 | `compute_input_qmd` masks |
 | H11 | `write_review_file` unmasks before writing |
+| H12 | `MASK_OPENER_RE` carries the regex `R` (CRLF) flag, so a `\r\n`-terminated opener line still matches `$` |
+| H13 | `mask_table` recurses into `table.caption.long`, mirroring the `Figure` arm |
 
 ### Tiers
 
@@ -347,6 +349,8 @@ outright vacuous.
 | T20 | C | capture | doc **with** a display block → `compute_input_qmd` bytes == `capture.input_qmd` | **H10** → RED. *Existing invariant fixture has no display block, so it stays green either way* |
 | T21 | C | `write_review_file` | doc with a display block → review file contents | **H11** → contains the marker, not `{r}` → RED |
 | T22 | C | two engines | `FixtureEngine` ×2 in sequence → second engine's received input | **H8** (hoist mask out of the loop) → second input unmasked → RED |
+| T23 | U | `mask`+`unmask` | `\r\n`-terminated display block → `unmask(mask(x)) == x` bytes | **H12** (drop the `R` flag) → `mask` reports no change → RED. *Found in task 5 review (round 1): CRLF reaches the pipeline unnormalized, and plain `(?m)`'s `$` never matches before a bare `\r`, so masking silently became a no-op on any CRLF checkout* |
+| T24 | U | `mask` | display block nested in a table's long-form caption → block text carries the marker | **H13** (drop the `table.caption.long` walk) → RED. *Found in task 5 review (round 1): `mask_table` walked head/bodies/foot but not the table's own `Caption`, unlike the `Figure` arm which does walk its caption* |
 
 ### Vacuity notes
 
@@ -502,11 +506,34 @@ implementation that does not exist yet.
 
 ### Phase 2 — The transform
 
-- [ ] `crates/quarto-core/src/engine/nested_cell_mask.rs`. Pin the API in the module doc: `mask(&mut Pandoc) -> Vec<usize>` (indices of top-level blocks that changed) and `unmask(&str) -> String`
-- [ ] Mask rewrites openers in in-scope blocks; unmask is prefix-tolerant and not `^`-anchored
-- [ ] Walker recurses containers (Div, lists, blockquotes, table cells)
-- [ ] Walker maps each changed nested block to its top-level ancestor index
-- [ ] Phase 1 unit tests green
+- [x] `crates/quarto-core/src/engine/nested_cell_mask.rs`. Pin the API in the module doc: `mask(&mut Pandoc) -> Vec<usize>` (indices of top-level blocks that changed) and `unmask(&str) -> String`
+- [x] Mask rewrites openers in in-scope blocks; unmask is prefix-tolerant and not `^`-anchored
+- [x] Walker recurses containers (Div, lists, blockquotes, table cells, table captions, Figure captions, NoteDefinitionFencedBlock, Custom slots)
+- [x] Walker maps each changed nested block to its top-level ancestor index
+- [x] Phase 1 unit tests green
+
+**Phase 2 findings (2026-09-02).** Implemented as two `LazyLock<Regex>`s (`MASK_OPENER_RE`,
+`UNMASK_OPENER_RE`) plus a recursive container walker. Because neither regex ever touches
+anything outside the `{...}` opener span, byte-exactness (leading/trailing whitespace,
+inter-token spacing, arbitrary backtick width) fell out of the design for free — only the
+blockquote asymmetry (H4: `unmask` must not be `^`-anchored, since it runs on the writer's
+`> `-reprefixed output while `mask` only ever sees the reader's already-stripped text) needed
+deliberate handling.
+
+Review round 1 found two gaps invisible to the frozen T9–T22 suite (added as H12/H13, tested as
+T23/T24 above): `MASK_OPENER_RE` lacked the regex `R` (CRLF) flag, so a `\r\n`-terminated opener
+line's trailing `\r` was never consumed by `[ \t]*$` under plain `(?m)` — `mask` silently became
+a no-op on any CRLF checkout, corrupting nothing and failing no frozen test (since
+`unmask(mask(x)) == x` holds trivially when neither function did anything). And `mask_table`
+recursed into head/bodies/foot rows but not `table.caption.long`, even though the `Figure` arm
+thirty lines above already walked its own (same-typed) caption — an oversight, not a scope
+decision. Both fixed; T23/T24 added to close the gap. No existing test was edited.
+
+Verified (`nested_cell_mask.rs` only touched; `cargo clippy -p quarto-core --all-targets -- -D
+warnings` clean): `quarto-core` 4329 run / 4317 passed / 12 failed / 31 skipped — the 12
+failures are exactly T15, T17 (writer tier, need Phase 3 provenance) and T1, T2, T4–T8, T19, T20,
+T22 (render/capture tier, need Phase 4 wiring). T3 and the render-tier control (over-masking
+guards) confirmed still green.
 
 ### Phase 3 — Provenance
 
