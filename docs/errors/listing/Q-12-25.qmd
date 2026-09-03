@@ -1,0 +1,75 @@
+---
+title: "Listing Id Collides With Section Id"
+description: "A listing's `id` is also the id of a section on the page, so both elements claim the same HTML anchor."
+code: Q-12-25
+subsystem: listing
+status: stub
+since: "99.9.9"
+categories:
+  - listing
+---
+
+# `Q-12-25` — Listing Id Collides With Section Id
+
+> A listing's `id` is also the id of a section on the page, so both
+> elements claim the same HTML anchor.
+
+## What this means
+
+A heading with no explicit id gets one derived from its text, so
+`## Learn more` becomes `<section id="learn-more">`. If a listing on
+the same page is also called `learn-more`, the rendered page ends up
+with two elements carrying that id:
+
+``` markdown
+---
+listing:
+  - id: learn-more
+    contents: posts/*.qmd
+---
+
+## Learn more
+
+::: {#learn-more}
+:::
+```
+
+The section's content is safe — Quarto renders the listing into the
+`:::` slot inside the section, not into the section itself — but
+`#learn-more` no longer identifies one element. A link to it, a table
+of contents entry, and any CSS or JavaScript selecting on the id may
+each resolve to whichever element the browser reaches first.
+
+## How to fix
+
+Rename whichever of the two is easier to move.
+
+To rename the listing, change both the `id:` and the slot that
+matches it:
+
+``` markdown
+---
+listing:
+  - id: recent-posts
+    contents: posts/*.qmd
+---
+
+## Learn more
+
+::: {#recent-posts}
+:::
+```
+
+Or give the heading an explicit id of its own, leaving the listing
+alone:
+
+``` markdown
+## Learn more {#sec-learn-more}
+
+::: {#learn-more}
+:::
+```
+
+Note that changing a heading's id changes the anchor readers use to
+link to that section, so prefer renaming the listing on a page that is
+already published.
