@@ -541,9 +541,39 @@ Phase 1 cannot pin this — a correct-looking render is achievable with the
 provenance wrong, so an implementer who skips this phase gets a green suite
 and ships the drift. These tests are the only thing guarding it.
 
-- [ ] Changed blocks, and the top-level ancestor of a changed nested block, get `Generated` + the `Other("nested-cell-mask/origin")` anchor
-- [ ] Test: `map_offset` into a masked block returns `None`; an unmasked sibling in the same document still resolves to its true offset
-- [ ] Test: a document with no nested fences yields a `SourceInfo::Concat` whose pieces are identical to an unmasked run (compare piece `offset_in_concat`/`length` pairs)
+- [x] Changed blocks, and the top-level ancestor of a changed nested block, get `Generated` + the `Other("nested-cell-mask/origin")` anchor
+- [x] Test: `map_offset` into a masked block returns `None`; an unmasked sibling in the same document still resolves to its true offset
+- [x] Test: a document with no nested fences yields a `SourceInfo::Concat` whose pieces are identical to an unmasked run (compare piece `offset_in_concat`/`length` pairs)
+
+**Phase 3 findings (2026-09-03).** All stamping lives inside `mask` (R1) — no
+second entry point. Two call sites produce the `Generated { by: { kind:
+"nested-cell-mask" }, from: [Other("nested-cell-mask/origin")] }` node: (a)
+`mask_block`'s direct-`CodeBlock` arm stamps the block itself the moment
+`mask_code_block_text` reports a change; (b) `mask`'s top-level loop captures
+each top-level block's pre-mutation `SourceInfo` before recursing, and — only
+if that top-level block is not already `Generated` from (a) — stamps it too
+after `mask_block` returns `true`. This covers both shapes the writer's
+top-level-only piece loop needs to see: a display block that *is* the
+top-level block (T15), and one nested inside a container whose top-level
+ancestor must carry the marking instead (T17), without double-stamping the
+same-object case. A private `mark_generated` helper (not a public API)
+factors the shared construction.
+
+Verified (`nested_cell_mask.rs` only touched; `cargo clippy -p quarto-core
+--all-targets -- -D warnings` clean): `quarto-core` 4329 run / 4319 passed /
+10 failed / 31 skipped — down from Phase 2's 12 failures by exactly T15 and
+T17, the Phase 3 gate. The remaining 10 (T1, T2, T4–T8, T19, T20, T22) are
+render/capture-tier, expected red pending Phase 4's seam wiring. T3 and the
+render-tier control (over-masking guards) reconfirmed still green, as are T16
+and T18 (Phase 2's writer-tier guards against over-application).
+
+Workspace boundary: `cargo nextest run --workspace` → 13581 run / 13570
+passed / 11 failed / 199 skipped. Delta against the Phase 2 boundary (13581
+run / 13568 passed / 13 failed / 199 skipped): +2 passed, −2 failed, run and
+skipped counts unchanged — exactly T15 and T17 flipping green, no other test
+moved. The 11 remaining failures are precisely the expected-red set carried
+forward: T1, T2, T4–T8, T19, T20, T22 in `quarto-core`, plus T21 in
+`quarto-hub-provider` (Phase 4's job).
 
 ### Phase 4 — Wire the seam
 
