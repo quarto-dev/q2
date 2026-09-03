@@ -212,7 +212,10 @@ fn test_multiple_html_elements() {
 
 #[test]
 fn test_block_level_html_elements() {
-    // Block-level HTML elements like <div> should also be converted to RawInline
+    // A block-level tag that opens a line makes the whole thing a raw HTML
+    // *block*, not a paragraph of RawInlines: `<div>` is flow content and is
+    // not allowed inside a `<p>` (bd-block-html-wrapped-in-p-w8qebxig).
+    // It still warns — naked HTML remains an unsupported authoring form.
     let input = "<div>content</div>";
 
     let result = readers::qmd::read(
@@ -239,11 +242,36 @@ fn test_block_level_html_elements() {
         "Should have warnings for HTML div elements"
     );
 
-    // Verify AST contains RawInline nodes
+    use pampa::pandoc::Block;
+    match &pandoc.blocks[0] {
+        Block::RawBlock(r) => {
+            assert_eq!(r.format, "html");
+            assert_eq!(r.text, "<div>content</div>");
+        }
+        other => panic!("Expected a RawBlock, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_inline_html_elements_stay_in_a_paragraph() {
+    // The counterpart to the test above: an inline element, or a block-level
+    // tag that does not open the line, stays a RawInline inside its paragraph.
+    let input = "text <div>content</div> more";
+
+    let (pandoc, _context, _warnings) = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+        None,
+    )
+    .expect("Document should parse successfully");
+
     use pampa::pandoc::{Block, Inline};
     let para = match &pandoc.blocks[0] {
         Block::Paragraph(p) => p,
-        _ => panic!("Expected paragraph block"),
+        other => panic!("Expected paragraph block, got {:?}", other),
     };
 
     let raw_inlines: Vec<_> = para
@@ -255,18 +283,13 @@ fn test_block_level_html_elements() {
         })
         .collect();
 
-    assert!(
-        raw_inlines.len() >= 2,
-        "Should have at least 2 RawInline nodes for opening and closing div"
+    assert_eq!(
+        raw_inlines.len(),
+        2,
+        "Should have RawInline nodes for the opening and closing div"
     );
-
-    // Verify the div tags
-    assert_eq!(raw_inlines[0].format, "html");
     assert_eq!(raw_inlines[0].text, "<div>");
-
-    let last = raw_inlines.last().unwrap();
-    assert_eq!(last.format, "html");
-    assert_eq!(last.text, "</div>");
+    assert_eq!(raw_inlines[1].text, "</div>");
 }
 
 #[test]
