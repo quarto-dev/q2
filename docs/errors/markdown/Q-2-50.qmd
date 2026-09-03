@@ -30,6 +30,13 @@ have this escape, in either place it used to appear:
   code block whose language reads `{{python}}`, and Quarto 2 reports
   this error so the doubled braces don't silently end up in your
   output.
+- **Inside a display block**, a nested ```` ```{{python}} ```` opener
+  is reported too. This is where the Quarto 1 escape almost always
+  appears, because doubling the braces was how you *showed* a cell
+  without running it — and showing a cell means wrapping it in an
+  outer fence. Quarto 2 displays fence contents verbatim, so the
+  doubled braces reach the page and your readers are shown a fence
+  opener that is not valid Quarto syntax.
 
 ## Why this happens
 
@@ -56,7 +63,10 @@ verbatim in Quarto 2, so no escape is needed:
 ````
 `````
 
-This shows the reader exactly what they should type.
+This shows the reader exactly what they should type. If you are
+porting a Quarto 1 page, the fix is usually just to remove the extra
+braces from the *inner* opener — the outer fence is already doing the
+work the escape used to do.
 
 **To write literal braces in prose**, escape each brace, or use a
 code span:
