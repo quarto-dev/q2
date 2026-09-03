@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-03
 
+- [`08f24ddb`](https://github.com/quarto-dev/q2/commits/08f24ddb): A share link is now presented as an invitation to the whole project rather than to one document: the card says "project invitation", names the project in its call to action, and lists the project's contents in place of the empty ruled-paper thumbnail — which is omitted entirely when the project holds a single file. File counts also read "1 file" rather than "1 files".
 - [`ea9b46ec`](https://github.com/quarto-dev/q2/commits/ea9b46ec): Invite cards and the editor welcome banner now render correctly in dark mode — the preview box's dividers were drawn in a light-only brand color, which showed as near-white grid lines on the dark card, and several surfaces were painted with translucent tints.
 - [`546fdd37`](https://github.com/quarto-dev/q2/commits/546fdd37): The sandboxed preview bundle is rebuilt from its current sources — math rendering there is back on KaTeX 0.18.4, which a later bundle rebuild had quietly reverted to 0.18.2, and the preview's service worker no longer caches assets for offline use.
 
