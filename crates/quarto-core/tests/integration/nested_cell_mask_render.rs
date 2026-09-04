@@ -527,3 +527,109 @@ fn control_display_block_with_no_live_cell_renders_unchanged() {
          html:\n{html}"
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// bd-0gwekaem — inline expressions inside a display block
+//
+// A *new tier*, not an extension of T1–T24: the seam spec above is frozen,
+// and these rows bind to their own hunks.
+//
+//   H14 — `mask` rewrites an inline expression marker inside an in-scope
+//         display block: `` `r x` `` -> `` `q2-nested-executable r x` ``,
+//         and likewise for the brace spelling `` `{r} x` ``.
+//   H15 — `unmask` restores it (backtick + marker + one space -> backtick).
+//   H16 — the inline pattern's `(^|[^`])` guard, so a fence's own backtick
+//         can never anchor an inline match.
+//
+// The unit-tier rows for these hunks live in `nested_cell_mask.rs`; these
+// two prove the fix through the real render path with real knitr.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// The T25/T26 fixture: a live `{r}` cell that defines `v` (with `echo:
+/// false`, so its own source never reaches the HTML) plus a ` ````markdown `
+/// block displaying both inline spellings.
+///
+/// `v` is built with `paste0` so the marker `INLINERAN` is **runtime-only**
+/// — it cannot appear in the HTML as an echo of anything, only as the value
+/// of an inline expression that actually evaluated.
+///
+/// **Vacuity note (measured).** The marker deliberately contains no
+/// markdown-special character. An earlier draft used `INLINE-RAN` and T25
+/// passed even with H14 reverted: q2's classic inline spelling escapes
+/// markdown specials in the value, so the executed expression reaches the
+/// HTML as `INLINE\-RAN` and a `contains("INLINE-RAN")` check is blind to
+/// it. Any runtime-only marker used with an inline expression must survive
+/// `.QuartoInlineRender`'s escaping unchanged.
+fn t25_t26_fixture() -> String {
+    "---\ntitle: T25-T26\nengine: knitr\n---\n\n\
+     ```{r}\n#| echo: false\nv <- paste0(\"INLINE\", \"RAN\")\n```\n\n\
+     ````markdown\nClassic: `r v`\n\nBrace: `{r} v`\n````\n"
+        .to_string()
+}
+
+// ── T25 (H14): a displayed inline expression does not execute ───────────
+//
+// The nested-cell mask stops a displayed *fence opener* from executing, but
+// an inline expression in the same display block was never rewritten, so
+// knitr's `all_patterns$md$inline.code` (and q2's own
+// `resolve_inline_r_expressions` pass, which runs over the whole serialized
+// document and is equally fence-unaware) claimed it anyway. Reverting H14
+// leaves the marker bare and `INLINERAN` — runtime-only — appears.
+#[test]
+fn t25_displayed_inline_expression_does_not_execute() {
+    if !knitr_render_available() {
+        eprintln!(
+            "SKIP: knitr (Rscript + package) not available — \
+             t25_displayed_inline_expression_does_not_execute"
+        );
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let html = render_html(&tmp, "t25.qmd", &t25_t26_fixture());
+
+    assert!(
+        !html.contains("INLINERAN"),
+        "a displayed inline expression must not execute (INLINERAN is \
+         runtime-only — it cannot appear from an echo of the source); \
+         html:\n{html}"
+    );
+}
+
+// ── T26 (H15): the reader sees the original inline expression ───────────
+//
+// Two surfaces, because they fail for different reasons. The *classic*
+// spelling discriminates H14 and H15 together on `main` today. The *brace*
+// spelling's literal is currently produced either way — q2 does not
+// evaluate `{r}` yet (bd-inline-r-brace-spelling-not-evaluated-lk9s3iwe) —
+// so today it binds only to **H15**: masking does fire on it, so a missing
+// or wrong restore leaves `q2-nested-executable` in the `<pre>`. Once that
+// strand lands, the same assertion starts discriminating H14 as well, which
+// is why the brace row is written now rather than deferred.
+#[test]
+fn t26_displayed_inline_expression_shows_original_spelling_no_marker() {
+    if !knitr_render_available() {
+        eprintln!(
+            "SKIP: knitr (Rscript + package) not available — \
+             t26_displayed_inline_expression_shows_original_spelling_no_marker"
+        );
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let html = render_html(&tmp, "t26.qmd", &t25_t26_fixture());
+
+    assert!(
+        html.contains("Classic: `r v`"),
+        "the display block must show the classic inline spelling exactly as \
+         written; html:\n{html}"
+    );
+    assert!(
+        html.contains("Brace: `{r} v`"),
+        "the display block must show the brace inline spelling exactly as \
+         written; html:\n{html}"
+    );
+    assert!(
+        !html.contains("q2-nested-executable"),
+        "the internal mask marker must never survive into the rendered HTML; \
+         html:\n{html}"
+    );
+}
