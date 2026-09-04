@@ -65,6 +65,66 @@ static UNMASK_OPENER_RE: LazyLock<Regex> = LazyLock::new(|| {
     .expect("UNMASK_OPENER_RE must compile")
 });
 
+/// Matches an *inline* executable expression inside a display block's text:
+/// an opening backtick, an expression marker in either spelling, a single
+/// separator character, the expression body, and a closing backtick.
+///
+/// Two spellings, because Quarto has two:
+/// - `{lang}` — the cross-engine brace form. Engine-agnostic, exactly like
+///   `MASK_OPENER_RE`'s language class, and for the same reason: the seam is
+///   shared by every engine, so the predicate should be too. Quarto 1 builds
+///   this matcher per language (`executeInlineCodeHandler`, `core/execute-inline.ts`);
+///   q2 wires `r` today and `{python}` is filed (bd-u996g8g2), so matching
+///   any `[A-Za-z0-9_]+` costs nothing now and holds when the next one lands.
+/// - `r` — knitr's own native rmarkdown spelling, which predates Quarto and
+///   is hardcoded to `r` in `knitr::all_patterns$md$inline.code`. Deliberately
+///   **not** generalized to any word: `` `foo bar` `` is an ordinary code span
+///   in every other language, and masking every one of them would rewrite
+///   great swathes of any displayed prose for nothing.
+///
+/// `{{lang}}` (doubled brace) is excluded for the same reason it is excluded
+/// from `MASK_OPENER_RE`: the character after `{` must be `[A-Za-z0-9_]`, and
+/// no scanner executes a doubled brace anyway.
+///
+/// ## The separator class `[ \t#]` is a union, on purpose
+///
+/// The mask must be a **superset** of every scanner that could claim the
+/// expression, or it leaves a hole. knitr's class is `[ #]` (space or hash);
+/// q2's `resolve_inline_r_expressions` uses `[ \t]` (space or tab) and
+/// rewrites what it matches into a form knitr then evaluates. The union of
+/// the two is what actually executes, so it is what the mask matches.
+///
+/// ## The `(^|[^`])` guard
+///
+/// The captured guard character is re-emitted verbatim; it is part of the
+/// match only so that a backtick may be excluded. Without it the *third*
+/// backtick of a nested fence anchors a match, `[^`]+` swallows the block
+/// body up to the next backtick, and the marker lands in the middle of the
+/// author's example — the same shape that once cost whole pages through
+/// `resolve_inline_r_expressions` (bd-knitr-inline-r-eats-fence-2ofk91x1).
+/// Unlike that pass, this one is byte-exactly reversible, so the damage
+/// would be provenance noise rather than a lost page; the guard is still
+/// the right thing, and it is what T29 binds to.
+///
+/// The guard excludes only a backtick, **not** a backslash. That is a
+/// deliberate difference from `INLINE_R_PATTERN`, whose backslash exclusion
+/// defends against escaped backticks arriving from the YAML-markdown-error
+/// fallback — text this mask never sees, since it runs on a `CodeBlock`'s
+/// verbatim body and never on front matter. knitr does not exclude a
+/// backslash either, so excluding one here would open a hole rather than
+/// close one.
+///
+/// **Accepted limitation:** two inline expressions written with no character
+/// between them (`` `r x``r y` ``) leave the second unmasked, because its
+/// opening backtick is the first one's closing backtick. `INLINE_R_PATTERN`
+/// and Quarto 1's handler share this property; it is the pathological case
+/// of a guard expressed as a consumed character rather than a lookbehind,
+/// which Rust's `regex` crate does not offer.
+static MASK_INLINE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(^|[^`])`((?:\{[A-Za-z0-9_]+\}|r)[ \t#][^`]+)`")
+        .expect("MASK_INLINE_RE must compile")
+});
+
 /// Rewrite executable fence openers that appear *inside* a markdown-displaying
 /// code block so no engine's cell scanner claims them, and restore them
 /// byte-exactly afterwards.
@@ -163,8 +223,26 @@ fn mark_generated(block: &mut Block, original: SourceInfo) {
     };
 }
 
+/// Restore both rewrites `mask` performs. Openers are matched by
+/// `UNMASK_OPENER_RE`; inline expressions need no regex at all, because
+/// `mask` only ever *inserts* a fixed string after an opening backtick —
+/// deleting that string again is byte-exact by construction, which is what
+/// reconcile depends on (spec § "Reconcile — why byte-exactness is
+/// load-bearing").
+///
+/// The two passes cannot interfere: a masked opener reads
+/// `{.lang q2-nested-executable}`, where the marker is preceded by a space,
+/// never a backtick, and a masked inline expression carries no `{.lang …}`
+/// shape at all.
 pub fn unmask(s: &str) -> String {
-    UNMASK_OPENER_RE.replace_all(s, "{$1$2}").into_owned()
+    let openers_restored = UNMASK_OPENER_RE.replace_all(s, "{$1$2}");
+    openers_restored.replace(&inline_mask_prefix(), "`")
+}
+
+/// The exact bytes `mask` inserts before an inline expression marker, and
+/// `unmask` deletes: an opening backtick, the marker, one space.
+fn inline_mask_prefix() -> String {
+    format!("`{MASK_MARKER} ")
 }
 
 /// True iff `block` is a `CodeBlock` eligible for masking: attr classes
@@ -182,9 +260,20 @@ fn is_in_scope_for_masking(block: &Block) -> bool {
 
 /// Rewrite every masking-eligible fence opener in `cb.text`. Returns
 /// whether anything actually changed.
+/// Rewrite every masking-eligible fence opener **and inline expression** in
+/// `cb.text`. Returns whether anything actually changed.
+///
+/// The two rewrites are independent and order-insensitive: an opener lives
+/// on a line of its own and carries 3+ backticks, an inline expression is
+/// delimited by single backticks mid-line, and neither rewrite's output can
+/// be claimed by the other's pattern (see `unmask`).
 fn mask_code_block_text(cb: &mut CodeBlock) -> bool {
-    let replacement = "${1}${2}${3}{.${4} ".to_string() + MASK_MARKER + "${5}}${6}";
-    let new_text = MASK_OPENER_RE.replace_all(&cb.text, replacement.as_str());
+    let opener_replacement = "${1}${2}${3}{.${4} ".to_string() + MASK_MARKER + "${5}}${6}";
+    let after_openers = MASK_OPENER_RE.replace_all(&cb.text, opener_replacement.as_str());
+
+    let inline_replacement = format!("${{1}}`{MASK_MARKER} ${{2}}`");
+    let new_text = MASK_INLINE_RE.replace_all(&after_openers, inline_replacement.as_str());
+
     if new_text == cb.text {
         false
     } else {
@@ -911,6 +1000,233 @@ mod tests {
             cb.text.contains("q2-nested-executable"),
             "the display block inside the table's long caption must be masked, got: {}",
             cb.text
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // bd-0gwekaem — inline expressions inside a display block.
+    //
+    // A *new tier*: the T1–T24 seam spec is frozen, so these rows carry
+    // their own hunk ids rather than being bolted onto existing ones.
+    //
+    //   H14 — `mask` rewrites an inline expression marker inside an
+    //         in-scope display block, by inserting the marker directly
+    //         after the opening backtick.
+    //   H15 — `unmask` restores it (backtick + marker + one space ->
+    //         backtick).
+    //   H16 — `MASK_INLINE_RE`'s `(^|[^`])` guard, so a fence's own
+    //         backtick can never anchor an inline match.
+    // ═══════════════════════════════════════════════════════════════════
+
+    // ── T27 (H14 + H15): every inline shape round-trips byte-exactly ────
+    //
+    // `assert_mask_unmask_roundtrip` is not vacuous here for the same
+    // reason it is not vacuous for T9: it asserts both that `mask`
+    // actually changed the document (the marker is present in the masked
+    // serialization) and that `unmask` restores the pre-mask bytes
+    // exactly. Reverting H14 fails the first assertion; reverting H15
+    // fails the second.
+    #[test]
+    fn t27_classic_inline_expression() {
+        let qmd = "````markdown\nInline: `r v`\n````\n";
+        assert_mask_unmask_roundtrip(qmd, "classic inline expression");
+    }
+
+    #[test]
+    fn t27_brace_inline_expression() {
+        let qmd = "````markdown\nInline: `{r} v`\n````\n";
+        assert_mask_unmask_roundtrip(qmd, "brace inline expression");
+    }
+
+    // knitr's separator class is `[ #]` and q2's `resolve_inline_r_expressions`
+    // uses `[ \t]`; `MASK_INLINE_RE` accepts the union, so neither scanner
+    // has a spelling the mask misses.
+    #[test]
+    fn t27_tab_separator() {
+        let qmd = "````markdown\nInline: `r\tv`\n````\n";
+        assert_mask_unmask_roundtrip(qmd, "tab-separated inline expression");
+    }
+
+    #[test]
+    fn t27_hash_separator() {
+        let qmd = "````markdown\nInline: `r#v`\n````\n";
+        assert_mask_unmask_roundtrip(qmd, "hash-separated inline expression");
+    }
+
+    #[test]
+    fn t27_two_expressions_on_one_line() {
+        let qmd = "````markdown\nA `r x` and B `{r} y` done\n````\n";
+        assert_mask_unmask_roundtrip(qmd, "two inline expressions on one line");
+    }
+
+    #[test]
+    fn t27_inline_in_bare_fenced_block() {
+        let qmd = "```\nInline: `r v`\n```\n";
+        assert_mask_unmask_roundtrip(qmd, "inline expression in a bare fenced block");
+    }
+
+    #[test]
+    fn t27_inline_in_blockquoted_display_block() {
+        let qmd = "> ````markdown\n> Inline: `r v`\n> ````\n";
+        assert_mask_unmask_roundtrip(qmd, "inline expression in a blockquoted display block");
+    }
+
+    // The expression body may span lines (`[^`]+` does, in knitr's pattern
+    // and in q2's), so the mask must accept that shape too.
+    #[test]
+    fn t27_multiline_expression_body() {
+        let qmd = "````markdown\nInline: `r paste(\na, b)`\n````\n";
+        assert_mask_unmask_roundtrip(qmd, "inline expression with a multiline body");
+    }
+
+    // An inline expression and a nested fence opener in the same display
+    // block: both rewrites must fire, and both must restore.
+    #[test]
+    fn t27_opener_and_inline_in_one_block() {
+        let qmd = "````markdown\nInline: `r v`\n\n```{r}\ncat(\"x\")\n```\n````\n";
+        assert_mask_unmask_roundtrip(qmd, "opener and inline expression in one block");
+    }
+
+    // ── T28 (H2): a real cell's own source is never rewritten ───────────
+    //
+    // R lets a name be quoted with backticks, so `` `r value` `` is
+    // ordinary R source — and a live `{r}` cell's body is code that is
+    // about to run. Rewriting there would corrupt it. The in-scope
+    // predicate (classes empty or exactly `["markdown"]`) is what excludes
+    // it; dropping that conjunct reddens this.
+    #[test]
+    fn t28_inline_shape_inside_a_real_cell_is_untouched() {
+        let qmd = "```{r}\ndf$`r value` <- 1\n```\n";
+        let mut doc = parse_qmd(qmd);
+        assert_eq!(
+            crate::engine::capture_splice::engine_cell_lang(&doc.blocks[0]),
+            Some("r"),
+            "fixture's block must be a real, executable {{r}} cell"
+        );
+
+        let changed = mask(&mut doc);
+        assert!(
+            changed.is_empty(),
+            "a real executable cell must never be masked, not even when its \
+             source contains a backtick-quoted R name"
+        );
+
+        let Block::CodeBlock(cb) = &doc.blocks[0] else {
+            panic!("fixture must remain a CodeBlock, got: {:?}", doc.blocks[0]);
+        };
+        assert!(
+            cb.text.contains("df$`r value` <- 1"),
+            "the live cell's source must be byte-identical, got: {}",
+            cb.text
+        );
+    }
+
+    // ── T29 (H16): a fence's own backtick cannot anchor an inline match ──
+    //
+    // This is the `bd-knitr-inline-r-eats-fence-2ofk91x1` hazard, in the
+    // mask's own regex: without the `(^|[^`])` guard the *third* backtick
+    // of a nested fence anchors a match, `[^`]+` swallows text up to the
+    // next backtick, and the mask inserts its marker in the middle of the
+    // author's example. The fixture's inner line is literal text (the
+    // outer fence is wider), and the whole block is in scope — so under a
+    // reverted guard `mask` rewrites it and this goes RED.
+    #[test]
+    fn t29_fence_backtick_does_not_anchor_an_inline_match() {
+        let qmd = "````markdown\n```r x`\n````\n";
+        let mut doc = parse_qmd(qmd);
+        let before = match &doc.blocks[0] {
+            Block::CodeBlock(cb) => cb.text.clone(),
+            other => panic!("fixture must parse to a CodeBlock, got: {other:?}"),
+        };
+        assert!(
+            before.contains("```r x`"),
+            "fixture must reach the mask with the fence-shaped line intact, got: {before}"
+        );
+
+        let changed = mask(&mut doc);
+        assert!(
+            changed.is_empty(),
+            "a fence's own backtick must not anchor an inline match"
+        );
+
+        let Block::CodeBlock(cb) = &doc.blocks[0] else {
+            panic!("fixture must remain a CodeBlock, got: {:?}", doc.blocks[0]);
+        };
+        assert_eq!(
+            cb.text, before,
+            "the display block's text must be untouched"
+        );
+    }
+
+    // ── T30 (H14): the brace spelling is engine-agnostic; doubled braces
+    // stay out of scope, exactly as they do for openers (T10) ────────────
+    #[test]
+    fn t30_brace_spelling_is_engine_agnostic() {
+        let qmd = "````markdown\nInline: `{python} v`\n````\n";
+        let mut doc = parse_qmd(qmd);
+        let changed = mask(&mut doc);
+        assert_eq!(
+            changed,
+            vec![0],
+            "a `{{python}}` inline expression in a display block must be masked \
+             — the seam is engine-agnostic, like MASK_OPENER_RE's language class"
+        );
+        let Block::CodeBlock(cb) = &doc.blocks[0] else {
+            panic!("fixture must remain a CodeBlock, got: {:?}", doc.blocks[0]);
+        };
+        assert!(
+            cb.text.contains(&format!("`{MASK_MARKER} {{python}} v`")),
+            "got: {}",
+            cb.text
+        );
+    }
+
+    #[test]
+    fn t30_doubled_brace_inline_is_out_of_scope() {
+        // Mirrors T10 for the inline case: the character after `{` is `{`,
+        // not `[A-Za-z0-9_]`, so no scanner executes it and the mask must
+        // leave it alone.
+        let qmd = "````markdown\nInline: `{{r}} v`\n````\n";
+        let mut doc = parse_qmd(qmd);
+        let changed = mask(&mut doc);
+        assert!(
+            changed.is_empty(),
+            "a doubled-brace inline expression is out of scope, like a \
+             doubled-brace opener (T10)"
+        );
+    }
+
+    // ── T31 (H14): the production scanner declines the masked text ──────
+    //
+    // T27 proves the rewrite round-trips; this proves the rewrite is the
+    // *right* one — that the string the mask produces is not claimed by
+    // `resolve_inline_r_expressions`, the pass that actually wraps inline
+    // expressions for knitr (`engine/knitr/mod.rs:158`). This is the inline
+    // counterpart of T14, which binds the opener mask to
+    // `parse_code_blocks`. It stays bound as that scanner grows: when
+    // bd-inline-r-brace-spelling-not-evaluated-lk9s3iwe adds the `{r}`
+    // alternation, the brace half of this test starts discriminating too.
+    #[test]
+    fn t31_masked_text_is_not_claimed_by_the_inline_scanner() {
+        use crate::engine::knitr::preprocess::resolve_inline_r_expressions;
+
+        let qmd = "````markdown\nClassic: `r v`\n\nBrace: `{r} v`\n````\n";
+        let doc = parse_qmd(qmd);
+        let unmasked_text = serialize(&doc);
+        assert_ne!(
+            resolve_inline_r_expressions(&unmasked_text),
+            unmasked_text,
+            "control: the unmasked display block IS claimed by the inline \
+             scanner — that is the bug"
+        );
+
+        let mut masked_doc = doc.clone();
+        assert!(!mask(&mut masked_doc).is_empty(), "mask must fire");
+        let masked_text = serialize(&masked_doc);
+        assert_eq!(
+            resolve_inline_r_expressions(&masked_text),
+            masked_text,
+            "the masked display block must be left alone by the inline scanner"
         );
     }
 }
