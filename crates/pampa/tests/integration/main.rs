@@ -82,6 +82,7 @@ pub mod test_shortcode_separator_diagnostics;
 pub mod test_smart_typography_positions;
 pub mod test_task_list;
 pub mod test_template_integration;
+pub mod test_toc_wrapper_divs;
 pub mod test_trailing_linebreak_commonmark;
 pub mod test_treesitter_coverage;
 pub mod test_treesitter_refactoring;

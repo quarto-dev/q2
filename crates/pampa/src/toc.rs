@@ -44,22 +44,32 @@
 //!
 //! The function detects sectionized structure and extracts headers accordingly.
 //!
-//! ## The walk stops at a non-section Div
+//! ## What the walk descends through
 //!
-//! The table of contents *is* the section tree. A `Div` that is not a
-//! section ends the walk, with no recursion past it — this is pandoc's
-//! rule, whose `sectionToListItem` matches only `Div(_, _, Header:rest)`
-//! and yields nothing for anything else.
+//! The table of contents *is* the section tree, and the walk reaches it
+//! two ways. It collects a section `Div` and recurses into it. It also
+//! descends through a *wrapper* — a `Div` whose sole content is another
+//! `Div` — collecting nothing on the way, which is pandoc's rule
+//! (`toTOCTree`, `Text/Pandoc/Chunks.hs`, jgm/pandoc#8402). That descent
+//! recurses, so stacked wrappers are all traversed. Anything else ends
+//! the walk.
 //!
-//! This is not a loss of reach, because `sectionize_blocks` *absorbs* a
-//! transparent wrapper — an empty-id `Div` around a single header-led
-//! run — into the section itself, so a heading inside `::: {.column-margin}`
-//! or a plain `:::` block is a section by the time we get here. What stays
-//! wrapped in a plain `Div` is filter-built chrome: a callout body, a
-//! tabset pane. Quarto 1 does not list those either, and listing them was
-//! actively harmful — the entries were indistinguishable from one another
-//! and every one past the first pointed at `display: none` content
-//! (bd-tabset-headings-in-toc-t04ie7f7).
+//! The wrapper clause exists for a `Div` the author gave an id.
+//! `sectionize_blocks` *absorbs* an anonymous wrapper — an empty-id
+//! `Div` around a single header-led run — into the section itself, so a
+//! heading inside `::: {.column-margin}` or a plain `:::` block is
+//! already an ordinary section by the time we get here. An id-bearing
+//! wrapper it cannot absorb, since that would put two ids on one
+//! element, so `::: {#download-hero}` leaves its section nested a level
+//! down and the walk has to descend to reach it
+//! (bd-toc-skips-headings-in-id-div-1jorg679).
+//!
+//! What ends the walk is filter-built chrome — though not always at its
+//! outermost `Div`; the `_` arm of `collect_toc_entries` records where
+//! each shape actually stops. Quarto 1 does not list those headings
+//! either, and listing them was actively harmful: the entries were
+//! indistinguishable from one another and every one past the first
+//! pointed at `display: none` content (bd-tabset-headings-in-toc-t04ie7f7).
 //!
 //! **Precondition:** callers that want headings nested in Divs to appear
 //! must pass blocks that have been through `sectionize_blocks`. See
@@ -367,15 +377,24 @@ fn collect_toc_entries(blocks: &[Block], max_depth: i32) -> Vec<FlatTocEntry> {
 
     for block in blocks {
         match block {
-            // Only section Divs are walked. A Div that is not a section
-            // ends the walk, with no recursion past it — pandoc's
-            // `sectionToListItem` matches `Div(_, _, Header:rest)` and
-            // returns nothing for anything else.
             Block::Div(div) if is_section_div(div) => {
                 if let Some(entry) = extract_entry_from_section(div, max_depth) {
                     entries.push(entry);
                 }
                 // Recurse into section content for nested sections
+                entries.extend(collect_toc_entries(&div.content, max_depth));
+            }
+            // A wrapper Div whose sole content is another Div is
+            // transparent to the walk — pandoc's `toTOCTree` descends
+            // through it (`Text/Pandoc/Chunks.hs`, jgm/pandoc#8402).
+            // The case that matters is a wrapper the author gave an id:
+            // `sectionize_blocks` absorbs an anonymous wrapper into the
+            // section it holds, but an id-bearing one it cannot, since
+            // that would put two ids on one element. The heading inside
+            // is an ordinary section a reader expects to navigate to.
+            // Recursion, not a single unwrap, so stacked wrappers are
+            // all descended through.
+            Block::Div(div) if wraps_exactly_one_div(div) => {
                 entries.extend(collect_toc_entries(&div.content, max_depth));
             }
             Block::Header(header) => {
@@ -385,10 +404,32 @@ fn collect_toc_entries(blocks: &[Block], max_depth: i32) -> Vec<FlatTocEntry> {
                 }
             }
             _ => {
-                // Nothing else carries a section. In particular
-                // `BlockQuote`: `sectionize_blocks` does not descend
-                // into one (matching pandoc's `makeSections`), so a
-                // quoted heading is never a section and is never
+                // Nothing else carries a section, and nothing else is
+                // descended through.
+                //
+                // Filter-built chrome ends the walk, but not always at
+                // its outermost Div. A *titled* callout and a resolved
+                // tabset each put two blocks side by side — header
+                // beside body, nav `Plain` beside pane container — so
+                // the walk stops at the outer Div. An *untitled*
+                // callout does not: `build_untitled_content`
+                // (`quarto-core/src/transforms/callout_resolve.rs`)
+                // emits a lone `.callout-body.d-flex`, so the walk
+                // descends one level and stops there instead, on the
+                // icon container beside the body container. pandoc
+                // descends that same level, so Quarto 1 stops in the
+                // same place.
+                //
+                // Both stops therefore rest on a *sibling* block: the
+                // tabset's nav `Plain`, and the callout's icon
+                // container, which `callout_resolve` emits
+                // unconditionally for Q1 parity. Dropping either would
+                // quietly put chrome headings back in the TOC
+                // (bd-tabset-headings-in-toc-t04ie7f7).
+                //
+                // `BlockQuote` likewise — `sectionize_blocks` does not
+                // descend into one (matching pandoc's `makeSections`),
+                // so a quoted heading is never a section and is never
                 // listed. bd-8yjvs3bj.
             }
         }
@@ -401,6 +442,17 @@ fn collect_toc_entries(blocks: &[Block], max_depth: i32) -> Vec<FlatTocEntry> {
 fn is_section_div(div: &Div) -> bool {
     let (_, classes, _) = &div.attr;
     classes.iter().any(|c| c == "section")
+}
+
+/// Check if a Div is one the walk should see through: one whose content
+/// is exactly one other Div, matching pandoc's `toTOCTree` clause
+/// `go (Div _ [d@Div{}]) = go d`.
+///
+/// Deliberately not called "transparent": `sectionize_blocks` uses that
+/// word for the anonymous wrapper it *absorbs*, which is the opposite
+/// shape — the one that never reaches this walk at all.
+fn wraps_exactly_one_div(div: &Div) -> bool {
+    matches!(div.content.as_slice(), [Block::Div(_)])
 }
 
 /// Extract the heading level from a section Div's classes.
@@ -724,14 +776,24 @@ mod tests {
         assert_eq!(toc.entries[0].children[0].id, "sub");
     }
 
-    // ── the walk stops at a non-section Div ────────────────────────
+    // ── what the walk descends through, and what ends it ───────────
     //
-    // pandoc's `toTableOfContents` matches only `Div(_, _, Header:rest)`
-    // — a section — so a Div that is not one ends the walk with no
-    // recursion past it. Everything a reader expects to see in the TOC
-    // has already been *absorbed* into the section tree by
-    // `sectionize_blocks`; what remains wrapped in a plain Div is filter
-    // chrome (a callout, a tabset pane), and Quarto 1 does not list it.
+    // pandoc's `toTOCTree` matches a section — `Div(_, _, Header:rest)`
+    // — and, since #8402, a wrapper Div whose sole content is another
+    // Div, which it descends through. Anything else ends the walk.
+    //
+    // A wrapper the author left anonymous is already gone by this
+    // point: `sectionize_blocks` absorbs a Div with an empty id whose
+    // content is exactly one section. What survives to be descended
+    // through is a wrapper the author gave an id — that one cannot be
+    // absorbed, because its id would collide with the section's.
+    //
+    // What survives to end the walk is filter-built chrome — though not
+    // always at its outermost Div: an untitled callout is a lone
+    // `.callout-body.d-flex`, so the walk descends one level and stops
+    // on the icon container beside the body. The tests below pin both
+    // stops, because each rests on a sibling block another transform is
+    // free to move.
 
     /// Every id in the tree, depth-first. Checking only `toc.entries`
     /// would miss a leaked entry, which `build_hierarchy` nests *under*
@@ -754,6 +816,19 @@ mod tests {
         }
     }
 
+    /// A `Plain` holding one `RawInline`, the shape filter-built chrome
+    /// leaves alongside its container Divs.
+    fn make_raw_plain(html: &str) -> Block {
+        Block::Plain(quarto_pandoc_types::block::Plain {
+            content: vec![Inline::RawInline(quarto_pandoc_types::inline::RawInline {
+                format: "html".to_string(),
+                text: html.to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })
+    }
+
     fn make_plain_div(id: &str, classes: Vec<&str>, content: Vec<Block>) -> Block {
         Block::Div(Div {
             attr: (
@@ -767,20 +842,31 @@ mod tests {
         })
     }
 
+    /// The shape `PanelTabsetResolveTransform` leaves behind: the
+    /// nav-tabs list as a `Plain`, then the pane container. The
+    /// `.panel-tabset` Div therefore holds two blocks, not one Div, so
+    /// the walk ends there and the section inside a pane stays out of
+    /// the TOC — which is where Quarto 1 leaves it.
+    /// bd-tabset-headings-in-toc-t04ie7f7.
     #[test]
-    fn test_non_section_div_terminates_the_walk() {
-        // The shape a resolved tabset leaves behind: a section, real and
-        // correct, buried under two plain Divs.
+    fn test_resolved_tabset_pane_is_not_reached() {
         let blocks = vec![
             make_section(2, "configuration", vec![], "Configuration", vec![]),
             make_plain_div(
                 "",
                 vec!["panel-tabset"],
-                vec![make_plain_div(
-                    "tabset-1-1",
-                    vec!["tab-pane"],
-                    vec![make_section(4, "in-a-tab", vec![], "In a tab", vec![])],
-                )],
+                vec![
+                    make_raw_plain("<ul class=\"nav nav-tabs\" role=\"tablist\">…</ul>"),
+                    make_plain_div(
+                        "",
+                        vec!["tab-content"],
+                        vec![make_plain_div(
+                            "tabset-1-1",
+                            vec!["tab-pane", "active"],
+                            vec![make_section(4, "in-a-tab", vec![], "In a tab", vec![])],
+                        )],
+                    ),
+                ],
             ),
             make_section(2, "next-steps", vec![], "Next steps", vec![]),
         ];
@@ -790,6 +876,112 @@ mod tests {
             vec!["configuration", "next-steps"],
             "the section inside the tab pane is real, but unreachable"
         );
+    }
+
+    /// The shape `build_untitled_content` leaves behind: the outer
+    /// `.callout` Div holds a *lone* `.callout-body.d-flex`, so unlike
+    /// a titled callout the walk does descend into it — and stops one
+    /// level down, because the icon container sits beside the body
+    /// container. pandoc stops in the same place, so Quarto 1 does too.
+    /// The icon container is emitted unconditionally for Q1 parity
+    /// (`callout_resolve::icon_container_div`); this test is what would
+    /// catch it going away. bd-tabset-headings-in-toc-t04ie7f7.
+    #[test]
+    fn test_untitled_callout_body_is_not_reached() {
+        let blocks = vec![
+            make_section(2, "before", vec![], "Before", vec![]),
+            make_plain_div(
+                "",
+                vec!["callout", "callout-style-simple", "callout-note"],
+                vec![make_plain_div(
+                    "",
+                    vec!["callout-body", "d-flex"],
+                    vec![
+                        make_plain_div(
+                            "",
+                            vec!["callout-icon-container"],
+                            vec![make_raw_plain("<i class=\"callout-icon\"></i>")],
+                        ),
+                        make_plain_div(
+                            "",
+                            vec!["callout-body-container"],
+                            vec![make_section(
+                                3,
+                                "in-a-callout",
+                                vec![],
+                                "In a callout",
+                                vec![],
+                            )],
+                        ),
+                    ],
+                )],
+            ),
+        ];
+        let toc = generate_toc(&blocks, &deep_config());
+        assert_eq!(all_ids(&toc.entries), vec!["before"]);
+    }
+
+    /// An author's `::: {#someid}` around a heading. The wrapper cannot
+    /// be absorbed by `sectionize_blocks` — its id would collide with
+    /// the section's — so the section sits one level down. pandoc and
+    /// Quarto 1 both list it. bd-toc-skips-headings-in-id-div-1jorg679.
+    #[test]
+    fn test_id_bearing_wrapper_is_descended_through() {
+        let blocks = vec![
+            make_section(2, "before", vec![], "Before", vec![]),
+            make_plain_div(
+                "someid",
+                vec![],
+                vec![make_section(2, "wrapped", vec![], "Wrapped", vec![])],
+            ),
+            make_section(2, "after", vec![], "After", vec![]),
+        ];
+        let toc = generate_toc(&blocks, &deep_config());
+        assert_eq!(all_ids(&toc.entries), vec!["before", "wrapped", "after"]);
+    }
+
+    /// `::: {#outer}` around `::: {#inner}`. pandoc's clause recurses,
+    /// so the descent iterates instead of unwrapping exactly one level.
+    #[test]
+    fn test_nested_wrappers_are_descended_through() {
+        let blocks = vec![make_plain_div(
+            "outer",
+            vec![],
+            vec![make_plain_div(
+                "inner",
+                vec![],
+                vec![make_section(
+                    2,
+                    "doubly-nested",
+                    vec![],
+                    "Doubly nested",
+                    vec![],
+                )],
+            )],
+        )];
+        let toc = generate_toc(&blocks, &deep_config());
+        assert_eq!(all_ids(&toc.entries), vec!["doubly-nested"]);
+    }
+
+    /// The negative control. When the wrapper holds prose *before* the
+    /// heading its content is not a single Div, and neither pandoc nor
+    /// Quarto 1 lists the heading. Descending unconditionally into
+    /// every Div would list it and break parity in the other direction.
+    #[test]
+    fn test_wrapper_with_content_before_the_section_ends_the_walk() {
+        let blocks = vec![
+            make_section(2, "before", vec![], "Before", vec![]),
+            make_plain_div(
+                "someid",
+                vec![],
+                vec![
+                    make_para("Prose before the heading."),
+                    make_section(2, "wrapped", vec![], "Wrapped", vec![]),
+                ],
+            ),
+        ];
+        let toc = generate_toc(&blocks, &deep_config());
+        assert_eq!(all_ids(&toc.entries), vec!["before"]);
     }
 
     #[test]

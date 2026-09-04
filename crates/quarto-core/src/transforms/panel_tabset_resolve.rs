@@ -352,6 +352,14 @@ mod tests {
             panic!("expected resolved Div");
         };
         assert!(outer.attr.1.contains(&"panel-tabset".to_string()));
+        // The nav `Plain` sitting beside the tab-content Div is
+        // load-bearing beyond the markup: `collect_toc_entries`
+        // (`pampa/src/toc.rs`) descends through a Div whose *sole*
+        // content is another Div, so this second block is what stops the
+        // TOC walk at the tabset. Move the nav into the template and
+        // `.tab-content` becomes a lone Div — and for a single-tab
+        // tabset its pane too — putting tab headings back in the TOC
+        // with nothing else failing (bd-tabset-headings-in-toc-t04ie7f7).
         assert_eq!(outer.content.len(), 2, "nav Plain + tab-content Div");
 
         let Block::Plain(nav) = &outer.content[0] else {
