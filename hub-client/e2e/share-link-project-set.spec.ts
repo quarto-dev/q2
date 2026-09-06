@@ -143,11 +143,20 @@ test.describe('Share link → synced project set', () => {
         );
         await page.goto(shareHash);
 
-        // The share handler redirects to the file route — wait until we're
-        // no longer on the raw /#/share/... URL (proves the handler fired).
+        // The share URL is scrubbed immediately (security), but connection
+        // now happens on the invite landing's CTA click, never on load
+        // (bd-fxdcxbpq). Assert the landing rendered without connecting.
         await expect
           .poll(() => page.url().includes('/#/share/'), { timeout: 15000 })
           .toBe(false);
+        await expect(page.getByTestId('invite-landing-card')).toBeVisible();
+        // No preview payload in a legacy share URL → generic CTA text.
+        await page.getByRole('button', { name: 'Open project' }).click();
+
+        // The CTA connects and opens the editor on the shared file.
+        await expect
+          .poll(() => page.url().includes('/file/'), { timeout: 15000 })
+          .toBe(true);
 
         // Step 3: go back to the selector and assert the shared project is
         // visible in the list rendered from the synced set.
@@ -204,7 +213,11 @@ test.describe('Share link → synced project set', () => {
         );
         await sharePage.goto(shareHash);
 
-        // Poll IDB directly until the share handler has persisted the entry.
+        // Connection (and the IDB entry) now happens on the landing's CTA
+        // click, not on load (bd-fxdcxbpq).
+        await sharePage.getByRole('button', { name: 'Open project' }).click();
+
+        // Poll IDB directly until the CTA handler has persisted the entry.
         await expect
           .poll(
             () =>

@@ -11,3 +11,14 @@ export interface Face {
   /** Hex color from the palette, e.g. "#E91E63". */
   color: string;
 }
+
+/**
+ * Initials for a facepile disk: first two letters of a single-word name,
+ * first + last initials otherwise.
+ */
+export function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
