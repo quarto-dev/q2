@@ -1,0 +1,102 @@
+---
+title: "Invalid brand font weight"
+description: "A `weight:` value in the brand's `typography` section is not a weight Quarto understands: a number from 100 to 900, a weight keyword such as `bold`, a list of those, or a numeric range such as `400..700`."
+code: Q-14-8
+subsystem: theme
+status: stub
+since: "99.9.9"
+categories:
+  - theme
+---
+
+# `Q-14-8` — Invalid Brand Font Weight
+
+> A `weight:` value in the brand's `typography` section is not a
+> weight Quarto understands: a number from 100 to 900, a weight
+> keyword such as `bold`, a list of those, or a numeric range such
+> as `400..700`.
+
+## What this means
+
+Somewhere under `typography:` in your brand (`_brand.yml`, or an
+inline `brand:` block) a `weight:` value could not be interpreted.
+The error names the YAML path of the value (for example
+`typography.fonts[0].weight`) and quotes the value itself, and when
+the brand lives in a file the message points at the exact line.
+The render stops rather than guessing a weight: an earlier version
+of Quarto silently substituted `400` here, which made bold text
+render as synthetic bold with no warning.
+
+A weight is written in one of these forms:
+
+- **A number from 100 to 900**, such as `400` or `650`.
+- **A keyword** from the CSS common-weight table: `thin`,
+  `extra-light`, `ultra-light`, `light`, `normal`, `regular`,
+  `medium`, `semi-bold`, `demi-bold`, `bold`, `extra-bold`,
+  `ultra-bold`, `black`. Keywords are lowercase and hyphenated
+  exactly as listed.
+- **A list** of numbers and keywords, such as `[400, bold]`.
+- **A numeric range** `N..M` with both ends from 100 to 900 and
+  `N` no larger than `M`, such as `400..700`. A range asks for a
+  variable font covering that whole span.
+
+Ranges are accepted on the fonts you declare under
+`typography.fonts` (`source: google`, `source: bunny`, and the
+per-file `weight` of `source: file`). The typography *slots*
+(`base`, `headings`, `link`, `monospace`, `monospace-inline`,
+`monospace-block`) style one kind of text, so they take a single
+weight, not a range.
+
+## Why this happens
+
+Common causes:
+
+- **A capitalized or unhyphenated keyword**, such as `Bold` or
+  `semibold`. Use `bold` and `semi-bold`.
+- **A CSS relative keyword**, such as `bolder` or `lighter`. These
+  are not brand weights; pick a number or an absolute keyword.
+- **A reversed or out-of-range range**, such as `700..400` or
+  `50..700`.
+- **Keywords as range ends**, such as `regular..bold`. Ranges are
+  numeric only: write `400..700`.
+- **A range on a typography slot**, such as
+  `headings: {weight: 500..700}`. Declare the range on the font
+  under `typography.fonts` and give the slot one weight.
+
+## How to fix
+
+Declare the variable font's range on the font entry and pick single
+weights for the slots that use it:
+
+```yaml
+typography:
+  fonts:
+    - family: EB Garamond
+      source: google
+      weight: 400..700
+  base: EB Garamond
+  headings:
+    family: EB Garamond
+    weight: 600
+```
+
+For a local variable font, the range goes on the file entry:
+
+```yaml
+typography:
+  fonts:
+    - family: My Sans
+      source: file
+      files:
+        - path: fonts/MySans-VariableFont_wght.woff2
+          weight: 300..800
+```
+
+Bunny Fonts has no variable-range syntax, so for `source: bunny`
+Quarto requests each weight in the range separately (`400..700`
+becomes `400,500,600,700`).
+
+## Related
+
+- `Q-14-1` — invalid theme configuration: the `brand:` value or
+  another part of the brand file has the wrong shape.

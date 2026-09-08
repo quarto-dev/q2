@@ -67,6 +67,27 @@ pub enum SassError {
         location: Option<SourceInfo>,
     },
 
+    /// A `weight:` in the brand's `typography` section is not a weight
+    /// Quarto understands (bd-5fseopxy, Q-14-8).
+    ///
+    /// `path` is the YAML path of the value (`typography.fonts[0].weight`),
+    /// `value` its text as written, `reason` the rule it broke — all
+    /// three come from `quarto_brand::Brand::validate`. `location` is the
+    /// span of that scalar: inside `_brand.yml` (keyed by
+    /// `quarto_yaml::file_id_for_filename(brand_file)`) for the path
+    /// form, inside the declaring config for an inline `brand:` block.
+    /// `brand_file` is the file the brand was read from, so the
+    /// diagnostic layer can register it as a source candidate; `None`
+    /// for inline blocks.
+    #[error("invalid font weight `{value}` at {path}: {reason}")]
+    InvalidBrandFontWeight {
+        path: String,
+        value: String,
+        reason: String,
+        location: Option<SourceInfo>,
+        brand_file: Option<PathBuf>,
+    },
+
     /// File I/O error
     #[error("Failed to read SASS file: {0}")]
     Io(#[from] std::io::Error),
@@ -93,6 +114,7 @@ impl SassError {
             SassError::UnknownTheme { location, .. }
             | SassError::InvalidThemeConfig { location, .. }
             | SassError::CustomThemeNotFound { location, .. }
+            | SassError::InvalidBrandFontWeight { location, .. }
                 if location.is_none() =>
             {
                 *location = Some(loc);

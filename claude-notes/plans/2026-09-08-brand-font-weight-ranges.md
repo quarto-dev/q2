@@ -4,8 +4,8 @@
 **Braid:** bd-5fseopxy (bug, p2, labels: css, diagnostics, theming)
 **Checkout:** `~/rooms/room-1/q2`, branch `main` @ `b7e7c96a` (no worktree/branch created; the
 user picks where the fix lands)
-**Status:** Design settled with user 2026-09-08 (decisions recorded below). Awaiting go-ahead
-to implement.
+**Status:** Implemented 2026-09-08 on branch `braid/bd-5fseopxy-brand-font-weight-ranges`;
+PR open against `main`. Remaining: merge, then close the strand.
 
 ## Triage verdict
 
@@ -187,85 +187,110 @@ filed as **bd-lh30hlvd**. Unrelated to this strand; not re-filed.
 
 ### Phase 0 — Tests (TDD; written first, verified failing)
 
-- [ ] `quarto-brand` unit: `weight: 400..700` → `Range(400, 700)`; `weight: 400` and
+- [x] `quarto-brand` unit: `weight: 400..700` → `Range(400, 700)`; `weight: 400` and
       `weight: bold` unchanged; `[400, 700]` unchanged.
-- [ ] `quarto-brand` unit: each of `700..400`, `50..700`, `400..1000`, `400..`, `..700`,
+- [x] `quarto-brand` unit: each of `700..400`, `50..700`, `400..1000`, `400..`, `..700`,
       `regular..bold`, `bolder`, `Bold`, `semibold` → validation error whose YAML path and
       offending text are as expected; a valid brand yields no errors.
-- [ ] `quarto-brand` unit: `headings: {weight: 500..700}` → validation error at
+- [x] `quarto-brand` unit: `headings: {weight: 500..700}` → validation error at
       `typography.headings.weight`.
-- [ ] `quarto-sass` `brand_layer_test.rs`: google range → `wght@400..700`; with
+- [x] `quarto-sass` `brand_layer_test.rs`: google range → `wght@400..700`; with
       `style: [normal, italic]` → `ital,wght@0,400..700;1,400..700`; range + discrete list is
       not representable (list atoms stay discrete) — assert the list path is unchanged.
-- [ ] `quarto-sass` `brand_layer_test.rs`: bunny range → `400,500,600,700` (and the `i`
+- [x] `quarto-sass` `brand_layer_test.rs`: bunny range → `400,500,600,700` (and the `i`
       italic form); file range → `font-weight: 300 800`.
-- [ ] `quarto-sass` config test: a `_brand.yml` on disk with a bad weight →
+- [x] `quarto-sass` config test: a `_brand.yml` on disk with a bad weight →
       `SassError::InvalidBrandFontWeight` whose `location` has the file's
       `file_id_for_filename` id and offsets covering the `400..7` scalar; inline brand block →
       location from the `ConfigValue`.
-- [ ] `quarto-sass` `brand_compile_test.rs`: the google-range brand compiles to a full bundle
+- [x] `quarto-sass` `brand_compile_test.rs`: the google-range brand compiles to a full bundle
       (regression guard for the SCSS-validity of the emitted lines).
-- [ ] `theme_diagnostic.rs`: `Q-14-8` renders with code, family, offending text, and a span
+- [x] `theme_diagnostic.rs`: `Q-14-8` renders with code, family, offending text, and a span
       into `_brand.yml`; catalog-registration test lists the new code.
-- [ ] CLI e2e `crates/quarto/tests/integration/brand_font_weight.rs` (registered in
+- [x] CLI e2e `crates/quarto/tests/integration/brand_font_weight.rs` (registered in
       `main.rs`): render `repro-google-only` → CSS contains `wght@0,400..700;1,400..700`;
       render a bad-weight fixture → exit non-zero, stderr has `Q-14-8` and a `_brand.yml`
       excerpt pointing at the `weight:` line.
-- [ ] Run them; confirm each fails for the expected reason (silent 400 / verbatim
+- [x] Run them; confirm each fails for the expected reason (silent 400 / verbatim
       passthrough / no code).
 
 ### Phase 1 — Type + validation (`quarto-brand`)
 
-- [ ] `BrandFontWeight::Range(u32, u32)` variant; `BrandFontWeightAtom` unchanged (a list
+*Implemented 2026-09-08.* `BrandFontWeight::Range(BrandFontWeightRange { min, max })` sits
+between `Number` and `Name` in the untagged order; its `Deserialize` accepts only
+`<digits>..<digits>` so every other string (keyword ends, half-open) stays `Name` for
+validation to report verbatim. `Brand::validate()` lives in `quarto-brand/src/validate.rs`
+with `BrandPath` (`typography.fonts[0].files[1].weight`). A quoted `"400"` arrives as
+`Name("400")` and is treated as the number. Numbers everywhere must be in `100..=900`.
+
+
+- [x] `BrandFontWeight::Range(u32, u32)` variant; `BrandFontWeightAtom` unchanged (a list
       never contains a range). Deserialize `N..M` strings into it; every other string stays
       `Name`.
-- [ ] Move `weight_name_to_number` into `quarto-brand` (single table shared by validation and
+- [x] Move `weight_name_to_number` into `quarto-brand` (single table shared by validation and
       emission); keep a re-export or call-through in `brand_layer.rs`.
-- [ ] `BrandError::InvalidFontWeight { path: String, value: String, reason: String }` and a
+- [x] `BrandError::InvalidFontWeight { path: String, value: String, reason: String }` and a
       `Brand::validate() -> Vec<BrandError>` (or validation inside `from_yaml_str` /
       `UnifiedBrand::split`) covering `fonts[].weight`, `files[].weight`, and every slot's
       `weight` (slots reject `Range`).
-- [ ] Decide whether file-entry `weight` and slot `weight` should share the `BrandFontWeight`
+- [x] Decide whether file-entry `weight` and slot `weight` should share the `BrandFontWeight`
       type or slots get a narrower type; the plan assumes shared type + validation (smaller
       change).
 
 ### Phase 2 — Emission (`quarto-sass/src/brand_layer.rs`)
 
-- [ ] `enumerate_weights` → returns an enum `Weights { Discrete(Vec<u32>), Range(u32, u32) }`;
+- [x] `enumerate_weights` → returns an enum `Weights { Discrete(Vec<u32>), Range(u32, u32) }`;
       google emits `N..M` (with `ital,` pairs when italic); bunny expands the range to every
       multiple of 100 in `[N, M]` (plus the `i` italics).
-- [ ] `file_font_face_block`: `Range(n, m)` → `font-weight: n m`.
-- [ ] `font_weight_to_scss` (slots): `Range` is unreachable after validation — `unreachable!`
+- [x] `file_font_face_block`: `Range(n, m)` → `font-weight: n m`.
+- [x] `font_weight_to_scss` (slots): `Range` is unreachable after validation — `unreachable!`
       is not acceptable; return an `Err` through `typography_layer` instead.
 
 ### Phase 3 — Location + diagnostic (`quarto-sass`, `quarto-core`)
 
-- [ ] `quarto-sass` depends on `quarto-yaml`; `load_split_brand` runs `Brand::validate()`,
+*Implemented 2026-09-08.* Path form: `load_split_brand` validates after the serde parse and,
+on failure, re-parses the text with `quarto_yaml::parse_file(text, full_path)` and walks the
+`BrandPath` to the node (`locate_in_brand_yaml`). Inline form: validated at *extraction* time
+in `extract_single_brand_ref`, while the `ConfigValue` tree is in scope
+(`locate_in_config_value`; a `Scalar(Yaml::Hash)` block falls back to the block's own span).
+The variant carries `brand_file` so `theme_diagnostic` can add it as a bind candidate itself —
+the stage's candidate list does not know about `_brand.yml`. The duplicate `brand_err` in
+`config.rs` was removed in favour of `brand_layer::brand_err`, which now maps
+`InvalidFontWeight` too (the location-less emission backstop).
+
+
+- [x] `quarto-sass` depends on `quarto-yaml`; `load_split_brand` runs `Brand::validate()`,
       maps each failure's YAML path to a `SourceInfo` via `quarto_yaml::parse_file` (path
       form) or the `ConfigValue` (inline form).
-- [ ] `SassError::InvalidBrandFontWeight { message, location: Option<SourceInfo> }`;
+- [x] `SassError::InvalidBrandFontWeight { message, location: Option<SourceInfo> }`;
       `with_location` covers it.
-- [ ] `theme_diagnostic.rs`: `Q-14-8` arm; brand file path added to the bind candidates (the
+- [x] `theme_diagnostic.rs`: `Q-14-8` arm; brand file path added to the bind candidates (the
       stage knows `brand_ref` and the project dir). **Land after bd-jsvetdea** to avoid a
       conflict in this file.
-- [ ] Route the two `stage_error("brand resolution: …")` sites in `compile_theme_css.rs`
+- [x] Route the two `stage_error("brand resolution: …")` sites in `compile_theme_css.rs`
       through `theme_diagnostic` so the code renders (today they are code-less).
 
 ### Phase 4 — Catalog + docs + lint
 
-- [ ] `error_catalog.json`: `Q-14-8` (subsystem `theme`); `docs/errors/theme/Q-14-8.qmd`;
+- [x] `error_catalog.json`: `Q-14-8` (subsystem `theme`); `docs/errors/theme/Q-14-8.qmd`;
       sidebar entry in code order; `cargo xtask lint` clean.
-- [ ] `docs/guides/authoring/brand.qmd`: the `weight` bullet — slots take one weight;
+- [x] `docs/guides/authoring/brand.qmd`: the `weight` bullet — slots take one weight;
       `fonts[].weight` accepts a number, keyword, list, or `N..M` (google/bunny/file); bunny
       is expanded to discrete weights; unknown strings are errors. Note for bd-qnylgu69.
 
 ### Phase 5 — End-to-end verification
 
-- [ ] `cargo run --bin q2 -- render` each fixture; record `@import` / `@font-face` output and
-      the `Q-14-8` stderr in this plan; open the google-only page and confirm bold uses the
-      variable font, not synthetic bold.
-- [ ] `cargo nextest run --workspace`; full `cargo xtask verify` (WASM leg).
-- [ ] Close bd-5fseopxy; comment on bd-qnylgu69 with the docs change.
+- [x] `cargo run --bin q2 -- render` each fixture; record `@import` / `@font-face` output and
+      the `Q-14-8` stderr in this plan (below). *Browser check of synthetic vs variable bold
+      not done — the fixture's local `.woff2` does not exist, and the Google request is
+      verified by the URL form Google documents for variable axes.*
+- [x] `cargo nextest run --workspace`; `cargo xtask verify --skip-hub-tests` green through
+      Rust build, clippy (`-D warnings`), workspace tests, ts-packages, hub-client `build:all`
+      (WASM) and the q2-preview-spa build (2026-09-08). Hub-client vitest skipped: Node 26
+      `localStorage` environment failure, bd-lh30hlvd. The preview-renderer integration
+      suite failed once on a stale local `node_modules` (KaTeX 0.17 installed, 0.18.4 pinned)
+      and passed after `npm install` (640 tests).
+- [ ] Close bd-5fseopxy after the PR merges; comment on bd-qnylgu69 with the docs change.
 
 ## Risks / tradeoffs
 
@@ -286,3 +311,36 @@ filed as **bd-lh30hlvd**. Unrelated to this strand; not re-filed.
   `cargo xtask verify` is required, not `--skip-hub-build`.
 - **Doc drift.** `brand.qmd` links to a nonexistent reference page; that belongs to
   bd-qnylgu69, not here.
+
+## End-to-end verification (2026-09-08, real binary, output inspected)
+
+All four fixtures under `claude-notes/plans/brand-font-weight-ranges-investigation/`, rendered
+with `cargo run -q --bin q2 -- render <dir>` on the topic branch:
+
+```
+$ … render repro-google-only        # weight: 400..700 on a google font
+Rendered 1 of 1 files
+quarto-theme-27d9b6d07ebeed24.css   334046 bytes
+@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..700&display=swap")
+
+$ … render repro-fonts-only         # + files[0].weight: 300..800 on a local file
+Rendered 1 of 1 files
+quarto-theme-dfd19eb23f7f5b75.css   334163 bytes
+@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..700&display=swap")
+@font-face{font-family:"Local Var";src:url("LocalVar-VariableFont_wght.woff2");font-weight:300 800;font-style:normal}
+
+$ … render repro-slot-only          # headings: {weight: 500..700}
+Error: [Q-14-8] Invalid brand font weight
+   ╭─[ …/repro-slot-only/_brand.yml:9:13 ]
+ 9 │     weight: 500..700
+   │             ────┬───
+   │                 ╰───── `500..700` at `typography.headings.weight` is not a font weight Quarto
+                            understands: a typography slot takes a single weight, not a range; …
+ℹ Use a number from 100 to 900, a keyword such as `bold` or `semi-bold`, a list of those, or —
+  on `typography.fonts` entries — a numeric range such as `400..700`?
+Rendered 0 of 1 files — 1 error
+```
+
+Before the fix the first two shipped `wght@0,400;1,400` and the 6996-byte `DEFAULT_CSS`
+respectively, and the last two rendered "successfully" with `DEFAULT_CSS`.
+

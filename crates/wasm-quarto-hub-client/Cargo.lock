@@ -2353,6 +2353,7 @@ dependencies = [
  "quarto-source-map",
  "quarto-system-runtime",
  "quarto-util",
+ "quarto-yaml",
  "regex",
  "serde",
  "serde_json",
