@@ -1,0 +1,6 @@
+project:
+  type: default
+brand: _brand.yml
+format:
+  html:
+    theme: brand

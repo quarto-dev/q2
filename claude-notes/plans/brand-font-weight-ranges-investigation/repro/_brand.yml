@@ -1,0 +1,14 @@
+typography:
+  fonts:
+    - family: EB Garamond
+      source: google
+      weight: 400..700
+    - family: Local Var
+      source: file
+      files:
+        - path: LocalVar-VariableFont_wght.woff2
+          weight: 300..800
+  base: EB Garamond
+  headings:
+    family: EB Garamond
+    weight: 500..700
