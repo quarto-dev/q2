@@ -31,6 +31,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { wireSassVfs } from '../test-utils/wasmSassVfs';
 
 interface WasmModule {
   default: (input?: BufferSource) => Promise<void>;
@@ -63,6 +64,9 @@ beforeAll(async () => {
 
   wasm = (await import('wasm-quarto-hub-client')) as unknown as WasmModule;
   await wasm.default(wasmBytes);
+  // The theme stage compiles Bootstrap through dart-sass, which needs
+  // the VFS importer; an unwired importer is a Q-14-6 hard error.
+  wireSassVfs(wasm);
 });
 
 beforeEach(() => {

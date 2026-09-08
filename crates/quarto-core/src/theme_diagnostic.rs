@@ -42,10 +42,13 @@ use crate::error::ParseError;
 /// candidate whose FileId equals the one on the diagnostic and
 /// loads its file content into the [`SourceContext`].
 ///
-/// Handles [`SassError::InvalidThemeConfig`] (Q-14-1) and
-/// [`SassError::UnknownTheme`] (Q-14-2) specifically; other
-/// variants fall back to a span-less diagnostic carrying the raw
-/// error message.
+/// Handles [`SassError::InvalidThemeConfig`] (Q-14-1),
+/// [`SassError::UnknownTheme`] (Q-14-2),
+/// [`SassError::CustomThemeNotFound`] (Q-14-4), and
+/// [`SassError::InvalidScssFile`] (Q-14-7) specifically; every other
+/// variant is a compile failure and renders as Q-14-6 carrying the
+/// compiler's text (see [`sass_error_to_parse_error_at`] for how it
+/// gets a location).
 ///
 /// If no candidate matches the diagnostic's FileId, or the error
 /// has no `location`, the diagnostic still renders — just without
@@ -54,7 +57,26 @@ pub fn sass_error_to_parse_error(
     err: &SassError,
     candidate_sources: &[(FileId, PathBuf)],
 ) -> ParseError {
-    let location = sass_error_location(err);
+    sass_error_to_parse_error_at(err, None, candidate_sources)
+}
+
+/// [`sass_error_to_parse_error`] with a fallback location for
+/// variants that carry none of their own.
+///
+/// A compile failure ([`SassError::CompilationFailed`]) is the
+/// crate-boundary stringification of a grass / dart-sass error: it
+/// points into the *assembled* SCSS bundle, never into user YAML, so
+/// the variant has no `location` field. The stage that knows which
+/// `theme:` value triggered the compile passes that value's span as
+/// `fallback_location`, and the diagnostic anchors there
+/// (bd-jsvetdea). A variant that already carries a span keeps it —
+/// the fallback only fills in `None`.
+pub fn sass_error_to_parse_error_at(
+    err: &SassError,
+    fallback_location: Option<quarto_source_map::SourceInfo>,
+    candidate_sources: &[(FileId, PathBuf)],
+) -> ParseError {
+    let location = sass_error_location(err).or(fallback_location);
 
     // Candidate-matched binding via the shared helper (this function
     // was the original precedent for it; bd-m6wmztln → bd-r64mj1aa):
@@ -115,16 +137,74 @@ pub fn sass_error_to_parse_error(
             }
             b.build()
         }
-        // Fallback for SassError variants we haven't migrated yet.
-        // Returning *something* structured is better than the legacy
-        // plain `e.to_string()` form — no code is assigned because
-        // the catalog only covers migrated variants.
-        other => DiagnosticMessageBuilder::error("SASS error")
-            .problem(other.to_string())
-            .build(),
+        SassError::InvalidScssFile { path, .. } => {
+            let mut b = DiagnosticMessageBuilder::error("Theme file has no layer boundary markers")
+                .with_code("Q-14-7")
+                .problem(format!(
+                    "the `theme:` entry resolves to `{}`, which contains none of the \
+                     `/*-- scss:... --*/` layer boundary markers Quarto needs to merge it \
+                     into the Bootstrap bundle.",
+                    path.display()
+                ))
+                .add_hint(
+                    "Should the file start with a layer marker such as \
+                     `/*-- scss:defaults --*/` (variables) or `/*-- scss:rules --*/` (CSS \
+                     rules)? The other markers are `scss:uses`, `scss:functions`, and \
+                     `scss:mixins`. A plain stylesheet with no Sass in it can be listed \
+                     under `css:` instead of `theme:`.",
+                );
+            if let Some(loc) = &location {
+                b = b.with_location(loc.clone());
+            }
+            b.build()
+        }
+        // Everything else reaches us from the compile call itself:
+        // `CompilationFailed` (the grass / dart-sass error, pointing
+        // into the assembled bundle), `NoBoundaryMarkers` from a
+        // built-in layer, `ThemeNotFound` for a missing embedded
+        // resource, `Io`. None of these carry a span of their own, so
+        // the caller's fallback location (the `theme:` value) is the
+        // anchor (bd-jsvetdea).
+        other => {
+            let mut b = DiagnosticMessageBuilder::error("Theme SCSS compilation failed")
+                .with_code("Q-14-6")
+                .problem(format!(
+                    "compiling the theme SCSS bundle failed:\n{}",
+                    compile_failure_text(other)
+                ))
+                .add_hint(
+                    "Does a variable in a theme file set a value Bootstrap's arithmetic \
+                     cannot use (a `rem` layout width, a non-numeric font weight)? The \
+                     reported line counts lines of the SCSS bundle Quarto assembles from \
+                     Bootstrap, its own layers, and the files under `theme:`, so it often \
+                     points into Quarto's own code reacting to a theme variable rather than \
+                     at your file. If no custom theme or brand is configured, this is likely \
+                     a Quarto bug; please report it.",
+                );
+            if let Some(loc) = &location {
+                b = b.with_location(loc.clone());
+            }
+            b.build()
+        }
     };
 
     ParseError::new(vec![diagnostic], source_context)
+}
+
+/// The text a compile failure shows the user: the grass / dart-sass
+/// output verbatim (message, excerpt, and its `./stdin:LINE:COL`
+/// pointer into the assembled bundle), minus the runtime's own
+/// `SASS compilation error:` prefix, which would otherwise repeat
+/// the diagnostic title. Other variants render their `Display` form.
+fn compile_failure_text(err: &SassError) -> String {
+    match err {
+        SassError::CompilationFailed { message } => message
+            .strip_prefix("SASS compilation error: ")
+            .unwrap_or(message)
+            .trim_end()
+            .to_string(),
+        other => other.to_string(),
+    }
 }
 
 /// Extract the source location carried by a [`SassError`], if any.
@@ -136,6 +216,7 @@ fn sass_error_location(err: &SassError) -> Option<quarto_source_map::SourceInfo>
         SassError::InvalidThemeConfig { location, .. } => location.clone(),
         SassError::UnknownTheme { location, .. } => location.clone(),
         SassError::CustomThemeNotFound { location, .. } => location.clone(),
+        SassError::InvalidScssFile { location, .. } => location.clone(),
         _ => None,
     }
 }
@@ -294,7 +375,7 @@ mod tests {
         // (Q-14-3, the interim dark-theme-ignored warning from
         // bd-o76p01wb, was retired when dual light/dark compilation
         // landed — bd-0pic6 phase A2.)
-        for code in ["Q-14-1", "Q-14-2", "Q-14-4", "Q-14-5"] {
+        for code in ["Q-14-1", "Q-14-2", "Q-14-4", "Q-14-5", "Q-14-6", "Q-14-7"] {
             let info = quarto_error_catalog::ERROR_CATALOG.get(code);
             assert!(
                 info.is_some(),
@@ -459,5 +540,217 @@ mod tests {
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-4"));
         assert_eq!(d.location, None);
+    }
+
+    /// The grass text the stage sees for the bd-jsvetdea repro
+    /// (`$grid-body-width: 52rem` in a user theme). Note the location
+    /// is a line of the *assembled* bundle (`./stdin`), at Quarto's own
+    /// `$grid-body-column-min` default — the user's file is never named.
+    const GRASS_UNITS_ERROR: &str = "SASS compilation error: Error: Incompatible units px and rem.\n     \u{2577}\n3269 \u{2502} $grid-body-column-min: quarto-math.min(500px, $grid-body-column-max) !default;\n     \u{2502}                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     \u{2575}\n./stdin:3269:24\n";
+
+    #[test]
+    fn compilation_failed_renders_with_q146_code_and_span() {
+        // bd-jsvetdea: a grass failure while compiling the theme
+        // bundle carries no location of its own (`CompilationFailed`
+        // is the crate-boundary stringification of the grass error),
+        // so the stage anchors it at the whole `theme:` value via the
+        // fallback location. The diagnostic must carry Q-14-6, the
+        // grass text verbatim, and a span on the `theme:` line.
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let yaml_path = root.join("_quarto.yml");
+        let contents =
+            "project:\n  type: website\nformat:\n  html:\n    theme: [cosmo, bad.scss]\n";
+        std::fs::write(&yaml_path, contents).unwrap();
+
+        let value_start = contents.find("[cosmo").unwrap();
+        let value_end = contents.find(']').unwrap() + 1;
+        let location = SourceInfo::Original {
+            file_id: file_id_for(&yaml_path),
+            start_offset: value_start,
+            end_offset: value_end,
+        };
+
+        let err = SassError::CompilationFailed {
+            message: GRASS_UNITS_ERROR.to_string(),
+        };
+        let parse_err = sass_error_to_parse_error_at(
+            &err,
+            Some(location.clone()),
+            &[(file_id_for(&yaml_path), yaml_path.clone())],
+        );
+        assert_eq!(parse_err.diagnostics.len(), 1);
+        let d = &parse_err.diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-14-6"));
+        assert!(
+            d.title.contains("Theme SCSS compilation failed"),
+            "title was: {}",
+            d.title,
+        );
+        assert_eq!(d.location.as_ref(), Some(&location));
+
+        let opts = quarto_error_reporting::TextRenderOptions {
+            enable_hyperlinks: false,
+        };
+        let rendered = d.to_text_with_options(Some(&parse_err.source_context), &opts);
+        assert!(
+            rendered.contains("Q-14-6"),
+            "rendered output missing code Q-14-6:\n{}",
+            rendered,
+        );
+        assert!(
+            rendered.contains("Incompatible units px and rem"),
+            "rendered output must carry the grass message verbatim:\n{}",
+            rendered,
+        );
+        assert!(
+            rendered.contains("$grid-body-column-min"),
+            "rendered output must carry the grass excerpt verbatim:\n{}",
+            rendered,
+        );
+        let stripped = strip_ansi(&rendered);
+        assert!(
+            stripped.contains("5 \u{2502}"),
+            "rendered output missing line marker for the `theme:` line:\n{}",
+            stripped,
+        );
+    }
+
+    #[test]
+    fn compilation_failed_without_location_renders_span_less() {
+        // No user theme configured (the default-bundle path) → no
+        // `theme:` value to anchor at; the diagnostic still carries the
+        // code and the grass text.
+        let err = SassError::CompilationFailed {
+            message: GRASS_UNITS_ERROR.to_string(),
+        };
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(FileId(0), PathBuf::from("/nonexistent"))]);
+        let d = &parse_err.diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-14-6"));
+        assert_eq!(d.location, None);
+        let rendered = d.to_text(None);
+        assert!(
+            rendered.contains("Incompatible units px and rem"),
+            "rendered output must carry the grass message:\n{}",
+            rendered,
+        );
+    }
+
+    #[test]
+    fn invalid_scss_file_renders_with_q147_code_and_span() {
+        // bd-qmpygp02: a `theme:` entry naming a file that exists but
+        // has no `/*-- scss:... --*/` layer markers must lift into a
+        // Q-14-7 diagnostic pointing at that entry and naming the
+        // resolved path.
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let yaml_path = root.join("doc.qmd");
+        let contents = "---\nformat:\n  html:\n    theme: [cosmo, nomarkers.scss]\n---\n";
+        std::fs::write(&yaml_path, contents).unwrap();
+
+        let entry_start = contents.find("nomarkers.scss").unwrap();
+        let entry_end = entry_start + "nomarkers.scss".len();
+        let location = SourceInfo::Original {
+            file_id: file_id_for(&yaml_path),
+            start_offset: entry_start,
+            end_offset: entry_end,
+        };
+
+        let err = SassError::InvalidScssFile {
+            path: root.join("nomarkers.scss"),
+            location: Some(location.clone()),
+        };
+        let parse_err =
+            sass_error_to_parse_error(&err, &[(file_id_for(&yaml_path), yaml_path.clone())]);
+        assert_eq!(parse_err.diagnostics.len(), 1);
+        let d = &parse_err.diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-14-7"));
+        assert!(
+            d.title.contains("no layer boundary markers"),
+            "title was: {}",
+            d.title,
+        );
+        assert_eq!(d.location.as_ref(), Some(&location));
+
+        let opts = quarto_error_reporting::TextRenderOptions {
+            enable_hyperlinks: false,
+        };
+        let rendered = d.to_text_with_options(Some(&parse_err.source_context), &opts);
+        assert!(
+            rendered.contains("Q-14-7"),
+            "rendered output missing code Q-14-7:\n{}",
+            rendered,
+        );
+        assert!(
+            rendered.contains("nomarkers.scss"),
+            "rendered output missing resolved path:\n{}",
+            rendered,
+        );
+        assert!(
+            rendered.contains("scss:defaults"),
+            "hint must name at least one layer marker:\n{}",
+            rendered,
+        );
+        let stripped = strip_ansi(&rendered);
+        assert!(
+            stripped.contains("4 \u{2502}"),
+            "rendered output missing line marker for the `theme:` line:\n{}",
+            stripped,
+        );
+    }
+
+    #[test]
+    fn invalid_scss_file_falls_back_to_theme_value_location() {
+        // The loader constructs `InvalidScssFile` without a location;
+        // when the stage cannot match the path to a `theme:` entry it
+        // anchors at the whole `theme:` value instead.
+        let fallback = SourceInfo::Original {
+            file_id: FileId(7),
+            start_offset: 10,
+            end_offset: 30,
+        };
+        let err = SassError::InvalidScssFile {
+            path: PathBuf::from("/somewhere/nomarkers.scss"),
+            location: None,
+        };
+        let parse_err = sass_error_to_parse_error_at(&err, Some(fallback.clone()), &[]);
+        let d = &parse_err.diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-14-7"));
+        assert_eq!(d.location.as_ref(), Some(&fallback));
+    }
+
+    #[test]
+    fn invalid_scss_file_without_location_renders_span_less() {
+        let err = SassError::InvalidScssFile {
+            path: PathBuf::from("/somewhere/nomarkers.scss"),
+            location: None,
+        };
+        let parse_err = sass_error_to_parse_error(&err, &[]);
+        let d = &parse_err.diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-14-7"));
+        assert_eq!(d.location, None);
+    }
+
+    #[test]
+    fn explicit_location_wins_over_fallback() {
+        // A variant that already carries its own span keeps it; the
+        // fallback only fills in a `None`.
+        let own = SourceInfo::Original {
+            file_id: FileId(1),
+            start_offset: 0,
+            end_offset: 4,
+        };
+        let fallback = SourceInfo::Original {
+            file_id: FileId(2),
+            start_offset: 0,
+            end_offset: 4,
+        };
+        let err = SassError::CustomThemeNotFound {
+            path: PathBuf::from("/x/nope.scss"),
+            location: Some(own.clone()),
+        };
+        let parse_err = sass_error_to_parse_error_at(&err, Some(fallback), &[]);
+        assert_eq!(parse_err.diagnostics[0].location.as_ref(), Some(&own));
     }
 }

@@ -304,6 +304,12 @@ impl PipelineStage for CompileThemeCssStage {
             ));
         };
 
+        // The span of the whole `theme:` value. Compile failures carry
+        // no location of their own (grass points into the assembled
+        // bundle), so their structured diagnostic anchors here
+        // (bd-jsvetdea). `None` for documents without a `theme:` key.
+        let theme_location = doc.ast.meta.get("theme").map(|v| v.source_info.clone());
+
         // `format: revealjs` uses its own reveal.js CSS + theme, not Bootstrap.
         // A reveal theme name like `white` is not a Bootswatch theme — running
         // the Bootstrap path would mis-validate it. Instead, register reveal's
@@ -353,22 +359,13 @@ impl PipelineStage for CompileThemeCssStage {
 
             // Compile Quarto's reveal theme (single unified SCSS pass, D1) and
             // register it as the theme-slot artifact (keyed by content
-            // fingerprint). On a *compile* failure we fall back to the vendored
-            // stock theme CSS so the deck still renders (mirrors the Bootstrap
-            // path's graceful fallback).
-            let compiled =
-                match compile_reveal(ctx, true, &resolution.layers, &resolution.load_paths).await {
-                    Ok(css) => Some(css),
-                    Err(e) => {
-                        trace_event!(
-                            ctx,
-                            EventLevel::Warn,
-                            "reveal theme compilation failed: {}, using vendored stock theme",
-                            e
-                        );
-                        None
-                    }
-                };
+            // fingerprint). A compile failure is a structured hard error
+            // (Q-14-6), same as the Bootstrap path — it used to fall back
+            // to the vendored stock theme with only a trace-level warning,
+            // which no CLI observer receives (bd-jsvetdea).
+            let compiled = compile_reveal(ctx, true, &resolution.layers, &resolution.load_paths)
+                .await
+                .map_err(|e| structured_compile_error(ctx, &e, theme_location.clone()))?;
             // Render (`revealjs`) links the full vendored asset set
             // (reset/reveal/theme/quarto-reveal + reveal.js) via `site_libs`;
             // the assembler emits `<link>`s in cascade order. Preview
@@ -380,11 +377,9 @@ impl PipelineStage for CompileThemeCssStage {
             // preview's theme transport verbatim — no preview-specific WASM
             // plumbing (bd-y259zb57).
             if ctx.format.target_format == "q2-slides" {
-                let theme_css = compiled
-                    .unwrap_or_else(|| crate::revealjs::stock_reveal_theme_css().to_string());
-                store_css(ctx, theme_css);
+                store_css(ctx, compiled);
             } else {
-                crate::revealjs::register_reveal_assets(&mut ctx.artifacts, compiled.as_deref());
+                crate::revealjs::register_reveal_assets(&mut ctx.artifacts, Some(&compiled));
             }
             return Ok(PipelineData::DocumentAst(doc));
         }
@@ -513,7 +508,15 @@ impl PipelineStage for CompileThemeCssStage {
             theme_context = theme_context.with_brand(&rb.brand, brand_dir);
         }
 
-        let light_css = variant_css(ctx, theme_config, &theme_context, &doc_vars, cache_ok).await?;
+        let light_css = variant_css(
+            ctx,
+            theme_config,
+            &theme_context,
+            &doc_vars,
+            cache_ok,
+            theme_location.as_ref(),
+        )
+        .await?;
 
         if let Some(dark_cfg) = theme_config.dark_variant() {
             let mut dark_context = ThemeContext::new(document_dir, runtime.as_ref());
@@ -521,7 +524,15 @@ impl PipelineStage for CompileThemeCssStage {
                 let brand_dir = rb.dir.clone().unwrap_or_else(|| ctx.project.dir.clone());
                 dark_context = dark_context.with_brand(&rb.brand, brand_dir);
             }
-            let dark_css = variant_css(ctx, &dark_cfg, &dark_context, &doc_vars, cache_ok).await?;
+            let dark_css = variant_css(
+                ctx,
+                &dark_cfg,
+                &dark_context,
+                &doc_vars,
+                cache_ok,
+                theme_location.as_ref(),
+            )
+            .await?;
             let dark_is_default = theme_config.dark.as_ref().is_some_and(|d| d.is_default);
             store_variant_pair(ctx, light_css, dark_css, dark_is_default);
             // Record the pair decision where the downstream consumers
@@ -553,15 +564,23 @@ impl PipelineStage for CompileThemeCssStage {
 /// result under the variant's key — but reads/writes the runtime CSS
 /// cache and emits trace events.
 ///
-/// Error contract mirrors the pre-A2 single-variant behavior:
-/// dangling custom themes are structured Q-14-4 errors; compile
-/// failures degrade to `DEFAULT_CSS` with a warning trace.
+/// Error contract: every failure is a structured hard error.
+/// Dangling custom themes are Q-14-4; a theme file without layer
+/// markers is Q-14-7; any other compile failure (grass / dart-sass,
+/// on the themed *or* the default-bundle path) is Q-14-6, anchored at
+/// `theme_location` — the whole `theme:` value — since the compiler
+/// only knows lines of the assembled bundle. Compile failures used to
+/// degrade to `DEFAULT_CSS` with a trace-level warning that no CLI
+/// observer receives, so a one-line unit mistake in a user theme
+/// silently shipped an unstyled page (bd-jsvetdea, bd-qmpygp02,
+/// decision recorded in bd-36vmz7nk).
 async fn variant_css(
     ctx: &mut StageContext,
     variant_config: &ThemeConfig,
     theme_context: &ThemeContext<'_>,
     doc_vars: &SassLayer,
     cache_ok: bool,
+    theme_location: Option<&quarto_source_map::SourceInfo>,
 ) -> Result<String, PipelineError> {
     // `theme: none` (for this variant) → the static lightweight
     // DEFAULT_CSS without compiling Bootstrap. Explicit opt-out.
@@ -619,15 +638,10 @@ async fn variant_css(
                 }
                 Ok(css)
             }
-            Err(e) => {
-                trace_event!(
-                    ctx,
-                    EventLevel::Warn,
-                    "default Bootstrap compilation failed: {}, using static DEFAULT_CSS",
-                    e
-                );
-                Ok(DEFAULT_CSS.to_string())
-            }
+            // No user input is in this bundle, so a failure here is a
+            // Quarto bug or a broken install — still a hard error, not
+            // a silent downgrade to the static DEFAULT_CSS.
+            Err(e) => Err(structured_compile_error(ctx, &e, theme_location.cloned())),
         };
     }
 
@@ -726,14 +740,56 @@ async fn variant_css(
             Ok(css)
         }
         Err(e) => {
-            trace_event!(
-                ctx,
-                EventLevel::Warn,
-                "theme CSS compilation failed: {}, using default CSS",
-                e
-            );
-            Ok(DEFAULT_CSS.to_string())
+            let e = attach_entry_location(e, variant_config, theme_context);
+            Err(structured_compile_error(ctx, &e, theme_location.cloned()))
         }
+    }
+}
+
+/// Lift a compile-path [`quarto_sass::SassError`] into the structured
+/// hard error every theme failure is (bd-jsvetdea): Q-14-6 / Q-14-7
+/// via `theme_diagnostic`, anchored at `location` (the whole `theme:`
+/// value) when the error carries no span of its own.
+fn structured_compile_error(
+    ctx: &StageContext,
+    err: &quarto_sass::SassError,
+    location: Option<quarto_source_map::SourceInfo>,
+) -> PipelineError {
+    let pe = crate::theme_diagnostic::sass_error_to_parse_error_at(
+        err,
+        location,
+        &theme_error_candidates(ctx),
+    );
+    PipelineError::Structured(pe)
+}
+
+/// Give an [`quarto_sass::SassError::InvalidScssFile`] the span of the
+/// `theme:` entry that named it, when its resolved path matches one of
+/// the variant's custom entries (the loader only knows the path). Any
+/// other error, or an unmatched path, passes through unchanged and
+/// falls back to the whole-`theme:` anchor.
+fn attach_entry_location(
+    err: quarto_sass::SassError,
+    config: &ThemeConfig,
+    context: &ThemeContext<'_>,
+) -> quarto_sass::SassError {
+    let entry_location = match &err {
+        quarto_sass::SassError::InvalidScssFile {
+            path,
+            location: None,
+        } => config.themes.iter().enumerate().find_map(|(i, spec)| {
+            let custom = spec.as_custom()?;
+            if context.resolve_path(custom) == *path {
+                config.theme_locations.get(i).cloned().flatten()
+            } else {
+                None
+            }
+        }),
+        _ => None,
+    };
+    match entry_location {
+        Some(loc) => err.with_location(loc),
+        None => err,
     }
 }
 
@@ -966,15 +1022,19 @@ fn store_variant_pair(
 /// Native uses `grass` in-process (sync); WASM uses the dart-sass JS bridge
 /// (async). This wrapper gives the stage one call site.
 #[cfg(not(target_arch = "wasm32"))]
-async fn compile_default(ctx: &StageContext, minified: bool) -> Result<String, String> {
-    compile_default_css(ctx.runtime.as_ref(), minified).map_err(|e| e.to_string())
+async fn compile_default(
+    ctx: &StageContext,
+    minified: bool,
+) -> Result<String, quarto_sass::SassError> {
+    compile_default_css(ctx.runtime.as_ref(), minified)
 }
 
 #[cfg(target_arch = "wasm32")]
-async fn compile_default(ctx: &StageContext, minified: bool) -> Result<String, String> {
-    compile_default_css(ctx.runtime.as_ref(), minified)
-        .await
-        .map_err(|e| e.to_string())
+async fn compile_default(
+    ctx: &StageContext,
+    minified: bool,
+) -> Result<String, quarto_sass::SassError> {
+    compile_default_css(ctx.runtime.as_ref(), minified).await
 }
 
 /// Compile Quarto's reveal.js theme CSS. Native uses `grass` in-process (sync);
@@ -986,9 +1046,8 @@ async fn compile_reveal(
     minified: bool,
     theme_layers: &[SassLayer],
     load_paths: &[PathBuf],
-) -> Result<String, String> {
+) -> Result<String, quarto_sass::SassError> {
     quarto_sass::compile_reveal_theme_css(ctx.runtime.as_ref(), minified, theme_layers, load_paths)
-        .map_err(|e| e.to_string())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -997,10 +1056,9 @@ async fn compile_reveal(
     minified: bool,
     theme_layers: &[SassLayer],
     load_paths: &[PathBuf],
-) -> Result<String, String> {
+) -> Result<String, quarto_sass::SassError> {
     quarto_sass::compile_reveal_theme_css(ctx.runtime.as_ref(), minified, theme_layers, load_paths)
         .await
-        .map_err(|e| e.to_string())
 }
 
 /// Compile a (possibly themed) bundle plus an optional doc-derived
@@ -1012,10 +1070,9 @@ async fn compile_with_doc_vars_via_runtime(
     theme_config: &ThemeConfig,
     theme_context: &ThemeContext<'_>,
     doc_vars: &SassLayer,
-) -> Result<String, String> {
+) -> Result<String, quarto_sass::SassError> {
     let _ = ctx; // runtime is captured inside theme_context
     quarto_sass::compile_with_doc_vars(theme_config, theme_context, doc_vars)
-        .map_err(|e| e.to_string())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1024,11 +1081,9 @@ async fn compile_with_doc_vars_via_runtime(
     theme_config: &ThemeConfig,
     theme_context: &ThemeContext<'_>,
     doc_vars: &SassLayer,
-) -> Result<String, String> {
+) -> Result<String, quarto_sass::SassError> {
     let _ = ctx; // runtime is captured inside theme_context
-    quarto_sass::compile_with_doc_vars(theme_config, theme_context, doc_vars)
-        .await
-        .map_err(|e| e.to_string())
+    quarto_sass::compile_with_doc_vars(theme_config, theme_context, doc_vars).await
 }
 
 #[cfg(test)]
@@ -1918,6 +1973,186 @@ mod tests {
             css.contains(".custom-rule"),
             "compiled CSS should contain .custom-rule from override.scss"
         );
+    }
+
+    // ── Compile failures are structured hard errors (bd-jsvetdea) ────
+
+    /// A well-formed layered theme whose one variable breaks the
+    /// Bootstrap grid arithmetic (`calc(... - 3em)` on a `rem` value
+    /// makes grass raise "Incompatible units px and rem"). This is the
+    /// bd-jsvetdea repro verbatim.
+    const BAD_UNITS_SCSS: &str = "/*-- scss:defaults --*/\n$grid-body-width: 52rem;\n";
+
+    /// A file that exists but has no `/*-- scss:... --*/` layer marker
+    /// (bd-qmpygp02).
+    const NO_MARKERS_SCSS: &str = ".plain-marker { color: #0a1b2c; }\n";
+
+    /// Write theme files into a fresh temp dir; returns the guard and
+    /// the canonical dir path (macOS `/tmp` is a symlink, and the stage
+    /// resolves custom themes against the document dir).
+    fn temp_theme_dir(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
+        let temp = tempfile::TempDir::new().unwrap();
+        let dir = temp.path().canonicalize().unwrap();
+        for (name, contents) in files {
+            std::fs::write(dir.join(name), contents).unwrap();
+        }
+        (temp, dir)
+    }
+
+    /// `theme: {light: [..], dark: [..]}` with arbitrary lists on each
+    /// side (the single-name helper above cannot express a custom
+    /// entry in the dark half).
+    fn meta_with_light_dark_theme_lists(light: &[&str], dark: &[&str]) -> ConfigValue {
+        let list = |names: &[&str]| ConfigValue {
+            value: ConfigValueKind::Array(
+                names
+                    .iter()
+                    .map(|s| ConfigValue {
+                        value: ConfigValueKind::scalar(Yaml::String(s.to_string())),
+                        source_info: SourceInfo::for_test(),
+                        merge_op: quarto_pandoc_types::MergeOp::Concat,
+                    })
+                    .collect(),
+            ),
+            source_info: SourceInfo::for_test(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+        let entry = |key: &str, value: ConfigValue| ConfigMapEntry {
+            key: key.to_string(),
+            key_source: SourceInfo::for_test(),
+            value,
+        };
+        let theme_value = ConfigValue {
+            value: ConfigValueKind::Map(vec![
+                entry("light", list(light)),
+                entry("dark", list(dark)),
+            ]),
+            source_info: SourceInfo::for_test(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        };
+        ConfigValue {
+            value: ConfigValueKind::Map(vec![entry("theme", theme_value)]),
+            source_info: SourceInfo::for_test(),
+            merge_op: quarto_pandoc_types::MergeOp::Concat,
+        }
+    }
+
+    /// Unwrap a `PipelineError::Structured` carrying exactly one
+    /// diagnostic with the given code; returns its rendered text.
+    fn expect_structured(err: PipelineError, code: &str) -> String {
+        match err {
+            PipelineError::Structured(pe) => {
+                assert_eq!(
+                    pe.diagnostics.len(),
+                    1,
+                    "expected exactly one diagnostic, got {:?}",
+                    pe.diagnostics
+                );
+                let d = &pe.diagnostics[0];
+                assert_eq!(
+                    d.code.as_deref(),
+                    Some(code),
+                    "diagnostic: {}",
+                    d.to_text(None)
+                );
+                let opts = quarto_error_reporting::TextRenderOptions {
+                    enable_hyperlinks: false,
+                };
+                d.to_text_with_options(Some(&pe.source_context), &opts)
+            }
+            other => panic!("expected PipelineError::Structured, got: {other}"),
+        }
+    }
+
+    fn assert_no_theme_artifacts(ctx: &StageContext) {
+        assert!(
+            ctx.artifacts.get_by_prefix("css:theme:").is_empty(),
+            "a failed compile must not store a css:theme:* artifact"
+        );
+        assert!(
+            ctx.artifacts.get_by_prefix("css:theme-dark:").is_empty(),
+            "a failed compile must not store a css:theme-dark:* artifact"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_theme_compile_error_is_structured_q146() {
+        // bd-jsvetdea: before the fix the Err arm returned
+        // Ok(DEFAULT_CSS) and the render reported success. A grass
+        // failure with a user theme in the bundle must be a Q-14-6
+        // hard error carrying the grass text.
+        let (_temp, dir) = temp_theme_dir(&[("bad.scss", BAD_UNITS_SCSS)]);
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let mut ctx = make_stage_context_at(runtime, dir.to_str().unwrap());
+        let stage = CompileThemeCssStage::new();
+
+        let meta = meta_with_theme_array(&["cosmo", "bad.scss"]);
+        let input = make_doc_ast_at(dir.join("test.qmd").to_str().unwrap(), meta);
+        let err = stage
+            .run(input, &mut ctx)
+            .await
+            .expect_err("a theme compile failure must fail the stage");
+
+        let text = expect_structured(err, "Q-14-6");
+        assert!(
+            text.contains("Incompatible units px and rem"),
+            "diagnostic must carry the grass message:\n{text}"
+        );
+        assert_no_theme_artifacts(&ctx);
+    }
+
+    #[tokio::test]
+    async fn test_dark_variant_compile_error_is_structured_q146() {
+        // The per-variant split (bd-0pic6 A2) used to ship *light*
+        // DEFAULT_CSS under the dark key when the dark half failed.
+        // A dark-half failure is the same hard error, and neither
+        // variant's artifact is stored.
+        let (_temp, dir) = temp_theme_dir(&[("bad.scss", BAD_UNITS_SCSS)]);
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let mut ctx = make_stage_context_at(runtime, dir.to_str().unwrap());
+        let stage = CompileThemeCssStage::new();
+
+        let meta = meta_with_light_dark_theme_lists(&["cosmo"], &["darkly", "bad.scss"]);
+        let input = make_doc_ast_at(dir.join("test.qmd").to_str().unwrap(), meta);
+        let err = stage
+            .run(input, &mut ctx)
+            .await
+            .expect_err("a dark-variant compile failure must fail the stage");
+
+        let text = expect_structured(err, "Q-14-6");
+        assert!(
+            text.contains("Incompatible units px and rem"),
+            "diagnostic must carry the grass message:\n{text}"
+        );
+        assert_no_theme_artifacts(&ctx);
+    }
+
+    #[tokio::test]
+    async fn test_theme_without_layer_markers_is_structured_q147() {
+        // bd-qmpygp02: a theme file that exists but has no layer
+        // markers was swallowed by the same Err arm. It is a Q-14-7
+        // hard error naming the file.
+        let (_temp, dir) = temp_theme_dir(&[("nomarkers.scss", NO_MARKERS_SCSS)]);
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let mut ctx = make_stage_context_at(runtime, dir.to_str().unwrap());
+        let stage = CompileThemeCssStage::new();
+
+        let meta = meta_with_theme_array(&["cosmo", "nomarkers.scss"]);
+        let input = make_doc_ast_at(dir.join("test.qmd").to_str().unwrap(), meta);
+        let err = stage
+            .run(input, &mut ctx)
+            .await
+            .expect_err("a theme file without layer markers must fail the stage");
+
+        let text = expect_structured(err, "Q-14-7");
+        assert!(
+            text.contains("nomarkers.scss"),
+            "diagnostic must name the offending file:\n{text}"
+        );
+        assert_no_theme_artifacts(&ctx);
     }
 
     fn make_builtin_config(theme: &str, minified: bool) -> ThemeConfig {
