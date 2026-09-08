@@ -122,9 +122,8 @@ const BLOCK_TAGS: &[&str] = &[
 /// instructions — which pandoc's `isBlockTag` also treats as block-level and
 /// which CommonMark covers with HTML block types 2 through 5.
 pub fn starts_block_html(text: &str) -> bool {
-    let rest = match text.strip_prefix('<') {
-        Some(rest) => rest,
-        None => return false,
+    let Some(rest) = text.strip_prefix('<') else {
+        return false;
     };
 
     // `<!--comment-->`, `<!DOCTYPE …>`, `<![CDATA[…]]>`, `<?php …?>`
@@ -132,25 +131,59 @@ pub fn starts_block_html(text: &str) -> bool {
         return true;
     }
 
-    let rest = rest.strip_prefix('/').unwrap_or(rest);
+    matches!(tag_name(text), Some((_, name)) if BLOCK_TAGS.binary_search(&name.as_str()).is_ok())
+}
+
+/// Tag names whose content is *raw text*: markdown is not parsed inside them.
+///
+/// CommonMark's HTML block type 1, and pandoc agrees — `pandoc -f markdown`
+/// leaves a code span inside `<pre>` or `<script>` as literal backticks while
+/// parsing one inside `<div>` or `<section>`. All four are in [`BLOCK_TAGS`],
+/// so the interior split in `paragraph.rs` has to exempt them explicitly or it
+/// would start parsing markdown inside a `<script>`.
+const RAW_TEXT_TAGS: &[&str] = &["pre", "script", "style", "textarea"];
+
+/// Does `text` open a raw-text element ([`RAW_TEXT_TAGS`])?
+///
+/// Only the *opening* tag counts: CommonMark's type-1 start condition is
+/// `<pre`, `<script`, `<style`, `<textarea` — a closing tag does not begin a
+/// raw-text block, so `</pre>` is false.
+pub fn starts_raw_text_element(text: &str) -> bool {
+    matches!(tag_name(text), Some((false, name)) if RAW_TEXT_TAGS.contains(&name.as_str()))
+}
+
+/// The tag name at the head of `text`, lowercased, with a flag for whether it
+/// is a closing tag.
+///
+/// `None` when `text` does not begin a well-formed tag, including the `<!…`
+/// and `<?…` forms, which have no name. The name must end at a delimiter, so
+/// `<divider>` does not read as `<div>`.
+///
+/// Shared by [`starts_block_html`] and [`starts_raw_text_element`] so the two
+/// cannot disagree about what a tag name is.
+fn tag_name(text: &str) -> Option<(bool, String)> {
+    let rest = text.strip_prefix('<')?;
+    if rest.starts_with('!') || rest.starts_with('?') {
+        return None;
+    }
+    let (closing, rest) = match rest.strip_prefix('/') {
+        Some(rest) => (true, rest),
+        None => (false, rest),
+    };
     let name_len = rest
         .find(|c: char| !c.is_ascii_alphanumeric())
         .unwrap_or(rest.len());
     if name_len == 0 {
-        return false;
+        return None;
     }
     let (name, after) = rest.split_at(name_len);
-
     // The tag name must actually end here: `<divider>` is not a `<div>`.
-    if !after.is_empty() {
-        let next = after.as_bytes()[0];
-        if !matches!(next, b' ' | b'\t' | b'\r' | b'\n' | b'>' | b'/') {
-            return false;
-        }
+    if let Some(&next) = after.as_bytes().first()
+        && !matches!(next, b' ' | b'\t' | b'\r' | b'\n' | b'>' | b'/')
+    {
+        return None;
     }
-
-    let name = name.to_ascii_lowercase();
-    BLOCK_TAGS.binary_search(&name.as_str()).is_ok()
+    Some((closing, name.to_ascii_lowercase()))
 }
 
 /// Is the byte at `offset` the first non-prefix content on its line?

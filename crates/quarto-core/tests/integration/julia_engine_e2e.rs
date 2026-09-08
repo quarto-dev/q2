@@ -1263,3 +1263,165 @@ fn list_dir_recursive(dir: &Path) -> String {
     out.sort();
     out.join("\n")
 }
+
+// ── J7: a FAILED run must not leak the file's QNR worker ──────────────────────
+
+/// Seed an isolated temp `HOME`'s julia runtime dir from the ambient one, so the
+/// isolated control server starts against an ALREADY-INSTANTIATED environment
+/// (only the small `Project.toml`/`Manifest.toml` are copied; the packages
+/// themselves live in the shared `JULIA_DEPOT_PATH`, which this never touches).
+/// Without this the isolated server would re-resolve the environment from
+/// scratch on every run.
+///
+/// Returns `false` when the ambient runtime dir is not instantiated (no
+/// `Manifest.toml`) — the caller should skip.
+fn seed_isolated_julia_runtime(real_home: &Path, tmp_home: &Path) -> bool {
+    let src = real_home.join("Library/Caches/quarto/julia");
+    if !src.join("Manifest.toml").exists() {
+        return false;
+    }
+    let dst = tmp_home.join("Library/Caches/quarto/julia");
+    std::fs::create_dir_all(&dst).unwrap();
+    for name in ["Project.toml", "Manifest.toml"] {
+        std::fs::copy(src.join(name), dst.join(name)).unwrap();
+    }
+    true
+}
+
+/// PIDs of a process's direct children. Against the QNR control server's pid
+/// these are exactly its per-notebook worker processes.
+fn child_pids(pid: i32) -> Vec<i32> {
+    Command::new("pgrep")
+        .arg("-P")
+        .arg(pid.to_string())
+        .output()
+        .ok()
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .filter_map(|l| l.trim().parse::<i32>().ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+// Regression row for the oneShot worker-process leak. `executeJulia` sent the
+// post-run close only on the SUCCESS path, so a render whose Julia cell raised
+// (the J4 error doc) threw out of `writeJuliaCommand` and skipped the close,
+// leaving that file's worker open on the control server FOREVER — nothing ever
+// runs that (temp-dir) file again to reclaim it, and an open worker also holds
+// the server past its `serve(; timeout = 300)` idle exit, so the server never
+// exits either. Observed live on a dev machine: 30 leaked workers under a single
+// orphaned server after a day of runs, with `j4` alone reproducing +1 worker per
+// invocation (deterministic).
+//
+// This row runs against an ISOLATED control server under a temp `HOME` (seeded
+// above so the Julia environment is already instantiated), so the assertion is
+// an exact `workers == 0` on a server this test owns — not a racy delta on the
+// user's shared server. The guard kills that server's process group on scope
+// exit, so the row cannot itself strand anything.
+//
+// Named revert: drop the `catch` that calls `errorRunClose` around the `run`
+// command in the fixture's `julia-engine.ts`/`julia-engine.js` (restore the bare
+// `await writeJuliaCommand(...)`) → the failed render leaks its worker → the
+// `workers.is_empty()` assertion reddens.
+#[test]
+fn j7_failed_run_does_not_leak_worker() {
+    if !cfg!(unix) {
+        eprintln!("SKIP: j7 worker-count cleanup requires unix process groups");
+        return;
+    }
+    if !deno_available() {
+        eprintln!("SKIP: deno not on PATH — j7_failed_run_does_not_leak_worker");
+        return;
+    }
+    if !julia_available() {
+        eprintln!("SKIP: julia not on PATH — j7_failed_run_does_not_leak_worker");
+        return;
+    }
+    let Some(real_home) = std::env::var("HOME").ok().map(PathBuf::from) else {
+        eprintln!("SKIP: HOME unset — j7_failed_run_does_not_leak_worker");
+        return;
+    };
+
+    // Proves at the end that the isolation never touched the user's real server.
+    let shared_sentinel = SharedTransportSentinel::capture(&real_home);
+
+    let home = TempDir::new().unwrap();
+    if !seed_isolated_julia_runtime(&real_home, home.path()) {
+        eprintln!(
+            "SKIP: ambient julia runtime dir has no Manifest.toml (not instantiated) — \
+             j7_failed_run_does_not_leak_worker"
+        );
+        return;
+    }
+    // SAFETY/scope: process-local under nextest (one process per test).
+    unsafe {
+        std::env::set_var("HOME", home.path());
+    }
+
+    let transport = home
+        .path()
+        .join("Library/Caches/quarto/julia/julia_transport.txt");
+    // Drops LAST (after `home`/`tmp`): kills the isolated server + its worker
+    // group even if an assertion below panics.
+    let _server_guard = IsolatedJuliaServerGuard {
+        transport: transport.clone(),
+    };
+
+    let tmp = setup_julia_project();
+    let error_input = tmp.path().join("error.qmd");
+    write_file(&error_input, ERROR_DOC);
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let options = RenderToFileOptions::default();
+    let project = ProjectContext::discover(&error_input, runtime.as_ref())
+        .expect("project discovery for the j7 error project");
+
+    let result = render_document_to_file(
+        &error_input,
+        "html",
+        &options,
+        Some(&project),
+        runtime.clone(),
+        None,
+        None,
+        None,
+    );
+    let err = result.expect_err("error doc must fail the render, not succeed");
+    assert!(
+        err.to_string().contains("this should fail gracefully"),
+        "j7 precondition: the render must fail with the Julia error text \
+         (otherwise this row is not exercising the error path); got: {err}"
+    );
+
+    // The failed render still started the isolated control server.
+    let server_pid = transport_pid(&transport).unwrap_or_else(|| {
+        panic!(
+            "j7 precondition: no isolated julia control server pid in {transport:?} \
+             — the render never started a server, so there is no worker to assert on"
+        )
+    });
+
+    // The close is sent before the render error surfaces, but the worker
+    // process exits asynchronously — poll rather than guess a sleep.
+    let mut workers = child_pids(server_pid);
+    let mut waited = 0;
+    while !workers.is_empty() && waited < 30 {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        waited += 1;
+        workers = child_pids(server_pid);
+    }
+
+    assert!(
+        workers.is_empty(),
+        "failed render leaked {} QNR worker process(es) {:?} on control server {} \
+         — the oneShot close must also run on the error path, or every failed \
+         render strands a worker (and keeps the server alive past its idle timeout)",
+        workers.len(),
+        workers,
+        server_pid
+    );
+
+    shared_sentinel.assert_untouched();
+}

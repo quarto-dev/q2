@@ -8,6 +8,7 @@ use crate::pandoc::block::MetaBlock;
 use crate::pandoc::inline::Inline;
 use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
 use crate::pandoc::table::{Alignment, Cell, ColWidth, Row, Table};
+use crate::pandoc::treesitter_utils::html_block::{starts_block_html, starts_raw_text_element};
 use crate::pandoc::{
     Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule,
     LineBlock, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
@@ -548,6 +549,96 @@ fn write_blockquote(
     Ok(())
 }
 
+/// Is this line made up solely of complete HTML tags?
+///
+/// Quoted attribute values are skipped, so `<div data-x="a>b">` is one tag.
+fn line_is_only_tags(line: &str) -> bool {
+    let mut rest = line.trim();
+    let mut saw_tag = false;
+    while !rest.is_empty() {
+        if !rest.starts_with('<') {
+            return false;
+        }
+        // A comment ends at `-->`, not at the first `>`: `<!-- a -> b -->`
+        // is one unit, and scanning to `>` would strand `b -->` as non-tag
+        // text and fence a run that did not need it.
+        if let Some(body) = rest.strip_prefix("<!--") {
+            let Some(end) = body.find("-->") else {
+                return false;
+            };
+            rest = body[end + 3..].trim_start();
+            saw_tag = true;
+            continue;
+        }
+        let bytes = rest.as_bytes();
+        let mut i = 1;
+        let mut quote: Option<u8> = None;
+        let mut closed = false;
+        while i < bytes.len() {
+            let c = bytes[i];
+            match quote {
+                Some(q) if c == q => quote = None,
+                Some(_) => {}
+                None if c == b'"' || c == b'\'' => quote = Some(c),
+                None if c == b'>' => {
+                    closed = true;
+                    i += 1;
+                    break;
+                }
+                None => {}
+            }
+            i += 1;
+        }
+        if !closed {
+            return false;
+        }
+        rest = rest[i..].trim_start();
+        saw_tag = true;
+    }
+    saw_tag
+}
+
+/// Would writing `text` bare — with no ```` ```{=html} ```` fence — read back
+/// as exactly one `RawBlock` holding this same text?
+///
+/// Only two shapes qualify, and they are exactly the two the lift in
+/// `paragraph.rs` produces:
+///
+///   * a pure run of block-level tags, which the lift re-forms on the next
+///     read, and
+///   * a raw-text element (`<pre>`, `<script>`, …), whose interior the reader
+///     deliberately leaves unparsed.
+///
+/// Anything else has to keep its fence. An author-written ```` ```{=html} ````
+/// block may hold arbitrary text, and bare it would be *parsed* on the next
+/// read — a backtick becoming `Code`, a `#` line after a blank line becoming a
+/// real `Header`. That is content corruption through any AST -> qmd -> read
+/// cycle, so the test is on the text, not merely on its first tag.
+fn round_trips_bare_html(text: &str) -> bool {
+    // A blank line ends the HTML block, so the rest would come back separately.
+    if text.lines().any(|line| line.trim().is_empty()) {
+        return false;
+    }
+    if !starts_block_html(text) {
+        return false;
+    }
+    starts_raw_text_element(text) || text.lines().all(line_is_only_tags)
+}
+
+/// Does [`write_rawblock`] emit this raw HTML bare?
+///
+/// The single source of truth for both the writer and the blank-line rule
+/// below, so the two cannot drift apart.
+fn html_writes_bare(text: &str) -> bool {
+    // The comment arm predates the block-tag one (bd-1066) and deliberately
+    // skips `round_trips_bare_html`'s blank-line guard: the grammar keeps a
+    // whole `<!-- … -->` as one `html_element`, blank lines and all, so a
+    // comment the *reader* produced always re-reads as itself. A comment
+    // `RawBlock` synthesised by a filter with markdown after a blank line
+    // inside it would not, but no reader path produces that.
+    is_html_comment(text) || round_trips_bare_html(text)
+}
+
 fn write_div(
     div: &crate::pandoc::Div,
     writer: &mut dyn std::io::Write,
@@ -558,7 +649,7 @@ fn write_div(
     writeln!(writer)?;
 
     for block in div.content.iter() {
-        // Add a blank line between blocks in the blockquote
+        // A blank line opens the div body and separates its blocks.
         writeln!(writer)?;
         write_block(block, writer, ctx)?;
     }
@@ -850,12 +941,28 @@ fn write_rawblock(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io:
     // Only output raw content if it's for markdown format
     if rawblock.format == "markdown" {
         write!(buf, "{}", rawblock.text)?;
-    } else if rawblock.format == "html" && is_html_comment(&rawblock.text) {
-        // HTML comments are emitted in native syntax, matching write_rawinline
-        // (bd-1066). A comment on its own line is now lifted to a RawBlock
-        // rather than a Paragraph of RawInlines, so the block writer needs the
-        // same case or the comment round-trips as a ```{=html} fence.
-        writeln!(buf, "{}", rawblock.text)?;
+    } else if rawblock.format == "html" && html_writes_bare(&rawblock.text) {
+        // Block-level raw HTML is emitted as written, not wrapped in a
+        // ```{=html} fence. Comments came first (bd-1066); the rest followed
+        // when the lift started splitting a tight `<div>` into
+        // RawBlock/Plain/RawBlock, because a fence around each tag would
+        // separate it from the `Plain` and break the round-trip.
+        //
+        // The rule is self-consistent: exactly the texts written bare here are
+        // the ones `paragraph.rs` lifts back to a `RawBlock` on the next read.
+        // Raw HTML that is *not* block-level keeps its fence, since bare it
+        // would come back as an inline.
+        //
+        // This reverses the normalisation to the documented ```{=html}
+        // spelling the lift originally shipped with — deliberately, in favour
+        // of round-trip stability and pandoc parity
+        // (bd-block-html-adjacent-markdown-unparsed-0qnjuwuy).
+        // `trim_end` because the text may already end in a newline — a filter
+        // or JSON AST can carry `"<div>\n"` — and `writeln!` would then emit a
+        // second one. Harmless to the parse (blocks are blank-line separated
+        // either way) but it makes the first write idempotent rather than the
+        // second.
+        writeln!(buf, "{}", rawblock.text.trim_end())?;
     } else {
         // For other formats, use fenced raw block notation with `=` prefix
         writeln!(buf, "```{{={}}}", rawblock.format)?;

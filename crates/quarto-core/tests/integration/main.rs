@@ -45,6 +45,7 @@ pub mod julia_engine_e2e;
 pub mod jupyter_integration;
 pub mod jupyter_kernel_cleanup;
 pub mod knitr_display_fence;
+pub mod knitr_inline_expressions;
 pub mod language_catalog;
 pub mod language_pipeline;
 pub mod language_resolve;

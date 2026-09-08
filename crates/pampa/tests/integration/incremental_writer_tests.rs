@@ -1431,12 +1431,105 @@ fn roundtrip_inline_comment() {
 }
 
 /// Standard writer round-trip: comment in blockquote.
+///
+/// This one cannot use [`assert_roundtrip`], which demands the rewritten text
+/// re-parse *structurally equal* to the new AST. A comment followed by prose on
+/// the next line is one paragraph, and the reader splits it into a `RawBlock`
+/// plus a `Plain` (bd-block-html-adjacent-markdown-unparsed-0qnjuwuy). The
+/// writer separates blocks with a blank line, so the `Plain` re-reads as a
+/// `Paragraph` — a canonicalization, in the same family as the table and
+/// definition-list rewrites documented in `writers/qmd.rs`.
+///
+/// Preserving the `Plain` would mean writing the two blocks tight, which
+/// requires knowing they came from one paragraph. The AST does not record that,
+/// and the rule that guessed it merged blocks that were never one paragraph —
+/// it pulled a following `<script>` into the preceding text and its contents
+/// were then parsed as markdown. So this asserts what actually holds: the
+/// comment stays in block position, the prose stays parsed, and the shape is
+/// stable from the first rewrite onward.
 #[test]
 fn roundtrip_comment_in_blockquote() {
-    assert_roundtrip(
-        "> <!-- comment -->\n> Some text.\n",
-        "> <!-- comment -->\n> Changed text.\n",
+    use pampa::pandoc::Block;
+
+    let original_qmd = "> <!-- comment -->\n> Some text.\n";
+    let new_qmd = "> <!-- comment -->\n> Changed text.\n";
+
+    let original_ast = parse_qmd(original_qmd);
+    let new_ast = parse_qmd(new_qmd);
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+    let result =
+        writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
+            .expect("incremental_write failed");
+
+    let quoted = match &parse_qmd(&result).blocks[0] {
+        Block::BlockQuote(q) => q.content.clone(),
+        other => panic!("expected a BlockQuote, got {:?}", other),
+    };
+    match &quoted[0] {
+        Block::RawBlock(r) => assert_eq!(r.text, "<!-- comment -->"),
+        other => panic!("the comment must stay in block position, got {:?}", other),
+    }
+    let text = match &quoted[1] {
+        Block::Plain(p) => &p.content,
+        Block::Paragraph(p) => &p.content,
+        other => panic!("expected the prose as its own block, got {:?}", other),
+    };
+    assert!(
+        format!("{:?}", text).contains("Changed"),
+        "the edit should be present: {:?}",
+        text
     );
+
+    // A second pass over the rewritten text must not move again.
+    let stable_ast = parse_qmd(&result);
+    let stable_plan = compute_reconciliation(&stable_ast, &stable_ast);
+    let stable =
+        writers::incremental::incremental_write(&result, &stable_ast, &stable_ast, &stable_plan)
+            .expect("incremental_write failed");
+    assert_eq!(stable, result, "the rewrite should reach a fixed point");
+}
+
+/// Incremental round-trip of a split at the *top level*.
+///
+/// `roundtrip_comment_in_blockquote` covers a split inside a container; this is
+/// the bare case. Same contract: the tags stay in block position, the interior
+/// stays parsed, and the shape is stable once rewritten.
+#[test]
+fn roundtrip_tight_div_at_top_level() {
+    use pampa::pandoc::Block;
+
+    let original_qmd = "<div class=\"note\">\ntext with `code`\n</div>\n";
+    let new_qmd = "<div class=\"note\">\nchanged with `code`\n</div>\n";
+
+    let original_ast = parse_qmd(original_qmd);
+    let new_ast = parse_qmd(new_qmd);
+    let plan = compute_reconciliation(&original_ast, &new_ast);
+    let result =
+        writers::incremental::incremental_write(original_qmd, &original_ast, &new_ast, &plan)
+            .expect("incremental_write failed");
+
+    let blocks = parse_qmd(&result).blocks;
+    match &blocks[0] {
+        Block::RawBlock(r) => assert_eq!(r.text, "<div class=\"note\">"),
+        other => panic!("the open tag must stay in block position, got {:?}", other),
+    }
+    match blocks.last() {
+        Some(Block::RawBlock(r)) => assert_eq!(r.text, "</div>"),
+        other => panic!("the close tag must stay in block position, got {:?}", other),
+    }
+    let interior = format!("{:?}", &blocks[1]);
+    assert!(
+        interior.contains("Code") && interior.contains("changed"),
+        "the edited interior should still be parsed markdown: {}",
+        interior
+    );
+
+    let stable_ast = parse_qmd(&result);
+    let stable_plan = compute_reconciliation(&stable_ast, &stable_ast);
+    let stable =
+        writers::incremental::incremental_write(&result, &stable_ast, &stable_ast, &stable_plan)
+            .expect("incremental_write failed");
+    assert_eq!(stable, result, "the rewrite should reach a fixed point");
 }
 
 // --- Phase 4: Edge case tests ---

@@ -108,3 +108,105 @@ escape also means code blocks that genuinely contain doubled braces —
 Jinja or Mustache templates, GitHub Actions expressions — render
 correctly, where Quarto 1 would collapse them.
 :::
+
+## Inline expressions
+
+A document can also compute a value **inline** --- inside a sentence, or
+inside an attribute --- so that the result appears in place of the
+expression. Quarto has two spellings for this, and they differ in how the
+computed value is inserted.
+
+The **brace spelling** mirrors the cell syntax and works across engines:
+
+````markdown
+The current release is `{r} release_version`.
+````
+
+The **classic spelling** is knitr's own, inherited from R Markdown, and
+predates Quarto. It is available with the knitr engine only:
+
+````markdown
+The current release is `r release_version`.
+````
+
+### The two spellings insert the value differently
+
+The brace spelling **escapes** Markdown's special characters in the value:
+whatever the expression returns is shown as text, exactly as it came out. The
+classic spelling inserts the value **as Markdown**, so formatting carried in
+the value is interpreted.
+
+With `notice` set to `**important**`:
+
+| Written              | Renders as      |
+|----------------------|-----------------|
+| `` `{r} notice` ``   | `**important**` |
+| `` `r notice` ``     | **important**   |
+
+To opt the brace spelling into Markdown, wrap the value in knitr's `I()`:
+
+````markdown
+The notice is `{r} I(notice)`.
+````
+
+That makes the two spellings equivalent: `` `r x` `` does the same thing as
+`` `{r} I(x)` ``.
+
+Reach for the brace spelling when the value comes from somewhere you do not
+control. Markdown admits inline HTML, so a value inserted as Markdown can
+bring markup with it; the brace spelling's escaping is the default for
+exactly that reason.
+
+### Where inline expressions work
+
+In prose, and in attribute values --- a fenced div's attributes, or a link
+title:
+
+````markdown
+The current release is `{r} release_version`.
+
+::: {#hero data-version="`{r} release_version`"}
+Download the latest build.
+:::
+
+[Download](https://example.com/dl "Version `{r} release_version`")
+````
+
+### Writing about an inline expression
+
+The rule is the one from [Displaying code cells without running
+them](#displaying-code-cells-without-running-them), and nothing about it
+changes for inline expressions: write it inside a `markdown` block and it is
+displayed rather than run.
+
+````markdown
+```markdown
+The current release is `{r} release_version`.
+```
+````
+
+which renders as:
+
+```markdown
+The current release is `{r} release_version`.
+```
+
+The expression is shown exactly as an author would type it, together with the
+prose around it, so a reader can copy the whole line into their own document.
+As with cells, the wrapping fence only needs to be longer than the longest run
+of backticks inside it.
+
+The block has to be a `markdown` block, or a fence carrying no language at
+all. A fence labelled with some other language --- ```` ```r ````, say ---
+displays its text but does not stop an expression inside it from running, so
+reach for `markdown` when what you are showing is Quarto syntax.
+
+::: callout-note
+## Migrating from Quarto 1
+
+Quarto 1 had a doubled-brace escape for inline expressions too: `` `{{r}} x` ``
+was displayed as `` `{r} x` ``. Quarto 2 drops it for the same reason it drops
+the doubled-brace escape for cells --- the `markdown` code block above does the
+job, and leaving doubled braces alone is what lets Jinja and Mustache templates
+render correctly.
+:::
