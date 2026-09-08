@@ -2,6 +2,8 @@
 //!
 //! Runs all build and test steps to ensure the entire project is healthy,
 //! matching the CI environment as closely as possible:
+//! 0. Preflight: the `node` on PATH satisfies `engines.node` (see
+//!    `node_version.rs`; skipped only when every npm-driven step is off)
 //! 1. Run custom lint checks
 //! 2. Check Rust formatting (cargo fmt --check)
 //! 3. Build all Rust crates (with -D warnings, matching CI)
@@ -69,6 +71,27 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
     } else {
         Some("-D warnings")
     };
+
+    // Preflight: Node toolchain. Every npm-driven step below (6–14) runs
+    // whatever `node` is first on PATH, and the repo pins a Node major in
+    // `engines.node` / `.nvmrc`. Drift surfaces late and misleadingly (23
+    // unrelated-looking vitest failures under Node 26 — bd-lh30hlvd), so check
+    // first: a mismatch fails in seconds, before the Rust build, with the
+    // cause named. Nothing to check when every npm-driven step is disabled.
+    let needs_node = !(config.skip_ts_packages_build
+        && config.skip_hub_build
+        && config.skip_hub_tests
+        && config.skip_trace_viewer_build
+        && config.skip_trace_viewer_tests
+        && config.skip_shared_package_tests
+        && config.skip_q2_preview_spa_build
+        && config.skip_hub_mcp_tests);
+    println!("\n━━━ Preflight: Node toolchain ━━━\n");
+    if needs_node {
+        crate::node_version::preflight_verify(&project_root)?;
+    } else {
+        println!("  (skipped — every npm-driven step is disabled)");
+    }
 
     // Step 1: Custom lint checks + clippy gate
     {
@@ -590,7 +613,7 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
 }
 
 /// Find the project root directory (where Cargo.toml with [workspace] lives).
-fn find_project_root() -> Result<std::path::PathBuf> {
+pub(crate) fn find_project_root() -> Result<std::path::PathBuf> {
     let mut dir = std::env::current_dir().context("Failed to get current directory")?;
 
     loop {

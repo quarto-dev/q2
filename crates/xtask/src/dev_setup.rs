@@ -146,11 +146,23 @@ pub fn run() -> Result<()> {
     }
 
     check_cmake();
+    check_node();
     check_pandoc();
     check_deno();
     check_wasm_opt();
 
     Ok(())
+}
+
+/// Check that the `node` on PATH satisfies the repo's pin (`engines.node` in
+/// the root `package.json`, mirrored in `.nvmrc`). Warn-only here; `cargo
+/// xtask verify` enforces it. See `node_version.rs` for why the pin needs
+/// enforcing at all (bd-lh30hlvd).
+fn check_node() {
+    match crate::verify::find_project_root() {
+        Ok(root) => crate::node_version::report_dev_setup(&root),
+        Err(e) => println!("\n  Warning: cannot locate the project root to check Node: {e:#}"),
+    }
 }
 
 /// Check for cmake (required — `cargo build --workspace` pulls in
