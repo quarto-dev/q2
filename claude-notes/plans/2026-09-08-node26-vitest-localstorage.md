@@ -2,199 +2,180 @@
 
 **Date:** 2026-09-08
 **Braid:** bd-lh30hlvd
-**Checkout:** invoked in the main checkout on `braid/bd-ve916wr8-brand-file-fonts` @ `89c580f1` (no worktree created — see § Notes on the checkout)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Worktree:** `.worktrees/bd-lh30hlvd-node-version-guard` (branch `braid/bd-lh30hlvd-node-version-guard`, based on `main` @ `b7e7c96a`)
+**Status:** Executing — direction agreed with the user on 2026-09-08 (see § Decision).
 
-## Triage verdict
+## Overview
 
-**Ready to design.** Root cause is fully understood and reproduced at HEAD; three fix
-candidates were tried empirically and one flag-free candidate passes all 62 affected
-tests under Node 26.8.1. The remaining decisions are about *which* layers to fix
-(test config, dependency version, environment enforcement) — not about what is wrong.
+`cargo xtask verify`'s hub-client leg went red on this machine because a routine
+`brew upgrade` on 2026-09-04 relinked `/opt/homebrew/bin/node` from node@24 to node 26.8.1.
+Node ≥ 25 defines a `localStorage` accessor on `globalThis` (returning `undefined` without
+`--localstorage-file`), and vitest 4.x's jsdom environment skips window keys that already
+exist on the global unless allowlisted — `localStorage` is not allowlisted until vitest 5.0.0.
+So jsdom's storage is never installed and every `localStorage.clear()` dereferences `undefined`.
 
-The user also asked *why this started happening recently* and *how to avoid the class*.
-Both are answered below (§ Timeline, § Why the May pin did not hold, § Avoiding the class).
+This is a **recurrence** of the May 2026 incident (`ca6d47c8` pinned Node 24 via `.nvmrc` +
+`engines`). The pin was advisory: no version manager on the machine, `engine-strict` off,
+and nothing in `xtask` looks at the Node version.
 
-## Issue context
+Full root-cause narrative, timeline, candidate table and probe artifacts are preserved in
+§ Investigation record below and in `node26-vitest-localstorage-investigation/`.
 
-Filed 2026-09-08 by Carlos (bug, P2, labels `hub-client`, `testing`), discovered during
-the bd-jsvetdea pre-flight verify. Under Node v26.8.1, `npm run test` in `hub-client`
-prints `ExperimentalWarning: localStorage is not available because --localstorage-file
-was not provided` and every test touching `localStorage` fails with
-`TypeError: Cannot read properties of undefined (reading 'clear')`. 23 tests across 6
-files; `cargo xtask verify`'s hub-client leg is red on Node 26 machines; CI (Node 24) is
-green.
+## Decision (2026-09-08)
 
-## Dependency graph
+The user's top-level decision: **do not move the repo to Node 26 yet**. Keep `engines.node`
+at `^24.0.0`. Fix the local machine so the existing pin is honoured, and make the pin
+*enforced* in the repo so the next drift fails fast with the cause named. Defer the vitest
+shim / vitest 5 upgrade to the deliberate LTS bump (Node 26 becomes LTS in Oct 2026).
 
-- **discovered-from** bd-jsvetdea (closed) — "User theme .scss compile error is
-  swallowed". Its pre-flight `cargo xtask verify` tripped over this. No other context
-  carried; the parent is unrelated to Node.
-- **related** (incoming) bd-202u5bld — "Add a Rust grammar to quarto-highlight".
-  Unrelated in substance; the edge looks like a same-session link. Ignore.
-- No `blocks` edges either way. No incoming pressure beyond "verify is red locally".
+Concretely:
 
-## What the code looks like today — root cause
+1. **Machine**: fnm, initialised in `~/.zprofile`, selects Node 24 from `.nvmrc` on `cd`.
+   Homebrew's `node` stays for `bitwarden-cli`; fnm's default is `system`, so nothing
+   changes outside pinned projects.
+2. **Repo**: a Node-version check in `cargo xtask verify` (fail, with an explicit escape
+   hatch) and `cargo xtask dev-setup` (warn + install hints); `engine-strict=true` in a
+   committed root `.npmrc`; a short instructions note.
+3. **Deferred** (own strand): vitest 5 / jsdom-Storage shim, when `engines` moves to 26.
 
-Reproduced at HEAD (`89c580f1`) with Node 26.8.1, vitest 4.1.8, jsdom 26:
+## Phase A — Local machine (done 2026-09-08)
+
+- [x] `brew install fnm` (1.39.0)
+- [x] `fnm install 24` → v24.20.0 (newer than Homebrew's node@24 24.15.0)
+- [x] `fnm default system` — outside pinned projects `node` stays Homebrew's 26.8.1
+- [x] `~/.zprofile` (new file): `eval "$(fnm env --use-on-cd --version-file-strategy=recursive)"`
+      with a comment explaining why `.zprofile` and not `.zshenv` (`/etc/zprofile`'s
+      `path_helper` would reorder `/opt/homebrew/bin` ahead of fnm — `/etc/paths.d/homebrew`
+      exists on this machine)
+- [x] `~/.zshrc`: pointer comment next to the PATH section
+- [x] Verified from fresh shells: `zsh -l` in repo → v24.20.0; in `hub-client/` → v24.20.0
+      (recursive strategy); outside repo → "Bypassing fnm: using system node" v26.8.1;
+      `zsh -l -i` (Terminal.app shape) → v24.20.0, npm 11.19.0
+- [ ] Note for the user: shells started *before* `~/.zprofile` existed (including the Claude
+      Code session that did this work) keep Node 26 until restarted
+
+## Phase B — Node toolchain check in xtask (TDD)
+
+Module `crates/xtask/src/node_version.rs`. Pure functions unit-tested; process/IO at the edge.
+
+- [ ] B0 tests (written first, must fail before implementation):
+  - [ ] `parse_node_version("v24.20.0")` → `24.20.0`; rejects garbage; tolerates trailing newline
+  - [ ] `engines_node_requirement(package_json_text)` → `VersionReq` for `^24.0.0`; error when
+        `engines`/`engines.node` missing; error (not silent pass) on an unparsable range
+  - [ ] `evaluate(requirement, Some(version))` → `Satisfied` / `Mismatch`; `None` → `NotFound`
+  - [ ] `Mismatch`/`NotFound` render an actionable message naming the found version, the
+        requirement, its source file, and the fnm/`.nvmrc` remedy
+  - [ ] escape hatch: `enforcement(outcome, allow_mismatch: bool)` → `Proceed` / `Fail`
+- [ ] B1 implement: `semver` crate (`VersionReq`, already in `Cargo.lock`) for the range;
+      `node --version` via `crate::util::nested_command` (Windows `.cmd` shims); read
+      `engines.node` from `<root>/package.json`
+- [ ] B2 wire into `verify::run`: before Step 1, when any npm-driven step will run, fail on
+      mismatch unless `Q2_ALLOW_NODE_MISMATCH=1` (then print a loud warning); print
+      `Node vX.Y.Z satisfies engines.node ^24.0.0` on success so a log names the toolchain
+- [ ] B3 wire into `dev_setup::run`: warn-only `check_node()` mirroring `check_wasm_opt`,
+      with per-platform install hints (fnm / mise / nvm; `.nvmrc` selects the version)
+- [ ] B4 `cargo nextest run -p xtask`; `cargo xtask lint`; clippy clean under `-D warnings`
+
+## Phase C — `engine-strict` at install time
+
+- [ ] C1 root `.npmrc`: `engine-strict=true` with a comment pointing at `engines.node` and
+      the instructions note
+- [ ] C2 verify: under Node 26 `npm install --dry-run` fails with `EBADENGINE`; under Node 24
+      `npm ci` in the worktree succeeds (also proves no *dependency* declares an
+      incompatible `engines` range — `engine-strict` applies to the whole tree)
+- [ ] C3 confirm CI is unaffected: every workflow's `setup-node` uses `node-version: '24'`
+      (checked 2026-09-08: hub-client-e2e, ts-test-suite ×2, release ×3, deploy-sandboxed-preview)
+
+## Phase D — Docs
+
+- [ ] D1 `claude-notes/instructions/node-version.md`: the pin (`.nvmrc` + `engines`), what
+      enforces it (xtask check, `engine-strict`), the Homebrew relink trap, fnm setup
+      (`.zprofile` vs `.zshenv` on macOS), the escape hatch, and how the pin gets bumped
+- [ ] D2 `CLAUDE.md`: two-line pointer under hub-client Development
+- [ ] D3 `.claude/rules/worktrees.md` fresh-worktree bootstrap: mention `npm ci` runs under the
+      pinned Node (one line)
+
+## Phase E — End-to-end verification and hand-off
+
+- [ ] E1 `cargo xtask verify` in the worktree under Node 26 (`PATH` override): must stop at the
+      preflight with the Node message, before any Rust build
+- [ ] E2 `cargo xtask verify` in the worktree under Node 24 (full, including hub build + tests):
+      green
+- [ ] E3 `cargo xtask dev-setup` output under both Nodes inspected
+- [ ] E4 pre-commit checklist (`claude-notes/instructions/review.md`) per commit
+- [ ] E5 file the deferred strand (vitest 5 / shim at the Node 26 LTS bump), link
+      `related:bd-lh30hlvd`; comment on bd-lh30hlvd; leave the strand open until the PR merges
+- [ ] E6 report: exact invocations + observed output for E1/E2, the machine changes made,
+      and the branch/PR handoff (push only with the user's permission)
+
+## Investigation record (2026-09-08)
+
+### Root cause
+
+Reproduced at `89c580f1` with Node 26.8.1, vitest 4.1.8, jsdom 26:
 
 ```
 $ cd hub-client && npx vitest run src/hooks/usePreference.test.tsx src/services/branchService.test.ts
- FAIL  src/hooks/usePreference.test.tsx > ... 
 TypeError: Cannot read properties of undefined (reading 'clear')
  ❯ src/hooks/usePreference.test.tsx:10:16
-      10|   localStorage.clear();
  Test Files  2 failed (2)   Tests  12 failed (12)
 ```
 
-The six failing files all carry `@vitest-environment jsdom` (60 files in hub-client do).
-They never polyfill `localStorage` themselves — they rely on vitest's jsdom environment
-copying `window.localStorage` onto `globalThis`. That copy is what Node 26 breaks:
+1. Node ≥ 25 defines a `localStorage` accessor on `globalThis`; without `--localstorage-file`
+   it warns and returns `undefined`, but `'localStorage' in globalThis === true`. Node 24 has
+   no such property (probe output in the investigation README).
+2. vitest 4.1.8 jsdom environment (`getWindowKeys` in
+   `node_modules/vitest/dist/chunks/index.DC7d2Pf8.js`): `if (k in global) return
+   keysArray.includes(k);` — `KEYS` has `"Storage"` but not `"localStorage"`, so jsdom's
+   storage is never copied onto the global.
+3. Upstream added `localStorage`/`sessionStorage` to the allowlist in **vitest 5.0.0** only
+   (verified by unpacking 4.1.9, 4.1.10, 4.1.11, 5.0.0 from npm). vitest-dev/vitest#8757.
 
-1. **Node ≥ 25 defines a `localStorage` accessor on `globalThis`** (Web Storage was
-   unflagged in v25.0.0). Without `--localstorage-file` the getter emits the
-   ExperimentalWarning and returns `undefined` — but the *property exists*:
-   `'localStorage' in globalThis === true`. (Probe output in the investigation README.)
-   Node 24 has no such property at all.
-2. **vitest's jsdom environment skips window keys that already exist on the global**
-   unless they are in its explicit allowlist (`KEYS`). In vitest 4.1.8
-   (`node_modules/vitest/dist/chunks/index.DC7d2Pf8.js`, `getWindowKeys`):
-
-   ```js
-   if (k in global) return keysArray.includes(k);
-   ```
-
-   `KEYS` contains `"Storage"` but **not** `"localStorage"`/`"sessionStorage"`. So on
-   Node 26 jsdom's storage is never installed; Node's undefined-returning accessor stays.
-3. Every `localStorage.clear()` / `getItem()` in a test then dereferences `undefined`.
-
-**Upstream status.** vitest `main` now lists `localStorage` and `sessionStorage` in the
-jsdom keys allowlist, but that change shipped only in **vitest 5.0.0** — I unpacked
-4.1.9, 4.1.10, 4.1.11 and 5.0.0 from npm: the key is absent in every 4.1.x and present
-in 5.0.0. Nothing in the 4.x line will fix this. (vitest-dev/vitest#8757 is the
-upstream issue; workspace pins `^4.0.17`, vite `^7.2.4`, and vitest 5 peers on
-`vite ^6.4 || ^7 || ^8`, so an upgrade is at least dependency-compatible.)
-
-### Fix candidates tried (Node 26.8.1, hub-client)
+### Fix candidates tried (Node 26.8.1)
 
 | Candidate | Result | Notes |
 | --- | --- | --- |
-| `NODE_OPTIONS=--no-webstorage` | unit suite green: 96 files / 1084 tests | **`--no-webstorage` is a bad option on Node 24** (`node: bad option`), so it cannot go unconditionally into shared config or CI. |
-| `NODE_OPTIONS=--localstorage-file=<tmp>` | 2 probe files green | Makes Node's *file-backed* Storage the one tests use (jsdom's is still skipped). Persists across runs and workers; wrong semantics for tests. Reject. |
-| `PATH` → node@24 | green | Confirms the environment, not a fix. |
-| **setupFiles shim using jsdom's own Storage** | **6 affected files green: 62/62** | vitest sets `globalThis.jsdom` to the JSDOM instance; the shim re-points `localStorage`/`sessionStorage` at `jsdom.window.<key>` when the global reads `undefined`. No flags, works on 24 and 26, becomes a no-op after a vitest 5 upgrade. Prototype: `node26-vitest-localstorage-investigation/webstorage-shim.ts`. |
+| `NODE_OPTIONS=--no-webstorage` | unit suite green (96 files / 1084 tests) | **Node 24 rejects the flag** (`bad option`) — cannot be shared config. |
+| `NODE_OPTIONS=--localstorage-file=<tmp>` | green | Substitutes Node's file-backed Storage for jsdom's; persists across runs/workers. Rejected. |
+| `PATH` → node@24 | green | Confirms the environment. |
+| setupFiles shim via `globalThis.jsdom.window.localStorage` | 6 files / 62 tests green | Flag-free, Node-agnostic; **deferred** by decision (would enable Node 26). Prototype kept in the investigation dir. |
 
-Full `npm run test:ci` under the `--no-webstorage` candidate: unit 1084/1084 and
-integration 119/119 pass; one **wasm** smoke-all test fails — identically under Node 24.
-That failure is a stale local `wasm_quarto_hub_client_bg.wasm` (built Sep 1; commit
-`813850ee` on Sep 3 changed include-error semantics). Not part of this strand; a
-`npm run build:wasm` clears it.
+`npm run test:ci` under the `--no-webstorage` candidate: unit 1084/1084, integration 119/119;
+one wasm smoke-all failure identical under Node 24 — a stale local WASM (built Sep 1; `813850ee`
+on Sep 3 changed include-error semantics). Unrelated.
 
-## Timeline — why it started "recently" in this environment
-
-All Node on this machine comes from Homebrew; `/opt/homebrew/bin/node` is whatever
-`brew` last linked. There is **no version manager** (no nvm/fnm/volta/asdf/mise), so
-`.nvmrc` is inert, and `engine-strict` is off, so `engines` only warns.
+### Timeline — why "recently"
 
 | Date | Event | Evidence |
 | --- | --- | --- |
-| 2026-04-28 | `brew` installs unversioned `node` 25.9.0_2 (Node 25 already unflags Web Storage) | `INSTALL_RECEIPT.json` time |
-| 2026-05-18 | Same symptom hit; commit `ca6d47c8` "chore(node): pin to Node 24 LTS" adds `.nvmrc` = `24` and `engines.node = ^24.0.0`; `node@24` brew formula installed the same afternoon (15:41) and evidently linked, since local tests were green all summer | commit message; `node@24` receipt |
-| 2026-06-01 / 06-10 | CI e2e briefly pinned to 24.15.0 for an unrelated Playwright/yauzl hang, then unpinned back to `'24'` | `55fad91d`, `4a446d85` |
-| 2026-09-04 11:10 | `brew upgrade` installs `node` 26.8.1 and **relinks `/opt/homebrew/bin/node` → 26.8.1**, silently displacing `node@24` | `Cellar/node/26.8.1` receipt; `var/homebrew/linked/node` symlink dated Sep 4 |
-| 2026-09-08 | First `cargo xtask verify` after the upgrade: hub-client leg red; bd-lh30hlvd filed | strand |
+| 2026-04-28 | Homebrew installs unversioned `node` 25.9.0_2 | `INSTALL_RECEIPT.json` |
+| 2026-05-18 | Same symptom; `ca6d47c8` pins Node 24 (`.nvmrc`, `engines`); `node@24` installed 15:41 and linked | commit; receipt |
+| 2026-06-01/10 | CI e2e pinned to 24.15.0 for an unrelated Playwright hang, then unpinned to `'24'` | `55fad91d`, `4a446d85` |
+| 2026-09-04 11:10 | `brew upgrade` (manual — no autoupdate agent) installs `node` 26.8.1 and relinks `bin/node` over node@24 | receipt; `var/homebrew/linked/node` |
+| 2026-09-08 | First `cargo xtask verify` after the upgrade is red; bd-lh30hlvd filed | strand |
 
-So this is a **recurrence** of the May incident, not a new failure mode. The May fix
-aligned the pin with CI but installed nothing that could *enforce* it; the next routine
-`brew upgrade` undid the manual link.
+`brew uninstall node` is not an option: `bitwarden-cli` depends on the unversioned formula.
 
-## Why the May pin did not hold
+### Why the May pin did not hold
 
-- `.nvmrc` only acts through a version manager; none is installed here.
-- `engines.node` only acts at `npm install`, and only warns unless `engine-strict` is
-  set. (Verified: `npm install --engine-strict --dry-run` under Node 26 fails with
-  `EBADENGINE … Required: {"node":"^24.0.0"}`.) `npm test` never consults `engines`.
-- `cargo xtask verify` and `dev-setup` never look at the Node version; `dev-setup` checks
-  `wasm-opt` but not `node`.
-- The test config itself depended on an accident of Node 24 (no `localStorage` global)
-  rather than stating the requirement.
+- `.nvmrc` acts only through a version manager; none was installed.
+- `engines.node` acts only at `npm install`, and only warns unless `engine-strict`
+  (`npm install --engine-strict --dry-run` under Node 26 → `EBADENGINE`, verified).
+- `xtask verify` / `dev-setup` never checked Node (`dev-setup` checks `wasm-opt`, not `node`).
 
-## Avoiding the class (draft — to be confirmed in design)
+Generalisation: a dependency that arrives via the machine's package manager rather than the
+lockfile (Node, wasm-opt, the rustup toolchain, tree-sitter CLI) needs an *enforced* pin;
+an advisory pin recurs on the next upgrade.
 
-Three independent layers, cheapest first:
+### Dependency graph
 
-1. **Make the test config independent of the Node version.** The shim (or the vitest 5
-   upgrade) removes the implicit assumption. This is the only layer that fixes the
-   *symptom* for whoever runs the tests on whatever Node.
-2. **Make the pin bite.** `.npmrc` with `engine-strict=true` turns the wrong Node into an
-   install-time error, and a Node-version check in `cargo xtask verify` (hub leg) and
-   `cargo xtask dev-setup` turns it into an actionable message at the point people
-   actually hit it (`Node 26.8.1 does not satisfy engines.node ^24.0.0 — brew link
-   --overwrite node@24, or install fnm to honor .nvmrc`). Also print the Node version at
-   the top of the hub leg so a red log names the culprit immediately.
-3. **Document the local convention** (`claude-notes/instructions/` or CLAUDE.md): Node is
-   pinned to the current LTS in `.nvmrc`/`engines`; Homebrew users should use `node@24`
-   and expect `brew upgrade` to relink the unversioned `node`; a version manager is the
-   robust option.
+- **discovered-from** bd-jsvetdea (closed): its pre-flight verify surfaced this; unrelated in substance.
+- **related** (incoming) bd-202u5bld (Rust highlight grammar): same-session link, unrelated.
+- No `blocks` edges.
 
-Generalisation: any dependency that arrives via the machine's package manager rather
-than the lockfile (Node, wasm-opt, rustup toolchain, tree-sitter CLI) needs an
-*enforced* pin or a self-contained config; an advisory pin recurs on the next upgrade.
+### Notes on the original checkout
 
-## Proposed phases (draft)
-
-- Phase 0 — Test plan. A regression test that fails under Node ≥ 25 without the shim:
-  a small `*.test.ts` under jsdom asserting `typeof localStorage.getItem === 'function'`
-  and `Object.keys(localStorage)` behaviour (branchService relies on key enumeration).
-  Verify it fails at HEAD on Node 26 (done informally above; make it a named test).
-- Phase 1 — Shim: promote `webstorage-shim.ts` into `hub-client/src/test-utils/`,
-  wire it as `setupFiles` in `vitest.config.ts` and `vitest.integration.config.ts`;
-  switch the undefined-check to a descriptor check so Node's ExperimentalWarning is not
-  triggered by the shim's own read. Run `npm run test:ci` on Node 26 and Node 24.
-- Phase 2 — Enforcement: `.npmrc` `engine-strict=true`; Node-version check + version
-  banner in `xtask verify` hub leg and `xtask dev-setup`. Test the check's range parsing.
-- Phase 3 — Docs: local Node convention note; CLAUDE.md pointer.
-- Phase 4 (separate strand, optional) — vitest 5 upgrade across the 11 `^4.0.17`
-  packages + `@vitest/coverage-v8`; afterwards the shim is dead code and can be removed.
-
-## Open design questions for the user
-
-1. **Config fix: shim now, vitest 5 later, or vitest 5 only?** Recommendation: land the
-   shim (small, no-flag, verified) and file the vitest 5 upgrade as its own strand — a
-   major bump across 11 packages is a different risk profile than this bug.
-2. **Should a wrong Node make `cargo xtask verify` fail or only warn?** Recommendation:
-   fail, with an env-var escape hatch (e.g. `Q2_ALLOW_NODE_MISMATCH=1`) for deliberate
-   experiments like the Node 26 runs in this investigation.
-3. **`engine-strict=true` in a committed `.npmrc`?** It fails `npm install` on any Node
-   outside `^24.0.0` for every contributor, including CI if the runner drifts. That is the
-   point, but it is a visible behaviour change — OK?
-4. **Local machine remedy**: re-link `node@24` (`brew link --overwrite node@24`, which
-   `brew upgrade` will undo again) or install a version manager (fnm/mise) so `.nvmrc`
-   is honoured? Not a repo change; asking so the docs recommend what you actually do.
-5. **Scope of the shim**: hub-client only, or also the other jsdom-using packages
-   (`preview-renderer` 38 files, `q2-preview-spa`, `preview-runtime`, `kanban`)? None of
-   their tests reference `localStorage` today, so I'd keep it hub-client-only and note
-   the pattern.
-
-## Risks / tradeoffs (draft)
-
-- The shim reaches into `globalThis.jsdom`, an implementation detail of vitest's jsdom
-  environment (present in 4.1.8; still present upstream). If it disappears the shim
-  no-ops and the Phase 0 regression test fires — acceptable.
-- `engine-strict` also blocks Node 25/26 users who have no interest in hub-client tests;
-  the `engines` range should track the LTS bump deliberately (next: Node 26 becomes LTS
-  in Oct 2026, at which point vitest 5 removes the need for the shim anyway).
-- A Node-version check in xtask must not break on non-Homebrew layouts or on Windows;
-  read `process.version` via `node -p`, don't inspect paths.
-
-## Notes on the checkout
-
-- Pre-flight `cargo xtask verify --skip-hub-build` was **red**, but not because of HEAD:
-  during this session another agent began writing tests in this same checkout
-  (`crates/quarto-sass/tests/integration/brand_compile_test.rs`,
-  `crates/quarto-brand/tests/integration/font_files_test.rs`,
-  `crates/quarto-core/tests/integration/brand_fonts.rs`, mtimes 14:47–14:49) for
-  bd-ve916wr8, and those call `brand_to_layers` with a not-yet-implemented signature.
-  `main` and the committed HEAD compile. This commit therefore stages **only** the plan
-  and investigation files, not `git add -A`.
-- The wasm smoke-all failure noted above is a stale local artifact, not a regression.
+The investigation was done in the main checkout on `braid/bd-ve916wr8-brand-file-fonts`
+(commit `9dd12112`, cherry-picked here as `57360606`); that branch's pre-flight verify was
+red only because another session was writing bd-ve916wr8's tests there. When that branch
+lands first, `git rebase main` on this branch drops the patch-identical plan commit.
