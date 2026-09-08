@@ -88,7 +88,13 @@ function CollectionPayload({ preview }: { preview: CollectionInvitePreview }) {
         <div key={p.name} className="il-payload-row">
           <span className="il-project">
             <span className="il-project-name">{p.name}</span>
-            <span className="il-file-summary mono">{fileSummary(p.topFiles, p.fileCount)}</span>
+            {/* A zero count means the sender had no cached summary for
+                this project, not that it is empty — every project is
+                scaffolded with at least two files. Name it and say
+                nothing rather than claim "0 files". */}
+            {p.fileCount > 0 && (
+              <span className="il-file-summary mono">{fileSummary(p.topFiles, p.fileCount)}</span>
+            )}
           </span>
           <Facepile initials={p.contributorInitials} />
         </div>

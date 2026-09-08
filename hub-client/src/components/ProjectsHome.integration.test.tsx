@@ -169,4 +169,63 @@ describe('ProjectsHome share link', () => {
     expect(preview?.kind).toBe('project');
     if (preview?.kind === 'project') expect(preview.fileCount).toBe(3);
   });
+
+  /** Copy the invite link for the non-root collection named `name`. */
+  async function inviteFrom(name: string) {
+    fireEvent.click(await screen.findByRole('button', { name: `Actions for ${name}` }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /People & invite/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy link' }));
+  }
+
+  const renderWithCollection = (entries: typeof summarized[]) =>
+    render(
+      <ThemeProvider>
+        <ProjectsHome
+          onSelectProject={vi.fn()}
+          projectSetStatus="connected"
+          projectSetEntries={entries}
+          collections={[
+            { ...rootSet, entries },
+            { ...teamDocs, entries },
+          ]}
+          onUpdateProjectSummary={vi.fn()}
+        />
+      </ThemeProvider>,
+    );
+
+  it('a collection invite always carries a preview payload', async () => {
+    // A link with no preview= at all can only come from a build predating
+    // this feature — worth pinning, because that is indistinguishable
+    // from a bug when you are looking at the card.
+    renderWithCollection([summarized]);
+    await inviteFrom('Team docs');
+
+    await waitFor(() => expect(written).toHaveLength(1));
+    expect(written[0]).toContain('#/join-collection/');
+    const match = new URL(written[0]).hash.match(/preview=([^&]*)/);
+    expect(match, 'collection invite carried no preview payload').not.toBeNull();
+    const preview = decodeInvitePreview(match![1]);
+    expect(preview?.kind).toBe('collection');
+    if (preview?.kind === 'collection') {
+      expect(preview.projects[0].fileCount).toBe(7);
+    }
+  });
+
+  it('a collection row for a project with no cached summary carries a zero count', async () => {
+    renderWithCollection([unsummarized]);
+    await inviteFrom('Team docs');
+
+    await waitFor(() => expect(written).toHaveLength(1));
+    const preview = decodeInvitePreview(
+      new URL(written[0]).hash.match(/preview=([^&]*)/)![1],
+    );
+    expect(preview?.kind).toBe('collection');
+    if (preview?.kind === 'collection') {
+      // 0 means "no cached summary", never "this project is empty" —
+      // every Quarto Hub project is scaffolded with at least two files.
+      // InviteLanding must therefore not render it as "0 files".
+      expect(preview.projects[0].fileCount).toBe(0);
+      expect(preview.projects[0].name).toBe('No summary yet');
+    }
+  });
 });

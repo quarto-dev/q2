@@ -168,6 +168,27 @@ describe('InviteLanding payload preview', () => {
     expect(screen.getByRole('heading', { name: 'Meeting notes' })).toBeTruthy();
   });
 
+  it('a collection row with no cached summary names the project and claims no count', () => {
+    // fileCount 0 means the sender had no cached summary for that
+    // project, not that it is empty — every project is scaffolded with
+    // at least two files, so "0 files" would be a plain lie.
+    renderLanding({
+      preview: {
+        kind: 'collection',
+        projects: [
+          { name: 'Never opened here', topFiles: [], fileCount: 0, contributorInitials: [] },
+          { name: 'Quarterly report', topFiles: ['report.qmd'], fileCount: 12, contributorInitials: ['CS'] },
+        ],
+        totalProjects: 2,
+        memberFirstNames: ['Carlos'],
+      },
+    });
+    expect(screen.getByText('Never opened here')).toBeTruthy();
+    expect(screen.queryByText(/0 files?/)).toBeNull();
+    // The project that does have a summary still shows one.
+    expect(screen.getByText('report.qmd · 12 files')).toBeTruthy();
+  });
+
   it('collection rows pluralize a single-file project', () => {
     renderLanding({
       preview: {
