@@ -1,0 +1,5 @@
+project:
+  type: website
+format:
+  html:
+    theme: [cosmo, theme.scss]

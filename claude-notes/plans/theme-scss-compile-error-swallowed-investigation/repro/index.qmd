@@ -1,0 +1,5 @@
+---
+title: Repro for bd-jsvetdea
+---
+
+A one-line unit mistake in `theme.scss` should surface as a diagnostic.

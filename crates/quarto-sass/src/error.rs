@@ -49,9 +49,17 @@ pub enum SassError {
         location: Option<SourceInfo>,
     },
 
-    /// Custom SCSS file doesn't have layer boundary markers
+    /// Custom SCSS file doesn't have layer boundary markers.
+    ///
+    /// `location` is the SourceInfo of the `theme:` entry that named
+    /// the file, when the caller can match the path back to one
+    /// (quarto-core's compile stage); `None` from the loader, which
+    /// only knows the resolved path (bd-qmpygp02).
     #[error("Custom SCSS file doesn't have layer boundary markers: {path}")]
-    InvalidScssFile { path: PathBuf },
+    InvalidScssFile {
+        path: PathBuf,
+        location: Option<SourceInfo>,
+    },
 
     /// Invalid theme configuration in document/project config.
     ///
@@ -114,6 +122,7 @@ impl SassError {
             SassError::UnknownTheme { location, .. }
             | SassError::InvalidThemeConfig { location, .. }
             | SassError::CustomThemeNotFound { location, .. }
+            | SassError::InvalidScssFile { location, .. }
             | SassError::InvalidBrandFontWeight { location, .. }
                 if location.is_none() =>
             {

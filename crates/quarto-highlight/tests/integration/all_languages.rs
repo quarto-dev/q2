@@ -26,6 +26,8 @@ fn cases() -> &'static [(&'static str, &'static str, &'static str)] {
         ("python", "def foo(): pass\n", "keyword"),
         ("py", "def foo(): pass\n", "keyword"),
         ("r", "x <- 1\n", "operator"),
+        ("rust", "fn main() {}\n", "keyword"),
+        ("rs", "fn main() {}\n", "keyword"),
         ("sql", "SELECT 1;\n", "keyword"),
         ("tsx", "const e = <div>hi</div>;\n", "keyword"),
         ("typescript", "const x: number = 1;\n", "keyword"),

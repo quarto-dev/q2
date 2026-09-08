@@ -1580,5 +1580,19 @@
     "message_template": "A page's front matter sets `repo-actions: true`. This key does not enable repository actions — the action list always comes from `website.repo-actions` — it asks only that a page with no table of contents show the actions in the margin rather than the page footer. Quarto 2 does not implement that placement, so the value is ignored and the actions render in the page footer at every width. Page-level `repo-actions: false`, which suppresses the actions for a single page, is supported.",
     "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-13",
     "since_version": "99.9.9"
+  },
+  "Q-14-6": {
+    "subsystem": "theme",
+    "title": "Theme SCSS compilation failed",
+    "message_template": "Compiling the theme SCSS bundle failed. The reported line refers to the bundle Quarto assembles from Bootstrap, its own layers, and the files under `theme:`, so it may point into Quarto's own code reacting to a variable set by a theme. Check the variables and rules in the theme files; if no custom theme or brand is configured, this is likely a Quarto bug.",
+    "docs_url": "https://quarto.org/docs/errors/theme/Q-14-6",
+    "since_version": "99.9.9"
+  },
+  "Q-14-7": {
+    "subsystem": "theme",
+    "title": "Theme file has no layer boundary markers",
+    "message_template": "A `theme:` entry names an `.scss` file that contains none of the `/*-- scss:... --*/` layer boundary markers Quarto needs to merge it into the Bootstrap bundle. Start the file with a marker such as `/*-- scss:defaults --*/` or `/*-- scss:rules --*/`, or list a plain stylesheet under `css:` instead.",
+    "docs_url": "https://quarto.org/docs/errors/theme/Q-14-7",
+    "since_version": "99.9.9"
   }
 }
