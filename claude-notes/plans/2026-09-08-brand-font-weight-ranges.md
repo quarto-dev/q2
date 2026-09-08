@@ -5,7 +5,8 @@
 **Checkout:** `~/rooms/room-1/q2`, branch `main` @ `b7e7c96a` (no worktree/branch created; the
 user picks where the fix lands)
 **Status:** Implemented 2026-09-08 on branch `braid/bd-5fseopxy-brand-font-weight-ranges`;
-PR open against `main`. Remaining: merge, then close the strand.
+PR https://github.com/quarto-dev/q2/pull/663 open against `main`. Remaining: merge, then close
+the strand.
 
 ## Triage verdict
 
