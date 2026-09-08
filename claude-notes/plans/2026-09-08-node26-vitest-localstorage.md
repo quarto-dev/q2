@@ -51,7 +51,7 @@ Concretely:
 - [x] Verified from fresh shells: `zsh -l` in repo → v24.20.0; in `hub-client/` → v24.20.0
       (recursive strategy); outside repo → "Bypassing fnm: using system node" v26.8.1;
       `zsh -l -i` (Terminal.app shape) → v24.20.0, npm 11.19.0
-- [ ] Note for the user: shells started *before* `~/.zprofile` existed (including the Claude
+- [x] Told the user: shells started *before* `~/.zprofile` existed (including the Claude
       Code session that did this work) keep Node 26 until restarted
 
 ## Phase B — Node toolchain check in xtask (TDD)
@@ -112,8 +112,7 @@ Module `crates/xtask/src/node_version.rs`. Pure functions unit-tested; process/I
 - [x] E5 deferred strand filed: **bd-s84z961e** (vitest 5 / shim at the Node 26 LTS bump,
       `related:bd-lh30hlvd`); progress comment left on bd-lh30hlvd; bd-lh30hlvd stays open
       until the PR merges
-- [ ] E6 report: exact invocations + observed output for E1/E2, the machine changes made,
-      and the branch/PR handoff (push only with the user's permission)
+- [x] E6 reported to the user 2026-09-08 (commit `1c0fe1c6`); push/PR awaits the user's go-ahead
 
 ## Investigation record (2026-09-08)
 
