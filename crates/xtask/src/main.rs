@@ -32,6 +32,7 @@ mod build_trace_viewer;
 mod create_worktree;
 mod dev_setup;
 mod lint;
+mod node_version;
 mod pandoc_check;
 mod stage_doc_examples;
 mod switch_task;
@@ -144,6 +145,8 @@ enum Command {
     /// Run full project verification (mirrors CI checks).
     ///
     /// This runs all build and test steps to ensure the entire project is healthy:
+    /// 0. Preflight: the `node` on PATH satisfies `engines.node` in package.json
+    ///    (fails early; override with Q2_ALLOW_NODE_MISMATCH=1 for experiments)
     /// 1. Run custom lint checks (cargo xtask lint)
     /// 2. Check Rust formatting (cargo fmt --check)
     /// 3. Build all Rust crates (cargo build --workspace, with -D warnings)

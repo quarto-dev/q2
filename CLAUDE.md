@@ -352,6 +352,8 @@ npm run local-prod # Run hub + static server with proxy (requires built client)
 
 **Important:** Never run `npm install` from hub-client directly - dependencies are hoisted to the root `node_modules/`.
 
+**Node version is pinned** (`.nvmrc` + `engines.node`, currently Node 24, same as CI). `npm install`/`npm ci` refuse other majors (`engine-strict` in `.npmrc`) and `cargo xtask verify` checks the Node on `PATH` before anything else. Use a version manager (fnm/mise/nvm) so `.nvmrc` selects it — do not rely on Homebrew's `node`, which `brew upgrade` relinks to the newest major. Setup and rationale: `claude-notes/instructions/node-version.md`.
+
 **Local production mode:**
 
 `npm run local-prod` runs a setup that mirrors the production deployment:

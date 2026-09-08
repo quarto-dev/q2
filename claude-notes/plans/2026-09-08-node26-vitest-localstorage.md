@@ -58,53 +58,60 @@ Concretely:
 
 Module `crates/xtask/src/node_version.rs`. Pure functions unit-tested; process/IO at the edge.
 
-- [ ] B0 tests (written first, must fail before implementation):
-  - [ ] `parse_node_version("v24.20.0")` → `24.20.0`; rejects garbage; tolerates trailing newline
-  - [ ] `engines_node_requirement(package_json_text)` → `VersionReq` for `^24.0.0`; error when
+- [x] B0 tests (written first; all 17 failed on `todo!()` stubs, then passed):
+  - [x] `parse_node_version("v24.20.0")` → `24.20.0`; rejects garbage; tolerates trailing newline
+  - [x] `engines_node_requirement(package_json_text)` → `VersionReq` for `^24.0.0`; error when
         `engines`/`engines.node` missing; error (not silent pass) on an unparsable range
-  - [ ] `evaluate(requirement, Some(version))` → `Satisfied` / `Mismatch`; `None` → `NotFound`
-  - [ ] `Mismatch`/`NotFound` render an actionable message naming the found version, the
+  - [x] `evaluate(requirement, Some(version))` → `Satisfied` / `Mismatch`; `None` → `NotFound`
+  - [x] `Mismatch`/`NotFound` render an actionable message naming the found version, the
         requirement, its source file, and the fnm/`.nvmrc` remedy
-  - [ ] escape hatch: `enforcement(outcome, allow_mismatch: bool)` → `Proceed` / `Fail`
-- [ ] B1 implement: `semver` crate (`VersionReq`, already in `Cargo.lock`) for the range;
+  - [x] escape hatch: `enforcement(outcome, allow_mismatch: bool)` → `Proceed` / `Fail`
+- [x] B1 implement — **decision changed during B1:** Cargo's `semver` crate rejects npm's
+      space-separated `>=24 <25`; switched to `nodejs-semver` 5.0.0 (npm's own grammar; adds
+      `miette`/`winnow`/`bytecount` to xtask only). Range via `Range::parse`/`satisfies`;
       `node --version` via `crate::util::nested_command` (Windows `.cmd` shims); read
       `engines.node` from `<root>/package.json`
-- [ ] B2 wire into `verify::run`: before Step 1, when any npm-driven step will run, fail on
+- [x] B2 wire into `verify::run`: before Step 1, when any npm-driven step will run, fail on
       mismatch unless `Q2_ALLOW_NODE_MISMATCH=1` (then print a loud warning); print
       `Node vX.Y.Z satisfies engines.node ^24.0.0` on success so a log names the toolchain
-- [ ] B3 wire into `dev_setup::run`: warn-only `check_node()` mirroring `check_wasm_opt`,
+- [x] B3 wire into `dev_setup::run`: warn-only `check_node()` mirroring `check_wasm_opt`,
       with per-platform install hints (fnm / mise / nvm; `.nvmrc` selects the version)
-- [ ] B4 `cargo nextest run -p xtask`; `cargo xtask lint`; clippy clean under `-D warnings`
+- [x] B4 `cargo nextest run -p xtask`; `cargo xtask lint`; clippy clean under `-D warnings`
 
 ## Phase C — `engine-strict` at install time
 
-- [ ] C1 root `.npmrc`: `engine-strict=true` with a comment pointing at `engines.node` and
+- [x] C1 root `.npmrc`: `engine-strict=true` with a comment pointing at `engines.node` and
       the instructions note
-- [ ] C2 verify: under Node 26 `npm install --dry-run` fails with `EBADENGINE`; under Node 24
+- [x] C2 verify: under Node 26 `npm install --dry-run` fails with `EBADENGINE`; under Node 24
       `npm ci` in the worktree succeeds (also proves no *dependency* declares an
       incompatible `engines` range — `engine-strict` applies to the whole tree)
-- [ ] C3 confirm CI is unaffected: every workflow's `setup-node` uses `node-version: '24'`
+- [x] C3 confirm CI is unaffected: every workflow's `setup-node` uses `node-version: '24'`
       (checked 2026-09-08: hub-client-e2e, ts-test-suite ×2, release ×3, deploy-sandboxed-preview)
 
 ## Phase D — Docs
 
-- [ ] D1 `claude-notes/instructions/node-version.md`: the pin (`.nvmrc` + `engines`), what
+- [x] D1 `claude-notes/instructions/node-version.md`: the pin (`.nvmrc` + `engines`), what
       enforces it (xtask check, `engine-strict`), the Homebrew relink trap, fnm setup
       (`.zprofile` vs `.zshenv` on macOS), the escape hatch, and how the pin gets bumped
-- [ ] D2 `CLAUDE.md`: two-line pointer under hub-client Development
-- [ ] D3 `.claude/rules/worktrees.md` fresh-worktree bootstrap: mention `npm ci` runs under the
+- [x] D2 `CLAUDE.md`: two-line pointer under hub-client Development
+- [x] D3 `.claude/rules/worktrees.md` fresh-worktree bootstrap: mention `npm ci` runs under the
       pinned Node (one line)
 
 ## Phase E — End-to-end verification and hand-off
 
-- [ ] E1 `cargo xtask verify` in the worktree under Node 26 (`PATH` override): must stop at the
-      preflight with the Node message, before any Rust build
-- [ ] E2 `cargo xtask verify` in the worktree under Node 24 (full, including hub build + tests):
-      green
-- [ ] E3 `cargo xtask dev-setup` output under both Nodes inspected
-- [ ] E4 pre-commit checklist (`claude-notes/instructions/review.md`) per commit
-- [ ] E5 file the deferred strand (vitest 5 / shim at the Node 26 LTS bump), link
-      `related:bd-lh30hlvd`; comment on bd-lh30hlvd; leave the strand open until the PR merges
+- [x] E1 `cargo xtask verify` in the worktree under Node 26: stops at the preflight (exit 1)
+      before any Rust build; `Q2_ALLOW_NODE_MISMATCH=1` warns and continues; with every
+      npm-driven step skipped the preflight reports itself skipped (see § End-to-end record)
+- [x] E2 `cargo xtask verify` (full: WASM + hub build + every test leg) in the worktree under
+      fnm's Node 24.20.0: `✓ All verification steps passed!` — 13,757 Rust tests, hub-client
+      1084/119/133, trace-viewer, shared preview-* and hub MCP suites all green (2026-09-08)
+- [x] E3 `cargo xtask dev-setup` output under both Nodes inspected
+- [x] E4 pre-commit checklist: no `HashMap`/`FxHashMap` in changed Rust; no TODOs; `cargo fmt`
+      clean; clippy `-D warnings` clean; `cargo xtask lint` clean; new module's decision logic
+      fully unit-tested, IO edges exercised end-to-end (E1/E3)
+- [x] E5 deferred strand filed: **bd-s84z961e** (vitest 5 / shim at the Node 26 LTS bump,
+      `related:bd-lh30hlvd`); progress comment left on bd-lh30hlvd; bd-lh30hlvd stays open
+      until the PR merges
 - [ ] E6 report: exact invocations + observed output for E1/E2, the machine changes made,
       and the branch/PR handoff (push only with the user's permission)
 
@@ -179,3 +186,27 @@ The investigation was done in the main checkout on `braid/bd-ve916wr8-brand-file
 (commit `9dd12112`, cherry-picked here as `57360606`); that branch's pre-flight verify was
 red only because another session was writing bd-ve916wr8's tests there. When that branch
 lands first, `git rebase main` on this branch drops the patch-identical plan commit.
+
+## End-to-end record (2026-09-08, worktree, xtask at this branch)
+
+`cargo xtask verify --skip-rust-build --skip-rust-tests --skip-treesitter-tests` under
+Homebrew's Node 26.8.1 (output inspected):
+
+```
+━━━ Preflight: Node toolchain ━━━
+
+Error: Node v26.8.1 does not satisfy engines.node ^24.0.0 (package.json).
+  This repository pins Node to ^24.0.0 (package.json `engines.node`, mirrored in `.nvmrc`).
+  With fnm, mise, or nvm installed, `.nvmrc` selects the pinned version automatically;
+  see claude-notes/instructions/node-version.md for setup (and for the Homebrew relink trap).
+  To run against this Node anyway, as a deliberate experiment: Q2_ALLOW_NODE_MISMATCH=1
+exit=1
+```
+
+Same under fnm's Node 24.20.0: `✓ Node v24.20.0 satisfies engines.node ^24.0.0 (package.json)`,
+then Step 1 runs. `cargo xtask dev-setup` prints the same message as a `Warning:` plus the
+three fnm install lines under Node 26, and the one-line confirmation under Node 24.
+
+`npm install --dry-run` with the new `.npmrc`: Node 26 → `npm error code EBADENGINE`,
+exit 1; Node 24 → exit 0. `npm ci` in the fresh worktree under Node 24 → exit 0 (so no
+dependency declares an incompatible `engines` range).
