@@ -147,6 +147,22 @@ explicit `theme: none` opt-out.
       conditions that should be `ctx.add_diagnostic`; fix the `-v` filter
       so `quarto_core` warnings are visible. Filed as bd-e1psgogt.
 
+## CI finding: WASM tests relied on the masked failure (2026-09-08)
+
+PR #661's first CI run failed 20 hub-client WASM tests in four files
+(`changelogRender`, `projectContext`, `runtimeMetadata`,
+`vfsArtifactReflush` `.wasm.test.ts`). Each loads the WASM module by hand
+and renders without calling `setVfsCallbacks`, so dart-sass cannot resolve
+the bundle's `@import "vendor/rfs"`. That is exactly the failure the
+`DEFAULT_CSS` fallback used to mask: the tests only inspected HTML, so they
+passed against an unstyled page. With the default-bundle compile now a
+`Q-14-6` hard error (design decision 1) they fail honestly. Fix: a shared
+`hub-client/src/test-utils/wasmSassVfs.ts` (`wireSassVfs(wasm)`) mirroring
+the production wiring in `preview-runtime`'s `wasmRenderer.ts`, called from
+each file's `beforeAll`. This is the "surfacing currently-masked failures"
+risk from bd-36vmz7nk, realised in the test suite rather than in a user
+project. `npm run test:wasm`: 133/133 after the fix.
+
 ## End-to-end verification record (2026-09-08)
 
 Invocation, after the fix, on the repro fixture (`theme: [cosmo, theme.scss]`,
