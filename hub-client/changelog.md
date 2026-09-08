@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-08
+
+- [`c2f1a1ef`](https://github.com/quarto-dev/q2/commits/c2f1a1ef): Invite cards now read "<name> invites you to collaborate on …" for both collections and projects, and the "New to Quarto Hub?" explainer is a small footnote with a "Learn more" link below the button rather than a panel above it.
+
 ### 2026-09-03
 
 - [`6a3e535e`](https://github.com/quarto-dev/q2/commits/6a3e535e): A share link is now presented as an invitation to the whole project rather than to one document: the card says "project invitation", names the project in its call to action, and lists the project's contents in place of the empty ruled-paper thumbnail — which is omitted entirely when the project holds a single file. File counts also read "1 file" rather than "1 files".
