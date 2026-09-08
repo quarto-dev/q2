@@ -68,6 +68,13 @@ pub fn brand_to_layers(
 ) -> Result<Vec<SassLayer>, SassError> {
     let mut layers = Vec::new();
 
+    // Semantic validation before any emission (bd-5fseopxy): an
+    // invalid `weight:` is reported with its YAML path here even when
+    // the caller skipped `Brand::validate`. Callers that hold the
+    // brand's source (config.rs) validate earlier and attach a span;
+    // this path is the location-less backstop.
+    brand.validate().map_err(brand_err)?;
+
     // 1. bootstrap-defaults layer (only when defaults.bootstrap is
     //    set — matches Q1's `if (brand?.data?.defaults?.bootstrap)`
     //    guard before unshift).
@@ -274,11 +281,12 @@ fn typography_layer(
     let mut import_lines: Vec<String> = Vec::new();
     let mut seen_imports: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    for font in brand.fonts() {
+    for (i, font) in brand.fonts().iter().enumerate() {
+        let font_path = format!("typography.fonts[{i}]");
         let line = match font {
-            BrandFont::Google(g) => google_font_import_string(g),
-            BrandFont::Bunny(b) => bunny_font_import_string(b),
-            BrandFont::File(f) => file_font_face_block(f, font_path_prefix),
+            BrandFont::Google(g) => google_font_import_string(g, &font_path)?,
+            BrandFont::Bunny(b) => bunny_font_import_string(b, &font_path)?,
+            BrandFont::File(f) => file_font_face_block(f, font_path_prefix, &font_path)?,
             BrandFont::System(_) => continue,
         };
         if seen_imports.insert(line.clone()) {
@@ -308,7 +316,13 @@ fn typography_layer(
                 "family" => options.family.as_deref().map(quote_family_name),
                 "size" => options.size.as_deref().map(String::from),
                 "line-height" => options.line_height.as_ref().map(yaml_scalar_to_scss),
-                "weight" => options.weight.as_ref().map(font_weight_to_scss),
+                "weight" => options
+                    .weight
+                    .as_ref()
+                    .map(|w| {
+                        font_weight_to_css(w, &format!("typography.{kind}.weight"), RangeOk::No)
+                    })
+                    .transpose()?,
                 "style" => options.style.as_ref().map(font_style_to_scss),
                 "color" => options.color.as_ref().map(|c| brand.resolve_color_quiet(c)),
                 "background-color" => options
@@ -347,40 +361,76 @@ fn quote_family_name(family: &str) -> String {
     format!("\"{escaped}\"")
 }
 
-fn font_weight_to_scss(w: &BrandFontWeight) -> String {
+/// Where a weight is being rendered, which decides whether a range is
+/// representable there.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RangeOk {
+    /// `@font-face` — a range renders as CSS `font-weight: N M`, the
+    /// declaration for a variable font file's axis.
+    FontFace,
+    /// A typography slot (`$headings-font-weight` etc.) — one weight
+    /// only; a range here would be invalid SCSS.
+    No,
+}
+
+/// Render a slot or `@font-face` weight as a CSS value.
+///
+/// Unknown keywords are errors, never a silent fallback (Q1 parity;
+/// bd-5fseopxy). `Brand::validate` reports the same conditions first,
+/// with the same YAML path, so these `Err` arms are the backstop for a
+/// caller that skipped validation — deliberately not `unreachable!`.
+fn font_weight_to_css(
+    w: &BrandFontWeight,
+    path: &str,
+    range_ok: RangeOk,
+) -> Result<String, SassError> {
     match w {
-        BrandFontWeight::Number(n) => n.to_string(),
-        BrandFontWeight::Name(s) => {
-            weight_name_to_number(s).map_or_else(|| s.clone(), |n| n.to_string())
+        BrandFontWeight::Number(n) => Ok(n.to_string()),
+        BrandFontWeight::Range(r) => match range_ok {
+            RangeOk::FontFace => Ok(format!("{} {}", r.min, r.max)),
+            RangeOk::No => Err(weight_err(
+                path,
+                r,
+                "a typography slot takes a single weight, not a range",
+            )),
+        },
+        BrandFontWeight::Name(s) => weight_atom_value(s, path).map(|n| n.to_string()),
+        BrandFontWeight::List(items) => {
+            let values = items
+                .iter()
+                .enumerate()
+                .map(|(i, a)| match a {
+                    BrandFontWeightAtom::Number(n) => Ok(n.to_string()),
+                    BrandFontWeightAtom::Name(s) => {
+                        weight_atom_value(s, &format!("{path}[{i}]")).map(|n| n.to_string())
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(values.join(", "))
         }
-        BrandFontWeight::List(items) => items
-            .iter()
-            .map(|a| match a {
-                BrandFontWeightAtom::Number(n) => n.to_string(),
-                BrandFontWeightAtom::Name(s) => {
-                    weight_name_to_number(s).map_or_else(|| s.clone(), |n| n.to_string())
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(", "),
     }
 }
 
-/// Map a font-weight keyword to its numeric value, matching Q1's
-/// `brandFontWeightValue` table.
-fn weight_name_to_number(name: &str) -> Option<u32> {
-    Some(match name {
-        "thin" => 100,
-        "extra-light" | "ultra-light" => 200,
-        "light" => 300,
-        "normal" | "regular" => 400,
-        "medium" => 500,
-        "semi-bold" | "demi-bold" => 600,
-        "bold" => 700,
-        "extra-bold" | "ultra-bold" => 800,
-        "black" => 900,
-        _ => return None,
-    })
+/// A weight written as a string: a keyword from the shared table, or a
+/// quoted number (`"400"`).
+fn weight_atom_value(s: &str, path: &str) -> Result<u32, SassError> {
+    s.parse::<u32>()
+        .ok()
+        .or_else(|| quarto_brand::weight_name_to_number(s))
+        .ok_or_else(|| weight_err(path, s, "not a weight keyword or a number from 100 to 900"))
+}
+
+/// Location-less [`SassError::InvalidBrandFontWeight`] for the emission
+/// backstop; the source-located form is built in `config.rs` where the
+/// brand text is in scope.
+fn weight_err(path: &str, value: impl std::fmt::Display, reason: &str) -> SassError {
+    SassError::InvalidBrandFontWeight {
+        path: path.to_string(),
+        value: value.to_string(),
+        reason: reason.to_string(),
+        location: None,
+        brand_file: None,
+    }
 }
 
 fn font_style_to_scss(s: &BrandFontStyle) -> String {
@@ -463,10 +513,18 @@ fn variable_translations_for_kind(kind: &str) -> &'static [(&'static str, &'stat
 
 // ── font @import builders ───────────────────────────────────────────
 
-fn google_font_import_string(font: &BrandFontGoogle) -> String {
+/// Google Fonts CSS2 import. A weight range is passed through as the
+/// `wght` axis span (`wght@400..700`, or `ital,wght@0,400..700;1,400..700`
+/// with italics), which is how the API serves one variable font file.
+fn google_font_import_string(font: &BrandFontGoogle, font_path: &str) -> Result<String, SassError> {
     let family_url = font.family.replace(' ', "+");
     let styles = enumerate_styles(font.style.as_ref());
-    let weights = enumerate_weights(font.weight.as_ref(), &[400, 700]);
+    let weights = weight_spec(
+        font.weight.as_ref(),
+        &[400, 700],
+        &format!("{font_path}.weight"),
+    )?
+    .google_axis_values();
     let display = font.display.as_deref().unwrap_or("swap");
 
     let mut style_string = String::new();
@@ -484,22 +542,26 @@ fn google_font_import_string(font: &BrandFontGoogle) -> String {
             .join(";");
         format!("{normal_part};{italic_part}")
     } else {
-        weights
-            .iter()
-            .map(u32::to_string)
-            .collect::<Vec<_>>()
-            .join(";")
+        weights.join(";")
     };
 
-    format!(
+    Ok(format!(
         "@import url('https://fonts.googleapis.com/css2?family={family_url}:{style_string}wght@{weights_string}&display={display}');"
-    )
+    ))
 }
 
-fn bunny_font_import_string(font: &BrandFontGoogle) -> String {
+/// Bunny Fonts import. Bunny has no range syntax — `inter:400..700`
+/// silently serves weight 400 only (checked 2026-09-08) — so a range is
+/// expanded to discrete weights (see [`WeightSpec::bunny_weights`]).
+fn bunny_font_import_string(font: &BrandFontGoogle, font_path: &str) -> Result<String, SassError> {
     let family_url = font.family.replace(' ', "-");
     let styles = enumerate_styles(font.style.as_ref());
-    let weights = enumerate_weights(font.weight.as_ref(), &[400, 700]);
+    let weights = weight_spec(
+        font.weight.as_ref(),
+        &[400, 700],
+        &format!("{font_path}.weight"),
+    )?
+    .bunny_weights();
     let display = font.display.as_deref().unwrap_or("swap");
 
     let weights_string = if styles.iter().any(|s| s == "italic") {
@@ -522,9 +584,9 @@ fn bunny_font_import_string(font: &BrandFontGoogle) -> String {
             .join(",")
     };
 
-    format!(
+    Ok(format!(
         "@import url('https://fonts.bunny.net/css?family={family_url}:{weights_string}&display={display}');"
-    )
+    ))
 }
 
 fn enumerate_styles(style: Option<&BrandFontStyle>) -> Vec<String> {
@@ -535,24 +597,80 @@ fn enumerate_styles(style: Option<&BrandFontStyle>) -> Vec<String> {
     }
 }
 
-fn enumerate_weights(weight: Option<&BrandFontWeight>, default: &[u32]) -> Vec<u32> {
-    match weight {
-        None => default.to_vec(),
-        Some(BrandFontWeight::Number(n)) => vec![*n],
-        Some(BrandFontWeight::Name(s)) => vec![weight_name_to_number(s).unwrap_or(400)],
-        Some(BrandFontWeight::List(items)) => items
-            .iter()
-            .map(|a| match a {
-                BrandFontWeightAtom::Number(n) => *n,
-                BrandFontWeightAtom::Name(s) => weight_name_to_number(s).unwrap_or(400),
-            })
-            .collect(),
+/// The weights a google/bunny font entry asks for.
+enum WeightSpec {
+    /// Individual weights (`weight: 400`, `[400, bold]`, or the
+    /// `[400, 700]` default).
+    Discrete(Vec<u32>),
+    /// A variable-font axis span (`weight: 400..700`).
+    Range(u32, u32),
+}
+
+impl WeightSpec {
+    /// Values for Google's `wght` axis: each discrete weight, or the
+    /// single `N..M` span.
+    fn google_axis_values(&self) -> Vec<String> {
+        match self {
+            WeightSpec::Discrete(v) => v.iter().map(u32::to_string).collect(),
+            WeightSpec::Range(min, max) => vec![format!("{min}..{max}")],
+        }
+    }
+
+    /// Discrete weights for Bunny, which has no range syntax: a range
+    /// becomes both ends plus every multiple of 100 strictly between
+    /// them (`400..700` → 400, 500, 600, 700; `450..620` → 450, 500,
+    /// 600, 620).
+    fn bunny_weights(&self) -> Vec<u32> {
+        match self {
+            WeightSpec::Discrete(v) => v.clone(),
+            WeightSpec::Range(min, max) => {
+                let mut out = vec![*min];
+                let mut w = (min / 100 + 1) * 100;
+                while w < *max {
+                    out.push(w);
+                    w += 100;
+                }
+                if max != min {
+                    out.push(*max);
+                }
+                out
+            }
+        }
     }
 }
 
-fn file_font_face_block(font: &BrandFontFile, font_path_prefix: &Path) -> String {
+fn weight_spec(
+    weight: Option<&BrandFontWeight>,
+    default: &[u32],
+    path: &str,
+) -> Result<WeightSpec, SassError> {
+    Ok(match weight {
+        None => WeightSpec::Discrete(default.to_vec()),
+        Some(BrandFontWeight::Number(n)) => WeightSpec::Discrete(vec![*n]),
+        Some(BrandFontWeight::Range(r)) => WeightSpec::Range(r.min, r.max),
+        Some(BrandFontWeight::Name(s)) => WeightSpec::Discrete(vec![weight_atom_value(s, path)?]),
+        Some(BrandFontWeight::List(items)) => WeightSpec::Discrete(
+            items
+                .iter()
+                .enumerate()
+                .map(|(i, a)| match a {
+                    BrandFontWeightAtom::Number(n) => Ok(*n),
+                    BrandFontWeightAtom::Name(s) => weight_atom_value(s, &format!("{path}[{i}]")),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+    })
+}
+
+/// One `@font-face` block per file. A per-file weight range renders as
+/// CSS `font-weight: N M`, the declaration for a variable font's axis.
+fn file_font_face_block(
+    font: &BrandFontFile,
+    font_path_prefix: &Path,
+    font_path: &str,
+) -> Result<String, SassError> {
     let mut parts: Vec<String> = Vec::new();
-    for entry in &font.files {
+    for (j, entry) in font.files.iter().enumerate() {
         let (path, weight, style) = match entry {
             BrandFontFileEntry::Path(p) => (p.clone(), None, None),
             BrandFontFileEntry::Explicit {
@@ -568,9 +686,14 @@ fn file_font_face_block(font: &BrandFontFile, font_path_prefix: &Path) -> String
             join_url_path(font_path_prefix, &path)
         };
 
-        let weight_str = weight
-            .as_ref()
-            .map_or_else(|| "normal".to_string(), font_weight_to_scss);
+        let weight_str = match weight.as_ref() {
+            Some(w) => font_weight_to_css(
+                w,
+                &format!("{font_path}.files[{j}].weight"),
+                RangeOk::FontFace,
+            )?,
+            None => "normal".to_string(),
+        };
         let style_str = style
             .as_ref()
             .map_or_else(|| "normal".to_string(), font_style_to_scss);
@@ -580,7 +703,7 @@ fn file_font_face_block(font: &BrandFontFile, font_path_prefix: &Path) -> String
             family = quote_family_name(&font.family),
         ));
     }
-    parts.join("\n")
+    Ok(parts.join("\n"))
 }
 
 fn is_external_url(s: &str) -> bool {
@@ -600,9 +723,22 @@ fn join_url_path(prefix: &Path, rel: &str) -> String {
 
 // ── error mapping ───────────────────────────────────────────────────
 
-fn brand_err(e: quarto_brand::BrandError) -> SassError {
-    SassError::InvalidThemeConfig {
-        message: e.to_string(),
-        location: None,
+pub(crate) fn brand_err(e: quarto_brand::BrandError) -> SassError {
+    match e {
+        quarto_brand::BrandError::InvalidFontWeight {
+            path,
+            value,
+            reason,
+        } => SassError::InvalidBrandFontWeight {
+            path: path.to_string(),
+            value,
+            reason,
+            location: None,
+            brand_file: None,
+        },
+        other => SassError::InvalidThemeConfig {
+            message: other.to_string(),
+            location: None,
+        },
     }
 }

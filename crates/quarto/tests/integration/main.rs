@@ -3,6 +3,7 @@
 
 pub mod attribution_cli_e2e;
 pub mod bootstrap_sh;
+pub mod brand_font_weight;
 pub mod build_ts_extension_e2e;
 pub mod coalesced_diagnostics;
 pub mod conditional_content_cli;

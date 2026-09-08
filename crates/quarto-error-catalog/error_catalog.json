@@ -1189,6 +1189,13 @@
     "docs_url": "https://quarto.org/docs/errors/theme/Q-14-5",
     "since_version": "99.9.9"
   },
+  "Q-14-8": {
+    "subsystem": "theme",
+    "title": "Invalid brand font weight",
+    "message_template": "A `weight:` value in the brand's `typography` section is not a weight Quarto understands. Use a number from 100 to 900, a weight keyword such as `bold`, a list of those, or — on `typography.fonts` entries only — a numeric range such as `400..700`.",
+    "docs_url": "https://quarto.org/docs/errors/theme/Q-14-8",
+    "since_version": "99.9.9"
+  },
   "Q-15-1": {
     "subsystem": "crossref",
     "title": "Duplicate Crossref Identifier",

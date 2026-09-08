@@ -25,6 +25,9 @@ quarto-util.workspace = true
 quarto-pandoc-types.workspace = true
 # SourceInfo for source-mapped diagnostics
 quarto-source-map.workspace = true
+# Source-located re-parse of `_brand.yml` so brand validation errors can
+# point at the offending YAML scalar (bd-5fseopxy)
+quarto-yaml.workspace = true
 # Brand (_brand.yml) data model and resolution
 quarto-brand.workspace = true
 

@@ -353,7 +353,10 @@ impl PipelineStage for CompileThemeCssStage {
                 std::path::Path::new(""),
             )
             .map_err(|e| {
-                PipelineError::stage_error(self.name(), format!("brand resolution: {e}"))
+                PipelineError::Structured(crate::theme_diagnostic::sass_error_to_parse_error(
+                    &e,
+                    &theme_error_candidates(ctx),
+                ))
             })?;
             resolution.layers.extend(brand_layers);
 
@@ -488,13 +491,19 @@ impl PipelineStage for CompileThemeCssStage {
         // whose content enables dark mode synthesizes the dark
         // variant right here. I/O happens here. Failures are
         // user-facing configuration errors (missing `_brand.yml`,
-        // invalid YAML, unknown brand shape) — propagate them rather
-        // than silently shipping DEFAULT_CSS, same reasoning as the
-        // `from_config_value` error path above.
+        // invalid YAML, unknown brand shape, an invalid font weight) —
+        // propagate them as structured diagnostics, same as the
+        // `from_config_value` error path above: `Q-14-1` for shape
+        // errors (span-less: `_brand.yml` values carry no source
+        // info), `Q-14-8` for an invalid weight (with a span into
+        // `_brand.yml`, bd-5fseopxy).
         let resolved = theme_config
             .resolve_variants(ctx.runtime.as_ref(), &ctx.project.dir)
             .map_err(|e| {
-                PipelineError::stage_error(self.name(), format!("brand resolution: {e}"))
+                PipelineError::Structured(crate::theme_diagnostic::sass_error_to_parse_error(
+                    &e,
+                    &theme_error_candidates(ctx),
+                ))
             })?;
         let theme_config = &resolved.config;
 

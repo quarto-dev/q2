@@ -45,10 +45,11 @@ use crate::error::ParseError;
 /// Handles [`SassError::InvalidThemeConfig`] (Q-14-1),
 /// [`SassError::UnknownTheme`] (Q-14-2),
 /// [`SassError::CustomThemeNotFound`] (Q-14-4), and
-/// [`SassError::InvalidScssFile`] (Q-14-7) specifically; every other
-/// variant is a compile failure and renders as Q-14-6 carrying the
-/// compiler's text (see [`sass_error_to_parse_error_at`] for how it
-/// gets a location).
+/// [`SassError::InvalidScssFile`] (Q-14-7), and
+/// [`SassError::InvalidBrandFontWeight`] (Q-14-8) specifically; every
+/// other variant is a compile failure and renders as Q-14-6 carrying
+/// the compiler's text (see [`sass_error_to_parse_error_at`] for how
+/// it gets a location).
 ///
 /// If no candidate matches the diagnostic's FileId, or the error
 /// has no `location`, the diagnostic still renders — just without
@@ -83,12 +84,31 @@ pub fn sass_error_to_parse_error_at(
     // registers only the candidate whose id equals the diagnostic's
     // resolved id, only with readable content. No match ⇒ span-less
     // render — never a wrong span.
+    //
+    // A brand error knows which `_brand.yml` it was read from; that
+    // file is not in any caller's candidate list (those enumerate
+    // config files), so it is added here from the error itself. Its
+    // id is the same filename hash quarto-yaml assigned when the
+    // brand was re-parsed for the span, so the match is exact.
     let mut source_context = SourceContext::new();
     if let Some(loc) = &location {
+        let brand_candidate = match err {
+            SassError::InvalidBrandFontWeight {
+                brand_file: Some(p),
+                ..
+            } => Some((
+                quarto_yaml::file_id_for_filename(&p.to_string_lossy()),
+                p.as_path(),
+            )),
+            _ => None,
+        };
         crate::config_sources::bind_source_candidates(
             &mut source_context,
             loc,
-            candidate_sources.iter().map(|(fid, p)| (*fid, p.as_path())),
+            candidate_sources
+                .iter()
+                .map(|(fid, p)| (*fid, p.as_path()))
+                .chain(brand_candidate),
         );
     }
 
@@ -131,6 +151,28 @@ pub fn sass_error_to_parse_error_at(
                     "Check the spelling and location of the file. Relative theme paths \
                      resolve against the document's directory; extension-bundled themes \
                      must sit next to the extension's `_extension.yml`?",
+                );
+            if let Some(loc) = location {
+                b = b.with_location(loc.clone());
+            }
+            b.build()
+        }
+        SassError::InvalidBrandFontWeight {
+            path,
+            value,
+            reason,
+            location,
+            ..
+        } => {
+            let mut b = DiagnosticMessageBuilder::error("Invalid brand font weight")
+                .with_code("Q-14-8")
+                .problem(format!(
+                    "`{value}` at `{path}` is not a font weight Quarto understands: {reason}."
+                ))
+                .add_hint(
+                    "Use a number from 100 to 900, a keyword such as `bold` or `semi-bold`, \
+                     a list of those, or — on `typography.fonts` entries — a numeric range \
+                     such as `400..700`?",
                 );
             if let Some(loc) = location {
                 b = b.with_location(loc.clone());
@@ -217,6 +259,7 @@ fn sass_error_location(err: &SassError) -> Option<quarto_source_map::SourceInfo>
         SassError::UnknownTheme { location, .. } => location.clone(),
         SassError::CustomThemeNotFound { location, .. } => location.clone(),
         SassError::InvalidScssFile { location, .. } => location.clone(),
+        SassError::InvalidBrandFontWeight { location, .. } => location.clone(),
         _ => None,
     }
 }
@@ -366,6 +409,90 @@ mod tests {
     }
 
     #[test]
+    fn invalid_brand_font_weight_renders_q_14_8_with_span_into_brand_file() {
+        // bd-5fseopxy: the error carries the brand file it was read
+        // from, and the converter must register *that* file as a
+        // candidate on its own — the stage's candidate list only
+        // knows about `_quarto.yml`, the document, and friends.
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let brand_path = root.join("_brand.yml");
+        let contents = "typography:\n  fonts:\n    - family: EB Garamond\n      source: google\n      weight: 700..400\n";
+        std::fs::write(&brand_path, contents).unwrap();
+        let start = contents.find("700..400").unwrap();
+        let location =
+            SourceInfo::original(file_id_for(&brand_path), start, start + "700..400".len());
+
+        let err = SassError::InvalidBrandFontWeight {
+            path: "typography.fonts[0].weight".to_string(),
+            value: "700..400".to_string(),
+            reason: "the range minimum 700 is greater than its maximum 400".to_string(),
+            location: Some(location.clone()),
+            brand_file: Some(brand_path.clone()),
+        };
+
+        // Deliberately no candidates: the brand file must come from
+        // the error itself.
+        let parse_err = sass_error_to_parse_error(&err, &[]);
+        assert_eq!(parse_err.diagnostics.len(), 1);
+        let d = &parse_err.diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-14-8"));
+        assert_eq!(d.location.as_ref(), Some(&location));
+
+        let opts = quarto_error_reporting::TextRenderOptions {
+            enable_hyperlinks: false,
+        };
+        let rendered = strip_ansi(&d.to_text_with_options(Some(&parse_err.source_context), &opts));
+        assert!(rendered.contains("Q-14-8"), "{rendered}");
+        assert!(
+            rendered.contains("typography.fonts[0].weight"),
+            "must name the YAML path:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("700..400"),
+            "must quote the value:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("greater than"),
+            "must carry the reason:\n{rendered}"
+        );
+        // Line 5 of the fixture holds `weight: 700..400`; the gutter
+        // marker proves the snippet was rendered against _brand.yml.
+        assert!(
+            rendered.contains("5 │"),
+            "expected a snippet of the weight line:\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn invalid_brand_font_weight_without_location_renders_span_less() {
+        // Inline brand blocks synthesized without source info, or the
+        // defensive emission-time path, have no span; the diagnostic
+        // still carries code, path, value, and reason in prose.
+        let err = SassError::InvalidBrandFontWeight {
+            path: "typography.headings.weight".to_string(),
+            value: "500..700".to_string(),
+            reason: "a typography slot takes a single weight".to_string(),
+            location: None,
+            brand_file: None,
+        };
+        let parse_err = sass_error_to_parse_error(&err, &[]);
+        let d = &parse_err.diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("Q-14-8"));
+        assert_eq!(d.location, None);
+        let opts = quarto_error_reporting::TextRenderOptions {
+            enable_hyperlinks: false,
+        };
+        let rendered = strip_ansi(&d.to_text_with_options(None, &opts));
+        assert!(
+            rendered.contains("typography.headings.weight"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("500..700"), "{rendered}");
+        assert!(rendered.contains("single weight"), "{rendered}");
+    }
+
+    #[test]
     fn theme_diagnostic_code_is_registered_in_catalog() {
         // Belt-and-braces: every code emitted by
         // sass_error_to_parse_error must exist in the shared
@@ -375,7 +502,9 @@ mod tests {
         // (Q-14-3, the interim dark-theme-ignored warning from
         // bd-o76p01wb, was retired when dual light/dark compilation
         // landed — bd-0pic6 phase A2.)
-        for code in ["Q-14-1", "Q-14-2", "Q-14-4", "Q-14-5", "Q-14-6", "Q-14-7"] {
+        for code in [
+            "Q-14-1", "Q-14-2", "Q-14-4", "Q-14-5", "Q-14-6", "Q-14-7", "Q-14-8",
+        ] {
             let info = quarto_error_catalog::ERROR_CATALOG.get(code);
             assert!(
                 info.is_some(),

@@ -215,3 +215,143 @@ fn resolve_path_brand_reads_from_runtime() {
     let color = brand.color.expect("color");
     assert_eq!(color.primary.as_deref(), Some("#def"));
 }
+
+// ── font weight validation + location (bd-5fseopxy) ─────────────────
+//
+// An invalid weight in a brand is a hard error carrying a source span
+// that points at the offending YAML scalar: into `_brand.yml` for the
+// path form (quarto-yaml re-parse keyed by `file_id_for_filename`),
+// into the declaring config for the inline form (the `ConfigValue`
+// node's own `source_info`).
+
+#[test]
+fn brand_file_invalid_weight_fails_resolution_with_span_into_brand_file() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let dir = temp.path().canonicalize().unwrap();
+    let contents = "typography:\n\
+                    \x20 fonts:\n\
+                    \x20   - family: EB Garamond\n\
+                    \x20     source: google\n\
+                    \x20     weight: 700..400\n";
+    let brand_path = dir.join("_brand.yml");
+    std::fs::write(&brand_path, contents).unwrap();
+
+    let config = flattened_config(vec![("brand", scalar_string("_brand.yml"))]);
+    let theme_config = ThemeConfig::from_config_value(&config).expect("shape is fine");
+    let err = theme_config
+        .resolve_variants(&quarto_system_runtime::NativeRuntime::new(), &dir)
+        .expect_err("reversed range must fail resolution");
+
+    let quarto_sass::SassError::InvalidBrandFontWeight {
+        path,
+        value,
+        location,
+        brand_file,
+        ..
+    } = err
+    else {
+        panic!("expected InvalidBrandFontWeight, got {err:?}");
+    };
+    assert_eq!(path, "typography.fonts[0].weight");
+    assert_eq!(value, "700..400");
+    assert_eq!(brand_file.as_deref(), Some(brand_path.as_path()));
+
+    let location = location.expect("path form must carry a location");
+    let expected_fid = quarto_yaml::file_id_for_filename(&brand_path.to_string_lossy());
+    assert_eq!(
+        location.root_file_id(),
+        Some(expected_fid),
+        "span must be keyed by the brand file's filename hash so \
+         bind_config_source can register it"
+    );
+    let start = contents.find("700..400").unwrap();
+    assert_eq!(
+        (location.start_offset(), location.end_offset()),
+        (start, start + "700..400".len()),
+        "span must cover exactly the weight scalar"
+    );
+}
+
+#[test]
+fn inline_brand_invalid_weight_fails_with_span_at_weight_node() {
+    // Build the inline block as a typed ConfigValue tree with a
+    // distinctive SourceInfo on the `weight` scalar, the way the
+    // metadata merge produces it from `_quarto.yml`.
+    let fid = quarto_source_map::FileId(41);
+    let weight_loc = SourceInfo::original(fid, 120, 128);
+    let entry = |k: &str, v: ConfigValue| ConfigMapEntry {
+        key: k.to_string(),
+        key_source: SourceInfo::original(fid, 0, 1),
+        value: v,
+    };
+    let font = ConfigValue::new_map(
+        vec![
+            entry(
+                "family",
+                ConfigValue::new_string("EB Garamond", SourceInfo::original(fid, 60, 71)),
+            ),
+            entry(
+                "source",
+                ConfigValue::new_string("google", SourceInfo::original(fid, 90, 96)),
+            ),
+            entry(
+                "weight",
+                ConfigValue::new_string("700..400", weight_loc.clone()),
+            ),
+        ],
+        SourceInfo::original(fid, 50, 130),
+    );
+    let fonts = ConfigValue::new_array(vec![font], SourceInfo::original(fid, 40, 130));
+    let typography = ConfigValue::new_map(
+        vec![entry("fonts", fonts)],
+        SourceInfo::original(fid, 30, 130),
+    );
+    let brand = ConfigValue::new_map(
+        vec![entry("typography", typography)],
+        SourceInfo::original(fid, 20, 130),
+    );
+    let config = flattened_config(vec![("brand", brand)]);
+
+    let err = ThemeConfig::from_config_value(&config)
+        .expect_err("inline brand with a reversed range must fail");
+    let quarto_sass::SassError::InvalidBrandFontWeight {
+        path,
+        value,
+        location,
+        brand_file,
+        ..
+    } = err
+    else {
+        panic!("expected InvalidBrandFontWeight, got {err:?}");
+    };
+    assert_eq!(path, "typography.fonts[0].weight");
+    assert_eq!(value, "700..400");
+    assert_eq!(brand_file, None, "inline blocks have no brand file");
+    assert_eq!(location.as_ref(), Some(&weight_loc));
+}
+
+#[test]
+fn brand_file_valid_range_resolves() {
+    // Control: the same shape with a valid range resolves and the
+    // typed brand carries the range.
+    let temp = tempfile::TempDir::new().unwrap();
+    let dir = temp.path().canonicalize().unwrap();
+    std::fs::write(
+        dir.join("_brand.yml"),
+        "typography:\n  fonts:\n    - family: EB Garamond\n      source: google\n      weight: 400..700\n",
+    )
+    .unwrap();
+    let config = flattened_config(vec![("brand", scalar_string("_brand.yml"))]);
+    let theme_config = ThemeConfig::from_config_value(&config).unwrap();
+    let resolved = theme_config
+        .resolve_variants(&quarto_system_runtime::NativeRuntime::new(), &dir)
+        .expect("valid range resolves");
+    let brand = &resolved.light_brand.expect("brand").brand;
+    match &brand.fonts()[0] {
+        quarto_brand::BrandFont::Google(g) => assert!(matches!(
+            g.weight.as_ref(),
+            Some(quarto_brand::BrandFontWeight::Range(r)) if r.min == 400 && r.max == 700
+        )),
+        other => panic!("{other:?}"),
+    }
+}

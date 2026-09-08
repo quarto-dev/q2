@@ -105,3 +105,39 @@ fn nested_brand_compiles() {
     let scss = flatten_layers(&layers);
     assert_compiles(&scss);
 }
+
+// ── font weight ranges (bd-5fseopxy) ────────────────────────────────
+
+fn brand_from_str(yaml: &str) -> Brand {
+    quarto_brand::UnifiedBrand::from_yaml_str(yaml)
+        .unwrap_or_else(|e| panic!("parse: {e}"))
+        .split()
+        .light
+}
+
+/// The range forms must produce SCSS grass accepts: `wght@400..700`
+/// inside an `@import url(...)` and `font-weight: 300 800` in
+/// `@font-face`. Before the fix the file form emitted
+/// `font-weight: 300..800;`, which grass rejects (`expected ";"`).
+#[test]
+fn weight_range_brand_compiles() {
+    let b = brand_from_str(
+        "typography:\n\
+         \x20 fonts:\n\
+         \x20   - family: EB Garamond\n\
+         \x20     source: google\n\
+         \x20     weight: 400..700\n\
+         \x20   - family: Local Var\n\
+         \x20     source: file\n\
+         \x20     files:\n\
+         \x20       - path: LocalVar-VariableFont_wght.woff2\n\
+         \x20         weight: 300..800\n\
+         \x20 base: EB Garamond\n\
+         \x20 headings:\n\
+         \x20   family: EB Garamond\n\
+         \x20   weight: 600\n",
+    );
+    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let scss = flatten_layers(&layers);
+    assert_compiles(&scss);
+}

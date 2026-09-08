@@ -1,0 +1,14 @@
+# Same as ../repro/_brand.yml minus the typography-slot range, so the
+# bundle compiles and the google/file emission is observable.
+typography:
+  fonts:
+    - family: EB Garamond
+      source: google
+      weight: 400..700
+    - family: Local Var
+      source: file
+      files:
+        - path: LocalVar-VariableFont_wght.woff2
+          weight: 300..800
+  base: EB Garamond
+  headings: EB Garamond
