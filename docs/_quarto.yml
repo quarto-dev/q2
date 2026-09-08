@@ -314,6 +314,8 @@ website:
             - errors/theme/Q-14-2.qmd
             - errors/theme/Q-14-4.qmd
             - errors/theme/Q-14-5.qmd
+            - errors/theme/Q-14-6.qmd
+            - errors/theme/Q-14-7.qmd
         - section: "lua"
           contents:
             - errors/lua/Q-11-1.qmd

@@ -1,0 +1,65 @@
+---
+title: "Theme file has no layer boundary markers"
+description: "A `theme:` entry names an `.scss` file that contains none of the `/*-- scss:... --*/` layer boundary markers Quarto needs to merge it into the Bootstrap bundle."
+code: Q-14-7
+subsystem: theme
+status: stub
+since: "99.9.9"
+categories:
+  - theme
+---
+
+# `Q-14-7` — Theme File Has No Layer Boundary Markers
+
+> A `theme:` entry names an `.scss` file that contains none of the
+> `/*-- scss:... --*/` layer boundary markers Quarto needs to merge
+> it into the Bootstrap bundle.
+
+## What this means
+
+A custom theme file is not compiled on its own. Quarto splits it
+into layers and merges each layer into the matching section of the
+Bootstrap bundle: variables go before Bootstrap's defaults so they
+take precedence, rules go after Bootstrap's rules so they override
+them. The split is driven by comment markers in the file:
+
+```scss
+/*-- scss:defaults --*/
+$primary: #2c5f8a;
+
+/*-- scss:rules --*/
+.sidebar { border-right: 1px solid $primary; }
+```
+
+The named file has none of these markers, so Quarto cannot tell
+which section anything belongs to. The render stops with this error
+instead of silently dropping the theme.
+
+## Why this happens
+
+Common causes:
+
+- **A plain CSS or SCSS file listed under `theme:`.** A stylesheet
+  that only contains rules belongs under `css:`, which links it as
+  is, or needs a `/*-- scss:rules --*/` marker at the top to become a
+  theme layer.
+- **A marker with the wrong spelling.** The marker must be exactly
+  `/*-- scss:<layer> --*/`, where `<layer>` is one of `uses`,
+  `functions`, `defaults`, `mixins`, or `rules`.
+- **A file that was meant to be `@import`ed** from another theme
+  file rather than listed directly.
+
+## How to fix
+
+- Add a marker before the first line of the file: `/*-- scss:defaults --*/`
+  for variable assignments, `/*-- scss:rules --*/` for CSS rules.
+  A file can have several sections in any order.
+- If the file is a finished stylesheet with no Sass in it, move it
+  from `theme:` to `css:`.
+
+## Related
+
+- `Q-14-4` — theme file not found: the `theme:` entry names a file
+  that does not exist.
+- `Q-14-6` — the theme file was merged but the bundle failed to
+  compile.
