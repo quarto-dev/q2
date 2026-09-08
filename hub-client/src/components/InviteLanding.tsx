@@ -21,6 +21,13 @@ import type { CollectionInvitePreview, ProjectInvitePreview, InvitePreview } fro
 import { generateColorFromId } from '../services/storage/utils';
 import { initialsFor } from '../utils/facepile';
 
+/**
+ * Destination for the footnote's "Learn more". Provisional: quarto.org is
+ * a sane landing spot until a Quarto Hub introduction page exists, which
+ * bd-rh2n4d7q tracks swapping in.
+ */
+const LEARN_MORE_URL = 'https://quarto.org';
+
 export interface InviteLandingProps {
   kind: 'collection' | 'project';
   /** Display name of the person who sent the invite. */
@@ -149,20 +156,12 @@ export default function InviteLanding(props: InviteLandingProps) {
             {initialsFor(inviter)}
           </span>
           <span>
-            <strong>{inviter}</strong>
-            {kind === 'collection' ? ' invited you to' : ' invited you to edit'}
+            <strong>{inviter}</strong> invites you to collaborate on
           </span>
         </div>
         <h1 className="il-title">{title}</h1>
         {preview?.kind === 'collection' && <CollectionPayload preview={preview} />}
         {preview?.kind === 'project' && <ProjectPayload preview={preview} />}
-        <div className="il-explainer">
-          <img className="il-explainer-logo" src="/quarto-icon.svg" alt="" />
-          <span>
-            <strong>New to Quarto Hub?</strong> It's where teams write Quarto documents together
-            — live, in the browser. Nothing to install.
-          </span>
-        </div>
         {error && (
           <div className="qh-error" role="alert">
             {error}
@@ -182,6 +181,19 @@ export default function InviteLanding(props: InviteLandingProps) {
               {signInCta}
             </>
           )}
+        </div>
+        {/* Footnote, deliberately after the CTA: the card leads with who
+            invited you, what to, and the one action; the what-is-this
+            pitch is for the minority who need it. */}
+        <div className="il-explainer">
+          <img className="il-explainer-logo" src="/quarto-icon.svg" alt="" />
+          <span>
+            New to Quarto Hub?{' '}
+            <a className="il-learn-more" href={LEARN_MORE_URL}>
+              Learn more
+            </a>
+            .
+          </span>
         </div>
       </div>
     </div>

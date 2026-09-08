@@ -65,11 +65,11 @@ describe('InviteLanding card anatomy', () => {
     renderLanding({ preview: collectionPreview });
     expect(screen.getByText('COLLECTION INVITATION')).toBeTruthy();
     expect(screen.getByText('Carlos Scheidegger')).toBeTruthy();
-    expect(screen.getByText(/invited you to\b/)).toBeTruthy();
+    expect(screen.getByText(/invites you to collaborate on/)).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Team docs' })).toBeTruthy();
   });
 
-  it('project invite shows the project kicker and "invited you to edit"', () => {
+  it('project invite shows the project kicker and the same collaborate wording', () => {
     renderLanding({
       kind: 'project',
       title: 'Quarterly report',
@@ -78,30 +78,43 @@ describe('InviteLanding card anatomy', () => {
     // A #/share/ link grants the whole project, so it is a project
     // invitation even though it opens at one file.
     expect(screen.getByText('PROJECT INVITATION')).toBeTruthy();
-    expect(screen.getByText(/invited you to edit/)).toBeTruthy();
+    // Both kinds read identically: only the kicker and payload differ.
+    expect(screen.getByText(/invites you to collaborate on/)).toBeTruthy();
+    expect(screen.queryByText(/invited you to edit/)).toBeNull();
     expect(screen.getByRole('heading', { name: 'Quarterly report' })).toBeTruthy();
   });
 
-  it('always renders the explainer block', () => {
+  it('always renders the explainer footnote with a Learn more link', () => {
     renderLanding();
-    expect(screen.getByText('New to Quarto Hub?')).toBeTruthy();
-    expect(
-      screen.getByText(/where teams write Quarto documents together/),
-    ).toBeTruthy();
-    expect(screen.getByText(/Nothing to install\./)).toBeTruthy();
+    expect(screen.getByText(/New to Quarto Hub\?/)).toBeTruthy();
+    const link = screen.getByRole('link', { name: 'Learn more' });
+    expect(link.getAttribute('href')).toBeTruthy();
+    // The long "It's where teams write…" pitch is gone; the footnote is
+    // one short line.
+    expect(screen.queryByText(/where teams write Quarto documents together/)).toBeNull();
+    expect(screen.queryByText(/Nothing to install/)).toBeNull();
   });
 
-  it('renders no name input, no color swatches, and nothing after the CTA', () => {
+  it('renders no name input and no color swatches', () => {
     const { container } = renderLanding({ preview: collectionPreview });
     expect(container.querySelector('input')).toBeNull();
     expect(container.querySelector('.qh-swatch')).toBeNull();
-    // The CTA is the last element of the card: no footnote below it.
+  });
+
+  it('the explainer footnote sits below the CTA', () => {
+    // Departs from the 3a mock, which put the explainer above a
+    // last-element CTA: Andrew moved it under the button so the card
+    // leads with who/what/act and leaves the pitch as a footnote.
+    renderLanding({ signedIn: true, preview: collectionPreview });
     const card = screen.getByTestId('invite-landing-card');
-    const last = card.lastElementChild;
-    expect(last).not.toBeNull();
-    expect(last!.querySelector('button') ?? last).toBe(
-      screen.getByRole('button', { name: /join|open|continue/i }),
-    );
+    const actions = card.querySelector('.il-actions')!;
+    const explainer = card.querySelector('.il-explainer')!;
+    expect(actions).not.toBeNull();
+    expect(explainer).not.toBeNull();
+    expect(
+      actions.compareDocumentPosition(explainer) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(card.lastElementChild).toBe(explainer);
   });
 });
 

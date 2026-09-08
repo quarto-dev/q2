@@ -158,30 +158,32 @@
 
 /* ---- explainer ---- */
 
+/* One quiet line under the CTA, not a panel above it. */
 .il-explainer {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  background: color-mix(in srgb, var(--posit-blue) 8%, var(--bg-modal));
-  border-radius: var(--radius-lg);
-  padding: 12px 14px;
-  font-size: 11.5px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0;
+  font-size: var(--text-2xs);
   line-height: var(--leading-base);
   color: var(--text-secondary);
-  margin-bottom: 18px;
-}
-
-.il-explainer strong {
-  color: var(--text-primary);
-  font-weight: var(--font-weight-bold);
+  margin-top: 14px;
 }
 
 .il-explainer-logo {
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
-  margin-top: 1px;
   filter: var(--logo-filter);
+}
+
+/* The themed blue accent, not --accent-primary (orange) and not the
+   global anchor's raw --posit-blue, which is nearly invisible against
+   the dark card. */
+.il-learn-more {
+  color: var(--accent-secondary);
+  text-decoration: underline;
 }
 
 /* ---- CTA (always the last element; nothing renders below it) ---- */
