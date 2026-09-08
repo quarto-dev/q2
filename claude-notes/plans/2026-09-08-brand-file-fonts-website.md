@@ -2,190 +2,170 @@
 
 **Date:** 2026-09-08
 **Braid:** bd-ve916wr8
-**Checkout:** main @ `b7e7c96a` (investigation ran in the main checkout; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Checkout:** main @ `b7e7c96a` (investigation ran in the main checkout)
+**Status:** Design agreed with user 2026-09-08 (decisions below). Ready to implement on a topic branch.
 
-## Triage verdict
+## Overview
 
-**Ready to design.** Every claim in the strand reproduces at HEAD with a
-two-page fixture, and the investigation found two more defects in the same
-mechanism (single-doc renders are equally broken; the SASS cache key omits
-the font prefix, so pages alias onto whichever compiled first). The fix is
-well-bounded — three consumers, one emitter — but there is one real design
-fork (where the font bytes go and therefore what the URL is) that the user
-should pick.
+`source: file` fonts in `_brand.yml` never reach the output, and the
+`@font-face` URL the theme CSS carries is document-relative while the CSS
+itself is relocated (`site_libs/quarto/` for websites, `{stem}_files/` for
+single documents). Every local brand font 404s. Evidence and committed
+repro fixtures: `claude-notes/plans/brand-file-fonts-website-investigation/`
+(NOTES.md has the exact invocations and observed output).
 
-Evidence: `claude-notes/plans/brand-file-fonts-website-investigation/NOTES.md`.
+Fix: publish font files as **project-scope artifacts beside the theme CSS**
+and emit a constant `fonts/<name>` URL. One mechanism serves website,
+single-doc, and the WASM preview; the prefix no longer depends on the
+document, which also removes the per-depth bundle split and the cache-key
+aliasing.
 
-## Issue context
+## Decisions (agreed 2026-09-08)
 
-Filed 2026-09-08 by Carlos, type `bug`, priority 2, labels `css`,
-`theming`, `websites`. Found while moving cscheid-net-2026 from Google
-Fonts to local woff2. Summary of the report:
+1. **Fonts as artifacts.** Font bytes are stored as `ArtifactScope::Project`
+   artifacts at `quarto/fonts/<basename>` (website → `site_libs/quarto/fonts/`)
+   or `fonts/<basename>` (single-doc → `{stem}_files/fonts/`), i.e. always
+   in a `fonts/` dir beside the theme CSS, so the `@font-face` URL is the
+   constant `fonts/<basename>`. Not a source-mirrored copy.
+2. **Name collisions are an error, never a silent overwrite.** Two distinct
+   byte contents claiming the same `fonts/<basename>` (across brands,
+   light/dark variants, or documents) fail the render with a diagnostic
+   naming both source files. Identical bytes dedupe (existing
+   `merge_into_project` semantics).
+3. **Leading `/` in a font path means project root** (path contract), for
+   locating the file. The emitted URL is the constant form regardless. The
+   `/assets/… + resources:` workaround keeps working (the file is now also
+   found via project root and published as an artifact; the explicit
+   `resources:` copy becomes redundant but harmless).
+4. **`format()` hint** derived from the extension (`woff2`, `woff`, `ttf` →
+   `truetype`, `otf` → `opentype`); unknown extension → no hint.
+5. **Unknown keys on a file entry (`format:`, `display:`) warn and are
+   ignored**, not rejected — the brand.yml spec has not settled them.
+6. **bd-5fseopxy** (weight ranges) edits the same emitter concurrently;
+   expect a textual conflict in `file_font_face_block` and resolve at rebase.
+7. **On merge**, comment on **bd-r1y48cx0** (`css:` files never copied)
+   pointing at the artifact mechanism as the one to reuse.
 
-1. `source: file` font files are never copied into the output.
-2. The emitted `src: url("assets/x.woff2")` is relative to the *document*,
-   but the compiled theme CSS is written to `site_libs/quarto/`, so the
-   browser resolves it against the wrong directory.
-3. The prefix is computed per document (`pathdiff(document_dir,
-   brand_dir)`), so a site with pages at different depths ships N theme
-   bundles.
-4. Minor: no `format("woff2")` hint, no `font-display` for file fonts;
-   `format:` on a files entry is silently ignored.
+Why not the resource channel for the copy: the user's answer to Q2 chose
+the resource channel *if* a copy was needed; with fonts as artifacts there
+is no copy step, and artifacts already flush through both the native sink
+and the preview VFS. The render-manifest gap (flushed `site_libs` artifacts
+are not listed in `.quarto/render-manifest.json`) is pre-existing for the
+theme CSS and out of scope here.
 
-Workaround in use: a site-root-absolute `/assets/…` path plus an explicit
-`project.resources` glob — correct only when served from the domain root.
+## Phases
 
-## Dependency graph
+### Phase 0 — Tests (TDD: written first, verified failing)
 
-No `discovered-from`, no incoming `blocks`. Two `related` edges:
+- [ ] `quarto-sass` unit (`brand_layer_test.rs`): `file_font_face_block`
+      emits `src: url('fonts/<basename>') format('woff2')`; `/`-rooted and
+      `../`-style source paths all collapse to `fonts/<basename>`;
+      external URLs pass through unchanged, no `format()`.
+- [ ] `quarto-sass` unit: `font_path_prefix` no longer influences the
+      URL — remove/replace the `"brand/regular.woff2"` assertion in
+      `typography_layer_emits_file_font_face`.
+- [ ] `quarto-brand` unit: an explicit file entry with `format:` /
+      `display:` parses (not an error) and exposes the unknown keys for
+      the warning.
+- [ ] `quarto-core` integration, driving the real render path (project
+      render / `render_document_to_file`, fixture promoted from
+      `brand-file-fonts-website-investigation/repro`):
+  - [ ] website with pages at two depths → exactly one theme bundle in
+        `site_libs/quarto/`, both pages link it, and the font exists at
+        `site_libs/quarto/fonts/<basename>` — i.e. the `@font-face` URL
+        resolves from the bundle's directory to a real file.
+  - [ ] single-doc → `{stem}_files/styles.css` + `{stem}_files/fonts/<basename>`.
+  - [ ] cache-aliasing regression: render the nested page alone, then the
+        whole project (same runtime cache); the root page's bundle has the
+        correct URL. (Passes structurally once the prefix is constant; keep
+        the test so a future document-dependent input can't regress it.)
+  - [ ] missing font file → warning naming the brand file, family and path;
+        render continues (matches `copy_navbar_logo` warn-and-continue).
+  - [ ] collision: two brands / two files with the same basename and
+        different bytes → render error naming both sources.
+  - [ ] unknown key on a file entry → one warning, render continues.
+  - [ ] light/dark brands with distinct font files → both published, no
+        conflict.
 
-- **bd-5fseopxy** (in_progress) — weight ranges `400..700` collapse to
-  400 for google *and* file sources. Touches the same
-  `file_font_face_block` (`font-weight: N M` for variable files). The two
-  strands will conflict textually in `brand_layer.rs:553-584`; whichever
-  lands second rebases. No semantic coupling — the URL/copy work here does
-  not care about the weight value.
-- **bd-qnylgu69** (open) — audit `docs/guides/authoring/brand.qmd` against
-  actual Q2 support. This strand's docs phase should hand it the exact
-  wording for `source: file` (paths are relative to the brand file; files
-  are copied automatically once this lands; until then the `/assets` +
-  `resources:` workaround).
+### Phase 1 — Constant font URL in the SCSS layer
 
-Also relevant, not linked: **bd-r1y48cx0** (open) — `css:` files never
-copied for websites. Same bug class ("theme/CSS side-input is read but
-never published"); the copy mechanism chosen here should be the one that
-strand reuses. And the path-resolution contract
-(`claude-notes/designs/path-resolution-model.md`) lists `brand:` as
-"project-root by construction" — font paths *inside* the brand file are a
-consumer that inventory does not yet mention; add a row.
+- [ ] `brand_layer.rs`: `file_font_face_block` emits `fonts/<basename>` +
+      `format()`; drop `join_url_path` and the `font_path_prefix`
+      parameter from `brand_to_layers` / `typography_layer` (update
+      `config.rs:695` caller and its doc comment).
+- [ ] `themes.rs:777-783`: remove the `pathdiff(document_dir, brand_dir)`
+      prefix; `brand_dir` stays on `ThemeContext` (Phase 2 reads it).
+- [ ] `compile_theme_css.rs` `cache_key()`: document in the comment why
+      `document_dir` is deliberately absent (URL is constant) — and hash
+      the font *basenames* so a renamed file invalidates the CSS.
 
-## What the code looks like today
+### Phase 2 — Publish font artifacts
 
-All file paths in the strand still exist with the described shape
-(spot-checked; line numbers in NOTES.md). Reproduced at HEAD:
+- [ ] In `CompileThemeCssStage::run`, after brand resolution, walk each
+      resolved brand's `typography.fonts` `source: file` entries (light and
+      dark): resolve the path (leading `/` → `ctx.project.dir`, else
+      `brand_dir.join(path)`; external URLs skipped), read bytes via
+      `ctx.runtime`, store `Artifact::from_bytes(bytes, <mime by ext>)`
+      with key `font:<basename>` and path `quarto/fonts/<basename>` /
+      `fonts/<basename>` (mirror `theme_artifact_key_and_path`'s
+      single-doc switch), scope `Project`.
+- [ ] Collision check before `ctx.artifacts.store`: same key already
+      present with different bytes → structured error naming both source
+      paths. Cross-document collisions surface via
+      `ArtifactStore::merge_into_project`'s existing conflict — wrap that
+      error so it names the font sources too (today it prints key + byte
+      lengths only).
+- [ ] Missing file → warning diagnostic; render continues without the
+      artifact (the CSS still references it, matching logo behavior).
+- [ ] Confirm nothing emits a `<link>` for `font:*` keys (link emission
+      selects by `css:` / `js:` prefixes — verify) and that
+      `flush_artifacts_to_vfs` carries binary content to the preview.
+- [ ] New `Q-14-*` catalog entries for the collision error and the
+      missing-file / unknown-key warnings, each with its
+      `docs/errors/theme/<code>.qmd` page **and** sidebar entry in the same
+      commit (`cargo xtask lint`).
 
-| Case | Theme CSS location | Emitted `src` | File copied? |
-|---|---|---|---|
-| website, `index.qmd` | `_site/site_libs/quarto/quarto-theme-<fp>.css` | `assets/…` | no |
-| website, `posts/one.qmd` (cold cache) | second bundle, different `<fp>` | `../assets/…` | no |
-| website, warm cache | one bundle, prefix of whichever page compiled *first* (persistent across sessions) | order-dependent | no |
-| single doc `doc.qmd` | `doc_files/styles.css` | `assets/…` → resolves to `doc_files/assets/…` | no |
+### Phase 3 — Unknown-key warning on file entries
 
-Two corrections to the strand text:
+- [ ] `quarto-brand` `BrandFontFileEntry::Explicit`: capture unrecognised
+      keys (`#[serde(flatten)]` map) so `format:`/`display:` survive parse.
+- [ ] Emit one warning per entry from the stage (has the diagnostics
+      sink); ignore the keys.
 
-- **Single-doc is broken too.** `styles.css` is not "next to the document";
-  it is in `{stem}_files/` (`resource_resolver.rs:113-124`), so the
-  document-relative prefix is wrong there as well.
-- **The N-bundle split only happens on a cold cache.** With the persistent
-  SASS cache warm, `cache_key()` (`compile_theme_css.rs:197`) — which
-  hashes the brand YAML but not `document_dir` — makes every page reuse the
-  first page's bundle, wrong prefix included. Either way the output is
-  wrong; the cache-key omission is a separate correctness bug worth its own
-  regression test.
+### Phase 4 — Docs, contract, verification
 
-Q1 parity: Q1 uses the identical document-relative prefix and does **not**
-copy font files for HTML (only for typst). It works in Q1 only because Q1's
-theme CSS sits beside the page. The `site_libs`/`{stem}_files` relocation
-is the Q2 change that exposed both gaps.
+- [ ] `docs/guides/authoring/brand.qmd`: `source: file` paths resolve
+      relative to the brand file (leading `/` = project root), files are
+      published automatically, `format:`/`display:` are not yet supported.
+      Hand the wording to bd-qnylgu69.
+- [ ] `claude-notes/designs/path-resolution-model.md`: add a row for
+      brand-file font paths (brand-dir base, `/` = project root, emitted
+      URL is artifact-relative).
+- [ ] End-to-end: `cargo run --bin q2 -- render` on both fixtures; inspect
+      `site_libs/quarto/fonts/`, the `@font-face` line, and a browser
+      load; record invocation + output snippet here.
+- [ ] `cargo xtask verify` (full — `quarto-core` changes affect the WASM
+      leg; hub-client vitest is currently red on `main` for an unrelated
+      `localStorage` environment issue, see NOTES.md).
+- [ ] Rebase over bd-5fseopxy if it has landed; resolve the
+      `file_font_face_block` conflict.
 
-## Proposed phases (draft)
+### On merge
 
-Skeleton only — contents depend on the design answers below.
+- [ ] Comment on bd-r1y48cx0 pointing at the font-artifact mechanism as
+      the one for `css:` files to reuse.
+- [ ] Close bd-ve916wr8.
 
-- **Phase 0 — Test plan (TDD).**
-  - `quarto-sass` unit: `file_font_face_block` emits the chosen URL shape
-    (and `format("woff2")` if in scope); `/`-rooted path handling per Q3.
-  - `quarto-core` integration (drive `render_document_to_file` /
-    project render, not `brand_to_layers` directly): (a) website with pages
-    at two depths → exactly one theme bundle, both pages link it, the
-    `@font-face` URL resolves from the bundle's directory to a file that
-    exists in the output; (b) single-doc → same property against
-    `{stem}_files/styles.css`; (c) cache-aliasing regression — render
-    nested page first, then root page, assert the root page's URL is
-    correct; (d) missing font file → warning naming the brand file key.
-  - Fixture: promote `brand-file-fonts-website-investigation/repro` into
-    the test tree.
-- **Phase 1 — Font URL base.** Compute the `@font-face` URL relative to
-  the theme artifact's location (or make it constant — see Q1). Remove
-  `document_dir` from the prefix computation so the fingerprint is
-  site-wide; add whatever *does* feed the URL to `cache_key()`.
-- **Phase 2 — Publish the font bytes.** Per Q1: either emit fonts as
-  project-scope artifacts next to the theme CSS, or register them as
-  implicit resources / a post-render copy hook. Must cover single-doc and
-  website; note WASM preview implications.
-- **Phase 3 — Small emitter fixes (if in scope, Q4).** `format()` from the
-  extension; reject unknown keys on file entries (`format:`/`display:`)
-  instead of dropping them; optionally accept a display hint.
-- **Phase 4 — Docs + contract.** `docs/guides/authoring/brand.qmd`
-  (`source: file` semantics, coordinate with bd-qnylgu69); add the
-  brand-font row to `path-resolution-model.md`'s inventory; end-to-end
-  verification via `cargo run --bin q2 -- render` on the fixture, output
-  inspected.
+## Risks
 
-## Open design questions for the user
-
-1. **Where do the font bytes live, and hence what is the URL?** Two shapes:
-   - **(a) Fonts become project-scope artifacts beside the theme CSS**
-     (`site_libs/quarto/fonts/<name>` / `doc_files/fonts/<name>`), and the
-     `@font-face` URL is the constant `fonts/<name>`. Pros: one mechanism
-     for website, single-doc, *and* the WASM preview (artifacts flush
-     through both transports; the native-only `copy_*` hooks do not);
-     the prefix is constant so the cache-key and per-depth problems vanish
-     structurally; no dependence on how the site is hosted. Cons: font
-     bytes pass through the in-memory artifact store; `_site/assets/`
-     no longer mirrors the source tree for fonts (a user's `/assets/…`
-     workaround keeps working but becomes redundant).
-   - **(b) Copy fonts to their source-mirrored output path** (like logos:
-     `_site/assets/x.woff2`) and emit a URL relative to the theme CSS
-     (`../../assets/x.woff2` from `site_libs/quarto/`; `../assets/…` from
-     `doc_files/`). Keeps the output tree familiar; needs the copy to run in
-     both single-doc and project paths and stays native-only.
-   My recommendation is (a). Do you agree, or do you want the output tree
-   to mirror the source layout?
-2. **Copy channel (only if 1b).** Post-render hook like `copy_navbar_logo`
-   (needs a single-doc twin), or the resource channel
-   (`ResolvedResource` with a brand-file origin, so the render manifest
-   lists the fonts for `quarto publish`)? I'd take the resource channel,
-   and bd-r1y48cx0 (`css:` copy) would reuse it.
-3. **Leading `/` in a font path.** Today `/assets/x` accidentally survives
-   as a site-root URL (`PathBuf::push` drops the prefix). The path contract
-   says a leading `/` means *project root* for resolution. Should the fix
-   (i) resolve `/assets/x` against the project root for the *copy* and
-   emit the normal relative/constant URL like any other path, or (ii)
-   keep `/…` as an explicit "emit verbatim, you host it" escape hatch?
-   (i) is contract-conformant and what I'd do; it changes the workaround's
-   emitted URL from `/assets/…` to the new form, which is still correct.
-4. **Scope of the emitter niceties.** In scope here or a follow-up strand:
-   `format("woff2")` from the extension (cheap, clearly good);
-   `deny_unknown_fields` on the explicit file entry so `format:`/`display:`
-   error instead of vanishing (the brand.yml spec has no `display` for
-   file fonts — accepting one would be a Q2 extension); a `display:` /
-   `font-display` hint for file fonts (spec extension — I'd file it
-   separately).
-5. **Interaction with bd-5fseopxy.** Both edit `file_font_face_block`.
-   Sequence this after it lands, or land this first and let the weight
-   work rebase? (Pure ordering question; either is fine.)
-
-## Risks / tradeoffs (draft)
-
-- **Artifact-store size (1a).** Variable fonts are ~100–500 KB each; a
-  brand with several files puts a few MB through the artifact map per
-  render. Should be fine (images already go this route) but worth one
-  measurement on a real brand.
-- **Fingerprint stability.** Whatever feeds the URL must feed both
-  `theme_fingerprint` (already content-based, fine) and `cache_key()`
-  (currently incomplete). If (1a), the URL is constant and the cache key
-  is correct by construction; if (1b), the key must include the
-  artifact-relative prefix.
-- **Dark brand with different fonts** — the dark bundle's `@font-face`
-  blocks reference the dark brand's files; under (1a) both variants' fonts
-  land in the same `fonts/` dir, so filename collisions across brands
-  need a content-hash or brand-scoped name.
-- **Hub-client preview** — under (1b) fonts would not appear in the WASM
-  preview at all (the copy hooks are native-only); under (1a) they should,
-  but the preview transport's handling of binary project-scope artifacts
-  needs a check before claiming it.
-- **Test environment** — pre-flight's hub-client vitest leg is red on a
-  clean `main` (`localStorage` undefined, Node v26.8.1); Rust legs green.
-  Unrelated but will show up in any full `cargo xtask verify`.
+- **Artifact-store size.** Variable fonts are ~100–500 KB each; a brand
+  with several files puts a few MB through the artifact map per render.
+  Images already take this route; measure once on a real brand.
+- **Collision granularity.** Basename-keyed names mean two *different*
+  brands (per-document `brand:` front matter) with `regular.woff2` each
+  collide by design (decision 2). If that bites in practice, the escape is
+  a content-hash suffix — not silent overwrite.
+- **Preview transport.** Binary project-scope artifacts should flow to the
+  hub-client VFS like images do; verify rather than assume before claiming
+  preview support.
+- **Concurrent edits** with bd-5fseopxy in `brand_layer.rs:553-584`.
