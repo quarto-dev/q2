@@ -43,12 +43,34 @@ pub struct ResolvedBrand {
     pub brand: Brand,
     /// Directory the brand file was read from; `None` for inline blocks.
     pub dir: Option<PathBuf>,
+    /// The brand file itself, when the brand came from one; `None` for
+    /// inline blocks. Diagnostics about the brand's *contents* (a font
+    /// file that does not exist, say) name this file so the user knows
+    /// where to look.
+    pub file: Option<PathBuf>,
 }
 
 impl ResolvedBrand {
     /// Construct from a brand and the directory it was read from.
     pub fn new(brand: Brand, dir: Option<PathBuf>) -> Self {
-        Self { brand, dir }
+        Self {
+            brand,
+            dir,
+            file: None,
+        }
+    }
+
+    /// Construct from a brand and the file it was read from; `dir` is
+    /// that file's directory.
+    pub fn from_file(brand: Brand, file: PathBuf) -> Self {
+        let dir = file
+            .parent()
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+        Self {
+            brand,
+            dir: Some(dir),
+            file: Some(file),
+        }
     }
 
     /// The prefix that turns a path written inside this brand into one

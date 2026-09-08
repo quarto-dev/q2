@@ -1196,6 +1196,27 @@
     "docs_url": "https://quarto.org/docs/errors/theme/Q-14-8",
     "since_version": "99.9.9"
   },
+  "Q-14-9": {
+    "subsystem": "theme",
+    "title": "Brand font file not found",
+    "message_template": "A `source: file` font in the brand names a file that does not exist, so it was not published. The `@font-face` rule was still written; the browser falls back to the next font. Font paths are relative to the brand file (a leading `/` means the project root).",
+    "docs_url": "https://quarto.org/docs/errors/theme/Q-14-9",
+    "since_version": "99.9.9"
+  },
+  "Q-14-10": {
+    "subsystem": "theme",
+    "title": "Two brand font files publish under the same name",
+    "message_template": "Two `source: file` brand fonts with different contents share a file name. Quarto publishes every brand font as `fonts/<file name>` beside the theme CSS, so two different files cannot share a name. Rename one of them.",
+    "docs_url": "https://quarto.org/docs/errors/theme/Q-14-10",
+    "since_version": "99.9.9"
+  },
+  "Q-14-11": {
+    "subsystem": "theme",
+    "title": "Unsupported key on a brand font file entry",
+    "message_template": "A `files:` entry of a `source: file` brand font sets a key Quarto does not support (such as `format:` or `display:`); it was ignored. The `format()` hint is derived from the file's extension.",
+    "docs_url": "https://quarto.org/docs/errors/theme/Q-14-11",
+    "since_version": "99.9.9"
+  },
   "Q-15-1": {
     "subsystem": "crossref",
     "title": "Duplicate Crossref Identifier",

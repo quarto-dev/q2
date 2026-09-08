@@ -395,10 +395,18 @@ impl ArtifactStore {
                     if existing.content == incoming.content {
                         stats.deduped += 1;
                     } else {
+                        let source_of = |a: &Artifact| {
+                            a.metadata
+                                .get("source")
+                                .and_then(serde_json::Value::as_str)
+                                .map(str::to_string)
+                        };
                         return Err(ArtifactMergeConflict {
                             key,
                             existing_len: existing.content.len(),
                             incoming_len: incoming.content.len(),
+                            existing_source: source_of(existing),
+                            incoming_source: source_of(&incoming),
                         });
                     }
                 }
@@ -437,6 +445,11 @@ pub struct ArtifactMergeConflict {
     /// Length in bytes of the new entry that triggered the
     /// conflict.
     pub incoming_len: usize,
+    /// Where the existing entry's bytes came from, when its producer
+    /// recorded a `source` metadata entry (published brand fonts do).
+    pub existing_source: Option<String>,
+    /// Where the incoming entry's bytes came from, likewise.
+    pub incoming_source: Option<String>,
 }
 
 impl std::fmt::Display for ArtifactMergeConflict {
@@ -445,7 +458,11 @@ impl std::fmt::Display for ArtifactMergeConflict {
             f,
             "artifact key '{}' has conflicting content (existing: {} bytes, incoming: {} bytes)",
             self.key, self.existing_len, self.incoming_len
-        )
+        )?;
+        if let (Some(existing), Some(incoming)) = (&self.existing_source, &self.incoming_source) {
+            write!(f, " — existing from {existing}, incoming from {incoming}")?;
+        }
+        Ok(())
     }
 }
 

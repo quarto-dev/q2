@@ -16,6 +16,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use hashlink::LinkedHashMap;
 use serde::{Deserialize, Serialize};
 
 /// A reference to a brand configuration in document or project metadata.
@@ -594,21 +595,86 @@ pub enum BrandFontFileEntry {
     /// A bare path string.
     Path(String),
     /// A typed file descriptor with optional weight/style.
-    Explicit {
-        path: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        weight: Option<BrandFontWeight>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        style: Option<BrandFontStyle>,
-    },
+    Explicit(BrandFontFileExplicit),
+}
+
+/// The map form of a `source: file` font file entry.
+///
+/// Deliberately **not** `deny_unknown_fields`: the brand.yml spec has
+/// not settled per-file keys such as `format:` and `display:`, so a
+/// brand that uses them must still parse. They are captured in
+/// [`Self::unknown`] so the consumer can warn that they are ignored
+/// (bd-ve916wr8, decision 5) instead of either rejecting the brand or
+/// dropping the keys silently.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BrandFontFileExplicit {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weight: Option<BrandFontWeight>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<BrandFontStyle>,
+    /// Keys this entry carried that Quarto does not understand, in
+    /// authored order. Ignored by every consumer; surfaced as a
+    /// warning by the theme stage.
+    #[serde(flatten, skip_serializing_if = "LinkedHashMap::is_empty")]
+    pub unknown: LinkedHashMap<String, serde_yaml::Value>,
 }
 
 impl BrandFontFileEntry {
     pub fn path(&self) -> &str {
         match self {
             BrandFontFileEntry::Path(p) => p,
-            BrandFontFileEntry::Explicit { path, .. } => path,
+            BrandFontFileEntry::Explicit(e) => &e.path,
         }
+    }
+
+    /// The `weight:` of the map form (`None` for a bare path).
+    pub fn weight(&self) -> Option<&BrandFontWeight> {
+        match self {
+            BrandFontFileEntry::Path(_) => None,
+            BrandFontFileEntry::Explicit(e) => e.weight.as_ref(),
+        }
+    }
+
+    /// The `style:` of the map form (`None` for a bare path).
+    pub fn style(&self) -> Option<&BrandFontStyle> {
+        match self {
+            BrandFontFileEntry::Path(_) => None,
+            BrandFontFileEntry::Explicit(e) => e.style.as_ref(),
+        }
+    }
+
+    /// Keys on this entry that Quarto does not understand, in
+    /// authored order (empty for a bare path).
+    pub fn unknown_keys(&self) -> Vec<&str> {
+        match self {
+            BrandFontFileEntry::Path(_) => Vec::new(),
+            BrandFontFileEntry::Explicit(e) => e.unknown.keys().map(String::as_str).collect(),
+        }
+    }
+}
+
+/// The name under which a local `source: file` font is published.
+///
+/// Local font files are copied into a `fonts/` directory beside the
+/// theme CSS that references them, and the `@font-face` URL is the
+/// constant `fonts/<name>` — so `<name>` is the file's basename,
+/// whatever directory the brand authored it in (brand-relative,
+/// `/`-rooted at the project, or a `../` climb). External URLs are
+/// served by whoever hosts them and have no published name.
+///
+/// Returns `None` for an external URL or a path with no basename.
+/// Both `/` and `\` count as separators so a brand authored on
+/// Windows publishes the same name.
+pub fn published_font_name(path: &str) -> Option<String> {
+    if quarto_util::is_external_url(path) {
+        return None;
+    }
+    let name = path.rsplit(['/', '\\']).next().unwrap_or("");
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
     }
 }
 

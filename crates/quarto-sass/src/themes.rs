@@ -361,10 +361,6 @@ pub struct ThemeContext<'a> {
     /// [`ThemeConfig::resolve`]. When `None` and a `ThemeSpec::Brand`
     /// is encountered, [`process_theme_specs`] returns an error.
     brand: Option<&'a quarto_brand::Brand>,
-
-    /// Directory containing the brand file (for resolving font URLs
-    /// in `@font-face` blocks).
-    brand_dir: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for ThemeContext<'_> {
@@ -374,7 +370,6 @@ impl std::fmt::Debug for ThemeContext<'_> {
             .field("load_paths", &self.load_paths)
             .field("runtime", &"<SystemRuntime>")
             .field("brand", &self.brand.is_some())
-            .field("brand_dir", &self.brand_dir)
             .finish()
     }
 }
@@ -395,7 +390,6 @@ impl<'a> ThemeContext<'a> {
             load_paths: Vec::new(),
             runtime,
             brand: None,
-            brand_dir: None,
         }
     }
 
@@ -416,30 +410,22 @@ impl<'a> ThemeContext<'a> {
             load_paths,
             runtime,
             brand: None,
-            brand_dir: None,
         }
     }
 
-    /// Builder-style: attach a resolved brand and its directory.
+    /// Builder-style: attach a resolved brand.
     ///
-    /// `brand_dir` is the directory containing the source `_brand.yml`
-    /// (used to resolve relative font-file paths in `@font-face`
-    /// blocks). For inline brand blocks with no source file, pass the
-    /// document directory.
-    pub fn with_brand(mut self, brand: &'a quarto_brand::Brand, brand_dir: PathBuf) -> Self {
+    /// Font-file *locations* are the theme stage's concern (it reads
+    /// and publishes them from the brand directory); the SCSS side
+    /// only needs the brand content.
+    pub fn with_brand(mut self, brand: &'a quarto_brand::Brand) -> Self {
         self.brand = Some(brand);
-        self.brand_dir = Some(brand_dir);
         self
     }
 
     /// The resolved brand, if any.
     pub fn brand(&self) -> Option<&'a quarto_brand::Brand> {
         self.brand
-    }
-
-    /// The brand-file directory, if a brand is attached.
-    pub fn brand_dir(&self) -> Option<&Path> {
-        self.brand_dir.as_deref()
     }
 
     /// Get the document directory.
@@ -775,14 +761,11 @@ pub fn process_theme_specs(
                             .to_string(),
                         location: None,
                     })?;
-                // Path prefix for @font-face URLs: brand_dir relative
-                // to the document_dir (matches Q1's
-                // `relative(projectDir, brandDir)`).
-                let prefix = match context.brand_dir() {
-                    Some(bd) => pathdiff_from_to(context.document_dir(), bd),
-                    None => PathBuf::new(),
-                };
-                let brand_layers = crate::brand_layer::brand_to_layers(brand, &prefix)?;
+                // `@font-face` URLs are the constant `fonts/<name>`
+                // (published beside the theme CSS by the theme stage),
+                // so the layers do not depend on the document's
+                // location — one compiled theme serves every page.
+                let brand_layers = crate::brand_layer::brand_to_layers(brand)?;
                 layers.extend(brand_layers);
             }
         }
@@ -837,47 +820,6 @@ pub fn resolve_theme(name: &str) -> Result<(BuiltInTheme, SassLayer), SassError>
     let theme: BuiltInTheme = name.parse()?;
     let layer = load_theme_layer(theme)?;
     Ok((theme, layer))
-}
-
-/// Compute `to` expressed relative to `from`, used for `@font-face`
-/// URLs in brand-derived SCSS. If the paths share no common prefix
-/// (different roots), we fall back to `to` as-is — the browser will
-/// resolve it from the served HTML's location.
-///
-/// This is a deliberately simple implementation that handles the
-/// common case where both paths are relative to the same project
-/// root or both absolute and share a common ancestor.
-fn pathdiff_from_to(from: &Path, to: &Path) -> PathBuf {
-    use std::path::Component;
-
-    let from_components: Vec<_> = from.components().collect();
-    let to_components: Vec<_> = to.components().collect();
-
-    // Find common prefix length.
-    let common = from_components
-        .iter()
-        .zip(to_components.iter())
-        .take_while(|(a, b)| a == b)
-        .count();
-
-    // Skip components that are equivalent to current-dir.
-    let from_remaining = &from_components[common..];
-    let to_remaining = &to_components[common..];
-
-    let mut result = PathBuf::new();
-    for _ in from_remaining
-        .iter()
-        .filter(|c| !matches!(c, Component::CurDir))
-    {
-        result.push("..");
-    }
-    for c in to_remaining {
-        result.push(c.as_os_str());
-    }
-    if result.as_os_str().is_empty() {
-        return PathBuf::new();
-    }
-    result
 }
 
 #[cfg(test)]

@@ -19,11 +19,9 @@
 //!   bare, which is fragile for multi-word names (`EB Garamond` would
 //!   be parsed as a token list). The Q2 output is more robust.
 
-use std::path::{Path, PathBuf};
-
 use quarto_brand::{
-    Brand, BrandFont, BrandFontFile, BrandFontFileEntry, BrandFontGoogle, BrandFontStyle,
-    BrandFontWeight, BrandFontWeightAtom,
+    Brand, BrandFont, BrandFontFile, BrandFontGoogle, BrandFontStyle, BrandFontWeight,
+    BrandFontWeightAtom, published_font_name,
 };
 
 use crate::error::SassError;
@@ -55,17 +53,16 @@ const DEFAULT_COLOR_NAME_MAP: &[(&str, &str)] = &[
 
 /// Translate a `Brand` into a vector of `SassLayer`s.
 ///
-/// `font_path_prefix` is the directory path used to resolve relative
-/// font-file URLs in `@font-face` blocks — it should be the brand
-/// file's directory relative to the project root. For an empty path,
-/// font files are referenced by their bare names.
+/// `source: file` fonts are referenced as `fonts/<basename>` — the
+/// location the theme stage publishes them to, beside the compiled
+/// theme CSS (see [`quarto_brand::published_font_name`]). The URL is
+/// therefore independent of where the brand file or the document
+/// lives, which is what lets one compiled theme serve every page of a
+/// site (bd-ve916wr8).
 ///
 /// Returns an empty vector if the brand has no color, typography, or
 /// `defaults.bootstrap` content.
-pub fn brand_to_layers(
-    brand: &Brand,
-    font_path_prefix: &Path,
-) -> Result<Vec<SassLayer>, SassError> {
+pub fn brand_to_layers(brand: &Brand) -> Result<Vec<SassLayer>, SassError> {
     let mut layers = Vec::new();
 
     // Semantic validation before any emission (bd-5fseopxy): an
@@ -91,7 +88,7 @@ pub fn brand_to_layers(
 
     // 3. typography layer
     if brand.typography.is_some()
-        && let Some(typography) = typography_layer(brand, font_path_prefix)?
+        && let Some(typography) = typography_layer(brand)?
     {
         layers.push(typography);
     }
@@ -267,10 +264,7 @@ fn yaml_scalar_to_scss(v: &serde_yaml::Value) -> String {
 
 // ── typography layer ────────────────────────────────────────────────
 
-fn typography_layer(
-    brand: &Brand,
-    font_path_prefix: &Path,
-) -> Result<Option<SassLayer>, SassError> {
+fn typography_layer(brand: &Brand) -> Result<Option<SassLayer>, SassError> {
     if brand.typography.is_none() {
         return Ok(None);
     }
@@ -286,7 +280,7 @@ fn typography_layer(
         let line = match font {
             BrandFont::Google(g) => google_font_import_string(g, &font_path)?,
             BrandFont::Bunny(b) => bunny_font_import_string(b, &font_path)?,
-            BrandFont::File(f) => file_font_face_block(f, font_path_prefix, &font_path)?,
+            BrandFont::File(f) => file_font_face_block(f, &font_path)?,
             BrandFont::System(_) => continue,
         };
         if seen_imports.insert(line.clone()) {
@@ -664,29 +658,25 @@ fn weight_spec(
 
 /// One `@font-face` block per file. A per-file weight range renders as
 /// CSS `font-weight: N M`, the declaration for a variable font's axis.
-fn file_font_face_block(
-    font: &BrandFontFile,
-    font_path_prefix: &Path,
-    font_path: &str,
-) -> Result<String, SassError> {
+fn file_font_face_block(font: &BrandFontFile, font_path: &str) -> Result<String, SassError> {
     let mut parts: Vec<String> = Vec::new();
     for (j, entry) in font.files.iter().enumerate() {
-        let (path, weight, style) = match entry {
-            BrandFontFileEntry::Path(p) => (p.clone(), None, None),
-            BrandFontFileEntry::Explicit {
-                path,
-                weight,
-                style,
-            } => (path.clone(), weight.clone(), style.clone()),
+        let path = entry.path();
+
+        // A local file is published beside the theme CSS as
+        // `fonts/<basename>` (the theme stage stores the bytes there);
+        // an external URL is served by whoever hosts it. The URL is
+        // the same for every page of a project, so the compiled theme
+        // is document-independent.
+        let src = match published_font_name(path) {
+            Some(name) => match font_format_hint(&name) {
+                Some(format) => format!("url('fonts/{name}') format('{format}')"),
+                None => format!("url('fonts/{name}')"),
+            },
+            None => format!("url('{path}')"),
         };
 
-        let font_url = if is_external_url(&path) {
-            path.clone()
-        } else {
-            join_url_path(font_path_prefix, &path)
-        };
-
-        let weight_str = match weight.as_ref() {
+        let weight_str = match entry.weight() {
             Some(w) => font_weight_to_css(
                 w,
                 &format!("{font_path}.files[{j}].weight"),
@@ -694,31 +684,31 @@ fn file_font_face_block(
             )?,
             None => "normal".to_string(),
         };
-        let style_str = style
-            .as_ref()
+        let style_str = entry
+            .style()
             .map_or_else(|| "normal".to_string(), font_style_to_scss);
 
         parts.push(format!(
-            "@font-face {{\n    font-family: {family};\n    src: url('{font_url}');\n    font-weight: {weight_str};\n    font-style: {style_str};\n}}",
+            "@font-face {{\n    font-family: {family};\n    src: {src};\n    font-weight: {weight_str};\n    font-style: {style_str};\n}}",
             family = quote_family_name(&font.family),
         ));
     }
     Ok(parts.join("\n"))
 }
 
-fn is_external_url(s: &str) -> bool {
-    s.starts_with("http://") || s.starts_with("https://") || s.starts_with("//")
-}
-
-/// Join a prefix and a relative path with forward slashes (URLs use
-/// `/`, not OS separators).
-fn join_url_path(prefix: &Path, rel: &str) -> String {
-    if prefix.as_os_str().is_empty() {
-        return rel.to_string();
+/// The CSS `format()` hint for a font file, from its extension.
+///
+/// Browsers use the hint to skip downloads they cannot decode. Unknown
+/// extensions get no hint rather than a guess.
+fn font_format_hint(name: &str) -> Option<&'static str> {
+    let ext = name.rsplit_once('.')?.1.to_ascii_lowercase();
+    match ext.as_str() {
+        "woff2" => Some("woff2"),
+        "woff" => Some("woff"),
+        "ttf" => Some("truetype"),
+        "otf" => Some("opentype"),
+        _ => None,
     }
-    let mut combined = PathBuf::from(prefix);
-    combined.push(rel);
-    combined.to_string_lossy().replace('\\', "/")
 }
 
 // ── error mapping ───────────────────────────────────────────────────

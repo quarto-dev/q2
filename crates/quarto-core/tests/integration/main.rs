@@ -13,6 +13,7 @@ pub mod attribution_viewer;
 pub mod attribution_wasm_invariant;
 pub mod behave_engine_e2e;
 pub mod bootstrap_js_pipeline;
+pub mod brand_fonts;
 pub mod brand_render;
 pub mod breadcrumbs_pipeline;
 pub mod capture_splice_engines;
