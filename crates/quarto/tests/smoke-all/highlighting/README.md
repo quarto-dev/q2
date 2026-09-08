@@ -16,6 +16,7 @@ intended source of truth — lift them as-is.
 | `04-filter/` | A Lua filter that produces `data-hl-spans` directly — shows the filter-authored extension point with a simple literal-word matcher. |
 | `05-theme-none.qmd` | `theme: none` emits `hl-*` classes but does NOT ship default highlight colors (user takes over theming). |
 | `06-filter-severity/` | A structured-log filter: multiple capture names (`severity.err`, `severity.warning`, `timestamp`, …). Intended as a more realistic copy-paste reference for users writing custom Lua filter highlighters. |
+| `09-builtin-rust.qmd` | Built-in Rust grammar via the canonical `rust` class and the `rs` alias. |
 
 See the Phase 3.5 plan at
 `claude-notes/plans/2026-04-20-syntax-highlighting-phase-3.5.md`
