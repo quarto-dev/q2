@@ -27,6 +27,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 - [`4b8bc49c`](https://github.com/quarto-dev/q2/commits/4b8bc49c): Invite cards now name Quarto Hub on the top line so recipients can see where the link leads, drop the redundant "Join to collaborate on …" line above the Google button, and copying a project's share link fetches its file summary first when one isn't cached — so invites for projects you haven't opened locally no longer arrive with an empty preview.
 - [`c2f1a1ef`](https://github.com/quarto-dev/q2/commits/c2f1a1ef): Invite cards now read "<name> invites you to collaborate on …" for both collections and projects, and the "New to Quarto Hub?" explainer is a small footnote with a "Learn more" link below the button rather than a panel above it.
+- [`c0a6230e`](https://github.com/quarto-dev/q2/commits/c0a6230e): WASM tests that render now wire the dart-sass VFS importer, since a theme compile failure is a hard error (Q-14-6) instead of a silent fallback to default CSS
 
 ### 2026-09-03
 

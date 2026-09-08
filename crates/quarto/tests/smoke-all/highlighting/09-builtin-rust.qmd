@@ -1,0 +1,29 @@
+---
+title: Built-in Rust syntax highlighting
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      dom-parity: true
+      ensureFileRegexMatches:
+        # Both the canonical `rust` class and the `rs` alias resolve to
+        # the built-in Rust grammar: the outer container carries
+        # `sourceCode`, keywords wrap in `hl-keyword`, and a macro
+        # invocation's name wraps in `hl-function-macro`.
+        - ["<pre class=\"sourceCode rust\"", "<pre class=\"sourceCode rs\"", "hl-keyword\">fn</span>", "hl-function-macro\">println</span>"]
+---
+
+Rust fences are highlighted whether they use the canonical `rust` class or
+the `rs` alias.
+
+```rust
+fn main() {
+    let x: u32 = 1;
+    println!("x = {x}");
+}
+```
+
+```rs
+fn main() {}
+```

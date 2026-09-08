@@ -602,6 +602,7 @@ pub fn load_custom_theme(
         match e {
             SassError::NoBoundaryMarkers { .. } => SassError::InvalidScssFile {
                 path: resolved_path.clone(),
+                location: None,
             },
             other => other,
         }
@@ -1128,7 +1129,7 @@ mod tests {
 
         assert!(result.is_err());
         match result {
-            Err(SassError::InvalidScssFile { path }) => {
+            Err(SassError::InvalidScssFile { path, .. }) => {
                 assert!(path.ends_with("no_boundaries.scss"));
             }
             _ => panic!("Expected InvalidScssFile error"),

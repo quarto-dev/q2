@@ -366,3 +366,201 @@ fn typography_layer_monospace_propagates_to_inline_and_block() {
         typ.defaults
     );
 }
+
+// ── font weight ranges (bd-5fseopxy) ────────────────────────────────
+//
+// brand.yml variable-font ranges (`weight: 400..700`). Google serves a
+// true variable axis via `wght@N..M`; Bunny has no range syntax
+// (`inter:400..700` silently serves 400 only — checked 2026-09-08), so
+// a range is expanded to discrete weights there; a local variable font
+// file declares its axis with CSS `font-weight: N M`.
+
+fn typography_uses(yaml: &str) -> String {
+    let b = brand(yaml);
+    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    layers.last().expect("typography layer").uses.clone()
+}
+
+#[test]
+fn google_weight_range_emits_wght_axis() {
+    let uses = typography_uses(
+        "typography:\n\
+         \x20 fonts:\n\
+         \x20   - family: EB Garamond\n\
+         \x20     source: google\n\
+         \x20     weight: 400..700\n\
+         \x20     style: normal\n",
+    );
+    assert!(
+        uses.contains("family=EB+Garamond:wght@400..700&display=swap"),
+        "expected the wght axis range form:\n{uses}"
+    );
+}
+
+#[test]
+fn google_weight_range_with_italic_emits_ital_wght_pairs() {
+    // Default style is [normal, italic]; each italic value pairs with
+    // the whole range, exactly as discrete weights do.
+    let uses = typography_uses(
+        "typography:\n\
+         \x20 fonts:\n\
+         \x20   - family: EB Garamond\n\
+         \x20     source: google\n\
+         \x20     weight: 400..700\n",
+    );
+    assert!(
+        uses.contains("family=EB+Garamond:ital,wght@0,400..700;1,400..700&display=swap"),
+        "expected ital,wght pairs over the range:\n{uses}"
+    );
+}
+
+#[test]
+fn google_keyword_list_still_emits_discrete_weights() {
+    // Regression guard for the pre-existing list behavior alongside
+    // the new range path.
+    let uses = typography_uses(
+        "typography:\n\
+         \x20 fonts:\n\
+         \x20   - family: EB Garamond\n\
+         \x20     source: google\n\
+         \x20     weight: [regular, bold]\n\
+         \x20     style: normal\n",
+    );
+    assert!(
+        uses.contains("family=EB+Garamond:wght@400;700&display=swap"),
+        "expected discrete weights:\n{uses}"
+    );
+}
+
+#[test]
+fn bunny_weight_range_expands_to_hundreds() {
+    let uses = typography_uses(
+        "typography:\n\
+         \x20 fonts:\n\
+         \x20   - family: Inter\n\
+         \x20     source: bunny\n\
+         \x20     weight: 400..700\n\
+         \x20     style: normal\n",
+    );
+    assert!(
+        uses.contains("family=Inter:400,500,600,700&display=swap"),
+        "expected the range expanded to discrete weights:\n{uses}"
+    );
+}
+
+#[test]
+fn bunny_weight_range_with_italic_expands_both_halves() {
+    let uses = typography_uses(
+        "typography:\n\
+         \x20 fonts:\n\
+         \x20   - family: Inter\n\
+         \x20     source: bunny\n\
+         \x20     weight: 400..600\n",
+    );
+    assert!(
+        uses.contains("family=Inter:400i,500i,600i,400,500,600&display=swap"),
+        "expected italic and normal expansions:\n{uses}"
+    );
+}
+
+#[test]
+fn bunny_non_round_range_keeps_its_ends() {
+    // Endpoints are kept verbatim; the multiples of 100 strictly
+    // between them are filled in.
+    let uses = typography_uses(
+        "typography:\n\
+         \x20 fonts:\n\
+         \x20   - family: Inter\n\
+         \x20     source: bunny\n\
+         \x20     weight: 450..620\n\
+         \x20     style: normal\n",
+    );
+    assert!(
+        uses.contains("family=Inter:450,500,600,620&display=swap"),
+        "expected ends plus interior hundreds:\n{uses}"
+    );
+}
+
+#[test]
+fn file_weight_range_emits_css_font_weight_pair() {
+    let uses = typography_uses(
+        "typography:\n\
+         \x20 fonts:\n\
+         \x20   - family: Local Var\n\
+         \x20     source: file\n\
+         \x20     files:\n\
+         \x20       - path: LocalVar-VariableFont_wght.woff2\n\
+         \x20         weight: 300..800\n",
+    );
+    assert!(
+        uses.contains("font-weight: 300 800;"),
+        "expected the CSS variable-font weight pair:\n{uses}"
+    );
+    assert!(
+        !uses.contains("300..800"),
+        "the YAML range syntax must not leak into CSS:\n{uses}"
+    );
+}
+
+#[test]
+fn file_keyword_weight_still_maps_to_number() {
+    let uses = typography_uses(
+        "typography:\n\
+         \x20 fonts:\n\
+         \x20   - family: Local\n\
+         \x20     source: file\n\
+         \x20     files:\n\
+         \x20       - path: local-bold.woff2\n\
+         \x20         weight: bold\n",
+    );
+    assert!(uses.contains("font-weight: 700;"), "{uses}");
+}
+
+/// Emission is defensive: even when a caller skipped
+/// `Brand::validate`, a range on a typography slot must not be written
+/// into SCSS (`$headings-font-weight: 500..700` fails the whole theme
+/// compile).
+#[test]
+fn slot_weight_range_is_an_error_not_scss() {
+    let b = brand(
+        "typography:\n\
+         \x20 headings:\n\
+         \x20   family: A\n\
+         \x20   weight: 500..700\n",
+    );
+    match brand_to_layers(&b, Path::new("")) {
+        Err(quarto_sass::SassError::InvalidBrandFontWeight { path, value, .. }) => {
+            assert_eq!(path, "typography.headings.weight");
+            assert_eq!(value, "500..700");
+        }
+        Err(other) => panic!("expected InvalidBrandFontWeight, got {other:?}"),
+        Ok(layers) => panic!(
+            "expected an error, got layers:\n{}",
+            layers.last().map_or("", |l| l.defaults.as_str())
+        ),
+    }
+}
+
+/// Same defensive contract for the silent-400 path: an unknown
+/// keyword on a google font is an error, never `wght@400`.
+#[test]
+fn unknown_google_weight_keyword_is_an_error_not_400() {
+    let b = brand(
+        "typography:\n\
+         \x20 fonts:\n\
+         \x20   - family: EB Garamond\n\
+         \x20     source: google\n\
+         \x20     weight: Bold\n",
+    );
+    match brand_to_layers(&b, Path::new("")) {
+        Err(quarto_sass::SassError::InvalidBrandFontWeight { path, value, .. }) => {
+            assert_eq!(path, "typography.fonts[0].weight");
+            assert_eq!(value, "Bold");
+        }
+        Err(other) => panic!("expected InvalidBrandFontWeight, got {other:?}"),
+        Ok(layers) => panic!(
+            "expected an error, got:\n{}",
+            layers.last().map_or("", |l| l.uses.as_str())
+        ),
+    }
+}

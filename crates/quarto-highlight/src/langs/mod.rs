@@ -16,6 +16,7 @@ pub(crate) mod julia;
 pub(crate) mod lua;
 pub(crate) mod python;
 pub(crate) mod r;
+pub(crate) mod rust;
 pub(crate) mod sql;
 pub(crate) mod tsx;
 pub(crate) mod typescript;

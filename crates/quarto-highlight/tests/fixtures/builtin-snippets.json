@@ -68,5 +68,10 @@
     "name": "lua",
     "class": "lua",
     "source": "local function greet(name)\n  print(\"hi, \" .. name)\nend\n"
+  },
+  {
+    "name": "rust",
+    "class": "rust",
+    "source": "/// Greets.\nfn greet(name: &str) -> String {\n    format!(\"hi, {name}\")\n}\n"
   }
 ]

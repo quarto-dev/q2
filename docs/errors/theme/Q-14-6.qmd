@@ -1,0 +1,67 @@
+---
+title: "Theme SCSS compilation failed"
+description: "Compiling the theme SCSS bundle failed; the Sass compiler's message and excerpt are shown, but the reported line is in the bundle Quarto assembles, not in your file."
+code: Q-14-6
+subsystem: theme
+status: stub
+since: "99.9.9"
+categories:
+  - theme
+---
+
+# `Q-14-6` — Theme SCSS Compilation Failed
+
+> Compiling the theme SCSS bundle failed. The Sass compiler's
+> message and excerpt are shown verbatim; the reported line is in
+> the bundle Quarto assembles, not in your file.
+
+## What this means
+
+Quarto builds one SCSS bundle from Bootstrap, its own layers, any
+`brand:` settings, and every file listed under `theme:`, then
+compiles it to CSS. That compile failed. The render stops rather
+than shipping a page with a stripped-down default stylesheet in
+place of your theme.
+
+The error shows the Sass compiler's own message, the failing line,
+and a pointer of the form `./stdin:LINE:COL`. That line number
+counts lines of the **assembled bundle**, and the excerpt is often
+one of Quarto's or Bootstrap's own lines reacting to a variable
+your theme set. The diagnostic's source span points at the
+`theme:` value that configured the bundle, which is where to start
+looking, but it is not the precise location of the mistake.
+
+## Why this happens
+
+Common causes:
+
+- **A variable set to a value Bootstrap's arithmetic cannot use.**
+  For example `$grid-body-width: 52rem;` makes the grid mixins fail
+  with `Incompatible units px and rem`, because they subtract a
+  pixel value from it. The excerpt shows Quarto's
+  `$grid-body-column-min` line, not yours.
+- **A Sass syntax error** in a theme file: an unbalanced brace, a
+  missing semicolon, a misspelled function.
+- **A `brand.yml` value that is not valid Sass**, such as a font
+  weight written as a range, which reaches the bundle as
+  `$font-weight-base: 400..700`.
+- **No custom theme or brand at all.** If you have not configured
+  any theme and this error still fires, the default bundle itself
+  failed to compile. That is a Quarto bug; please report it with the
+  full message.
+
+## How to fix
+
+- Read the Sass message first; it names the operation that failed.
+  Then look for the variable it mentions in your theme files.
+- Try the theme with the suspect variable commented out to confirm
+  which line triggers the failure.
+- Match the unit Bootstrap expects. Layout variables such as
+  `$grid-body-width` take pixel values.
+
+## Related
+
+- `Q-14-4` — theme file not found: the `theme:` entry names a file
+  that does not exist.
+- `Q-14-7` — the theme file exists but has no layer boundary
+  markers.
