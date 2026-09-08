@@ -144,8 +144,18 @@ export default function InviteLanding(props: InviteLandingProps) {
   return (
     <div className="il-wrap">
       <div className="il-card" data-testid="invite-landing-card">
-        <div className="il-kicker">
-          {kind === 'collection' ? 'COLLECTION INVITATION' : 'PROJECT INVITATION'}
+        {/* Top row: what kind of invitation this is, and where it leads.
+            The card used to mention Quarto Hub only in a footnote pitched
+            at newcomers, so a recipient could not tell what they were
+            being invited into. */}
+        <div className="il-header">
+          <div className="il-kicker">
+            {kind === 'collection' ? 'COLLECTION INVITATION' : 'PROJECT INVITATION'}
+          </div>
+          <div className="il-lockup">
+            <img className="il-lockup-logo" src="/quarto-icon.svg" alt="" />
+            <span>Quarto Hub</span>
+          </div>
         </div>
         <div className="il-inviter">
           <span
@@ -168,25 +178,23 @@ export default function InviteLanding(props: InviteLandingProps) {
           </div>
         )}
         <div className="il-actions">
+          {/* Signed out, the provider's button is the whole CTA: the
+              inviter line above already says what you are joining, so a
+              lead-in here only repeated it and read like a second
+              button. */}
           {signedIn ? (
             <button type="button" className="qh-btn primary" disabled={busy || ctaDisabled} onClick={onCta}>
               {ctaLabel(props)}
             </button>
           ) : (
-            <>
-              {/* The invite is to the project (or collection) the title
-                  names — never to one file, even though a project invite
-                  opens at one. */}
-              <div className="il-signin-lead">Join to collaborate on {title}</div>
-              {signInCta}
-            </>
+            signInCta
           )}
         </div>
         {/* Footnote, deliberately after the CTA: the card leads with who
-            invited you, what to, and the one action; the what-is-this
-            pitch is for the minority who need it. */}
+            invited you, what to, and the one action. The lockup above
+            already names the product, so this is just the way out to
+            read about it. */}
         <div className="il-explainer">
-          <img className="il-explainer-logo" src="/quarto-icon.svg" alt="" />
           <span>
             New to Quarto Hub?{' '}
             <a className="il-learn-more" href={LEARN_MORE_URL}>

@@ -288,6 +288,8 @@ export default function ProjectsHome({
     peekTimerRef.current = window.setTimeout(() => setPeekFor(null), 180);
   }, []);
   const [peekRefreshing, setPeekRefreshing] = useState(false);
+  // Project whose share link is being prepared (fetching a peek summary).
+  const [sharingId, setSharingId] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
   // Dialogs
@@ -790,7 +792,12 @@ export default function ProjectsHome({
       setCopied(label);
       setTimeout(() => setCopied(null), 2000);
     } catch (err) {
+      // Surface the failure instead of only logging it: a rejected write
+      // (no transient activation left, permission denied) otherwise looks
+      // exactly like success — the label just never changes.
       console.error('Clipboard write failed:', err);
+      setCopied(`${label}:failed`);
+      setTimeout(() => setCopied(null), 3000);
     }
   }, []);
 
@@ -1170,27 +1177,14 @@ export default function ProjectsHome({
       >
         Duplicate
       </MenuItem>
-      <MenuItem
-        keepOpen
-        onSelect={() => copyToClipboard(
-          buildShareableUrl(item.indexDocId, item.syncServer, item.description, 'index.qmd', {
-            from: userSettings?.userName,
-            preview: item.summary
-              ? {
-                  kind: 'project',
-                  fileName: 'index.qmd',
-                  topFiles: item.summary.topFiles.filter((f) => f !== 'index.qmd').slice(0, 2),
-                  fileCount: item.summary.fileCount,
-                  contributorInitials: item.summary.contributors
-                    .map((c) => initialsFor(c.name))
-                    .slice(0, 4),
-                }
-              : undefined,
-          }),
-          item.indexDocId + ':share',
-        )}
-      >
-        {copied === item.indexDocId + ':share' ? 'Link copied!' : 'Share link…'}
+      <MenuItem keepOpen onSelect={() => void shareProject(item)}>
+        {copied === item.indexDocId + ':share'
+          ? 'Link copied!'
+          : copied === item.indexDocId + ':share:failed'
+            ? 'Copy failed — try again'
+            : sharingId === item.indexDocId
+              ? 'Preparing link…'
+              : 'Share link…'}
       </MenuItem>
       <MenuItem
         keepOpen
@@ -1220,23 +1214,79 @@ export default function ProjectsHome({
   /** Refresh a peek summary via a short background connection. Contributors
    * are carried over: they only update on a real open, when presence data
    * is flowing. */
-  const refreshPeek = async (item: ProjectItem) => {
-    if (peekRefreshing || exportingId || duplicatingId) return;
+  /**
+   * Refresh a project's cached peek summary from the sync server.
+   *
+   * Returns the summary it wrote so callers can use it in the same turn —
+   * the write travels up through onUpdateProjectSummary and back down as
+   * props, so `item.summary` is still stale when this resolves. Returns
+   * null when the refresh was skipped or failed.
+   */
+  const refreshPeek = async (item: ProjectItem): Promise<ProjectSetEntrySummary | null> => {
+    if (peekRefreshing || exportingId || duplicatingId) return null;
     setPeekRefreshing(true);
     try {
       const files = await connect(resolveSyncServerUrl(item.syncServer), item.indexDocId);
-      onUpdateProjectSummary?.(item.indexDocId, {
+      const summary: ProjectSetEntrySummary = {
         fileCount: files.length,
         topFiles: files.slice(0, 5).map((f) => f.path),
         contributors: item.summary?.contributors ?? [],
         asOf: new Date().toISOString(),
-      });
+      };
+      onUpdateProjectSummary?.(item.indexDocId, summary);
+      return summary;
     } catch (err) {
       console.error('Peek refresh failed:', err);
+      return null;
     } finally {
       try { await disconnect(); } catch { /* connection already down */ }
       setPeekRefreshing(false);
     }
+  };
+
+  /**
+   * Copy a share link for a project, embedding the display-only preview
+   * the recipient's invite card renders (bd-fxdcxbpq).
+   *
+   * The preview comes from the cached peek summary, which is written
+   * while a project is open in this browser. A project never opened here
+   * has none, and its links used to ship with no preview at all, so this
+   * fetches one first in that case. The cached path stays synchronous:
+   * `navigator.clipboard.writeText` needs the click's transient
+   * activation, and awaiting a round trip can outlive it — hence the
+   * explicit failure label rather than a silent console error.
+   */
+  const shareProject = async (item: ProjectItem) => {
+    let summary = item.summary ?? null;
+    if (!summary) {
+      setSharingId(item.indexDocId);
+      try {
+        summary = await refreshPeek(item);
+      } finally {
+        setSharingId(null);
+      }
+    }
+    const url = buildShareableUrl(
+      item.indexDocId,
+      item.syncServer,
+      item.description,
+      'index.qmd',
+      {
+        from: userSettings?.userName,
+        preview: summary
+          ? {
+              kind: 'project',
+              fileName: 'index.qmd',
+              topFiles: summary.topFiles.filter((f) => f !== 'index.qmd').slice(0, 2),
+              fileCount: summary.fileCount,
+              contributorInitials: summary.contributors
+                .map((c) => initialsFor(c.name))
+                .slice(0, 4),
+            }
+          : undefined,
+      },
+    );
+    await copyToClipboard(url, item.indexDocId + ':share');
   };
 
   const renderPeek = (item: ProjectItem) => {

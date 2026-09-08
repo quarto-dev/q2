@@ -84,15 +84,31 @@ describe('InviteLanding card anatomy', () => {
     expect(screen.getByRole('heading', { name: 'Quarterly report' })).toBeTruthy();
   });
 
-  it('always renders the explainer footnote with a Learn more link', () => {
-    renderLanding();
-    expect(screen.getByText(/New to Quarto Hub\?/)).toBeTruthy();
-    const link = screen.getByRole('link', { name: 'Learn more' });
-    expect(link.getAttribute('href')).toBeTruthy();
-    // The long "It's where teams write…" pitch is gone; the footnote is
-    // one short line.
-    expect(screen.queryByText(/where teams write Quarto documents together/)).toBeNull();
-    expect(screen.queryByText(/Nothing to install/)).toBeNull();
+  it('names Quarto Hub on the kicker line, right-aligned', () => {
+    // Without this the card never said where you were being invited to:
+    // the destination was only implied by a footnote aimed at newcomers.
+    const { container } = renderLanding();
+    const card = screen.getByTestId('invite-landing-card');
+    const header = container.querySelector('.il-header')!;
+    const kicker = container.querySelector('.il-kicker')!;
+    const lockup = container.querySelector('.il-lockup')!;
+    expect(header).not.toBeNull();
+    expect(lockup.textContent).toContain('Quarto Hub');
+    // One row at the top of the card: kicker first, lockup opposite it.
+    expect(card.firstElementChild).toBe(header);
+    expect(header.children).toHaveLength(2);
+    expect(header.firstElementChild).toBe(kicker);
+    expect(header.lastElementChild).toBe(lockup);
+  });
+
+  it('the footnote reads "New to Quarto Hub? Learn more." in both signed-in states', () => {
+    for (const signedIn of [false, true]) {
+      renderLanding({ signedIn, signInCta: fakeSignInCta });
+      expect(screen.getByText(/New to Quarto Hub\?/)).toBeTruthy();
+      const link = screen.getByRole('link', { name: 'Learn more' });
+      expect(link.getAttribute('href')).toBeTruthy();
+      cleanup();
+    }
   });
 
   it('renders no name input and no color swatches', () => {
@@ -187,21 +203,26 @@ describe('InviteLanding CTA matrix', () => {
     expect(screen.queryByRole('button', { name: /join|open/i })).toBeNull();
   });
 
-  it('signed out + collection: "Join to collaborate on <collection>" leads into the sign-in button', () => {
-    renderLanding({ preview: collectionPreview });
-    expect(screen.getByText('Join to collaborate on Team docs')).toBeTruthy();
+  it('signed out: the sign-in button stands alone, with no lead-in line above it', () => {
+    // The inviter line already says "<name> invites you to collaborate
+    // on <title>", so a "Join to collaborate on …" line above the button
+    // repeated it — and, sitting directly above a real button, read like
+    // one itself.
+    const { container } = renderLanding({ preview: collectionPreview });
+    expect(screen.queryByText(/Join to collaborate on/)).toBeNull();
+    expect(container.querySelector('.il-signin-lead')).toBeNull();
+    const actions = container.querySelector('.il-actions')!;
+    expect(actions.children).toHaveLength(1);
   });
 
-  it('signed out + project: the lead-in names the project, never the file it opens at', () => {
+  it('signed out + project: still no lead-in, for either a rich or a legacy link', () => {
     renderLanding({ kind: 'project', title: 'Quarterly report', preview: projectPreview });
-    expect(screen.getByText('Join to collaborate on Quarterly report')).toBeTruthy();
-    expect(screen.queryByText(/Join to collaborate on report\.qmd/)).toBeNull();
+    expect(screen.queryByText(/Join to collaborate on/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeTruthy();
-  });
-
-  it('signed out + project legacy (no preview): lead-in still names the project', () => {
+    cleanup();
     renderLanding({ kind: 'project', title: 'Quarterly report' });
-    expect(screen.getByText('Join to collaborate on Quarterly report')).toBeTruthy();
+    expect(screen.queryByText(/Join to collaborate on/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeTruthy();
   });
 
   it('signed in + collection: "Open <collection name>" (no sign-in friction, so the verb is just open)', () => {
