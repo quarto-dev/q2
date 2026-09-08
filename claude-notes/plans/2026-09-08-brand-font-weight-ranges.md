@@ -4,9 +4,8 @@
 **Braid:** bd-5fseopxy (bug, p2, labels: css, diagnostics, theming)
 **Checkout:** `~/rooms/room-1/q2`, branch `main` @ `b7e7c96a` (no worktree/branch created; the
 user picks where the fix lands)
-**Status:** Implemented 2026-09-08 on branch `braid/bd-5fseopxy-brand-font-weight-ranges`;
-PR https://github.com/quarto-dev/q2/pull/663 open against `main`. Remaining: merge, then close
-the strand.
+**Status:** Merged to `main` 2026-09-08 via https://github.com/quarto-dev/q2/pull/663. Nothing left
+to do in the repo; the strand is closed in braid once the user approves.
 
 ## Triage verdict
 
@@ -291,7 +290,8 @@ the stage's candidate list does not know about `_brand.yml`. The duplicate `bran
       `localStorage` environment failure, bd-lh30hlvd. The preview-renderer integration
       suite failed once on a stale local `node_modules` (KaTeX 0.17 installed, 0.18.4 pinned)
       and passed after `npm install` (640 tests).
-- [ ] Close bd-5fseopxy after the PR merges; comment on bd-qnylgu69 with the docs change.
+- [x] PR #663 merged 2026-09-08 (`9a49ba4ee`); commented on bd-qnylgu69 with the docs change.
+      Closing bd-5fseopxy is the only remaining bookkeeping step, done in braid, not in the repo.
 
 ## Risks / tradeoffs
 
