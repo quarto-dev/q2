@@ -1,0 +1,9 @@
+---
+title: Single
+brand: _brand.yml
+format:
+  html:
+    theme: [brand]
+---
+
+Hello.
