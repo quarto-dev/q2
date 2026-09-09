@@ -462,4 +462,159 @@ describe('ReplayDrawer', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
   });
+
+  // bd-ew0vak6b: the Edit pill turns q2-preview block editing on/off.
+  // Same anatomy as the Authors pill; rendered only when both props are
+  // supplied. Labels: "Editing on" / "Editing off" / "Editing unavailable…".
+  describe('Edit toggle', () => {
+    it('is hidden when the props are not supplied', () => {
+      render(<ReplayDrawer state={makeState()} controls={controls} />);
+      expect(screen.queryByLabelText(/Editing/)).toBeNull();
+    });
+
+    it('renders in collapsed state when previewEditing + onPreviewEditingChange are passed', () => {
+      render(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          previewEditing={true}
+          onPreviewEditingChange={vi.fn()}
+        />,
+      );
+      expect(screen.getByLabelText(/Editing on/)).toBeDefined();
+    });
+
+    it('renders in expanded state', () => {
+      const activeState = makeState({
+        isActive: true,
+        historyLength: 100,
+        currentIndex: 42,
+        currentContent: 'hello',
+        timestamp: 1710000000,
+        actor: 'abcdef0123456789abcdef0123456789',
+        chunkActors: [],
+      });
+      render(
+        <ReplayDrawer
+          state={activeState}
+          controls={controls}
+          previewEditing={true}
+          onPreviewEditingChange={vi.fn()}
+        />,
+      );
+      expect(screen.getByLabelText(/Editing on/)).toBeDefined();
+    });
+
+    it('reflects previewEditing via aria-pressed and the on-class', () => {
+      const { rerender } = render(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          previewEditing={true}
+          onPreviewEditingChange={vi.fn()}
+        />,
+      );
+      const on = screen.getByLabelText(/Editing on/);
+      expect(on.getAttribute('aria-pressed')).toBe('true');
+      expect(on.className).toContain('replay-drawer__edit--on');
+
+      rerender(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          previewEditing={false}
+          onPreviewEditingChange={vi.fn()}
+        />,
+      );
+      const off = screen.getByLabelText(/Editing off/);
+      expect(off.getAttribute('aria-pressed')).toBe('false');
+      expect(off.className).not.toContain('replay-drawer__edit--on');
+    });
+
+    it('clicking calls onPreviewEditingChange with the negation', () => {
+      const onChange = vi.fn();
+      const { rerender } = render(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          previewEditing={true}
+          onPreviewEditingChange={onChange}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText(/Editing on/));
+      expect(onChange).toHaveBeenCalledWith(false);
+
+      rerender(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          previewEditing={false}
+          onPreviewEditingChange={onChange}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText(/Editing off/));
+      expect(onChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it('clicking does not trigger replay enter', () => {
+      render(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          previewEditing={true}
+          onPreviewEditingChange={vi.fn()}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText(/Editing on/));
+      expect(controls.enter).not.toHaveBeenCalled();
+    });
+
+    it('renders disabled (no aria-pressed, no on-class) for unsupported formats', () => {
+      render(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          previewEditing={true}
+          onPreviewEditingChange={vi.fn()}
+          previewEditingDisabled={true}
+        />,
+      );
+      const pill = screen.getByLabelText(/Editing unavailable/) as HTMLButtonElement;
+      expect(pill.disabled).toBe(true);
+      expect(pill.getAttribute('aria-pressed')).toBeNull();
+      expect(pill.className).not.toContain('replay-drawer__edit--on');
+    });
+
+    it('does not fire onPreviewEditingChange when clicked while disabled', () => {
+      const onChange = vi.fn();
+      render(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          previewEditing={true}
+          onPreviewEditingChange={onChange}
+          previewEditingDisabled={true}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText(/Editing unavailable/));
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('renders before the Authors pill in the right-hand cluster', () => {
+      render(
+        <ReplayDrawer
+          state={makeState()}
+          controls={controls}
+          previewEditing={true}
+          onPreviewEditingChange={vi.fn()}
+          attributionOn={false}
+          onAttributionChange={vi.fn()}
+        />,
+      );
+      const edit = screen.getByLabelText(/Editing on/);
+      const authors = screen.getByLabelText(/Authors/);
+      // DOCUMENT_POSITION_FOLLOWING (4): `authors` comes after `edit`.
+      expect(edit.compareDocumentPosition(authors) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
 });

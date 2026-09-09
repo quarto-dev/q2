@@ -187,31 +187,31 @@ adds an explicit effect (decision D6).
 
 ### Phase 1 — tests first (all red before Phase 2)
 
-- [ ] `services/preferences/schema.test.ts`: `previewEditing` defaults to
+- [x] `services/preferences/schema.test.ts`: `previewEditing` defaults to
       `true`; a stored prefs object without the key still parses and
       preserves the other settings (same shape as the `richText` tests).
-- [ ] `components/ReplayDrawer.test.tsx`, new `describe('Edit toggle')`
+- [x] `components/ReplayDrawer.test.tsx`, new `describe('Edit toggle')`
       mirroring the Attribution block: renders in collapsed and expanded
       states only when both `previewEditing` + `onPreviewEditingChange` are
       supplied; `aria-pressed` reflects state; click calls the callback
       with the negation; click does not call `controls.enter`; `disabled`
       renders non-interactive and drops `aria-pressed`.
-- [ ] `components/render/ReactRenderer.integration.test.tsx` (or a new
+- [x] `components/render/ReactRenderer.integration.test.tsx` (or a new
       focused test alongside it): `editingDisabled` given to
       `ReactRenderer` for `q2-preview` appears in the `UPDATE_AST` payload
       posted to the iframe (use the `postMessage` spy + `IFRAME_READY`
       pattern from `Q2PreviewIframe.integration.test.tsx:266`). Assert both
       `true` and `false`, and that a rerender with the other value re-posts.
-- [ ] `components/render/ReactPreview.*.integration.test.tsx`: with the
+- [x] `components/render/ReactPreview.*.integration.test.tsx`: with the
       `usePreference` mock returning `previewEditing: false`, a
       `PreviewNodeEditPayload` passed to `setAst` neither calls
       `applyNodeEdit` nor `onContentRewrite` (D7). With `true`, the existing
       path runs.
-- [ ] `ts-packages/preview-renderer` `q2-preview.integration.test.tsx`:
+- [x] `ts-packages/preview-renderer` `q2-preview.integration.test.tsx`:
       with an open edit target, rerendering `PreviewRoot` with
       `editingDisabled: true` closes the session (edit target cleared; a
       dirty draft is committed through the normal path) (D6).
-- [ ] Playwright, new `hub-client/e2e/q2-preview-edit-toggle.spec.ts`
+- [x] Playwright, new `hub-client/e2e/q2-preview-edit-toggle.spec.ts`
       (model: `q2-preview-locked-hover.spec.ts`): a `q2-preview` document
       with a paragraph containing a link to a second document. (a) Default:
       `[data-block-pool-id]` present; (b) click the Edit pill → no
@@ -222,39 +222,39 @@ adds an explicit effect (decision D6).
 
 ### Phase 2 — implementation
 
-- [ ] `services/preferences/schema.ts`: add `previewEditing` with
+- [x] `services/preferences/schema.ts`: add `previewEditing` with
       `.default(true)` and the matching `DEFAULT_PREFERENCES` entry; update
       the seeded prefs object in `AboutTab.test.tsx:43` if its shape is
       asserted exactly.
-- [ ] `ReplayDrawer.tsx`: `EditToggle` component + `previewEditing` /
+- [x] `ReplayDrawer.tsx`: `EditToggle` component + `previewEditing` /
       `onPreviewEditingChange` / `previewEditingDisabled` props; render in
       both bar states before `AttributionToggle` (D4, D5).
-- [ ] `ReplayDrawer.css`: pill styles. Either extract the shared pill
+- [x] `ReplayDrawer.css`: pill styles. Either extract the shared pill
       rules from `.replay-drawer__attribution` into a `.replay-drawer__pill`
       base used by both, or add a sibling `.replay-drawer__edit` block —
       decide when touching the file; no alpha colours (see
       `.claude/rules/hub-client-theme.md`).
-- [ ] `Editor.tsx`: `const [previewEditing, setPreviewEditing] =
+- [x] `Editor.tsx`: `const [previewEditing, setPreviewEditing] =
       usePreference('previewEditing')`; pass to `ReplayDrawer` with
       `previewEditingDisabled={currentFormat !== 'q2-preview'}`.
-- [ ] `ReactPreview.tsx`: read the preference (D3); pass
+- [x] `ReactPreview.tsx`: read the preference (D3); pass
       `editingDisabled={!previewEditing}` to `ReactRenderer`; early-return in
       `handleSetAst` when off (D7).
-- [ ] `ReactRenderer.tsx`: `editingDisabled?: boolean` prop, forwarded to
+- [x] `ReactRenderer.tsx`: `editingDisabled?: boolean` prop, forwarded to
       `Q2PreviewIframe` only (documented like `commentsMode`).
-- [ ] `PreviewRoot.tsx` (preview-renderer): the close-on-disable effect
+- [x] `PreviewRoot.tsx` (preview-renderer): the close-on-disable effect
       (D6).
-- [ ] `DevHarness.tsx` replay-drawer fixture: pass the new props so the dev
+- [x] `DevHarness.tsx` replay-drawer fixture: pass the new props so the dev
       gallery shows the pill (optional but cheap; keeps the a11y harness
       specs covering it).
 
 ### Phase 3 — verification and bookkeeping
 
-- [ ] `cd hub-client && npm run test:ci` and `npm run build:all` (the
+- [x] `cd hub-client && npm run test:ci` and `npm run build:all` (the
       production build is stricter than vitest).
-- [ ] `ts-packages/preview-renderer` tests (`npm test -w
+- [x] `ts-packages/preview-renderer` tests (`npm test -w
       ts-packages/preview-renderer`).
-- [ ] Run the new Playwright spec (`VITE_E2E=1 npm run build`, then
+- [x] Run the new Playwright spec (`VITE_E2E=1 npm run build`, then
       `npx playwright test e2e/q2-preview-edit-toggle.spec.ts
       --project=chromium --workers=1`).
 - [ ] **End-to-end in a real browser** against a running hub (`npm run

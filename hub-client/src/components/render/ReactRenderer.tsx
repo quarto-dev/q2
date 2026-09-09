@@ -124,6 +124,12 @@ interface ReactRendererProps {
    */
   richText?: boolean;
   /**
+   * bd-ew0vak6b: read-only mode (the bottom-bar Edit pill off). Forwarded
+   * to `Q2PreviewIframe` only, which ships it in `UPDATE_AST`; the renderer
+   * already honours it (bd-ov4gqk3m). Absent/false ⇒ editable.
+   */
+  editingDisabled?: boolean;
+  /**
    * P3.2: per-siKey clean QMD buffers for nested blocks, produced by
    * `regenerateNestedBuffers` in `ReactPreview` (gated on
    * `unlockNestingCursor`). Forwarded to `Q2PreviewIframe` only.
@@ -170,6 +176,7 @@ function ReactRenderer({
   commentsMode,
   unlockNestingCursor,
   richText,
+  editingDisabled,
   nestedEditBuffers,
   scrollHandleRef,
   onPreviewScroll,
@@ -332,6 +339,7 @@ function ReactRenderer({
             commentsMode={commentsMode}
             unlockNestingCursor={unlockNestingCursor}
             richText={richText}
+            editingDisabled={editingDisabled}
             nestedEditBuffers={nestedEditBuffers}
             currentSlideIndex={currentSlideIndex}
             onSlideChange={onSlideChange}

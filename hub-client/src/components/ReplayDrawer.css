@@ -314,10 +314,11 @@
   pointer-events: none;
 }
 
-/* Attribution overlay toggle — sits flush-right in both collapsed and
-   expanded states. Off-state matches the dim transport-button look;
-   on-state lights up with the editor accent. */
-.replay-drawer__attribution {
+/* Mode pills — the Authors and Edit toggles in the bar's right-hand
+   cluster share one pill: off-state matches the dim transport-button
+   look; on-state lights up with the editor success colour, so "this
+   mode is on" reads the same for every pill. */
+.replay-drawer__pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -338,13 +339,13 @@
   user-select: none;
 }
 
-.replay-drawer__attribution:hover {
+.replay-drawer__pill:hover {
   color: var(--editor-text);
   border-color: var(--editor-text-dim);
 }
 
-.replay-drawer__attribution:disabled,
-.replay-drawer__attribution:disabled:hover {
+.replay-drawer__pill:disabled,
+.replay-drawer__pill:disabled:hover {
   cursor: not-allowed;
   opacity: 0.4;
   color: var(--editor-text-dim);
@@ -352,20 +353,20 @@
   background: var(--editor-accent-bg);
 }
 
-.replay-drawer__attribution--on {
+.replay-drawer__pill--on {
   color: var(--editor-success-text);
   border-color: var(--editor-success);
   background: var(--editor-success-bg);
 }
 
-.replay-drawer__attribution--on:hover {
+.replay-drawer__pill--on:hover {
   background: var(--editor-success);
   /* Dark text on the solid green fill: --editor-bg was 3.02:1 in light
      (WCAG 1.4.3 failure); #17212B is 4.95:1 on #72994E in both themes. */
   color: var(--posit-blue-dark-3);
 }
 
-.replay-drawer__attribution-dot {
+.replay-drawer__pill-dot {
   display: inline-block;
   width: 7px;
   height: 7px;
@@ -375,8 +376,13 @@
   transition: opacity 0.15s;
 }
 
-.replay-drawer__attribution--on .replay-drawer__attribution-dot {
+.replay-drawer__pill--on .replay-drawer__pill-dot {
   opacity: 1;
+}
+
+/* Adjacent pills (Edit, then Authors) — collapse the doubled gap. */
+.replay-drawer__pill-cell + .replay-drawer__pill-cell .replay-drawer__pill {
+  margin-left: 0;
 }
 
 /* Rotating-gradient sweep around the pill while attribution data
@@ -449,8 +455,8 @@
    (bd-0rsk07il, GH #445). One badge for the whole group; hidden at
    zero (the element is simply not rendered). Reuses the view-toggle
    palette so it reads as part of the control. */
-/* Authors pill container: a full-height cell (pill centered inside). */
-.replay-drawer__authors-cell {
+/* Pill container: a full-height cell (pill centered inside). */
+.replay-drawer__pill-cell {
   align-self: stretch;
   display: inline-flex;
   align-items: center;
@@ -459,7 +465,7 @@
 /* Expanded drawer: bottom border on the header's status / authors /
    comments containers, separating them from the controls row below. */
 .replay-drawer--expanded .sync-status-badge,
-.replay-drawer--expanded .replay-drawer__authors-cell,
+.replay-drawer--expanded .replay-drawer__pill-cell,
 .replay-drawer--expanded .comments-mode-box {
   border-bottom: 1px solid var(--editor-header-border);
 }
