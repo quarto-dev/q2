@@ -3,7 +3,7 @@
 **Strand:** bd-bpt089zw
 **Branch / worktree:** `braid/bd-bpt089zw-q2-preview-comments-resolving` at
 `.worktrees/bd-bpt089zw-q2-preview-comments-resolving/`
-**Status:** diagnosed; plan reviewed 2026-09-09 (decisions below); awaiting go-ahead to execute
+**Status:** fixed, verified, committed on the branch (2026-09-09); awaiting push approval
 
 ## Overview
 
@@ -363,8 +363,11 @@ grows warts.
   comments"`, 0 children, 14×6 px, z-index 1000) and a glow that survived
   both the move and a click outside. The 'Expand comments' variant shares
   the glow path and was not re-run separately.
-- [ ] Commit the fix; second commit adding the `hub-client/changelog.md` entry
-  with the fix commit's hash; `braid close bd-bpt089zw`; ask before pushing.
+- [x] Fix committed as `0242ab91e`; changelog entry under `### 2026-09-09`
+  in `hub-client/changelog.md` (WASM render gate `npm run test:wasm`: 23
+  files / 133 passed) in the follow-up commit; `braid close bd-bpt089zw`.
+- [ ] Push (`git push -u origin braid/bd-bpt089zw-q2-preview-comments-resolving:bugfix/bd-bpt089zw-q2-preview-comments-resolving`)
+  and open the PR — **needs explicit approval**.
 
 ## Review decisions (2026-09-09)
 

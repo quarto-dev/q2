@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-09
+
+- [`0242ab91`](https://github.com/quarto-dev/q2/commits/0242ab91): Resolving the last comment on a block in the q2-preview no longer leaves an empty bubble behind or a block glow that never clears
+
 ### 2026-09-08
 
 - [`c0a6230e`](https://github.com/quarto-dev/q2/commits/c0a6230e): WASM tests that render now wire the dart-sass VFS importer, since a theme compile failure is a hard error (Q-14-6) instead of a silent fallback to default CSS
