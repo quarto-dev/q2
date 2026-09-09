@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-09
 
+- [`93b146c`](https://github.com/quarto-dev/q2/commits/93b146c): Edit pill in the document bottom bar turns q2-preview block editing on/off (off makes links plain links); the choice persists
 - [`0242ab91`](https://github.com/quarto-dev/q2/commits/0242ab91): Resolving the last comment on a block in the q2-preview no longer leaves an empty bubble behind or a block glow that never clears
 
 ### 2026-09-08

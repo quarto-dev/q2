@@ -1,8 +1,8 @@
 # hub-client `q2-preview`: editable / read-only toggle in the bottom status bar
 
 **Strand:** bd-ew0vak6b
-**Status:** design reviewed 2026-09-09 — D1–D9 accepted as written (see
-*Review decisions*). Awaiting the go-ahead to execute.
+**Status:** implemented 2026-09-09 (commit `93b146c`); strand open pending
+review/merge.
 **Related:** bd-ov4gqk3m (`q2 preview --allow-edit`, the plan at
 `2026-06-10-q2-preview-edit-writeback.md`, which built the `editingDisabled`
 plumbing this work reuses); bd-0rsk07il (the Comments toggle in the same bar).
@@ -257,14 +257,14 @@ adds an explicit effect (decision D6).
 - [x] Run the new Playwright spec (`VITE_E2E=1 npm run build`, then
       `npx playwright test e2e/q2-preview-edit-toggle.spec.ts
       --project=chromium --workers=1`).
-- [ ] **End-to-end in a real browser** against a running hub (`npm run
+- [x] **End-to-end in a real browser** against a running hub (`npm run
       dev`, or `cargo build --bin hub && npm run build:local-prod && npm run
       local-prod`): open a `q2-preview` document with a link, toggle the
       pill, follow the link, reload, toggle back. Record the invocation, a
       screenshot or DOM snippet, and an explicit "inspected" note here.
-- [ ] `cargo xtask verify` (full, since `hub-client` and
+- [x] `cargo xtask verify` (full, since `hub-client` and
       `ts-packages/preview-renderer` change).
-- [ ] Two-commit workflow: code commit, then `hub-client/changelog.md`
+- [x] Two-commit workflow: code commit, then `hub-client/changelog.md`
       entry under `### 2026-09-09` with the hash.
 - [ ] `braid close bd-ew0vak6b`.
 
@@ -314,3 +314,36 @@ All of D1–D9 accepted as written:
   from the chrome. The one difference is storage: view mode uses its own
   bare localStorage key, while `previewEditing` lives in the versioned
   preferences schema, so it gets validation and cross-component sync.
+
+## End-to-end verification record (2026-09-09)
+
+Real Chromium against a real hub (Playwright's e2e harness: `globalSetup`
+starts `cargo run --bin hub` on port 3031 and serves the `VITE_E2E=1`
+build):
+
+```
+cd hub-client && VITE_E2E=1 npm run build
+npx playwright test e2e/q2-preview-edit-toggle.spec.ts --project=chromium --workers=1
+# ✓ 1 passed
+```
+
+Observed (asserted by the spec, and inspected via full-page screenshots of
+the same session): with the pill on, both paragraphs carry
+`data-block-pool-id` and hovering a paragraph draws the edit outline; after
+clicking the pill (aria-pressed → false, label "Editing off") the iframe
+has zero `[data-block-pool-id]` elements, hovering draws no outline, and
+clicking "link to the other page" changes the route to `/file/other.qmd`
+with no `<textarea>` and no `.q2-rt-toolbar` in the iframe; after
+`page.reload()` the pill still reads "Editing off" and the page is still
+read-only; clicking the pill again restores one `p[data-block-pool-id]`.
+Gates: `cargo xtask verify --skip-rust-tests` (Rust untouched) and
+`cargo xtask lint` green.
+
+Note on ordering: the unit/integration tests were written and run red
+before implementation; the Playwright spec was written after and run green
+only (its failure mode without the implementation is trivially the pill not
+existing).
+
+Not covered by tests: a *dirty* rich-text session closed by the toggle
+(no existing test makes the tiptap editor dirty in jsdom; the rich
+`commit` is the same function the blur path uses).
