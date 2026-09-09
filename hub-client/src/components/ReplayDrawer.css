@@ -382,7 +382,7 @@
 
 /* Adjacent pills (Edit, then Authors) — collapse the doubled gap. */
 .replay-drawer__pill-cell + .replay-drawer__pill-cell .replay-drawer__pill {
-  margin-left: 0;
+  margin-inline-start: 0;
 }
 
 /* Rotating-gradient sweep around the pill while attribution data
