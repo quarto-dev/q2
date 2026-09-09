@@ -3,7 +3,7 @@
 **Strand:** bd-bpt089zw
 **Branch / worktree:** `braid/bd-bpt089zw-q2-preview-comments-resolving` at
 `.worktrees/bd-bpt089zw-q2-preview-comments-resolving/`
-**Status:** diagnosed; fix plan awaiting review (no code changes yet)
+**Status:** diagnosed; plan reviewed 2026-09-09 (decisions below); awaiting go-ahead to execute
 
 ## Overview
 
@@ -220,7 +220,7 @@ and delete the bubble's `onMouseEnter`/`onMouseLeave` pair. This fixes the
 "stuck after any movement" case with no new browser features and is fully
 exercisable in jsdom.
 
-**Optional refinement (recommended, small):** clear the glow *before* the
+**Refinement (approved 2026-09-09):** clear the glow *before* the
 first movement too — the exact state in the report's third screenshot. Track
 the last pointer position in a ref from the wrapper's `mousemove`, and in the
 existing layout effect that re-registers the bubble on size changes (deps
@@ -236,10 +236,9 @@ const r = bubbleRef.current?.getBoundingClientRect();
 if (bubbleHoveredRef.current && (!pt || !r || !inside(pt, r))) setBubbleHovered(false);
 ```
 
-I'd include it: it is ~10 lines, keyed on deps that already exist for the same
-"bubble changed shape" reason, and it makes the result deterministic instead of
-"fixed on the next pixel of movement". Happy to drop it if you'd rather keep
-the change minimal.
+Included: ~10 lines, keyed on deps that already exist for the same "bubble
+changed shape" reason, and it makes the result deterministic instead of
+"fixed on the next pixel of movement".
 
 **Not proposed:** a CSS-only glow via `.wrapper:has(.q2-comment-bubble:hover)`.
 It would be the most robust (the browser's `:hover` is exactly the thing that
@@ -258,9 +257,10 @@ grows warts.
   `<Ast>` + `previewRegistry` under a `PreviewContext.Provider` whose
   `resolveSource` returns `{ sourceNode, sourceEntry, reachabilityClass:
   'TopLevel' }` and whose `commitSubtreeEdit` is a `vi.fn()`).
-- `hub-client/changelog.md` is **not** touched: the change is in
-  `ts-packages/preview-renderer`, not `hub-client/`. (Confirm with the user if
-  they want a changelog line anyway, since the visible effect is in hub-client.)
+- `hub-client/changelog.md`: **add an entry** (decided 2026-09-09) — the code
+  lives in `ts-packages/preview-renderer`, but the fix is user-visible in
+  hub-client. Follows the two-commit workflow (fix commit first, then the
+  changelog entry referencing its hash).
 
 ## Checklist (TDD)
 
@@ -287,7 +287,7 @@ grows warts.
   → `+`; click it → textarea present and the chrome stays (the
   `showInlineInput` guard of the collapse effect). Guards against the effect
   eating the add flow.
-- [ ] T6 (only if the refinement ships) **glow clears without movement**: stub
+- [ ] T6 **glow clears without movement**: stub
   `getBoundingClientRect` on the bubble to a rect that excludes the recorded
   pointer; after the comment-less rerender, wrapper `boxShadow === 'none'`
   with no further events.
@@ -300,7 +300,7 @@ grows warts.
 - [ ] Collapse effect for `selfExpanded` (defect 1).
 - [ ] Wrapper-owned `bubbleHovered` derivation; remove the bubble's
   enter/leave handlers (defect 2).
-- [ ] Optional refinement: pointer-position ref + geometric re-check in the
+- [ ] Refinement: pointer-position ref + geometric re-check in the
   size-change layout effect.
 - [ ] Update the `CommentWrapper` header comment where it describes the
   bubble-hover → block-glow mirror.
@@ -318,15 +318,14 @@ grows warts.
   element may exist under the paragraph wrapper (or a `+` only while the
   right half is hovered). Also repeat the 'Expand comments' variant. Record
   the DOM probe output here.
-- [ ] Commit; `braid close bd-bpt089zw`; ask before pushing.
+- [ ] Commit the fix; second commit adding the `hub-client/changelog.md` entry
+  with the fix commit's hash; `braid close bd-bpt089zw`; ask before pushing.
 
-## Open questions for review
+## Review decisions (2026-09-09)
 
-1. Include the optional geometric re-check (clears the glow with the pointer
-   stationary), or keep the minimal event-based fix?
-2. After the last resolve, should the chrome show `+` while the right half is
-   still hovered (current behaviour of the 'expand'-mode variant, and what the
-   minimal fix yields), or disappear entirely until the pointer moves? The
-   plan assumes `+`-while-hovered is fine.
-3. Changelog: `hub-client/changelog.md` entry or not, given the code lives in
-   `ts-packages/preview-renderer`?
+1. **Geometric re-check: yes.** Ship the ~10-line refinement so the glow
+   clears with the pointer stationary (T6 is mandatory).
+2. **`+`-while-hovered after the last resolve: fine.** No extra "hide until
+   the pointer moves" behaviour.
+3. **Changelog: yes.** Add a `hub-client/changelog.md` entry (two-commit
+   workflow) because the fix is user-visible.
