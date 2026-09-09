@@ -269,6 +269,26 @@ interface PreviewAppState {
  *     structured `diagnostics` / `warnings` / `pass1Failures` the
  *     render returned.
  */
+/**
+ * Message for a render that succeeded but produced a full HTML page rather
+ * than a preview AST (bd-kltzdhle, D5). `q2 preview` only renders the AST
+ * pipeline; documents in `format: q2-html-render` (hub-client's full-DOM
+ * opt-out) or in non-html formats have to go through `q2 render`.
+ *
+ * `format` is the resolved format the WASM reports on the response; when
+ * it is absent (older responses, or an error path that still carried
+ * `html`) the message stays generic rather than guessing.
+ */
+export function noLivePreviewMessage(format: string | undefined): string {
+  const subject = format ? `\`format: ${format}\`` : "This document's format";
+  return (
+    `${subject} has no live preview in q2 preview: ` +
+    'it renders as a full HTML page, which this viewer does not display. ' +
+    'Run `q2 render` to produce it, or switch the document to an html-family ' +
+    'format (or remove `format:`) to preview it here.'
+  );
+}
+
 interface RenderStatus {
   failure: { message: string } | null;
   diagnostics: Diagnostic[];
@@ -1187,6 +1207,24 @@ export default function PreviewApp() {
             render: {
               failure: null,
               diagnostics: [],
+              warnings: result.warnings ?? [],
+              pass1Failures: result.pass1_failures ?? [],
+            },
+          }));
+        } else if (result.success && result.html !== undefined) {
+          // bd-kltzdhle (D5): a *successful* render that produced a full
+          // HTML page instead of a preview AST — `format: q2-html-render`
+          // (hub-client's full-DOM opt-out), `pdf`, `docx`, an extension
+          // format, … `q2 preview` has no full-DOM renderer, so say so
+          // plainly (naming the format the WASM reports) rather than
+          // logging a generic failure. Same non-terminal `render.failure`
+          // slot as a real failure: with no last-good AST the overlay is
+          // the whole view; otherwise it sits on top of the last render.
+          setState((s) => ({
+            ...s,
+            render: {
+              failure: { message: noLivePreviewMessage(result.format) },
+              diagnostics: result.diagnostics ?? [],
               warnings: result.warnings ?? [],
               pass1Failures: result.pass1_failures ?? [],
             },

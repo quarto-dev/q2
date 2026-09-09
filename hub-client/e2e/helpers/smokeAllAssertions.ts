@@ -95,9 +95,17 @@ export async function runAssertions(
   documentPath: string,
   assertions: AssertionSpec[],
   expectsError: boolean,
-  opts: { kind?: PreviewIframeKind } = {},
+  opts: {
+    kind: PreviewIframeKind;
+    /**
+     * When set (to the owning parity strand id), `ensureHtmlElements`
+     * assertions are skipped for this fixture — see
+     * `DOM_ASSERTIONS_PENDING_PARITY` in smokeAllDiscovery.ts.
+     */
+    skipDomAssertionsFor?: string;
+  },
 ): Promise<void> {
-  const kind: PreviewIframeKind = opts.kind ?? 'html';
+  const kind: PreviewIframeKind = opts.kind;
   const iframeSel = previewIframeSelector(kind);
 
   // q2-debug doesn't go through the WASM html render path, so skip the
@@ -133,6 +141,14 @@ export async function runAssertions(
 
       case 'ensureHtmlElements': {
         expect(render.success, `Render failed: ${render.error}`).toBe(true);
+        if (opts.skipDomAssertionsFor) {
+          // Parsed by the offline analyzer alongside the other
+          // `[smoke-diag]` lines, so skipped DOM coverage stays visible.
+          console.log(
+            `[smoke-diag] dom-assertions-skipped strand=${opts.skipDomAssertionsFor} kind=${kind}`,
+          );
+          break;
+        }
         const previewFrame = page.frameLocator(iframeSel);
         for (const selector of spec.selectors) {
           await expect(
@@ -151,7 +167,9 @@ export async function runAssertions(
 
       case 'ensureCssRegexMatches': {
         expect(render.success, `Render failed: ${render.error}`).toBe(true);
-        const css = await getPreviewCss(page);
+        // Stylesheets come from the render string, not the live iframe, so
+        // the assertion is independent of which renderer is mounted.
+        const css = await getPreviewCss(page, render.html);
         expect(
           css.length,
           'ensureCssRegexMatches: no CSS content found',

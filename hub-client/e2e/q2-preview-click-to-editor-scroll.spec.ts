@@ -310,6 +310,9 @@ function htmlAlignFixture(): string {
     return [
         '---',
         'title: "P2a — HTML preview alignment anchors on the clicked span, not the block"',
+        // This fixture exercises the full-DOM MorphIframe path specifically;
+        // since bd-kltzdhle that renderer is opt-in.
+        'format: q2-html-render',
         '---',
         '',
         ...filler,
@@ -330,7 +333,7 @@ const HTML_IFRAME = 'iframe.preview-active';
 async function openDoc(
     page: Page,
     format: string | null,
-    kind: 'q2-preview' | 'html',
+    kind: 'q2-preview' | 'q2-html-render',
 ): Promise<void> {
     const serverUrl = getServerUrl();
     const docId = await createProjectOnServer(serverUrl, [
@@ -372,7 +375,7 @@ async function openHtmlDocWithContent(page: Page, content: string): Promise<void
     await bootstrapProjectSet(page, serverUrl);
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/doc.qmd`);
-    await waitForPreviewRender(page, { kind: 'html', timeout: 30000 });
+    await waitForPreviewRender(page, { kind: 'q2-html-render', timeout: 30000 });
 }
 
 /**
@@ -635,7 +638,10 @@ test.describe('preview→editor scroll sync on click', () => {
     });
 
     test('T3 — control: the same click DOES reach the HTML preview document', async ({ page }) => {
-        await openDoc(page, null, 'html');
+        // The control deliberately targets the full-DOM MorphIframe, which a
+        // document only gets by declaring `format: q2-html-render` now that
+        // q2-preview is the default renderer (bd-kltzdhle).
+        await openDoc(page, 'q2-html-render', 'q2-html-render');
         const iframe = page.frameLocator(HTML_IFRAME);
         await iframe.locator('p').first().waitFor({ timeout: 15_000 });
         await recordIframeDocClicks(page, HTML_IFRAME);

@@ -110,7 +110,8 @@ test.describe('Import from ZIP', () => {
     const localId = match![1];
     await page.goto(`/#/p/${localId}/file/index.qmd`);
 
-    const previewFrame = page.frameLocator('iframe.preview-active');
+    // Plain document ⇒ q2-preview iframe (the default renderer).
+    const previewFrame = page.frameLocator('iframe[src*="q2-preview.html"]');
     await expect(previewFrame.locator('body')).toContainText(
       'Hello from an imported zip',
       { timeout: 30000 },

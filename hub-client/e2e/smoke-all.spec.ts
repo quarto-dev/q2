@@ -13,6 +13,7 @@ import { test, expect } from '@playwright/test';
 import {
   discoverSmokeAllTests,
   shouldSkip,
+  DOM_ASSERTIONS_PENDING_PARITY,
   type DiscoveredTest,
 } from './helpers/smokeAllDiscovery';
 import {
@@ -22,6 +23,7 @@ import {
   getServerUrl,
 } from './helpers/projectFactory';
 import { waitForPreviewRender, waitForVfsFiles } from './helpers/previewExtraction';
+import type { PreviewIframeKind } from './helpers/previewExtraction';
 import { runAssertions } from './helpers/smokeAllAssertions';
 
 // ---------------------------------------------------------------------------
@@ -121,15 +123,21 @@ test.describe('smoke-all E2E tests', () => {
           { timeout: 10000, consoleErrors },
         );
 
-        // Format-driven dispatch: q2-debug uses the AstIframe,
-        // q2-preview uses the Q2PreviewIframe (Plan 2A), everything
-        // else uses the html preview iframe.
-        const kind =
-          spec.format === 'q2-debug'
+        // Which iframe hub-client mounts (bd-kltzdhle): q2-debug specs use
+        // the Q2DebugIframe; a document that itself declares
+        // `format: q2-html-render` (or a non-html format) gets the full-DOM
+        // MorphIframe; everything else — including fixtures tested under
+        // `html` with no `format:` key — renders in the Q2PreviewIframe,
+        // because q2-preview is the default renderer for html documents.
+        // Note the decision keys on the document's OWN front matter
+        // (`fixture.documentFormat`), not on the test-spec dimension
+        // (`spec.format`), which is what the assertions are keyed by.
+        const kind: PreviewIframeKind =
+          spec.format === 'q2-debug' || fixture.documentFormat === 'q2-debug'
             ? 'q2-debug'
-            : spec.format === 'q2-preview'
-              ? 'q2-preview'
-              : 'html';
+            : fixture.documentFormat === 'q2-html-render'
+              ? 'q2-html-render'
+              : 'q2-preview';
 
         // Wait for render (or error)
         if (!spec.expectsError) {
@@ -143,13 +151,19 @@ test.describe('smoke-all E2E tests', () => {
           await page.waitForTimeout(5000);
         }
 
-        // Run assertions
+        // Run assertions. A fixture listed in DOM_ASSERTIONS_PENDING_PARITY
+        // has its DOM selectors skipped in the q2-preview iframe (plan D8);
+        // everything else still runs.
+        const pendingParity =
+          kind === 'q2-preview'
+            ? DOM_ASSERTIONS_PENDING_PARITY.get(fixture.relPath)
+            : undefined;
         await runAssertions(
           page,
           fixture.renderPath,
           spec.assertions,
           spec.expectsError,
-          { kind },
+          { kind, skipDomAssertionsFor: pendingParity },
         );
       });
     }

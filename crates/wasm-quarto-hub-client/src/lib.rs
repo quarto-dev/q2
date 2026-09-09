@@ -600,6 +600,15 @@ struct RenderResponse {
     /// present.
     #[serde(skip_serializing_if = "Option::is_none")]
     ast_json: Option<String>,
+    /// The format the render actually ran with — `Format::target_format`
+    /// after detection and any `prefer_preview_format` substitution
+    /// (e.g. `q2-preview` for a document with no `format:` key rendered
+    /// with the knob on; `q2-html-render` or `pdf` for a render that
+    /// came back as `html`). Lets a host explain *why* a response
+    /// carries `html` rather than `ast_json` (bd-kltzdhle, D5) without
+    /// re-parsing the front matter in JS. `None` on error responses.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<String>,
     /// True when `ast_json` is a `format: revealjs` deck (preview
     /// pseudo-format `q2-slides`). The SPA renders the section AST with a
     /// reveal shell (`.reveal/.slides` + reveal.js) instead of the plain
@@ -1605,6 +1614,7 @@ async fn render_single_doc_to_response(
         error: None,
         html,
         ast_json,
+        format: Some(format.target_format.clone()),
         is_slides: format.target_format == "q2-slides",
         untransformed_ast_json,
         diagnostics: None,
@@ -1721,6 +1731,9 @@ async fn render_project_active_page_to_response(
     // Captured before `format` is moved into the pipeline below; signals the
     // SPA to render the AST with a reveal shell (Phase 1P).
     let is_slides = format.target_format == "q2-slides";
+    // Likewise captured before the move: reported on the response so hosts
+    // can tell which format the render actually ran with (bd-kltzdhle).
+    let resolved_format = format.target_format.clone();
     let summary = match kind {
         Some("preview") => {
             let mut renderer = RenderToPreviewAstRenderer::new("/.quarto/project-artifacts");
@@ -1897,6 +1910,7 @@ async fn render_project_active_page_to_response(
         error: None,
         html,
         ast_json,
+        format: Some(resolved_format),
         is_slides,
         untransformed_ast_json,
         diagnostics: None,
@@ -1948,6 +1962,7 @@ fn error_response(msg: impl Into<String>) -> String {
         error: Some(msg.into()),
         html: None,
         ast_json: None,
+        format: None,
         is_slides: false,
         untransformed_ast_json: None,
         diagnostics: None,
@@ -1974,6 +1989,7 @@ fn render_error_response(e: QuartoError) -> String {
         error: Some(error_msg),
         html: None,
         ast_json: None,
+        format: None,
         is_slides: false,
         untransformed_ast_json: None,
         diagnostics,
@@ -2013,6 +2029,7 @@ fn pass_failure_response(
         )),
         html: None,
         ast_json: None,
+        format: None,
         is_slides: false,
         untransformed_ast_json: None,
         diagnostics,

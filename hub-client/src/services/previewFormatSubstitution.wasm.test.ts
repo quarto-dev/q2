@@ -108,8 +108,10 @@ describe('prefer_preview_format on the hub-client entry point (bd-kltzdhle)', ()
         expect(resp.success, `render failed: ${resp.error}`).toBe(true);
         expect(resp.ast_json).toBeDefined();
         expect(resp.html).toBeUndefined();
-        // The AST carries the substituted format, which is what the
-        // router echoes to the Editor chrome.
+        // The response names the format the render ran with …
+        expect(resp.format).toBe('q2-preview');
+        // … and the AST carries the substituted format too, which is what
+        // the router echoes to the Editor chrome.
         const ast = JSON.parse(resp.ast_json!);
         expect(ast.meta.format).toMatchObject({ t: 'MetaString', c: 'q2-preview' });
     });
@@ -140,6 +142,9 @@ describe('prefer_preview_format on the hub-client entry point (bd-kltzdhle)', ()
         expect(resp.html).toBeDefined();
         expect(resp.html).toContain('<p>Hello <em>world</em>.</p>');
         expect(resp.ast_json).toBeUndefined();
+        // The response says which format produced the `html`, so a host
+        // that expected `ast_json` can explain why (D5).
+        expect(resp.format).toBe('q2-html-render');
     });
 
     it('(d) format: q2-preview → ast_json regardless of the knob', async () => {
@@ -166,5 +171,6 @@ describe('prefer_preview_format on the hub-client entry point (bd-kltzdhle)', ()
         expect(resp.ast_json).toBeDefined();
         expect(resp.html).toBeUndefined();
         expect(resp.is_slides).toBe(true);
+        expect(resp.format).toBe('q2-slides');
     });
 });

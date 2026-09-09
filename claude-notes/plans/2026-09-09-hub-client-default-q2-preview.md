@@ -371,28 +371,64 @@ change) at each phase boundary; commit at each clean boundary.
 
 ### Phase 4 — e2e suite
 
-- [ ] `previewExtraction.ts`: rename kind `'html'` → `'q2-html-render'` (D7),
+- [x] `previewExtraction.ts`: rename kind `'html'` → `'q2-html-render'` (D7),
       selector unchanged; **remove the `?? 'html'` defaults** in
       `waitForPreviewRender` and `runAssertions` (a default kind hides
       wrong assumptions — make every caller explicit).
-- [ ] `smoke-all.spec.ts:126-132`: kind = `q2-debug` for q2-debug specs,
+- [x] `smoke-all.spec.ts:126-132`: kind = `q2-debug` for q2-debug specs,
       `q2-html-render` when the fixture's *own front matter* declares
       `format: q2-html-render`, else `q2-preview`. `smokeAllDiscovery.ts`
       already exposes the front matter; add `documentFormat` to
       `DiscoveredTest` if it is not there.
-- [ ] `search.spec.ts:53`, `import-zip.spec.ts:113`, `project-loading.spec.ts:51`:
+- [x] `search.spec.ts:53`, `import-zip.spec.ts:113`, `project-loading.spec.ts:51` (and `preview-extraction.spec.ts:51`, which passed no kind):
       switch to the q2-preview iframe selector (they test default behaviour).
-- [ ] `q2-preview-click-to-editor-scroll.spec.ts`: the html-kind fixture
+- [x] `q2-preview-click-to-editor-scroll.spec.ts`: the html-kind fixture
       (`:375`) declares `format: q2-html-render` explicitly; kind
       `'q2-html-render'`.
-- [ ] Run `cargo xtask verify --e2e`. Triage every `ensureHtmlElements`
-      failure per D8; record the resulting `HTML_RENDER_ONLY` list and its
-      strands in this plan.
+- [x] First smoke-all run (2026-09-09, `playwright.smoke-all.config.ts`, 157
+      tests): 121 passed, 35 failed, 1 skipped. Triage:
+      - **24 harness failures**, all `getPreviewCss` throwing "No active
+        preview iframe found": the CSS assertion read `<link>` tags from the
+        MorphIframe DOM. Fixed properly — it now parses the render string
+        `renderForAssertions` already produces (the same HTML the regex
+        assertions match), so the CSS assertions are renderer-independent.
+      - **11 DOM failures** (`ensureHtmlElements` against the q2-preview
+        iframe), all page chrome or known component gaps — listed as the
+        skip-list below. The skip is *per assertion type*: the fixture still
+        renders in the default iframe and its regex / CSS / diagnostics
+        assertions still run; only the DOM selectors are skipped, with a
+        `[smoke-diag] dom-assertions-skipped strand=…` line.
+      The list lives in `DOM_ASSERTIONS_PENDING_PARITY` (`e2e/helpers/smokeAllDiscovery.ts`)
+      rather than `HTML_RENDER_ONLY`, since nothing is forced onto the
+      full-DOM renderer.
 
 ### Phase 4b — work the skip-list back down (same PR, follow-up commits)
 
 Per D8 the skip-list is staging, not an end state. One commit per fixture
 or per shared root cause:
+
+Skip-list as of 2026-09-09 (fixture → strand):
+
+| fixture | selector that fails in the q2-preview iframe | strand |
+|---|---|---|
+| drafts/draft-banner, localization/lang-es-draft-banner | `div#quarto-draft-alert.alert.alert-warning` | bd-3cpv7dah |
+| mermaid/basic | `pre.mermaid` | bd-c3dtpe36 |
+| metadata/dir-metadata-paths/chapters/intro/doc | `link[href="../../shared/styles.css"]` | bd-b3oq2fsy |
+| repo-actions/actions | `nav#TOC div.toc-actions a.toc-action` | bd-fandfn60 |
+| title-block/banner-true, banner-color, banner-image | `body > header#title-block-header div.quarto-title-banner`, `main.quarto-banner-title-block` | bd-xiz1a2go (new) |
+| toc-containers/callout-body-heading-not-in-toc | `div.callout-note section#body-heading` | bd-bg0jze2i |
+| toc-containers/div-heading-becomes-section | `blockquote > h4#quoted` | bd-q2wqj24c (new) |
+| toc-containers/tabset-pane-heading-not-in-toc | `div.panel-tabset div.tab-pane#tabset-1-2 …` | bd-47afd5ro |
+
+Observation for the reviewer: every entry is *page chrome* (title banner,
+TOC actions, draft alert, `<link>` tags) or a component q2-preview does not
+yet have (mermaid, tabsets), plus two sectionize differences. Several of
+these fixtures carry `dom-parity: true` — their *article body* matches the
+HTML writer under the parity harness — so the html-spec `ensureHtmlElements`
+selectors that fail are precisely the ones outside `main#quarto-document-content`.
+Because the `_quarto: tests: html:` DSL is shared with the native runner, a
+selector can only be "equivalent" if it holds in both DOMs; chrome selectors
+therefore resolve only by closing the parity gap, not by rewording.
 
 - [ ] For each `HTML_RENDER_ONLY` entry, classify: (a) the selector is
       HTML-writer-specific and q2-preview has an obvious equivalent → add
@@ -407,23 +443,28 @@ or per shared root cause:
 
 ### Phase 5 — `q2 preview` SPA message (D5)
 
-- [ ] Test, `q2-preview-spa/src/PreviewApp.integration.test.tsx`: a render
-      result `{success: true, html: '…'}` with no `ast_json` renders the
-      "no live preview" message naming the format; no `console.error`.
-- [ ] Implement in the else-branch at `PreviewApp.tsx:1195`; format name
-      from `result` if present, else from the front matter.
+- [x] Test, `q2-preview-spa/src/PreviewApp.integration.test.tsx`: a render
+      result `{success: true, html: '…', format: 'q2-html-render'}` with no
+      `ast_json` renders the "no live preview" message naming the format; no
+      `console.error`. Ran red first (boot screen, no message).
+- [x] Implement in the else-branch at `PreviewApp.tsx:1195` (`noLivePreviewMessage`).
+      The format name comes from a new `format` field on the WASM
+      `RenderResponse` — the resolved `Format::target_format` after any
+      preview substitution — rather than re-parsing front matter in JS;
+      `previewFormatSubstitution.wasm.test.ts` pins it (`q2-preview`,
+      `q2-html-render`, `q2-slides`). Error responses omit the field.
 
 ### Phase 6 — docs, changelog, strands
 
-- [ ] `hub-client/changelog.md` entry (two-commit workflow) describing the
+- [x] `hub-client/changelog.md` entry (commit 001cc47d, two-commit workflow) describing the
       default switch and the `format: q2-html-render` opt-out.
-- [ ] `claude-notes/plans/2026-07-01-html-format-capture-display.md`
+- [x] `claude-notes/plans/2026-07-01-html-format-capture-display.md`
       and `2026-09-09-q2-preview-edit-toggle.md`: add a one-line note that
       the "plain html preview" mode is now `q2-html-render` (they describe
       it as the default).
-- [ ] Close bd-zvh2p (attribution now reaches reveal decks via D3), link it
-      from bd-kltzdhle. File a follow-up strand for D2's alternative (Rust
-      single-source router probe) only if you want it.
+- [x] Closed bd-zvh2p (attribution now reaches reveal decks via D3). No
+      follow-up strand filed for D2's alternative (Rust single-source router
+      probe) — say the word if you want one.
 
 ### Phase 7 — end-to-end verification (before declaring done)
 

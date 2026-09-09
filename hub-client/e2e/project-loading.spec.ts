@@ -47,8 +47,9 @@ test.describe('Project Loading', () => {
     // Navigate to the project file
     await page.goto(`/#/p/${localId}/file/index.qmd`);
 
-    // Wait for the preview iframe to render content (up to 30s for WASM init + render)
-    const previewFrame = page.frameLocator('iframe.preview-active');
+    // Wait for the preview iframe to render content (up to 30s for WASM init
+    // + render). Plain document ⇒ q2-preview iframe (the default renderer).
+    const previewFrame = page.frameLocator('iframe[src*="q2-preview.html"]');
     await expect(previewFrame.locator('body')).toContainText('Hello from E2E', {
       timeout: 30000,
     });

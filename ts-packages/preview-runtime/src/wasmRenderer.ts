@@ -988,6 +988,8 @@ export interface RenderResult {
    * present.
    */
   ast_json?: string;
+  /** The format the render ran with (`Format::target_format` after any preview substitution); absent on errors. */
+  format?: string;
   /** Structured error diagnostics with line/column information for Monaco. */
   diagnostics?: Diagnostic[];
   /** Structured warning diagnostics with line/column information for Monaco. */
