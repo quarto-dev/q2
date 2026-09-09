@@ -4,7 +4,7 @@
 **Braid:** bd-4bu7vwi5
 **Branch:** `main` @ `3ecabd28f` (investigated in the main checkout, no worktree)
 **Pre-flight:** `cargo xtask verify --skip-hub-build` green at HEAD (under Node 24 via fnm; the Homebrew `node` on PATH is v26 and trips the preflight).
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Approved 2026-09-09 — implementing. Decisions: step 1 placement; add `--skip-css-lint`; lint:css only (wider drift filed as bd-l7mcijfe + bd-ya2nacaa); doc rule, no structural lint.
 
 ## Triage verdict
 
@@ -60,16 +60,55 @@ The strand asks about lint:css only, but the same comparison shows other steps C
 
 Everything `verify` runs, CI also runs, so the drift is one-directional.
 
-## Proposed phases (draft)
+## Work items
 
-Skeleton only — actual phase contents wait on the design discussion.
+Phase 0 — tests first (unit tests in `crates/xtask/src/verify.rs`):
+- [x] `runs_css_lint`: on by default, off with `skip_css_lint`, still on under `--skip-hub-build` (the exact hole from PR #667).
+- [x] `needs_node`: extracted from the inline expression; css lint counts as npm-driven, so "everything else skipped" still preflights Node.
+- [x] `css_lint_command_matches_ci_workflow`: the local `npm` args joined equal a `run:` line in `ts-test-suite.yml`, so the two gates cannot drift silently.
+- [x] Run, confirm failure (functions/field do not exist yet).
 
-- Phase 0 — Test plan. A unit test in `crates/xtask` that fails at HEAD: the `verify` module must invoke `lint:css` (e.g. a step-list/registry the test can inspect, or at minimum a source-level assertion the way `ci_test_wiring` parses workflows). If the answer to Q3 is "yes", the test instead becomes a new repo-level lint rule that parses `ts-test-suite.yml` and asserts each gating step has a `verify` counterpart or an `EXCUSED` entry.
-- Phase 1 — Add the lint:css step to `verify.rs`. Position: with the other fail-fast checks (step 1, next to `cargo xtask lint` + clippy), or at the top of the hub-client leg (step 7) as the strand suggests. Gate it on the same condition as step 7 (`!skip_hub_build`) or on a new `--skip-css-lint`, per Q2. Bump `TOTAL_STEPS` and the module doc.
-- Phase 2 — Optional, per Q3: fold the rest of the drift table in, or file it as separate strands.
-- Phase 3 — Docs: `CLAUDE.md` "Full Project Verification" step list, `hub-client/design-system.md` enforcement sentence, and a note on bd-owmzraf6's plan that the local mirror now exists.
+Phase 1 — implementation:
+- [x] `VerifyConfig.skip_css_lint` + `--skip-css-lint` clap flag in `main.rs`.
+- [x] Step 1 runs `npm run lint:css -w hub-client` from the project root, after `cargo xtask lint` and before clippy (fail-fast, 0.2 s). `TOTAL_STEPS` unchanged (it lives inside step 1).
+- [x] Module doc + `Verify` clap doc updated.
+- [ ] Tests green; `cargo nextest run --workspace`; `cargo xtask verify --skip-hub-build`.
 
-## Open design questions for the user
+Phase 2 — end-to-end:
+- [x] Inject `margin-left: 0;` into a hub-client CSS file, run `cargo xtask verify --skip-hub-build`, observe step 1 fails on lint:css; revert; observe green. Record the invocation + output here.
+
+End-to-end record (2026-09-09, main + this change, Node 24 via fnm). Appended
+`.bd-4bu7vwi5-e2e { margin-left: 0; }` to `hub-client/src/components/ReplayDrawer.css`
+and ran, with every other step skipped:
+
+```
+cargo xtask verify --skip-rust-build --skip-rust-tests --skip-treesitter-tests \
+  --skip-hub-build --skip-hub-tests --skip-ts-packages-build --skip-trace-viewer-build \
+  --skip-trace-viewer-tests --skip-shared-package-tests --skip-q2-preview-spa-build \
+  --skip-hub-mcp-tests
+```
+
+Observed (step 1, before any Rust compile):
+
+```
+lint:css[no-physical-box-props] src/components/ReplayDrawer.css:491  margin-left: 0;
+lint:css: 1 problem(s)
+Error: hub-client lint:css failed (see hub-client/design-system.md)
+```
+
+Reverted the file; same invocation printed `✓ hub-client lint:css clean` and
+`✓ All verification steps passed!`. With `--skip-css-lint` added the preflight
+printed `(skipped — every npm-driven step is disabled)` and step 1 printed
+`↳ Skipping hub-client lint:css`. Output inspected by hand.
+
+Phase 3 — docs:
+- [x] `CLAUDE.md` "Full Project Verification": add the lint:css step and the rule *when you add a CI step, add its verify counterpart in the same commit*.
+- [x] `hub-client/design-system.md`: enforcement sentence names `cargo xtask verify` too.
+- [x] Follow-ups filed: bd-l7mcijfe (Node-only suites), bd-ya2nacaa (Deno/wasm32/harness legs).
+
+## Design questions (answered 2026-09-09)
+
+Answers: (1) step 1; (2) add `--skip-css-lint`; (3) lint:css only, wider drift filed separately; (4) docs are enough.
 
 1. **Placement.** Run lint:css in step 1 with the other fail-fast lints (fails in 0.2 s before the multi-minute Rust build, matching CI's "right after npm ci" placement), or inside the hub-client leg (step 7) as the strand text says? Step 1 means `--skip-hub-build` still runs it, which is what a CSS-only change wants; step 7 means `--skip-hub-build` skips it, which recreates a smaller version of this hole.
 2. **Skip flag.** Does it need its own `--skip-css-lint`, or is it cheap enough to be unconditional (like `cargo xtask lint` and `cargo fmt --check` today)? Note the Node preflight: if it runs unconditionally, `needs_node` must include it, so the "every npm-driven step is disabled" shortcut goes away unless a flag exists.

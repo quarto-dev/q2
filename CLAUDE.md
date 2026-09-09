@@ -571,6 +571,10 @@ cargo xtask verify           # Full verification (Rust + hub-client builds + tes
 ```
 
 This runs:
+0. `cargo xtask lint`, `npm run lint:css -w hub-client`, and clippy - the
+   fail-fast lints (step 1 in the xtask's numbering). The CSS lint enforces
+   `hub-client/design-system.md` and runs even under `--skip-hub-build`;
+   disable it with `--skip-css-lint`.
 1. `cargo build --workspace` - Build all Rust crates
 2. `cargo nextest run --workspace` - Run all Rust tests
 3. `npm run build --if-present -w ts-packages/...` - Build the ts-packages
@@ -586,8 +590,18 @@ This runs:
 cargo xtask verify --skip-rust-tests    # Skip Rust tests
 cargo xtask verify --skip-hub-tests     # Skip hub-client tests
 cargo xtask verify --skip-hub-build     # Skip hub-client build entirely
+cargo xtask verify --skip-css-lint      # Skip the hub-client CSS lint
 cargo xtask verify --e2e                # Include slower e2e browser tests
 ```
+
+**Keep `verify` and CI in sync: when you add a gating step to a CI
+workflow, add its `cargo xtask verify` counterpart in the same commit.**
+`verify` is the local mirror of CI, and nothing reconciles the two
+automatically. The CSS lint was wired into `ts-test-suite.yml` twelve days
+before it reached `verify`; in between, PR #667 passed the full local gate
+and failed both CI legs on a `margin-left: 0` (bd-4bu7vwi5). Known
+remaining drift is tracked as bd-l7mcijfe (Node-only test suites) and
+bd-ya2nacaa (legs needing Deno / wasm32 / the hub binary).
 
 **Why this matters**: The `wasm-quarto-hub-client` crate depends on `quarto-core` types like `RenderOutput`. Changes to these types will break the WASM build even if `cargo build --workspace` succeeds (WASM uses a separate build target).
 
