@@ -4923,6 +4923,7 @@ dependencies = [
 name = "quarto-brand"
 version = "0.30.0"
 dependencies = [
+ "hashlink",
  "pathdiff",
  "quarto-util",
  "serde",

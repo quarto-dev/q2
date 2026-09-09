@@ -200,19 +200,37 @@ pub(crate) fn route_drained_project_artifacts(
 ) -> Result<()> {
     match (accumulator, has_shared_lib) {
         (Some(dest), true) => {
-            dest.merge_into_project(drained).map_err(|e| {
-                QuartoError::other(format!(
-                    "Project-scoped artifact merge failed for {}: {}",
-                    input.display(),
-                    e
-                ))
-            })?;
+            dest.merge_into_project(drained)
+                .map_err(|e| merge_conflict_to_error(input, &e))?;
         }
         _ => {
             enqueue_artifacts(&drained, resolver, ArtifactScope::Project, sink)?;
         }
     }
     Ok(())
+}
+
+/// The error a project-scope artifact merge conflict for `input`
+/// surfaces as.
+///
+/// Two documents' brands publishing different bytes under one font
+/// name is a user-facing configuration error with its own catalog
+/// code (`Q-14-10`, bd-ve916wr8); every other conflict is the generic
+/// internal error. Shared by the serial tail
+/// ([`route_drained_project_artifacts`]) and the parallel Pass-2
+/// reducer so both report a clash the same way.
+pub(crate) fn merge_conflict_to_error(
+    input: &Path,
+    conflict: &crate::artifact::ArtifactMergeConflict,
+) -> QuartoError {
+    match crate::brand_fonts::merge_conflict_error(conflict) {
+        Some(pe) => QuartoError::Parse(pe),
+        None => QuartoError::other(format!(
+            "Project-scoped artifact merge failed for {}: {}",
+            input.display(),
+            conflict
+        )),
+    }
 }
 
 /// Flush every path-bearing, non-empty artifact in `artifacts` into

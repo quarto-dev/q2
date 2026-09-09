@@ -1,0 +1,67 @@
+---
+title: "Brand font file not found"
+description: "A `source: file` font in the brand names a file that does not exist, so it was not published; the `@font-face` rule was still written."
+code: Q-14-9
+subsystem: theme
+status: complete
+since: "99.9.9"
+categories:
+  - theme
+---
+
+# `Q-14-9` — Brand Font File Not Found
+
+> A `source: file` font in the brand names a file that does not
+> exist, so it was not published. The `@font-face` rule was still
+> written; the browser falls back to the next font in the stack.
+
+## What this means
+
+A font under `typography.fonts` in your `_brand.yml` has
+`source: file`, and one of its `files:` entries points at a path
+Quarto could not find. Quarto publishes every local brand font into
+a `fonts/` directory next to the compiled theme CSS, and writes an
+`@font-face` rule that refers to it there. With the source file
+missing there is nothing to publish, so the rule points at a file
+that does not exist and the browser silently uses the next font in
+`font-family`.
+
+This is a warning: the render completes, and the message names the
+brand file, the font family, the path as written, and the location
+Quarto looked at.
+
+## Why this happens
+
+- **The path is relative to the wrong base.** Font paths are
+  resolved relative to the **brand file's own directory**, not the
+  document or the project root. A brand at `brand/_brand.yml`
+  declaring `fonts/Regular.woff2` expects
+  `brand/fonts/Regular.woff2`.
+- **A leading `/` was meant literally.** `/assets/Regular.woff2`
+  means `<project root>/assets/Regular.woff2`, never the filesystem
+  root.
+- **The file was moved, renamed, or never copied** into the project.
+  `q2 use brand` copies a brand's font files alongside the brand;
+  a hand-written brand needs the files placed by hand.
+- **The file exists but cannot be read** (permissions). The message
+  includes the operating-system error in that case.
+
+## How to fix
+
+Compare the path in the message with where the file actually is,
+and adjust one or the other:
+
+```yaml
+# _brand.yml, next to a fonts/ directory
+typography:
+  fonts:
+    - family: EB Garamond
+      source: file
+      files:
+        - path: fonts/EBGaramond-Regular.woff2
+          weight: 400
+  base: EB Garamond
+```
+
+Remote fonts (`https://…`) are never published and never raise this
+warning; they are fetched by the browser directly.

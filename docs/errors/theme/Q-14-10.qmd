@@ -1,0 +1,64 @@
+---
+title: "Two brand font files publish under the same name"
+description: "Two `source: file` brand fonts with different contents share a file name; Quarto publishes fonts by file name, so one of them must be renamed."
+code: Q-14-10
+subsystem: theme
+status: complete
+since: "99.9.9"
+categories:
+  - theme
+---
+
+# `Q-14-10` — Two Brand Font Files Publish Under the Same Name
+
+> Two `source: file` brand fonts with different contents share a
+> file name. Quarto publishes every brand font as
+> `fonts/<file name>` beside the theme CSS, so two different files
+> cannot share a name.
+
+## What this means
+
+Quarto copies each local brand font into a `fonts/` directory next
+to the compiled theme CSS and refers to it as `fonts/<file name>`,
+where `<file name>` is the last component of the path you wrote —
+the directory part is dropped. Two entries whose paths end in the
+same file name therefore land on the same published file. When
+their bytes are identical that is harmless and Quarto keeps one
+copy. When they differ, one would silently overwrite the other and
+some pages would get the wrong font, so Quarto stops the render
+instead and names both source files.
+
+This applies across everything that publishes into one output tree:
+the light and dark halves of a brand pair, a project brand and a
+document's own `brand:`, or two documents that each bring their own
+brand.
+
+## Why this happens
+
+- **Generic file names in different directories.** `serif/Regular.woff2`
+  and `sans/Regular.woff2` both publish as `fonts/Regular.woff2`.
+- **Light and dark brands** that ship differently-tuned files under
+  the same name.
+- **A stale copy.** The same font was updated in one brand directory
+  but not another, so the "same" file now has different bytes.
+
+## How to fix
+
+Rename one of the files so the two names differ, and update the
+`files:` entry that points at it:
+
+```yaml
+typography:
+  fonts:
+    - family: Serif Brand
+      source: file
+      files:
+        - path: serif/SerifBrand-Regular.woff2
+    - family: Sans Brand
+      source: file
+      files:
+        - path: sans/SansBrand-Regular.woff2
+```
+
+If the two files are meant to be the same font, replace one with a
+copy of the other; identical bytes do not conflict.

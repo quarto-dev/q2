@@ -11,8 +11,6 @@
 //! Q1's algorithm; the External Sources Policy forbids reading from
 //! `external-sources/` at test time.
 
-use std::path::Path;
-
 use quarto_brand::Brand;
 use quarto_sass::brand_to_layers;
 
@@ -33,7 +31,7 @@ fn color_layer_emits_brand_palette_sass_vars() {
          \x20   red: \"#FF0000\"\n\
          \x20   black: \"#002040\"\n",
     );
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     // The color layer is always the first non-empty layer.
     let color = &layers[0];
     assert!(
@@ -55,7 +53,7 @@ fn color_layer_emits_brand_palette_css_custom_props() {
          \x20 palette:\n\
          \x20   red: \"#FF0000\"\n",
     );
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     let color = &layers[0];
     assert!(
         color.rules.contains(":root {"),
@@ -79,7 +77,7 @@ fn color_layer_emits_named_theme_color_sass_vars_with_resolution() {
          \x20 primary: red\n\
          \x20 foreground: \"#21f\"\n",
     );
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     let color = &layers[0];
     assert!(
         color.defaults.contains("$primary: #FF0000 !default;"),
@@ -102,7 +100,7 @@ fn color_layer_applies_default_color_name_map() {
          \x20 foreground: \"#21f\"\n\
          \x20 background: \"#e6f8ff\"\n",
     );
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     let color = &layers[0];
     // foreground maps to body-color and pre-color and body-color.
     assert!(
@@ -130,7 +128,7 @@ fn color_layer_palette_key_sanitization() {
          \x20 palette:\n\
          \x20   \"my color\": \"#abc\"\n",
     );
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     let color = &layers[0];
     assert!(
         color.defaults.contains("$brand-my-color: #abc !default;"),
@@ -142,7 +140,7 @@ fn color_layer_palette_key_sanitization() {
 #[test]
 fn empty_brand_produces_no_layers() {
     let b = brand("");
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     assert!(
         layers.is_empty(),
         "empty brand should produce no layers, got {} layer(s)",
@@ -168,7 +166,7 @@ fn bootstrap_defaults_layer_emits_bootstrap_colors_from_palette() {
          \x20   defaults:\n\
          \x20     font-size-base: \"1.1rem\"\n",
     );
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     // Per Q1's `brandBootstrapSassLayers`, bootstrap-defaults is
     // `unshift`-ed to the front of the user layers — so the order is
     // [bootstrap_defaults, color, typography?].
@@ -205,7 +203,7 @@ fn bootstrap_defaults_layer_emits_passthrough_sections() {
          \x20   mixins: \"@mixin bar { color: red; }\"\n\
          \x20   rules: \".my-class { color: red; }\"\n",
     );
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     let bs = &layers[0]; // no color/typography, so bootstrap-defaults is first
     assert!(bs.uses.contains("@use 'sass:math';"), "uses: {}", bs.uses);
     assert!(
@@ -222,7 +220,7 @@ fn no_bootstrap_defaults_no_bootstrap_layer() {
     // Brand with color only — no bootstrap defaults — should produce
     // exactly one layer (the color layer).
     let b = brand("color:\n  primary: \"#abc\"\n");
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     assert_eq!(
         layers.len(),
         1,
@@ -243,7 +241,7 @@ fn typography_layer_emits_google_font_import() {
          \x20     weight: [400, 700]\n\
          \x20     style: [normal, italic]\n",
     );
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     let typ = layers.last().expect("typography layer");
     // Q1 places font @import lines in `uses` (so they land at the top
     // of the compiled SCSS, before any rules).
@@ -268,11 +266,11 @@ fn typography_layer_emits_file_font_face() {
          \x20   - source: file\n\
          \x20     family: Brand Font\n\
          \x20     files:\n\
-         \x20       - path: regular.woff2\n\
+         \x20       - path: assets/sub/regular.woff2\n\
          \x20         weight: 400\n\
          \x20         style: normal\n",
     );
-    let layers = brand_to_layers(&b, Path::new("brand")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     let typ = layers.last().expect("typography layer");
     // @font-face blocks live in `uses` alongside @import lines.
     assert!(
@@ -285,9 +283,18 @@ fn typography_layer_emits_file_font_face() {
         "family in @font-face (quoted):\n{}",
         typ.uses
     );
+    // bd-ve916wr8: the file is published beside the theme CSS as
+    // `fonts/<basename>`, so the URL is that constant — never the
+    // brand-relative source path, and never document-relative.
     assert!(
-        typ.uses.contains("brand/regular.woff2"),
-        "relative path joined with font_path_prefix:\n{}",
+        typ.uses
+            .contains("src: url('fonts/regular.woff2') format('woff2');"),
+        "published-name URL with a format() hint:\n{}",
+        typ.uses
+    );
+    assert!(
+        !typ.uses.contains("assets/sub"),
+        "source directory must not leak into the URL:\n{}",
         typ.uses
     );
     assert!(
@@ -295,6 +302,65 @@ fn typography_layer_emits_file_font_face() {
         "weight:\n{}",
         typ.uses
     );
+}
+
+fn file_font_uses(path: &str) -> String {
+    let b = brand(&format!(
+        "typography:\n\
+         \x20 fonts:\n\
+         \x20   - source: file\n\
+         \x20     family: F\n\
+         \x20     files:\n\
+         \x20       - {path}\n"
+    ));
+    let layers = brand_to_layers(&b).unwrap();
+    layers.last().expect("typography layer").uses.clone()
+}
+
+/// A leading `/` means the project root (path-resolution contract);
+/// `../` climbs out of the brand dir. Both are *source* locations —
+/// the published URL is still `fonts/<basename>` (bd-ve916wr8
+/// decision 3).
+#[test]
+fn file_font_face_rooted_and_parent_source_paths_publish_by_basename() {
+    let rooted = file_font_uses("/assets/Rooted.woff");
+    assert!(
+        rooted.contains("src: url('fonts/Rooted.woff') format('woff');"),
+        "rooted path:\n{rooted}"
+    );
+    let parent = file_font_uses("../shared/Parent.ttf");
+    assert!(
+        parent.contains("src: url('fonts/Parent.ttf') format('truetype');"),
+        "parent path:\n{parent}"
+    );
+    let otf = file_font_uses("Plain.otf");
+    assert!(
+        otf.contains("src: url('fonts/Plain.otf') format('opentype');"),
+        "otf:\n{otf}"
+    );
+}
+
+#[test]
+fn file_font_face_external_url_passes_through_without_format_hint() {
+    let uses = file_font_uses("https://fonts.example.com/dir/Remote.woff2");
+    assert!(
+        uses.contains("src: url('https://fonts.example.com/dir/Remote.woff2');"),
+        "external URL verbatim:\n{uses}"
+    );
+    assert!(
+        !uses.contains("format("),
+        "no format() hint for an external URL:\n{uses}"
+    );
+}
+
+#[test]
+fn file_font_face_unknown_extension_has_no_format_hint() {
+    let uses = file_font_uses("assets/Mystery.font");
+    assert!(
+        uses.contains("src: url('fonts/Mystery.font');"),
+        "unknown extension still published by basename:\n{uses}"
+    );
+    assert!(!uses.contains("format("), "no format() hint:\n{uses}");
 }
 
 #[test]
@@ -306,7 +372,7 @@ fn typography_layer_base_font_assigns_bootstrap_vars() {
          \x20   size: 12pt\n\
          \x20   weight: 400\n",
     );
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     let typ = layers.last().expect("typography layer");
     assert!(
         typ.defaults
@@ -329,7 +395,7 @@ fn typography_layer_base_font_assigns_bootstrap_vars() {
 #[test]
 fn typography_layer_headings_font_emits_revealjs_vars_too() {
     let b = brand("typography:\n  headings:\n    family: PT Sans\n");
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     let typ = layers.last().expect("typography layer");
     // Both bootstrap and revealjs targets are emitted.
     assert!(
@@ -356,7 +422,7 @@ fn typography_layer_monospace_propagates_to_inline_and_block() {
          \x20   family: Fira Code\n\
          \x20   color: \"#222\"\n",
     );
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     let typ = layers.last().expect("typography layer");
     // Bootstrap monospace var
     assert!(
@@ -377,7 +443,7 @@ fn typography_layer_monospace_propagates_to_inline_and_block() {
 
 fn typography_uses(yaml: &str) -> String {
     let b = brand(yaml);
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     layers.last().expect("typography layer").uses.clone()
 }
 
@@ -528,7 +594,7 @@ fn slot_weight_range_is_an_error_not_scss() {
          \x20   family: A\n\
          \x20   weight: 500..700\n",
     );
-    match brand_to_layers(&b, Path::new("")) {
+    match brand_to_layers(&b) {
         Err(quarto_sass::SassError::InvalidBrandFontWeight { path, value, .. }) => {
             assert_eq!(path, "typography.headings.weight");
             assert_eq!(value, "500..700");
@@ -552,7 +618,7 @@ fn unknown_google_weight_keyword_is_an_error_not_400() {
          \x20     source: google\n\
          \x20     weight: Bold\n",
     );
-    match brand_to_layers(&b, Path::new("")) {
+    match brand_to_layers(&b) {
         Err(quarto_sass::SassError::InvalidBrandFontWeight { path, value, .. }) => {
             assert_eq!(path, "typography.fonts[0].weight");
             assert_eq!(value, "Bold");

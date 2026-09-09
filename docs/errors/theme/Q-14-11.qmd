@@ -1,0 +1,56 @@
+---
+title: "Unsupported key on a brand font file entry"
+description: "A `files:` entry of a `source: file` brand font sets a key Quarto does not support, such as `format:` or `display:`; it was ignored."
+code: Q-14-11
+subsystem: theme
+status: complete
+since: "99.9.9"
+categories:
+  - theme
+---
+
+# `Q-14-11` — Unsupported Key on a Brand Font File Entry
+
+> A `files:` entry of a `source: file` brand font sets a key Quarto
+> does not support (such as `format:` or `display:`); it was
+> ignored. The `format()` hint is derived from the file's extension.
+
+## What this means
+
+Each entry under a `source: file` font's `files:` list is either a
+bare path or a map with `path`, `weight`, and `style`. The entry in
+question carries additional keys. The brand.yml specification has
+not settled what those keys mean, so rather than reject the brand
+or drop the keys silently, Quarto warns once per entry and renders
+as if the keys were absent.
+
+The message names the brand file, the font family, the entry's
+path, and the ignored keys.
+
+## Why this happens
+
+- **`format:`** — you wanted a `format("woff2")` hint in the
+  `@font-face` rule. Quarto already derives that hint from the
+  file's extension (`.woff2`, `.woff`, `.ttf`, `.otf`), so the key
+  is redundant.
+- **`display:`** — you wanted a `font-display` value. `display:` is
+  supported on `source: google` and `source: bunny` fonts, where it
+  becomes part of the request URL, but not yet on file fonts.
+- **A typo** for `weight` or `style`.
+
+## How to fix
+
+Remove the key. For a `format()` hint, make sure the file has the
+right extension; for `font-display` on a local font, add the
+declaration in a custom SCSS or CSS file for now:
+
+```yaml
+typography:
+  fonts:
+    - family: EB Garamond
+      source: file
+      files:
+        - path: fonts/EBGaramond-Regular.woff2
+          weight: 400
+          style: normal
+```

@@ -17,10 +17,7 @@
 use std::fmt;
 
 use crate::BrandError;
-use crate::types::{
-    Brand, BrandFont, BrandFontFileEntry, BrandFontWeight, BrandFontWeightAtom,
-    BrandFontWeightRange,
-};
+use crate::types::{Brand, BrandFont, BrandFontWeight, BrandFontWeightAtom, BrandFontWeightRange};
 
 /// Lowest and highest weight accepted anywhere in a brand, per the
 /// brand.yml specification (CSS itself allows 1–1000, but no brand
@@ -140,10 +137,7 @@ impl<V> Brand<V> {
                 BrandFont::File(f) => {
                     let files = font_path.key("files");
                     for (j, entry) in f.files.iter().enumerate() {
-                        if let BrandFontFileEntry::Explicit {
-                            weight: Some(w), ..
-                        } = entry
-                        {
+                        if let Some(w) = entry.weight() {
                             validate_weight(w, &files.index(j).key("weight"), RangeAllowed::Yes)?;
                         }
                     }

@@ -531,7 +531,7 @@ impl ThemeConfig {
 
         let light_brand = light_split
             .as_ref()
-            .map(|(split, dir)| ResolvedBrand::new(split.light.clone(), dir.clone()));
+            .map(|(split, file)| resolved_brand(split.light.clone(), file.clone()));
 
         let dark_brand = match self.dark.as_ref().and_then(|d| d.brand_ref.as_ref()) {
             None => None,
@@ -541,14 +541,14 @@ impl ThemeConfig {
                 // one parse.
                 light_split
                     .as_ref()
-                    .map(|(split, dir)| ResolvedBrand::new(split.dark.clone(), dir.clone()))
+                    .map(|(split, file)| resolved_brand(split.dark.clone(), file.clone()))
             }
             Some(dark_ref) => {
                 // Two-file form: the dark variant's own file
                 // contributes its dark half (for a plain single-mode
                 // file the halves are identical).
-                let (split, dir) = load_split_brand(dark_ref, runtime, base_dir)?;
-                Some(ResolvedBrand::new(split.dark, dir))
+                let (split, file) = load_split_brand(dark_ref, runtime, base_dir)?;
+                Some(resolved_brand(split.dark, file))
             }
         };
 
@@ -631,12 +631,21 @@ pub fn resolve_brand(
     let Some(brand_ref) = extract_brand_refs(config.get("brand"))?.light else {
         return Ok(None);
     };
-    let (split, dir) = load_split_brand(&brand_ref, runtime, base_dir)?;
-    Ok(Some(ResolvedBrand::new(split.light, dir)))
+    let (split, file) = load_split_brand(&brand_ref, runtime, base_dir)?;
+    Ok(Some(resolved_brand(split.light, file)))
 }
 
-/// Read and parse one [`BrandRef`] into a split brand plus the
-/// directory it was read from (`None` for inline blocks).
+/// A [`ResolvedBrand`] for a half of a split brand: anchored at its
+/// file when it came from one, directory-less for an inline block.
+fn resolved_brand(brand: quarto_brand::Brand, file: Option<PathBuf>) -> ResolvedBrand {
+    match file {
+        Some(file) => ResolvedBrand::from_file(brand, file),
+        None => ResolvedBrand::new(brand, None),
+    }
+}
+
+/// Read and parse one [`BrandRef`] into a split brand plus the file
+/// it was read from (`None` for inline blocks).
 ///
 /// The parse form is [`quarto_brand::UnifiedBrand`] — color values may
 /// be plain strings or `{light:, dark:}` pairs — which is immediately
@@ -672,10 +681,7 @@ fn load_split_brand(
                     Some(full_path.clone()),
                 )
             })?;
-            let dir = full_path
-                .parent()
-                .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-            Ok((brand.split(), Some(dir)))
+            Ok((brand.split(), Some(full_path)))
         }
         BrandRef::Inline(value) => {
             let brand: quarto_brand::UnifiedBrand = serde_yaml::from_value((**value).clone())
@@ -688,32 +694,6 @@ fn load_split_brand(
                 .map_err(|e| brand_validation_err(e, |_| None, None))?;
             Ok((brand.split(), None))
         }
-    }
-}
-
-/// Resolve a `_brand.yml` (from the `brand:` key) into SCSS layers, independent
-/// of the Bootstrap `theme:` parsing.
-///
-/// `format: html` resolves brand through [`ThemeConfig::from_config_value`] +
-/// the `brand` position marker in `process_theme_specs`, but that path also
-/// parses `theme:` against the Bootswatch theme set — which rejects reveal theme
-/// names. RevealJS therefore resolves brand on its own via this helper: extract
-/// the `brand:` reference, read/parse it into a [`Brand`], and convert it to
-/// SCSS layers with [`crate::brand_to_layers`]. Returns an empty vector when no
-/// brand is configured.
-///
-/// `base_dir` resolves a relative `brand:` path (typically the project root);
-/// `font_path_prefix` is the directory prefix for `@font-face` URLs (pass an
-/// empty path to reference brand-bundled fonts by bare name).
-pub fn resolve_brand_layers(
-    config: &ConfigValue,
-    runtime: &dyn SystemRuntime,
-    base_dir: &Path,
-    font_path_prefix: &Path,
-) -> Result<Vec<crate::SassLayer>, SassError> {
-    match resolve_brand(config, runtime, base_dir)? {
-        Some(resolved) => crate::brand_layer::brand_to_layers(&resolved.brand, font_path_prefix),
-        None => Ok(Vec::new()),
     }
 }
 
