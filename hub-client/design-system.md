@@ -3,7 +3,8 @@
 The hub-client UI is built from a small set of tokens and primitives.
 This page is the contract: follow it when adding or touching UI, and the
 app stays coherent. The enforcement counterparts are `npm run lint:css`
-(off-token values) and the `#/dev/` gallery (keyboard + axe coverage).
+(off-token values; also run by CI and by step 1 of `cargo xtask verify`)
+and the `#/dev/` gallery (keyboard + axe coverage).
 
 ## Tokens (`src/theme.css`)
 
