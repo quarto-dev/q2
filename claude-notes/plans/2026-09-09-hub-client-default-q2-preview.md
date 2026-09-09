@@ -2,7 +2,7 @@
 
 **Strand:** bd-kltzdhle
 **Date:** 2026-09-09
-**Status:** Executing (go-ahead 2026-09-09, branch `braid/bd-kltzdhle-hub-client-make-q2`). Phase 1 done; Phase 2 in progress.
+**Status:** Executing (go-ahead 2026-09-09, branch `braid/bd-kltzdhle-hub-client-make-q2`). Phases 1–3 done (Phase 3 commit pending build:all); Phase 4 next.
 **Related:** PR #667 / bd-ew0vak6b (Edit pill; plan
 `2026-09-09-q2-preview-edit-toggle.md`), bd-zvh2p (attribution through
 `render_page_for_preview` — superseded by D3 below), bd-j3764r9a (React ↔
@@ -332,7 +332,7 @@ change) at each phase boundary; commit at each clean boundary.
 
 ### Phase 3 — hub-client routing and chrome
 
-- [ ] Tests first:
+- [x] Tests first (all ran red before the change, green after):
   - new `hub-client/src/components/render/getQ2Format.test.ts` covering
     the full rule in D2 (`html → q2-preview`, `q2-html-render → null`,
     `q2-preview`/`q2-debug`/`q2-slides`/`revealjs` pass through,
@@ -349,24 +349,25 @@ change) at each phase boundary; commit at each clean boundary.
     mounts `ReactPreview` with `format='q2-preview'` and reports
     `onFormatChange('q2-preview')`; `format: q2-html-render` mounts
     `Preview` and reports `null`.
-- [ ] `getQ2Format.ts`: implement D2; update the file comment.
-- [ ] `ReactPreview.tsx`: `doRender` uses `renderPageInProjectWithAttribution(…, true)`
+- [x] `getQ2Format.ts`: implement D2; update the file comment.
+- [x] `ReactPreview.tsx`: `doRender` uses `renderPageInProjectWithAttribution(…, true)`
       for every `usesPreviewPipeline` format; delete the `revealjs`-only
       `renderPageForPreview` branch (`ReactPreview.tsx:263-`); keep
       `isSlidesPreview` for the slide-shell props. Check `handleSetAst`
       (`:820`) needs no change (it dispatches on the format string, which is
       `q2-preview` for html docs).
-- [ ] `Editor.tsx` gates (`:392`, `:1444`, `:1448`) and
+- [x] `Editor.tsx` gates (`:392`, `:1444`, `:1448`) and
       `FileSidebar.tsx:187-195` need no code change — verify with the router
       test that `currentFormat` is `q2-preview` for a plain document, so the
       Edit and Authors pills enable and the printable affordance appears.
-- [ ] `ReactRenderer.tsx:218` render-components gate: unchanged
+- [x] `ReactRenderer.tsx:218` render-components gate: unchanged
       (`q2-preview` is already in it).
-- [ ] `Preview.tsx` header comment and `PreviewRouter.tsx:57-65,170-180`
+- [x] `Preview.tsx` header comment and `PreviewRouter.tsx:57-65,170-180`
       comments: rewrite "default html preview" wording to "`q2-html-render`
       / non-html fallback".
-- [ ] Vitest tier green: `cd hub-client && npm run test:ci`; production
-      build: `npm run build:all`.
+- [x] Vitest tier green under the pinned Node 24 (`fnm exec --using=24`; Node 26
+      makes ~23 localStorage tests fail spuriously): unit 1102, integration 128,
+      WASM 140; typecheck clean; production build: see Phase 7 log.
 
 ### Phase 4 — e2e suite
 
