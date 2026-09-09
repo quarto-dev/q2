@@ -148,8 +148,15 @@ theme CSS and out of scope here.
 - [x] `cargo xtask verify` (full — `quarto-core` changes affect the WASM
       leg; hub-client vitest is currently red on `main` for an unrelated
       `localStorage` environment issue, see NOTES.md).
-- [ ] Rebase over bd-5fseopxy if it has landed; resolve the
-      `file_font_face_block` conflict.
+- [x] Rebase over bd-5fseopxy if it has landed; resolve the
+      `file_font_face_block` conflict. Done 2026-09-09 onto `main` @
+      `9d236060` (after #661, #663, #664–#667): kept #663's weight-range
+      emitter (`font_weight_to_css` + `RangeOk::FontFace`, YAML-path
+      error locations, `Brand::validate`) and #661's structured
+      `sass_error_to_parse_error` mapping in the reveal branch; layered
+      the constant `fonts/<name>` URL, the `BrandFontFileEntry`
+      accessors, and the brand-file tracking on top. `validate.rs` now
+      reads `entry.weight()`. Catalog carries `Q-14-6`..`Q-14-11`.
 
 ### On merge
 
