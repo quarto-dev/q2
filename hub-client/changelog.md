@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-09
 
+- [`6d0aa438`](https://github.com/quarto-dev/q2/commits/6d0aa438): The live preview now renders every plain document (no `format:` key, or `format: html`) through the q2-preview renderer, the same one `q2 preview` uses, so comments, the Edit pill, Authors, and the printable version are available without opting in; add `format: q2-html-render` to a document to keep the previous full-page HTML preview instead
 - [`93b146c`](https://github.com/quarto-dev/q2/commits/93b146c): Edit pill in the document bottom bar turns q2-preview block editing on/off (off makes links plain links); the choice persists
 - [`0242ab91`](https://github.com/quarto-dev/q2/commits/0242ab91): Resolving the last comment on a block in the q2-preview no longer leaves an empty bubble behind or a block glow that never clears
 
