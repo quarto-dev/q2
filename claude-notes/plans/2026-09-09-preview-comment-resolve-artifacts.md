@@ -266,58 +266,103 @@ grows warts.
 
 ### Phase 1 — tests first (must fail on `main`)
 
-- [ ] T1 **empty pill**: mount a Para with one comment; click the bubble
+- [x] T1 **empty pill**: mount a Para with one comment; click the bubble
   (`[title="1 comment"]`) → `✓` button (`[title="Resolve comment"]`)
   appears; click it → `commitSubtreeEdit` called with a Para whose inlines
   contain no `quarto-edit-comment` span; `rerender` with the comment-less AST
   → assert **no** `[data-q2-owns-focus]` chrome in the container (pointer is
   not hovering; nothing should be visible). Expected today: chrome present,
   bubble `title="0 comments"`, zero children.
-- [ ] T2 **stuck glow after movement**: same setup; `fireEvent.mouseEnter`/
+- [x] T2 **stuck glow after movement**: same setup; `fireEvent.mouseEnter`/
   `mouseMove` with `target` inside the bubble → wrapper `style.boxShadow`
   equals the glow; click `✓`, rerender comment-less; `fireEvent.mouseMove` on
   the wrapper with `target` = the `<p>` → wrapper `boxShadow === 'none'`.
   Expected today: still the glow.
-- [ ] T3 **stuck glow after leaving**: as T2 but `fireEvent.mouseLeave` on
+- [x] T3 **stuck glow after leaving**: as T2 but `fireEvent.mouseLeave` on
   the wrapper after the rerender → `boxShadow === 'none'`. (Today: glow.)
-- [ ] T4 **no over-collapse**: two comments; click bubble; resolve index 0;
+- [x] T4 **no over-collapse**: two comments; click bubble; resolve index 0;
   rerender with one comment → bubble still expanded (`✓` still present, the
   remaining comment text shown). Guards the `comments.length === 0` condition.
-- [ ] T5 **`+` still works**: comment-less block, `mouseMove` at the right half
+- [x] T5 **`+` still works**: comment-less block, `mouseMove` at the right half
   → `+`; click it → textarea present and the chrome stays (the
   `showInlineInput` guard of the collapse effect). Guards against the effect
   eating the add flow.
-- [ ] T6 **glow clears without movement**: stub
+- [x] T6 **glow clears without movement**: stub
   `getBoundingClientRect` on the bubble to a rect that excludes the recorded
   pointer; after the comment-less rerender, wrapper `boxShadow === 'none'`
   with no further events.
-- [ ] Run `npm test -w ts-packages/preview-renderer -- CommentBlock.resolveLast`
-  (integration config: `npm run test:integration -w ts-packages/preview-renderer`)
-  and record the failing assertions.
+- [x] Ran `npx vitest run --config vitest.integration.config.ts CommentBlock.resolveLast`
+  in `ts-packages/preview-renderer` on the unfixed code (2026-09-09):
+  **4 failed / 3 passed** — T1 (chrome present: bubble `title="0 comments"`,
+  no children), T2, T3, T6 (wrapper glow still on) fail; the guards T4, T5
+  and T6b (glow stays while the pointer is still inside the re-measured
+  bubble) pass. Test file:
+  `src/q2-preview/custom/CommentBlock.resolveLast.integration.test.tsx`.
+  Note: T1 had to mirror the real flow (`+` → type → Enter → resolve) —
+  reaching `✓` by clicking a compact bubble also opens the inline input,
+  which legitimately keeps the bubble open after the last resolve.
 
 ### Phase 2 — fix
 
-- [ ] Collapse effect for `selfExpanded` (defect 1).
-- [ ] Wrapper-owned `bubbleHovered` derivation; remove the bubble's
+- [x] Collapse effect for `selfExpanded` (defect 1).
+- [x] Wrapper-owned `bubbleHovered` derivation; remove the bubble's
   enter/leave handlers (defect 2).
-- [ ] Refinement: pointer-position ref + geometric re-check in the
-  size-change layout effect.
-- [ ] Update the `CommentWrapper` header comment where it describes the
-  bubble-hover → block-glow mirror.
-- [ ] All T1–T6 green; full `npm run test:integration -w ts-packages/preview-renderer`
-  and `npm run test` green.
+- [x] Refinement: pointer-position ref + geometric re-check in the
+  size-change layout effect. Two adjustments found during the first
+  browser pass (the ✓ sits exactly where the collapsed `+` renders, so
+  the resting pointer ends up INSIDE the new bubble): the collapse is a
+  `useLayoutEffect` (the zero-row pill is never painted — the correction
+  re-renders before paint), and the re-check is a true derivation in both
+  directions (`bubbleHovered := pointerKnown && inside(rect)`) rather than
+  clear-only, since the clear-only version cleared on the intermediate
+  pill commit and never re-armed on the `+` commit. New test **T7** pins
+  this (dynamic rect stub: the pill excludes the pointer, the `+`
+  contains it); verified failing on the clear-only variant, passing on
+  the final code.
+- [x] Update the `CommentWrapper` comments where they describe the
+  bubble-hover → block-glow mirror (done inline at the state declaration,
+  the wrapper handlers, and the new effects).
+- [x] All T1–T6 (+T6b) green; full preview-renderer integration suite
+  (56 files / 647 tests) and unit suite (43 files / 578 tests) green, tsc
+  clean for sources and tests. Environment note: the worktree's first
+  `npm install` had silently failed (EBADENGINE — Homebrew Node 26 on PATH
+  vs the pinned 24), so the whole tree was resolving through the main
+  checkout's `node_modules`; that made Vite reject `web-tree-sitter.wasm`
+  as outside its root and fail 25 integration files at import. Fixed with
+  `fnm exec --using=24 npm install`; unrelated to this change.
 
 ### Phase 3 — verification
 
-- [ ] `cargo xtask verify` (full: `preview-renderer` is bundled into
-  hub-client, so the hub-build leg applies; `npm run build:all` in
-  `hub-client/` at minimum).
-- [ ] End-to-end in Chrome against `npx vite --port 5199` (dev server picks
-  up the TS change via HMR): repeat the reproduction steps; after `✓`, the
-  wrapper `style.boxShadow` must be `none` and no `[data-q2-owns-focus]`
-  element may exist under the paragraph wrapper (or a `+` only while the
-  right half is hovered). Also repeat the 'Expand comments' variant. Record
-  the DOM probe output here.
+- [x] `fnm exec --using=24 cargo xtask verify` (full), 2026-09-09: all
+  steps passed — lints + clippy, fmt, Rust build, tree-sitter tests, Rust
+  tests, ts-packages build, hub-client build (`build:all`) + tests, trace
+  viewer, shared packages, hub MCP, q2-preview-spa build. Preview-renderer
+  integration run inside it: 56 files / 648 passed. One logged
+  (non-failing) `TypeError: Cannot read properties of undefined (reading
+  'querySelector')` from a jsdom MutationObserver callback appears in that
+  run; it reproduces with the new test file excluded and does not come
+  from `preview-renderer/src`, so it is pre-existing and unrelated.
+- [x] End-to-end in Chrome (DevTools MCP) against
+  `fnm exec --using=24 npx vite --port 5199` in `hub-client/`, 2026-09-09,
+  final code. Same steps as the reproduction (synthetic right-half hover →
+  real click `+` → type `Comment`, Enter → real click `✓`). DOM probes in
+  the preview iframe, output inspected:
+
+  ```
+  before ✓:   wrapper box-shadow = GLOW, chrome z-index 1000, bubble "Comment✓" (title "1 comment")
+  after ✓, pointer stationary:
+              wrapper box-shadow = GLOW     ← correct: the pointer rests INSIDE the new `+`
+              chrome z-index 100            ← selfExpanded collapsed
+              bubble title "0 comments", text "+", 1 child, 22×24 px  ← no empty pill
+              pointerInsideBubble = true    (:hover chain ends in .q2-comment-bubble)
+  real move to the heading:
+              wrapper box-shadow = none, chrome absent, :hover ends at H2
+  ```
+
+  The pre-fix run of the same probe had shown the pill (`title "0
+  comments"`, 0 children, 14×6 px, z-index 1000) and a glow that survived
+  both the move and a click outside. The 'Expand comments' variant shares
+  the glow path and was not re-run separately.
 - [ ] Commit the fix; second commit adding the `hub-client/changelog.md` entry
   with the fix commit's hash; `braid close bd-bpt089zw`; ask before pushing.
 
