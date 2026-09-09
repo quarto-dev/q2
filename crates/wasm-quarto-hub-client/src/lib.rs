@@ -708,12 +708,13 @@ fn map_format_for_preview(format_str: &str) -> &str {
 /// `q2-preview → html` (a normal HTML page) and `q2-slides → revealjs`
 /// (so the reveal deck **assembler** runs — note this is *not*
 /// `builtin_pseudo_format`'s `html` base, which would drop the deck).
-/// The developer views `q2-debug`/`q2-sandboxed-preview` fall back to `html`.
+/// The developer views `q2-debug`/`q2-sandboxed-preview`, and the
+/// hub-client full-DOM opt-out `q2-html-render`, fall back to `html`.
 /// Non-preview formats (including `revealjs` and `html` themselves)
 /// pass through unchanged so they render via their own HTML pipeline.
 fn coerce_format_for_print(format_str: &str) -> &str {
     match format_str {
-        "q2-preview" | "q2-debug" | "q2-sandboxed-preview" => "html",
+        "q2-preview" | "q2-debug" | "q2-sandboxed-preview" | "q2-html-render" => "html",
         "q2-slides" => "revealjs",
         other => other,
     }
@@ -1141,12 +1142,12 @@ pub async fn render_qmd_content(
 ///
 /// Phase 9 entry point used by the hub-client live preview.
 /// Equivalent to
-/// [`render_page_in_project_with_attribution(path, user_grammars, None, None)`](render_page_in_project_with_attribution).
+/// [`render_page_in_project_with_attribution(path, user_grammars, None, None, None)`](render_page_in_project_with_attribution).
 /// Kept as a separate entry point for callers that have no
 /// attribution payload or capture to ship and want the simpler signature.
 #[wasm_bindgen]
 pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
-    render_page_in_project_with_attribution(path, user_grammars, None, None).await
+    render_page_in_project_with_attribution(path, user_grammars, None, None, None).await
 }
 
 /// Render a single page **in the context of its surrounding project**,
@@ -1184,7 +1185,7 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
 ///
 /// `render_page_in_project(path, user_grammars)` is byte-identical
 /// to `render_page_in_project_with_attribution(path, user_grammars,
-/// None, None)` for every fixture. A regression on the all-`None`
+/// None, None, None)` for every fixture. A regression on the all-`None`
 /// branch would break *all* q2-preview renders, not just attributed
 /// or capture-spliced ones.
 ///
@@ -1204,6 +1205,16 @@ pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGram
 ///   When present, the q2-preview pipeline's `CaptureSpliceStage`
 ///   folds the recorded engine output into the AST. `None` renders
 ///   code cells as source.
+/// * `prefer_preview_format` - When `Some(true)`, apply the `q2 preview`
+///   default-format substitution ([`map_format_for_preview`]:
+///   `html → q2-preview`, `revealjs → q2-slides`) before dispatch, so a
+///   document with no `format:` key renders through the q2-preview
+///   pipeline and returns `ast_json`. This is how hub-client makes
+///   q2-preview its default renderer (bd-kltzdhle) while keeping
+///   [`RenderHost::HubClient`] — [`render_page_for_preview`] hard-codes
+///   the native-preview host, which would wrongly suppress the Q-5-12
+///   render-scripts warning in the browser. `None` / `Some(false)` keep
+///   the detected format: byte-identical to the pre-knob behaviour.
 ///
 /// [`PreBuiltAttributionProvider`]:
 ///     quarto_core::attribution::PreBuiltAttributionProvider
@@ -1219,7 +1230,12 @@ pub async fn render_page_in_project_with_attribution(
     // output is spliced in *without* losing attribution. `None` is
     // byte-identical to the pre-feature behaviour for every existing caller.
     capture_gz_json: Option<Vec<u8>>,
+    // bd-kltzdhle: `Option<bool>` rather than `bool` so a JS caller that
+    // omits the argument (`undefined`) is explicitly `None` → `false`,
+    // instead of relying on the ToInt32 coercion of `undefined`.
+    prefer_preview_format: Option<bool>,
 ) -> String {
+    let prefer_preview_format = prefer_preview_format.unwrap_or(false);
     let runtime = get_runtime();
     let path_buf = std::path::PathBuf::from(path);
     let path = path_buf.as_path();
@@ -1262,7 +1278,7 @@ pub async fn render_page_in_project_with_attribution(
             &content,
             &project,
             user_grammars,
-            false,
+            prefer_preview_format,
             captures,
             attribution_json,
             None,
@@ -1287,7 +1303,7 @@ pub async fn render_page_in_project_with_attribution(
         &content,
         project,
         user_grammars,
-        false,
+        prefer_preview_format,
         RenderHost::HubClient,
         captures,
         attribution_json,
@@ -1301,9 +1317,11 @@ pub async fn render_page_in_project_with_attribution(
 /// `html`) renders through the q2-preview pipeline and returns
 /// `ast_json`. Explicit non-html formats are honoured as-is.
 ///
-/// The `q2 preview` CLI calls this entry point; hub-client keeps
-/// using [`render_page_in_project`] so its existing format dispatch
-/// is unchanged.
+/// The `q2 preview` SPA calls this entry point. hub-client gets the
+/// same substitution through the `prefer_preview_format` argument of
+/// [`render_page_in_project_with_attribution`] instead (bd-kltzdhle):
+/// this entry point hard-codes [`RenderHost::NativePreview`], which is
+/// only right for the SPA.
 ///
 /// Phase C.4 (bd-kw93.3): if `capture_gz_json` is provided — gzipped
 /// JSON bytes of a [`EngineCapture`], the same wire format Phase C.1

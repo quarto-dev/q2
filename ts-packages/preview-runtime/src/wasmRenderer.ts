@@ -88,6 +88,12 @@ interface WasmModuleExtended {
     // present, the q2-preview pipeline's CaptureSpliceStage folds the recorded
     // engine output into the AST — alongside attribution, not instead of it.
     capture_gz_json?: Uint8Array,
+    // bd-kltzdhle: when `true`, apply `q2 preview`'s default-format
+    // substitution (`html → q2-preview`, `revealjs → q2-slides`) before
+    // dispatch, exactly as `render_page_for_preview` does — but keeping
+    // the hub-client `RenderHost`. Omitted / `false` is byte-identical to
+    // the pre-knob behaviour.
+    prefer_preview_format?: boolean,
   ) => Promise<string>;
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
@@ -521,6 +527,16 @@ export async function renderPageInProject(
  * the Phase 6 invariant: every actor referenced in `runs` must have
  * an entry in `identities`. See `useAttribution` for the hub-client
  * producer that builds this payload from Automerge history.
+ *
+ * `preferPreviewFormat` (bd-kltzdhle) is hub-client's version of the
+ * `q2 preview` default-format substitution: with `true`, a document
+ * whose detected format is `html` (the default when no `format:` key
+ * is set) renders through the q2-preview pipeline and returns
+ * `ast_json`, and `revealjs` renders as `q2-slides`; explicit
+ * pseudo-formats (`q2-preview`, `q2-debug`, `q2-html-render`, …) pass
+ * through. Unlike `renderPageForPreview`, the render host stays
+ * hub-client, so host-dependent diagnostics (Q-5-12) still fire. Omit
+ * (or `false`) to keep the detected format — the pre-knob behaviour.
  */
 export async function renderPageInProjectWithAttribution(
   path: string,
@@ -531,6 +547,7 @@ export async function renderPageInProjectWithAttribution(
   // the recorded engine output into the AST alongside attribution. Omit (or
   // `undefined`) to render code cells as source.
   captureGzJson?: Uint8Array,
+  preferPreviewFormat?: boolean,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
   return JSON.parse(
@@ -539,6 +556,7 @@ export async function renderPageInProjectWithAttribution(
       userGrammars,
       attributionJson ?? undefined,
       captureGzJson,
+      preferPreviewFormat,
     ),
   );
 }
@@ -550,8 +568,11 @@ export async function renderPageInProjectWithAttribution(
  * through the q2-preview pipeline and return `ast_json` instead of
  * `html`. Explicit non-html formats pass through unchanged.
  *
- * Use this from the q2-preview SPA. hub-client keeps using
- * `renderPageInProject` so its own format dispatch is unchanged.
+ * Use this from the q2-preview SPA only. hub-client gets the same
+ * substitution via `renderPageInProjectWithAttribution(…,
+ * preferPreviewFormat = true)` (bd-kltzdhle) — this entry point
+ * hard-codes the native-preview render host, which would suppress
+ * host-dependent diagnostics (Q-5-12) that hub-client must show.
  *
  * Phase C.4 (bd-kw93.3): when `captureGzJson` is provided — gzipped
  * JSON bytes of a server-recorded `EngineCapture` (the same wire

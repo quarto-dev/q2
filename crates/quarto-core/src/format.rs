@@ -123,6 +123,14 @@ fn builtin_pseudo_format(name: &str) -> Option<(&'static str, Option<&'static st
         "q2-debug" => Some(("html", None)),
         "q2-preview" => Some(("html", Some("preview"))),
         "q2-sandboxed-preview" => Some(("html", None)),
+        // `q2-html-render` is hub-client's explicit opt-out from the
+        // q2-preview default (bd-kltzdhle): the document previews in the
+        // full-DOM iframe renderer instead of the React AST renderer. The
+        // pipeline treats it exactly like `q2-debug` — a plain HTML render
+        // — so `q2 render` writes an ordinary HTML file for it; only the
+        // hub-client router (`getQ2Format.ts`) reads the name. See
+        // claude-notes/plans/2026-09-09-hub-client-default-q2-preview.md.
+        "q2-html-render" => Some(("html", None)),
         _ => None,
     }
 }
@@ -150,7 +158,7 @@ pub fn is_revealjs_target(target_format: &str) -> bool {
 ///
 /// This maps each preview pseudo-format back to the real format it emulates so
 /// preview Lua behaves identically to render:
-/// - `q2-preview` / `q2-debug` / `q2-sandboxed-preview` → `html`
+/// - `q2-preview` / `q2-debug` / `q2-sandboxed-preview` / `q2-html-render` → `html`
 /// - `q2-slides` → `revealjs` (so `is_format("revealjs")` is true, matching
 ///   what [`is_revealjs_target`] already does for pipeline decisions; note this
 ///   intentionally differs from [`builtin_pseudo_format`], which reports the
@@ -160,7 +168,7 @@ pub fn is_revealjs_target(target_format: &str) -> bool {
 /// through unchanged.
 pub fn lua_format_for(target_format: &str) -> &str {
     match target_format {
-        "q2-preview" | "q2-debug" | "q2-sandboxed-preview" => "html",
+        "q2-preview" | "q2-debug" | "q2-sandboxed-preview" | "q2-html-render" => "html",
         "q2-slides" => "revealjs",
         other => other,
     }
@@ -371,7 +379,7 @@ impl Format {
     ///   `"html"` (bd-5b21rbaq).
     /// - everything else → the identifier base (`html`, `pdf`, …), which
     ///   already canonicalizes extension formats (`acm-pdf` → `pdf`) and the
-    ///   HTML preview pseudo-formats (`q2-preview`/`q2-debug`/`q2-sandboxed-preview` → `html`).
+    ///   HTML preview pseudo-formats (`q2-preview`/`q2-debug`/`q2-sandboxed-preview`/`q2-html-render` → `html`).
     ///
     /// This is the [`Format`]-aware companion to the string-only
     /// [`lua_format_for`] (used where only a `target_format` string is in hand,
@@ -862,12 +870,30 @@ mod tests {
     }
 
     #[test]
+    fn test_from_format_string_q2_html_render() {
+        // `q2-html-render` (bd-kltzdhle) is the hub-client opt-out from
+        // the q2-preview default: the full-DOM iframe renderer. In the
+        // pipeline it is indistinguishable from `q2-debug` — an HTML
+        // render with no preview pipeline_kind — so `q2 render` writes a
+        // normal HTML file for it.
+        let f = Format::from_format_string("q2-html-render").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Html);
+        assert_eq!(f.target_format, "q2-html-render");
+        assert_eq!(f.extension_name, None);
+        assert_eq!(f.display_name, "q2-html-render");
+        assert_eq!(f.output_extension, "html");
+        assert!(f.native_pipeline);
+        assert_eq!(f.pipeline_kind, None);
+    }
+
+    #[test]
     fn test_lua_format_for_maps_preview_pseudo_formats() {
         // HTML-emulating pseudo-formats resolve to `html` so
         // `is_format("html:js")` fires in preview (bd-5b21rbaq).
         assert_eq!(lua_format_for("q2-preview"), "html");
         assert_eq!(lua_format_for("q2-debug"), "html");
         assert_eq!(lua_format_for("q2-sandboxed-preview"), "html");
+        assert_eq!(lua_format_for("q2-html-render"), "html");
         // The reveal preview pseudo-format resolves to `revealjs` so
         // `is_format("revealjs")` fires — distinct from
         // `builtin_pseudo_format`, which reports the output-writer base `html`.
@@ -909,6 +935,12 @@ mod tests {
             Format::from_format_string("q2-debug").unwrap().lua_format(),
             "html"
         );
+        assert_eq!(
+            Format::from_format_string("q2-html-render")
+                .unwrap()
+                .lua_format(),
+            "html"
+        );
         // Reveal preview pseudo-format → revealjs (NOT its html output base) —
         // the parity fix for user filters in reveal preview.
         assert_eq!(
@@ -924,7 +956,14 @@ mod tests {
     /// (string-only) and user-filter stage (Format-aware) don't drift.
     #[test]
     fn test_lua_format_helpers_agree_on_shared_cases() {
-        for fmt in ["html", "revealjs", "q2-preview", "q2-slides", "q2-debug"] {
+        for fmt in [
+            "html",
+            "revealjs",
+            "q2-preview",
+            "q2-slides",
+            "q2-debug",
+            "q2-html-render",
+        ] {
             let f = Format::from_format_string(fmt).unwrap();
             assert_eq!(
                 f.lua_format(),
