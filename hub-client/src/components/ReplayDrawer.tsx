@@ -53,6 +53,21 @@ interface Props {
   commentsMode?: CommentsMode;
   onCommentsModeChange?: (next: CommentsMode) => void;
   /**
+   * q2-preview block editing on/off (bd-ew0vak6b) — the Edit pill,
+   * rendered before the Authors pill. Both props must be supplied to
+   * render it. Backed by the persisted `previewEditing` preference
+   * (owned by `Editor.tsx`), unlike the session-only Authors/Comments
+   * toggles: read mode is a way of working, and should survive reloads.
+   */
+  previewEditing?: boolean;
+  onPreviewEditingChange?: (next: boolean) => void;
+  /**
+   * When true the Edit pill renders greyed-out and non-interactive —
+   * formats without a block-edit surface (everything but q2-preview).
+   * The stored preference is untouched while disabled.
+   */
+  previewEditingDisabled?: boolean;
+  /**
    * Optional status element (the document sync-status badge) rendered
    * in the bar's right-side cluster, to the left of the Authors pill.
    */
@@ -185,7 +200,9 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
     return () => cancelAnimationFrame(raf);
   }, [generating, disabled]);
   const classes = [
+    'replay-drawer__pill',
     'replay-drawer__attribution',
+    attributionOn && !disabled && 'replay-drawer__pill--on',
     attributionOn && !disabled && 'replay-drawer__attribution--on',
     generating && !disabled && 'replay-drawer__attribution--generating',
   ]
@@ -202,7 +219,7 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
   return (
     // Full-height cell around the pill — border/divider styling lands
     // here, never on the pill itself.
-    <span className="replay-drawer__authors-cell">
+    <span className="replay-drawer__pill-cell">
     <Tooltip content={titleText}>
       <button
         ref={btnRef}
@@ -217,8 +234,61 @@ function AttributionToggle({ attributionOn, onAttributionChange, generating, dis
         aria-label={ariaLabel}
         aria-busy={generating && !disabled || undefined}
       >
-        <span className="replay-drawer__attribution-dot" />
-        <span className="replay-drawer__attribution-label">Authors</span>
+        <span className="replay-drawer__pill-dot" />
+        <span className="replay-drawer__pill-label">Authors</span>
+      </button>
+    </Tooltip>
+    </span>
+  );
+}
+
+interface EditToggleProps {
+  previewEditing: boolean;
+  onPreviewEditingChange: (next: boolean) => void;
+  disabled: boolean;
+}
+
+/**
+ * The Edit pill (bd-ew0vak6b): q2-preview block editing on/off. Same
+ * anatomy as the Authors pill. With editing off the preview behaves
+ * like a read-only `q2 preview` — no hover outlines, no edit
+ * affordances, and links are plain links (with editing on, a click on
+ * a link inside a paragraph also opens that paragraph's editor).
+ */
+function EditToggle({ previewEditing, onPreviewEditingChange, disabled }: EditToggleProps) {
+  const on = previewEditing && !disabled;
+  const classes = [
+    'replay-drawer__pill',
+    'replay-drawer__edit',
+    on && 'replay-drawer__pill--on',
+    on && 'replay-drawer__edit--on',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const titleText = disabled
+    ? 'Editing is not available for this format'
+    : previewEditing
+      ? 'Turn off editing — links become plain links'
+      : 'Turn on editing';
+  const ariaLabel = disabled
+    ? 'Editing unavailable for this format'
+    : `Editing ${previewEditing ? 'on' : 'off'}`;
+  return (
+    <span className="replay-drawer__pill-cell">
+    <Tooltip content={titleText}>
+      <button
+        type="button"
+        className={classes}
+        onClick={(e) => {
+          e.stopPropagation();
+          onPreviewEditingChange(!previewEditing);
+        }}
+        disabled={disabled}
+        aria-pressed={disabled ? undefined : previewEditing}
+        aria-label={ariaLabel}
+      >
+        <span className="replay-drawer__pill-dot" />
+        <span className="replay-drawer__pill-label">Edit</span>
       </button>
     </Tooltip>
     </span>
@@ -263,9 +333,14 @@ export default function ReplayDrawer({
   attributionDisabled,
   commentsMode,
   onCommentsModeChange,
+  previewEditing,
+  onPreviewEditingChange,
+  previewEditingDisabled,
   commentsCount,
   statusSlot,
 }: Props) {
+  const showEditToggle =
+    previewEditing !== undefined && onPreviewEditingChange !== undefined;
   const showAttributionToggle =
     attributionOn !== undefined && onAttributionChange !== undefined;
   const showCommentsToggle =
@@ -373,6 +448,13 @@ export default function ReplayDrawer({
           <span>{replay.title}</span>
         </button>
         {statusSlot}
+        {showEditToggle && (
+          <EditToggle
+            previewEditing={previewEditing!}
+            onPreviewEditingChange={onPreviewEditingChange!}
+            disabled={!!previewEditingDisabled}
+          />
+        )}
         {showAttributionToggle && (
           <AttributionToggle
             attributionOn={attributionOn!}
@@ -440,6 +522,13 @@ export default function ReplayDrawer({
         </div>
 
         {statusSlot}
+        {showEditToggle && (
+          <EditToggle
+            previewEditing={previewEditing!}
+            onPreviewEditingChange={onPreviewEditingChange!}
+            disabled={!!previewEditingDisabled}
+          />
+        )}
         {showAttributionToggle && (
           <AttributionToggle
             attributionOn={attributionOn!}

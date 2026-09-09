@@ -262,6 +262,27 @@ describe('ReactRenderer format routing', () => {
     expect(capturedPreviewIframeProps.at(-1)?.richText).toBe(true);
   });
 
+  it('forwards editingDisabled to Q2PreviewIframe (bd-ew0vak6b)', () => {
+    // The bottom-bar Edit pill (via the previewEditing preference) reaches
+    // the iframe as `editingDisabled`; the renderer already honours it
+    // (bd-ov4gqk3m). Both values must pass through, and a rerender with the
+    // other value must reach the iframe too (the live toggle case).
+    const common = {
+      astJson: EMPTY_AST,
+      currentFilePath: '/project/index.qmd',
+      files: [],
+      fileContents: new Map<string, string>(),
+      onNavigateToDocument: () => {},
+      setAst: () => {},
+      format: 'q2-preview',
+    };
+    const { rerender } = render(<ReactRenderer {...common} editingDisabled={true} />);
+    expect(capturedPreviewIframeProps.at(-1)?.editingDisabled).toBe(true);
+
+    rerender(<ReactRenderer {...common} editingDisabled={false} />);
+    expect(capturedPreviewIframeProps.at(-1)?.editingDisabled).toBe(false);
+  });
+
   it('does not route q2-slides through any AST iframe', () => {
     const { queryByTestId } = mountForRouting('q2-slides');
     expect(capturedAstIframeProps.length).toBe(0);
