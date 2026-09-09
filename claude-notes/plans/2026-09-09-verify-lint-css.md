@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-09
 **Braid:** bd-4bu7vwi5
-**Branch:** `main` @ `3ecabd28f` (investigated in the main checkout, no worktree)
+**Branch:** `braid/bd-4bu7vwi5-verify-lint-css` (remote `chore/bd-4bu7vwi5-verify-lint-css`), rebased onto `main` after #667 merged. **PR:** https://github.com/quarto-dev/q2/pull/669
 **Pre-flight:** `cargo xtask verify --skip-hub-build` green at HEAD (under Node 24 via fnm; the Homebrew `node` on PATH is v26 and trips the preflight).
 **Status:** Approved 2026-09-09 — implementing. Decisions: step 1 placement; add `--skip-css-lint`; lint:css only (wider drift filed as bd-l7mcijfe + bd-ya2nacaa); doc rule, no structural lint.
 
