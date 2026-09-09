@@ -2,7 +2,9 @@
 
 **Strand:** bd-kltzdhle
 **Date:** 2026-09-09
-**Status:** Executing (go-ahead 2026-09-09, branch `braid/bd-kltzdhle-hub-client-make-q2`). Phases 1–3 done (Phase 3 commit pending build:all); Phase 4 next.
+**Status:** Phases 1–7 implemented and verified 2026-09-09 on branch
+`braid/bd-kltzdhle-hub-client-make-q2` (5 commits, not pushed). Phase 4b
+(work the DOM-assertion skip-list down) is the remaining work.
 **Related:** PR #667 / bd-ew0vak6b (Edit pill; plan
 `2026-09-09-q2-preview-edit-toggle.md`), bd-zvh2p (attribution through
 `render_page_for_preview` — superseded by D3 below), bd-j3764r9a (React ↔
@@ -468,20 +470,47 @@ therefore resolve only by closing the parity gap, not by rewording.
 
 ### Phase 7 — end-to-end verification (before declaring done)
 
-- [ ] Rebuild the whole chain: `cd hub-client && npm run build:wasm`,
-      `cargo xtask build-q2-preview-spa`, `cargo build --bin q2`.
-- [ ] hub-client in a real browser (`npm run local-prod` or `npm run dev`
-      against a local hub): open a project with (a) a no-front-matter
-      document, (b) `format: html: toc: true`, (c) `format: q2-html-render`,
-      (d) `format: revealjs`. For (a)/(b): the iframe is `q2-preview.html`,
-      the Edit / Authors / Comments pills are enabled, a comment can be
-      added from the preview. For (c): the iframe is `.preview-active`,
-      pills disabled. For (d): Authors pill works. Record screenshots or
-      DOM snippets here.
-- [ ] `q2 preview --ui editor <project>` shows the same routing as hub-client.
-- [ ] `q2 preview <doc-with-q2-html-render>` shows the D5 message;
-      `q2 render` on the same doc writes HTML.
-- [ ] Full `cargo xtask verify` green; then ask before pushing.
+- [x] Rebuilt the whole chain: `cd hub-client && npm run build:wasm`,
+      `cargo xtask build-q2-preview-spa`, `cargo build --bin q2` (2026-09-09).
+- [x] hub-client in a real browser (2026-09-09; `q2 preview <scratch>/verify-proj --ui editor --port 4322`,
+      i.e. the embedded hub-client bundle rebuilt with `cargo xtask build-hub-client-embed`,
+      driven through the Chrome DevTools MCP). Project: `_quarto.yml` + four docs.
+      - (a) `plain.qmd`, no front matter: `iframe[src*="q2-preview.html"]` mounted,
+        body "Plain document / No front matter at all. A link and emphasis. / Second
+        section / More text here."; bottom bar: `Editing on` (pressed), `Authors overlay off`
+        (enabled), Expand/Show/Hide comments. Screenshot:
+        `claude-notes/plans/bd-kltzdhle-plain-doc-q2-preview.png`.
+      - (b) `htmlmap.qmd`, `format: html: toc: true`: q2-preview iframe, TOC present
+        (`#TOC`), Edit + Authors enabled.
+      - (c) `optout.qmd`, `format: q2-html-render`: `iframe.preview-active` (MorphIframe),
+        no q2-preview iframe; pills read "Editing unavailable for this format" /
+        "Authors overlay unavailable for this format" (disabled).
+      - (d) `deck.qmd`, `format: revealjs`: q2-preview iframe with the reveal shell
+        (`.reveal .slides`), both slides present. The Authors pill is disabled for
+        revealjs — the existing `Editor.tsx` gate, untouched here; the data path is
+        threaded, enabling the pill is bd-jx8b0ax9.
+      - Comments (plain.qmd, q2-preview iframe): hovering the right half of the
+        "More text here." paragraph showed the "+" bubble; clicking it opened the
+        inline input; entering "Verified from the preview (bd-kltzdhle)" produced
+        a bubble with that text and the Monaco source line became
+        `More text here.[>> Verified from the preview (bd-kltzdhle)]` — a comment
+        added from the preview on a document with no `format:` key, which was
+        the point of the change.
+- [x] `q2 preview --ui editor <project>` *is* the hub-client bundle; the
+      browser verification above ran through it.
+- [x] `q2 preview <scratch>/verify-proj/optout.qmd --port 4321 --no-browser`
+      (front matter `format: q2-html-render`), opened in Chrome via the
+      DevTools MCP: the page shows the render overlay with the text
+      "`format: q2-html-render` has no live preview in q2 preview: it renders
+      as a full HTML page, which this viewer does not display. Run `q2 render`
+      to produce it, or switch the document to an html-family format (or
+      remove `format:`) to preview it here." Same server, `?page=plain.qmd`
+      (no front matter): the `q2-preview.html` iframe body reads "Plain
+      document / No front matter at all. A link and emphasis. / Second
+      section / More text here." `q2 render` on the opt-out doc: see Phase 1.
+- [x] Full `cargo xtask verify` (with the hub build) green 2026-09-09, after
+      `cargo xtask verify --skip-hub-build` also passed. Push still awaits
+      approval.
 
 ## Open questions
 
