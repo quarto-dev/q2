@@ -4,7 +4,7 @@
 **Related:** bd-q2wqj24c (CommentBlock wrapper `<div>` breaks parent > child
 parity in general), bd-tvtknbhx (interactive checkboxes; its open polish item
 (2) — loose/Para-leading task items — is fixed by this plan as a by-product).
-**Status:** done 2026-09-10 (all phases; see evidence under Phase 3).
+**Status:** done 2026-09-10 (all phases; see evidence under Phase 3). PR: https://github.com/quarto-dev/q2/pull/673
 
 ## Overview
 
