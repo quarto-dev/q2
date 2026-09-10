@@ -6,8 +6,7 @@
 PR #670 (https://github.com/quarto-dev/q2/pull/670). No worktree; the work is
 designed and done in the main checkout and pushed to that branch so it merges
 through #670 (user's instruction, 2026-09-10).
-**Status:** Investigation — pending design alignment with user. **Do not start
-implementation until the user gives the go-ahead.**
+**Status:** Designed (D1–D7 agreed with the user 2026-09-10); implementation not yet started.
 **Precursor:** `2026-09-10-commentblock-overlay-handoff.md` (the previous
 session's recommendation). This plan re-verifies it and narrows it in three
 places (see "What the code looks like today").
@@ -125,99 +124,146 @@ registration — a stale-artifact issue, not a defect at HEAD (the parent plan's
 Phase 7 records the full verify green after `npm run build:wasm`). Confirmed:
 after `npm run build:wasm` the file passes 7/7 (2026-09-10).
 
-## Proposed phases (draft)
+## Decisions (2026-09-10, with the user)
 
-Skeleton only — contents wait on the design discussion.
+- **D1 — Layer.** One body-level layer (`position: absolute; top: 0; left: 0;
+  width: 0; height: 0; overflow: visible; pointer-events: none`), lazily
+  created by the comment module (same idempotent pattern as the
+  `data-q2-comment-styles` style tag), portalled into by every `CommentWrapper`.
+  Bubbles are `position: absolute` children at **document coordinates**
+  (anchor rect + `scrollX/Y`), `pointer-events: auto`. No scroll listener.
+  Works identically under `PreviewDocument` and `RevealDeck`.
+- **D2 — Anchor discovery.** A `CommentAnchorContext` provided per
+  `CommentBlock` with `{ node, register }`; the chrome-eligible host components
+  (`Para`, `Header`, `CodeBlock`, `MermaidCodeBlock`, `Div`) call a hook that
+  returns a ref callback only when `ctx.node === args.node`. No `NodeArgs`
+  change; nothing threads through the dispatcher or `AttributionWrap`. A user
+  `render-components` override that does not adopt the hook gets no chrome —
+  accepted; the override infrastructure is expected to change and is not worth
+  designing around now.
+- **D3 — `Plain`.** Option (a): the components that host a `Plain` in an
+  element provide that element through a `PlainHostContext`, and a `Plain`'s
+  `CommentBlock` anchors to it. Blast radius today (see below): `BulletList`
+  and `OrderedList` `<li>`s are the only sites where a `Plain` can *get* chrome;
+  `DefinitionList` `<dd>`/`<dt>` only matter for read-only display of comments
+  that already exist. **Fallback when no anchor is found:** passthrough with
+  the comment spans left in the text — nothing silently disappears.
+- **D4 — Glow.** Keep it as an overlay outline over the anchor rect
+  (`pointer-events: none`, in the same layer); evaluate in the browser.
+- **D5 — Decks.** Delete the measured `scale`, the counter-scale transform and
+  `DECK_BUBBLE_FUDGE`; keep `.present`-slide gating and the `q2-reveal-scale`
+  relayout trigger. Re-introduce a single deck size constant only if the
+  browser check shows deck bubbles read small.
+- **D6 — Freshness.** Relayout on `ResizeObserver` (anchors + the layer's
+  container) plus the existing triggers; one-frame lag for content growth
+  above a block is acceptable. **No `MutationObserver`.**
+- **D7 — `AttributionWrap`.** Out of scope; filed as bd-ijlb2yui
+  (related → bd-j3764r9a, discovered-from → bd-q2wqj24c).
 
-- **Phase 0 — Tests first (red before the change).**
-  - New `custom/CommentBlock.structure.integration.test.tsx`: mount with a
-    `PreviewContext` (pattern: `CommentBlock.resolveLast.integration.test.tsx:40-95`)
-    and assert DOM shape — `blockquote > h4`, `blockquote > p`,
-    `li > p`, `div.callout-body > p:first-child`-style relations hold with
-    comments absent, present, and with the bubble visible; no element sits
-    between a block and its parent; bubbles live in the overlay layer.
-  - Parity guard the harness lacks: a test that mounts the same AST twice
-    (read-only vs with `PreviewContext` + a visible bubble) and asserts the
-    article-body element structure is identical.
-  - Rewrite the wrapper-dependent helpers: `wrapper()` / `wrapperGlows()` in
-    `CommentBlock.resolveLast.integration.test.tsx:103-131`, the
-    `host = para.parentElement` assertion in `CommentBlock.defensive.integration.test.tsx:96`.
-    `CommentBlock.bubbleText` is bubble-internal and should survive.
-- **Phase 1 — Anchor discovery.** Per Q2/Q3: block components expose their host
-  element to the enclosing `CommentBlock`; `Plain` resolves to its parent host
-  or renders passthrough.
-- **Phase 2 — Overlay layer + geometry.** `CommentWrapper` renders
-  `<>{children}</>` plus its chrome portalled into the layer; `BubbleEntry`
-  carries the anchor element; the relayout pass writes `top`/`left` from the
-  anchor rect; `ResizeObserver` on anchors and the layer's container joins the
-  existing triggers.
-- **Phase 3 — Hover + glow.** Delegated `mousemove`/`mouseleave` at the root
-  (or on the layer's container) mapped to the nearest registered anchor;
-  right-half test against the anchor's rect; glow becomes an overlay outline
-  over the anchor rect (Q4).
-- **Phase 4 — Decks.** Verify bubbles in `format: revealjs` under the new
-  layer; decide what survives of `RevealScaleSync`, the `q2-reveal-scale`
-  listener, `.present` gating, and `DECK_BUBBLE_FUDGE` (Q5).
-- **Phase 5 — Close out.** Remove the `div-heading-becomes-section` entry from
-  `DOM_ASSERTIONS_PENDING_PARITY`; run the smoke-all e2e config and the
-  interactive comment specs; browser verification per the handoff's
-  "Verification" list (hover `+`, add, resolve, deck bubbles, read-only
-  `q2 preview`); callout-body spot-check against `q2 render`; update the
-  handoff note and bd-kltzdhle's Phase 4b table; `hub-client/changelog.md`
-  entry (the skip-list edit is under `hub-client/`, so the two-commit rule
-  applies); full `cargo xtask verify`.
+### Q3 blast radius (what "Plain gets chrome" means today)
 
-## Open design questions for the user
+`CommentBlock` gives a comment-less block chrome only when `resolveSource`
+returns a non-Opaque node of the *same commentable kind* (`:272-289`). For a
+`Plain` that means:
 
-1. **Where the overlay layer lives.** (a) *Recommended:* one body-level layer
-   (`position: absolute; top: 0; left: 0; width: 0; height: 0; overflow: visible;
-   pointer-events: none`) lazily created by the comment module and portalled
-   into, with bubbles at **document coordinates** (anchor rect + `scrollX/Y`).
-   No scroll listener needed; works identically under `PreviewDocument` and
-   `RevealDeck`; bubbles sit outside reveal's transform. (b) A layer rendered by
-   each document root and handed down through a context — cleaner ownership,
-   but both roots must opt in and decks need their own placement. Which?
-2. **How a bubble finds its block's element.** (a) *Recommended:* a
-   `CommentAnchorContext` provided per `CommentBlock` carrying `{ node, register }`;
-   the five chrome-eligible components call a small hook that returns a ref
-   callback only when `ctx.node === args.node` (the identity check keeps a
-   nested `Para` inside a comment-container `Div` from registering as the
-   Div's anchor). No change to `NodeArgs`, nothing threads through the
-   dispatcher or `AttributionWrap`. (b) An optional `hostRef` prop on
-   `NodeArgs` (React 19 passes `ref` as a plain prop). (c) A `data-loc`
-   `querySelector` after mount — touches nothing else but fails for synthesized
-   blocks and in jsdom tests without locations. Under (a) or (b), a user
-   `render-components` override of `Para`/`Header` that does not adopt the hook
-   gets no bubble; is "no chrome for non-adopting overrides" acceptable?
-3. **`Plain` blocks (tight list items, definition bodies, table cells).**
-   `Plain` renders a fragment. Options: (a) the list/definition/table
-   components provide their `<li>`/`<dd>`/`<td>` element through a
-   `PlainHostContext` so the Plain's bubble anchors to it; (b) no bubble on
-   Plain blocks. And the fallback when no anchor is found (whichever option):
-   render passthrough with the comment spans left **in the text** (nothing
-   silently disappears), or strip and show nothing as `hide` mode does?
-4. **The block glow.** Today bubble-hover paints a `box-shadow` on the wrapper.
-   Keep it as an overlay outline positioned over the anchor rect
-   (`pointer-events: none`), or drop the glow and keep only the bubble-side
-   glow on block hover?
-5. **Deck sizing.** With bubbles outside the `.slides` transform, the
-   counter-scale, the measured `scale` field, and `DECK_BUBBLE_FUDGE` become
-   unnecessary; the `.present`-slide gating and the `q2-reveal-scale` relayout
-   trigger stay. OK to delete the scale machinery, keeping a single "bubbles on
-   decks are 1.2× larger" constant only if a real browser check shows they read
-   small?
-6. **Position freshness.** With document-coordinate placement, a bubble's
-   position updates on the next relayout pass (ResizeObserver, register, hover,
-   mode switch, image load, deck signal) rather than by CSS. Content growth
-   above a block that does not change the block's size is caught by the
-   observer on the layer's container (`#quarto-content` / `.reveal`), one
-   frame late. Acceptable, or do you want the pass also driven by a
-   `MutationObserver`?
-7. **`AttributionWrap` (finding 3).** File a separate strand under
-   bd-j3764r9a for the `div.q2-attr-wrap` wrapper, and leave it out of this
-   change?
+| host of the `Plain` | resolves to | chrome today | after D3 |
+|---|---|---|---|
+| `BulletList` / `OrderedList` item (`<li>`, incl. task items) | the `Plain` itself | yes (`li > div[pos:rel] > text`) | anchor = the `<li>` — `blocks/BulletList.tsx:38,87`, `blocks/OrderedList.tsx:53,95,106` |
+| `DefinitionList` term/definition (`<dt>`/`<dd>`) | the `DefinitionList` → kind mismatch | no (read-only display only if a comment already exists) | anchor = `<dt>`/`<dd>` (`blocks/DefinitionList.tsx:34,62`) so existing comments still show |
+| `Table` cell | Opaque | no | unchanged (no anchor → passthrough, spans in text) |
+| `Figure` caption | the `Figure` → kind mismatch | no | unchanged |
 
-## Risks / tradeoffs (draft)
+So D3 touches two files for the real case (five `<li>` sites) and one more for
+read-only parity; `taskList.tsx` renders inside the list's `<li>` and needs
+nothing.
+
+## Phases
+
+### Phase 0 — Tests first (red before the change)
+
+- [ ] `custom/CommentBlock.structure.integration.test.tsx` (new). Mount with a
+      `PreviewContext` (pattern: `CommentBlock.resolveLast.integration.test.tsx:40-95`,
+      generalised to arbitrary block trees) and assert DOM shape with comments
+      absent, present, and with the bubble visible (hover): `blockquote > h4`,
+      `blockquote > p`, `li > p` (loose item), `li` text directly (tight item),
+      `div.callout-body > p:first-child`; no element between a block and its
+      parent; bubbles live under `[data-q2-comment-layer]`; `#quarto-content`
+      contains no bubble.
+- [ ] Parity guard: same AST mounted read-only and with `PreviewContext` +
+      visible bubbles — `main#quarto-document-content` element structure
+      (tag names + classes, text-free) identical.
+- [ ] Rewrite wrapper-dependent helpers: `wrapper()` / `wrapperGlows()`
+      (`resolveLast` `:103-131`) → glow read from the overlay outline;
+      `defensive` `:96` host assertion → anchor registered / bubble present.
+- [ ] Geometry unit test for the pass: with stubbed rects, a bubble's
+      `top`/`left` equal anchor rect + scroll + the `-11px`/`-10px` offsets;
+      the force-layout nudge still separates two overlapping bubbles.
+- [ ] Plain-in-list test: a tight bullet item with a comment renders
+      `li > text` (no wrapper) and its bubble is anchored to the `<li>` rect;
+      a commented `Plain` with no host context renders passthrough with the
+      span in the text.
+
+### Phase 1 — Anchor discovery (D2, D3)
+
+- [ ] `q2-preview/commentAnchor.ts(x)`: `CommentAnchorContext`,
+      `useCommentAnchorRef(node)`, `PlainHostContext`.
+- [ ] Adopt in `Para`, `Header`, `CodeBlock` (both return paths),
+      `MermaidCodeBlock` (diagram + error + fallback paths), `Div`.
+- [ ] `BulletList`, `OrderedList`: provide `PlainHostContext` per `<li>`;
+      `DefinitionList`: per `<dt>`/`<dd>`.
+- [ ] `CommentBlock`: provide the context around `B`; a `Plain` resolves its
+      anchor from `PlainHostContext`; no anchor → passthrough (D3 fallback).
+
+### Phase 2 — Overlay layer + geometry (D1, D5, D6)
+
+- [ ] Layer host: lazily created body-level element, re-created if detached
+      (tests wipe `document.body`).
+- [ ] `CommentWrapper` renders `<>{children}</>` + `createPortal(chrome, layer)`.
+- [ ] `BubbleEntry` carries the **anchor element**; the pass measures the
+      anchor rect, computes natural `top = rect.top - 11`, `left`/`right` from
+      the anchor's right edge, solves as today (viewport px), and writes
+      `top`/`left` in document coordinates (+ `translateY(nudge)` stays for the
+      animated nudge).
+- [ ] Delete `scale`/`setScale`, the counter-scale transform, `DECK_BUBBLE_FUDGE`;
+      keep `.present` gating (via the anchor's `closest('.reveal section')`)
+      and the `q2-reveal-scale` reset trigger.
+- [ ] `ResizeObserver` on each registered anchor and on the layer's container
+      (`#quarto-content` or `.reveal`, whichever exists) → `scheduleBubbleRelayout()`.
+
+### Phase 3 — Hover + glow (D4)
+
+- [ ] Delegated `mousemove` / `mouseleave` on `document` (installed once while
+      any entry is registered): resolve the anchor under the pointer by walking
+      `target` ancestors against a `WeakMap<Element, entry>`; right-half test
+      on the anchor rect; pointer inside a bubble → `bubbleHovered` for that
+      entry (bubbles are outside the anchor subtree now, so containment is
+      checked against the bubble element).
+- [ ] Glow: an outline element in the layer positioned over the anchor rect,
+      shown while `bubbleHovered`.
+- [ ] Remove the wrapper `<div>` and the "chrome before content" ordering note.
+
+### Phase 4 — Decks
+
+- [ ] Browser check on a `format: revealjs` doc: bubbles on the current slide
+      only, normal size, positioned at the slide-local block; decide on a size
+      constant (D5).
+
+### Phase 5 — Close out
+
+- [ ] Remove `'toc-containers/div-heading-becomes-section.qmd'` from
+      `DOM_ASSERTIONS_PENDING_PARITY`; run
+      `npx playwright test --config playwright.smoke-all.config.ts` (full) and
+      the interactive comment specs.
+- [ ] Browser verification per the handoff "Verification" list (hover `+`,
+      add, resolve, read-only `q2 preview`, callout-body spot-check vs
+      `q2 render`), after `cargo xtask build-q2-preview-spa`,
+      `cargo xtask build-hub-client-embed`, `cargo build --bin q2`.
+- [ ] `hub-client/changelog.md` (two-commit rule); update
+      `2026-09-10-commentblock-overlay-handoff.md` (superseded pointer) and
+      bd-kltzdhle's Phase 4b table.
+- [ ] Full `cargo xtask verify` under Node 24; push to the PR branch on approval.
+
+## Risks / tradeoffs
 
 - **The hover/positioning core is being rewritten**, including the nudge
   round-trip the comments warn is fragile ("never read back from our own
