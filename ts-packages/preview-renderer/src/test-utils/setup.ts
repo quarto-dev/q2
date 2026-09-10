@@ -9,12 +9,15 @@ if (!globalThis.crypto?.randomUUID) {
   Object.defineProperty(globalThis, 'crypto', { value: cryptoPolyfill });
 }
 
+// Constructible stubs: `new ResizeObserver(cb)` must work (vitest 4 will
+// not `new` a vi.fn whose implementation is an arrow function). Callbacks
+// never fire — jsdom has no layout.
 if (!globalThis.ResizeObserver) {
-  globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn(),
-  }));
+  globalThis.ResizeObserver = class {
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+  } as unknown as typeof ResizeObserver;
 }
 
 if (!globalThis.IntersectionObserver) {

@@ -2,9 +2,11 @@ import { useContext } from 'react';
 import { renderChildren, dataLocProps } from '../../framework';
 import type { NodeArgs, ParaBlock } from '../../framework';
 import { PreviewContext } from '../PreviewContext';
+import { useCommentAnchorRef } from '../commentAnchor';
 
 export const Para = (args: NodeArgs<ParaBlock>) => {
     const ctx = useContext(PreviewContext);
+    const anchorRef = useCommentAnchorRef(args.node);
     const poolId = (args.node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
 
@@ -33,5 +35,5 @@ export const Para = (args: NodeArgs<ParaBlock>) => {
         domProps.tabIndex = -1;
     }
 
-    return <p {...domProps} {...dataLocProps(args.node)}>{renderChildren(args)}</p>;
+    return <p ref={anchorRef} {...domProps} {...dataLocProps(args.node)}>{renderChildren(args)}</p>;
 };

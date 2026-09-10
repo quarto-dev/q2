@@ -449,8 +449,6 @@ export const DOM_ASSERTIONS_PENDING_PARITY: ReadonlyMap<string, string> = new Ma
   ['repo-actions/actions.qmd', 'bd-fandfn60'],
   // Callout body heading not sectionized in preview.
   ['toc-containers/callout-body-heading-not-in-toc.qmd', 'bd-bg0jze2i'],
-  // Heading inside a blockquote: `blockquote > h4` not matched in preview.
-  ['toc-containers/div-heading-becomes-section.qmd', 'bd-q2wqj24c'],
   // Tabsets are not rendered as a component in q2-preview.
   ['toc-containers/tabset-pane-heading-not-in-toc.qmd', 'bd-47afd5ro'],
 ]);

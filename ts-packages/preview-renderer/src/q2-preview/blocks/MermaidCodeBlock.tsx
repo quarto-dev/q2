@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { dataLocProps } from '../../framework';
 import type { CodeBlock as CodeBlockType, NodeArgs } from '../../framework';
 import { PreviewContext } from '../PreviewContext';
+import { useCommentAnchorRef } from '../commentAnchor';
 import { CodeBlock } from './CodeBlock';
 
 /**
@@ -121,6 +122,7 @@ const MermaidDiagram = ({ code }: { code: string }) => {
 export const MermaidCodeBlock = (args: NodeArgs<CodeBlockType>) => {
     const { node } = args;
     const ctx = useContext(PreviewContext);
+    const anchorRef = useCommentAnchorRef(node);
     const [[, classes], code] = node.c;
 
     if (!classes.includes('mermaid')) {
@@ -137,7 +139,7 @@ export const MermaidCodeBlock = (args: NodeArgs<CodeBlockType>) => {
     const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {};
 
     return (
-        <div className="mermaid-diagram-container" {...affordanceAttr} {...dataLocProps(node)}>
+        <div ref={anchorRef} className="mermaid-diagram-container" {...affordanceAttr} {...dataLocProps(node)}>
             <MermaidDiagram code={code} />
         </div>
     );

@@ -2,6 +2,7 @@ import { Fragment, useContext, type ReactNode } from 'react';
 import { dataLocProps } from '../../framework';
 import type { CodeBlock as CodeBlockType, NodeArgs } from '../../framework';
 import { PreviewContext } from '../PreviewContext';
+import { useCommentAnchorRef } from '../commentAnchor';
 import { sliceEncodedUtf8 } from '../../utils/sliceSource';
 
 /**
@@ -164,6 +165,7 @@ function renderHighlighted(text: string, spans: HighlightSpan[]): ReactNode {
 
 export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
     const ctx = useContext(PreviewContext);
+    const anchorRef = useCommentAnchorRef(node);
     const poolId = (node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(node) : null;
     const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
@@ -196,7 +198,7 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
         const divClassName = ['sourceCode', ...extras].join(' ');
         const codeContainerClass = language ? `sourceCode ${language}` : 'sourceCode';
         return (
-            <div className={divClassName} {...(id ? { id } : {})} {...affordanceAttr} {...dataLocProps(node)}>
+            <div ref={anchorRef} className={divClassName} {...(id ? { id } : {})} {...affordanceAttr} {...dataLocProps(node)}>
                 <pre className={codeContainerClass} {...preDataAttrs}>
                     <code className={codeContainerClass}>{renderHighlighted(code, spans)}</code>
                 </pre>
@@ -212,7 +214,7 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
     if (id) preProps.id = id;
     if (classes.length) preProps.className = classes.join(' ');
     return (
-        <pre {...preProps} {...affordanceAttr} {...dataLocProps(node)}>
+        <pre ref={anchorRef} {...preProps} {...affordanceAttr} {...dataLocProps(node)}>
             <code>{code}</code>
         </pre>
     );

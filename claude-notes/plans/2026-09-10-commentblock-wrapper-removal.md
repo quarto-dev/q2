@@ -6,7 +6,7 @@
 PR #670 (https://github.com/quarto-dev/q2/pull/670). No worktree; the work is
 designed and done in the main checkout and pushed to that branch so it merges
 through #670 (user's instruction, 2026-09-10).
-**Status:** Designed (D1–D7 agreed with the user 2026-09-10); implementation not yet started.
+**Status:** Implemented and verified 2026-09-10 (Phases 0–5; only the changelog entry and the push remain). Committed on the PR #670 branch.
 **Precursor:** `2026-09-10-commentblock-overlay-handoff.md` (the previous
 session's recommendation). This plan re-verifies it and narrows it in three
 places (see "What the code looks like today").
@@ -181,7 +181,7 @@ nothing.
 
 ### Phase 0 — Tests first (red before the change)
 
-- [ ] `custom/CommentBlock.structure.integration.test.tsx` (new). Mount with a
+- [x] `custom/CommentBlock.structure.integration.test.tsx` (new; 10 tests, ran red first: 10/12 failed). Mount with a
       `PreviewContext` (pattern: `CommentBlock.resolveLast.integration.test.tsx:40-95`,
       generalised to arbitrary block trees) and assert DOM shape with comments
       absent, present, and with the bubble visible (hover): `blockquote > h4`,
@@ -189,79 +189,79 @@ nothing.
       `div.callout-body > p:first-child`; no element between a block and its
       parent; bubbles live under `[data-q2-comment-layer]`; `#quarto-content`
       contains no bubble.
-- [ ] Parity guard: same AST mounted read-only and with `PreviewContext` +
+- [x] Parity guard (in the structure suite): same AST mounted read-only and with `PreviewContext` +
       visible bubbles — `main#quarto-document-content` element structure
       (tag names + classes, text-free) identical.
-- [ ] Rewrite wrapper-dependent helpers: `wrapper()` / `wrapperGlows()`
+- [x] Rewrote wrapper-dependent helpers: `wrapper()` / `wrapperGlows()`
       (`resolveLast` `:103-131`) → glow read from the overlay outline;
       `defensive` `:96` host assertion → anchor registered / bubble present.
-- [ ] Geometry unit test for the pass: with stubbed rects, a bubble's
+- [x] Geometry test (`CommentBlock.geometry.integration.test.tsx`, 2 tests, red first): with stubbed rects, a bubble's
       `top`/`left` equal anchor rect + scroll + the `-11px`/`-10px` offsets;
       the force-layout nudge still separates two overlapping bubbles.
-- [ ] Plain-in-list test: a tight bullet item with a comment renders
+- [x] Plain-in-list test (in the structure suite): a tight bullet item with a comment renders
       `li > text` (no wrapper) and its bubble is anchored to the `<li>` rect;
       a commented `Plain` with no host context renders passthrough with the
       span in the text.
 
 ### Phase 1 — Anchor discovery (D2, D3)
 
-- [ ] `q2-preview/commentAnchor.ts(x)`: `CommentAnchorContext`,
+- [x] `q2-preview/commentAnchor.tsx`: `CommentAnchorContext`,
       `useCommentAnchorRef(node)`, `PlainHostContext`.
-- [ ] Adopt in `Para`, `Header`, `CodeBlock` (both return paths),
+- [x] Adopted in `Para`, `Header`, `CodeBlock` (both return paths),
       `MermaidCodeBlock` (diagram + error + fallback paths), `Div`.
-- [ ] `BulletList`, `OrderedList`: provide `PlainHostContext` per `<li>`;
+- [x] `BulletList`, `OrderedList`: provide `PlainHostContext` per `<li>`;
       `DefinitionList`: per `<dt>`/`<dd>`.
-- [ ] `CommentBlock`: provide the context around `B`; a `Plain` resolves its
+- [x] `CommentBlock`: provides the context around `B`; a `Plain` resolves its
       anchor from `PlainHostContext`; no anchor → passthrough (D3 fallback).
 
 ### Phase 2 — Overlay layer + geometry (D1, D5, D6)
 
-- [ ] Layer host: lazily created body-level element, re-created if detached
+- [x] Layer host: lazily created body-level element, re-created if detached
       (tests wipe `document.body`).
-- [ ] `CommentWrapper` renders `<>{children}</>` + `createPortal(chrome, layer)`.
-- [ ] `BubbleEntry` carries the **anchor element**; the pass measures the
+- [x] `CommentWrapper` renders `<>{children}</>` + `createPortal(chrome, layer)`.
+- [x] `BubbleEntry` carries the **anchor element**; the pass measures the
       anchor rect, computes natural `top = rect.top - 11`, `left`/`right` from
       the anchor's right edge, solves as today (viewport px), and writes
       `top`/`left` in document coordinates (+ `translateY(nudge)` stays for the
       animated nudge).
-- [ ] Delete `scale`/`setScale`, the counter-scale transform, `DECK_BUBBLE_FUDGE`;
+- [x] Deleted `scale`/`setScale`, the counter-scale transform, `DECK_BUBBLE_FUDGE`;
       keep `.present` gating (via the anchor's `closest('.reveal section')`)
       and the `q2-reveal-scale` reset trigger.
-- [ ] `ResizeObserver` on each registered anchor and on the layer's container
+- [x] `ResizeObserver` (built lazily on first use) on each registered anchor and on the layer's container
       (`#quarto-content` or `.reveal`, whichever exists) → `scheduleBubbleRelayout()`.
 
 ### Phase 3 — Hover + glow (D4)
 
-- [ ] Delegated `mousemove` / `mouseleave` on `document` (installed once while
+- [x] Delegated `mousemove` / `mouseleave` on `document` (installed once while
       any entry is registered): resolve the anchor under the pointer by walking
       `target` ancestors against a `WeakMap<Element, entry>`; right-half test
       on the anchor rect; pointer inside a bubble → `bubbleHovered` for that
       entry (bubbles are outside the anchor subtree now, so containment is
       checked against the bubble element).
-- [ ] Glow: an outline element in the layer positioned over the anchor rect,
+- [x] Glow: an outline element in the layer positioned over the anchor rect,
       shown while `bubbleHovered`.
-- [ ] Remove the wrapper `<div>` and the "chrome before content" ordering note.
+- [x] Removed the wrapper `<div>` and the "chrome before content" ordering note.
 
 ### Phase 4 — Decks
 
-- [ ] Browser check on a `format: revealjs` doc: bubbles on the current slide
+- [x] Browser check on a `format: revealjs` doc (see the verification record: deck bubbles adopt the deck font and are scaled 1.2×): bubbles on the current slide
       only, normal size, positioned at the slide-local block; decide on a size
       constant (D5).
 
 ### Phase 5 — Close out
 
-- [ ] Remove `'toc-containers/div-heading-becomes-section.qmd'` from
+- [x] Removed `'toc-containers/div-heading-becomes-section.qmd'` from
       `DOM_ASSERTIONS_PENDING_PARITY`; run
       `npx playwright test --config playwright.smoke-all.config.ts` (full) and
       the interactive comment specs.
-- [ ] Browser verification per the handoff "Verification" list (hover `+`,
+- [x] Browser verification per the handoff "Verification" list (hover `+`,
       add, resolve, read-only `q2 preview`, callout-body spot-check vs
       `q2 render`), after `cargo xtask build-q2-preview-spa`,
       `cargo xtask build-hub-client-embed`, `cargo build --bin q2`.
-- [ ] `hub-client/changelog.md` (two-commit rule); update
+- [ ] `hub-client/changelog.md` (two-commit rule; after the first commit); updated
       `2026-09-10-commentblock-overlay-handoff.md` (superseded pointer) and
       bd-kltzdhle's Phase 4b table.
-- [ ] Full `cargo xtask verify` under Node 24; push to the PR branch on approval.
+- [x] Full `cargo xtask verify` under Node 24 (all 14 steps green 2026-09-10, after the grammar-cache rebuild noted below); push to the PR branch on approval — pending.
 
 ## Risks / tradeoffs
 
@@ -280,3 +280,83 @@ nothing.
 - **Node.** All npm/vitest commands must run under Node 24
   (`fnm exec --using=24 …`); the shell's default Node 26 fails the verify
   preflight and breaks ~23 hub-client unit tests spuriously.
+
+## Verification record (2026-09-10)
+
+Chain rebuilt before every browser check: `cargo xtask build-q2-preview-spa`,
+`cargo xtask build-hub-client-embed`, `cargo build --bin q2`; e2e bundle via
+`VITE_E2E=1 npm run build` in `hub-client` with `cargo build --bin hub`.
+
+**Tests.** preview-renderer: 578 unit + 669 integration (14 new: 10 structure,
+2 geometry, plus the rewritten resolveLast/defensive assertions) green;
+hub-client: typecheck, 1102 unit, 128 integration, 140 WASM (incl. the parity
+harness) green. e2e: smoke-all 156 passed / 1 skipped (pre-existing), with the
+`div-heading-becomes-section` fixture's DOM assertions live; the interactive
+comment specs (`q2-preview-render-components-comment`, `q2-preview-edit-toggle`)
+4/4.
+
+**Browser (hub-client editor UI).** `cargo run --bin q2 -- preview
+<scratch>/verify-proj --ui editor --port 4322 --no-browser`, driven through
+the Chrome DevTools MCP. Project: `_quarto.yml` + `doc.qmd` (blockquote with a
+heading, titled callout, tight/loose lists, code block, a paragraph with two
+comments) + `deck.qmd` (`format: revealjs`, two slides). Screenshots:
+`bd-q2wqj24c-doc-bubbles.png`, `bd-q2wqj24c-deck-bubbles.png` (before the
+deck font/size fix).
+
+- DOM: `blockquote > h4` and `blockquote > p` hold; `.callout-body-container.callout-body`
+  has `p` as first child with computed `margin-top: 0px` and last child
+  `margin-bottom: 0px` — the same values `q2 render`'s output computes for
+  the same document (checked in the browser on `doc.html`); 3 `li > p`;
+  tight `<li>`s have no child elements; no `.q2-comment-bubble` and no
+  `position: relative` div inside `main#quarto-document-content`.
+- Layer: exactly one `[data-q2-comment-layer]`, a child of `body`,
+  `position:absolute; 0×0; overflow:visible; pointer-events:none`.
+- Geometry (viewport px): quote paragraph top 195.3 / right 699.8 → bubble
+  top 184.3 / right 709.8; tight item top 450.2 → 439.2; closing paragraph
+  top 802.8 → 791.8 (`−11` / `+10` everywhere).
+- Hover: a synthetic `mousemove` on the right half of a comment-less tight
+  item showed the `+` bubble at top 464.7 / right 731 (item top 475.7 /
+  right 721) without inserting anything into the `<li>`; a real click on
+  `+` opened the inline input with focus and did **not** activate the block
+  editor (`#q2-active-edit-region` absent); typing "Added from the overlay
+  (bd-q2wqj24c)" + Enter made the Monaco line read
+  `* tight two[>> Added from the overlay (bd-q2wqj24c)]` and the bubble show
+  the text with ✓; clicking ✓ returned the line to `* tight two` and the
+  bubble to the hover-only `+`.
+- Glow: pointer over a bubble mounts `[data-q2-comment-glow]` in the layer
+  with a rect equal to the block's (top 68.8 / left 50.8 / 649×25.5) and no
+  inline style on the block; moving onto the block's left half removes it.
+- Deck (`deck.qmd`, `format: revealjs`, editor UI): `.slides` at
+  `matrix(0.64, …)`; on the present slide the paragraph (top 230.8 / right
+  709.4) has its bubble at top 219.8 / right 719.4 and the tight item (top
+  271.7 / right 166.8) at 260.7 / 176.8 — placed against the *scaled* block
+  rects with no counter-scale math. First pass showed two things the old
+  in-tree chrome got for free: the bubbles inherited the page's default serif
+  (they no longer sit under `.reveal`) and read small next to slide type. Fixed
+  by adopting the anchor's computed `font-family` on every layout pass (a
+  once-per-anchor cache was wrong: the first placement ran before the deck
+  theme's stylesheet applied and measured `Times`) and scaling deck chrome by
+  `DECK_BUBBLE_SCALE = 1.2` (D5). After the fix both bubbles report
+  `"Source Sans Pro", Helvetica, sans-serif` and `translate(-100%, 0px) scale(1.2)`.
+  Screenshot: `bd-q2wqj24c-deck-bubbles.png` (after the fix).
+- Read-only `q2 preview` (`--port 4323`, no `--ui editor`, `?page=doc.qmd`):
+  the five existing comments render as bubbles in the body-level layer, none
+  inside `main`; `blockquote > h4` computes `margin-top: 25.5px` — the same
+  as `q2 render`'s `doc.html` in the same browser; callout body margins 0/0
+  as above; the chrome's `font-family` equals the body's.
+- Gotcha met on the way: after rebuilding the embed, the already-open tab
+  kept a **browser-cached** `q2-preview.html` whose asset URL now fell
+  through to the SPA fallback, so the iframe ran the old code. Reload with
+  the cache bypassed before trusting a re-check.
+- Final e2e on the final bundle: `div-heading-becomes-section` 1/1 with live
+  DOM assertions; the two interactive comment specs 4/4.
+- Gotcha met during the full verify: Step 4 (`tree-sitter test`) failed 8
+  corpus cases (all YAML-metadata / `---` related, producing `(metadata (yaml))`
+  where the corpus expects `(metadata)`) with **no grammar change in this
+  checkout**. Cause: the tree-sitter CLI caches the compiled parser at
+  `~/.cache/tree-sitter/lib/markdown.dylib`, keyed by grammar *name* only, so
+  a sibling checkout (`rooms/room-5/q2`, whose `parser.c` was regenerated at
+  13:53) rebuilt the shared library and this checkout's tests ran a foreign
+  parser. `tree-sitter test --rebuild` from this directory: 613/613. Worth
+  a strand if it bites again: `cargo xtask verify` could pass `--rebuild`
+  (or `-p <dir>`) so the grammar step is hermetic across checkouts.

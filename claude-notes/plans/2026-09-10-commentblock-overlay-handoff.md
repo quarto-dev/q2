@@ -4,9 +4,12 @@
 **Written:** 2026-09-10, for a fresh session. Everything below was verified in the
 session that made hub-client default to q2-preview (PR for bd-kltzdhle; plan
 `2026-09-09-hub-client-default-q2-preview.md`, Phase 4b).
-**Status:** not started. This note is the recommendation, not a decision record —
-the implementer should re-verify the facts marked *(verified)* and challenge the
-design where the code disagrees.
+**Status:** superseded 2026-09-10 by the implementation plan
+`2026-09-10-commentblock-wrapper-removal.md` (decisions D1–D7 there; this note
+remains as the original recommendation). Where the two differ, the plan wins:
+the layer is body-level rather than inside `#quarto-content` (decks have no
+`#quarto-content`), the anchor contract is a per-CommentBlock context rather
+than a `NodeArgs` prop, and only five block components adopt it.
 
 ## The defect
 
