@@ -82,6 +82,7 @@ import { PreviewRoot } from '@quarto/preview-renderer/q2-preview/PreviewRoot';
 import { makeIframeMessageDispatcher } from './iframeMessageDispatch';
 import { init as initServiceWorker } from './registerServiceWorker';
 import { rewriteThemeCssUrls } from './assetPolicy';
+import { installScrollClickBridge, scrollDocumentToLine } from './scrollClickBridge';
 
 // Directory the compiled theme artifact lives in on the VFS
 // (DEFAULT_CSS_ARTIFACT_PATH's dir) — relative url() refs in the CSS are
@@ -186,6 +187,12 @@ window.addEventListener('message', (event) => {
         // Drive the reveal deck imperatively (no AST re-render). No-op when
         // the current preview isn't a slide deck (no navigator registered).
         revealSlideNavigator?.(data.index);
+        return;
+    }
+    if (data.type === 'SCROLL_TO_LINE') {
+        // Editor→preview scroll sync: the parent cannot reach into this
+        // cross-origin document, so it asks us to do the data-loc lookup.
+        scrollDocumentToLine(document, window, data.line);
         return;
     }
     if (
@@ -356,6 +363,13 @@ function updateAst(payload: UpdateAstPayload) {
     `;
     }
 }
+
+// Preview→editor sync: report scrolls and located clicks to the parent.
+// Installed once at module top — the document persists for the iframe's
+// lifetime (React re-renders the body; the frame never reloads).
+installScrollClickBridge(window, document, (msg) => {
+    window.parent.postMessage(msg, '*');
+});
 
 // Register the asset-proxy service worker, then signal readiness. The
 // message listener above is already registered, so nothing the parent

@@ -269,7 +269,23 @@ function ReactRenderer({
           <Q2SandboxedPreviewIframe
             astJson={astJson}
             currentFilePath={currentFilePath}
+            onNavigateToDocument={stableNavigate}
+            setAst={stableSetAst}
+            customComponentsCode={customComponentsCode}
             themeFingerprint={themeFingerprint}
+            renderedContent={renderedContent}
+            untransformedAstJson={untransformedAstJson}
+            currentActor={currentActor}
+            commentsMode={commentsMode}
+            unlockNestingCursor={unlockNestingCursor}
+            richText={richText}
+            nestedEditBuffers={nestedEditBuffers}
+            currentSlideIndex={currentSlideIndex}
+            onSlideChange={onSlideChange}
+            scrollHandleRef={scrollHandleRef}
+            onScroll={onPreviewScroll}
+            onClickAtLine={onPreviewClickAtLine}
+            onAstRendered={onAstRendered}
           />
         </div>
       </ErrorBoundary>

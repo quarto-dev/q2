@@ -30,6 +30,7 @@ function renderIframe(props: Partial<Parameters<typeof Q2SandboxedPreviewIframe>
     <Q2SandboxedPreviewIframe
       astJson='{"blocks":[]}'
       currentFilePath="docs/page.qmd"
+      setAst={props.setAst ?? (() => {})}
       {...props}
     />,
   );
@@ -148,6 +149,129 @@ describe('Q2SandboxedPreviewIframe', () => {
       const msg = updateTheme![0] as { cssText: string | null; fingerprint: string | null };
       expect(msg.cssText).toBeNull();
       expect(msg.fingerprint).toBeNull();
+    });
+  });
+
+  it('exposes a scroll handle: scrollToLine posts SCROLL_TO_LINE, getScrollRatio returns the last reported ratio', async () => {
+    const handleRef: { current: { scrollToLine: (l: number) => void; getScrollRatio: () => number | null } | null } = { current: null };
+    const { postMessage } = renderIframe({ scrollHandleRef: handleRef });
+    signalIframeReady();
+
+    await waitFor(() => expect(handleRef.current).not.toBeNull());
+    expect(handleRef.current!.getScrollRatio()).toBeNull();
+
+    handleRef.current!.scrollToLine(42);
+    expect(
+      postMessage.mock.calls.some(
+        ([msg]) => (msg as { type?: string; line?: number }).type === 'SCROLL_TO_LINE'
+          && (msg as { line?: number }).line === 42,
+      ),
+    ).toBe(true);
+
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'PREVIEW_SCROLLED', ratio: 0.37 } }));
+    await waitFor(() => expect(handleRef.current!.getScrollRatio()).toBe(0.37));
+  });
+
+  it('forwards PREVIEW_SCROLLED to onScroll and CLICK_AT_LINE to onClickAtLine with hostY = iframeY + iframe top', async () => {
+    const onScroll = vi.fn();
+    const onClickAtLine = vi.fn();
+    const { iframe } = renderIframe({ onScroll, onClickAtLine });
+    vi.spyOn(iframe, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect);
+    signalIframeReady();
+
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'PREVIEW_SCROLLED', ratio: 0.5 } }));
+    await waitFor(() => expect(onScroll).toHaveBeenCalled());
+
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'CLICK_AT_LINE', line: 7, iframeY: 23 } }));
+    await waitFor(() => expect(onClickAtLine).toHaveBeenCalledWith(7, 123));
+  });
+
+  it('forwards NAVIGATE_TO_DOCUMENT, SET_AST, SLIDE_CHANGED, and AST_RENDERED to their callbacks', async () => {
+    const onNavigateToDocument = vi.fn();
+    const setAst = vi.fn();
+    const onSlideChange = vi.fn();
+    const onAstRendered = vi.fn();
+    renderIframe({ onNavigateToDocument, setAst, onSlideChange, onAstRendered });
+    signalIframeReady();
+
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'NAVIGATE_TO_DOCUMENT', path: 'other.qmd', anchor: 'sec' } }));
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'SET_AST', ast: { blocks: [] } } }));
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'SLIDE_CHANGED', index: 3 } }));
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'AST_RENDERED' } }));
+
+    await waitFor(() => {
+      expect(onNavigateToDocument).toHaveBeenCalledWith('other.qmd', 'sec');
+      expect(setAst).toHaveBeenCalledWith({ blocks: [] });
+      expect(onSlideChange).toHaveBeenCalledWith(3);
+      expect(onAstRendered).toHaveBeenCalled();
+    });
+  });
+
+  it('posts LOAD_CUSTOM_COMPONENTS and a deduped SET_SLIDE when ready', async () => {
+    const { postMessage } = renderIframe({
+      customComponentsCode: { 'comp.tsx': 'export default 1' },
+      currentSlideIndex: 2,
+    });
+    signalIframeReady();
+
+    await waitFor(() => {
+      expect(
+        postMessage.mock.calls.some(
+          ([msg]) => (msg as { type?: string }).type === 'LOAD_CUSTOM_COMPONENTS',
+        ),
+      ).toBe(true);
+      expect(
+        postMessage.mock.calls.filter(
+          ([msg]) => (msg as { type?: string }).type === 'SET_SLIDE',
+        ),
+      ).toHaveLength(1);
+    });
+
+    // An in-deck SLIDE_CHANGED echoing back as the same index must not re-post.
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'SLIDE_CHANGED', index: 4 } }));
+    await waitFor(() => {
+      expect(
+        postMessage.mock.calls.filter(
+          ([msg]) => (msg as { type?: string }).type === 'SET_SLIDE',
+        ),
+      ).toHaveLength(1);
+    });
+  });
+
+  it('ships the full feature payload in UPDATE_AST', async () => {
+    const { postMessage } = renderIframe({
+      projectFilePaths: ['docs/page.qmd', 'other.qmd'],
+      pendingAnchor: 'sec-2',
+      pendingAnchorEpoch: 3,
+      renderedContent: '# src',
+      untransformedAstJson: '{"blocks":[],"pre":true}',
+      currentActor: 'actor-1',
+      commentsMode: 'hide',
+      unlockNestingCursor: true,
+      richText: true,
+      nestedEditBuffers: { k: 'v' },
+    });
+    signalIframeReady();
+
+    await waitFor(() => {
+      const updateAst = postMessage.mock.calls.find(
+        ([msg]) => (msg as { type?: string }).type === 'UPDATE_AST',
+      );
+      expect(updateAst).toBeDefined();
+      const payload = (updateAst![0] as { payload: Record<string, unknown> }).payload;
+      expect(payload).toMatchObject({
+        currentFilePath: 'docs/page.qmd',
+        projectFilePaths: ['docs/page.qmd', 'other.qmd'],
+        pendingAnchor: 'sec-2',
+        pendingAnchorEpoch: 3,
+        renderedContent: '# src',
+        untransformedAstJson: '{"blocks":[],"pre":true}',
+        currentActor: 'actor-1',
+        commentsMode: 'hide',
+        unlockNestingCursor: true,
+        richText: true,
+        nestedEditBuffers: { k: 'v' },
+      });
     });
   });
 

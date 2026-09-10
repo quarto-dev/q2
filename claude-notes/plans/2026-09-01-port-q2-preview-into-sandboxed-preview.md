@@ -172,20 +172,32 @@ under `/q2/` on Pages, immune to basename collisions, and app assets
 
 ### Phase 3 — parent feature parity (scroll sync, click-to-line)
 
-- [ ] Test first: protocol tests for the new messages
-      (`SCROLL_TO_LINE`, `REPORT_SCROLL_RATIO`, `PREVIEW_SCROLLED {ratio}`,
-      `CLICK_AT_LINE {line, iframeY}`).
-- [ ] Iframe side: import `scrollSyncDom.ts` unmodified, drive it from new
-      message handlers; attach the `pointerup` + `scroll` listeners inside
-      the iframe; report `iframeY` (parent adds its own
-      `iframe.getBoundingClientRect().top` for `hostY`).
-- [ ] Parent side: grow `Q2SandboxedPreviewIframe.tsx` (copy-adapt from
-      `Q2PreviewIframe.tsx`) to the full 17-prop surface; implement
-      `Q2PreviewIframeHandle` (`scrollToLine`/`getScrollRatio`) over
-      postMessage (async ratio → small protocol change or cached last
-      ratio).
-- [ ] `ReactRenderer.tsx` sandboxed branch passes the full prop set
-      (mirroring the `q2-preview` branch).
+- [x] Tests first (12 new, red → green): bridge unit tests
+      (PREVIEW_SCROLLED ratio on scroll, CLICK_AT_LINE with line + block
+      top, silent on unlocated / included-file clicks, SCROLL_TO_LINE
+      scrolling with visibility check) + parent protocol tests (handle
+      posts SCROLL_TO_LINE / cached getScrollRatio, hostY = iframeY +
+      iframe top, NAVIGATE/SET_AST/SLIDE_CHANGED/AST_RENDERED forwarding,
+      LOAD_CUSTOM_COMPONENTS, deduped SET_SLIDE incl. echo guard, full
+      UPDATE_AST payload).
+- [x] Iframe side: `scrollClickBridge.ts` imports
+      `findElementForLine`/`isElementVisible`/`lineForClickTarget`
+      unmodified from `scrollSyncDom`; entry installs the bridge at module
+      top and handles `SCROLL_TO_LINE`.
+- [x] Parent side: `Q2SandboxedPreviewIframe` grown to the full
+      `Q2PreviewIframe` surface (same `Q2PreviewIframeHandle` interface;
+      `getScrollRatio` reads the last `PREVIEW_SCROLLED` ratio, null
+      before first report; SET_SLIDE echo-dedup; state reset on
+      IFRAME_READY).
+- [x] `ReactRenderer.tsx` sandboxed branch passes the full prop set,
+      mirroring the q2-preview branch (custom-components *generation* gate
+      still excludes the sandboxed format — Phase 4).
+- [x] End-to-end smoke (headless chromium, harness + iframe on separate
+      ports, 80-paragraph document, data-loc stamped on two blocks):
+      SCROLL_TO_LINE 61 scrolled the frame 0 → 1865px; smooth scroll
+      emitted PREVIEW_SCROLLED ratios; pointerup on the located block
+      posted CLICK_AT_LINE {line: 11, iframeY: 156}. Output inspected;
+      recorded 2026-09-10.
 
 ### Phase 4 — remaining functionality
 

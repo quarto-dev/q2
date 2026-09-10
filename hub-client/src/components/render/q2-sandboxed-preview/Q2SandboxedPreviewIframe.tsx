@@ -1,12 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import type { Ref } from 'react';
 import { vfsReadFile } from '@quarto/preview-runtime';
 import { DEFAULT_CSS_ARTIFACT_PATH } from '@quarto/preview-renderer/types/artifactPaths';
+import type { Q2PreviewIframeHandle } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { isBinaryPath } from '../../../../quarto-hub-sandboxed-preview/src/assetPolicy';
 import { buildProxyAssetManifest } from './proxyAssetManifest';
 
 interface Q2SandboxedPreviewIframeProps {
   astJson: string;
   currentFilePath: string;
+  onNavigateToDocument?: (path: string, anchor: string | null) => void;
+  setAst: (newAst: any) => void;
+  customComponentsCode?: Record<string, string>;
   /**
    * Three-way theme fingerprint, same semantics as `Q2PreviewIframe`:
    *  - `string`: render produced a theme. Read the compiled CSS text
@@ -23,6 +28,35 @@ interface Q2SandboxedPreviewIframeProps {
    * one. The iframe mints its own blob URL from the text.
    */
   themeFingerprint?: string | null;
+  projectFilePaths?: readonly string[];
+  pendingAnchor?: string | null;
+  pendingAnchorEpoch?: number;
+  renderedContent?: string;
+  untransformedAstJson?: string | null;
+  currentActor?: string | null;
+  commentsMode?: 'expand' | 'show' | 'hide';
+  unlockNestingCursor?: boolean;
+  richText?: boolean;
+  nestedEditBuffers?: Record<string, string>;
+  currentSlideIndex?: number;
+  onSlideChange?: (slideIndex: number) => void;
+  /**
+   * Scroll-sync handle, same interface as `Q2PreviewIframe`'s — but
+   * implemented over postMessage: `scrollToLine` posts SCROLL_TO_LINE
+   * (the iframe does the data-loc lookup itself), and `getScrollRatio`
+   * returns the last ratio the iframe reported via PREVIEW_SCROLLED
+   * (null before the first report).
+   */
+  scrollHandleRef?: Ref<Q2PreviewIframeHandle>;
+  onScroll?: () => void;
+  /**
+   * Preview→editor click sync. The iframe reports the clicked block's
+   * top edge in ITS viewport coordinates (`iframeY`); this component
+   * adds its own bounding rect's top to produce `hostY` in host-page
+   * coordinates — the piece the iframe cannot know.
+   */
+  onClickAtLine?: (line: number, hostY?: number) => void;
+  onAstRendered?: () => void;
 }
 
 // The sandboxed preview is served from a separate origin (GitHub Pages) so the
@@ -35,15 +69,40 @@ const Q2_SANDBOXED_PREVIEW_URL = import.meta.env.VITE_Q2_SANDBOXED_PREVIEW_URL |
 /**
  * Iframe wrapper for the sandboxed (cross-origin) preview renderer.
  *
- * The iframe bundles the real q2-preview renderer (`@quarto/preview-renderer`
- * via the quarto-hub-sandboxed-preview project) and talks to this parent
- * exclusively over postMessage; assets are proxied through the iframe's
- * service worker (see `quarto-hub-sandboxed-preview/src/serviceWorker.ts`).
+ * Feature parity with `Q2PreviewIframe`, restated for a frame the parent
+ * cannot reach into:
+ *  - the renderer bundle is the same `@quarto/preview-renderer` code
+ *    (see quarto-hub-sandboxed-preview/src/entry.tsx);
+ *  - assets are proxied through the iframe's service worker
+ *    (`__q2_vfs__` namespace) instead of parent-minted blob URLs;
+ *  - theme CSS travels as text instead of a blob URL;
+ *  - scroll sync and click-to-line travel as postMessage
+ *    (SCROLL_TO_LINE / PREVIEW_SCROLLED / CLICK_AT_LINE) instead of
+ *    direct contentDocument reads.
  */
 export function Q2SandboxedPreviewIframe({
   astJson,
   currentFilePath,
+  onNavigateToDocument,
+  setAst,
+  customComponentsCode,
   themeFingerprint,
+  projectFilePaths,
+  pendingAnchor,
+  pendingAnchorEpoch,
+  renderedContent,
+  untransformedAstJson,
+  currentActor,
+  commentsMode,
+  unlockNestingCursor,
+  richText,
+  nestedEditBuffers,
+  currentSlideIndex,
+  onSlideChange,
+  scrollHandleRef,
+  onScroll,
+  onClickAtLine,
+  onAstRendered,
 }: Q2SandboxedPreviewIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
@@ -51,14 +110,57 @@ export function Q2SandboxedPreviewIframe({
   // Dedupe UPDATE_THEME posts; reset on IFRAME_READY (fresh iframe).
   const lastSentThemeFingerprintRef = useRef<string | null | undefined>(undefined);
 
-  // Handle messages from the iframe
-  // the requests are sent from `requestVFS` in `registerServiceWorker.ts` in the
-  // `quarto-hub-sandboxed-preview` project.
+  // SET_SLIDE dedup, reset on IFRAME_READY — same echo-loop guard as
+  // Q2PreviewIframe (cursor → SET_SLIDE → slidechanged → SLIDE_CHANGED →
+  // editor state → SET_SLIDE …).
+  const lastSentSlideRef = useRef<number | undefined>(undefined);
+
+  // Last scroll ratio the iframe reported (PREVIEW_SCROLLED). The handle's
+  // getScrollRatio must answer synchronously, so it reads this cache.
+  const lastScrollRatioRef = useRef<number | null>(null);
+
+  useImperativeHandle(
+    scrollHandleRef,
+    () => ({
+      scrollToLine: (line: number) => {
+        iframeRef.current?.contentWindow?.postMessage({ type: 'SCROLL_TO_LINE', line }, '*');
+      },
+      getScrollRatio: () => lastScrollRatioRef.current,
+    }),
+    [],
+  );
+
+  // Handle messages from the iframe. `url` requests come from `requestVFS`
+  // in `registerServiceWorker.ts` in the `quarto-hub-sandboxed-preview`
+  // project.
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
       if (event.data.type === 'IFRAME_READY') {
         lastSentThemeFingerprintRef.current = undefined;
+        lastSentSlideRef.current = undefined;
+        lastScrollRatioRef.current = null;
         setIframeReady(true)
+      } else if (event.data.type === 'NAVIGATE_TO_DOCUMENT') {
+        onNavigateToDocument?.(event.data.path, event.data.anchor);
+      } else if (event.data.type === 'SET_AST') {
+        setAst(event.data.ast);
+      } else if (event.data.type === 'SLIDE_CHANGED') {
+        // The deck navigated inside the iframe; record as already-synced
+        // so the resulting editor state change does not bounce back.
+        lastSentSlideRef.current = event.data.index;
+        onSlideChange?.(event.data.index);
+      } else if (event.data.type === 'AST_RENDERED') {
+        onAstRendered?.();
+      } else if (event.data.type === 'PREVIEW_SCROLLED') {
+        lastScrollRatioRef.current = event.data.ratio;
+        onScroll?.();
+      } else if (event.data.type === 'CLICK_AT_LINE') {
+        const iframeTop = iframeRef.current?.getBoundingClientRect().top;
+        const hostY =
+          typeof event.data.iframeY === 'number' && iframeTop !== undefined
+            ? event.data.iframeY + iframeTop
+            : undefined;
+        onClickAtLine?.(event.data.line, hostY);
       } else if (event.data.type === 'url' && event.data.path) {
         // Read from VFS and respond. `path` is the fully-resolved VFS path
         // extracted from the __q2_vfs__ proxy URL (the parent resolved it
@@ -97,7 +199,34 @@ export function Q2SandboxedPreviewIframe({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, []);
+  }, [onNavigateToDocument, setAst, onSlideChange, onAstRendered, onScroll, onClickAtLine]);
+
+  // Post the controlled slide index when it changes, deduped against the
+  // last sent/reported value.
+  useEffect(() => {
+    if (!iframeReady || !iframeRef.current?.contentWindow) return;
+    if (currentSlideIndex === undefined) return;
+    if (lastSentSlideRef.current === currentSlideIndex) return;
+    lastSentSlideRef.current = currentSlideIndex;
+    iframeRef.current.contentWindow.postMessage(
+      { type: 'SET_SLIDE', index: currentSlideIndex },
+      '*',
+    );
+  }, [iframeReady, currentSlideIndex]);
+
+  // Send custom components code when iframe is ready (or when it changes).
+  useEffect(() => {
+    if (!iframeReady || !iframeRef.current?.contentWindow) return;
+    if (customComponentsCode) {
+      iframeRef.current.contentWindow.postMessage(
+        {
+          type: 'LOAD_CUSTOM_COMPONENTS',
+          componentsCode: customComponentsCode,
+        },
+        '*',
+      );
+    }
+  }, [iframeReady, customComponentsCode]);
 
   // Proxy-URL asset manifest, rebuilt when the AST or document changes.
   // Cheap (no VFS reads — bytes are fetched on demand through the
@@ -115,12 +244,41 @@ export function Q2SandboxedPreviewIframe({
     iframeRef.current.contentWindow.postMessage(
       {
         type: 'UPDATE_AST',
-        payload: { astJson, currentFilePath, assetManifest },
+        payload: {
+          astJson,
+          currentFilePath,
+          assetManifest,
+          projectFilePaths,
+          pendingAnchor,
+          pendingAnchorEpoch,
+          renderedContent,
+          untransformedAstJson,
+          currentActor,
+          commentsMode,
+          unlockNestingCursor,
+          richText,
+          nestedEditBuffers,
+        },
       },
       '*'
     );
 
-  }, [iframeReady, astJson, currentFilePath, assetManifest]);
+  }, [
+    iframeReady,
+    astJson,
+    currentFilePath,
+    assetManifest,
+    projectFilePaths,
+    pendingAnchor,
+    pendingAnchorEpoch,
+    renderedContent,
+    untransformedAstJson,
+    currentActor,
+    commentsMode,
+    unlockNestingCursor,
+    richText,
+    nestedEditBuffers,
+  ]);
 
   // Send theme CSS text when iframe is ready and fingerprint is known.
   useEffect(() => {
