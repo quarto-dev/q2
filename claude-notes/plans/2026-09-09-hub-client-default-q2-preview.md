@@ -2,9 +2,11 @@
 
 **Strand:** bd-kltzdhle
 **Date:** 2026-09-09
-**Status:** Phases 1–7 implemented and verified 2026-09-09 on branch
-`braid/bd-kltzdhle-hub-client-make-q2` (5 commits, not pushed). Phase 4b
-(work the DOM-assertion skip-list down) is the remaining work.
+**Status:** Phases 1–7 done; Phase 4b partially worked (draft alert fixed, title-banner
+fixtures made renderer-neutral). PR opened 2026-09-10 from
+`braid/bd-kltzdhle-hub-client-make-q2` with 6 fixtures still on the e2e DOM-assertion
+skip-list (see the Phase 4b table). The `CommentBlock` wrapper removal is handed
+off to a fresh session: `2026-09-10-commentblock-overlay-handoff.md`.
 **Related:** PR #667 / bd-ew0vak6b (Edit pill; plan
 `2026-09-09-q2-preview-edit-toggle.md`), bd-zvh2p (attribution through
 `render_page_for_preview` — superseded by D3 below), bd-j3764r9a (React ↔
@@ -419,7 +421,7 @@ Skip-list as of 2026-09-09 (fixture → strand):
 | repo-actions/actions | `nav#TOC div.toc-actions a.toc-action` | bd-fandfn60 |
 | title-block/banner-true, banner-color, banner-image | `body > header#title-block-header …` | bd-xiz1a2go — **diagnosed 2026-09-10, not a rendering gap**: the preview already renders the banner header (`header#title-block-header.quarto-title-block…`, `div.quarto-title-banner > div.quarto-title > h1.title`, subtitle, date, `main.quarto-banner-title-block`, theme colour applied — every selector holds *except* the `body >` prefix). React mounts into `div#root`, so nothing the preview renders can be a direct child of `body`. **Resolved 2026-09-10 (approved)**: dropped `body >` from the three fixtures' DOM selectors and pinned the above-`#quarto-content` placement with `ensureFileRegexMatches` `<body[^>]*>\s*<header id="title-block-header"` on the render output. Native smoke-all, the hub-client WASM smoke runner, and the e2e (3/3, DOM assertions live) all pass; unlisted. |
 | toc-containers/callout-body-heading-not-in-toc | `div.callout-note section#body-heading` | bd-bg0jze2i |
-| toc-containers/div-heading-becomes-section | `blockquote > h4#quoted` | bd-q2wqj24c — **re-scoped 2026-09-10**: sectionize is correct; the live DOM is `blockquote > div[style="position: relative; box-shadow…"] > h4`. The div is `CommentBlock`'s per-block wrapper (present in read-only `q2 preview` too: 15 wrappers in this doc), which the parity harness never sees. It breaks every direct-child theme rule (`.callout-body > :first-child`, `li > p:last-of-type`, `.tab-pane > p`, …). Fix direction: `display: contents` wrapper with the bubble positioned from the block's measured rect; contained to `CommentBlock.tsx` but touches its positioning/hover core. Needs a go-ahead. |
+| toc-containers/div-heading-becomes-section | `blockquote > h4#quoted` | bd-q2wqj24c — **re-scoped 2026-09-10**: sectionize is correct; the live DOM is `blockquote > div[style="position: relative; box-shadow…"] > h4`. The div is `CommentBlock`'s per-block wrapper (present in read-only `q2 preview` too: 15 wrappers in this doc), which the parity harness never sees. It breaks every direct-child theme rule (`.callout-body > :first-child`, `li > p:last-of-type`, `.tab-pane > p`, …). **Correction:** `display: contents` does not help (`>` matches the DOM tree). The wrapper element must go — overlay layer + host-ref contract. **Handed off** to a fresh session: `2026-09-10-commentblock-overlay-handoff.md`. Stays skip-listed until then. |
 | toc-containers/tabset-pane-heading-not-in-toc | `div.panel-tabset div.tab-pane#tabset-1-2 …` | bd-47afd5ro |
 
 Observation for the reviewer: every entry is *page chrome* (title banner,
