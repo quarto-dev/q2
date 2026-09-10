@@ -17,13 +17,23 @@ _quarto:
       noErrors: true
       ensureHtmlElements:
         - [
-            "body > header#title-block-header.quarto-title-block.default.page-columns.page-full",
+            "header#title-block-header.quarto-title-block.default.page-columns.page-full",
             "header#title-block-header > div.quarto-title-banner.page-columns.page-full > div.quarto-title.column-body > h1.title",
             "div.quarto-title-banner div.quarto-title > p.subtitle.lead",
             "header#title-block-header div.quarto-title-meta p.date",
             "main.content.quarto-banner-title-block#quarto-document-content",
           ]
         - ["main header#title-block-header"]
+      ensureFileRegexMatches:
+        - [
+            # The banner header is the FIRST thing in the body, above
+            # #quarto-content (P5). This used to be a `body >` DOM selector;
+            # the live preview mounts into div#root, so nothing it renders can
+            # be a direct child of body -- the placement is pinned on the
+            # render output instead (bd-xiz1a2go).
+            '<body[^>]*>\s*<header id="title-block-header"',
+          ]
+        - []
 ---
 
 Body.

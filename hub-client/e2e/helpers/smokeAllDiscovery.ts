@@ -447,10 +447,6 @@ export const DOM_ASSERTIONS_PENDING_PARITY: ReadonlyMap<string, string> = new Ma
   ['metadata/dir-metadata-paths/chapters/intro/doc.qmd', 'bd-b3oq2fsy'],
   // TOC copy of repo actions dropped at the default toc-location.
   ['repo-actions/actions.qmd', 'bd-fandfn60'],
-  // Title-block banner chrome absent from the q2-preview DOM.
-  ['title-block/banner-color.qmd', 'bd-xiz1a2go'],
-  ['title-block/banner-image.qmd', 'bd-xiz1a2go'],
-  ['title-block/banner-true.qmd', 'bd-xiz1a2go'],
   // Callout body heading not sectionized in preview.
   ['toc-containers/callout-body-heading-not-in-toc.qmd', 'bd-bg0jze2i'],
   // Heading inside a blockquote: `blockquote > h4` not matched in preview.
