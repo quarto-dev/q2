@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-01
 
+- [`e7f9fcc2a`](https://github.com/quarto-dev/q2/commits/e7f9fcc2a): Images and theme fonts now load correctly in the sandboxed preview, including same-named images in different folders and pictures in subdirectories.
 - [`5684cfead`](https://github.com/quarto-dev/q2/commits/5684cfead): The `q2-sandboxed-preview` format now renders documents with the real preview renderer (headers, paragraphs, math, code highlighting, theme CSS) instead of the placeholder box view.
 - [`a4c3fb9c`](https://github.com/quarto-dev/q2/commits/a4c3fb9c): The experimental branch bar's Merge button now uses the app's standard accent color in both themes, and its branch-name input shows the standard keyboard focus ring.
 - [`41da392c`](https://github.com/quarto-dev/q2/commits/41da392c): Branch chips in the experimental branch bar now activate on click and via the keyboard, and deleting a branch no longer also switches to it.
