@@ -119,6 +119,10 @@ const mainConfig: UserConfig = {
   },
   build: {
     outDir: 'dist',
+    // Not the default 'assets': the service worker exempts this directory
+    // from VFS proxying (assetPolicy.ts APP_ASSET_DIR — keep in sync), and
+    // a project's own top-level assets/ folder must not be shadowed by it.
+    assetsDir: 'q2-preview-assets',
     emptyOutDir: true,
     rollupOptions: {
       input: 'index.html',

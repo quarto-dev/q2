@@ -19,7 +19,7 @@ describe('buildProxyAssetManifest', () => {
       '/project/sub/doc.qmd',
     );
     expect(manifest).toEqual({
-      'images/pic.png': '__q2_vfs__/project/sub/images/pic.png',
+      'images/pic.png': 'project/sub/images/pic.png',
     });
   });
 
@@ -28,7 +28,7 @@ describe('buildProxyAssetManifest', () => {
       astWithImages('../shared/pic.png'),
       '/project/sub/doc.qmd',
     );
-    expect(manifest['../shared/pic.png']).toBe('__q2_vfs__/project/shared/pic.png');
+    expect(manifest['../shared/pic.png']).toBe('project/shared/pic.png');
   });
 
   it('passes root-absolute paths through unresolved (leading slash stripped)', () => {
@@ -36,7 +36,7 @@ describe('buildProxyAssetManifest', () => {
       astWithImages('/project/top.png'),
       '/project/sub/doc.qmd',
     );
-    expect(manifest['/project/top.png']).toBe('__q2_vfs__/project/top.png');
+    expect(manifest['/project/top.png']).toBe('project/top.png');
   });
 
   it('skips external URLs', () => {

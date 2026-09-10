@@ -86,7 +86,8 @@ import { installScrollClickBridge, scrollDocumentToLine } from './scrollClickBri
 
 // Directory the compiled theme artifact lives in on the VFS
 // (DEFAULT_CSS_ARTIFACT_PATH's dir) — relative url() refs in the CSS are
-// rewritten into the __q2_vfs__ proxy namespace against it.
+// rewritten to absolute page URLs resolved against it, which the service
+// worker proxies from the VFS.
 const THEME_CSS_VFS_DIR = '.quarto/project-artifacts';
 
 // Renderer-surface global for user TSX overrides, identical to the
@@ -139,11 +140,12 @@ interface UpdateAstPayload {
     currentFilePath: string;
     untransformedAstJson?: string | null;
     /**
-     * In the sandboxed protocol the manifest maps `origPath → origPath`
-     * (identity): the `<img>` fetch goes to the network on this frame's
-     * own origin, where the service worker intercepts it and proxies the
-     * bytes from the parent's VFS. (In q2-preview it maps to parent-minted
-     * blob URLs, which this frame could not fetch.)
+     * In the sandboxed protocol the manifest maps `origPath → <bare
+     * resolved VFS path>` (bd-00bgt5cy): the `<img>` fetch goes to the
+     * network on this frame's own origin, where the service worker
+     * intercepts it and proxies the bytes from the parent's VFS. (In
+     * q2-preview it maps to parent-minted blob URLs, which this frame
+     * could not fetch.)
      */
     assetManifest?: Record<string, string>;
     projectFilePaths?: readonly string[];
@@ -240,10 +242,14 @@ function applyThemeText(cssText: string | null): void {
         if (link) link.remove();
         return;
     }
-    // Rewrite relative url() refs (fonts, background images) into the
-    // service-worker proxy namespace: a blob-URL stylesheet has an opaque
-    // base, so they would otherwise resolve nowhere.
-    const blob = new Blob([rewriteThemeCssUrls(cssText, THEME_CSS_VFS_DIR)], { type: 'text/css' });
+    // Rewrite relative url() refs (fonts, background images) to absolute
+    // page URLs the service worker proxies from the VFS: a blob-URL
+    // stylesheet has an opaque base, so they would otherwise resolve
+    // nowhere.
+    const blob = new Blob(
+        [rewriteThemeCssUrls(cssText, THEME_CSS_VFS_DIR, document.baseURI)],
+        { type: 'text/css' },
+    );
     currentThemeBlobUrl = URL.createObjectURL(blob);
     if (!link) {
         link = document.createElement('link');

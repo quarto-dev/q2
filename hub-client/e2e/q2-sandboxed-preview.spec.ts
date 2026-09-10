@@ -8,8 +8,9 @@
  *    `<link data-q2-theme>` inside the frame; KaTeX math from the real
  *    renderer).
  *  - Phase 1: the real PreviewRoot renders the document (heading text).
- *  - Phase 2: images resolve through the `__q2_vfs__` service-worker
- *    proxy (manifest-resolved path in the src; decoded natural size).
+ *  - Phase 2 + bd-00bgt5cy: images resolve through the service-worker
+ *    VFS proxy (bare manifest-resolved path in the src; decoded natural
+ *    size).
  *
  * The iframe is the same-origin copy at public/q2-sandboxed-preview/
  * (`VITE_Q2_SANDBOXED_PREVIEW_URL` is set by the test:e2e script and the
@@ -91,12 +92,10 @@ test.describe('q2-sandboxed-preview format', () => {
       timeout: 20000,
     });
 
-    // Phase 2: the image goes through the __q2_vfs__ service-worker proxy
-    // with the manifest-resolved path, and actually decodes.
-    const img = iframe.locator('img[src*="__q2_vfs__"]');
+    // Phase 2 + bd-00bgt5cy: the image goes through the service-worker
+    // VFS proxy with the bare manifest-resolved path, and actually decodes.
+    const img = iframe.locator('img[src="images/dot.png"]');
     await expect(img).toBeVisible();
-    const src = await img.getAttribute('src');
-    expect(src).toContain('images/dot.png');
     await expect
       .poll(async () => img.evaluate((el: HTMLImageElement) => el.naturalWidth), {
         timeout: 20000,

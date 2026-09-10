@@ -87,7 +87,8 @@ function sandboxTargetOrigin(): string {
  *  - the renderer bundle is the same `@quarto/preview-renderer` code
  *    (see quarto-hub-sandboxed-preview/src/entry.tsx);
  *  - assets are proxied through the iframe's service worker
- *    (`__q2_vfs__` namespace) instead of parent-minted blob URLs;
+ *    (any in-scope path outside the frame's own app files) instead of
+ *    parent-minted blob URLs;
  *  - theme CSS travels as text instead of a blob URL;
  *  - scroll sync and click-to-line travel as postMessage
  *    (SCROLL_TO_LINE / PREVIEW_SCROLLED / CLICK_AT_LINE) instead of
@@ -180,23 +181,32 @@ export function Q2SandboxedPreviewIframe({
             : undefined;
         onClickAtLine?.(event.data.line, hostY);
       } else if (event.data.type === 'url' && event.data.path) {
-        // Read from VFS and respond. `path` is the fully-resolved VFS path
-        // extracted from the __q2_vfs__ proxy URL (the parent resolved it
-        // against currentFilePath when it built the asset manifest, or the
-        // theme-CSS rewriter resolved it against the artifact dir); `id`
-        // correlates the response with the requesting fetch.
+        // Read from VFS and respond. `path` is the request URL's path
+        // relative to the SW scope. Manifest-produced and theme-CSS
+        // rewritten URLs carry fully-resolved VFS paths, so the as-is
+        // read hits; a path the manifest never saw (an <img> in raw HTML
+        // or chrome, resolved by the browser against the page base) may
+        // miss at the root — retry it against the current document's
+        // directory (bd-00bgt5cy). `id` correlates the response with the
+        // requesting fetch.
         const wasm = await import('wasm-quarto-hub-client');
 
         const isBinary = isBinaryPath(event.data.path);
-        const resultJson = isBinary
-          ? wasm.vfs_read_binary_file(event.data.path)
-          : wasm.vfs_read_file(event.data.path);
+        const read = (path: string) =>
+          JSON.parse(
+            isBinary ? wasm.vfs_read_binary_file(path) : wasm.vfs_read_file(path),
+          ) as { success: boolean; content?: string; error?: string };
 
-        const result = JSON.parse(resultJson) as {
-          success: boolean;
-          content?: string;
-          error?: string;
-        };
+        let result = read(event.data.path);
+        if (!result.success) {
+          const lastSlash = currentFilePath.lastIndexOf('/');
+          if (lastSlash >= 0) {
+            const docDir = currentFilePath.slice(0, lastSlash + 1).replace(/^\/+/, '');
+            const retryPath = docDir + event.data.path;
+            const retried = read(retryPath);
+            if (retried.success) result = retried;
+          }
+        }
 
         if (iframeRef.current?.contentWindow) {
           iframeRef.current.contentWindow.postMessage(
@@ -217,7 +227,7 @@ export function Q2SandboxedPreviewIframe({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [onNavigateToDocument, setAst, onSlideChange, onAstRendered, onScroll, onClickAtLine]);
+  }, [onNavigateToDocument, setAst, onSlideChange, onAstRendered, onScroll, onClickAtLine, currentFilePath]);
 
   // Post the controlled slide index when it changes, deduped against the
   // last sent/reported value.

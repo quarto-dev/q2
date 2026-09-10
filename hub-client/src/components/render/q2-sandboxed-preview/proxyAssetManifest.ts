@@ -5,10 +5,11 @@
  * parent-origin **blob URLs** for each image (`assetWalker.ts`). Blob URLs
  * are scoped to the minting origin, so the cross-origin sandboxed iframe
  * could never fetch them. Here the manifest instead maps each image target
- * to a page-relative URL inside the service-worker proxy namespace
- * (`__q2_vfs__/<resolved path>`); the iframe's `<Image>` renders it as-is,
- * the browser fetches it on the iframe's own origin, and the service
- * worker round-trips the bytes from this parent's WASM VFS.
+ * to its bare resolved VFS path as a page-relative URL (bd-00bgt5cy); the
+ * iframe's `<Image>` renders it as-is, the browser fetches it on the
+ * iframe's own origin, and the service worker — which proxies any
+ * in-scope path outside the frame's own app files — round-trips the
+ * bytes from this parent's WASM VFS.
  *
  * Path resolution deliberately mirrors `assetWalker.buildAssetManifest`
  * (same `resolveRelativePath` + leading-slash strip), so the sandboxed
@@ -17,7 +18,7 @@
  * worker asks.
  */
 import { resolveRelativePath } from '@quarto/preview-renderer/utils/vfsPaths';
-import { proxyUrlForVfsPath } from '../../../../quarto-hub-sandboxed-preview/src/assetPolicy';
+import { pageRelativeUrlForVfsPath } from '../../../../quarto-hub-sandboxed-preview/src/assetPolicy';
 
 export function buildProxyAssetManifest(
   astJson: string,
@@ -33,7 +34,7 @@ export function buildProxyAssetManifest(
   const manifest: Record<string, string> = {};
   for (const origPath of collectImagePaths(ast)) {
     const resolved = resolveRelativePath(currentFilePath, origPath).replace(/^\/+/, '');
-    manifest[origPath] = proxyUrlForVfsPath(resolved);
+    manifest[origPath] = pageRelativeUrlForVfsPath(resolved);
   }
   return manifest;
 }

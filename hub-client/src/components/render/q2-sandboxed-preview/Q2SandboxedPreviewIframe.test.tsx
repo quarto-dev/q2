@@ -16,12 +16,22 @@ vi.mock('@quarto/preview-runtime', () => ({
 }));
 
 // The service-worker asset proxy resolves through the parent's WASM VFS.
+// Paths starting with 'orphan' miss at the VFS root (exercising the
+// currentFilePath-relative fallback for non-manifest fetches).
 vi.mock('wasm-quarto-hub-client', () => ({
   vfs_read_file: vi.fn((path: string) =>
-    JSON.stringify({ success: true, content: `text of ${path}` }),
+    JSON.stringify(
+      path.startsWith('orphan')
+        ? { success: false, error: 'not found' }
+        : { success: true, content: `text of ${path}` },
+    ),
   ),
   vfs_read_binary_file: vi.fn((path: string) =>
-    JSON.stringify({ success: true, content: `base64-of-${path}` }),
+    JSON.stringify(
+      path.startsWith('orphan')
+        ? { success: false, error: 'not found' }
+        : { success: true, content: `base64-of-${path}` },
+    ),
   ),
 }));
 
@@ -109,7 +119,7 @@ describe('Q2SandboxedPreviewIframe', () => {
       expect(updateAst).toBeDefined();
       const payload = (updateAst![0] as { payload: Record<string, unknown> }).payload;
       expect(payload.assetManifest).toEqual({
-        'images/pic.png': '__q2_vfs__/project/sub/images/pic.png',
+        'images/pic.png': 'project/sub/images/pic.png',
       });
     });
   });
@@ -130,6 +140,27 @@ describe('Q2SandboxedPreviewIframe', () => {
       expect(msg.success).toBe(true);
       expect(msg.isBinary).toBe(true);
       expect(msg.content).toBe('base64-of-project/sub/images/pic.png');
+    });
+  });
+
+  it('retries a missed url request against the current document directory (non-manifest fetch fallback, bd-00bgt5cy)', async () => {
+    // An <img> from raw HTML in docs/page.qmd resolves its URL against
+    // the page base, so the SW forwards 'orphan.png' — which only exists
+    // at docs/orphan.png on the VFS.
+    const { iframe, postMessage } = renderIframe();
+    signalIframeReady(iframe);
+
+    postFromIframe(iframe, { type: 'url', id: 'req-77', path: 'orphan.png' });
+
+    await waitFor(() => {
+      const response = postMessage.mock.calls.find(
+        ([msg]) => (msg as { type?: string }).type === 'url_response',
+      );
+      expect(response).toBeDefined();
+      const msg = response![0] as Record<string, unknown>;
+      expect(msg.id).toBe('req-77');
+      expect(msg.success).toBe(true);
+      expect(msg.content).toBe('base64-of-docs/orphan.png');
     });
   });
 

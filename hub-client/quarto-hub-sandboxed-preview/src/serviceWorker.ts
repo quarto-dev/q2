@@ -9,8 +9,9 @@ import {
 
 // Caching/offline support disabled for now (commit 103af4445) — the
 // service worker only proxies document assets out of the parent's VFS.
-// Everything outside the __q2_vfs__ namespace (the page, assets/*,
-// serviceWorker.js, KaTeX fonts) falls through to the network.
+// The frame's own app files (the page, serviceWorker.js, assets/* incl.
+// KaTeX fonts) fall through to the network; every other in-scope path is
+// a document asset proxied from the VFS (bd-00bgt5cy).
 
 self.addEventListener('install', () => {
     // Activate updated workers without waiting for old clients to close.
@@ -58,7 +59,7 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 const REQUEST_TIMEOUT_MS = 10_000;
 
 /**
- * Forward a __q2_vfs__ fetch to the page (which relays it to the parent
+ * Forward a document-asset fetch to the page (which relays it to the parent
  * over postMessage), and synthesize an HTTP response from the bytes that
  * come back.
  */
@@ -106,7 +107,10 @@ const proxyVfsRequest = (event: FetchEvent, vfsPath: string): Promise<Response> 
 
 self.addEventListener('fetch', function (event) {
     if (event.request.method !== 'GET') return;
-    const vfsPath = vfsPathForRequestUrl(event.request.url);
-    if (vfsPath === null) return; // app asset / page — network as usual
+    // Any in-scope relative path is a document asset served from the
+    // parent's VFS; only the frame's own app files (the page,
+    // serviceWorker.js, assets/*) fall through to the network.
+    const vfsPath = vfsPathForRequestUrl(event.request.url, self.registration.scope);
+    if (vfsPath === null) return;
     event.respondWith(proxyVfsRequest(event, vfsPath));
 });

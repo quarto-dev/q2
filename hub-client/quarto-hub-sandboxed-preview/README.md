@@ -30,7 +30,10 @@ from the sandbox attribute.
   `@quarto/preview-runtime` is stubbed (`src/stubs/preview-runtime.ts`) —
   the iframe never touches WASM
 - **Multi-file output**: normal Vite build with `base: './'` —
-  `dist/index.html` + `dist/assets/*` + `dist/serviceWorker.js`
+  `dist/index.html` + `dist/q2-preview-assets/*` + `dist/serviceWorker.js`
+  (the asset dir is deliberately not `assets/` — the service worker exempts
+  it from VFS proxying, and a project's own `assets/` folder must not be
+  shadowed)
 - **Output locations**: `dist/` (deployed to GitHub Pages by
   `.github/workflows/deploy-sandboxed-preview.yml`) and a copy at
   `../public/q2-sandboxed-preview/` (gitignored; same-origin fallback for

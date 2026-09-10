@@ -2,59 +2,74 @@
  * Shared asset-proxy policy — the single source of truth for how document
  * assets travel between the sandboxed iframe and the parent's WASM VFS.
  *
- * Consumed by three parties (this replaces the skewed extension lists the
- * old TODO pair in serviceWorker.ts / Q2SandboxedPreviewIframe.tsx warned
- * about):
+ * Consumed by three parties:
  *  - the service worker (`serviceWorker.ts`) — which fetches to intercept,
  *    what MIME type to synthesize;
  *  - the iframe page bridge (`registerServiceWorker.ts`);
  *  - the parent responder (`Q2SandboxedPreviewIframe.tsx` in hub-client,
  *    imported by relative path) — binary vs text VFS read.
  *
- * ## The proxy namespace
+ * ## Routing (bd-00bgt5cy)
  *
- * Proxied assets live under a dedicated **page-relative** URL segment:
+ * **Any relative path is served from the VFS.** The service worker
+ * intercepts every same-origin GET inside its scope EXCEPT the frame's
+ * own app files:
  *
- *     __q2_vfs__/<resolved VFS path, no leading slash>
+ *   - the page itself (`/`, `index.html`)
+ *   - `serviceWorker.js`
+ *   - `q2-preview-assets/*` — the hashed renderer bundle chunks and
+ *     KaTeX fonts (deliberately NOT `assets/`, so a project's own
+ *     `assets/` directory is proxied like any other project path;
+ *     `build.assetsDir` in vite.config.ts must stay in sync)
  *
- * The parent resolves each AST image target against `currentFilePath`
- * (same resolution as q2-preview's asset walker) and ships the mapping in
- * the `UPDATE_AST` asset manifest, so the browser requests e.g.
- * `https://quarto-dev.github.io/q2/__q2_vfs__/project/sub/pic.png`.
+ * Everything else is treated as a document asset: the URL path relative
+ * to the SW scope IS the VFS path. The parent resolves AST image targets
+ * against `currentFilePath` at manifest-build time (same resolution as
+ * q2-preview's asset walker) and ships bare resolved paths, so e.g. a
+ * subdirectory image renders as `<img src="sub/images/pic.png">` — full
+ * paths in the URL keep same-named files in different directories
+ * distinct. Paths that never went through the manifest (an `<img>` in
+ * raw HTML or navbar chrome) are still intercepted; the parent responder
+ * retries them against the current document's directory on a VFS miss.
  *
- * Page-relative matters twice: the URL stays inside the service worker's
- * scope under a project-path deployment (`/q2/…`), and the full resolved
- * path rides in the URL — two same-named images in different directories
- * stay distinct (the old bridge stripped URLs to their basename and
- * collided them).
+ * Known limitation, deliberate: project files literally named
+ * `index.html`, `serviceWorker.js`, or under `q2-preview-assets/` at the
+ * VFS root are shadowed by the app-file exemption (they fall through to
+ * the network). The app asset dir is named `q2-preview-assets` precisely
+ * so no real project trips over this.
  */
 
-export const VFS_PROXY_SEGMENT = '__q2_vfs__';
+/** App files the service worker must NOT proxy (relative to its scope). */
+const APP_FILES = new Set(['', 'index.html', 'serviceWorker.js']);
+const APP_ASSET_DIR = 'q2-preview-assets/';
 
-/** Page-relative proxy URL for a resolved VFS path. */
-export function proxyUrlForVfsPath(vfsPath: string): string {
-    const clean = vfsPath.replace(/^\/+/, '');
-    return `${VFS_PROXY_SEGMENT}/${encodeURI(clean)}`;
+/** Page-relative URL for a resolved VFS path (bare path, URI-encoded). */
+export function pageRelativeUrlForVfsPath(vfsPath: string): string {
+    return encodeURI(vfsPath.replace(/^\/+/, ''));
 }
 
 /**
- * Inverse of {@link proxyUrlForVfsPath}: extract the VFS path from a
- * request URL, or `null` when the URL is outside the proxy namespace
- * (the page itself, `assets/*` bundle files, `serviceWorker.js`, …).
+ * Inverse of {@link pageRelativeUrlForVfsPath}: extract the VFS path from
+ * a request URL, or `null` when the URL should not be proxied — outside
+ * `scopeUrl`, or one of the frame's own app files.
  */
-export function vfsPathForRequestUrl(url: string): string | null {
+export function vfsPathForRequestUrl(url: string, scopeUrl: string): string | null {
     let pathname: string;
+    let scopePath: string;
     try {
-        pathname = new URL(url).pathname;
+        const u = new URL(url);
+        const s = new URL(scopeUrl);
+        if (u.origin !== s.origin) return null;
+        pathname = u.pathname;
+        scopePath = s.pathname;
     } catch {
         return null;
     }
-    const marker = `/${VFS_PROXY_SEGMENT}/`;
-    const idx = pathname.indexOf(marker);
-    if (idx === -1) return null;
-    const rest = pathname.slice(idx + marker.length);
-    if (!rest) return null;
-    return decodeURI(rest);
+    if (!scopePath.endsWith('/')) scopePath += '/';
+    if (!pathname.startsWith(scopePath)) return null;
+    const rest = decodeURI(pathname.slice(scopePath.length));
+    if (APP_FILES.has(rest) || rest.startsWith(APP_ASSET_DIR)) return null;
+    return rest;
 }
 
 /**
@@ -92,17 +107,22 @@ export function mimeTypeFor(filename: string): string {
 }
 
 /**
- * Rewrite relative `url(...)` references in theme CSS into the proxy
- * namespace, resolved against the directory the CSS artifact lives in
- * (`.quarto/project-artifacts`). The theme is applied through a blob URL
- * whose base is opaque, so relative refs would otherwise resolve nowhere
- * — q2-preview simply loses them; here the service worker can serve them
- * from the VFS.
+ * Rewrite relative `url(...)` references in theme CSS into **absolute**
+ * page URLs, resolved against the directory the CSS artifact lives in
+ * (`.quarto/project-artifacts`) and anchored at `pageBaseUrl` (the
+ * iframe document's base). Absolute because the theme is applied through
+ * a blob-URL stylesheet whose opaque base cannot anchor relative refs.
+ * The resulting URLs land inside the SW scope, so fonts and background
+ * images round-trip from the VFS like any other document asset.
  *
- * Absolute (`http(s):`, `//`), `data:`, `blob:`, and fragment (`#…`) refs
- * pass through untouched.
+ * Absolute (`http(s):`, `//`), `data:`, `blob:`, root-relative (`/…`),
+ * and fragment (`#…`) refs pass through untouched.
  */
-export function rewriteThemeCssUrls(cssText: string, cssDirVfsPath: string): string {
+export function rewriteThemeCssUrls(
+    cssText: string,
+    cssDirVfsPath: string,
+    pageBaseUrl: string,
+): string {
     const baseSegments = cssDirVfsPath.replace(/^\/+|\/+$/g, '').split('/');
     return cssText.replace(
         /url\(\s*(['"]?)([^'")]+)\1\s*\)/g,
@@ -119,7 +139,11 @@ export function rewriteThemeCssUrls(cssText: string, cssDirVfsPath: string): str
                     segments.push(part);
                 }
             }
-            return `url(${quote}${proxyUrlForVfsPath(segments.join('/'))}${quote})`;
+            const abs = new URL(
+                pageRelativeUrlForVfsPath(segments.join('/')),
+                pageBaseUrl,
+            ).href;
+            return `url(${quote}${abs}${quote})`;
         },
     );
 }

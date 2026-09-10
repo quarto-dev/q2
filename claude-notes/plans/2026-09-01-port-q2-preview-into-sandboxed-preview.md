@@ -274,6 +274,23 @@ under `/q2/` on Pages, immune to basename collisions, and app assets
 - [x] `cargo xtask verify --skip-rust-tests` (Rust untouched since
       Phase 0's fully-verified commit) green at phase close.
 
+## Post-epic amendment (2026-09-10, bd-00bgt5cy)
+
+Any relative path is now proxied from the VFS — the `__q2_vfs__/` URL
+prefix is gone. The SW exempts only the frame's app files (the page,
+`serviceWorker.js`, and the bundle asset dir) and treats every other
+in-scope path as a VFS path; the manifest ships bare resolved paths
+(`<img src="sub/images/pic.png">`), and non-manifest fetches (raw-HTML /
+chrome images) are retried against the current document's directory on a
+VFS miss. The bundle asset dir was renamed `assets/` →
+`q2-preview-assets/` (vite `build.assetsDir` + `APP_ASSET_DIR` in
+assetPolicy.ts, kept in sync) so a project's own `assets/` folder is
+never shadowed; the residual shadowing surface is just `index.html`,
+`serviceWorker.js`, and `q2-preview-assets/` at the project root.
+Verified: 43 sandboxed unit tests (incl. exemption, assets/-proxied, and
+fallback cases), full unit tier, and the e2e spec
+(`img[src="images/dot.png"]` decoded through the proxy) green.
+
 ## Deferred / out of scope
 
 - Strict CSP on the Pages origin (blocked by blob-script custom components).

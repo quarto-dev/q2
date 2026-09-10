@@ -21,7 +21,7 @@ Main app:   https://your-hub-domain.com/
             └─ Q2SandboxedPreviewIframe (parent side of the protocol)
 
 Sandbox:    https://quarto-dev.github.io/q2/          (GitHub Pages)
-            ├─ index.html + assets/* (renderer bundle, KaTeX fonts)
+            ├─ index.html + q2-preview-assets/* (renderer bundle, KaTeX fonts)
             ├─ serviceWorker.js (asset proxy)
             └─ Communicates ONLY via postMessage
 ```
@@ -94,17 +94,32 @@ all frame-side handling in `hub-client/quarto-hub-sandboxed-preview/src/`
 | `url` | `{ id, path }` — **the core of the asset path**: VFS proxy request relayed from the service worker |
 | `hub-client-save` | `{}` (Cmd+S, from the shared link handlers) |
 
-### Asset proxying (`__q2_vfs__` namespace)
+### Asset proxying (any relative path, bd-00bgt5cy)
 
-The parent resolves AST image targets against `currentFilePath`
+**Any in-scope path outside the frame's own app files is served from the
+VFS.** The service worker exempts only the page itself, `serviceWorker.js`,
+and `q2-preview-assets/*` (the hashed renderer chunks + KaTeX fonts — the
+dir is deliberately not `assets/` so a project's own `assets/` folder is
+proxied normally); every other same-origin GET is relayed `SW → page → parent → WASM VFS → back`,
+correlated by request id with timeouts at each hop. The URL path relative
+to the SW scope IS the VFS path.
+
+The parent still resolves AST image targets against `currentFilePath`
 (mirroring q2-preview's `assetWalker`) and ships a manifest of
-`origPath → __q2_vfs__/<resolved VFS path>` page-relative URLs. The
-browser fetch is intercepted by the service worker (only inside that
-namespace — app assets and KaTeX fonts pass through), relayed
-`SW → page → parent → WASM VFS → back`, correlated by request id with
-timeouts at each hop. Theme CSS relative `url()` refs are rewritten into
-the same namespace against `.quarto/project-artifacts`, so theme fonts
-resolve (they don't in q2-preview's blob-based `<link>`).
+`origPath → <bare resolved path>` page-relative URLs — that's what keeps
+`../` and subdirectory images correct, and same-named files in different
+directories distinct. Paths the manifest never saw (an `<img>` in raw
+HTML or navbar chrome) are proxied too; the parent retries them against
+the current document's directory on a VFS miss. Theme CSS relative
+`url()` refs are rewritten to absolute page URLs against
+`.quarto/project-artifacts`, so theme fonts resolve (they don't in
+q2-preview's blob-based `<link>`).
+
+Known limitation, deliberate: project files literally named `index.html`,
+`serviceWorker.js`, or under `q2-preview-assets/` at the VFS root are
+shadowed by the app-file exemption (they fall through to the network).
+The asset dir is named `q2-preview-assets` precisely so no real project
+trips over this.
 
 Policy (interception namespace, binary classification, MIME table,
 CSS rewriting) is a single module shared by the SW, the page bridge,
