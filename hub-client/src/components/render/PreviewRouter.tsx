@@ -74,10 +74,19 @@ interface PreviewRouterProps {
 }
 
 /**
- * Router component that selects between Preview and ReactPreview based on document format.
+ * Router component that selects between ReactPreview and Preview based on
+ * the document's resolved format (see `getQ2Format` for the rule).
  *
- * - If format: q2-slides or format: q2-debug is present in the YAML frontmatter, use ReactPreview
- * - Otherwise, use the normal Preview component (for regular HTML rendering)
+ * - The default — no `format:` key, `format: html`, or a `format: html: {…}`
+ *   map — and every `q2-*` pseudo-format except `q2-html-render`, plus
+ *   `revealjs`, mount `ReactPreview` (the React AST renderer; `html`
+ *   renders as `q2-preview`, matching `q2 preview`).
+ * - `format: q2-html-render` (the explicit full-DOM opt-out) and non-html
+ *   formats (`pdf`, `docx`, extension formats, …) mount `Preview`, the
+ *   MorphIframe renderer that morphs a complete HTML render into an iframe.
+ *
+ * The resolved format is echoed up via `onFormatChange`; `Editor.tsx` gates
+ * the Edit / Authors pills and the printable-document affordance on it.
  */
 export default function PreviewRouter(props: PreviewRouterProps) {
   const [reactFormat, setReactFormat] = useState<string | null>(null);
@@ -173,9 +182,9 @@ export default function PreviewRouter(props: PreviewRouterProps) {
           // Phase 9 Decision 6: pass `fileContents` so any sibling
           // edit (including `_quarto.yml`) triggers a re-render via
           // the Map identity changing on every Automerge update.
-          // bd-uy4uygha: `captures` threads the capture sidecar so the default
-          // `format: html` preview can splice executed output (previously only
-          // ReactPreview / q2-preview consumed captures).
+          // bd-uy4uygha: `captures` threads the capture sidecar so the full-DOM
+          // `q2-html-render` preview can splice executed output too (previously
+          // only ReactPreview / q2-preview consumed captures).
           <Preview {...commonProps} fileContents={fileContents} captures={captures} onRegisterScrollToLine={onRegisterScrollToLine} onRegisterSetScrollRatio={onRegisterSetScrollRatio} />
         )}
       </div>

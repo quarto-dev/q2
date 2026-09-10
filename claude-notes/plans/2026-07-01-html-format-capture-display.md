@@ -1,5 +1,11 @@
 # Display executed code output in the default `format: html` preview
 
+> **Note (2026-09-09, bd-kltzdhle):** the "plain `format: html` preview" this
+> plan refers to is no longer hub-client's default. q2-preview is the default
+> renderer for html documents; the full-DOM MorphIframe path is now reached only
+> with `format: q2-html-render` (or for non-html formats). See
+> `2026-09-09-hub-client-default-q2-preview.md`.
+
 **Strand:** bd-uy4uygha (bug, P1; discovered-from bd-sfet3264).
 **Date:** 2026-07-01.
 **Status:** Planned — awaiting review. No implementation started.

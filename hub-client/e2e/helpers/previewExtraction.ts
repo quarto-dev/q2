@@ -11,17 +11,26 @@ import type {} from './testHooks';
 /**
  * Wait for the preview iframe to render content.
  *
- * For html-style previews (the default) the DoubleBufferedIframe component
- * mounts an `iframe.preview-active` whose body is populated when render
- * completes. For `format: q2-debug`, the renderer mounts a Q2DebugIframe
- * whose `src` ends in `q2-debug.html`; we wait for that iframe and for
- * its body to receive content from the postMessage flow.
+ * The kind names the *renderer* hub-client mounted, not the document's
+ * declared format (bd-kltzdhle): a document with no `format:` key (or
+ * `format: html`) renders in the q2-preview iframe, so `'q2-preview'` is
+ * the kind for plain fixtures. `'q2-html-render'` is the full-DOM
+ * MorphIframe (`iframe.preview-active`), mounted only for
+ * `format: q2-html-render` and for non-html formats; its body is
+ * populated when the morph completes. For `format: q2-debug`, the
+ * renderer mounts a Q2DebugIframe whose `src` ends in `q2-debug.html`; we
+ * wait for that iframe and for its body to receive content from the
+ * postMessage flow.
+ *
+ * There is deliberately no default kind: every caller states which
+ * renderer it expects, so a routing change fails loudly here instead of
+ * timing out against the wrong iframe.
  *
  * If `consoleErrors` is provided, the wait will abort early when a fatal
  * browser error is detected (e.g. WebSocket failure, WASM crash), avoiding
  * a long timeout with no diagnostic info.
  */
-export type PreviewIframeKind = 'html' | 'q2-debug' | 'q2-preview';
+export type PreviewIframeKind = 'q2-html-render' | 'q2-debug' | 'q2-preview';
 
 export function previewIframeSelector(kind: PreviewIframeKind): string {
   if (kind === 'q2-debug') return 'iframe[src*="q2-debug.html"]';
@@ -237,7 +246,7 @@ export interface PreviewStageDiagnostics {
 
 export async function capturePreviewDiagnostics(
   page: Page,
-  kind: PreviewIframeKind = 'html',
+  kind: PreviewIframeKind,
 ): Promise<PreviewStageDiagnostics> {
   const iframeSelector = previewIframeSelector(kind);
   const raw = await page.evaluate(async (selector) => {
@@ -374,12 +383,13 @@ export async function waitForPreviewRender(
   opts: {
     timeout?: number;
     consoleErrors?: string[];
-    kind?: PreviewIframeKind;
-  } = {},
+    /** Which renderer the fixture is expected to mount — see `PreviewIframeKind`. */
+    kind: PreviewIframeKind;
+  },
 ): Promise<void> {
   const timeout = opts.timeout ?? 30000;
   const consoleErrors = opts.consoleErrors;
-  const iframeSelector = previewIframeSelector(opts.kind ?? 'html');
+  const iframeSelector = previewIframeSelector(opts.kind);
 
   // Poll for render completion, but also check for fatal console errors
   // so we can fail fast with a useful message instead of timing out.
@@ -425,7 +435,7 @@ export async function waitForPreviewRender(
   // parsed by the offline analyzer to bucket failures by cause.
   let diagLine = '[smoke-diag] stage=DIAG_FAILED';
   try {
-    const diag = await capturePreviewDiagnostics(page, opts.kind ?? 'html');
+    const diag = await capturePreviewDiagnostics(page, opts.kind);
     diagLine = diag.line;
   } catch (err) {
     diagLine = `[smoke-diag] stage=DIAG_FAILED err=${err instanceof Error ? err.message : String(err)}`;
@@ -506,24 +516,30 @@ export async function getPreviewHtml(
 }
 
 /**
- * Get combined CSS from all local stylesheets referenced in the preview.
+ * Get combined CSS from all local stylesheets referenced by a rendered
+ * document.
  *
- * Parses <link rel="stylesheet"> tags from the preview HTML, reads each
- * local stylesheet from VFS via the wasmRenderer module, and returns
- * the concatenated CSS.
+ * Takes the HTML string that `renderForAssertions` produced for the
+ * document (the same full HTML render the regex assertions match), parses
+ * its <link rel="stylesheet"> tags, reads each local stylesheet from VFS via
+ * the wasmRenderer module, and returns the concatenated CSS.
+ *
+ * It deliberately reads the render string rather than the live preview
+ * iframe's DOM (bd-kltzdhle): the CSS assertions describe the HTML
+ * pipeline's stylesheet output, which is the same whichever renderer the
+ * preview pane mounted, and only the full-DOM MorphIframe carries the
+ * document's <link> tags in its own DOM — the q2-preview iframe (the
+ * default) injects the theme differently. Reading the render string keeps
+ * the assertion meaningful for every iframe kind.
  */
-export async function getPreviewCss(page: Page): Promise<string> {
-  return page.evaluate(async () => {
-    const iframe = document.querySelector('iframe.preview-active') as HTMLIFrameElement | null;
-    if (!iframe?.contentDocument) {
-      throw new Error('No active preview iframe found');
-    }
-
+export async function getPreviewCss(page: Page, renderedHtml: string): Promise<string> {
+  return page.evaluate(async (html) => {
     await window.__quartoTestReady;
     const hooks = window.__quartoTest;
     if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
     const renderer = hooks.wasmRenderer;
-    const links = iframe.contentDocument.querySelectorAll('link[rel="stylesheet"]');
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const links = doc.querySelectorAll('link[rel="stylesheet"]');
     let combinedCss = '';
 
     for (const link of links) {
@@ -560,7 +576,7 @@ export async function getPreviewCss(page: Page): Promise<string> {
     }
 
     return combinedCss;
-  });
+  }, renderedHtml);
 }
 
 /**

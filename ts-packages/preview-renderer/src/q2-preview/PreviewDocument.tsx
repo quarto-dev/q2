@@ -11,6 +11,7 @@ import {
 import type { BlockNode, PandocAST } from '../framework';
 import * as Custom from './custom';
 import {
+    DraftAlertSlot,
     NavbarSlot,
     SecondaryNavSlot,
     SidebarSlot,
@@ -91,6 +92,11 @@ export const PreviewDocument = ({
     );
     const secondaryNavHtml = extractMetaString(
         getMetaPath(meta, ['rendered', 'navigation', 'secondary-nav']),
+    );
+    // `draft: true` pages: the localized banner label from
+    // `DraftAlertTransform` (bd-3cpv7dah). Absent on non-draft pages.
+    const draftAlertText = extractMetaString(
+        getMetaPath(meta, ['rendered', 'draft-alert-text']),
     );
 
     // Mirror Rust `render_with_compiled_template`'s body-class
@@ -322,6 +328,11 @@ export const PreviewDocument = ({
             {/* Phase F.2: header-includes (favicon, RSS links, user
                 includes) appended imperatively to `document.head`. */}
             <HeaderIncludesEffect items={headerIncludes} />
+
+            {/* Draft alert banner: first thing in the body, above the
+                site header (template.rs `$if(rendered.draft-alert-text)$`
+                precedes `$quarto-header()$`). bd-3cpv7dah. */}
+            {draftAlertText ? <DraftAlertSlot text={draftAlertText} /> : null}
 
             {/* The site header lives BEFORE quarto-content, wrapping
                 the navbar and the narrow-viewport secondary nav

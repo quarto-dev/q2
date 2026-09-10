@@ -58,7 +58,7 @@ interface PreviewProps {
    * Path → recorded engine capture sidecar entry (bd-uy4uygha). The active
    * file's capture (if any) is fetched and spliced into the html render so a
    * document executed by a connected `q2 provide-hub` shows its output in the
-   * default `format: html` preview.
+   * full-DOM `format: q2-html-render` preview as well as in q2-preview.
    */
   captures?: Record<string, CaptureRef>;
   /** Callback to register scrollToLine function for external use */

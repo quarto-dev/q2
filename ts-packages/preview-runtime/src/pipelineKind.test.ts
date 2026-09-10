@@ -24,6 +24,10 @@ describe('pipelineKindForFormat', () => {
     expect(pipelineKindForFormat('html')).toBeUndefined();
   });
 
+  it('returns undefined for q2-html-render (the full-DOM opt-out renders through the HTML pipeline)', () => {
+    expect(pipelineKindForFormat('q2-html-render')).toBeUndefined();
+  });
+
   it('returns undefined for unknown formats', () => {
     expect(pipelineKindForFormat('not-a-real-format')).toBeUndefined();
     expect(pipelineKindForFormat('')).toBeUndefined();

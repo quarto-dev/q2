@@ -101,6 +101,8 @@ export interface RenderResponse {
    * `pipelineKindForFormat(format)` to decide which is expected).
    */
   ast_json?: string;
+  /** The format the render ran with (`Format::target_format` after any preview substitution); absent on errors. */
+  format?: string;
   /**
    * Untransformed Pandoc AST JSON — the `qmd_to_pandoc` output
    * captured immediately after `ParseDocumentStage`, before any

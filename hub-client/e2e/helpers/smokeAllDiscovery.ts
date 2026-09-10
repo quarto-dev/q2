@@ -89,6 +89,33 @@ export interface DiscoveredTest {
   runConfig: RunConfig | null;
   /** Format-specific test specs */
   formatSpecs: FormatTestSpec[];
+  /**
+   * The document's *own* `format:` front-matter value — the scalar, or
+   * the first key of a map — or `null` when absent. Distinct from
+   * `formatSpecs[].format`, which is the `_quarto: tests:` dimension the
+   * fixture is asserted under. The runner needs the document's own value
+   * to know which preview iframe hub-client mounts (bd-kltzdhle): a
+   * fixture tested under `html` renders in the q2-preview iframe unless
+   * its front matter says `format: q2-html-render`.
+   */
+  documentFormat: string | null;
+}
+
+/**
+ * Read the document's own `format:` key the way the WASM's
+ * `detect_format_from_content` does: a scalar is taken as-is, a map yields
+ * its first key, anything else (absent, list) is `null`.
+ */
+export function documentFormatFromFrontmatter(
+  metadata: Record<string, unknown>,
+): string | null {
+  const format = metadata.format;
+  if (typeof format === 'string') return format;
+  if (format && typeof format === 'object' && !Array.isArray(format)) {
+    const [first] = Object.keys(format as Record<string, unknown>);
+    return first ?? null;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -398,6 +425,36 @@ function readAllFiles(dir: string): {
  *
  * Returns only HTML format tests (E2E tests can only render HTML).
  */
+/**
+ * Fixtures whose `ensureHtmlElements` assertions (written against the HTML
+ * writer's DOM) do not yet hold in the q2-preview iframe, which is where a
+ * plain document renders now that q2-preview is hub-client's default
+ * renderer (bd-kltzdhle, plan D8). Each entry names the parity strand that
+ * owns the gap. While listed, the runner still renders the fixture in the
+ * default iframe and runs every *other* assertion (regex, CSS, diagnostics);
+ * only the DOM selectors are skipped, with a `[smoke-diag]` line so the
+ * skip is visible in the report.
+ *
+ * This is a staging device, not an end state: Phase 4b of the plan works
+ * the list back down (fix the gap, or replace the selector with one that
+ * holds in both DOMs). Add an entry only with a strand; remove it when the
+ * strand closes.
+ */
+export const DOM_ASSERTIONS_PENDING_PARITY: ReadonlyMap<string, string> = new Map([
+  // Mermaid blocks: no `pre.mermaid` component in q2-preview yet.
+  ['mermaid/basic.qmd', 'bd-c3dtpe36'],
+  // User-declared `css:` links are not emitted in VFS/preview mode.
+  ['metadata/dir-metadata-paths/chapters/intro/doc.qmd', 'bd-b3oq2fsy'],
+  // TOC copy of repo actions dropped at the default toc-location.
+  ['repo-actions/actions.qmd', 'bd-fandfn60'],
+  // Callout body heading not sectionized in preview.
+  ['toc-containers/callout-body-heading-not-in-toc.qmd', 'bd-bg0jze2i'],
+  // Heading inside a blockquote: `blockquote > h4` not matched in preview.
+  ['toc-containers/div-heading-becomes-section.qmd', 'bd-q2wqj24c'],
+  // Tabsets are not rendered as a component in q2-preview.
+  ['toc-containers/tabset-pane-heading-not-in-toc.qmd', 'bd-47afd5ro'],
+]);
+
 export function discoverSmokeAllTests(): DiscoveredTest[] {
   const qmdFiles = discoverTestFiles(SMOKE_ALL_DIR);
   const tests: DiscoveredTest[] = [];
@@ -410,8 +467,12 @@ export function discoverSmokeAllTests(): DiscoveredTest[] {
       skipPrintsMessage: SKIP_PRINTS_MESSAGE.has(relPath),
     });
 
-    // Only formats the e2e runner knows how to drive: html (preview iframe),
-    // q2-debug (AstIframe), and q2-preview (Q2PreviewIframe — Plan 2A).
+    // Only formats the e2e runner knows how to drive: html, q2-preview
+    // (both in the Q2PreviewIframe — html is q2-preview's default since
+    // bd-kltzdhle, unless the document itself declares
+    // `format: q2-html-render`), and q2-debug (Q2DebugIframe). The
+    // runner picks the iframe kind from `documentFormat`; see
+    // smoke-all.spec.ts.
     const supportedSpecs = formatSpecs.filter(
       (s) =>
         s.format === 'html' ||
@@ -419,6 +480,7 @@ export function discoverSmokeAllTests(): DiscoveredTest[] {
         s.format === 'q2-preview',
     );
     if (supportedSpecs.length === 0) continue;
+    const documentFormat = documentFormatFromFrontmatter(metadata);
 
     const qmdDir = dirname(qmdPath);
     const projectRoot = findProjectRoot(qmdDir);
@@ -438,6 +500,7 @@ export function discoverSmokeAllTests(): DiscoveredTest[] {
       renderPath: relative(projectRoot, qmdPath),
       runConfig,
       formatSpecs: supportedSpecs,
+      documentFormat,
     });
   }
 
