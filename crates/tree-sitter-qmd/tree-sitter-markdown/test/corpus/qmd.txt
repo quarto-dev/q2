@@ -473,7 +473,8 @@ author: Someone
 Content paragraph.
 --------------------------------------------------------------------------------
     (document
-      (metadata)
+      (metadata
+        body: (yaml))
       (section
         (pandoc_paragraph
           (pandoc_str)

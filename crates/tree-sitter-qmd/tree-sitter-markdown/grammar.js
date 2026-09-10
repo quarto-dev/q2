@@ -182,6 +182,24 @@ module.exports = grammar({
             repeat($.section),
         ),
 
+        // YAML metadata block (`---` ... `---`). All four delimiting tokens
+        // are external: the scanner opens a block only on a `---` line that
+        // is followed by a non-blank line and, somewhere below, by a closing
+        // line — exactly `---` at column 0, optionally followed by blanks —
+        // and it recognises that closing line only at a line start, so a
+        // `---` inside a value is body text. The body is exposed as the
+        // `yaml` child so consumers take the YAML's exact range from the
+        // tree rather than re-scanning the text (bd-mjo6ao32, GH #671); it
+        // is also the node a YAML injection query would target. The closing
+        // delimiter's line break is consumed like any other block's.
+        minus_metadata: $ => seq(
+            $._minus_metadata_start,
+            $._minus_metadata_open_newline,
+            field('body', alias($._minus_metadata_body, $.yaml)),
+            $._minus_metadata_end,
+            choice($._newline, $._eof),
+        ),
+
         ///////////////////////////////////////////////////////////////////////////////////////////
         // BLOCK STRUCTURE
 
@@ -1118,7 +1136,12 @@ module.exports = grammar({
         $._trigger_error,
         $._eof,
 
-        $.minus_metadata,
+        // YAML metadata block, as four tokens; see the `minus_metadata` rule
+        // and the matching section of scanner.c.
+        $._minus_metadata_start,
+        $._minus_metadata_open_newline,
+        $._minus_metadata_body,
+        $._minus_metadata_end,
 
         $._pipe_table_start,
         $._pipe_table_line_ending,

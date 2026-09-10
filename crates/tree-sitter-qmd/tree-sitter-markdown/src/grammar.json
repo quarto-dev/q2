@@ -47,6 +47,49 @@
         }
       ]
     },
+    "minus_metadata": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_minus_metadata_start"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_minus_metadata_open_newline"
+        },
+        {
+          "type": "FIELD",
+          "name": "body",
+          "content": {
+            "type": "ALIAS",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_minus_metadata_body"
+            },
+            "named": true,
+            "value": "yaml"
+          }
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_minus_metadata_end"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_newline"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_eof"
+            }
+          ]
+        }
+      ]
+    },
     "_block": {
       "type": "CHOICE",
       "members": [
@@ -5020,7 +5063,19 @@
     },
     {
       "type": "SYMBOL",
-      "name": "minus_metadata"
+      "name": "_minus_metadata_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_minus_metadata_open_newline"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_minus_metadata_body"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_minus_metadata_end"
     },
     {
       "type": "SYMBOL",
