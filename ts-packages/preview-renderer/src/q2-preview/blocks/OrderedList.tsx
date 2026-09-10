@@ -4,7 +4,7 @@ import type { NodeArgs, OrderedListBlock } from '../../framework';
 import { IncrementalContext } from '../IncrementalContext';
 import { PreviewContext } from '../PreviewContext';
 import { isLeadingBlockBorrowable } from './listBorrow';
-import { makeTaskToggle, TaskItemBody, taskItemChecked } from './taskList';
+import { makeTaskToggle, TaskItemBlocks, taskItemChecked } from './taskList';
 
 const NOOP = () => {};
 
@@ -93,7 +93,7 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
                 if (checked !== null) {
                     return (
                         <li key={i} {...itemAttrProps} {...liProps}>
-                            <TaskItemBody
+                            <TaskItemBlocks
                                 item={item}
                                 checked={checked}
                                 onToggle={makeTaskToggle(ctx, resolved, i)}

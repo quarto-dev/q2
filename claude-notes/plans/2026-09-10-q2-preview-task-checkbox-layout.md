@@ -4,7 +4,7 @@
 **Related:** bd-q2wqj24c (CommentBlock wrapper `<div>` breaks parent > child
 parity in general), bd-tvtknbhx (interactive checkboxes; its open polish item
 (2) — loose/Para-leading task items — is fixed by this plan as a by-product).
-**Status:** proposed — awaiting review before execution.
+**Status:** done 2026-09-10 (all phases; see evidence under Phase 3).
 
 ## Overview
 
@@ -155,75 +155,118 @@ Why not the alternatives:
 
 ### Phase 1 — tests first (must fail on `main` before Phase 2)
 
+Done 2026-09-10. Before the fix: 5 failed / 5 passed — the three inline-label
+tests failed on `expected <div …> to be null` (the CommentBlock wrapper inside
+the label), the two loose-item tests on `expected +0 to be 2` (no label at
+all). After Phase 2: 10 / 10; full package suites 578 unit + 656 integration
+green. Fixtures: `__fixtures__/task-list-{nested,loose,ordered}.{qmd,ast.json}`.
+
 All in `ts-packages/preview-renderer/src/q2-preview/` (run with
 `npx vitest run task-list` from that package; fixtures generated verbatim with
 `pampa <(printf …) -t json` like the existing ones).
 
-- [ ] `task-list.integration.test.tsx`: add a structural assertion to the
+- [x] `task-list.integration.test.tsx`: add a structural assertion to the
       existing tight-list test — the `<label>` wrapping each checkbox contains
       **no block-level element** (`label.querySelector('div, p') === null`)
       and the input's next sibling is the text. This is the regression test
       for the reported bug; it fails today with the CommentBlock `<div>`.
-- [ ] Same file: new test with the reporter's nested/mixed fixture
+- [x] Same file: new test with the reporter's nested/mixed fixture
       (`* \[Elliot\]` / nested bullets / one `[x]` item). Asserts: the inner
       `<ul>` has no `task-list` class (writer parity, all-items rule), and the
       one checkbox's label passes the same no-block-descendant check.
-- [ ] Same file: new test that any block-level wrapper is an **ancestor** of
+- [x] Same file: new test that any block-level wrapper is an **ancestor** of
       the label, i.e. `input.closest('li') > * … > label` — the comment
       wrapper `<div>` (present in `show` mode) now sits between `<li>` and
       `<label>`; documents the intended DOM shape.
-- [ ] Same file: loose task items (`- [ ] a\n\n- [x] b\n`) render
+- [x] Same file: loose task items (`- [ ] a\n\n- [x] b\n`) render
       `li > p > label > input` and no ballot glyph in `textContent`
       (bd-tvtknbhx item 2; fails today — glyph renders as text).
-- [ ] Same file: toggle tests keep passing unchanged (they fire `click` on the
+- [x] Same file: toggle tests keep passing unchanged (they fire `click` on the
       input and inspect the subtree commit) — they are the guard that the
       context plumbing delivers `onToggle` correctly. Add one for a loose
       item toggle.
-- [ ] `OrderedList` coverage: one test with `1. [ ] a` / `2. [x] b` asserting
+- [x] `OrderedList` coverage: one test with `1. [ ] a` / `2. [x] b` asserting
       `ol` has no `task-list` class and labels are block-free.
 
 ### Phase 2 — implementation
 
-- [ ] `taskList.tsx`: add `TaskItemContext` and `TaskLabel`; remove
+- [x] `taskList.tsx`: add `TaskItemContext` and `TaskLabel`; remove
       `TaskItemBody` / `strippedTaskHead`; update the module comment (the
       "tight items only … until Para grows a slot" paragraph is obsolete).
-- [ ] `Plain.tsx`, `Para.tsx`: consume the context; render `TaskLabel` when the
+- [x] `Plain.tsx`, `Para.tsx`: consume the context; render `TaskLabel` when the
       head-marker check passes.
-- [ ] `BulletList.tsx`, `OrderedList.tsx`: provide the context around
+- [x] `BulletList.tsx`, `OrderedList.tsx`: provide the context around
       `item[0]` in both branches; drop the `TaskItemBody` fork.
-- [ ] `npx vitest run` in `ts-packages/preview-renderer` green; then
+- [x] `npx vitest run` in `ts-packages/preview-renderer` green; then
       `cargo xtask verify` (hub-client build + `test:ci` cover the consumer;
       no Rust change expected, but the TS package is bundled by hub-client and
-      q2-preview-spa).
+      q2-preview-spa). Ran `fnm exec --using=24 cargo xtask verify
+      --skip-rust-tests` (no Rust source changed): all steps passed
+      2026-09-10 — lints, workspace build, ts-packages builds + tests,
+      hub-client `build:all` and `test:ci`, q2-preview-spa build.
 
 ### Phase 3 — end-to-end verification (required before declaring done)
 
-- [ ] Rebuild the embedded SPA so `q2 preview` picks up the TS change:
+- [x] Rebuild the embedded SPA so `q2 preview` picks up the TS change:
       `cargo xtask build-q2-preview-spa && cargo build --bin q2`.
-- [ ] `target/debug/q2 preview tasklist.qmd --no-browser` + the Playwright
+- [x] `target/debug/q2 preview tasklist.qmd --no-browser` + the Playwright
       inspect script: the input and the text now share one line
       (label height ≈ one line box; input rect and label rect on the same y),
       `li` outerHTML shows `<li><div …><label><input …>text</label></div></li>`.
       Record the invocation and the observed DOM in this plan.
-- [ ] Same for the all-task fixture and a loose-item fixture
+- [x] Same for the all-task fixture and a loose-item fixture
       (`li > p > label`).
-- [ ] hub-client: `cd hub-client && npm run dev`, open a project with the
-      reporter's snippet as a `format: q2-preview` document, confirm visually
-      (screenshot into the plan) and confirm toggling still writes `[x]`/`[ ]`
-      back (the `--allow-edit`/edit-toggle surface) — this is the surface the
-      bug was reported on.
-- [ ] Optional parity check: `/preview-parity` harness fixture for a task list
-      if the harness mounts with `PreviewContext` (bd-q2wqj24c notes it does
-      not — if so, skip and say so).
+- [x] hub-client: verified on the reported surface with a permanent e2e spec,
+      `hub-client/e2e/q2-preview-task-list.spec.ts` (real hub on :3031, real
+      q2-preview iframe, headless Chromium). One document with the reporter's
+      nested list + a tight and a loose all-task list; per checkbox it asserts
+      no block element inside the label, `label` is the input's parent, and
+      the text's first client rect starts within the checkbox's height of the
+      checkbox (same line box) — plus `task-list` class parity and
+      `li > p > label` for loose items. Run:
+      `VITE_E2E=1 npm run build && npx playwright test e2e/q2-preview-task-list.spec.ts --project=chromium --workers=1`
+      → 1 passed (3.1s). Red-check: with the renderer changes stashed and the
+      client rebuilt, the same spec fails (`toHaveCount(5)` received 3 — the
+      loose items had no checkbox; the two retries agree), so it guards the
+      fix. Toggle write-back was exercised through `q2 preview --allow-edit`
+      (above); the hub-client path shares `makeTaskToggle` unchanged, and the
+      integration tests cover its commit payload for tight, loose and ordered
+      items.
+- [x] Optional parity check: skipped. The `/preview-parity` harness mounts
+      read-only without `PreviewContext` (bd-q2wqj24c), so it never sees the
+      CommentBlock wrapper and cannot reproduce this bug; the e2e spec above
+      is the browser-level guard instead.
+
+#### q2 preview evidence (2026-09-10, after `cargo xtask build-q2-preview-spa && cargo build --bin q2`)
+
+`target/debug/q2 preview <fixture> --no-browser`, inspected with the headless
+Playwright script (`inspect.mjs`: finds the checkbox in the preview frame,
+dumps its `<li>` outerHTML and rects). Output was read, not inferred:
+
+| fixture | `<li>` outerHTML (abridged) | input top / label top / label height |
+|---|---|---|
+| nested (reporter's) | `<li><div style="position: relative; …"><label><input disabled type="checkbox" checked>working with Julia …</label></div></li>` | 180.8 / 175.8 / **25.5px** (was 51px) |
+| tight all-task | `<li><div …><label><input … checked>done item</label></div></li>`, `ul.task-list` | 22 / 17 / 25.5px |
+| loose all-task | `<li><div …><p data-loc="0:1:7-2:1"><label><input …>todo</label></p></div></li>`, `ul.task-list` | 22 / 17 / 25.5px |
+
+Before the fix the same nested item measured label height 51px with the
+`<div>` inside the label; screenshots `out-*/li.png` show checkbox and text
+on one line.
+
+Toggle write-back, `q2 preview toggle.qmd --no-browser --allow-edit` on a copy
+of the loose fixture, clicking the first checkbox from Playwright: the file on
+disk went from `- [ ] todo` to `* [x] todo` (bullet canonicalisation is
+bd-tvtknbhx item 4, pre-existing); the second item stayed `[x]`. Loose items
+had no checkbox at all before this change.
 
 ### Phase 4 — wrap-up
 
-- [ ] `braid comment` the strand with the e2e evidence; close it.
-- [ ] Comment on bd-tvtknbhx that polish item (2) (loose task items) is done
+- [x] `braid comment` the strand with the e2e evidence; close it.
+- [x] Comment on bd-tvtknbhx that polish item (2) (loose task items) is done
       here; items (3) and (4) remain.
-- [ ] hub-client changelog entry is **not** needed unless `hub-client/` files
-      change (the fix lives in `ts-packages/preview-renderer`); re-check the
-      diff before committing.
+- [x] hub-client changelog entry: needed after all — the e2e spec lives under
+      `hub-client/e2e/`, and the fix is user-visible in hub-client; added in
+      the follow-up changelog commit per the two-commit workflow.
 
 ## Decisions (reviewed 2026-09-10)
 
