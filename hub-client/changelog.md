@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-10
 
+- [`8f2e5802`](https://github.com/quarto-dev/q2/commits/8f2e5802): Comment bubbles in the live preview no longer wrap each block in an extra element, so theme styling of blockquote headings, callout bodies, list items and tabsets now matches the rendered site; bubbles keep their font on slide decks and are slightly larger there
 - [`42d91ad9`](https://github.com/quarto-dev/q2/commits/42d91ad9): Draft pages (`draft: true`) now show the "Draft" banner in the live preview, localized like the rendered site
 
 ### 2026-09-09

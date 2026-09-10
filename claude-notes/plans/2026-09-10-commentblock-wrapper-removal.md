@@ -258,7 +258,7 @@ nothing.
       add, resolve, read-only `q2 preview`, callout-body spot-check vs
       `q2 render`), after `cargo xtask build-q2-preview-spa`,
       `cargo xtask build-hub-client-embed`, `cargo build --bin q2`.
-- [ ] `hub-client/changelog.md` (two-commit rule; after the first commit); updated
+- [x] `hub-client/changelog.md` (two-commit rule; entry for 8f2e58025); updated
       `2026-09-10-commentblock-overlay-handoff.md` (superseded pointer) and
       bd-kltzdhle's Phase 4b table.
 - [x] Full `cargo xtask verify` under Node 24 (all 14 steps green 2026-09-10, after the grammar-cache rebuild noted below); push to the PR branch on approval — pending.
