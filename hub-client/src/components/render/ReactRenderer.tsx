@@ -205,17 +205,20 @@ function ReactRenderer({
   );
 
   // Extract component paths - only recompute when the list of paths
-  // changes. The gate covers q2-debug, q2-preview, and revealjs because
-  // all three load user TSX overrides via the iframe's
-  // `LOAD_CUSTOM_COMPONENTS` postMessage handler. Plan 2A item 13
-  // extended the q2-debug-only gate to also include q2-preview. revealjs
-  // later converged onto the same Q2PreviewIframe tree (bd-vwp4y5ku), but
-  // this gate wasn't updated to match, so render-components: silently
-  // never loaded for revealjs documents in Hub, even though the CLI's
-  // q2-preview-spa has no such gate at all. That gap itself isn't tracked
-  // under any strand as of this fix.
+  // changes. The gate covers every format that loads user TSX overrides
+  // via the iframe's `LOAD_CUSTOM_COMPONENTS` postMessage handler:
+  // q2-debug, q2-preview (Plan 2A item 13), revealjs (converged onto the
+  // same Q2PreviewIframe tree in bd-vwp4y5ku; gate caught up in
+  // ee47e8ec), and q2-sandboxed-preview (sandboxed-preview port Phase 4
+  // — its entry exposes the same renderer surface and blob-import
+  // loader).
   const componentPathsKey = useMemo(() => {
-    if (format !== 'q2-debug' && format !== 'q2-preview' && format !== 'revealjs') {
+    if (
+      format !== 'q2-debug' &&
+      format !== 'q2-preview' &&
+      format !== 'revealjs' &&
+      format !== 'q2-sandboxed-preview'
+    ) {
       return '';
     }
 
@@ -278,7 +281,27 @@ function ReactRenderer({
           right: 0,
           bottom: 0,
         }}>
-          <Q2SandboxedPreviewIframe astJson={astJson} />
+          <Q2SandboxedPreviewIframe
+            astJson={astJson}
+            currentFilePath={currentFilePath}
+            onNavigateToDocument={stableNavigate}
+            setAst={stableSetAst}
+            customComponentsCode={customComponentsCode}
+            themeFingerprint={themeFingerprint}
+            renderedContent={renderedContent}
+            untransformedAstJson={untransformedAstJson}
+            currentActor={currentActor}
+            commentsMode={commentsMode}
+            unlockNestingCursor={unlockNestingCursor}
+            richText={richText}
+            nestedEditBuffers={nestedEditBuffers}
+            currentSlideIndex={currentSlideIndex}
+            onSlideChange={onSlideChange}
+            scrollHandleRef={scrollHandleRef}
+            onScroll={onPreviewScroll}
+            onClickAtLine={onPreviewClickAtLine}
+            onAstRendered={onAstRendered}
+          />
         </div>
       </ErrorBoundary>
     );

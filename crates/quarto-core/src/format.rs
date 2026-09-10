@@ -122,7 +122,10 @@ fn builtin_pseudo_format(name: &str) -> Option<(&'static str, Option<&'static st
         "q2-slides" => Some(("html", Some("preview"))),
         "q2-debug" => Some(("html", None)),
         "q2-preview" => Some(("html", Some("preview"))),
-        "q2-sandboxed-preview" => Some(("html", None)),
+        // Sandboxed-preview port (bd-jgpz4hfq): same preview pipeline as
+        // q2-preview — the sandboxed renderer needs the post-pipeline AST
+        // (highlight spans, chrome metadata, theme fingerprint).
+        "q2-sandboxed-preview" => Some(("html", Some("preview"))),
         _ => None,
     }
 }
@@ -858,6 +861,21 @@ mod tests {
         // `AstTransformsStage::run()` will branch on this in a
         // later commit (Plan 7 cleanup retires the temporary
         // `target_format == "q2-preview"` string match).
+        assert_eq!(f.pipeline_kind, Some("preview"));
+    }
+
+    #[test]
+    fn test_from_format_string_q2_sandboxed_preview() {
+        let f = Format::from_format_string("q2-sandboxed-preview").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Html);
+        assert_eq!(f.target_format, "q2-sandboxed-preview");
+        assert_eq!(f.extension_name, None);
+        assert_eq!(f.output_extension, "html");
+        assert!(f.native_pipeline);
+        // Sandboxed-preview port (bd-jgpz4hfq): the sandboxed renderer
+        // consumes the same post-pipeline AST as q2-preview (highlight
+        // spans, chrome metadata, theme fingerprint), so it uses the
+        // preview pipeline_kind rather than the raw parse-only path.
         assert_eq!(f.pipeline_kind, Some("preview"));
     }
 

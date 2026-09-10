@@ -25,6 +25,9 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-10
 
+- [`14de97b62`](https://github.com/quarto-dev/q2/commits/14de97b62): The sandboxed preview now validates the sender of every cross-frame message, so other windows can't inject content into the preview or the document.
+- [`9f7efd8a9`](https://github.com/quarto-dev/q2/commits/9f7efd8a9): Custom render-components (user TSX overrides) and the code-copy button now work in the sandboxed preview.
+- [`0d5967f2a`](https://github.com/quarto-dev/q2/commits/0d5967f2a): The sandboxed preview now supports editor-preview scroll sync, click-to-source navigation, document links, slide navigation, and live editing — matching the standard preview.
 - [`0f17a8b2c`](https://github.com/quarto-dev/q2/commits/0f17a8b2c): q2-preview task lists: the checkbox and its item text render on one line again, and loose (blank-line-separated) task items now get checkboxes too
 
 ### 2026-09-09
@@ -46,6 +49,8 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-01
 
+- [`e7f9fcc2a`](https://github.com/quarto-dev/q2/commits/e7f9fcc2a): Images and theme fonts now load correctly in the sandboxed preview, including same-named images in different folders and pictures in subdirectories.
+- [`5684cfead`](https://github.com/quarto-dev/q2/commits/5684cfead): The `q2-sandboxed-preview` format now renders documents with the real preview renderer (headers, paragraphs, math, code highlighting, theme CSS) instead of the placeholder box view.
 - [`a4c3fb9c`](https://github.com/quarto-dev/q2/commits/a4c3fb9c): The experimental branch bar's Merge button now uses the app's standard accent color in both themes, and its branch-name input shows the standard keyboard focus ring.
 - [`41da392c`](https://github.com/quarto-dev/q2/commits/41da392c): Branch chips in the experimental branch bar now activate on click and via the keyboard, and deleting a branch no longer also switches to it.
 - [`e4a72819`](https://github.com/quarto-dev/q2/commits/e4a72819): Math rendering upgraded to KaTeX 0.18.4 everywhere — the sandboxed preview bundle, the hub client, and the CDN link rendering emits for `html-math-method: katex` stay aligned on one version.

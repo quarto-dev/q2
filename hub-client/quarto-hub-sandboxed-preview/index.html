@@ -4,13 +4,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>q2-raw Renderer</title>
+  <title>q2-sandboxed-preview Renderer</title>
+  <style>
+    /* Minimal body styling; theme CSS posted via UPDATE_THEME dominates
+       once it lands and the document picks up Bootstrap typography from
+       there. */
+    body {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
 </head>
 
 <body>
-  <div id="root">Loading q2-raw renderer...</div>
+  <div id="root">Loading q2-sandboxed-preview renderer...</div>
 
-  <script type="module" src="/src/main.tsx"></script>
+  <script type="module" src="/src/entry.tsx"></script>
 </body>
 
 </html>
