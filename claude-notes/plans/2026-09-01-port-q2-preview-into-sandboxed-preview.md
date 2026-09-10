@@ -286,8 +286,11 @@ under `/q2/` on Pages, immune to basename collisions, and app assets
 
 ## Bookkeeping
 
-- [ ] File a braid epic for this port with one strand per phase
-      (`--deps parent-child`), referencing this plan file.
+- [x] Epic bd-r9yr0hbe with per-phase strands bd-jgpz4hfq (0),
+      bd-44ohor2w (1), bd-k9tfhsst (2), bd-xqg0t494 (3), bd-rhn8wi8r (4),
+      bd-5fwm3zju (5). All closed 2026-09-10; commits d6df9500a,
+      5684cfead, e7f9fcc2a, 0d5967f2a, 9f7efd8a9, 14de97b62 (+ changelog
+      commits) on branch q2-sandboxed-preview.
 
 ## Reference: exploration findings (2026-09-01)
 
