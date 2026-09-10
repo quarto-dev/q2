@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-10
+
+- [`0d5967f2a`](https://github.com/quarto-dev/q2/commits/0d5967f2a): The sandboxed preview now supports editor-preview scroll sync, click-to-source navigation, document links, slide navigation, and live editing — matching the standard preview.
+
 ### 2026-09-01
 
 - [`e7f9fcc2a`](https://github.com/quarto-dev/q2/commits/e7f9fcc2a): Images and theme fonts now load correctly in the sandboxed preview, including same-named images in different folders and pictures in subdirectories.
