@@ -48,6 +48,32 @@ interface SlotProps {
 const TRANSPARENT: CSSProperties = { display: 'contents' };
 
 /**
+ * Draft alert banner — Quarto 1's `#quarto-draft-alert` strip for
+ * `draft: true` pages (bd-3cpv7dah). `DraftAlertTransform` decides
+ * whether a page is a draft and publishes the *localized* label at
+ * `meta.rendered.draft-alert-text` (`Draft`, `Borrador`, …); it runs in
+ * the q2-preview pipeline, so the only render-only piece was the
+ * template's markup, mirrored here byte-for-byte (template.rs
+ * `$if(rendered.draft-alert-text)$`): the icon is an `<i>` sibling
+ * followed by a bare text node, not a wrapping span.
+ *
+ * Unlike the `*-render` slots this is React-owned markup rather than
+ * injected HTML: the transform hands over a label, not HTML. Renders
+ * BEFORE the `<header id="quarto-header">` wrapper (or before
+ * `#quarto-content` when the page has no header) — the banner is the
+ * first thing in the body, where Q1's DOM postprocessor puts it.
+ * Bootstrap's `.alert-warning` and the theme's `#quarto-draft-alert`
+ * rule (`_bootstrap-rules.scss`) are in the preview's compiled theme.
+ */
+export const DraftAlertSlot = memo(({ text }: { text: string }) => (
+    <div id="quarto-draft-alert" className="alert alert-warning">
+        <i className="bi bi-pencil-square"></i>
+        {text}
+    </div>
+));
+DraftAlertSlot.displayName = 'DraftAlertSlot';
+
+/**
  * Navbar HTML — emitted by `NavbarRenderTransform` into
  * `meta.rendered.navigation.navbar`. Renders INSIDE the React-owned
  * `<header id="quarto-header">` wrapper, which sits BEFORE

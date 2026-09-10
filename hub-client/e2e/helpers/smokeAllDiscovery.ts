@@ -441,9 +441,6 @@ function readAllFiles(dir: string): {
  * strand closes.
  */
 export const DOM_ASSERTIONS_PENDING_PARITY: ReadonlyMap<string, string> = new Map([
-  // Draft-alert banner slot missing from the preview renderer.
-  ['drafts/draft-banner.qmd', 'bd-3cpv7dah'],
-  ['localization/lang-es-draft-banner.qmd', 'bd-3cpv7dah'],
   // Mermaid blocks: no `pre.mermaid` component in q2-preview yet.
   ['mermaid/basic.qmd', 'bd-c3dtpe36'],
   // User-declared `css:` links are not emitted in VFS/preview mode.

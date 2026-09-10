@@ -413,7 +413,7 @@ Skip-list as of 2026-09-09 (fixture → strand):
 
 | fixture | selector that fails in the q2-preview iframe | strand |
 |---|---|---|
-| drafts/draft-banner, localization/lang-es-draft-banner | `div#quarto-draft-alert.alert.alert-warning` | bd-3cpv7dah |
+| ~~drafts/draft-banner, localization/lang-es-draft-banner~~ | ~~`div#quarto-draft-alert.alert.alert-warning`~~ | bd-3cpv7dah — **done 2026-09-10**: `DraftAlertSlot` in `chromeSlots.tsx`, rendered by `PreviewDocument` before the site header from `meta.rendered.draft-alert-text` (the transform already ran in the preview pipeline; only the template markup was render-only). 3 PreviewDocument tests; both fixtures unlisted and green in smoke-all; verified in `q2 preview` (label "Borrador", `.alert-warning` colours applied, before `main`). |
 | mermaid/basic | `pre.mermaid` | bd-c3dtpe36 |
 | metadata/dir-metadata-paths/chapters/intro/doc | `link[href="../../shared/styles.css"]` | bd-b3oq2fsy |
 | repo-actions/actions | `nav#TOC div.toc-actions a.toc-action` | bd-fandfn60 |
