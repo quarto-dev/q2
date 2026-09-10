@@ -198,12 +198,13 @@ function ReactRenderer({
   );
 
   // Extract component paths - only recompute when the list of paths
-  // changes. The gate covers both q2-debug and q2-preview because both
-  // load user TSX overrides via the iframe's
-  // `LOAD_CUSTOM_COMPONENTS` postMessage handler. Plan 2A item 13
-  // extended the q2-debug-only gate to also include q2-preview.
+  // changes. The gate covers the formats that load user TSX overrides
+  // via the iframe's `LOAD_CUSTOM_COMPONENTS` postMessage handler:
+  // q2-debug, q2-preview (Plan 2A item 13), and q2-sandboxed-preview
+  // (sandboxed-preview port Phase 4 — its entry exposes the same
+  // renderer surface and blob-import loader).
   const componentPathsKey = useMemo(() => {
-    if (format !== 'q2-debug' && format !== 'q2-preview') {
+    if (format !== 'q2-debug' && format !== 'q2-preview' && format !== 'q2-sandboxed-preview') {
       return '';
     }
 

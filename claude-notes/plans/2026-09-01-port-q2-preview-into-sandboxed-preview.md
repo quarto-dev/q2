@@ -201,18 +201,33 @@ under `/q2/` on Pages, immune to basename collisions, and app assets
 
 ### Phase 4 — remaining functionality
 
-- [ ] `LOAD_CUSTOM_COMPONENTS` (user TSX): parent transpile path already
-      exists; iframe-side blob-`import()` works under `allow-scripts` —
-      verify, and note CSP implications (no strict CSP yet).
-- [ ] Rich text / tiptap editing (`richText`, `nestedEditBuffers`,
-      `SET_AST` edit payloads) — should work as-is via postMessage; verify.
-- [ ] Slides: `SET_SLIDE` / `SLIDE_CHANGED`, `RevealDeck` + reveal CSS.
-- [ ] `hub-client-save` (Cmd+S) forwarding — already postMessage; verify
-      reaches `App.tsx` handler cross-origin.
-- [ ] Clipboard: `COPY_TO_CLIPBOARD` message → parent executes
-      `navigator.clipboard.writeText`.
-- [ ] Comments mode / attribution (`currentActor`, `commentsMode`,
-      `untransformedAstJson`, `renderedContent`).
+- [x] `LOAD_CUSTOM_COMPONENTS` (user TSX): ReactRenderer's
+      component-transpile gate extended to `q2-sandboxed-preview` (TDD:
+      failing ReactRenderer integration test first, plus a routing test).
+      Browser smoke: LOAD_CUSTOM_COMPONENTS with a Para override →
+      blob-URL `import()` inside the allow-scripts frame → override
+      rendered (`CUSTOM PARA` sentinel observed). No strict CSP on the
+      Pages origin yet — blob script imports depend on that staying true
+      (deferred item unchanged).
+- [x] Rich text / tiptap (`richText`, `nestedEditBuffers`, `SET_AST` edit
+      payloads): fully wired through the full-surface props + protocol
+      tests (Phase 3); interactive editing verified in Phase 5's real
+      session, not separately here.
+- [x] Slides: `SET_SLIDE`/`SLIDE_CHANGED` unit-tested both sides
+      (echo-dedup included); RevealDeck + reveal CSS are in the bundle.
+      Note: in hub-client, `format: revealjs` routes to `Q2PreviewIframe`,
+      not the sandboxed frame, and the sandboxed pseudo-format is
+      html-based (`isSlides` false) — so a sandboxed reveal deck has no
+      production route today; the machinery is ported and inert.
+- [x] `hub-client-save` (Cmd+S): posted by the unmodified
+      `installLinkHandlers` inside the frame; `App.tsx`'s window-level
+      listener is origin-agnostic. No change needed.
+- [x] Clipboard: `allow="clipboard-write"` delegated on the iframe so the
+      unmodified `codeCopy.ts` can call `navigator.clipboard.writeText`
+      cross-origin (test-first). No COPY_TO_CLIPBOARD proxy message needed.
+- [x] Comments mode / attribution (`currentActor`, `commentsMode`,
+      `untransformedAstJson`, `renderedContent`): shipped in the Phase 3
+      payload; covered by the full-payload protocol test.
 
 ### Phase 5 — hardening + verification
 

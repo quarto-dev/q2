@@ -38,10 +38,18 @@ import { render } from '@testing-library/react';
 
 const capturedAstIframeProps: any[] = [];
 const capturedPreviewIframeProps: any[] = [];
+const capturedSandboxedIframeProps: any[] = [];
 
 vi.mock('./q2-debug/Q2DebugIframe', () => ({
   Q2DebugIframe: (props: any) => {
     capturedAstIframeProps.push(props);
+    return null;
+  },
+}));
+
+vi.mock('./q2-sandboxed-preview/Q2SandboxedPreviewIframe', () => ({
+  Q2SandboxedPreviewIframe: (props: any) => {
+    capturedSandboxedIframeProps.push(props);
     return null;
   },
 }));
@@ -186,10 +194,46 @@ describe('ReactRenderer (q2-debug render-components lookup)', () => {
   });
 });
 
+describe('ReactRenderer (q2-sandboxed-preview render-components lookup)', () => {
+  beforeEach(() => {
+    capturedSandboxedIframeProps.length = 0;
+  });
+
+  it('passes transpiled components to the sandboxed iframe (Phase 4 of the sandboxed-preview port)', () => {
+    const fileContents = new Map([
+      ['elliot/simple.tsx', 'export const Para = () => null;'],
+    ]);
+
+    render(
+      <ReactRenderer
+        astJson={astWithRenderComponents(['/elliot/simple.tsx'])}
+        currentFilePath="elliot/index.qmd"
+        files={[]}
+        fileContents={fileContents}
+        onNavigateToDocument={() => {}}
+        setAst={() => {}}
+        format="q2-sandboxed-preview"
+      />,
+    );
+
+    expect(capturedSandboxedIframeProps.at(-1)?.customComponentsCode).toEqual({
+      '/elliot/simple.tsx': 'JS:export const Para = () => null;',
+    });
+  });
+});
+
 describe('ReactRenderer format routing', () => {
   beforeEach(() => {
     capturedAstIframeProps.length = 0;
     capturedPreviewIframeProps.length = 0;
+    capturedSandboxedIframeProps.length = 0;
+  });
+
+  it('routes q2-sandboxed-preview through Q2SandboxedPreviewIframe only', () => {
+    mountForRouting('q2-sandboxed-preview');
+    expect(capturedSandboxedIframeProps.length).toBeGreaterThan(0);
+    expect(capturedPreviewIframeProps.length).toBe(0);
+    expect(capturedAstIframeProps.length).toBe(0);
   });
 
   it('routes q2-preview through Q2PreviewIframe (Plan 2A item 12)', () => {

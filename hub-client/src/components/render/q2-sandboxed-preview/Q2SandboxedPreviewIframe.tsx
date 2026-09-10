@@ -307,6 +307,9 @@ export function Q2SandboxedPreviewIframe({
       src={Q2_SANDBOXED_PREVIEW_URL}
       title="q2-sandboxed-preview Renderer"
       sandbox="allow-scripts allow-same-origin"
+      // codeCopy.ts inside the frame uses navigator.clipboard.writeText;
+      // a cross-origin frame needs the permission delegated explicitly.
+      allow="clipboard-write"
       style={{
         width: '99%',
         height: '100%',

@@ -52,6 +52,14 @@ describe('Q2SandboxedPreviewIframe', () => {
     cleanup();
   });
 
+  it('delegates clipboard-write permission to the cross-origin frame', () => {
+    // codeCopy.ts (unmodified q2-preview code running inside the iframe)
+    // calls navigator.clipboard.writeText; a cross-origin frame only gets
+    // that permission when the embedding iframe delegates it.
+    const { iframe } = renderIframe();
+    expect(iframe.getAttribute('allow')).toContain('clipboard-write');
+  });
+
   it('pins a light canvas behind the transparent sandboxed document', () => {
     // The sandboxed document paints no background; the editor's preview pane
     // follows the chrome theme (dark in dark mode). The iframe's own
