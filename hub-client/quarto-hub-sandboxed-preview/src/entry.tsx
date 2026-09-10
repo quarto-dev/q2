@@ -130,7 +130,7 @@ const registerSlideNavigator = (nav: ((index: number) => void) | null) => {
     revealSlideNavigator = nav;
 };
 const postSlideChanged = (index: number) => {
-    window.parent.postMessage({ type: 'SLIDE_CHANGED', index }, '*');
+    window.parent.postMessage({ type: 'SLIDE_CHANGED', index }, parentOrigin);
 };
 
 /** Same payload shape as the q2-preview entry's UpdateAstPayload. */
@@ -177,12 +177,24 @@ const dispatch = makeIframeMessageDispatcher({
     },
 });
 
+// The embedding origin, pinned from the first accepted parent message —
+// used as the targetOrigin for everything this frame posts up, so a
+// navigated-away parent can never receive document content. '*' only
+// until the parent has spoken (IFRAME_READY and any bridge posts that
+// somehow precede the first UPDATE_AST).
+let parentOrigin = '*';
+
 // Module-top message handler. Registered before `IFRAME_READY` is
 // posted so the parent's `UPDATE_THEME` (which can fire immediately
 // after `IFRAME_READY` from a sibling `useEffect`) is never dropped.
 window.addEventListener('message', (event) => {
+    // Only the embedding window may drive this renderer — any window can
+    // postMessage a frame, and a forged UPDATE_AST would otherwise paint
+    // attacker content. `event.source` cannot be spoofed.
+    if (event.source !== window.parent) return;
     const data = event.data;
     if (!data || typeof data.type !== 'string') return;
+    if (event.origin) parentOrigin = event.origin;
     if (data.type === 'SET_SLIDE') {
         // Drive the reveal deck imperatively (no AST re-render). No-op when
         // the current preview isn't a slide deck (no navigator registered).
@@ -329,26 +341,26 @@ function updateAst(payload: UpdateAstPayload) {
                 registerSlideNavigator={registerSlideNavigator}
                 onSlideChange={postSlideChanged}
                 onAstRendered={() => {
-                    window.parent.postMessage({ type: 'AST_RENDERED' }, '*');
+                    window.parent.postMessage({ type: 'AST_RENDERED' }, parentOrigin);
                 }}
                 onNavigateToDocument={(path, anchor) => {
                     window.parent.postMessage(
                         { type: 'NAVIGATE_TO_DOCUMENT', path, anchor },
-                        '*',
+                        parentOrigin,
                     );
                 }}
                 setAst={(newAst) => {
                     // PreviewNodeEditPayload: pass through directly without
                     // rewrapping custom nodes (it's not a PandocAST).
                     if ((newAst as unknown as { __isPreviewNodeEdit?: boolean }).__isPreviewNodeEdit) {
-                        window.parent.postMessage({ type: 'SET_AST', ast: newAst }, '*');
+                        window.parent.postMessage({ type: 'SET_AST', ast: newAst }, parentOrigin);
                         return;
                     }
                     // Rewrap JS-native CustomNodes back to wire-format
                     // Div/Span before posting.
                     window.parent.postMessage(
                         { type: 'SET_AST', ast: rewrapCustomNodes(newAst) },
-                        '*',
+                        parentOrigin,
                     );
                 }}
             />,
@@ -368,7 +380,7 @@ function updateAst(payload: UpdateAstPayload) {
 // Installed once at module top — the document persists for the iframe's
 // lifetime (React re-renders the body; the frame never reloads).
 installScrollClickBridge(window, document, (msg) => {
-    window.parent.postMessage(msg, '*');
+    window.parent.postMessage(msg, parentOrigin);
 });
 
 // Register the asset-proxy service worker, then signal readiness. The

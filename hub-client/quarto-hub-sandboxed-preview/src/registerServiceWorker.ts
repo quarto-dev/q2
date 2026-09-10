@@ -28,6 +28,9 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const requestVFS = (id: string, path: string): Promise<UrlResponseMessage> =>
     new Promise((resolve, reject) => {
         const handleMessage = (event: MessageEvent) => {
+            // Only the embedding window may answer VFS requests — a forged
+            // url_response would inject attacker bytes as document assets.
+            if (event.source !== window.parent) return;
             const data = event.data as UrlResponseMessage | undefined;
             if (data?.type === 'url_response' && data.id === id) {
                 window.removeEventListener('message', handleMessage);

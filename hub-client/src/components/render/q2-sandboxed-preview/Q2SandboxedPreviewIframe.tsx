@@ -67,6 +67,19 @@ interface Q2SandboxedPreviewIframeProps {
 const Q2_SANDBOXED_PREVIEW_URL = import.meta.env.VITE_Q2_SANDBOXED_PREVIEW_URL || 'https://quarto-dev.github.io/q2/';
 
 /**
+ * The sandbox origin, derived from the (possibly relative) iframe URL —
+ * used as the targetOrigin for every message posted to the frame, so a
+ * navigated-away frame can never receive document content.
+ */
+function sandboxTargetOrigin(): string {
+  try {
+    return new URL(Q2_SANDBOXED_PREVIEW_URL, window.location.href).origin;
+  } catch {
+    return window.location.origin;
+  }
+}
+
+/**
  * Iframe wrapper for the sandboxed (cross-origin) preview renderer.
  *
  * Feature parity with `Q2PreviewIframe`, restated for a frame the parent
@@ -123,7 +136,7 @@ export function Q2SandboxedPreviewIframe({
     scrollHandleRef,
     () => ({
       scrollToLine: (line: number) => {
-        iframeRef.current?.contentWindow?.postMessage({ type: 'SCROLL_TO_LINE', line }, '*');
+        iframeRef.current?.contentWindow?.postMessage({ type: 'SCROLL_TO_LINE', line }, sandboxTargetOrigin());
       },
       getScrollRatio: () => lastScrollRatioRef.current,
     }),
@@ -135,6 +148,11 @@ export function Q2SandboxedPreviewIframe({
   // project.
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
+      // Only the embedded frame's own window may drive this component —
+      // any other window (sibling iframes, popups, extensions) can
+      // postMessage the parent, and a forged SET_AST would otherwise
+      // reach the document state. `event.source` cannot be spoofed.
+      if (event.source !== iframeRef.current?.contentWindow) return;
       if (event.data.type === 'IFRAME_READY') {
         lastSentThemeFingerprintRef.current = undefined;
         lastSentSlideRef.current = undefined;
@@ -191,7 +209,7 @@ export function Q2SandboxedPreviewIframe({
               error: result.error,
               isBinary,
             },
-            '*'
+            sandboxTargetOrigin()
           );
         }
       }
@@ -210,7 +228,7 @@ export function Q2SandboxedPreviewIframe({
     lastSentSlideRef.current = currentSlideIndex;
     iframeRef.current.contentWindow.postMessage(
       { type: 'SET_SLIDE', index: currentSlideIndex },
-      '*',
+      sandboxTargetOrigin(),
     );
   }, [iframeReady, currentSlideIndex]);
 
@@ -223,7 +241,7 @@ export function Q2SandboxedPreviewIframe({
           type: 'LOAD_CUSTOM_COMPONENTS',
           componentsCode: customComponentsCode,
         },
-        '*',
+        sandboxTargetOrigin(),
       );
     }
   }, [iframeReady, customComponentsCode]);
@@ -260,7 +278,7 @@ export function Q2SandboxedPreviewIframe({
           nestedEditBuffers,
         },
       },
-      '*'
+      sandboxTargetOrigin()
     );
 
   }, [
@@ -296,7 +314,7 @@ export function Q2SandboxedPreviewIframe({
 
     iframeRef.current.contentWindow.postMessage(
       { type: 'UPDATE_THEME', cssText, fingerprint: themeFingerprint },
-      '*'
+      sandboxTargetOrigin()
     );
     lastSentThemeFingerprintRef.current = themeFingerprint;
   }, [iframeReady, themeFingerprint]);

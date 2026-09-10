@@ -39,8 +39,15 @@ function renderIframe(props: Partial<Parameters<typeof Q2SandboxedPreviewIframe>
   return { iframe, postMessage };
 }
 
-function signalIframeReady() {
-  window.dispatchEvent(new MessageEvent('message', { data: { type: 'IFRAME_READY' } }));
+/** Post a message as the iframe would — with `source` set to its window. */
+function postFromIframe(iframe: HTMLIFrameElement, data: unknown) {
+  window.dispatchEvent(
+    new MessageEvent('message', { data, source: iframe.contentWindow }),
+  );
+}
+
+function signalIframeReady(iframe: HTMLIFrameElement) {
+  postFromIframe(iframe, { type: 'IFRAME_READY' });
 }
 
 describe('Q2SandboxedPreviewIframe', () => {
@@ -72,8 +79,8 @@ describe('Q2SandboxedPreviewIframe', () => {
   it('ships currentFilePath alongside astJson in the UPDATE_AST payload', async () => {
     // The real renderer resolves relative asset paths and source slices
     // against the active document path; astJson alone is not enough.
-    const { postMessage } = renderIframe();
-    signalIframeReady();
+    const { iframe, postMessage } = renderIframe();
+    signalIframeReady(iframe);
 
     await waitFor(() => {
       const updateAst = postMessage.mock.calls.find(
@@ -92,8 +99,8 @@ describe('Q2SandboxedPreviewIframe', () => {
         { t: 'Para', c: [{ t: 'Image', c: [['', [], []], [], ['images/pic.png', '']] }] },
       ],
     });
-    const { postMessage } = renderIframe({ astJson, currentFilePath: '/project/sub/doc.qmd' });
-    signalIframeReady();
+    const { iframe, postMessage } = renderIframe({ astJson, currentFilePath: '/project/sub/doc.qmd' });
+    signalIframeReady(iframe);
 
     await waitFor(() => {
       const updateAst = postMessage.mock.calls.find(
@@ -108,14 +115,10 @@ describe('Q2SandboxedPreviewIframe', () => {
   });
 
   it('answers a url request with a url_response carrying the same request id', async () => {
-    const { postMessage } = renderIframe();
-    signalIframeReady();
+    const { iframe, postMessage } = renderIframe();
+    signalIframeReady(iframe);
 
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: { type: 'url', id: 'req-42', path: 'project/sub/images/pic.png' },
-      }),
-    );
+    postFromIframe(iframe, { type: 'url', id: 'req-42', path: 'project/sub/images/pic.png' });
 
     await waitFor(() => {
       const response = postMessage.mock.calls.find(
@@ -131,8 +134,8 @@ describe('Q2SandboxedPreviewIframe', () => {
   });
 
   it('posts UPDATE_THEME with the CSS text when themeFingerprint is a string', async () => {
-    const { postMessage } = renderIframe({ themeFingerprint: 'fp-1' });
-    signalIframeReady();
+    const { iframe, postMessage } = renderIframe({ themeFingerprint: 'fp-1' });
+    signalIframeReady(iframe);
 
     await waitFor(() => {
       const updateTheme = postMessage.mock.calls.find(
@@ -146,8 +149,8 @@ describe('Q2SandboxedPreviewIframe', () => {
   });
 
   it('posts an explicit UPDATE_THEME clear when themeFingerprint is null', async () => {
-    const { postMessage } = renderIframe({ themeFingerprint: null });
-    signalIframeReady();
+    const { iframe, postMessage } = renderIframe({ themeFingerprint: null });
+    signalIframeReady(iframe);
 
     await waitFor(() => {
       const updateTheme = postMessage.mock.calls.find(
@@ -162,8 +165,8 @@ describe('Q2SandboxedPreviewIframe', () => {
 
   it('exposes a scroll handle: scrollToLine posts SCROLL_TO_LINE, getScrollRatio returns the last reported ratio', async () => {
     const handleRef: { current: { scrollToLine: (l: number) => void; getScrollRatio: () => number | null } | null } = { current: null };
-    const { postMessage } = renderIframe({ scrollHandleRef: handleRef });
-    signalIframeReady();
+    const { iframe, postMessage } = renderIframe({ scrollHandleRef: handleRef });
+    signalIframeReady(iframe);
 
     await waitFor(() => expect(handleRef.current).not.toBeNull());
     expect(handleRef.current!.getScrollRatio()).toBeNull();
@@ -176,7 +179,7 @@ describe('Q2SandboxedPreviewIframe', () => {
       ),
     ).toBe(true);
 
-    window.dispatchEvent(new MessageEvent('message', { data: { type: 'PREVIEW_SCROLLED', ratio: 0.37 } }));
+    postFromIframe(iframe, { type: 'PREVIEW_SCROLLED', ratio: 0.37 });
     await waitFor(() => expect(handleRef.current!.getScrollRatio()).toBe(0.37));
   });
 
@@ -185,12 +188,12 @@ describe('Q2SandboxedPreviewIframe', () => {
     const onClickAtLine = vi.fn();
     const { iframe } = renderIframe({ onScroll, onClickAtLine });
     vi.spyOn(iframe, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect);
-    signalIframeReady();
+    signalIframeReady(iframe);
 
-    window.dispatchEvent(new MessageEvent('message', { data: { type: 'PREVIEW_SCROLLED', ratio: 0.5 } }));
+    postFromIframe(iframe, { type: 'PREVIEW_SCROLLED', ratio: 0.5 });
     await waitFor(() => expect(onScroll).toHaveBeenCalled());
 
-    window.dispatchEvent(new MessageEvent('message', { data: { type: 'CLICK_AT_LINE', line: 7, iframeY: 23 } }));
+    postFromIframe(iframe, { type: 'CLICK_AT_LINE', line: 7, iframeY: 23 });
     await waitFor(() => expect(onClickAtLine).toHaveBeenCalledWith(7, 123));
   });
 
@@ -199,13 +202,13 @@ describe('Q2SandboxedPreviewIframe', () => {
     const setAst = vi.fn();
     const onSlideChange = vi.fn();
     const onAstRendered = vi.fn();
-    renderIframe({ onNavigateToDocument, setAst, onSlideChange, onAstRendered });
-    signalIframeReady();
+    const { iframe } = renderIframe({ onNavigateToDocument, setAst, onSlideChange, onAstRendered });
+    signalIframeReady(iframe);
 
-    window.dispatchEvent(new MessageEvent('message', { data: { type: 'NAVIGATE_TO_DOCUMENT', path: 'other.qmd', anchor: 'sec' } }));
-    window.dispatchEvent(new MessageEvent('message', { data: { type: 'SET_AST', ast: { blocks: [] } } }));
-    window.dispatchEvent(new MessageEvent('message', { data: { type: 'SLIDE_CHANGED', index: 3 } }));
-    window.dispatchEvent(new MessageEvent('message', { data: { type: 'AST_RENDERED' } }));
+    postFromIframe(iframe, { type: 'NAVIGATE_TO_DOCUMENT', path: 'other.qmd', anchor: 'sec' });
+    postFromIframe(iframe, { type: 'SET_AST', ast: { blocks: [] } });
+    postFromIframe(iframe, { type: 'SLIDE_CHANGED', index: 3 });
+    postFromIframe(iframe, { type: 'AST_RENDERED' });
 
     await waitFor(() => {
       expect(onNavigateToDocument).toHaveBeenCalledWith('other.qmd', 'sec');
@@ -216,11 +219,11 @@ describe('Q2SandboxedPreviewIframe', () => {
   });
 
   it('posts LOAD_CUSTOM_COMPONENTS and a deduped SET_SLIDE when ready', async () => {
-    const { postMessage } = renderIframe({
+    const { iframe, postMessage } = renderIframe({
       customComponentsCode: { 'comp.tsx': 'export default 1' },
       currentSlideIndex: 2,
     });
-    signalIframeReady();
+    signalIframeReady(iframe);
 
     await waitFor(() => {
       expect(
@@ -236,7 +239,7 @@ describe('Q2SandboxedPreviewIframe', () => {
     });
 
     // An in-deck SLIDE_CHANGED echoing back as the same index must not re-post.
-    window.dispatchEvent(new MessageEvent('message', { data: { type: 'SLIDE_CHANGED', index: 4 } }));
+    postFromIframe(iframe, { type: 'SLIDE_CHANGED', index: 4 });
     await waitFor(() => {
       expect(
         postMessage.mock.calls.filter(
@@ -247,7 +250,7 @@ describe('Q2SandboxedPreviewIframe', () => {
   });
 
   it('ships the full feature payload in UPDATE_AST', async () => {
-    const { postMessage } = renderIframe({
+    const { iframe, postMessage } = renderIframe({
       projectFilePaths: ['docs/page.qmd', 'other.qmd'],
       pendingAnchor: 'sec-2',
       pendingAnchorEpoch: 3,
@@ -259,7 +262,7 @@ describe('Q2SandboxedPreviewIframe', () => {
       richText: true,
       nestedEditBuffers: { k: 'v' },
     });
-    signalIframeReady();
+    signalIframeReady(iframe);
 
     await waitFor(() => {
       const updateAst = postMessage.mock.calls.find(
@@ -283,11 +286,42 @@ describe('Q2SandboxedPreviewIframe', () => {
     });
   });
 
+  it('ignores messages whose source is not the sandboxed iframe window', async () => {
+    // Any window can postMessage the parent; only the embedded frame's
+    // own contentWindow may drive this component. A forged SET_AST from
+    // another frame must not reach the document state.
+    const setAst = vi.fn();
+    const { iframe, postMessage } = renderIframe({ setAst });
+
+    // No source (jsdom default: null) — must not mark the iframe ready...
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'IFRAME_READY' } }));
+    // ...and must not forward a forged SET_AST.
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'SET_AST', ast: { forged: true } } }));
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(setAst).not.toHaveBeenCalled();
+    expect(
+      postMessage.mock.calls.some(
+        ([msg]) => (msg as { type?: string }).type === 'UPDATE_AST',
+      ),
+    ).toBe(false);
+
+    // The genuine frame still works.
+    signalIframeReady(iframe);
+    await waitFor(() => {
+      expect(
+        postMessage.mock.calls.some(
+          ([msg]) => (msg as { type?: string }).type === 'UPDATE_AST',
+        ),
+      ).toBe(true);
+    });
+  });
+
   it('skips the UPDATE_THEME post entirely when themeFingerprint is undefined', async () => {
     // Transient render failures must not strip the iframe's last-good
     // styling — same three-way semantics as Q2PreviewIframe.
-    const { postMessage } = renderIframe({ themeFingerprint: undefined });
-    signalIframeReady();
+    const { iframe, postMessage } = renderIframe({ themeFingerprint: undefined });
+    signalIframeReady(iframe);
 
     // Wait for the UPDATE_AST that accompanies readiness, then confirm no
     // UPDATE_THEME rode along.

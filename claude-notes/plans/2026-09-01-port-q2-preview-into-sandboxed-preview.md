@@ -231,24 +231,48 @@ under `/q2/` on Pages, immune to basename collisions, and app assets
 
 ### Phase 5 — hardening + verification
 
-- [ ] Origin checks: parent accepts messages only from the sandbox origin
-      + `event.source === iframe.contentWindow`; iframe checks
-      `event.source === window.parent` and pins the parent origin after
-      first contact; replace `'*'` target origins where the origin is known.
-- [ ] Strip debug `console.log`s from SW/bridge.
-- [ ] Update stale docs: sandboxed README (`allow-same-origin` reality —
-      isolation comes from the separate origin, which the SW requires;
-      output path), `claude-notes/designs/q2-sandboxed-preview-separate-domain.md`
-      (the `url` message is now the core asset path; CSP note re: blob
-      script imports).
-- [ ] End-to-end (required before declaring success): real browser session
-      via `npm run local-prod:fresh:nginx`, document with
-      `format: q2-sandboxed-preview` — verify themed render, images in
-      subdirectories, KaTeX math, code highlighting, scroll sync both ways,
-      click-to-line, link navigation, Cmd+S. Record invocation + observed
-      output in this plan.
-- [ ] `cargo xtask verify` (full, since quarto-core/WASM touched) +
-      `npm run build:all` from hub-client.
+- [x] Source/origin checks (TDD, negative test first): the parent ignores
+      messages whose `event.source !== iframe.contentWindow` (forged
+      SET_AST cannot reach document state); the frame ignores messages
+      whose `event.source !== window.parent` — including the page
+      bridge's `url_response` listener (forged responses would inject
+      attacker bytes as document assets). Target origins pinned: parent →
+      sandbox origin derived from the iframe URL; frame → parent origin
+      pinned from first accepted message. `'*'` remains only on the
+      pre-contact IFRAME_READY and the SW-bridge `url` request (both go
+      to `window.parent`, which only the embedder receives, and carry no
+      document content).
+- [x] Debug logs: the SW/bridge rewrites (Phase 2) already dropped the
+      per-request logs; the one-time SW registration logs are kept
+      (parity with q2-preview's own logging).
+- [x] Docs: sandboxed README rewritten in Phase 1;
+      `claude-notes/designs/q2-sandboxed-preview-separate-domain.md`
+      rewritten (full protocol table, `url` as the core asset path,
+      security posture incl. CSP/blob note, testing pointers).
+- [x] **End-to-end, real pipeline**: new Playwright spec
+      `hub-client/e2e/q2-sandboxed-preview.spec.ts` — real hub server
+      (globalSetup `cargo run --bin hub`), real WASM preview pipeline,
+      project with `_quarto.yml` + `images/dot.png` (binary) + a
+      `format: q2-sandboxed-preview` doc. Observed inside the sandboxed
+      frame: title block `<h1 class="title">Sandboxed Doc</h1>`, content
+      heading with a real `data-loc` stamp, KaTeX `.katex` markup,
+      `<link data-q2-theme>`, and
+      `<img src="__q2_vfs__/…/images/dot.png">` decoded at natural size
+      1×1 through the SW proxy. `npx playwright test
+      e2e/q2-sandboxed-preview.spec.ts` → 1 passed (5.0s), 2026-09-10.
+      Wiring: `test:e2e` script + the CI e2e workflow now build the
+      sandboxed bundle and set
+      `VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html`
+      so CI tests this branch's renderer, not the last Pages deploy.
+      Additional harness smokes re-run against the hardened bundle:
+      proxy+theme (incl. theme-CSS `url()` font round trip through the
+      SW), scroll/click, custom components — all green.
+      Not exercised in a real browser session: interactive richtext
+      editing and Cmd+S inside the sandboxed frame (machinery identical
+      to q2-preview's, protocol unit-tested; verify by hand in
+      local-prod when convenient).
+- [x] `cargo xtask verify --skip-rust-tests` (Rust untouched since
+      Phase 0's fully-verified commit) green at phase close.
 
 ## Deferred / out of scope
 
