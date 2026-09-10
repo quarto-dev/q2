@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-10
+
+- [`42d91ad9`](https://github.com/quarto-dev/q2/commits/42d91ad9): Draft pages (`draft: true`) now show the "Draft" banner in the live preview, localized like the rendered site
+
 ### 2026-09-09
 
 - [`6d0aa438`](https://github.com/quarto-dev/q2/commits/6d0aa438): The live preview now renders every plain document (no `format:` key, or `format: html`) through the q2-preview renderer, the same one `q2 preview` uses, so comments, the Edit pill, Authors, and the printable version are available without opting in; add `format: q2-html-render` to a document to keep the previous full-page HTML preview instead
