@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-10
 
+- [`14de97b62`](https://github.com/quarto-dev/q2/commits/14de97b62): The sandboxed preview now validates the sender of every cross-frame message, so other windows can't inject content into the preview or the document.
 - [`9f7efd8a9`](https://github.com/quarto-dev/q2/commits/9f7efd8a9): Custom render-components (user TSX overrides) and the code-copy button now work in the sandboxed preview.
 - [`0d5967f2a`](https://github.com/quarto-dev/q2/commits/0d5967f2a): The sandboxed preview now supports editor-preview scroll sync, click-to-source navigation, document links, slide navigation, and live editing — matching the standard preview.
 
