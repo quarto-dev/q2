@@ -79,11 +79,11 @@ use crate::transforms::{
     MermaidRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
     NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
-    SectionizeTransform, ShortcodeResolveTransform, SidebarGenerateTransform,
-    SidebarRenderTransform, TableBootstrapClassTransform, TheoremSugarTransform,
-    TitleBannerTransform, TitleBlockTransform, TocGenerateTransform, TocLocationTransform,
-    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
-    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
+    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
+    TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -719,16 +719,40 @@ pub async fn run_pipeline(
     // render. `None` for pipelines that stop before the unwrap stage.
     ctx.document_profile = stage_ctx.document_profile;
 
+    // Apply the `diagnostics:` suppression policy resolved by
+    // `MetadataMergeStage`. This is deliberately the *only* place
+    // suppression happens: every per-document diagnostic — from stages,
+    // transforms, pampa, or Lua filters — leaves the pipeline through
+    // here, and every frontend (`quarto render`, `q2 preview`,
+    // hub-client) reads it from here. Doing it inside the render also
+    // puts it strictly before `--strict`'s promotion at the CLI summary
+    // boundary, so a suppressed warning stays suppressed rather than
+    // reappearing as an error (bd-lone-bracket-diagnostic-mxu41qbt).
+    //
+    // Both exits pass through it. A failing stage can carry warnings
+    // collected before it out through its error — an unexpandable
+    // include does exactly that
+    // (bd-include-parse-failure-dropped-u4rdjxru) — and a suppressed
+    // warning must not reappear just because the document later failed.
+    // Errors are never suppressible, so the failure itself always
+    // survives.
+    let policy = stage_ctx.diagnostic_policy;
+
     result
         .map_err(|e| match e {
             // Already-structured errors (built by stages that know
             // their span lives outside the document — see
-            // `theme_diagnostic`). Pass through verbatim so the
-            // ariadne renderer can resolve cross-file references.
-            crate::stage::PipelineError::Structured(pe) => crate::error::QuartoError::Parse(pe),
-            crate::stage::PipelineError::StageError { diagnostics, .. }
-                if !diagnostics.is_empty() =>
-            {
+            // `theme_diagnostic`). Pass through with the stage's own
+            // SourceContext so the ariadne renderer can resolve
+            // cross-file references.
+            crate::stage::PipelineError::Structured(mut pe) => {
+                policy.apply(&mut pe.diagnostics);
+                crate::error::QuartoError::Parse(pe)
+            }
+            crate::stage::PipelineError::StageError {
+                mut diagnostics, ..
+            } if !diagnostics.is_empty() => {
+                policy.apply(&mut diagnostics);
                 // Create a SourceContext for the parse error
                 let mut source_context = SourceContext::new();
                 let content_str = String::from_utf8_lossy(content).to_string();
@@ -741,18 +765,8 @@ pub async fn run_pipeline(
             other => crate::error::QuartoError::Other(other.to_string()),
         })
         .map(|d| {
-            // Apply the `diagnostics:` suppression policy resolved by
-            // `MetadataMergeStage`. This is deliberately the *only* place
-            // suppression happens: every per-document diagnostic — from
-            // stages, transforms, pampa, or Lua filters — leaves the
-            // pipeline through this expression, and every frontend
-            // (`quarto render`, `q2 preview`, hub-client) reads it from
-            // here. Doing it inside the render also puts it strictly
-            // before `--strict`'s promotion at the CLI summary boundary,
-            // so a suppressed warning stays suppressed rather than
-            // reappearing as an error (bd-lone-bracket-diagnostic-mxu41qbt).
             let mut diagnostics = stage_ctx.diagnostics;
-            stage_ctx.diagnostic_policy.apply(&mut diagnostics);
+            policy.apply(&mut diagnostics);
             (d, diagnostics)
         })
 }
@@ -1493,6 +1507,18 @@ pub fn build_transform_pipeline(
     // user-filter slot inserted before AttributionRender still sees the
     // un-enriched class list. Idempotent.
     pipeline.push(Box::new(TableBootstrapClassTransform::new()));
+
+    // bd-images-no-max-width-e5ywgnma: tag body images with Bootstrap's
+    // `img-fluid` so an image the author never sized is capped at its
+    // container's width instead of laying out at intrinsic pixel width
+    // (matches Quarto 1's `quarto-post/responsive.lua`). Sits next to
+    // the table pass above for the same reason it runs late: every
+    // upstream transform has finished producing images by now, so
+    // crossref-rendered figures are tagged too. Chrome emitted as raw
+    // HTML (listing thumbnails, navbar logos) is not in `ast.blocks`
+    // and stays untagged, as in Quarto 1. Idempotent, and self-gated
+    // to HTML formats excluding revealjs and `minimal: true`.
+    pipeline.push(Box::new(ResponsiveImageTransform::new()));
 
     // llms markdown capture (bd-llms-txt-unimplemented-oih6z6j7).
     // Runs after every content-mutating transform — crossref-render

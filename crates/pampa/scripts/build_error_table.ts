@@ -127,11 +127,18 @@ try {
       continue;
     }
 
-    const { code, title, message, notes, hints, cases } = errorSpec;
+    const { code, title, message, notes, hints, cases, desynchronizes } = errorSpec;
 
     // Process each case
     for (const testCase of cases) {
       const { name, content, captures, prefixes, suffixes, prefixesAndSuffixes } = testCase;
+      // A guard discriminates entries that share an (lr_state, sym) key.
+      // Deliberately per-case only: one code covers several spellings that
+      // fail in different states, and usually only one of them is
+      // contended. A code-level default would apply "guarded beats
+      // unguarded" to every case of the code, including the ones that
+      // should claim their state outright.
+      const guard = testCase.guard ?? null;
       console.log(`  Processing case: ${name}`);
 
       // Track (lr_state, sym) pairs for this case to detect duplicates
@@ -215,6 +222,8 @@ try {
             captures: augmentedCaptures,
             notes,
             hints: hints || [],
+            guard,
+            desynchronizes: desynchronizes ?? false,
           },
           name: `${code}/${variantName}`,
         });

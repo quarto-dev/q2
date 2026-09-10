@@ -391,3 +391,81 @@ fn test_error_corpus_json_snapshots() {
         }
     }
 }
+
+/// Every corpus case file must still report the code it was written for.
+///
+/// The error table is keyed on `(parse state, lookahead symbol)`, and
+/// several codes share a key — `Q-2-34` and `Q-2-52` at state 3603,
+/// `Q-2-28` and `Q-2-52` at 2675 — with a `guard` deciding between them.
+/// Nothing else reconciles "the case that defines a code" against "the code
+/// that case actually produces", so a new entry could quietly claim a state
+/// belonging to an existing code and every other test here would still pass:
+/// they check that a diagnostic is *rendered*, not that it is the right one.
+/// That is the exact defect this corpus exists to prevent — `{{< fa plus>}}`
+/// answering as `Q-2-34` for a parameter with no digit in it.
+///
+/// Case files are named `<CODE>-<case>.qmd` by `scripts/build_error_table.ts`.
+#[test]
+fn every_corpus_case_reports_its_own_code() {
+    let corpus_dir = PathBuf::from("resources/error-corpus/case-files");
+    let code_pattern = Regex::new(r"^(Q-\d+-\d+)-").expect("Invalid regex pattern");
+
+    let mut qmd_files: Vec<PathBuf> = glob(&format!("{}/*.qmd", corpus_dir.display()))
+        .expect("Failed to glob error corpus case-files")
+        .filter_map(Result::ok)
+        .collect();
+    qmd_files.sort();
+    assert!(
+        !qmd_files.is_empty(),
+        "Error corpus should contain case files"
+    );
+
+    let mut mismatches = Vec::new();
+
+    for qmd_file in &qmd_files {
+        let name = qmd_file
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("case file has a name");
+        let Some(captures) = code_pattern.captures(name) else {
+            panic!("case file {name} is not named <CODE>-<case>.qmd");
+        };
+        let expected = captures[1].to_string();
+
+        let mut content = fs::read_to_string(qmd_file)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {}", qmd_file.display(), e));
+        if !content.ends_with('\n') {
+            content.push('\n');
+        }
+
+        let result = pampa::readers::qmd::read(
+            content.as_bytes(),
+            false,
+            &qmd_file.to_string_lossy(),
+            &mut std::io::sink(),
+            true,
+            None,
+        );
+
+        match result {
+            Ok(_) => mismatches.push(format!("{name}: parsed successfully, expected {expected}")),
+            Err(diagnostics) => {
+                let codes: Vec<&str> = diagnostics
+                    .iter()
+                    .filter_map(|d| d.code.as_deref())
+                    .collect();
+                if !codes.contains(&expected.as_str()) {
+                    mismatches.push(format!("{name}: expected {expected}, got {codes:?}"));
+                }
+            }
+        }
+    }
+
+    assert!(
+        mismatches.is_empty(),
+        "{} of {} corpus cases no longer report their own code:\n  {}",
+        mismatches.len(),
+        qmd_files.len(),
+        mismatches.join("\n  ")
+    );
+}

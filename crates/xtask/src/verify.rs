@@ -2,7 +2,9 @@
 //!
 //! Runs all build and test steps to ensure the entire project is healthy,
 //! matching the CI environment as closely as possible:
-//! 1. Run custom lint checks
+//! 0. Preflight: the `node` on PATH satisfies `engines.node` (see
+//!    `node_version.rs`; skipped only when every npm-driven step is off)
+//! 1. Run custom lint checks, hub-client `lint:css`, and clippy
 //! 2. Check Rust formatting (cargo fmt --check)
 //! 3. Build all Rust crates (with -D warnings, matching CI)
 //! 4. Test tree-sitter grammars
@@ -26,6 +28,11 @@ use crate::lint;
 use crate::test;
 
 const TOTAL_STEPS: u32 = 14;
+
+/// The hub-client CSS lint, exactly as CI's `Lint hub-client CSS` step in
+/// `.github/workflows/ts-test-suite.yml` runs it (from the repo root, via the
+/// npm workspace). Kept as a constant so a test can hold the two in sync.
+const CSS_LINT_ARGS: [&str; 4] = ["run", "lint:css", "-w", "hub-client"];
 
 /// Configuration for the verify command.
 #[derive(Default)]
@@ -54,10 +61,35 @@ pub struct VerifyConfig {
     pub skip_q2_preview_spa_build: bool,
     /// Skip the quarto-sync-client + quarto-hub-mcp package tests.
     pub skip_hub_mcp_tests: bool,
+    /// Skip the hub-client CSS lint (`npm run lint:css`).
+    pub skip_css_lint: bool,
     /// Run hub-client e2e tests (slower, requires browser).
     pub include_e2e: bool,
     /// Do not set RUSTFLAGS="-D warnings" (allows warnings during iteration).
     pub no_deny_warnings: bool,
+}
+
+/// Whether step 1 runs the hub-client CSS lint. Deliberately independent of
+/// `skip_hub_build`: a CSS-only change verified with `--skip-hub-build` is
+/// exactly the case that slipped past the local gate in PR #667
+/// (bd-4bu7vwi5).
+fn runs_css_lint(config: &VerifyConfig) -> bool {
+    !config.skip_css_lint
+}
+
+/// Whether any npm-driven step is enabled, so the Node preflight has
+/// something to protect. Must list every step that shells out to `npm` or
+/// `node`; a step missing here can run under a mismatched Node unannounced.
+fn needs_node(config: &VerifyConfig) -> bool {
+    runs_css_lint(config)
+        || !(config.skip_ts_packages_build
+            && config.skip_hub_build
+            && config.skip_hub_tests
+            && config.skip_trace_viewer_build
+            && config.skip_trace_viewer_tests
+            && config.skip_shared_package_tests
+            && config.skip_q2_preview_spa_build
+            && config.skip_hub_mcp_tests)
 }
 
 /// Run the verify command.
@@ -70,10 +102,24 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
         Some("-D warnings")
     };
 
-    // Step 1: Custom lint checks + clippy gate
+    // Preflight: Node toolchain. Every npm-driven step below (the css lint
+    // in step 1, then 6–14) runs whatever `node` is first on PATH, and the
+    // repo pins a Node major in `engines.node` / `.nvmrc`. Drift surfaces
+    // late and misleadingly (23 unrelated-looking vitest failures under Node
+    // 26 — bd-lh30hlvd), so check first: a mismatch fails in seconds, before
+    // the Rust build, with the cause named. Nothing to check when every
+    // npm-driven step is disabled.
+    println!("\n━━━ Preflight: Node toolchain ━━━\n");
+    if needs_node(config) {
+        crate::node_version::preflight_verify(&project_root)?;
+    } else {
+        println!("  (skipped — every npm-driven step is disabled)");
+    }
+
+    // Step 1: Custom lint checks + hub-client css lint + clippy gate
     {
         println!(
-            "\n━━━ Step 1/{}: Running custom lints + clippy ━━━\n",
+            "\n━━━ Step 1/{}: Running custom lints + lint:css + clippy ━━━\n",
             TOTAL_STEPS
         );
         let lint_config = lint::LintConfig {
@@ -81,6 +127,25 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
             quiet: false,
         };
         lint::run_check(&lint_config)?;
+
+        // hub-client CSS lint (design-system.md's token / logical-property
+        // rules). CI runs it right after `npm ci`, before the WASM build;
+        // it takes ~0.2 s, so it belongs with the fail-fast lints rather
+        // than the hub-client leg. Added after PR #667 passed the whole
+        // local gate and failed CI on a `margin-left: 0` (bd-4bu7vwi5).
+        if runs_css_lint(config) {
+            println!("  ↳ hub-client lint:css...");
+            run_command(
+                "npm",
+                &CSS_LINT_ARGS,
+                &project_root,
+                None,
+                "hub-client lint:css failed (see hub-client/design-system.md)",
+            )?;
+            println!("  ✓ hub-client lint:css clean");
+        } else {
+            println!("  ↳ Skipping hub-client lint:css");
+        }
 
         // Clippy gate (matches the CI step in test-suite.yml). The workspace
         // policy lives in the root Cargo.toml `[workspace.lints.clippy]` table;
@@ -590,7 +655,7 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
 }
 
 /// Find the project root directory (where Cargo.toml with [workspace] lives).
-fn find_project_root() -> Result<std::path::PathBuf> {
+pub(crate) fn find_project_root() -> Result<std::path::PathBuf> {
     let mut dir = std::env::current_dir().context("Failed to get current directory")?;
 
     loop {
@@ -641,4 +706,65 @@ fn run_command(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every npm-driven step disabled, css lint included.
+    fn all_npm_steps_skipped() -> VerifyConfig {
+        VerifyConfig {
+            skip_ts_packages_build: true,
+            skip_hub_build: true,
+            skip_hub_tests: true,
+            skip_trace_viewer_build: true,
+            skip_trace_viewer_tests: true,
+            skip_shared_package_tests: true,
+            skip_q2_preview_spa_build: true,
+            skip_hub_mcp_tests: true,
+            skip_css_lint: true,
+            ..VerifyConfig::default()
+        }
+    }
+
+    #[test]
+    fn css_lint_runs_by_default_and_honours_skip_flag() {
+        assert!(runs_css_lint(&VerifyConfig::default()));
+        assert!(!runs_css_lint(&VerifyConfig {
+            skip_css_lint: true,
+            ..VerifyConfig::default()
+        }));
+        // --skip-hub-build alone must NOT disable it: that was the hole in
+        // bd-4bu7vwi5 (CSS-only change, Rust-only local gate, red CI).
+        assert!(runs_css_lint(&VerifyConfig {
+            skip_hub_build: true,
+            ..VerifyConfig::default()
+        }));
+    }
+
+    #[test]
+    fn node_preflight_counts_css_lint_as_npm_driven() {
+        assert!(needs_node(&VerifyConfig::default()));
+        assert!(!needs_node(&all_npm_steps_skipped()));
+        // Only the css lint left on: still needs Node.
+        let only_css_lint = VerifyConfig {
+            skip_css_lint: false,
+            ..all_npm_steps_skipped()
+        };
+        assert!(needs_node(&only_css_lint));
+    }
+
+    /// The local step must run the same command CI runs, so the two gates
+    /// cannot drift apart silently again (bd-4bu7vwi5: CI got the step in
+    /// 28afc1e14, verify did not).
+    #[test]
+    fn css_lint_command_matches_ci_workflow() {
+        let workflow = include_str!("../../../.github/workflows/ts-test-suite.yml");
+        let local = format!("npm {}", CSS_LINT_ARGS.join(" "));
+        assert!(
+            workflow.contains(&format!("run: {local}")),
+            "ts-test-suite.yml has no `run: {local}` step; keep CI and verify in sync"
+        );
+    }
 }

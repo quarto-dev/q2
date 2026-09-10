@@ -24,6 +24,12 @@ pathdiff.workspace = true
 sha2 = "0.11"
 hex = "0.4"
 glob = "0.3"
+# Nested-cell-mask opener/closer matching (engine/nested_cell_mask.rs) runs on
+# both native and wasm32 (the WASM preview pipeline must mask displayed cells
+# too). Unconditional here costs nothing: `pampa` already declares `regex`
+# unconditionally and `quarto-core` depends on `pampa` unconditionally, so
+# regex is already compiled into the WASM payload.
+regex = "1.12"
 # `time` for date formatting (used by L1 ListingItemInfoStage; see
 # claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md §D12).
 # `formatting` enables `OffsetDateTime::format`; `parsing` enables
@@ -87,7 +93,6 @@ clap = ["dep:clap"]
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tempfile = "3"
 which = "8"
-regex = "1.12"
 # `scraper` (CSS-selector HTML reader) for the L7 post-render upgrade
 # (`bd-qf7r`). Native-only by construction: post_render runs only
 # under `quarto render`, never in the WASM hub-client preview. The

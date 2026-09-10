@@ -124,6 +124,12 @@ interface ReactRendererProps {
    */
   richText?: boolean;
   /**
+   * bd-ew0vak6b: read-only mode (the bottom-bar Edit pill off). Forwarded
+   * to `Q2PreviewIframe` only, which ships it in `UPDATE_AST`; the renderer
+   * already honours it (bd-ov4gqk3m). Absent/false ⇒ editable.
+   */
+  editingDisabled?: boolean;
+  /**
    * P3.2: per-siKey clean QMD buffers for nested blocks, produced by
    * `regenerateNestedBuffers` in `ReactPreview` (gated on
    * `unlockNestingCursor`). Forwarded to `Q2PreviewIframe` only.
@@ -170,6 +176,7 @@ function ReactRenderer({
   commentsMode,
   unlockNestingCursor,
   richText,
+  editingDisabled,
   nestedEditBuffers,
   scrollHandleRef,
   onPreviewScroll,
@@ -198,13 +205,20 @@ function ReactRenderer({
   );
 
   // Extract component paths - only recompute when the list of paths
-  // changes. The gate covers the formats that load user TSX overrides
+  // changes. The gate covers every format that loads user TSX overrides
   // via the iframe's `LOAD_CUSTOM_COMPONENTS` postMessage handler:
-  // q2-debug, q2-preview (Plan 2A item 13), and q2-sandboxed-preview
-  // (sandboxed-preview port Phase 4 — its entry exposes the same
-  // renderer surface and blob-import loader).
+  // q2-debug, q2-preview (Plan 2A item 13), revealjs (converged onto the
+  // same Q2PreviewIframe tree in bd-vwp4y5ku; gate caught up in
+  // ee47e8ec), and q2-sandboxed-preview (sandboxed-preview port Phase 4
+  // — its entry exposes the same renderer surface and blob-import
+  // loader).
   const componentPathsKey = useMemo(() => {
-    if (format !== 'q2-debug' && format !== 'q2-preview' && format !== 'q2-sandboxed-preview') {
+    if (
+      format !== 'q2-debug' &&
+      format !== 'q2-preview' &&
+      format !== 'revealjs' &&
+      format !== 'q2-sandboxed-preview'
+    ) {
       return '';
     }
 
@@ -348,6 +362,7 @@ function ReactRenderer({
             commentsMode={commentsMode}
             unlockNestingCursor={unlockNestingCursor}
             richText={richText}
+            editingDisabled={editingDisabled}
             nestedEditBuffers={nestedEditBuffers}
             currentSlideIndex={currentSlideIndex}
             onSlideChange={onSlideChange}

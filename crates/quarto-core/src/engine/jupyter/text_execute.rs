@@ -891,6 +891,42 @@ mod tests {
         }
     }
 
+    // ── T14 (H1): mask's opener-widening reddens this ───────────────────────
+    //
+    // `parse_code_blocks` is private, so this seam lives in this module
+    // rather than exposing it (controller ruling R5). Runs the real
+    // `nested_cell_mask::mask` end to end — parse a display block containing
+    // a nested `{python}` opener, mask it, serialize the masked AST back to
+    // qmd — and asserts jupyter's own partitioner finds nothing to execute
+    // in the result. Reverting H1 (mask stops rewriting the opener) leaves
+    // the literal `{python}` opener in the masked text, which
+    // `parse_code_blocks` *would* then match — turning this RED.
+    #[test]
+    fn t14_masked_display_block_yields_no_jupyter_cells() {
+        let qmd = "````markdown\n```{python}\nprint(\"x\")\n````\n";
+        let mut output = Vec::<u8>::new();
+        let (doc, _ast_context, _warnings) =
+            pampa::readers::qmd::read(qmd.as_bytes(), false, "test.qmd", &mut output, true, None)
+                .expect("parse qmd fixture");
+
+        let mut masked_doc = doc;
+        let changed = crate::engine::nested_cell_mask::mask(&mut masked_doc);
+        assert!(
+            !changed.is_empty(),
+            "fixture must actually get masked for this test to be meaningful"
+        );
+
+        let mut buf = Vec::new();
+        pampa::writers::qmd::write(&masked_doc, &mut buf).expect("serialize masked qmd fixture");
+        let masked_text = String::from_utf8(buf).expect("qmd writer must emit valid utf8");
+
+        let cells = parse_code_blocks(&masked_text);
+        assert!(
+            cells.is_empty(),
+            "masked text must yield 0 cells from jupyter's partitioner, got: {cells:?}"
+        );
+    }
+
     // ── partition_cells tests ────────────────────────────────────────────────
 
     // -----------------------------------------------------------------------

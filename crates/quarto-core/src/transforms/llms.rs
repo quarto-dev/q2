@@ -352,7 +352,15 @@ fn is_float_div(attr: &Attr) -> bool {
 fn sanitize_attr(attr: &mut Attr, attr_source: &mut AttrSourceInfo) {
     let class_noise = |c: &str| {
         c.starts_with("quarto-")
-            || matches!(c, "anchored" | "code-with-copy" | "cell" | "callout-titled")
+            // `img-fluid` is appended to every body image by
+            // `ResponsiveImageTransform`, which runs immediately
+            // before this capture. It is Bootstrap presentation —
+            // `max-width: 100%` — and carries no meaning for a model
+            // reading the mirror (bd-images-no-max-width-e5ywgnma).
+            || matches!(
+                c,
+                "anchored" | "code-with-copy" | "cell" | "callout-titled" | "img-fluid"
+            )
     };
     if attr.1.len() == attr_source.classes.len() {
         let keep: Vec<bool> = attr.1.iter().map(|c| !class_noise(c)).collect();

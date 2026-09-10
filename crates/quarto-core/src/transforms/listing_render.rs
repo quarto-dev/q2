@@ -276,7 +276,37 @@ fn render_one(
     };
 
     // Splice into the AST.
-    if !try_replace_explicit_slot(ast, &r.listing.id, &parsed_blocks) {
+    let outcome = try_replace_explicit_slot(ast, &r.listing.id, &parsed_blocks);
+
+    // A section is never the host (see `fill_in_blocks`), so the
+    // section's content is safe either way — but the author still
+    // has a heading and a listing competing for one HTML anchor,
+    // and only they can decide which should keep the id. Report it
+    // on the pass that actually renders, so a second pass over an
+    // already-rendered document stays quiet.
+    if outcome != SlotOutcome::AlreadyRendered
+        && let Some(heading) = find_colliding_section(&ast.blocks, &r.listing.id)
+    {
+        let which = if heading.is_empty() {
+            "a section".to_string()
+        } else {
+            format!("the section for heading \u{201c}{heading}\u{201d}")
+        };
+        push_diag(
+            diags,
+            "Q-12-25",
+            format!(
+                "Listing `{id}` has the same id as {which}. The section keeps its \
+                 content and the listing renders separately, but both elements claim \
+                 the `#{id}` anchor, so links to it are ambiguous. Rename the \
+                 listing's `id:` (along with any `::: {{#{id}}}` slot that matches \
+                 it), or give the heading an explicit id of its own.",
+                id = r.listing.id,
+            ),
+        );
+    }
+
+    if outcome == SlotOutcome::NotFound {
         // No explicit slot — append a fresh wrapper Div.
         let mut attrs = LinkedHashMap::new();
         attrs.insert("data-listing-rendered".to_string(), "1".to_string());
@@ -293,9 +323,27 @@ fn render_one(
     }
 }
 
+/// The class `SectionizeTransform` puts on the Div it wraps around a
+/// heading; the HTML writer turns such a Div into a `<section>`.
+const SECTION_CLASS: &str = "section";
+
+fn is_section(div: &Div) -> bool {
+    div.attr.1.iter().any(|c| c == SECTION_CLASS)
+}
+
+/// What a walk of the document found for one listing's id.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum SlotOutcome {
+    /// An author's slot was found and populated by this pass.
+    Filled,
+    /// An author's slot was found, but a previous pass populated it.
+    AlreadyRendered,
+    /// The document has no slot for this listing.
+    NotFound,
+}
+
 /// Walk the host AST looking for a Div with the given id.
 /// Replaces its content + marks it with `data-listing-rendered="1"`.
-/// Returns `true` when a slot was found and updated.
 ///
 /// Recursion is needed because the SectionizeTransform (which runs
 /// in the Normalization phase, ahead of Navigation) wraps top-level
@@ -303,37 +351,75 @@ fn render_one(
 /// `::: {#my-blog}` slot inside a section is no longer a top-level
 /// block by the time the listing renders. Q1 recurses too. Already-
 /// rendered slots short-circuit so the recursion is idempotent.
-fn try_replace_explicit_slot(ast: &mut Pandoc, id: &str, blocks: &[Block]) -> bool {
+fn try_replace_explicit_slot(ast: &mut Pandoc, id: &str, blocks: &[Block]) -> SlotOutcome {
     fill_in_blocks(&mut ast.blocks, id, blocks)
 }
 
-fn fill_in_blocks(blocks_in: &mut Vec<Block>, id: &str, payload: &[Block]) -> bool {
+fn fill_in_blocks(blocks_in: &mut Vec<Block>, id: &str, payload: &[Block]) -> SlotOutcome {
     for block in blocks_in.iter_mut() {
         if let Block::Div(div) = block {
             // `Attr` is the tuple `(id, classes, attributes)`.
-            if div.attr.0 == id {
+            //
+            // A section Div is never the host, even when its id
+            // matches. It is not something an author wrote to hold a
+            // listing — it is the wrapper SectionizeTransform built
+            // around a heading, and it inherited that heading's
+            // auto-generated id. Since a heading's auto-id is its
+            // slugified text, `## Learn more` + `::: {#learn-more}`
+            // collides by construction; filling the section would
+            // replace the heading and every other block in it. Walk
+            // past it to the author's real slot nested inside.
+            if div.attr.0 == id && !is_section(div) {
                 // Idempotency: if we already populated this slot,
                 // skip the second pass.
                 let already_rendered =
                     div.attr.2.get("data-listing-rendered").map(String::as_str) == Some("1");
                 if already_rendered {
-                    return true;
+                    return SlotOutcome::AlreadyRendered;
                 }
                 div.content = payload.to_vec();
                 div.attr
                     .2
                     .insert("data-listing-rendered".to_string(), "1".to_string());
-                return true;
+                return SlotOutcome::Filled;
             }
             // Recurse into the Div's content. Handles nested
             // sections (from SectionizeTransform) as well as nested
             // user Divs.
-            if fill_in_blocks(&mut div.content, id, payload) {
-                return true;
+            let inner = fill_in_blocks(&mut div.content, id, payload);
+            if inner != SlotOutcome::NotFound {
+                return inner;
             }
         }
     }
-    false
+    SlotOutcome::NotFound
+}
+
+/// Find a section Div carrying `id`, returning the text of its
+/// heading (empty when it has none) so the collision diagnostic can
+/// name the heading the author actually wrote.
+fn find_colliding_section(blocks: &[Block], id: &str) -> Option<String> {
+    for block in blocks {
+        let Block::Div(div) = block else { continue };
+        if div.attr.0 == id && is_section(div) {
+            return Some(section_heading_text(div));
+        }
+        if let Some(found) = find_colliding_section(&div.content, id) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn section_heading_text(section: &Div) -> String {
+    section
+        .content
+        .iter()
+        .find_map(|b| match b {
+            Block::Header(h) => Some(crate::transforms::inlines_to_plain_text(&h.content)),
+            _ => None,
+        })
+        .unwrap_or_default()
 }
 
 fn push_diag(diags: &mut Vec<DiagnosticMessage>, code: &str, message: impl Into<String>) {
@@ -1841,6 +1927,301 @@ mod tests {
         assert!(
             rendered.contains("Link("),
             "document items keep their anchor: {rendered}"
+        );
+    }
+
+    // bd-listing-id-collides-with-heading-l57w41jl: a heading's
+    // auto-id is its slugified text, so `## Main listing` followed
+    // by `::: {#main-listing}` puts the author's slot inside a
+    // section Div that SectionizeTransform gave the very same id.
+    // The section must never be treated as the listing's host —
+    // filling it would replace the heading and every other block in
+    // the section.
+    //
+    // Fixtures are built by running the real `sectionize_blocks`,
+    // so they carry exactly the shape the Normalization phase
+    // produces ahead of us.
+
+    fn header(level: usize, text: &str) -> Block {
+        Block::Header(quarto_pandoc_types::block::Header {
+            level,
+            attr: (slug(text), vec![], LinkedHashMap::new()),
+            content: vec![quarto_pandoc_types::inline::Inline::Str(
+                quarto_pandoc_types::inline::Str {
+                    text: text.to_string(),
+                    source_info: SourceInfo::for_test(),
+                },
+            )],
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    fn slug(text: &str) -> String {
+        text.to_lowercase().replace(' ', "-")
+    }
+
+    fn para(text: &str) -> Block {
+        Block::Paragraph(quarto_pandoc_types::block::Paragraph {
+            content: vec![quarto_pandoc_types::inline::Inline::Str(
+                quarto_pandoc_types::inline::Str {
+                    text: text.to_string(),
+                    source_info: SourceInfo::for_test(),
+                },
+            )],
+            source_info: SourceInfo::for_test(),
+        })
+    }
+
+    fn slot(id: &str) -> Block {
+        Block::Div(Div {
+            attr: (id.to_string(), vec![], LinkedHashMap::new()),
+            content: vec![],
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    fn sectionized(blocks: Vec<Block>) -> Pandoc {
+        Pandoc {
+            meta: ConfigValue::default(),
+            blocks: pampa::transforms::sectionize_blocks(blocks),
+        }
+    }
+
+    /// Text of every Paragraph anywhere in the tree.
+    fn collect_para_text(blocks: &[Block], out: &mut Vec<String>) {
+        for b in blocks {
+            match b {
+                Block::Paragraph(p) => {
+                    let mut s = String::new();
+                    inlines_to_text(&p.content, &mut s);
+                    out.push(s);
+                }
+                Block::Div(d) => collect_para_text(&d.content, out),
+                _ => {}
+            }
+        }
+    }
+
+    fn find_div<'a>(blocks: &'a [Block], id: &str) -> Option<&'a Div> {
+        for b in blocks {
+            if let Block::Div(d) = b {
+                if d.attr.0 == id {
+                    return Some(d);
+                }
+                if let Some(found) = find_div(&d.content, id) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
+    /// The author's slot inside the colliding section is the host;
+    /// the section's heading and prose survive untouched.
+    #[tokio::test]
+    async fn colliding_section_is_not_the_host_and_keeps_its_content() {
+        let listing = make_listing(ListingType::Default);
+        let items = vec![make_item("a", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let ast = sectionized(vec![
+            header(2, "Main listing"),
+            para("BEFORE the listing slot"),
+            slot("main-listing"),
+            para("AFTER the listing slot"),
+        ]);
+
+        let (ast, _) = run_transform(ast, resolved).await;
+
+        // The section survives, still a section, still unrendered.
+        let Block::Div(section) = &ast.blocks[0] else {
+            panic!(
+                "expected the section Div at index 0, got {:?}",
+                ast.blocks[0]
+            )
+        };
+        assert!(
+            section.attr.1.iter().any(|c| c == "section"),
+            "block 0 should still be the section Div, classes: {:?}",
+            section.attr.1
+        );
+        assert_eq!(
+            section.attr.2.get("data-listing-rendered"),
+            None,
+            "the section must not have been used as the listing host"
+        );
+
+        // Heading and both paragraphs are still there.
+        let mut headers = Vec::new();
+        collect_header_text(&section.content, &mut headers);
+        assert!(
+            headers.iter().any(|h| h == "Main listing"),
+            "the heading was destroyed; headers found: {:?}",
+            headers
+        );
+        let mut paras = Vec::new();
+        collect_para_text(&section.content, &mut paras);
+        for expected in ["BEFORE the listing slot", "AFTER the listing slot"] {
+            assert!(
+                paras.iter().any(|p| p == expected),
+                "`{expected}` was destroyed; paragraphs found: {:?}",
+                paras
+            );
+        }
+
+        // And the listing did render — into the author's slot,
+        // which is the *inner* Div carrying the id.
+        let inner = section
+            .content
+            .iter()
+            .find_map(|b| match b {
+                Block::Div(d) if d.attr.0 == "main-listing" => Some(d),
+                _ => None,
+            })
+            .expect("author's slot Div should still be a direct child of the section");
+        assert_eq!(
+            inner
+                .attr
+                .2
+                .get("data-listing-rendered")
+                .map(String::as_str),
+            Some("1"),
+            "the author's slot should be the host"
+        );
+        let titles = rendered_block_titles(inner);
+        assert!(
+            titles.iter().any(|t| t.contains('a')),
+            "expected item title `a` in the slot, got {:?}",
+            titles
+        );
+    }
+
+    /// A colliding section with no slot inside it is not a host
+    /// either: the listing falls through to the append path and the
+    /// section keeps its content.
+    #[tokio::test]
+    async fn colliding_section_without_a_slot_falls_through_to_append() {
+        let listing = make_listing(ListingType::Default);
+        let items = vec![make_item("a", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let ast = sectionized(vec![header(2, "Main listing"), para("Section prose")]);
+
+        let (ast, _) = run_transform(ast, resolved).await;
+
+        let Block::Div(section) = &ast.blocks[0] else {
+            panic!("expected the section Div at index 0")
+        };
+        let mut headers = Vec::new();
+        collect_header_text(&section.content, &mut headers);
+        assert!(
+            headers.iter().any(|h| h == "Main listing"),
+            "the heading was destroyed; headers found: {:?}",
+            headers
+        );
+        let mut paras = Vec::new();
+        collect_para_text(&section.content, &mut paras);
+        assert!(
+            paras.iter().any(|p| p == "Section prose"),
+            "section prose was destroyed; paragraphs: {:?}",
+            paras
+        );
+
+        // The listing got its own appended wrapper instead.
+        let appended = ast.blocks.last().unwrap();
+        let Block::Div(div) = appended else {
+            panic!("expected an appended Div")
+        };
+        assert_eq!(div.attr.0, "main-listing");
+        assert!(div.attr.1.iter().any(|c| c == "quarto-listing"));
+    }
+
+    /// The collision itself is reported — an author whose slot and
+    /// heading share an id has two elements competing for one HTML
+    /// anchor, whichever one we pick as host.
+    #[tokio::test]
+    async fn colliding_section_id_emits_q_12_25() {
+        let listing = make_listing(ListingType::Default);
+        let items = vec![make_item("a", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let ast = sectionized(vec![header(2, "Main listing"), slot("main-listing")]);
+
+        let (_, diags) = run_transform(ast, resolved).await;
+
+        let hit = diags
+            .iter()
+            .find(|d| d.code.as_deref() == Some("Q-12-25"))
+            .unwrap_or_else(|| panic!("expected Q-12-25, got: {:?}", diags));
+        assert!(
+            hit.title.contains("main-listing"),
+            "diagnostic should name the colliding id, got: {}",
+            hit.title
+        );
+    }
+
+    /// Control: a listing whose id differs from every section id is
+    /// business as usual — no diagnostic, slot filled.
+    #[tokio::test]
+    async fn non_colliding_section_id_emits_no_diagnostic() {
+        let mut listing = make_listing(ListingType::Default);
+        listing.id = "other-id".to_string();
+        let items = vec![make_item("a", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let ast = sectionized(vec![header(2, "Main listing"), slot("other-id")]);
+
+        let (ast, diags) = run_transform(ast, resolved).await;
+
+        assert!(
+            diags.is_empty(),
+            "expected no diagnostics, got: {:?}",
+            diags
+        );
+        let slot = find_div(&ast.blocks, "other-id").expect("slot should still exist");
+        assert_eq!(
+            slot.attr.2.get("data-listing-rendered").map(String::as_str),
+            Some("1")
+        );
+    }
+
+    /// Re-running the transform must not re-report the collision.
+    #[tokio::test]
+    async fn colliding_section_diagnostic_is_not_repeated_on_second_pass() {
+        let listing = make_listing(ListingType::Default);
+        let items = vec![make_item("a", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing {
+            listing: listing.clone(),
+            items: items.clone(),
+        }];
+        let mut ast = sectionized(vec![header(2, "Main listing"), slot("main-listing")]);
+
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/posts/index.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let index = Arc::new(ProjectIndex::new(Vec::<DocumentProfile>::new()));
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_project_index(index);
+
+        ctx.resolved_listings = resolved.clone();
+        ListingRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        ctx.resolved_listings = resolved;
+        ListingRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        let count = ctx
+            .diagnostics
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("Q-12-25"))
+            .count();
+        assert_eq!(
+            count, 1,
+            "Q-12-25 should be emitted once, got: {:?}",
+            ctx.diagnostics
         );
     }
 }

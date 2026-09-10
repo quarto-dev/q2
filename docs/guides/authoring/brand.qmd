@@ -591,6 +591,61 @@ typography:
 
 The properties you can set for a font under `fonts` depends on the `source`. You can see the other properties available in our [Reference for Brand](/docs/reference/metadata/brand.qmd#font-resource-definitions).
 
+For `source: google` and `source: bunny`, `weight` selects the weights to download: a single value, a list, or a **variable-font range** written as `N..M`:
+
+``` {.yaml filename="_brand.yml"}
+typography:
+  fonts:
+    - family: EB Garamond
+      source: google
+      weight: 400..700
+```
+
+Google Fonts serves a range as one variable font covering the whole span. Bunny Fonts has no range syntax, so Quarto requests each weight in the range separately (`400..700` becomes `400,500,600,700`). When `weight` is omitted, weights 400 and 700 are requested.
+
+For `source: file`, each file may declare the weights it covers; a variable font file declares its range the same way:
+
+``` {.yaml filename="_brand.yml"}
+typography:
+  fonts:
+    - family: My Sans
+      source: file
+      files:
+        - path: fonts/MySans-VariableFont_wght.woff2
+          weight: 300..800
+        - path: fonts/MySans-Italic.woff2
+          weight: 400
+          style: italic
+```
+
+Range ends are numbers from 100 to 900 with the smaller first; keywords are not accepted as range ends. A weight Quarto does not recognize stops the render with error `Q-14-8`, which names the offending value and its location.
+
+### Local font files {#local-font-files}
+
+A font with `source: file` ships its own files with the project instead of loading them from Google Fonts or Bunny Fonts:
+
+``` {.yaml filename="_brand.yml"}
+typography:
+  fonts:
+    - family: EB Garamond
+      source: file
+      files:
+        - path: fonts/EBGaramond-Regular.woff2
+          weight: 400
+        - path: fonts/EBGaramond-Italic.woff2
+          weight: 400
+          style: italic
+  base: EB Garamond
+```
+
+Each `files` entry is a path (or a map with `path`, `weight`, and `style`). Paths are relative to the **brand file's own directory**, so the example above expects a `fonts/` directory next to `_brand.yml`. A path that starts with `/` is relative to the project root instead.
+
+Quarto publishes the files for you: every local font is copied into a `fonts/` directory next to the compiled theme stylesheet (`site_libs/quarto/fonts/` in a website, `<document>_files/fonts/` for a standalone document), and the generated `@font-face` rule points there. You do not need to list font files under `resources`. The `format()` hint of the rule comes from the file's extension (`.woff2`, `.woff`, `.ttf`, or `.otf`).
+
+Because published fonts are named by their file name only, two different files in one project cannot share a name — `serif/Regular.woff2` and `sans/Regular.woff2` would collide. Quarto stops the render and names both files when that happens; rename one of them. A `files` entry that points at a file which does not exist produces a warning and the render continues without it. Remote fonts (`https://…` paths) are left for the browser to fetch.
+
+Per-file keys beyond `path`, `weight`, and `style` — such as `format` or `display` — are not part of the settled brand.yml specification. Quarto warns and ignores them.
+
 
 You can then refer to fonts by `family` in the remaining typography options:
 
@@ -707,7 +762,7 @@ The supported fields are generally described as follows:
 
 -   `size`: The font size for a typographic element. Should be specified using a CSS length unit (e.g., "14px", "1em", "0.9rem").
 
--   `weight`: The font weight (or boldness) of the text. Can be a numeric value between 100 and 900, or a string like "normal" or "bold".
+-   `weight`: The font weight (or boldness) of the text. Can be a numeric value between 100 and 900, or one of the keywords `thin`, `extra-light`, `ultra-light`, `light`, `normal`, `regular`, `medium`, `semi-bold`, `demi-bold`, `bold`, `extra-bold`, `ultra-bold`, or `black`. A text element takes a single weight; ranges belong on the font declaration under `fonts` (see below). Any other value is an error.
 
 -   `style`: The font style for the text, typically either "normal" or "italic".
 

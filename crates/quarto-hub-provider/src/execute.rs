@@ -392,6 +392,15 @@ async fn write_review_file(
     let bytes = compute_input_qmd(abs_path, project, runtime)
         .await
         .map_err(|e| format!("computing the resolved document for review: {e}"))?;
+    // nested-cell-masking (spec § "The engine capture — asymmetric, by
+    // necessity" / `compute_input_qmd`'s three-consumer table): this is the
+    // one security-facing consumer — the artifact a human operator reads
+    // before consenting to execution — so, unlike the staleness compare and
+    // cache key, it must show the author's own `{r}`, not the internal
+    // mask marker. `compute_input_qmd` returns masked bytes; unmask them
+    // here before writing.
+    let text = String::from_utf8_lossy(&bytes);
+    let unmasked = quarto_core::engine::nested_cell_mask::unmask(&text);
 
     let base = Path::new(rel_path).file_name().map_or_else(
         || std::ffi::OsString::from("document"),
@@ -401,7 +410,7 @@ async fn write_review_file(
     file_name.push(".resolved.qmd");
     let review_file = review_dir.join(file_name);
 
-    std::fs::write(&review_file, &bytes)
+    std::fs::write(&review_file, &unmasked)
         .map_err(|e| format!("writing the review file {}: {e}", review_file.display()))?;
     Ok(review_file)
 }
@@ -475,6 +484,69 @@ mod tests {
         assert!(
             !engines.iter().any(|e| e == "markdown"),
             "markdown must not be advertised: {engines:?}"
+        );
+    }
+
+    /// T21 (hunk H11): `write_review_file` is the artifact a human operator
+    /// reads before consenting to execution (see this module's doc comment,
+    /// "Consent"). The operator must see the `{r}` they actually wrote, not
+    /// `q2-nested-executable` — the one *security-facing* consumer of
+    /// `compute_input_qmd`, deliberately unmasked while the staleness compare
+    /// (`quarto-preview/src/capture_driver.rs`) and cache key
+    /// (`quarto-preview/src/cache.rs`) deliberately stay masked. Do not
+    /// "fix" this test by masking the review file to match those two.
+    ///
+    /// The discriminating assertion is `assert_ne!` against
+    /// `compute_input_qmd`'s own (masked, per H10) bytes: today, with neither
+    /// H10 nor H11 implemented, `compute_input_qmd` and `write_review_file`
+    /// produce byte-identical unmasked output, so the two are *equal* and the
+    /// test is genuinely red. It only goes green once `write_review_file`
+    /// unmasks what `compute_input_qmd` masked, making the two outputs
+    /// differ for a doc with a display block.
+    #[tokio::test]
+    async fn write_review_file_shows_the_authors_r_not_the_mask() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let qmd_path = dir.path().join("doc.qmd");
+        std::fs::write(
+            &qmd_path,
+            "---\ntitle: Review\n---\n\n```markdown\n```{r}\n1 + 1\n```\n```\n",
+        )
+        .expect("write fixture");
+
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let project = ProjectContext::discover(&qmd_path, runtime.as_ref())
+            .expect("discover single-file project");
+
+        let review_dir = dir.path().join("review");
+        std::fs::create_dir_all(&review_dir).expect("create review dir");
+
+        let review_file =
+            write_review_file(&qmd_path, &project, runtime.clone(), &review_dir, "doc.qmd")
+                .await
+                .expect("write_review_file");
+
+        let contents = std::fs::read_to_string(&review_file).expect("read review file");
+
+        let masked = compute_input_qmd(&qmd_path, &project, runtime)
+            .await
+            .expect("compute_input_qmd");
+        let masked_str = String::from_utf8(masked).expect("UTF-8");
+
+        assert_ne!(
+            contents, masked_str,
+            "write_review_file must unmask what compute_input_qmd masks — the \
+             review file and the (masked) engine-input bytes must not be \
+             identical for a doc with a display block; got:\n{contents}"
+        );
+        assert!(
+            contents.contains("{r}"),
+            "review file must show the author's `{{r}}` opener verbatim so the \
+             operator reviews the actual bytes that will run; got:\n{contents}"
+        );
+        assert!(
+            !contents.contains("q2-nested-executable"),
+            "review file must NOT contain the internal masking marker — an \
+             operator can't consent to code they can't recognize; got:\n{contents}"
         );
     }
 }

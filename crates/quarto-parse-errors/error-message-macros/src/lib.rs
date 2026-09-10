@@ -4,8 +4,9 @@ use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 use syn::{
+    LitStr, Token,
     parse::{Parse, ParseStream},
-    parse_macro_input, LitStr, Token,
+    parse_macro_input,
 };
 
 #[derive(Deserialize)]
@@ -44,6 +45,10 @@ struct ErrorInfo {
     notes: Vec<Note>,
     #[serde(default)]
     hints: Vec<String>,
+    #[serde(default)]
+    guard: Option<String>,
+    #[serde(default)]
+    desynchronizes: bool,
 }
 
 #[derive(Deserialize)]
@@ -167,6 +172,12 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
             quote! { #hint }
         });
 
+        let guard = match &entry.error_info.guard {
+            Some(g) => quote! { Some(#g) },
+            None => quote! { None },
+        };
+        let desynchronizes = entry.error_info.desynchronizes;
+
         quote! {
             #module_tokens::ErrorTableEntry {
                 state: #state,
@@ -180,16 +191,32 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
                     captures: &[#(#captures),*],
                     notes: &[#(#notes),*],
                     hints: &[#(#hints),*],
+                    guard: #guard,
+                    desynchronizes: #desynchronizes,
                 },
                 name: #name,
             }
         }
     });
 
+    // Make rustc track the JSON as a source dependency.
+    //
+    // A proc macro that reads a file with `fs::read_to_string` leaves no
+    // trace cargo can see, so editing the error table alone does not
+    // trigger a rebuild and the previously embedded table keeps being
+    // used — tests then run against a table that no longer matches the
+    // corpus on disk. `include_str!` in the emitted code is the stable
+    // way to declare the dependency (`proc_macro::tracked_path` is not
+    // stable). The binding is discarded; only the tracking matters.
+    let tracked_path = path_str.strip_prefix("./").unwrap_or(&path_str);
     let expanded = quote! {
-        &[
-            #(#table_entries),*
-        ]
+        {
+            const _TABLE_SOURCE: &str =
+                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #tracked_path));
+            &[
+                #(#table_entries),*
+            ]
+        }
     };
 
     TokenStream::from(expanded)

@@ -1,4 +1,5 @@
 import type { AstProps, BlockNode, InlineNode } from '../../framework';
+import { suggestMainColumn } from '../mainColumn';
 import {
     extractMetaBool,
     extractMetaString,
@@ -139,7 +140,7 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
     // Banner mode (P5, bd-364ol5lu): `TitleBannerTransform` writes the
     // flag; the markup mirrors TITLE_BLOCK_PARTIAL's banner branch —
     // title/subtitle/description/categories inside
-    // div.quarto-title-banner > div.quarto-title.column-body, the meta
+    // div.quarto-title-banner > div.quarto-title.<main-column>, the meta
     // grids below the banner, page-columns page-full on header +
     // banner div, and (Q1 banner-partial parity) NO hide-description
     // gate.
@@ -147,6 +148,11 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
         extractMetaBool(
             getMetaPath(meta, ['rendered', 'title-block-banner']),
         ) === true;
+    // Under `page-layout: full` the banner title tracks `<main>`'s
+    // suggested column, or the two grids fall out of alignment — see
+    // `suggestMainColumn` and its Rust twin in template.rs
+    // (bd-no-toc-reserves-margin-column-s8nonx0w).
+    const bannerColumn = suggestMainColumn(meta) ?? 'column-body';
 
     const categoryChips =
         categories.length > 0 ? (
@@ -172,7 +178,7 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
                 className="quarto-title-block default page-columns page-full"
             >
                 <div className="quarto-title-banner page-columns page-full">
-                    <div className="quarto-title column-body">
+                    <div className={`quarto-title ${bannerColumn}`}>
                         {title ? <h1 className="title">{title}</h1> : null}
                         {subtitle ? (
                             <p className="subtitle lead">{subtitle}</p>

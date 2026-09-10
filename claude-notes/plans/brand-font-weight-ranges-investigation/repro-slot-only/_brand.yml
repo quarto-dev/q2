@@ -1,0 +1,9 @@
+# Only the typography-slot range: shows the $headings-font-weight emission failing.
+typography:
+  fonts:
+    - family: EB Garamond
+      source: google
+  base: EB Garamond
+  headings:
+    family: EB Garamond
+    weight: 500..700

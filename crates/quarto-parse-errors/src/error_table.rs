@@ -46,6 +46,15 @@ pub struct ErrorInfo {
     pub captures: &'static [ErrorCapture], // Tokens to highlight
     pub notes: &'static [ErrorNote],       // Additional context
     pub hints: &'static [&'static str],    // Suggestions for fixing
+    /// Regular expression the source text at the error position must
+    /// match for this entry to apply. See [`lookup_error_entry`] for
+    /// what the text is and how the guard participates in selection.
+    pub guard: Option<&'static str>,
+    /// Whether this error is known to leave the parser desynchronised,
+    /// so that every later error in the same parse is recovery debris
+    /// rather than an independent mistake. See
+    /// `error_generation::produce_diagnostic_messages`.
+    pub desynchronizes: bool,
 }
 
 /// Entry in the error table mapping a parser state to diagnostic information.
@@ -62,20 +71,39 @@ pub struct ErrorTableEntry {
     pub name: &'static str, // Test case name (for debugging)
 }
 
+/// Whether an entry's guard admits `error_text`.
+///
+/// An entry without a guard admits anything. An entry with a guard is
+/// admitted only when the pattern matches; a pattern that fails to
+/// compile admits nothing, so a typo in the corpus degrades to "this
+/// entry never fires" rather than "this entry always fires".
+///
+/// Guards are compiled on demand rather than cached. Only the handful
+/// of entries sharing the failing parser state are ever tested, and
+/// only when a parse has already failed, so the compile cost is not on
+/// any hot path.
+fn guard_admits(entry: &ErrorTableEntry, error_text: &str) -> bool {
+    match entry.error_info.guard {
+        None => true,
+        Some(pattern) => regex::Regex::new(pattern).is_ok_and(|re| re.is_match(error_text)),
+    }
+}
+
 /// Look up an error message by parser state and symbol.
 ///
 /// Returns the error message string if found, or None if this (state, sym)
 /// combination is not in the error table.
+///
+/// `error_text` is the source text at the error position; see
+/// [`lookup_error_entry`].
 pub fn lookup_error_message(
     table: &[ErrorTableEntry],
     process_message: &ProcessMessage,
+    error_text: &str,
 ) -> Option<&'static str> {
-    for entry in table {
-        if entry.state == process_message.state && entry.sym == process_message.sym {
-            return Some(entry.error_info.message);
-        }
-    }
-    None
+    lookup_error_entry(table, process_message, error_text)
+        .first()
+        .map(|entry| entry.error_info.message)
 }
 
 /// Look up error table entries by parser state and symbol.
@@ -83,21 +111,60 @@ pub fn lookup_error_message(
 /// Returns all matching entries. Multiple entries for the same (state, sym)
 /// can exist when the same parser state should produce different error messages
 /// in different contexts.
+///
+/// `(state, sym)` is not always fine enough to tell those contexts apart.
+/// `{{< fa plus>}}` and `{{< fa 2plus >}}` fail in the same parser state
+/// on the same lookahead, but the first is a missing separator before the
+/// closing delimiter and the second is a value that starts with a digit —
+/// different mistakes with different remedies. An entry may therefore
+/// carry a `guard`: a regular expression matched against `error_text`,
+/// the source from the error position to the end of its line.
+///
+/// Selection is by specificity. Entries whose guard rejects `error_text`
+/// drop out; if any guarded entry survives, the unguarded ones drop out
+/// too. So a guard says "this entry claims exactly these occurrences of
+/// the state", and an unguarded entry keeps the rest.
 pub fn lookup_error_entry<'a>(
     table: &'a [ErrorTableEntry],
     process_message: &ProcessMessage,
+    error_text: &str,
 ) -> Vec<&'a ErrorTableEntry> {
-    table
+    let candidates: Vec<&'a ErrorTableEntry> = table
         .iter()
         .filter(|entry| entry.state == process_message.state && entry.sym == process_message.sym)
-        .collect()
+        .filter(|entry| guard_admits(entry, error_text))
+        .collect();
+
+    if candidates.iter().any(|e| e.error_info.guard.is_some()) {
+        candidates
+            .into_iter()
+            .filter(|e| e.error_info.guard.is_some())
+            .collect()
+    } else {
+        candidates
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn make_test_entry(state: usize, sym: &'static str, message: &'static str) -> ErrorTableEntry {
+    pub(super) fn make_guarded_entry(
+        state: usize,
+        sym: &'static str,
+        message: &'static str,
+        guard: &'static str,
+    ) -> ErrorTableEntry {
+        let mut entry = make_test_entry(state, sym, message);
+        entry.error_info.guard = Some(guard);
+        entry
+    }
+
+    pub(super) fn make_test_entry(
+        state: usize,
+        sym: &'static str,
+        message: &'static str,
+    ) -> ErrorTableEntry {
         ErrorTableEntry {
             state,
             sym,
@@ -110,12 +177,14 @@ mod tests {
                 captures: &[],
                 notes: &[],
                 hints: &[],
+                guard: None,
+                desynchronizes: false,
             },
             name: "test_case",
         }
     }
 
-    fn make_process_message(state: usize, sym: &str) -> ProcessMessage {
+    pub(super) fn make_process_message(state: usize, sym: &str) -> ProcessMessage {
         ProcessMessage {
             version: 1,
             state,
@@ -189,6 +258,8 @@ mod tests {
             captures: &[],
             notes: &[],
             hints: &["Try removing the extra character"],
+            guard: None,
+            desynchronizes: false,
         };
         let debug = format!("{:?}", info);
         assert!(debug.contains("ErrorInfo"));
@@ -214,6 +285,8 @@ mod tests {
             captures: &CAPTURES,
             notes: &[],
             hints: &[],
+            guard: None,
+            desynchronizes: false,
         };
         assert_eq!(info.captures.len(), 1);
         assert_eq!(info.captures[0].label, "tok");
@@ -241,7 +314,7 @@ mod tests {
         ];
 
         let msg = make_process_message(2, "EOF");
-        let result = lookup_error_message(&table, &msg);
+        let result = lookup_error_message(&table, &msg, "");
 
         assert_eq!(result, Some("Unexpected end of file"));
     }
@@ -254,7 +327,7 @@ mod tests {
         ];
 
         let msg = make_process_message(99, "UNKNOWN");
-        let result = lookup_error_message(&table, &msg);
+        let result = lookup_error_message(&table, &msg, "");
 
         assert_eq!(result, None);
     }
@@ -263,7 +336,7 @@ mod tests {
     fn test_lookup_error_message_empty_table() {
         let table: [ErrorTableEntry; 0] = [];
         let msg = make_process_message(1, "EOF");
-        let result = lookup_error_message(&table, &msg);
+        let result = lookup_error_message(&table, &msg, "");
 
         assert_eq!(result, None);
     }
@@ -274,7 +347,7 @@ mod tests {
 
         // Same symbol, different state
         let msg = make_process_message(2, "EOF");
-        let result = lookup_error_message(&table, &msg);
+        let result = lookup_error_message(&table, &msg, "");
 
         assert_eq!(result, None);
     }
@@ -285,7 +358,7 @@ mod tests {
 
         // Same state, different symbol
         let msg = make_process_message(1, "NEWLINE");
-        let result = lookup_error_message(&table, &msg);
+        let result = lookup_error_message(&table, &msg, "");
 
         assert_eq!(result, None);
     }
@@ -300,7 +373,7 @@ mod tests {
         ];
 
         let msg = make_process_message(1, "NEWLINE");
-        let result = lookup_error_entry(&table, &msg);
+        let result = lookup_error_entry(&table, &msg, "");
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].error_info.message, "Error 1");
@@ -315,7 +388,7 @@ mod tests {
         ];
 
         let msg = make_process_message(1, "EOF");
-        let result = lookup_error_entry(&table, &msg);
+        let result = lookup_error_entry(&table, &msg, "");
 
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].error_info.message, "First EOF error");
@@ -327,7 +400,7 @@ mod tests {
         let table = [make_test_entry(1, "EOF", "Error 1")];
 
         let msg = make_process_message(99, "UNKNOWN");
-        let result = lookup_error_entry(&table, &msg);
+        let result = lookup_error_entry(&table, &msg, "");
 
         assert!(result.is_empty());
     }
@@ -336,8 +409,55 @@ mod tests {
     fn test_lookup_error_entry_empty_table() {
         let table: [ErrorTableEntry; 0] = [];
         let msg = make_process_message(1, "EOF");
-        let result = lookup_error_entry(&table, &msg);
+        let result = lookup_error_entry(&table, &msg, "");
 
         assert!(result.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::tests::*;
+    use super::*;
+
+    /// A guard that rejects the text at the error position removes its
+    /// entry from consideration entirely.
+    #[test]
+    fn failing_guard_excludes_its_entry() {
+        let table = vec![make_guarded_entry(1, "tok", "closing delimiter", r"^>\}\}")];
+        let msg = make_process_message(1, "tok");
+
+        assert!(lookup_error_entry(&table, &msg, ">}} rest").len() == 1);
+        assert!(lookup_error_entry(&table, &msg, "plus >}}").is_empty());
+    }
+
+    /// The specificity rule: a guarded entry that matches beats an
+    /// unguarded entry at the same (state, sym). This is what lets
+    /// `{{< fa plus>}}` and `{{< fa 2plus >}}` — the same parser state on
+    /// the same lookahead — produce different diagnostics.
+    #[test]
+    fn matching_guard_beats_unguarded_entry() {
+        let table = vec![
+            make_test_entry(1, "tok", "value starts with a digit"),
+            make_guarded_entry(1, "tok", "closing delimiter", r"^>\}\}"),
+        ];
+        let msg = make_process_message(1, "tok");
+
+        let at_delimiter = lookup_error_entry(&table, &msg, ">}} rest");
+        assert_eq!(at_delimiter.len(), 1);
+        assert_eq!(at_delimiter[0].error_info.message, "closing delimiter");
+
+        let elsewhere = lookup_error_entry(&table, &msg, "plus >}}");
+        assert_eq!(elsewhere.len(), 1);
+        assert_eq!(elsewhere[0].error_info.message, "value starts with a digit");
+    }
+
+    /// A guard that does not compile admits nothing, so a corpus typo
+    /// degrades to "this entry never fires" rather than the reverse.
+    #[test]
+    fn uncompilable_guard_admits_nothing() {
+        let table = vec![make_guarded_entry(1, "tok", "broken", "[unterminated")];
+        let msg = make_process_message(1, "tok");
+        assert!(lookup_error_entry(&table, &msg, "anything").is_empty());
     }
 }

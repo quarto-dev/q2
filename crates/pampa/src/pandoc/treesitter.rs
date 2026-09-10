@@ -704,7 +704,7 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateMetadataString(text, node_location(node))
         }
         "section" => process_section(node, children, context),
-        "pandoc_paragraph" => process_paragraph(node, children, context),
+        "pandoc_paragraph" => process_paragraph(node, children, input_bytes, context),
         "atx_heading" => process_atx_heading(node, children, context),
         "atx_h1_marker" | "atx_h2_marker" | "atx_h3_marker" | "atx_h4_marker" | "atx_h5_marker"
         | "atx_h6_marker" => {
@@ -1655,14 +1655,35 @@ fn native_visitor<T: Write>(
                 let trimmed_source_info =
                     node_source_info_with_options(node, context, &SourceInfoOptions::trim_all());
 
-                // Create a warning (not error) about the auto-conversion
-                let msg =
+                // Create a warning (not error) about the auto-conversion.
+                //
+                // Naked HTML is not a supported authoring form in qmd, so the
+                // warning fires either way — but the accurate description and
+                // the useful suggestion differ between a tag that opens a line
+                // with a block-level name (which becomes a RawBlock; see
+                // treesitter_utils/html_block.rs) and one sitting in running
+                // text (which becomes a RawInline).
+                let is_block =
+                    crate::pandoc::treesitter_utils::html_block::starts_block_html(&text)
+                        && crate::pandoc::treesitter_utils::html_block::at_line_start(
+                            input_bytes,
+                            node.start_byte(),
+                        );
+                let builder =
                     DiagnosticMessageBuilder::warning("HTML element converted to raw HTML")
                         .with_code("Q-2-9")
-                        .with_location(trimmed_source_info.clone())
-                        .add_info("HTML elements are automatically converted to RawInline nodes with format 'html'")
+                        .with_location(trimmed_source_info.clone());
+                let msg = if is_block {
+                    builder
+                        .add_info("This tag opens a line and names a block-level element, so it is passed through as a raw HTML block")
+                        .add_hint("To be explicit, put it in a ```{=html} block — or write a Quarto div instead: ::: {.your-class}")
+                        .build()
+                } else {
+                    builder
+                        .add_info("HTML in markdown text is passed through unchanged, as a raw HTML inline")
                         .add_hint("To be explicit, use: `<element>`{=html}")
-                        .build();
+                        .build()
+                };
                 error_collector.add(msg);
 
                 // Tree-sitter may include leading/trailing whitespace in the
@@ -1760,7 +1781,7 @@ pub fn treesitter_to_pandoc<T: Write>(
         );
         return Err(vec![diagnostic]);
     };
-    let result = match postprocess(pandoc, error_collector) {
+    let result = match postprocess(pandoc, input_bytes, error_collector) {
         Ok(doc) => doc,
         Err(()) => {
             // Postprocess found errors, return the diagnostics from the collector

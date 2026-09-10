@@ -1,0 +1,5 @@
+---
+title: Weight range repro
+---
+
+Regular text and **bold text**.

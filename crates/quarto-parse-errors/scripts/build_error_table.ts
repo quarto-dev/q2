@@ -177,11 +177,14 @@ try {
       continue;
     }
 
-    const { code, title, message, notes, hints, cases } = errorSpec;
+    const { code, title, message, notes, hints, cases, desynchronizes } = errorSpec;
 
     // Process each case
     for (const testCase of cases) {
       const { name, content, captures, prefixes, suffixes, prefixesAndSuffixes } = testCase;
+      // A guard discriminates entries that share an (lr_state, sym) key.
+      // Per-case only; see the note in crates/pampa/scripts/build_error_table.ts.
+      const guard = testCase.guard ?? null;
       console.log(`  Processing case: ${name}`);
 
       // Track (lr_state, sym) pairs for this case to detect duplicates
@@ -265,6 +268,8 @@ try {
             captures: augmentedCaptures,
             notes,
             hints: hints || [],
+            guard,
+            desynchronizes: desynchronizes ?? false,
           },
           name: `${code}/${variantName}`,
         });

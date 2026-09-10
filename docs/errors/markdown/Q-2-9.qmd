@@ -1,6 +1,6 @@
 ---
 title: "HTML Element Auto-converted"
-description: "An HTML element in markdown text was auto-converted to a raw-HTML inline. Warning only."
+description: "An HTML element written directly in markdown was passed through as raw HTML. Warning only."
 code: Q-2-9
 subsystem: markdown
 status: stub
@@ -11,17 +11,26 @@ categories:
 
 # `Q-2-9` — HTML Element Auto-converted
 
-> An HTML element in markdown text was auto-converted to a
-> raw-HTML inline. Warning only.
+> An HTML element written directly in markdown was passed through
+> as raw HTML. Warning only.
 
 ## What this means
 
-When Quarto encounters raw HTML (like `<span>` or a custom tag)
-inside markdown, it does not reject the element; it converts it
-to a Pandoc `RawInline` with format `html` and emits this warning.
-The output is identical to what an explicit raw-HTML attribute
-would produce, but the warning calls attention to the implicit
-conversion.
+Writing HTML directly in markdown — "naked" HTML — is not a
+supported form in Quarto Markdown. Quarto does not reject it: it
+passes the element through unchanged and emits this warning so the
+implicit conversion is visible.
+
+How it is passed through depends on where the tag sits:
+
+- A tag that **opens a line** and names a **block-level** element
+  (`<div>`, `<details>`, `<summary>`, `<section>`, `<table>`, …)
+  becomes a raw HTML *block*. It is emitted on its own, not wrapped
+  in a paragraph — a `<div>` inside a `<p>` is invalid HTML, and a
+  browser would silently restructure the page around it.
+- Anything else — a tag in the middle of a sentence, or an inline
+  element such as `<span>`, `<b>` or `<img>` — becomes a raw HTML
+  *inline* and stays inside its paragraph.
 
 ## Why this happens
 
@@ -34,15 +43,32 @@ The pattern shows up whenever raw HTML appears in markdown text:
 ## How to fix
 
 The warning does not block the build, so no action is strictly
-required. To silence the warning, mark the snippet explicitly as
-raw HTML using Pandoc's raw-attribute form:
+required. To silence it, use one of the explicit forms.
+
+For a block, either a raw-HTML block:
+
+````markdown
+```{=html}
+<details class="checksums-section">
+<summary>SHA-256 checksums</summary>
+```
+````
+
+or — usually better, when all you want is a container with
+attributes — a Quarto div, which is native markdown and works in
+every output format:
+
+```markdown
+::: {.checksums-section}
+Content here.
+:::
+```
+
+For an inline, Pandoc's raw-attribute form:
 
 ```markdown
 `<custom-tag>content</custom-tag>`{=html}
 ```
-
-This is also the form Quarto recommends — it makes the intent
-explicit and is portable across formats.
 
 ## Related
 

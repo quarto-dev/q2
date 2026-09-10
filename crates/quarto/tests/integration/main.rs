@@ -3,6 +3,7 @@
 
 pub mod attribution_cli_e2e;
 pub mod bootstrap_sh;
+pub mod brand_font_weight;
 pub mod build_ts_extension_e2e;
 pub mod coalesced_diagnostics;
 pub mod conditional_content_cli;
@@ -24,6 +25,7 @@ pub mod render_scripts_cli;
 pub mod revealjs_cli;
 pub mod smoke_all;
 pub mod strict_mode;
+pub mod theme_compile_error;
 pub mod theme_missing_file;
 pub mod trace_cli;
 pub mod unknown_project_type;

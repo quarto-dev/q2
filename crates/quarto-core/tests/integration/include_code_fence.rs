@@ -21,7 +21,9 @@
 //!
 //! Plan: `claude-notes/plans/2026-08-10-include-in-code-block.md`.
 
-use crate::include_expansion_diagnostics::{codes, render_fixture};
+use crate::include_expansion_diagnostics::{
+    codes, error_codes, render_fixture, render_fixture_err,
+};
 
 const APP_PY: &str = "import os\n\nprint(\"hello from app.py\")\n";
 
@@ -282,8 +284,10 @@ async fn nested_code_fence_include_expands_without_token() {
 #[tokio::test]
 async fn self_including_code_fence_reports_a_cycle() {
     // Embedding a document in its own listing would recurse forever:
-    // the spliced copy carries the same include line.
-    let output = render_fixture(
+    // the spliced copy carries the same include line. The listing
+    // cannot be produced, so the document fails rather than shipping
+    // an empty fence.
+    let error = render_fixture_err(
         &[(
             "index.qmd",
             "---\ntitle: Listing\n---\n\n```{.markdown}\n{{< include index.qmd >}}\n```\n",
@@ -293,20 +297,18 @@ async fn self_including_code_fence_reports_a_cycle() {
     .await;
 
     assert!(
-        codes(&output).contains(&"Q-17-1"),
-        "expected a circular-include warning, got {:?}",
-        codes(&output)
-    );
-    assert!(
-        !output.html.contains("?include"),
-        "cycle leaked the error token:\n{}",
-        output.html
+        error_codes(&error).contains(&"Q-17-1"),
+        "expected a circular-include error, got {:?}",
+        error_codes(&error)
     );
 }
 
 #[tokio::test]
-async fn missing_code_fence_include_reports_q_17_2_without_token() {
-    let output = render_fixture(
+async fn missing_code_fence_include_fails_the_document() {
+    // A listing whose source file is gone is the same silent hole as a
+    // missing block-level include: the fence would render with the
+    // included lines simply absent.
+    let error = render_fixture_err(
         &[(
             "index.qmd",
             "---\ntitle: Listing\n---\n\n```{.python}\nkept = 1\n{{< include gone.py >}}\n```\n",
@@ -316,17 +318,8 @@ async fn missing_code_fence_include_reports_q_17_2_without_token() {
     .await;
 
     assert!(
-        codes(&output).contains(&"Q-17-2"),
-        "expected a missing-file warning, got {:?}",
-        codes(&output)
+        error_codes(&error).contains(&"Q-17-2"),
+        "expected a missing-file error, got {:?}",
+        error_codes(&error)
     );
-    // The unresolved line is dropped rather than left to become
-    // `?include` downstream.
-    assert!(
-        !output.html.contains("?include"),
-        "unresolved include leaked the error token:\n{}",
-        output.html
-    );
-    let body = listing_body(&output.html);
-    assert!(body.contains("kept"), "lost the surrounding code:\n{body}");
 }

@@ -1,6 +1,6 @@
 title: Quarto Julia Engine Extension
 author: Quarto Julia Engine
-version: 0.1.0
+version: 0.2.1
 quarto-required: ">=1.9.0"
 contributes:
   engines:

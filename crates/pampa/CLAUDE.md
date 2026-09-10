@@ -120,6 +120,70 @@ To add a new test case to an existing error:
 3. Run `./scripts/build_error_table.ts` to regenerate the error table
 4. Test your changes with `cargo test`
 
+### When two errors share a state: `guard`
+
+The table is keyed on `(parse state, symbol)`, and sometimes that key is
+not fine enough. `{{< fa plus>}}` (a missing space before the closing
+delimiter) and `{{< fa 2plus >}}` (a value that starts with a digit) fail
+in the *same* state on the *same* lookahead, but they are different
+mistakes with different remedies. Before Q-2-52 existed, whichever code
+owned the state answered for both, and the tight-close spelling was
+reported as Q-2-34 — telling the author to quote a value that had no
+digit in it.
+
+A case may therefore carry a `guard`: a regular expression matched
+against the source text from the error position to the end of its line.
+
+```json
+{
+  "name": "closing-delimiter",
+  "content": "Click the {{< fa plus>}} icon.\n",
+  "captures": [],
+  "guard": "^>\\}\\}"
+}
+```
+
+Selection is by **specificity**: entries whose guard rejects the text drop
+out, and if any guarded entry survives, the unguarded ones drop out too.
+So a guard says "this entry claims exactly these occurrences of the
+state", and an unguarded entry keeps the rest. A guard that fails to
+compile admits nothing, so a typo means "never fires" rather than
+"always fires".
+
+A guard is **per case, never per code**. One code usually covers several
+spellings that fail in different states, and typically only one of them is
+contended; a code-level default would apply "guarded beats unguarded" to
+every case of that code, including the ones that should claim their state
+outright.
+
+Reach for a guard only when a state is genuinely contended. Prefer to
+find a distinct state first: quoting the value in the example above
+(`{{< fa "plus">}}`) reaches its own state and needed no guard.
+
+### When one mistake wrecks the rest of the parse: `desynchronizes`
+
+Some errors do not merely fail where they are written. Recovery from a
+tight `{{<` consumes the opening `:::` of a div several lines below,
+reading it as three `pipe_table_align_left` tokens — and the div's
+closing `:::`, which is correct Quarto, is then reported as a further
+parse error. One missing space produced three errors, the last of them
+pointing at code that was not wrong.
+
+Set `"desynchronizes": true` at the top level of a `Q-*.json` to declare
+that this error leaves the parser desynchronised. Diagnostics are sorted
+by position and everything *after* the first such error is dropped;
+errors *before* it are kept, since they were found while the parser was
+still synchronised.
+
+Unlike `guard`, this is per code rather than per case, and deliberately
+so: every spelling of a missing separator wrecks the parse the same way,
+and a code whose spellings genuinely differed on this point would be
+better split into two codes than given two settings.
+
+It is opt-in. It is the right tool when the construct's recovery is known
+to eat unrelated text, and the wrong one for an error the parser recovers
+from cleanly.
+
 ### One LR state per *inline container* — the coverage trap
 
 The table is keyed on `(parse state, symbol)`, and for an error that can occur

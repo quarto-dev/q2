@@ -67,4 +67,36 @@ describe('validatePreferences', () => {
     // Missing richText fills in its ON default:
     expect(result.richText).toBe(true);
   });
+
+  // bd-ew0vak6b: the q2-preview Edit pill in the bottom bar persists its
+  // state as `previewEditing`. Same migration-safety shape as richText —
+  // a required key would wipe stored prefs that predate it.
+  it('defaults previewEditing to ON (block editing enabled by default)', () => {
+    expect(DEFAULT_PREFERENCES.previewEditing).toBe(true);
+  });
+
+  it('round-trips an explicit previewEditing: false', () => {
+    const result = validatePreferences({
+      ...DEFAULT_PREFERENCES,
+      previewEditing: false,
+    });
+    expect(result.previewEditing).toBe(false);
+  });
+
+  it('preserves other settings when previewEditing is absent (prefs from before it existed)', () => {
+    const oldPrefs = {
+      version: 1,
+      scrollSyncEnabled: false,
+      errorOverlayCollapsed: false,
+      colorScheme: 'dark',
+      unlockNestingCursor: false,
+      richText: false,
+    };
+    const result = validatePreferences(oldPrefs);
+    expect(result.scrollSyncEnabled).toBe(false);
+    expect(result.richText).toBe(false);
+    expect(result.colorScheme).toBe('dark');
+    // Missing previewEditing fills in its ON default:
+    expect(result.previewEditing).toBe(true);
+  });
 });

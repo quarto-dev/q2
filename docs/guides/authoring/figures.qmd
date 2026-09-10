@@ -275,7 +275,7 @@ You can provide a short caption that is used in the "List of Figures" using the 
 You can specify `fig-scap` as an executable code block option or as an attribute on an image:
 
 ````markdown
-```{{python}}
+```{python}
 #| fig-cap: "Long caption"
 #| fig-scap: "Short caption"
 

@@ -1,0 +1,1 @@
+Show the {{{<fa plus >}}} syntax.

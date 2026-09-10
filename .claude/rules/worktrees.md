@@ -96,6 +96,10 @@ npm install                              # only if hub-client work is in scope
 cargo xtask verify --skip-hub-build      # confirm green at branch HEAD
 ```
 
+`npm install` and `cargo xtask verify` both require the Node major pinned in
+`.nvmrc` / `engines.node`; with fnm's `--use-on-cd`, the `cd` into the worktree
+selects it (see `claude-notes/instructions/node-version.md`).
+
 `--base` defaults to `main` when omitted. **If the strand has an
 open parent epic, the command prints a warning** nudging you toward
 the epic's integration branch (e.g. `feature/<name>`). Pass

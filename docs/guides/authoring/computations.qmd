@@ -2,14 +2,91 @@
 title: Computations
 ---
 
-TBD.
+## Overview
+
+A Quarto document can contain **executable cells**: fenced code blocks whose
+info string is a language name wrapped in braces. Quarto hands each cell to
+an [engine](engines.qmd), runs it, and splices the results into the rendered
+document. For example, a cell written like this:
+
+````markdown
+```{r}
+sum(1:10)
+```
+````
+
+would, if run, produce `55` underneath it in the rendered page. (This page
+only *shows* cells like this one — see the next section — so nothing on it
+actually runs.)
 
 ## Displaying code cells without running them
 
-To show readers an executable cell — for example, in a document that
-teaches Quarto itself — wrap the cell in a fenced code block with more
-backticks:
+Writing *about* Quarto means showing readers what a cell looks like without
+running it — for example, in a tutorial or in this documentation. The rule is
+the ordinary Markdown one: **a fenced code block is displayed verbatim**, so a
+cell written inside one is shown, not executed.
 
+To display the cell above instead of running it, wrap it in a fence with
+*more backticks* than the cell uses:
+
+`````markdown
+````markdown
+```{r}
+sum(1:10)
+```
+````
+`````
+
+which renders as:
+
+````markdown
+```{r}
+sum(1:10)
+```
+````
+
+The braces stay single. Nothing about the inner cell changes — it is shown
+exactly as an author would type it, which is the point: a reader can copy it
+straight into their own document.
+
+### The outer fence must be longer
+
+Markdown decides where a fenced code block ends by matching the length of its
+opening fence. So the wrapping fence only needs to be *longer* than the
+longest run of backticks inside it — one backtick longer is enough. A cell
+written with the ordinary three backticks is displayed by wrapping it in four;
+if the content being displayed already contains a four-backtick fence, wrap
+that in five, and so on.
+
+### Cell options are displayed too
+
+Options on the fence header, and Quarto's `#|` comment options, are part of
+the cell and are displayed along with it — nothing needs to be stripped or
+adjusted. A fence-header option:
+
+````markdown
+```{r, echo=FALSE}
+plot(1:10)
+```
+````
+
+and a `#|` comment option:
+
+````markdown
+```{r}
+#| echo: false
+#| label: fig-example
+plot(1:10)
+```
+````
+
+### Displaying a block that itself displays a cell
+
+The same rule applies at any depth: each layer's fence just needs to be
+longer than the longest fence nested inside it. To show a document like this
+page — one that itself displays a cell — add one more layer of backticks:
+
+``````markdown
 `````markdown
 ````markdown
 ```{python}
@@ -17,9 +94,7 @@ backticks:
 ```
 ````
 `````
-
-Fenced code blocks are displayed verbatim, so the inner cell is shown
-exactly as written (single braces and all) and is not executed.
+``````
 
 ::: callout-note
 ## Migrating from Quarto 1
@@ -32,4 +107,106 @@ and the fix is the `markdown` code block shown above. Dropping the
 escape also means code blocks that genuinely contain doubled braces —
 Jinja or Mustache templates, GitHub Actions expressions — render
 correctly, where Quarto 1 would collapse them.
+:::
+
+## Inline expressions
+
+A document can also compute a value **inline** --- inside a sentence, or
+inside an attribute --- so that the result appears in place of the
+expression. Quarto has two spellings for this, and they differ in how the
+computed value is inserted.
+
+The **brace spelling** mirrors the cell syntax and works across engines:
+
+````markdown
+The current release is `{r} release_version`.
+````
+
+The **classic spelling** is knitr's own, inherited from R Markdown, and
+predates Quarto. It is available with the knitr engine only:
+
+````markdown
+The current release is `r release_version`.
+````
+
+### The two spellings insert the value differently
+
+The brace spelling **escapes** Markdown's special characters in the value:
+whatever the expression returns is shown as text, exactly as it came out. The
+classic spelling inserts the value **as Markdown**, so formatting carried in
+the value is interpreted.
+
+With `notice` set to `**important**`:
+
+| Written              | Renders as      |
+|----------------------|-----------------|
+| `` `{r} notice` ``   | `**important**` |
+| `` `r notice` ``     | **important**   |
+
+To opt the brace spelling into Markdown, wrap the value in knitr's `I()`:
+
+````markdown
+The notice is `{r} I(notice)`.
+````
+
+That makes the two spellings equivalent: `` `r x` `` does the same thing as
+`` `{r} I(x)` ``.
+
+Reach for the brace spelling when the value comes from somewhere you do not
+control. Markdown admits inline HTML, so a value inserted as Markdown can
+bring markup with it; the brace spelling's escaping is the default for
+exactly that reason.
+
+### Where inline expressions work
+
+In prose, and in attribute values --- a fenced div's attributes, or a link
+title:
+
+````markdown
+The current release is `{r} release_version`.
+
+::: {#hero data-version="`{r} release_version`"}
+Download the latest build.
+:::
+
+[Download](https://example.com/dl "Version `{r} release_version`")
+````
+
+### Writing about an inline expression
+
+The rule is the one from [Displaying code cells without running
+them](#displaying-code-cells-without-running-them), and nothing about it
+changes for inline expressions: write it inside a `markdown` block and it is
+displayed rather than run.
+
+````markdown
+```markdown
+The current release is `{r} release_version`.
+```
+````
+
+which renders as:
+
+```markdown
+The current release is `{r} release_version`.
+```
+
+The expression is shown exactly as an author would type it, together with the
+prose around it, so a reader can copy the whole line into their own document.
+As with cells, the wrapping fence only needs to be longer than the longest run
+of backticks inside it.
+
+The block has to be a `markdown` block, or a fence carrying no language at
+all. A fence labelled with some other language --- ```` ```r ````, say ---
+displays its text but does not stop an expression inside it from running, so
+reach for `markdown` when what you are showing is Quarto syntax.
+
+::: callout-note
+## Migrating from Quarto 1
+
+Quarto 1 had a doubled-brace escape for inline expressions too: `` `{{r}} x` ``
+was displayed as `` `{r} x` ``. Quarto 2 drops it for the same reason it drops
+the doubled-brace escape for cells --- the `markdown` code block above does the
+job, and leaving doubled braces alone is what lets Jinja and Mustache templates
+render correctly.
 :::

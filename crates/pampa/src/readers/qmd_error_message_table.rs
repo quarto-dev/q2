@@ -28,15 +28,21 @@ pub fn get_error_table() -> &'static [ErrorTableEntry] {
 /// Look up an error message by parser state and symbol.
 ///
 /// Convenience wrapper that uses the QMD error table.
-pub fn lookup_error_message(process_message: &ProcessMessage) -> Option<&'static str> {
-    quarto_parse_errors::lookup_error_message(get_error_table(), process_message)
+pub fn lookup_error_message(
+    process_message: &ProcessMessage,
+    error_text: &str,
+) -> Option<&'static str> {
+    quarto_parse_errors::lookup_error_message(get_error_table(), process_message, error_text)
 }
 
 /// Look up error table entries by parser state and symbol.
 ///
 /// Convenience wrapper that uses the QMD error table.
-pub fn lookup_error_entry(process_message: &ProcessMessage) -> Vec<&'static ErrorTableEntry> {
-    quarto_parse_errors::lookup_error_entry(get_error_table(), process_message)
+pub fn lookup_error_entry(
+    process_message: &ProcessMessage,
+    error_text: &str,
+) -> Vec<&'static ErrorTableEntry> {
+    quarto_parse_errors::lookup_error_entry(get_error_table(), process_message, error_text)
 }
 
 #[cfg(test)]

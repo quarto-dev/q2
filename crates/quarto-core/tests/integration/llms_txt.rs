@@ -1097,3 +1097,52 @@ fn llms_undecorated_md_link_stays_static() {
         output_diag_codes(&summary)
     );
 }
+
+/// bd-images-no-max-width-e5ywgnma: `ResponsiveImageTransform` runs
+/// just before the llms capture and appends Bootstrap's `img-fluid`
+/// to every body image. That class is HTML presentation and has no
+/// business in the markdown mirror — `sanitize_attr`'s `class_noise`
+/// predicate must strip it, exactly as it strips `anchored` and
+/// `code-with-copy`.
+///
+/// Without the strip the companion reads
+/// `![A caption](wide.png){.img-fluid}`, which is both noise for a
+/// model reading the mirror and a Bootstrap detail leaking out of the
+/// HTML pipeline.
+#[test]
+fn llms_companion_strips_img_fluid() {
+    let (project_dir, _summary) = render_project(|dir| {
+        write(
+            &dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  title: \"Test Site\"\n\
+             \x20 llms-txt: true\n",
+        );
+        write(
+            &dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\n\
+             ![A caption](wide.png)\n\n\
+             Inline ![i](wide.png) here.\n",
+        );
+        write(&dir.join("wide.png"), "not-really-a-png");
+    });
+
+    let companion = read(&project_dir.join("_site/index.md"));
+    assert_not_contains(
+        &companion,
+        "img-fluid",
+        "the HTML-only responsive class must not reach the markdown companion",
+    );
+    // The images themselves must survive the strip — this is a
+    // sanitize rule, not a drop rule.
+    assert_contains(
+        &companion,
+        "![A caption](wide.png)",
+        "the block image survives with a clean attribute list",
+    );
+    assert_contains(
+        &companion,
+        "![i](wide.png)",
+        "the inline image survives with a clean attribute list",
+    );
+}

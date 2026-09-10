@@ -28,11 +28,12 @@
 
 use std::path::{Path, PathBuf};
 
-use quarto_brand::{BrandRef, ResolvedBrand};
+use quarto_brand::{BrandPath, BrandPathSegment, BrandRef, ResolvedBrand};
 use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::SourceInfo;
 use quarto_system_runtime::SystemRuntime;
 
+use crate::brand_layer::brand_err;
 use crate::error::SassError;
 use crate::themes::ThemeSpec;
 
@@ -530,7 +531,7 @@ impl ThemeConfig {
 
         let light_brand = light_split
             .as_ref()
-            .map(|(split, dir)| ResolvedBrand::new(split.light.clone(), dir.clone()));
+            .map(|(split, file)| resolved_brand(split.light.clone(), file.clone()));
 
         let dark_brand = match self.dark.as_ref().and_then(|d| d.brand_ref.as_ref()) {
             None => None,
@@ -540,14 +541,14 @@ impl ThemeConfig {
                 // one parse.
                 light_split
                     .as_ref()
-                    .map(|(split, dir)| ResolvedBrand::new(split.dark.clone(), dir.clone()))
+                    .map(|(split, file)| resolved_brand(split.dark.clone(), file.clone()))
             }
             Some(dark_ref) => {
                 // Two-file form: the dark variant's own file
                 // contributes its dark half (for a plain single-mode
                 // file the halves are identical).
-                let (split, dir) = load_split_brand(dark_ref, runtime, base_dir)?;
-                Some(ResolvedBrand::new(split.dark, dir))
+                let (split, file) = load_split_brand(dark_ref, runtime, base_dir)?;
+                Some(resolved_brand(split.dark, file))
             }
         };
 
@@ -630,12 +631,21 @@ pub fn resolve_brand(
     let Some(brand_ref) = extract_brand_refs(config.get("brand"))?.light else {
         return Ok(None);
     };
-    let (split, dir) = load_split_brand(&brand_ref, runtime, base_dir)?;
-    Ok(Some(ResolvedBrand::new(split.light, dir)))
+    let (split, file) = load_split_brand(&brand_ref, runtime, base_dir)?;
+    Ok(Some(resolved_brand(split.light, file)))
 }
 
-/// Read and parse one [`BrandRef`] into a split brand plus the
-/// directory it was read from (`None` for inline blocks).
+/// A [`ResolvedBrand`] for a half of a split brand: anchored at its
+/// file when it came from one, directory-less for an inline block.
+fn resolved_brand(brand: quarto_brand::Brand, file: Option<PathBuf>) -> ResolvedBrand {
+    match file {
+        Some(file) => ResolvedBrand::from_file(brand, file),
+        None => ResolvedBrand::new(brand, None),
+    }
+}
+
+/// Read and parse one [`BrandRef`] into a split brand plus the file
+/// it was read from (`None` for inline blocks).
 ///
 /// The parse form is [`quarto_brand::UnifiedBrand`] — color values may
 /// be plain strings or `{light:, dark:}` pairs — which is immediately
@@ -664,10 +674,14 @@ fn load_split_brand(
                 location: None,
             })?;
             let brand = quarto_brand::UnifiedBrand::from_yaml_str(yaml).map_err(brand_err)?;
-            let dir = full_path
-                .parent()
-                .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-            Ok((brand.split(), Some(dir)))
+            brand.validate().map_err(|e| {
+                brand_validation_err(
+                    e,
+                    |path| locate_in_brand_yaml(yaml, &full_path, path),
+                    Some(full_path.clone()),
+                )
+            })?;
+            Ok((brand.split(), Some(full_path)))
         }
         BrandRef::Inline(value) => {
             let brand: quarto_brand::UnifiedBrand = serde_yaml::from_value((**value).clone())
@@ -675,34 +689,11 @@ fn load_split_brand(
                     message: format!("inline brand block: {e}"),
                     location: None,
                 })?;
+            brand
+                .validate()
+                .map_err(|e| brand_validation_err(e, |_| None, None))?;
             Ok((brand.split(), None))
         }
-    }
-}
-
-/// Resolve a `_brand.yml` (from the `brand:` key) into SCSS layers, independent
-/// of the Bootstrap `theme:` parsing.
-///
-/// `format: html` resolves brand through [`ThemeConfig::from_config_value`] +
-/// the `brand` position marker in `process_theme_specs`, but that path also
-/// parses `theme:` against the Bootswatch theme set — which rejects reveal theme
-/// names. RevealJS therefore resolves brand on its own via this helper: extract
-/// the `brand:` reference, read/parse it into a [`Brand`], and convert it to
-/// SCSS layers with [`crate::brand_to_layers`]. Returns an empty vector when no
-/// brand is configured.
-///
-/// `base_dir` resolves a relative `brand:` path (typically the project root);
-/// `font_path_prefix` is the directory prefix for `@font-face` URLs (pass an
-/// empty path to reference brand-bundled fonts by bare name).
-pub fn resolve_brand_layers(
-    config: &ConfigValue,
-    runtime: &dyn SystemRuntime,
-    base_dir: &Path,
-    font_path_prefix: &Path,
-) -> Result<Vec<crate::SassLayer>, SassError> {
-    match resolve_brand(config, runtime, base_dir)? {
-        Some(resolved) => crate::brand_layer::brand_to_layers(&resolved.brand, font_path_prefix),
-        None => Ok(Vec::new()),
     }
 }
 
@@ -807,6 +798,7 @@ fn extract_single_brand_ref(value: &ConfigValue) -> Result<BrandRef, SassError> 
     // in `resolve`.
     if value.as_map_entries().is_some() {
         let yaml_value = config_value_to_yaml_value(value)?;
+        validate_inline_brand(&yaml_value, value)?;
         return Ok(BrandRef::Inline(Box::new(yaml_value)));
     }
 
@@ -818,6 +810,7 @@ fn extract_single_brand_ref(value: &ConfigValue) -> Result<BrandRef, SassError> 
     {
         // Only accept if the yaml_value is a mapping; bail otherwise.
         if matches!(yaml_value, serde_yaml::Value::Mapping(_)) {
+            validate_inline_brand(&yaml_value, value)?;
             return Ok(BrandRef::Inline(Box::new(yaml_value)));
         }
     }
@@ -826,6 +819,89 @@ fn extract_single_brand_ref(value: &ConfigValue) -> Result<BrandRef, SassError> 
         message: "`brand:` must be a path string or a brand block (map)".to_string(),
         location: Some(value.source_info.clone()),
     })
+}
+
+/// Validate an inline brand block at extraction time, while the
+/// `ConfigValue` tree — and with it each node's `source_info` — is
+/// still in scope, so an invalid weight is reported with a span at the
+/// offending node (bd-5fseopxy). Shape errors are deliberately left to
+/// load time (`load_split_brand`) so they are reported once, through
+/// the same path as the file form.
+fn validate_inline_brand(yaml: &serde_yaml::Value, value: &ConfigValue) -> Result<(), SassError> {
+    let Ok(brand) = serde_yaml::from_value::<quarto_brand::UnifiedBrand>(yaml.clone()) else {
+        return Ok(());
+    };
+    brand.validate().map_err(|e| {
+        brand_validation_err(
+            e,
+            |path| {
+                // A `Scalar(Yaml::Hash)` block has no per-node
+                // ConfigValues to walk; fall back to the whole block.
+                locate_in_config_value(value, path).or_else(|| Some(value.source_info.clone()))
+            },
+            None,
+        )
+    })
+}
+
+/// Map a `Brand::validate` failure to its `SassError`, attaching the
+/// span `locate` finds for the reported YAML path and the file the brand
+/// was read from (`None` for inline blocks).
+fn brand_validation_err(
+    e: quarto_brand::BrandError,
+    locate: impl FnOnce(&BrandPath) -> Option<SourceInfo>,
+    brand_file: Option<PathBuf>,
+) -> SassError {
+    match e {
+        quarto_brand::BrandError::InvalidFontWeight {
+            path,
+            value,
+            reason,
+        } => {
+            let location = locate(&path);
+            SassError::InvalidBrandFontWeight {
+                path: path.to_string(),
+                value,
+                reason,
+                location,
+                brand_file,
+            }
+        }
+        other => brand_err(other),
+    }
+}
+
+/// Find the node at `path` in a brand file by re-parsing its text with
+/// quarto-yaml. The resulting span is keyed by
+/// `quarto_yaml::file_id_for_filename(brand_file)` — the same hash the
+/// diagnostic layer re-derives from the path to register the file — so
+/// `brand_file` must be passed exactly as it will be reported.
+///
+/// `None` when the text does not re-parse or the path does not resolve
+/// (the diagnostic then renders span-less; never a wrong span).
+fn locate_in_brand_yaml(text: &str, brand_file: &Path, path: &BrandPath) -> Option<SourceInfo> {
+    let root = quarto_yaml::parse_file(text, &brand_file.to_string_lossy()).ok()?;
+    let mut node = &root;
+    for seg in path.segments() {
+        node = match seg {
+            BrandPathSegment::Key(k) => node.get_hash_value(k)?,
+            BrandPathSegment::Index(i) => node.get_array_item(*i)?,
+        };
+    }
+    Some(node.source_info.clone())
+}
+
+/// Find the node at `path` in an inline brand block's `ConfigValue`
+/// tree; each node already carries the span of where it was written.
+fn locate_in_config_value(root: &ConfigValue, path: &BrandPath) -> Option<SourceInfo> {
+    let mut node = root;
+    for seg in path.segments() {
+        node = match seg {
+            BrandPathSegment::Key(k) => node.get(k)?,
+            BrandPathSegment::Index(i) => node.as_array()?.get(*i)?,
+        };
+    }
+    Some(node.source_info.clone())
 }
 
 /// Convert a `ConfigValue` to a `serde_yaml::Value`, walking the
@@ -906,13 +982,6 @@ fn yaml_rust_to_serde(yaml: &yaml_rust2::Yaml) -> serde_yaml::Value {
         }
         Yaml::Alias(_) | Yaml::BadValue => serde_yaml::Value::Null,
         Yaml::Null => serde_yaml::Value::Null,
-    }
-}
-
-fn brand_err(e: quarto_brand::BrandError) -> SassError {
-    SassError::InvalidThemeConfig {
-        message: e.to_string(),
-        location: None,
     }
 }
 

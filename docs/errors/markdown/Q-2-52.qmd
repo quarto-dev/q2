@@ -1,0 +1,79 @@
+---
+title: "Shortcode delimiter not separated by a space"
+description: "A shortcode's opening and closing delimiters must each be separated from its content by a space."
+code: Q-2-52
+subsystem: markdown
+status: complete
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-52` — Shortcode delimiter not separated by a space
+
+> A shortcode's delimiters must be separated from its content by
+> whitespace. Write `{{{< fa plus >}}}` — a space after `{{<` and a
+> space before `>}}` — rather than \{\{\<fa plus\>\}\}.
+
+## What this means
+
+A shortcode is written `{{{< name arg1 arg2 >}}}`, and the space on each
+side of the content is part of the syntax rather than a matter of
+style. Both of these are errors:
+
+- \{\{\<fa plus \>\}\} — no space after the opening delimiter.
+- \{\{\< fa plus\>\}\} — no space before the closing one.
+
+Quarto 1 accepted them. It matched shortcodes with a regular
+expression, which tolerated the tight spelling incidentally. Quarto 2
+parses shortcodes as part of the document grammar, and requires the
+separator so that `{{` at the start of a word stays unambiguous — `{{`
+is also the opening delimiter of Jinja, Handlebars, Liquid and several
+other template languages that Quarto documents routinely quote.
+
+## Why this happens
+
+- **A document ported from Quarto 1.** This is by far the most common
+  cause. The tight spelling renders fine under Quarto 1, so it
+  accumulates in a project unnoticed.
+- **Only one delimiter was fixed.** Adding the space after `{{<` but
+  not before `>}}` leaves the shortcode just as unparseable. Both
+  delimiters need it.
+- **The escaped spelling.** `{{{{< ... >}}}}`, which shows a shortcode
+  literally instead of running it, takes the separator on the same
+  terms.
+
+## How to fix
+
+Put a space on both sides of the shortcode's content:
+
+```markdown
+Click the {{{< fa plus >}}} icon.
+```
+
+To convert a whole file or a whole project, `qmd-syntax-helper` will do
+it for you:
+
+```bash
+qmd-syntax-helper convert -r q-2-52 -i path/to/document.qmd
+```
+
+The rule rewrites both delimiters, and reports each one it changed. The
+spaced form is what Quarto 1 emits and both versions accept, so a
+converted document still builds under Quarto 1.
+
+## Example
+
+A line written tight, \{\{\<fa plus\>\}\}, becomes:
+
+```markdown
+Click the {{{< fa plus >}}} icon.
+```
+
+## Related errors
+
+- [`Q-2-34`](Q-2-34.qmd) — an unquoted shortcode parameter that starts
+  with a digit. A closing delimiter written tight after such a value
+  produces this error, `Q-2-52`, rather than `Q-2-34`: the value is
+  fine and the space is what is missing.
+- [`Q-2-27`](Q-2-27.qmd) — a shortcode that is never closed.

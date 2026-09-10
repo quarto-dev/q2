@@ -151,6 +151,7 @@ Update this table when adding keys or migrating sites.
 | `project/mod.rs` fragment rebase; `extension/{paths,read}.rs` | extension-contributed theme/css/include-*/template/filters | (2) force-marked `Path` |
 | `website_config.rs`, `website_post_render.rs` | `favicon`, navbar logo / footer image copy | project-root by construction (`_quarto.yml`-only keys) |
 | `discovery.rs`, `project_resources.rs`, `sidebar_auto.rs`, `quarto-sass/src/config.rs` | `project.render`, `project.resources`, sidebar `auto:`, `brand:` | project-root by construction |
+| `quarto-core/src/brand_fonts.rs` (`resolve_source`) | `_brand.yml` `typography.fonts[].files[].path` (`source: file`) | brand-file dir base; leading `/` = project root; **emitted URL is artifact-relative** (`fonts/<basename>` beside the theme CSS), never a rebased source path (bd-ve916wr8) |
 | URL-space emitters (`link_rewrite`, `navbar/footer_render`, `website_favicon`, `transforms/format_css`, `example_embed`, listing `item.rs`) | emitted hrefs/srcs | `page_url_for` family (rule-2 exit) |
 | `transforms/repo_actions_render.rs` + `quarto-navigation::repo_actions` | `repo-url`, `repo-branch`, `repo-subdir`, `issue-url` | absolute external URLs built from the pivot form (`page_relative_source`); **neither rule-2 exit** — no `page_url_for`, no filesystem read. `repo-subdir` is a *repository*-namespace path, outside this contract entirely. |
 | `include_expansion.rs:689` (`resolve_include_target`) | `{{< include >}}` (markdown space) | project-root leading-`/` + includer-dir |

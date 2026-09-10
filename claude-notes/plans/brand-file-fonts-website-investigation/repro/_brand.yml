@@ -1,0 +1,9 @@
+typography:
+  fonts:
+    - family: EB Garamond
+      source: file
+      files:
+        - path: assets/EBGaramond-VariableFont_wght.woff2
+          weight: 400
+          style: normal
+  base: EB Garamond

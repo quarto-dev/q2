@@ -306,6 +306,27 @@ describe('ReactRenderer format routing', () => {
     expect(capturedPreviewIframeProps.at(-1)?.richText).toBe(true);
   });
 
+  it('forwards editingDisabled to Q2PreviewIframe (bd-ew0vak6b)', () => {
+    // The bottom-bar Edit pill (via the previewEditing preference) reaches
+    // the iframe as `editingDisabled`; the renderer already honours it
+    // (bd-ov4gqk3m). Both values must pass through, and a rerender with the
+    // other value must reach the iframe too (the live toggle case).
+    const common = {
+      astJson: EMPTY_AST,
+      currentFilePath: '/project/index.qmd',
+      files: [],
+      fileContents: new Map<string, string>(),
+      onNavigateToDocument: () => {},
+      setAst: () => {},
+      format: 'q2-preview',
+    };
+    const { rerender } = render(<ReactRenderer {...common} editingDisabled={true} />);
+    expect(capturedPreviewIframeProps.at(-1)?.editingDisabled).toBe(true);
+
+    rerender(<ReactRenderer {...common} editingDisabled={false} />);
+    expect(capturedPreviewIframeProps.at(-1)?.editingDisabled).toBe(false);
+  });
+
   it('does not route q2-slides through any AST iframe', () => {
     const { queryByTestId } = mountForRouting('q2-slides');
     expect(capturedAstIframeProps.length).toBe(0);
@@ -339,6 +360,35 @@ describe('ReactRenderer render-components gate (Plan 2A item 13)', () => {
     );
 
     // Same transpilation behavior as q2-debug — gate covers both.
+    expect(lastCapturedPreviewCode()).toEqual({
+      '/elliot/simple.tsx': 'JS:export const Para = () => null;',
+    });
+  });
+
+  it('extracts customComponentsCode for revealjs format', () => {
+    // revealjs renders through the same Q2PreviewIframe/dispatcher tree as
+    // q2-preview (see ReactRenderer format routing describe block above),
+    // so render-components: must apply there too. The gate at the top of
+    // customComponentsCode's useMemo previously only allowed
+    // 'q2-debug' | 'q2-preview', silently skipping revealjs documents even
+    // though revealjs converged onto this same tree (bd-vwp4y5ku) — that
+    // convergence just never extended to this particular gate.
+    const fileContents = new Map([
+      ['elliot/simple.tsx', 'export const Para = () => null;'],
+    ]);
+
+    render(
+      <ReactRenderer
+        astJson={astWithRenderComponents(['/elliot/simple.tsx'])}
+        currentFilePath="elliot/index.qmd"
+        files={[]}
+        fileContents={fileContents}
+        onNavigateToDocument={() => {}}
+        setAst={() => {}}
+        format="revealjs"
+      />,
+    );
+
     expect(lastCapturedPreviewCode()).toEqual({
       '/elliot/simple.tsx': 'JS:export const Para = () => null;',
     });

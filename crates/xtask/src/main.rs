@@ -32,6 +32,7 @@ mod build_trace_viewer;
 mod create_worktree;
 mod dev_setup;
 mod lint;
+mod node_version;
 mod pandoc_check;
 mod stage_doc_examples;
 mod switch_task;
@@ -144,7 +145,9 @@ enum Command {
     /// Run full project verification (mirrors CI checks).
     ///
     /// This runs all build and test steps to ensure the entire project is healthy:
-    /// 1. Run custom lint checks (cargo xtask lint)
+    /// 0. Preflight: the `node` on PATH satisfies `engines.node` in package.json
+    ///    (fails early; override with Q2_ALLOW_NODE_MISMATCH=1 for experiments)
+    /// 1. Run custom lint checks (cargo xtask lint), hub-client lint:css, clippy
     /// 2. Check Rust formatting (cargo fmt --check)
     /// 3. Build all Rust crates (cargo build --workspace, with -D warnings)
     /// 4. Test tree-sitter grammars (tree-sitter test)
@@ -202,6 +205,11 @@ enum Command {
         /// Skip the quarto-sync-client + quarto-hub-mcp package tests.
         #[arg(long)]
         skip_hub_mcp_tests: bool,
+
+        /// Skip the hub-client CSS lint (npm run lint:css). Independent of
+        /// --skip-hub-build: it runs in step 1 with the other fail-fast lints.
+        #[arg(long)]
+        skip_css_lint: bool,
 
         /// Include hub-client e2e tests (slower, requires browser).
         #[arg(long)]
@@ -383,6 +391,7 @@ fn main() -> Result<()> {
             skip_shared_package_tests,
             skip_q2_preview_spa_build,
             skip_hub_mcp_tests,
+            skip_css_lint,
             e2e,
             no_deny_warnings,
         } => {
@@ -399,6 +408,7 @@ fn main() -> Result<()> {
                 skip_shared_package_tests,
                 skip_q2_preview_spa_build,
                 skip_hub_mcp_tests,
+                skip_css_lint,
                 include_e2e: e2e,
                 no_deny_warnings,
             };

@@ -267,8 +267,8 @@ pub fn resolve_single_file_deps(
 
     use quarto_core::project::{DocumentInfo, ProjectContext};
     use quarto_core::stage::{
-        IncludeExpansionStage, LoadedSource, ParseDocumentStage, PipelineData, PipelineStage,
-        StageContext,
+        LoadedSource, ParseDocumentStage, PipelineData, PipelineStage, StageContext,
+        expand_document_includes,
     };
 
     let abs_deck = project_root.join(single_file_rel);
@@ -296,19 +296,22 @@ pub fn resolve_single_file_deps(
     // tokio runtime (the same pattern `quarto-preview` uses elsewhere). Include
     // expansion reads included files through `ctx.runtime` (the native FS).
     let parse = ParseDocumentStage;
-    let expand = IncludeExpansionStage::new();
-    let expanded = pollster::block_on(async {
-        let parsed = parse
-            .run(
-                PipelineData::LoadedSource(LoadedSource::new(abs_deck.clone(), source)),
-                &mut ctx,
-            )
-            .await?;
-        expand.run(parsed, &mut ctx).await
-    });
-    let Ok(PipelineData::DocumentAst(doc)) = expanded else {
+    let parsed = pollster::block_on(parse.run(
+        PipelineData::LoadedSource(LoadedSource::new(abs_deck.clone(), source)),
+        &mut ctx,
+    ));
+    let Ok(PipelineData::DocumentAst(mut doc)) = parsed else {
         return SingleFileDeps::default();
     };
+
+    // An include that cannot supply its content fails the *render*
+    // (bd-include-parse-failure-dropped-u4rdjxru) but must not empty the
+    // *watch set*: a broken include is precisely when the author is
+    // editing the included file, and dropping it here would mean the fix
+    // never re-triggers a render. `expand_document_includes` populates
+    // `recorded_includes` for every file the walk touched either way, so
+    // the failure is deliberately ignored.
+    let _ = expand_document_includes(&mut doc, &mut ctx);
 
     let canonical_root = project_root
         .canonicalize()
@@ -676,6 +679,38 @@ mod tests {
             deps.qmd_files.is_empty(),
             "missing/escaping/non-tsx entries must all be dropped; got {:?}",
             deps.qmd_files,
+        );
+    }
+
+    /// A document whose include cannot be resolved still yields its other
+    /// dependencies. The render fails in that state
+    /// (bd-include-parse-failure-dropped-u4rdjxru), but the watch set is
+    /// what lets the author's fix re-trigger a render — emptying it would
+    /// strand the preview on the broken version.
+    #[test]
+    fn single_file_deps_survive_an_unresolvable_include() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        std::fs::write(root.join("good.qmd"), "![pic](logo.png)\n").unwrap();
+        std::fs::write(root.join("logo.png"), b"\x89PNG\r\n").unwrap();
+        std::fs::write(
+            root.join("main.qmd"),
+            "{{< include good.qmd >}}\n\n{{< include gone.qmd >}}\n",
+        )
+        .unwrap();
+
+        let deps = resolve_single_file_deps(root, std::path::Path::new("main.qmd"), native_arc());
+        assert_eq!(
+            deps.qmd_files,
+            vec![std::path::PathBuf::from("good.qmd")],
+            "the resolvable include must still be watched; got {:?}",
+            deps.qmd_files,
+        );
+        assert_eq!(
+            deps.binary_files,
+            vec![std::path::PathBuf::from("logo.png")],
+            "deps reached through the resolvable include must survive too; got {:?}",
+            deps.binary_files,
         );
     }
 

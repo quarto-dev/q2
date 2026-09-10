@@ -238,4 +238,50 @@ In Pandoc, you can intersperse HTML and Markdown, and Pandoc will (attempt to) p
 its AST format. This is brittle and inefficient because it relies heavily on backtracking through
 parser combinators. In `quarto-markdown`, use the raw block and inline syntax directly.
 
+Naked HTML is nonetheless *accepted*, with a `Q-2-9` warning, and the reader
+tries to give it the same shape Pandoc would. Two deliberate gaps remain.
+
+**No `native_divs` / `native_spans`.** Pandoc promotes a balanced
+`<div>…</div>` to a `Div` node, which wraps its contents in `<p>`. Finding the
+matching close tag is the backtracking this section rejects, so we do not do
+it: the tags stay `RawBlock`s and the contents are not wrapped. The visible
+difference is a missing `<p>`.
+
+**`Plain` where Pandoc sometimes writes `Para`.** Markdown *is* parsed inside a
+naked HTML block — Pandoc's `markdown_in_html_blocks`, which is a separate
+extension from `native_divs` and which we do implement. Pandoc chooses between
+`Plain` and `Para` for that content by tracking which element is still open;
+lacking that, we always emit `Plain`. The visible difference is again only a
+`<p>`, and only for text that trails a raw tag rather than sitting between a
+pair. Analysis:
+`claude-notes/research/2026-09-03-block-html-adjacent-markdown-unparsed.md`.
+
+Content inside `<pre>`, `<script>`, `<style>` and `<textarea>` is *not* parsed
+as markdown — they are CommonMark's raw-text elements, and Pandoc agrees. The
+exemption covers one paragraph, because that is the extent of the lift: if such
+an element's content contains a blank line, only the part before it is kept
+verbatim and the rest is read as markdown.
+
+**Writing the AST back out does not reproduce the `Plain`.** The writer always
+separates blocks with a blank line, so a lifted interior read back as `Plain`
+comes out as a `Paragraph` on the next read — gaining a `<p>`. This is
+canonicalization, like the table and definition-list rewrites, not a lossy
+step: the tags stay in block position and the markdown stays parsed, and the
+shape is stable from the first cycle onward.
+
+Preserving the `Plain` would mean writing it *tight* against the neighbouring
+tag, which requires knowing the two blocks came from one paragraph. The AST
+does not record that, and a rule that inferred it from block types alone was
+wrong in both directions: it merged a `Plain` with a following *unrelated*
+`<script>`, so the script's contents were parsed as markdown, and it let a
+closing tag fall back inside a paragraph — the `<p><div>` shape the lift
+exists to prevent. The information needed is provenance the AST cannot carry,
+so the writer does not guess.
+
+One consequence is worth knowing: for an element whose content model is
+phrasing — `<summary>`, `<td>` — the added `<p>` is not valid there. The first
+render is correct; only a write/read cycle introduces it. Naked HTML is an
+unsupported authoring form that already warns (`Q-2-9`) and points at
+`::: {.class}` or a `{=html}` fence, which have neither problem.
+
 

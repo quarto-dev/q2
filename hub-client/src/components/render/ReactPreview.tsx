@@ -506,6 +506,10 @@ export default function ReactPreview({
   // q2-preview iframe so editable paragraphs/headings open the tiptap editor
   // instead of the monospaced textarea.
   const [richText] = usePreference('richText');
+  // bd-ew0vak6b: the bottom-bar Edit pill. Off ⇒ the iframe runs read-only
+  // (`editingDisabled`), and `handleSetAst` below drops any edit payload
+  // that still arrives (defense in depth, mirroring the q2-preview SPA).
+  const [previewEditing] = usePreference('previewEditing');
   // Track previewState in a ref for use in callbacks
   const previewStateRef = useRef<PreviewState>('START');
   useEffect(() => {
@@ -822,6 +826,10 @@ export default function ReactPreview({
           );
           return;
         }
+        // bd-ew0vak6b: read-only mode never writes. The iframe renders no
+        // edit surface while editing is off, but a payload can still be in
+        // flight from a session that was open when the pill was flipped.
+        if (!previewEditing) return;
         if (!rendered.untransformedAstJson) {
           console.warn(
             'q2-preview setAst: no untransformedAstJson retained; render first',
@@ -873,7 +881,7 @@ export default function ReactPreview({
         console.error('Failed to write AST back to QMD:', err);
       }
     },
-    [content, onContentRewrite, format, rendered.untransformedAstJson, rendered.renderedContent, beginCommitStatus, settleCommitStatus],
+    [content, onContentRewrite, format, rendered.untransformedAstJson, rendered.renderedContent, beginCommitStatus, settleCommitStatus, previewEditing],
   );
 
   return (
@@ -900,6 +908,7 @@ export default function ReactPreview({
             commentsMode={commentsMode}
             unlockNestingCursor={unlockNestingCursor}
             richText={richText}
+            editingDisabled={!previewEditing}
             nestedEditBuffers={nestedEditBuffers}
             scrollHandleRef={previewScrollRef}
             onPreviewScroll={handlePreviewScroll}

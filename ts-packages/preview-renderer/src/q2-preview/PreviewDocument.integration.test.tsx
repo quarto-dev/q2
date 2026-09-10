@@ -155,6 +155,97 @@ describe('PreviewDocument body container', () => {
         expect(document.body.className).toBe('quarto-light');
     });
 
+    it('sidebar page with no TOC → fullcontent composes with the sidebar classes', () => {
+        // bd-no-toc-reserves-margin-column-s8nonx0w: `fullcontent` and
+        // the sidebar-supplied structural classes are orthogonal. The
+        // preview mirrors the Rust compose
+        // (`test_full_template_fullcontent_composes_with_sidebar_body_classes`).
+        mount({
+            rendered: mm({
+                navigation: mm({ 'body-classes': ms('nav-sidebar docked') }),
+            }),
+        });
+        expect(document.body.className).toBe(
+            'nav-sidebar docked fullcontent quarto-light',
+        );
+    });
+
+    it('sidebar page with a TOC → no fullcontent', () => {
+        mount({
+            rendered: mm({
+                navigation: mm({
+                    'body-classes': ms('nav-sidebar docked'),
+                    toc: ms('<ul><li>x</li></ul>'),
+                }),
+            }),
+        });
+        expect(document.body.className).toBe('nav-sidebar docked quarto-light');
+    });
+
+    it('margin categories occupy the right margin → no fullcontent', () => {
+        mount({
+            rendered: mm({
+                navigation: mm({
+                    margin_categories: ms('<div class="quarto-listing-category"></div>'),
+                }),
+            }),
+        });
+        expect(document.body.className).toBe('quarto-light');
+    });
+
+    it('page-layout: full with a left sidebar → main.column-page-right, no fullcontent', () => {
+        // bd-no-toc-reserves-margin-column-s8nonx0w: the full-layout
+        // remedy is a column class on <main>, not a body class — Q1
+        // applies one or the other, never both.
+        const { container } = mount({
+            'page-layout': ms('full'),
+            rendered: mm({
+                navigation: mm({
+                    'body-classes': ms('nav-sidebar docked'),
+                    sidebar: ms('<nav id="quarto-sidebar">S</nav>'),
+                }),
+            }),
+        });
+        expect(
+            container.querySelector(
+                'main.content.column-page-right#quarto-document-content',
+            ),
+        ).not.toBeNull();
+        expect(document.body.className).toBe('nav-sidebar docked quarto-light');
+    });
+
+    it('page-layout: full with both margins free → main.column-page', () => {
+        const { container } = mount({ 'page-layout': ms('full') });
+        expect(
+            container.querySelector('main.content.column-page#quarto-document-content'),
+        ).not.toBeNull();
+    });
+
+    it('page-layout: full with both margins occupied → main.column-body', () => {
+        const { container } = mount({
+            'page-layout': ms('full'),
+            rendered: mm({
+                navigation: mm({
+                    sidebar: ms('<nav id="quarto-sidebar">S</nav>'),
+                    toc: ms('<ul><li>x</li></ul>'),
+                }),
+            }),
+        });
+        expect(
+            container.querySelector('main.content.column-body#quarto-document-content'),
+        ).not.toBeNull();
+    });
+
+    it('page-layout: article sets no column class on main', () => {
+        const { container } = mount({
+            rendered: mm({
+                navigation: mm({ sidebar: ms('<nav id="quarto-sidebar">S</nav>') }),
+            }),
+        });
+        const main = container.querySelector('main#quarto-document-content');
+        expect(main!.className).toBe('content');
+    });
+
     it('cleanup: unmount restores the pre-mount body.className', () => {
         document.body.className = 'pre-existing';
         const { unmount } = mount({ 'body-classes': ms('mid') });
@@ -590,7 +681,11 @@ describe('PreviewDocument chrome injection (Phase F.2)', () => {
                 },
             ]),
         });
-        expect(document.body.className).toBe('nav-sidebar floating quarto-light');
+        // No TOC and no margin content, so `fullcontent` composes on
+        // top since bd-no-toc-reserves-margin-column-s8nonx0w.
+        expect(document.body.className).toBe(
+            'nav-sidebar floating fullcontent quarto-light',
+        );
     });
 
     it('user-set top-level body-classes still wins over sidebar-render', () => {

@@ -1,0 +1,7 @@
+project:
+  type: default
+brand: _brand.yml
+trace: summary
+format:
+  html:
+    theme: brand

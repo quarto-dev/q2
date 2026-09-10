@@ -28,6 +28,24 @@ WASM rebuild is needed for a changelog-only edit.
 - [`14de97b62`](https://github.com/quarto-dev/q2/commits/14de97b62): The sandboxed preview now validates the sender of every cross-frame message, so other windows can't inject content into the preview or the document.
 - [`9f7efd8a9`](https://github.com/quarto-dev/q2/commits/9f7efd8a9): Custom render-components (user TSX overrides) and the code-copy button now work in the sandboxed preview.
 - [`0d5967f2a`](https://github.com/quarto-dev/q2/commits/0d5967f2a): The sandboxed preview now supports editor-preview scroll sync, click-to-source navigation, document links, slide navigation, and live editing — matching the standard preview.
+- [`0f17a8b2c`](https://github.com/quarto-dev/q2/commits/0f17a8b2c): q2-preview task lists: the checkbox and its item text render on one line again, and loose (blank-line-separated) task items now get checkboxes too
+
+### 2026-09-09
+
+- [`93b146c`](https://github.com/quarto-dev/q2/commits/93b146c): Edit pill in the document bottom bar turns q2-preview block editing on/off (off makes links plain links); the choice persists
+- [`0242ab91`](https://github.com/quarto-dev/q2/commits/0242ab91): Resolving the last comment on a block in the q2-preview no longer leaves an empty bubble behind or a block glow that never clears
+
+### 2026-09-08
+
+- [`c0a6230e`](https://github.com/quarto-dev/q2/commits/c0a6230e): WASM tests that render now wire the dart-sass VFS importer, since a theme compile failure is a hard error (Q-14-6) instead of a silent fallback to default CSS
+
+### 2026-09-03
+
+- [`546fdd37`](https://github.com/quarto-dev/q2/commits/546fdd37): The sandboxed preview bundle is rebuilt from its current sources — math rendering there is back on KaTeX 0.18.4, which a later bundle rebuild had quietly reverted to 0.18.2, and the preview's service worker no longer caches assets for offline use.
+
+### 2026-09-02
+
+- [`ee47e8ec`](https://github.com/quarto-dev/q2/commits/ee47e8ec): Fix `render-components:` custom TSX overrides silently not loading for revealjs presentations.
 
 ### 2026-09-01
 

@@ -377,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "comrak-to-pandoc"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "comrak",
  "hashlink",
@@ -2075,7 +2075,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-analysis"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-pandoc-types",
@@ -2097,8 +2097,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-brand"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
+ "hashlink",
  "pathdiff",
  "quarto-util",
  "serde",
@@ -2108,7 +2109,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-citeproc"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "glob",
  "hashlink",
@@ -2139,7 +2140,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-core"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2191,7 +2192,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-csl"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -2242,7 +2243,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "once_cell",
  "quarto-highlight-encoding",
@@ -2261,6 +2262,7 @@ dependencies = [
  "tree-sitter-lua",
  "tree-sitter-python",
  "tree-sitter-r",
+ "tree-sitter-rust",
  "tree-sitter-sequel",
  "tree-sitter-typescript",
  "tree-sitter-yaml",
@@ -2268,7 +2270,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight-encoding"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2276,7 +2278,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-lsp-core"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "pampa",
  "pollster",
@@ -2297,7 +2299,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-navigation"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "quarto-config",
  "quarto-pandoc-types",
@@ -2326,6 +2328,7 @@ dependencies = [
  "quarto-error-message-macros",
  "quarto-error-reporting",
  "quarto-source-map",
+ "regex",
  "serde",
  "serde_json",
  "tree-sitter",
@@ -2333,7 +2336,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-project-create"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "quarto-doctemplate",
  "serde",
@@ -2343,7 +2346,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-sass"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "include_dir",
  "once_cell",
@@ -2352,6 +2355,7 @@ dependencies = [
  "quarto-source-map",
  "quarto-system-runtime",
  "quarto-util",
+ "quarto-yaml",
  "regex",
  "serde",
  "serde_json",
@@ -2374,7 +2378,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-system-runtime"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "async-trait",
  "base64",
@@ -2391,7 +2395,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-trace"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "flate2",
  "serde",
@@ -2409,7 +2413,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-util"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "dirs",
  "serde",
@@ -2418,7 +2422,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-xml"
-version = "0.28.0"
+version = "0.30.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -3743,6 +3747,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-rust"
+version = "0.24.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "439e577dbe07423ec2582ac62c7531120dbfccfa6e5f92406f93dd271a120e45"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-sequel"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4025,7 +4039,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-printf-fmt"
-version = "0.28.0"
+version = "0.30.0"
 
 [[package]]
 name = "wasm-quarto-hub-client"

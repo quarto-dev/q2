@@ -1,0 +1,8 @@
+# Only the google range: the bundle compiles, so the @import is observable.
+typography:
+  fonts:
+    - family: EB Garamond
+      source: google
+      weight: 400..700
+  base: EB Garamond
+  headings: EB Garamond

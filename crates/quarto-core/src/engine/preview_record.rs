@@ -230,11 +230,21 @@ pub async fn compute_input_qmd(
     let input = PipelineData::LoadedSource(LoadedSource::new(path.to_path_buf(), content));
     let final_data = pipeline.run(input, &mut ctx).await?;
 
-    let doc_ast = final_data.into_document_ast().ok_or_else(|| {
+    let mut doc_ast = final_data.into_document_ast().ok_or_else(|| {
         PipelineError::other(
             "pre-engine pipeline did not produce DocumentAst — unexpected output kind".to_string(),
         )
     })?;
+
+    // nested-cell-masking (spec § "The engine capture — asymmetric, by
+    // necessity" / `compute_input_qmd`'s three-consumer table): these bytes
+    // must match what `EngineExecutionStage` hands the engine as
+    // `input_qmd` — masked. The two consumers that read this function's
+    // output directly (the staleness compare in `capture_driver.rs` and the
+    // cache key in `cache.rs`) both want masked bytes; only
+    // `write_review_file` (`quarto-hub-provider/src/execute.rs`) unmasks,
+    // and it does so itself after calling this function.
+    crate::engine::nested_cell_mask::mask(&mut doc_ast.ast);
 
     let mut buf = Vec::new();
     pampa::writers::qmd::write(&doc_ast.ast, &mut buf).map_err(|diagnostics| {
@@ -515,6 +525,52 @@ mod tests {
         assert_eq!(
             computed_str, capture.input_qmd,
             "compute_input_qmd must yield the same bytes the engine receives"
+        );
+    }
+
+    /// T20 (hunk H10): `compute_input_qmd` must mask executable fence
+    /// openers nested inside a *displayed* code block — the same masked
+    /// bytes the engine-execution loop hands to the engine as `input_qmd`
+    /// (once H8 lands there too). `compute_input_qmd_matches_capture_input_qmd`
+    /// above uses a fixture with **no** display block, so it stays green
+    /// through a regression here; this fixture adds one, closing that gap.
+    ///
+    /// The first assertion (masked marker present) is what makes this test
+    /// genuinely red today: neither `compute_input_qmd` nor `record_capture`
+    /// masks anything yet, so today's bytes carry the bare `{r}` opener, not
+    /// `q2-nested-executable`. The second assertion protects the
+    /// fully-implemented invariant (compute == capture) once H8 and H10 both
+    /// land.
+    #[tokio::test]
+    async fn compute_input_qmd_masks_nested_display_fence() {
+        let (_tmp, path, project, runtime) = fixture(
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nSENTINEL\n```\n\n```markdown\n```{r}\n1 + 1\n```\n```\n",
+        );
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(PassthroughTestEngine));
+
+        let captures = record_capture(&path, &project, runtime.clone(), Some(Arc::new(registry)))
+            .await
+            .expect("record_capture");
+        let capture = captures.first().expect("capture present");
+
+        let computed = compute_input_qmd(&path, &project, runtime)
+            .await
+            .expect("compute_input_qmd");
+        let computed_str = String::from_utf8(computed).expect("UTF-8");
+
+        assert!(
+            computed_str.contains("q2-nested-executable"),
+            "compute_input_qmd must mask the nested `{{r}}` opener inside the \
+             display block so quarto-preview's staleness compare and cache key \
+             see masked bytes (spec: \"The engine capture — asymmetric, by \
+             necessity\"); got:\n{computed_str}"
+        );
+        assert_eq!(
+            computed_str, capture.input_qmd,
+            "compute_input_qmd must yield the same (masked) bytes the engine \
+             receives, even for docs with a display block"
         );
     }
 

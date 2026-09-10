@@ -4,10 +4,9 @@ format: html
 _quarto:
   tests:
     html:
-      dom-parity: true
-      noErrors: default
+      shouldError: default
       printsMessage:
-        level: WARN
+        level: ERROR
         regex: "Include file not found"
 ---
 

@@ -546,11 +546,7 @@ fn render_batch_parallel(
                     Ok(_) => outputs.push(*result),
                     Err(e) => failures.push(file_failure_from_error(
                         doc.input.clone(),
-                        crate::error::QuartoError::other(format!(
-                            "Project-scoped artifact merge failed for {}: {}",
-                            doc.input.display(),
-                            e
-                        )),
+                        crate::artifact_flush::merge_conflict_to_error(&doc.input, &e),
                     )),
                 }
             }

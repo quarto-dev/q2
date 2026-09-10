@@ -18,7 +18,7 @@
 
 use std::path::{Path, PathBuf};
 
-use quarto_brand::{Brand, BrandFont, BrandFontFileEntry, BrandLogoResource, LogoEntry};
+use quarto_brand::{Brand, BrandFont, BrandLogoResource, LogoEntry};
 
 use crate::commands::common::plan::CommandFailure;
 
@@ -219,10 +219,7 @@ fn collect_assets(brand: &Brand, brand_dir: &Path) -> Vec<PathBuf> {
             // installed; neither has anything to copy.
             if let BrandFont::File(file_font) = font {
                 for entry in &file_font.files {
-                    match entry {
-                        BrandFontFileEntry::Path(p) => declared.push(p.clone()),
-                        BrandFontFileEntry::Explicit { path, .. } => declared.push(path.clone()),
-                    }
+                    declared.push(entry.path().to_string());
                 }
             }
         }

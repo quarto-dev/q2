@@ -16,6 +16,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use hashlink::LinkedHashMap;
 use serde::{Deserialize, Serialize};
 
 /// A reference to a brand configuration in document or project metadata.
@@ -594,21 +595,86 @@ pub enum BrandFontFileEntry {
     /// A bare path string.
     Path(String),
     /// A typed file descriptor with optional weight/style.
-    Explicit {
-        path: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        weight: Option<BrandFontWeight>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        style: Option<BrandFontStyle>,
-    },
+    Explicit(BrandFontFileExplicit),
+}
+
+/// The map form of a `source: file` font file entry.
+///
+/// Deliberately **not** `deny_unknown_fields`: the brand.yml spec has
+/// not settled per-file keys such as `format:` and `display:`, so a
+/// brand that uses them must still parse. They are captured in
+/// [`Self::unknown`] so the consumer can warn that they are ignored
+/// (bd-ve916wr8, decision 5) instead of either rejecting the brand or
+/// dropping the keys silently.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BrandFontFileExplicit {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weight: Option<BrandFontWeight>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<BrandFontStyle>,
+    /// Keys this entry carried that Quarto does not understand, in
+    /// authored order. Ignored by every consumer; surfaced as a
+    /// warning by the theme stage.
+    #[serde(flatten, skip_serializing_if = "LinkedHashMap::is_empty")]
+    pub unknown: LinkedHashMap<String, serde_yaml::Value>,
 }
 
 impl BrandFontFileEntry {
     pub fn path(&self) -> &str {
         match self {
             BrandFontFileEntry::Path(p) => p,
-            BrandFontFileEntry::Explicit { path, .. } => path,
+            BrandFontFileEntry::Explicit(e) => &e.path,
         }
+    }
+
+    /// The `weight:` of the map form (`None` for a bare path).
+    pub fn weight(&self) -> Option<&BrandFontWeight> {
+        match self {
+            BrandFontFileEntry::Path(_) => None,
+            BrandFontFileEntry::Explicit(e) => e.weight.as_ref(),
+        }
+    }
+
+    /// The `style:` of the map form (`None` for a bare path).
+    pub fn style(&self) -> Option<&BrandFontStyle> {
+        match self {
+            BrandFontFileEntry::Path(_) => None,
+            BrandFontFileEntry::Explicit(e) => e.style.as_ref(),
+        }
+    }
+
+    /// Keys on this entry that Quarto does not understand, in
+    /// authored order (empty for a bare path).
+    pub fn unknown_keys(&self) -> Vec<&str> {
+        match self {
+            BrandFontFileEntry::Path(_) => Vec::new(),
+            BrandFontFileEntry::Explicit(e) => e.unknown.keys().map(String::as_str).collect(),
+        }
+    }
+}
+
+/// The name under which a local `source: file` font is published.
+///
+/// Local font files are copied into a `fonts/` directory beside the
+/// theme CSS that references them, and the `@font-face` URL is the
+/// constant `fonts/<name>` — so `<name>` is the file's basename,
+/// whatever directory the brand authored it in (brand-relative,
+/// `/`-rooted at the project, or a `../` climb). External URLs are
+/// served by whoever hosts them and have no published name.
+///
+/// Returns `None` for an external URL or a path with no basename.
+/// Both `/` and `\` count as separators so a brand authored on
+/// Windows publishes the same name.
+pub fn published_font_name(path: &str) -> Option<String> {
+    if quarto_util::is_external_url(path) {
+        return None;
+    }
+    let name = path.rsplit(['/', '\\']).next().unwrap_or("");
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
     }
 }
 
@@ -618,14 +684,79 @@ pub struct BrandFontSystem {
     pub family: String,
 }
 
-/// Font weight: either a number (100-900), a named keyword (e.g. "bold"),
-/// or an array of either.
+/// Font weight: a number (100–900), a numeric range `N..M` (a
+/// variable-font axis span, e.g. `400..700`), a named keyword (e.g.
+/// `bold`), or an array of numbers and keywords.
+///
+/// Parsing is shape-only. `Name` holds *any* string that is not a
+/// well-formed `N..M` range — including unknown keywords and malformed
+/// ranges such as `400..` — so that [`Brand::validate`] can report the
+/// offending text verbatim with its YAML path. Consumers must run
+/// validation (or handle `Name` defensively) rather than assume a
+/// `Name` is in the keyword table.
+///
+/// The untagged variant order matters: an unquoted YAML integer is a
+/// `Number`; a string is tried as a `Range` first and falls back to
+/// `Name`; a sequence is a `List`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum BrandFontWeight {
     Number(u32),
+    Range(BrandFontWeightRange),
     Name(String),
     List(Vec<BrandFontWeightAtom>),
+}
+
+/// A variable-font weight range written as `N..M` in brand.yml
+/// (`weight: 400..700`).
+///
+/// Deserializes from — and serializes to — the string form. Only the
+/// *syntax* is checked here (two unsigned integers around a literal
+/// `..`); the bounds (`100..=900`, `min <= max`) are enforced by
+/// [`Brand::validate`] so a bad range is reported with its YAML path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BrandFontWeightRange {
+    pub min: u32,
+    pub max: u32,
+}
+
+impl std::str::FromStr for BrandFontWeightRange {
+    type Err = ();
+
+    /// Accepts exactly `<digits>..<digits>`; anything else (keyword
+    /// ends, a missing end, more than one `..`) is rejected so the
+    /// untagged enum falls through to [`BrandFontWeight::Name`].
+    fn from_str(s: &str) -> Result<Self, ()> {
+        let (lo, hi) = s.split_once("..").ok_or(())?;
+        let is_digits = |t: &str| !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit());
+        if !is_digits(lo) || !is_digits(hi) {
+            return Err(());
+        }
+        let min = lo.parse().map_err(|_| ())?;
+        let max = hi.parse().map_err(|_| ())?;
+        Ok(Self { min, max })
+    }
+}
+
+impl std::fmt::Display for BrandFontWeightRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}..{}", self.min, self.max)
+    }
+}
+
+impl Serialize for BrandFontWeightRange {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for BrandFontWeightRange {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(|()| {
+            serde::de::Error::custom(format!("`{s}` is not a font weight range of the form N..M"))
+        })
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

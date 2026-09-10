@@ -182,11 +182,16 @@ fn pipeline_renders_sidebar_for_two_page_website() {
     // sidebar, the body must carry `nav-sidebar floating`; without these
     // classes the grid mixin produces no left sidebar column and the
     // sidebar falls below the page content. bd-mtzry appends a color-mode
-    // class (`quarto-light`) after the structural classes, so the full
-    // expected body class is `"nav-sidebar floating quarto-light"`.
+    // class (`quarto-light`) after the structural classes. Neither page
+    // renders a TOC or margin content, so since
+    // bd-no-toc-reserves-margin-column-s8nonx0w `fullcontent` also
+    // composes in — the class that reclaims the empty right margin
+    // column, previously unreachable for any page in a sidebar. The
+    // full expected body class is
+    // `"nav-sidebar floating fullcontent quarto-light"`.
     assert!(
-        index_html.contains("<body class=\"nav-sidebar floating quarto-light\">"),
-        "index page body must carry nav-sidebar+floating+quarto-light classes; \
+        index_html.contains("<body class=\"nav-sidebar floating fullcontent quarto-light\">"),
+        "index page body must carry nav-sidebar+floating+fullcontent+quarto-light classes; \
          got body tag: {}",
         index_html
             .find("<body")
@@ -194,8 +199,8 @@ fn pipeline_renders_sidebar_for_two_page_website() {
                 [i..(i + 80).min(index_html.len())])
     );
     assert!(
-        about_html.contains("<body class=\"nav-sidebar floating quarto-light\">"),
-        "about page body must carry nav-sidebar+floating+quarto-light classes; \
+        about_html.contains("<body class=\"nav-sidebar floating fullcontent quarto-light\">"),
+        "about page body must carry nav-sidebar+floating+fullcontent+quarto-light classes; \
          got body tag: {}",
         about_html
             .find("<body")

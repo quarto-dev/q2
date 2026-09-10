@@ -17,8 +17,13 @@ categories:
 
 An `{{{< include >}}}` shortcode names a file that Quarto could not
 read — most often because no file exists at the resolved path. The
-include is skipped: its content is omitted from the output, and the
-rest of the document renders normally.
+content the include asks for cannot be supplied.
+
+The document therefore **fails to render**, and no output file is
+written for it. A page written without the included content would
+look complete while quietly missing a section, so Quarto reports the
+problem instead of shipping the hole. (Quarto 1 also treats an
+unreadable include as fatal.)
 
 ## Why this happens
 
