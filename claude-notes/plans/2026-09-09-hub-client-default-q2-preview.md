@@ -3,7 +3,7 @@
 **Strand:** bd-kltzdhle
 **Date:** 2026-09-09
 **Status:** Phases 1–7 done; Phase 4b partially worked (draft alert fixed, title-banner
-fixtures made renderer-neutral). PR opened 2026-09-10 from
+fixtures made renderer-neutral). PR #670 (https://github.com/quarto-dev/q2/pull/670) opened 2026-09-10 from
 `braid/bd-kltzdhle-hub-client-make-q2` with 6 fixtures still on the e2e DOM-assertion
 skip-list (see the Phase 4b table). The `CommentBlock` wrapper removal is handed
 off to a fresh session: `2026-09-10-commentblock-overlay-handoff.md`.
