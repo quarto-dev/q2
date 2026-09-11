@@ -795,3 +795,85 @@ fn test_zero_width_joiner_in_word() {
     let pandoc = parse_qmd("ab\u{200D}cd");
     assert_eq!(para_text(&pandoc, 0), "ab\u{200D}cd");
 }
+
+// ============================================================================
+// Format characters (Unicode category Cf) in prose (bd-wuiu1of7, GH #672)
+// Pandoc folds every Cf codepoint into Str verbatim. Before the fix the prose
+// regexes accepted none of them except ZWNJ/ZWJ, so pampa's own qmd output
+// (which decoded &ZeroWidthSpace; etc. into the raw codepoint) failed to
+// re-parse.
+// ============================================================================
+
+#[test]
+fn test_zero_width_space_inside_word() {
+    // U+200B — what &ZeroWidthSpace; decodes to, written literally
+    let pandoc = parse_qmd("a\u{200B}b");
+    assert_eq!(para_text(&pandoc, 0), "a\u{200B}b");
+}
+
+#[test]
+fn test_soft_hyphen_inside_word() {
+    // U+00AD — what &shy; decodes to
+    let pandoc = parse_qmd("hy\u{00AD}phen");
+    assert_eq!(para_text(&pandoc, 0), "hy\u{00AD}phen");
+}
+
+#[test]
+fn test_directional_marks_after_space() {
+    // U+200E / U+200F — &lrm; / &rlm;
+    let pandoc = parse_qmd("a \u{200E}b \u{200F}c");
+    assert_eq!(para_text(&pandoc, 0), "a \u{200E}b \u{200F}c");
+}
+
+#[test]
+fn test_word_joiner_at_line_start() {
+    // U+2060 — &NoBreak;
+    let pandoc = parse_qmd("\u{2060}word");
+    assert_eq!(para_text(&pandoc, 0), "\u{2060}word");
+}
+
+#[test]
+fn test_mathml_invisible_operators_inside_word() {
+    // U+2061..U+2064 — &ApplyFunction; &InvisibleTimes; &InvisibleComma; and
+    // invisible plus (no named entity)
+    let pandoc = parse_qmd("f\u{2061}x\u{2062}y\u{2063}z\u{2064}w");
+    assert_eq!(
+        para_text(&pandoc, 0),
+        "f\u{2061}x\u{2062}y\u{2063}z\u{2064}w"
+    );
+}
+
+#[test]
+fn test_zero_width_no_break_space_inside_word() {
+    // U+FEFF mid-text (not a leading BOM — that is bd-5rr4lgj1)
+    let pandoc = parse_qmd("a\u{FEFF}b");
+    assert_eq!(para_text(&pandoc, 0), "a\u{FEFF}b");
+}
+
+#[test]
+fn test_bidi_controls_inside_word() {
+    // U+202A (LRE) … U+202C (PDF) and U+2066 (LRI) … U+2069 (PDI)
+    let pandoc = parse_qmd("a\u{202A}b\u{202C}c\u{2066}d\u{2069}e");
+    assert_eq!(
+        para_text(&pandoc, 0),
+        "a\u{202A}b\u{202C}c\u{2066}d\u{2069}e"
+    );
+}
+
+#[test]
+fn test_zero_width_space_inside_heading_superscript() {
+    // The GH #672 cascade: a raw U+200B inside ^…^ in a heading produced
+    // Q-2-16 Unclosed Superscript.
+    let pandoc = parse_qmd("# Title^a\u{200B}b^");
+    let Block::Header(h) = &pandoc.blocks[0] else {
+        panic!("expected Header, got {:?}", pandoc.blocks[0]);
+    };
+    let Some(Inline::Superscript(sup)) = h.content.last() else {
+        panic!("expected trailing Superscript, got {:?}", h.content);
+    };
+    assert_eq!(sup.content.len(), 1);
+    let Inline::Str(s) = &sup.content[0] else {
+        panic!("expected Str, got {:?}", sup.content[0]);
+    };
+    assert_eq!(s.text, "a\u{200B}b");
+}

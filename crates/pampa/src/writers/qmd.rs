@@ -1815,6 +1815,23 @@ fn escape_markdown(
                 }
             }
 
+            // Join controls (ZWNJ / ZWJ) are format characters too, but they
+            // parse raw (bd-96fswwce), are ordinary content in Persian/Indic
+            // text, and ZWJ is structural inside emoji sequences — an entity
+            // there would be noise and would split the emoji token on re-read.
+            '\u{200C}' | '\u{200D}' => result.push(ch),
+            // Every other Unicode format character (category Cf: zero width
+            // space, soft hyphen, bidi controls, MathML invisibles, …) is
+            // invisible in source, so spell it as a character reference —
+            // the preferred WHATWG name, else `&#xXXXX;`. The reader decodes
+            // both. See `writers::format_chars` (bd-wuiu1of7, GH #672).
+            c if super::format_chars::is_format_char(c) => {
+                result.push_str(
+                    &super::format_chars::format_char_reference(c)
+                        .expect("is_format_char and format_char_reference agree"),
+                );
+            }
+
             // Characters that don't need escaping in most contexts:
             // , + ! ? = : ; / ( ) % &
             // These are only special in very specific contexts and escaping them
@@ -3312,6 +3329,76 @@ mod inline_fragment_escaping_tests {
         assert_eq!(
             whole_document("[#7380](https://example.com/7380)\n"),
             "[\\#7380](https://example.com/7380)"
+        );
+    }
+}
+
+#[cfg(test)]
+mod format_character_writer_tests {
+    //! Unicode format characters (category `Cf`) are invisible in source, and
+    //! most of them were rejected by the qmd grammar's prose regexes before
+    //! bd-wuiu1of7 (GH #672). The writer re-encodes them as character
+    //! references so the emitted qmd is readable and robust.
+    use super::{LineStartEscapes, escape_markdown};
+
+    fn esc(text: &str) -> String {
+        escape_markdown(text, false, LineStartEscapes::Always)
+    }
+
+    #[test]
+    fn named_entities_for_format_characters_with_a_whatwg_name() {
+        assert_eq!(esc("a\u{200B}b"), "a&ZeroWidthSpace;b");
+        assert_eq!(esc("hy\u{00AD}phen"), "hy&shy;phen");
+        assert_eq!(esc("\u{200E}"), "&lrm;");
+        assert_eq!(esc("\u{200F}"), "&rlm;");
+        assert_eq!(esc("\u{2060}"), "&NoBreak;");
+        assert_eq!(esc("f\u{2061}x"), "f&ApplyFunction;x");
+        assert_eq!(esc("x\u{2062}y"), "x&InvisibleTimes;y");
+        assert_eq!(esc("y\u{2063}z"), "y&InvisibleComma;z");
+    }
+
+    #[test]
+    fn numeric_references_for_format_characters_without_a_name() {
+        assert_eq!(esc("z\u{2064}w"), "z&#x2064;w"); // invisible plus
+        assert_eq!(esc("a\u{FEFF}b"), "a&#xFEFF;b"); // zero width no-break space
+        assert_eq!(esc("a\u{202A}b\u{202C}c"), "a&#x202A;b&#x202C;c"); // bidi embedding
+        assert_eq!(esc("a\u{2066}b\u{2069}c"), "a&#x2066;b&#x2069;c"); // bidi isolate
+        assert_eq!(esc("a\u{061C}b"), "a&#x61C;b"); // Arabic letter mark
+        assert_eq!(esc("a\u{E0001}b"), "a&#xE0001;b"); // tag character
+    }
+
+    #[test]
+    fn join_controls_stay_raw() {
+        // ZWNJ / ZWJ already parse (bd-96fswwce) and are legitimate content in
+        // Persian/Indic text and emoji sequences; an entity would be noise.
+        assert_eq!(esc("ab\u{200C}cd"), "ab\u{200C}cd");
+        assert_eq!(esc("ab\u{200D}cd"), "ab\u{200D}cd");
+        assert_eq!(
+            esc("\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}"),
+            "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}"
+        );
+    }
+
+    #[test]
+    fn other_non_ascii_text_stays_raw() {
+        // Letters, marks, symbols and Unicode whitespace all parse raw today
+        // and must not be touched.
+        assert_eq!(esc("caf\u{00E9}"), "caf\u{00E9}");
+        assert_eq!(esc("cafe\u{0301}"), "cafe\u{0301}");
+        assert_eq!(esc("a\u{00A0}b"), "a\u{00A0}b");
+        assert_eq!(esc("a\u{2009}b"), "a\u{2009}b");
+        assert_eq!(esc("\u{0915}\u{093E}"), "\u{0915}\u{093E}");
+        assert_eq!(esc("\u{00A9}"), "\u{00A9}");
+    }
+
+    #[test]
+    fn mixed_source_spellings_collapse_to_the_preferred_name() {
+        // `&af;`, `&ApplyFunction;` and a raw U+2061 all decode to the same
+        // Str, so the writer cannot tell them apart — the preferred name wins
+        // for every occurrence (Pandoc's markdown writer is lossy the same way).
+        assert_eq!(
+            esc("a\u{2061}b \u{2061}c"),
+            "a&ApplyFunction;b &ApplyFunction;c"
         );
     }
 }

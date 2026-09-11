@@ -1,0 +1,3 @@
+Raw: a​b hy­phen ‎c ⁠d f⁡x a﻿b.
+
+Join controls stay raw: ab‌cd ab‍cd 👨‍👩‍👧.
