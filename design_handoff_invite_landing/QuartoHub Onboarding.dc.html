@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/posit-design-system-6bad3a5c-5418-40b2-8f75-b3b91502f049/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/posit-design-system-6bad3a5c-5418-40b2-8f75-b3b91502f049/tokens/colors.css">
+<script src="_ds/posit-design-system-6bad3a5c-5418-40b2-8f75-b3b91502f049/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:#f0eee9;font-family:"Open Sans",system-ui,sans-serif;color:#404041}
+a{color:#447099}a:hover{color:#3276B5}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:600 10px "Source Code Pro",monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 "Open Sans",sans-serif;color:#1a1a1a}
+.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px "Source Code Pro",monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 "Open Sans",sans-serif;color:rgba(0,0,0,.55)}
+.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
+.dv-opt:target .dv-oid{background:#3276B5;color:#fff}
+.dv-next{margin:22px 0 0;font:12px/1.5 "Open Sans",sans-serif;color:rgba(0,0,0,.5)}
+/* wireframe kit */
+.wf{width:232px;flex:none;background:#fff;border:1.5px solid #9aa4ad;border-radius:6px;overflow:hidden;box-shadow:2px 2px 0 rgba(0,0,0,.06)}
+.wf-bar{display:flex;align-items:center;gap:6px;background:#eef1f4;border-bottom:1px solid #d5dbe0;padding:4px 8px;font:400 8.5px "Source Code Pro",monospace;color:#717171;white-space:nowrap;overflow:hidden}
+.wf-dot{width:6px;height:6px;border-radius:50%;background:#c9d0d6;flex:none}
+.wf-body{padding:12px;display:flex;flex-direction:column;gap:7px;min-height:130px}
+.wf-h{font:700 12px/1.25 "Open Sans",sans-serif;color:#404041}
+.wf-p{font:400 9.5px/1.4 "Open Sans",sans-serif;color:#717171}
+.wf-btn{display:inline-block;border:1.5px solid #447099;border-radius:4px;background:#447099;color:#fff;font:700 9px/1 "Open Sans",sans-serif;padding:6px 10px;text-align:center}
+.wf-btn.ghost{background:#fff;color:#447099}
+.wf-input{border:1.5px dashed #9aa4ad;border-radius:4px;padding:5px 8px;font:400 8.5px "Source Code Pro",monospace;color:#717171;background:#fafbfc}
+.wf-label{font:400 8px "Source Code Pro",monospace;letter-spacing:.08em;text-transform:uppercase;color:#447099}
+.wf-note{font:400 8.5px/1.35 "Open Sans",sans-serif;color:#9aa4ad;font-style:italic}
+.pain{display:flex;gap:5px;align-items:flex-start;max-width:232px;font:400 9.5px/1.35 "Open Sans",sans-serif;color:#B4461F}
+.pain::before{content:"✕";font:700 9px "Source Code Pro",monospace;color:#fff;background:#EE6331;border-radius:3px;padding:1px 4px;flex:none;margin-top:1px}
+.win{display:flex;gap:5px;align-items:flex-start;max-width:232px;font:400 9.5px/1.35 "Open Sans",sans-serif;color:#2f6d4f}
+.win::before{content:"✓";font:700 9px "Source Code Pro",monospace;color:#fff;background:#4d8a6a;border-radius:3px;padding:1px 4px;flex:none;margin-top:1px}
+.flow{display:flex;gap:14px;align-items:flex-start}
+.step{display:flex;flex-direction:column;gap:6px}
+.arr{align-self:flex-start;margin-top:78px;font:400 16px sans-serif;color:#9aa4ad;flex:none}
+.path-h{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
+.path-tag{font:700 9px "Source Code Pro",monospace;letter-spacing:.08em;color:#fff;background:#447099;border-radius:4px;padding:3px 7px}
+.path-name{font:700 13px "Open Sans",sans-serif;color:#404041}
+.path-sub{font:400 10.5px "Source Code Pro",monospace;color:#717171}
+.path{padding:18px 20px;border-bottom:1px dashed #d5dbe0}
+.avatar{width:18px;height:18px;border-radius:50%;background:#447099;color:#fff;font:700 8px/18px "Open Sans",sans-serif;text-align:center;flex:none}
+.thumb{border:1.5px solid #d5dbe0;border-radius:4px;background:repeating-linear-gradient(0deg,#fff,#fff 4px,#f2f4f6 4px,#f2f4f6 6px);height:44px;position:relative}
+.thumb span{position:absolute;left:4px;bottom:2px;font:400 7.5px "Source Code Pro",monospace;color:#717171;background:#fff;padding:0 2px}
+</style>
+</helmet>
+<section class="dv-turn" id="t3">
+<div class="dv-thd"><a class="dv-tid" href="#t3">3</a><span class="dv-tname">One invite pattern, two payloads — collection invites and document invites share the same landing; PR scoped to just these</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="3a"><div class="dv-olabel"><a class="dv-oid" href="#3a">3a</a>Unified invite landing — same anatomy, the payload block is the only difference</div>
+<div class="dv-card" style="width:1240px;padding:22px;background:#f0eee9;display:flex;gap:22px;align-items:flex-start">
+
+<div style="flex:none;width:520px">
+<div style="font:600 10px 'Source Code Pro',monospace;letter-spacing:.08em;color:#447099;margin:0 0 8px">INVITE TO A COLLECTION · #/join-collection/…</div>
+<div style="background:#fff;border:1px solid #A2B8CB;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+<div style="display:flex;align-items:center;gap:7px;background:#eef1f4;border-bottom:1px solid #d5dbe0;padding:7px 12px"><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="font:400 10px 'JetBrains Mono',monospace;color:#707073;margin-left:6px">quartohub.com/#/join-collection/4XyZ…</span></div>
+<div style="display:flex;justify-content:center;padding:28px 18px;background:#fff">
+<div style="width:400px;background:#fff;border:1px solid #A2B8CB;border-radius:16px;padding:26px 30px;box-shadow:0 20px 60px rgba(0,0,0,.15);font-family:system-ui,sans-serif">
+<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#2E6E71;margin-bottom:10px">COLLECTION INVITATION</div>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px"><span style="width:28px;height:28px;border-radius:50%;background:#FF5722;color:#fff;font:700 11px system-ui;display:flex;align-items:center;justify-content:center">CS</span><span style="font-size:13.5px;color:#305775"><b style="color:#17212B">Carlos Scheidegger</b> invited you to</span></div>
+<h1 style="font-size:22px;margin:0 0 12px;color:#17212B;line-height:1.25;font-weight:700">Team docs</h1>
+<div style="border:1px solid #A2B8CB;border-radius:12px;overflow:hidden;margin-bottom:12px">
+<div style="display:flex;align-items:center;gap:12px;padding:10px 13px;border-bottom:1px solid #D1DBE5"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#17212B">Quarterly report</div><div style="font-size:11.5px;color:#305775;font-family:'JetBrains Mono',monospace">report.qmd · 12 files</div></div><div style="display:inline-flex"><span style="width:19px;height:19px;border-radius:50%;background:#FF5722;border:2px solid #fff;color:#fff;font:700 7.5px system-ui;display:flex;align-items:center;justify-content:center">CS</span><span style="width:19px;height:19px;border-radius:50%;background:#9C27B0;border:2px solid #fff;color:#fff;font:700 7.5px system-ui;display:flex;align-items:center;justify-content:center;margin-left:-7px">JL</span></div></div>
+<div style="display:flex;align-items:center;gap:12px;padding:10px 13px;border-bottom:1px solid #D1DBE5"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#17212B">Methods paper</div><div style="font-size:11.5px;color:#305775;font-family:'JetBrains Mono',monospace">paper.qmd · 7 files</div></div><div style="display:inline-flex"><span style="width:19px;height:19px;border-radius:50%;background:#9C27B0;border:2px solid #fff;color:#fff;font:700 7.5px system-ui;display:flex;align-items:center;justify-content:center">JL</span></div></div>
+<div style="padding:8px 13px;font-size:11.5px;color:#305775">+ 2 more projects · Carlos, Jenny and Mine work here</div>
+</div>
+<div style="display:flex;gap:9px;align-items:flex-start;padding:10px 12px;background:rgba(68,112,153,.08);border-radius:10px;margin-bottom:14px"><span style="width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 32 32"><path d="M15 15 L1 15 A14 14 0 0 1 15 1 Z" fill="#447099" opacity="0.4"></path><path d="M17 15 L17 1 A14 14 0 0 1 31 15 Z" fill="#447099" opacity="0.65"></path><path d="M15 17 L15 31 A14 14 0 0 1 1 17 Z" fill="#447099" opacity="0.85"></path><path d="M17 17 L31 17 A14 14 0 0 1 17 31 Z" fill="#447099"></path></svg></span><div style="font-size:11.5px;color:#305775;line-height:1.45"><b style="color:#17212B">New to Quarto Hub?</b> It’s where teams write Quarto documents together — live, in the browser. Nothing to install.</div></div>
+<button style="width:100%;padding:11px;font-size:13.5px;font-weight:600;color:#17212B;background:#fff;border:1px solid #A2B8CB;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px"><span style="width:16px;height:16px;border-radius:50%;background:conic-gradient(#4285F4 0 90deg,#34A853 90deg 180deg,#FBBC05 180deg 270deg,#EA4335 270deg 360deg)"></span>Continue with Google to join</button>
+
+</div>
+</div>
+</div>
+</div>
+
+<div style="flex:none;width:520px">
+<div style="font:600 10px 'Source Code Pro',monospace;letter-spacing:.08em;color:#447099;margin:0 0 8px">INVITE TO A DOCUMENT · #/share/… — same card, single-doc payload</div>
+<div style="background:#fff;border:1px solid #A2B8CB;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+<div style="display:flex;align-items:center;gap:7px;background:#eef1f4;border-bottom:1px solid #d5dbe0;padding:7px 12px"><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="font:400 10px 'JetBrains Mono',monospace;color:#707073;margin-left:6px">quartohub.com/#/share/9fKw…</span></div>
+<div style="display:flex;justify-content:center;padding:28px 18px;background:#fff">
+<div style="width:400px;background:#fff;border:1px solid #A2B8CB;border-radius:16px;padding:26px 30px;box-shadow:0 20px 60px rgba(0,0,0,.15);font-family:system-ui,sans-serif">
+<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#2E6E71;margin-bottom:10px">DOCUMENT INVITATION</div>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px"><span style="width:28px;height:28px;border-radius:50%;background:#FF5722;color:#fff;font:700 11px system-ui;display:flex;align-items:center;justify-content:center">CS</span><span style="font-size:13.5px;color:#305775"><b style="color:#17212B">Carlos Scheidegger</b> invited you to edit</span></div>
+<h1 style="font-size:22px;margin:0 0 12px;color:#17212B;line-height:1.25;font-weight:700">Quarterly report</h1>
+<div style="border:1px solid #A2B8CB;border-radius:12px;overflow:hidden;margin-bottom:12px">
+<div style="height:74px;background:repeating-linear-gradient(0deg,#fff,#fff 7px,#f4f6f8 7px,#f4f6f8 10px);border-bottom:1px solid #D1DBE5;position:relative"><span style="position:absolute;left:10px;bottom:6px;font:400 10px 'JetBrains Mono',monospace;color:#305775;background:#fff;padding:1px 5px;border:1px solid #D1DBE5;border-radius:4px">report.qmd</span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:9px 13px"><div style="flex:1;font-size:11.5px;color:#305775;font-family:'JetBrains Mono',monospace">figures/ · data.csv · 12 files</div><div style="display:inline-flex"><span style="width:19px;height:19px;border-radius:50%;background:#FF5722;border:2px solid #fff;color:#fff;font:700 7.5px system-ui;display:flex;align-items:center;justify-content:center">CS</span><span style="width:19px;height:19px;border-radius:50%;background:#9C27B0;border:2px solid #fff;color:#fff;font:700 7.5px system-ui;display:flex;align-items:center;justify-content:center;margin-left:-7px">JL</span></div></div>
+</div>
+<div style="display:flex;gap:9px;align-items:flex-start;padding:10px 12px;background:rgba(68,112,153,.08);border-radius:10px;margin-bottom:14px"><span style="width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 32 32"><path d="M15 15 L1 15 A14 14 0 0 1 15 1 Z" fill="#447099" opacity="0.4"></path><path d="M17 15 L17 1 A14 14 0 0 1 31 15 Z" fill="#447099" opacity="0.65"></path><path d="M15 17 L15 31 A14 14 0 0 1 1 17 Z" fill="#447099" opacity="0.85"></path><path d="M17 17 L31 17 A14 14 0 0 1 17 31 Z" fill="#447099"></path></svg></span><div style="font-size:11.5px;color:#305775;line-height:1.45"><b style="color:#17212B">New to Quarto Hub?</b> It’s where teams write Quarto documents together — live, in the browser. Nothing to install.</div></div>
+<button style="width:100%;padding:11px;font-size:13.5px;font-weight:600;color:#17212B;background:#fff;border:1px solid #A2B8CB;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px"><span style="width:16px;height:16px;border-radius:50%;background:conic-gradient(#4285F4 0 90deg,#34A853 90deg 180deg,#FBBC05 180deg 270deg,#EA4335 270deg 360deg)"></span>Continue with Google to open</button>
+
+</div>
+</div>
+</div>
+</div>
+
+<div style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:5px">
+<div class="win" style="max-width:none">One component, one anatomy: kicker → inviter → title → payload preview → explainer → single CTA → honest footnote. Only the kicker, payload block, and verb change</div>
+<div class="win" style="max-width:none">Document invites stop cold-opening the editor — the same who/what/why moment as collections, then straight to the doc</div>
+<div class="win" style="max-width:none">Signed-in users see the same cards with one primary button instead of the Google one: <b>Join and open Quarterly report</b> / <b>Open Quarterly report</b>. Google round-trip returns to this screen (existing hash restore)</div>
+
+</div>
+</div></div>
+
+<div class="dv-opt" id="3b"><div class="dv-olabel"><a class="dv-oid" href="#3b">3b</a>Initial PR — <span style="font-family:'Source Code Pro',monospace;font-size:10px">onboarding/invite-landing</span>, scoped to the two invite flows only</div>
+<div class="dv-card" style="width:560px;padding:20px;font-size:12px;line-height:1.5">
+<ul style="margin:0 0 12px;padding-left:18px;color:#404041">
+<li><b>New: InviteLanding.tsx</b> — replaces JoinCollectionLanding; renders both route types from one layout; props: kind ('collection' | 'document'), inviter, title, preview payload, signed-in state. Name/color form removed (identity from Google, fallback to existing identity service)</li>
+<li><b>routing.ts</b> — <span style="font-family:monospace;font-size:11px">share</span> route gains <span style="font-family:monospace;font-size:11px">from=</span> + display-only <span style="font-family:monospace;font-size:11px">preview=</span> (files count, top files, contributor initials); <span style="font-family:monospace;font-size:11px">join-collection</span> gains <span style="font-family:monospace;font-size:11px">preview=</span> + <span style="font-family:monospace;font-size:11px">start=</span>. Both parse legacy URLs (no new params) fine — landing just omits the preview block</li>
+<li><b>App.tsx</b> — share route stops silently connecting; renders InviteLanding, connect happens on CTA. Signed-out invite routes render the landing (not LoginScreen) with the Google CTA; pre-auth hash restore unchanged</li>
+<li><b>ShareDialog.tsx / buildShareableUrl</b> — embed from + preview; dialog copy: “Anyone with this link can edit this project”</li>
+<li><b>ProjectsHome.tsx</b> — buildInviteUrl embeds preview from cached peek summaries + optional start-here pick</li>
+<li><b>Editor</b> — one-time welcome banner after an invite entry (collection or document): joined context + “Change name”</li>
+<li>Tests: both landings signed-in/out, legacy URLs, join→open path, dev-harness pages for both variants</li>
+</ul>
+<div style="font-size:11.5px;color:#707073;font-style:italic">Deferred (later PRs): zero-setup cold start (2b), seeded first-run (1c), revocable role links (1e).</div>
+</div></div>
+
+</div>
+<p class="dv-next">Next: “handoff doc for the PR” · “design the sender side — Share dialog + invite popover emitting these links” · “edge states: expired/broken link, already-a-member”</p>
+</section>
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Hi-fi: invite landing (<a href="#1b">1b</a>) + zero-setup (<a href="#1d">1d</a>) — in the real hub-client tokens — and the branch/PR plan</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Invite landing, redesigned — preview + what-is-this + Google sign-in in one flow</div>
+<div class="dv-card" style="width:1620px;padding:22px;display:flex;gap:22px;align-items:flex-start;background:#f0eee9">
+<div style="flex:none;width:640px">
+<div style="font:600 10px 'Source Code Pro',monospace;letter-spacing:.08em;color:#447099;margin:0 0 8px">STEP 1 · SIGNED OUT — PREVIEW IS PUBLIC-SAFE, SIGN-IN IS THE ONLY GATE</div>
+<div style="background:#fff;border:1px solid #A2B8CB;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+<div style="display:flex;align-items:center;gap:7px;background:#eef1f4;border-bottom:1px solid #d5dbe0;padding:7px 12px"><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="font:400 10px 'JetBrains Mono',monospace;color:#707073;margin-left:6px">quartohub.com/#/join-collection/4XyZ…</span></div>
+<div style="display:flex;align-items:center;justify-content:center;padding:34px 20px;background:#fff">
+<div style="width:460px;background:#fff;border:1px solid #A2B8CB;border-radius:16px;padding:30px 34px;box-shadow:0 20px 60px rgba(0,0,0,.15);font-family:system-ui,sans-serif">
+<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#2E6E71;margin-bottom:10px">COLLECTION INVITATION</div>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="width:30px;height:30px;border-radius:50%;background:#FF5722;color:#fff;font:700 12px system-ui;display:flex;align-items:center;justify-content:center">CS</span><span style="font-size:14px;color:#305775"><b style="color:#17212B">Carlos Scheidegger</b> invited you to</span></div>
+<h1 style="font-size:24px;margin:0 0 14px;color:#17212B;line-height:1.25;font-weight:700">Team docs</h1>
+<div style="border:1px solid #A2B8CB;border-radius:12px;overflow:hidden;margin-bottom:14px">
+<div style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-bottom:1px solid #D1DBE5"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#17212B">Quarterly report</div><div style="font-size:12px;color:#305775;font-family:'JetBrains Mono',monospace">report.qmd · figures/ · 12 files</div></div><div style="display:inline-flex"><span style="width:20px;height:20px;border-radius:50%;background:#FF5722;border:2px solid #fff;color:#fff;font:700 8px system-ui;display:flex;align-items:center;justify-content:center">CS</span><span style="width:20px;height:20px;border-radius:50%;background:#9C27B0;border:2px solid #fff;color:#fff;font:700 8px system-ui;display:flex;align-items:center;justify-content:center;margin-left:-7px">JL</span></div></div>
+<div style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-bottom:1px solid #D1DBE5"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#17212B">Methods paper</div><div style="font-size:12px;color:#305775;font-family:'JetBrains Mono',monospace">paper.qmd · refs.bib · 7 files</div></div><div style="display:inline-flex"><span style="width:20px;height:20px;border-radius:50%;background:#9C27B0;border:2px solid #fff;color:#fff;font:700 8px system-ui;display:flex;align-items:center;justify-content:center">JL</span></div></div>
+<div style="padding:9px 14px;font-size:12px;color:#305775">+ 2 more projects</div>
+</div>
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px"><div style="display:inline-flex"><span style="width:24px;height:24px;border-radius:50%;background:#FF5722;border:2px solid #fff;color:#fff;font:700 9px system-ui;display:flex;align-items:center;justify-content:center">CS</span><span style="width:24px;height:24px;border-radius:50%;background:#9C27B0;border:2px solid #fff;color:#fff;font:700 9px system-ui;display:flex;align-items:center;justify-content:center;margin-left:-7px">JL</span><span style="width:24px;height:24px;border-radius:50%;background:#2196F3;border:2px solid #fff;color:#fff;font:700 9px system-ui;display:flex;align-items:center;justify-content:center;margin-left:-7px">MR</span></div><span style="font-size:12px;color:#305775">Carlos, Jenny and Mine are working here</span></div>
+<div style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;background:rgba(68,112,153,.08);border-radius:10px;margin-bottom:16px"><span style="width:26px;height:26px;flex:none;display:flex;align-items:center;justify-content:center"><svg width="24" height="24" viewBox="0 0 32 32"><path d="M15 15 L1 15 A14 14 0 0 1 15 1 Z" fill="#447099" opacity="0.4"></path><path d="M17 15 L17 1 A14 14 0 0 1 31 15 Z" fill="#447099" opacity="0.65"></path><path d="M15 17 L15 31 A14 14 0 0 1 1 17 Z" fill="#447099" opacity="0.85"></path><path d="M17 17 L31 17 A14 14 0 0 1 17 31 Z" fill="#447099"></path></svg></span><div style="font-size:12.5px;color:#305775;line-height:1.5"><b style="color:#17212B">New to Quarto Hub?</b> It’s where teams write Quarto documents together — everyone edits the same doc, live, in the browser. Nothing to install.</div></div>
+<button style="width:100%;padding:12px;font-size:14px;font-weight:600;color:#17212B;background:#fff;border:1px solid #A2B8CB;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px"><span style="width:17px;height:17px;border-radius:50%;background:conic-gradient(#4285F4 0 90deg,#34A853 90deg 180deg,#FBBC05 180deg 270deg,#EA4335 270deg 360deg)"></span>Continue with Google to join</button>
+<p style="font-size:12px;color:#305775;margin:14px 0 0;line-height:1.45">Sign-in keeps your work on your account — you’ll come straight back here. Anyone with this link can join.</p>
+</div>
+</div>
+</div>
+</div>
+<div style="flex:none;width:400px">
+<div style="font:600 10px 'Source Code Pro',monospace;letter-spacing:.08em;color:#447099;margin:0 0 8px">STEP 2 · BACK FROM GOOGLE — SAME SCREEN, ONE CLICK LEFT</div>
+<div style="background:#fff;border:1px solid #A2B8CB;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);font-family:system-ui,sans-serif">
+<div style="display:flex;align-items:center;gap:7px;background:#eef1f4;border-bottom:1px solid #d5dbe0;padding:7px 12px"><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="font:400 10px 'JetBrains Mono',monospace;color:#707073;margin-left:6px">quartohub.com/#/join-collection/4XyZ…</span></div>
+<div style="display:flex;align-items:center;justify-content:center;padding:26px 16px;background:#fff">
+<div style="width:320px;background:#fff;border:1px solid #A2B8CB;border-radius:16px;padding:24px 26px;box-shadow:0 20px 60px rgba(0,0,0,.15);font-family:system-ui,sans-serif">
+<div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#2E6E71;margin-bottom:8px">COLLECTION INVITATION</div>
+<div style="font-size:13px;color:#305775;margin-bottom:2px"><b style="color:#17212B">Carlos Scheidegger</b> invited you to</div>
+<div style="font-size:19px;font-weight:700;color:#17212B;margin-bottom:10px">Team docs</div>
+<div style="border:1px solid #D1DBE5;border-radius:10px;padding:8px 11px;margin-bottom:12px;font-size:11.5px;color:#305775">Quarterly report · Methods paper · + 2 more</div>
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><span style="width:22px;height:22px;border-radius:50%;background:#009688;color:#fff;font:700 8.5px system-ui;display:flex;align-items:center;justify-content:center">AM</span><span style="font-size:12px;color:#305775">Joining as <b style="color:#17212B">Amy Mora</b> (from Google)</span></div>
+<button style="width:100%;padding:11px;font-size:13.5px;font-weight:600;color:#fff;background:#2E6E71;border:none;border-radius:8px;cursor:pointer">Join and open Quarterly report</button>
+</div>
+</div>
+</div>
+<div style="margin-top:10px" class="win">Already signed in? Step 1 skips the Google button and shows this join button directly — one screen, one click total</div>
+</div>
+<div style="flex:none;width:440px;display:flex;flex-direction:column;gap:14px">
+<div>
+<div style="font:600 10px 'Source Code Pro',monospace;letter-spacing:.08em;color:#447099;margin:0 0 8px">STEP 3 · LANDS IN THE EDITOR ON THE INVITER’S “START HERE” FILE</div>
+<div style="background:#fff;border:1px solid #A2B8CB;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);font-family:system-ui,sans-serif">
+<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #A2B8CB"><span style="width:14px;height:14px;border:1.5px solid #447099;border-radius:3px;flex:none"></span><span style="font-size:12px;font-weight:600;color:#17212B">Quarterly report</span><span style="font:400 11px 'JetBrains Mono',monospace;color:#305775">report.qmd</span><span style="flex:1"></span><span style="width:20px;height:20px;border-radius:50%;background:#FF5722;color:#fff;font:700 8px system-ui;display:flex;align-items:center;justify-content:center">CS</span><span style="width:20px;height:20px;border-radius:50%;background:#009688;color:#fff;font:700 8px system-ui;display:flex;align-items:center;justify-content:center;margin-left:-6px">AM</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:rgba(65,149,153,.08);border-bottom:1px solid #A2B8CB;font-size:12px;color:#17212B"><span style="flex:1">Welcome to <b>Team docs</b> — Carlos suggested starting here. You’re editing live as <b>Amy Mora</b>.</span><button style="padding:4px 10px;font-size:12px;font-weight:600;color:#2E6E71;background:none;border:1px solid #419599;border-radius:6px;cursor:pointer;white-space:nowrap;flex:none">Change name</button><span style="color:#305775;cursor:pointer;font-size:14px;line-height:1">×</span></div>
+<div style="display:flex;height:150px"><div style="width:38%;border-right:1px solid #D1DBE5;padding:10px;display:flex;flex-direction:column;gap:6px"><div style="height:8px;width:80%;background:rgba(68,112,153,.15);border-radius:3px"></div><div style="height:8px;width:95%;background:rgba(68,112,153,.08);border-radius:3px"></div><div style="height:8px;width:70%;background:rgba(68,112,153,.08);border-radius:3px"></div><div style="height:8px;width:88%;background:rgba(68,112,153,.08);border-radius:3px"></div></div><div style="flex:1;padding:10px;background:repeating-linear-gradient(0deg,#fff,#fff 8px,#f4f6f8 8px,#f4f6f8 11px)"></div></div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:5px">
+<div class="win" style="max-width:none">Invite context now leads, not the login wall: preview + “New to Quarto Hub?” explainer render before auth; Google is the only gate, framed as “to join”</div>
+<div class="win" style="max-width:none">Identity comes free from Google (name + avatar) — no name/cursor-color form; editor banner offers a rename</div>
+<div class="win" style="max-width:none">Preview is display-only data in the invite URL (names, top files, contributor initials) — no bearer doc ids exposed, works before the collection syncs</div>
+<div class="win" style="max-width:none">Invite carries optional <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px">start=</span> project+file → “Join and open Quarterly report” instead of dumping on the home screen</div>
+<div class="win" style="max-width:none">Round-trip already works: pre-auth hash save/restore brings the user back to this exact screen after Google</div>
+</div>
+</div>
+</div></div>
+
+<div class="dv-opt" id="2b"><div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Zero-setup cold start — setup screen deleted, language rewritten</div>
+<div class="dv-card" style="width:1150px;padding:22px;display:flex;gap:22px;align-items:flex-start;background:#f0eee9">
+<div style="flex:none;width:430px">
+<div style="font:600 10px 'Source Code Pro',monospace;letter-spacing:.08em;color:#447099;margin:0 0 8px">SIGN-IN — NOW SAYS WHAT THE PRODUCT IS</div>
+<div style="background:#fff;border:1px solid #A2B8CB;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);font-family:system-ui,sans-serif">
+<div style="display:flex;align-items:center;gap:7px;background:#eef1f4;border-bottom:1px solid #d5dbe0;padding:7px 12px"><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="width:9px;height:9px;border-radius:50%;background:#c9d0d6"></span><span style="font:400 10px 'JetBrains Mono',monospace;color:#707073;margin-left:6px">quartohub.com</span></div>
+<div style="display:flex;align-items:center;justify-content:center;padding:44px 20px">
+<div style="width:340px;text-align:center;background:#fff;border:1px solid #A2B8CB;border-radius:16px;padding:40px 32px;box-shadow:0 20px 60px rgba(0,0,0,.15)">
+<div style="width:44px;height:44px;margin:0 auto 10px;display:flex;align-items:center;justify-content:center"><svg width="42" height="42" viewBox="0 0 32 32"><path d="M15 15 L1 15 A14 14 0 0 1 15 1 Z" fill="#447099" opacity="0.4"></path><path d="M17 15 L17 1 A14 14 0 0 1 31 15 Z" fill="#447099" opacity="0.65"></path><path d="M15 17 L15 31 A14 14 0 0 1 1 17 Z" fill="#447099" opacity="0.85"></path><path d="M17 17 L31 17 A14 14 0 0 1 17 31 Z" fill="#447099"></path></svg></div>
+<div style="font-size:21px;font-weight:700;color:#17212B;margin-bottom:6px">Quarto Hub</div>
+<p style="font-size:13.5px;color:#305775;margin:0 0 20px;line-height:1.5">Write and publish Quarto documents together — live, in your browser.</p>
+<button style="width:100%;padding:10px;font-size:13px;font-weight:600;color:#17212B;background:#fff;border:1px solid #A2B8CB;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><span style="width:16px;height:16px;border-radius:50%;background:conic-gradient(#4285F4 0 90deg,#34A853 90deg 180deg,#FBBC05 180deg 270deg,#EA4335 270deg 360deg)"></span>Continue with Google</button>
+<p style="font-size:11.5px;color:#305775;margin:16px 0 0;line-height:1.45">Have an invite link? Just open it — you’ll land right where you were invited.</p>
+</div>
+</div>
+</div>
+</div>
+<div style="flex:none;width:430px">
+<div style="font:600 10px 'Source Code Pro',monospace;letter-spacing:.08em;color:#447099;margin:0 0 8px">FIRST VISIT — STRAIGHT TO THE HOME SCREEN (SETUP SCREEN IS GONE)</div>
+<div style="background:#fff;border:1px solid #A2B8CB;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);font-family:system-ui,sans-serif">
+<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #A2B8CB"><span style="width:15px;height:15px;border:1.5px solid #447099;border-radius:3px"></span><span style="font-size:13px;font-weight:700;color:#17212B">Quarto Hub</span><span style="flex:1"></span><span style="width:24px;height:24px;border-radius:50%;background:#009688;color:#fff;font:700 9px system-ui;display:flex;align-items:center;justify-content:center">AA</span></div>
+<div style="padding:40px 30px;text-align:center">
+<div style="width:44px;height:44px;margin:0 auto 14px;border-radius:50%;background:rgba(68,112,153,.08);display:flex;align-items:center;justify-content:center;color:#447099;font-size:18px">✎</div>
+<div style="font-size:18px;font-weight:700;color:#17212B;margin-bottom:6px">Create your first project</div>
+<p style="font-size:13px;color:#305775;margin:0 0 18px;line-height:1.5">A project is a Quarto document or website you can edit with others in real time.</p>
+<div style="display:flex;gap:10px;justify-content:center"><button style="padding:9px 16px;font-size:13px;font-weight:600;color:#fff;background:#2E6E71;border:none;border-radius:8px;cursor:pointer">New project</button><button style="padding:9px 16px;font-size:13px;font-weight:600;color:#447099;background:none;border:1px solid #A2B8CB;border-radius:8px;cursor:pointer">Import from computer</button></div>
+</div>
+</div>
+<div style="margin-top:12px">
+<div style="font:600 10px 'Source Code Pro',monospace;letter-spacing:.08em;color:#447099;margin:0 0 8px">DEVICE LINKING — MOVES INTO THE AVATAR MENU, HUMAN WORDS</div>
+<div style="width:280px;background:#fff;border:1px solid #A2B8CB;border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.12);padding:6px;font-family:system-ui,sans-serif">
+<div style="display:flex;gap:10px;align-items:center;padding:8px 10px"><span style="width:30px;height:30px;border-radius:50%;background:#009688;color:#fff;font:700 11px system-ui;display:flex;align-items:center;justify-content:center">AA</span><div><div style="font-size:13px;color:#17212B;font-weight:600">Amiable Auklet</div><div style="font-size:11px;color:#305775">amy@example.com</div></div></div>
+<div style="height:1px;background:#D1DBE5;margin:4px 8px"></div>
+<div style="padding:8px 11px;font-size:13px;color:#17212B;border-radius:6px">Use Quarto Hub on another device…</div>
+<div style="padding:8px 11px;font-size:13px;color:#17212B">Advanced: sync server…</div>
+<div style="padding:8px 11px;font-size:13px;color:#17212B">Sign out</div>
+</div>
+</div>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:200px">
+<div class="win" style="max-width:none">ProjectSetSetup never renders: the silent create/migrate effect that invites and ephemeral previews already use runs unconditionally</div>
+<div class="win" style="max-width:none">“Project set” never appears in UI copy; sync server becomes an Advanced item (default hidden)</div>
+<div class="win" style="max-width:none">Legacy migration happens silently and non-destructively; “Download backup” moves to the avatar menu</div>
+<div class="win" style="max-width:none">Device linking gets human words + stays as a link/QR under the hood (same doc-id mechanics)</div>
+</div>
+</div></div>
+
+<div class="dv-opt" id="2c"><div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Branch/PR plan — two stacked PRs</div>
+<div class="dv-card" style="width:560px;padding:20px;font-size:12px;line-height:1.5">
+<div style="font:600 11px 'Source Code Pro',monospace;color:#17212B;margin-bottom:4px">PR 1 · <span style="color:#2E6E71">onboarding/zero-setup</span> — small, ships first</div>
+<ul style="margin:0 0 14px;padding-left:18px;color:#404041">
+<li><b>App.tsx</b> — run the silent create/migrate effect for every route (drop the <span style="font-family:monospace;font-size:11px">join-collection</span>/<span style="font-family:monospace;font-size:11px">ephemeralHub</span> gates); stop rendering ProjectSetSetup for needs-setup/needs-migration (keep it only for the error state, reworded)</li>
+<li><b>LoginScreen.tsx</b> — value line + invite-link hint (strings.ts)</li>
+<li><b>ProjectsHome / avatar menu</b> — “Use on another device…” (wraps buildProjectSetLinkUrl), “Advanced: sync server…”, “Download backup” relocated</li>
+<li><b>ProjectSetSetup.tsx</b> — shrinks to the error/recovery screen; copy loses “project set”</li>
+<li>Tests: setup-fresh / setup-migration dev-harness pages + e2e for silent path</li>
+</ul>
+<div style="font:600 11px 'Source Code Pro',monospace;color:#17212B;margin-bottom:4px">PR 2 · <span style="color:#2E6E71">onboarding/invite-landing</span> — stacked on PR 1</div>
+<ul style="margin:0 0 14px;padding-left:18px;color:#404041">
+<li><b>routing.ts</b> — invite URL gains display-only <span style="font-family:monospace;font-size:11px">preview=</span> (project names, top files, contributor initials — reuse the peek-summary shape, no doc ids) and <span style="font-family:monospace;font-size:11px">start=</span> (project + file)</li>
+<li><b>ProjectsHome.tsx</b> — buildInviteUrl embeds preview from cached summaries + a “start here” picker in the invite popover</li>
+<li><b>JoinCollectionLanding.tsx</b> — preview list + facepile; name/color form removed (identity service default); button “Join and open &lt;start&gt;”</li>
+<li><b>App.tsx</b> — onDone: if <span style="font-family:monospace;font-size:11px">start</span> resolves after sync, open that project/file; else home with the collection highlighted</li>
+<li><b>Editor</b> — one-time welcome banner (joined collection + “Set my name”); dismiss persists</li>
+<li>Tests: landing render w/ + w/o preview payload, join→open path, legacy invite URLs (no preview) keep working</li>
+</ul>
+<div style="font-size:11.5px;color:#707073;font-style:italic">Open questions for the PRs: cap preview payload (URL length) at ~3 projects × 2 files; auto-name wordlist location; whether “start here” defaults to the collection’s most recent project when unset.</div>
+</div></div>
+
+</div>
+<p class="dv-next">Next: “tweak <a class="dv-oid" href="#2a">2a</a>/<a class="dv-oid" href="#2b">2b</a> …” · “write the PR-ready implementation notes as a handoff doc” · “design the invite popover’s start-here picker”</p>
+</section>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Getting into Quarto Hub — what happens today (from the shipped code), then prioritized fixes</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Current-state map — every entry path as coded in hub-client today</div>
+<div class="dv-card" style="width:1360px">
+
+<div class="path"><div class="path-h"><span class="path-tag">PATH A</span><span class="path-name">Cold start — types quartohub.com</span><span class="path-sub">App.tsx auth gate → ProjectSetSetup → ProjectsHome</span></div>
+<div class="flow">
+<div class="step"><div class="wf"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>quartohub.com</div><div class="wf-body" style="align-items:center;justify-content:center;text-align:center"><div style="width:26px;height:26px;border:1.5px solid #9aa4ad;border-radius:5px"></div><div class="wf-h">Quarto Hub</div><div class="wf-p">Sign in with Google to continue</div><div class="wf-btn ghost" style="width:120px">Sign in with Google</div></div></div>
+<div class="pain">Sign-in wall with zero explanation of what Quarto Hub is or why to bother</div></div>
+<div class="arr">→</div>
+<div class="step"><div class="wf"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>quartohub.com/#/</div><div class="wf-body"><div class="wf-h">Quarto Hub</div><div class="wf-p">Multiplayer editing for your Quarto projects. Get started by creating a new project set, or link to an existing one from another browser.</div><div class="wf-label">Sync server URL</div><div class="wf-input">wss://sync.automerge.org</div><div class="wf-btn">Create New Project Set</div><div class="wf-btn ghost">Link to Existing Project Set</div></div></div>
+<div class="pain">Screen #2 asks infrastructure questions: “project set”? “sync server”? — jargon before any value</div>
+<div class="pain">Two equally-weighted choices; a new user can’t tell which applies to them</div></div>
+<div class="arr">→</div>
+<div class="step"><div class="wf"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>quartohub.com/#/</div><div class="wf-body"><div style="display:flex;justify-content:space-between"><div class="wf-h">Projects</div><span class="avatar">ME</span></div><div style="border:1.5px dashed #c9d0d6;border-radius:5px;padding:18px 10px;text-align:center"><div class="wf-h" style="font-size:11px">No projects yet</div><div class="wf-p">Create your first project below.</div><div style="display:flex;gap:6px;justify-content:center;margin-top:6px"><span class="wf-btn">New project</span><span class="wf-btn ghost">Import .zip</span></div></div></div></div>
+<div class="pain">Empty room. Nothing to click, read, or learn from — no samples, no tour, no “what can this do”</div></div>
+</div></div>
+
+<div class="path"><div class="path-h"><span class="path-tag">PATH B</span><span class="path-name">Collection invite link (the common case)</span><span class="path-sub">#/join-collection/… → JoinCollectionLanding</span></div>
+<div class="flow">
+<div class="step"><div class="wf"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>…#/join-collection/4Xy…</div><div class="wf-body" style="align-items:center;justify-content:center;text-align:center"><div class="wf-h">Quarto Hub</div><div class="wf-p">Sign in with Google to continue</div><div class="wf-btn ghost" style="width:120px">Sign in with Google</div></div></div>
+<div class="pain">Invite context vanishes behind a generic login — no “Carlos invited you” until after Google</div>
+<div class="pain">The invite hash survives the OAuth roundtrip only via a sessionStorage save/restore — fragile</div></div>
+<div class="arr">→</div>
+<div class="step"><div class="wf"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>…#/join-collection/4Xy…</div><div class="wf-body"><div class="wf-label">Collection invitation</div><div class="wf-h">Carlos invited you to <span style="color:#447099">Team docs</span></div><div class="wf-p">A shared collection of Quarto projects — its contents sync to you when you join.</div><div class="wf-label">How you’ll appear to the team</div><div style="display:flex;gap:6px;align-items:center"><span class="avatar">?</span><div class="wf-input" style="flex:1">Your name</div></div><div style="display:flex;gap:3px">​<span style="width:10px;height:10px;border-radius:50%;background:#E91E63"></span><span style="width:10px;height:10px;border-radius:50%;background:#9C27B0"></span><span style="width:10px;height:10px;border-radius:50%;background:#3F51B5"></span><span style="width:10px;height:10px;border-radius:50%;background:#2196F3"></span><span style="width:10px;height:10px;border-radius:50%;background:#00BCD4"></span></div><div class="wf-btn">Join Team docs</div><div class="wf-note">Joining subscribes you to this collection — anyone with the link can join and add or remove projects.</div></div></div>
+<div class="win">Personal root auto-created silently behind this screen — now also silently migrates legacy projects (invitee never sees setup)</div>
+<div class="win">Invite link now carries only collection id + server — slim and forward-compatible</div>
+<div class="pain">Can’t see what’s inside before committing — no doc names, no faces, no preview</div>
+<div class="pain">Asked to pick a name + cursor color before seeing any value</div>
+<div class="pain">“Anyone with the link can join and add or remove projects” — accurate, and alarming</div></div>
+<div class="arr">→</div>
+<div class="step"><div class="wf"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>quartohub.com/#/</div><div class="wf-body"><div style="display:flex;justify-content:space-between"><div class="wf-h">Projects</div><span class="avatar">AB</span></div><div class="wf-label">Team docs</div><div style="display:flex;gap:5px"><div class="thumb" style="flex:1"><span>?</span></div><div class="thumb" style="flex:1"><span>?</span></div><div class="thumb" style="flex:1"><span>?</span></div></div><div class="wf-label" style="color:#717171">My projects</div><div class="wf-p" style="font-style:italic">(empty)</div></div></div>
+<div class="pain">Dumped on the home screen after joining — no “here’s the doc Carlos wanted you to see”</div>
+<div class="win">New: per-project peek summaries (top files + contributor facepile) are cached — the raw material for previews in <a href="#1b">1b</a> already exists</div></div>
+</div></div>
+
+<div class="path"><div class="path-h"><span class="path-tag">PATH C</span><span class="path-name">Single-project share link</span><span class="path-sub">#/share/&lt;docId&gt;?server=…&amp;file=…&amp;name=…</span></div>
+<div class="flow">
+<div class="step"><div class="wf"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>…#/share/9fK…?server=…</div><div class="wf-body" style="justify-content:center"><div class="wf-p" style="color:#B4461F;border:1.5px solid #EE6331;border-radius:4px;padding:8px">This share link is incomplete. Please ask the sender to share a new link.</div></div></div>
+<div class="pain">Link breaks if any of 3 query params is missing — and the blame lands on the recipient</div></div>
+<div class="arr">→</div>
+<div class="step"><div class="wf"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>…#/p/local-id/file/report.qmd</div><div class="wf-body"><div style="display:flex;gap:4px;align-items:center"><span style="width:8px;height:8px;border:1.5px solid #9aa4ad;border-radius:2px"></span><span class="wf-p" style="font-size:8px">Quarterly report | report.qmd</span></div><div style="display:flex;gap:5px;flex:1"><div style="flex:1;border:1.5px dashed #c9d0d6;border-radius:3px;min-height:70px"></div><div style="flex:1.4;border:1.5px solid #d5dbe0;border-radius:3px;background:repeating-linear-gradient(0deg,#fff,#fff 5px,#f2f4f6 5px,#f2f4f6 7px)"></div></div></div></div>
+<div class="pain">Straight into the editor with zero orientation — no who shared it, no what-is-this, cursor blinking</div>
+<div class="pain">The link is a bearer token: permanent, irrevocable <b>edit</b> access; project silently added to your list forever</div></div>
+<div class="arr">→</div>
+<div class="step"><div class="wf" style="border-style:dashed"><div class="wf-bar"><span class="wf-dot"></span>sender’s side: Share dialog</div><div class="wf-body"><div class="wf-h" style="font-size:11px">Share Project</div><div class="wf-p" style="color:#B4461F">⚠ Anyone with this link can access and edit this project permanently. This link cannot be revoked.</div><div class="wf-input">https://quartohub.com/#/share/9fK…</div><div class="wf-btn">Copy Link</div></div></div>
+<div class="pain">Senders are warned off the only sharing tool they have — one link type, all-or-nothing</div></div>
+</div></div>
+
+<div class="path" style="border-bottom:none"><div class="path-h"><span class="path-tag">PATH D</span><span class="path-name">Second browser / device linking</span><span class="path-sub">#/link-project-set/… or paste-a-doc-ID</span></div>
+<div class="flow">
+<div class="step"><div class="wf"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>quartohub.com/#/</div><div class="wf-body"><div class="wf-h" style="font-size:11px">Link to Existing Project Set</div><div class="wf-label">Project set ID</div><div class="wf-input">bs58-encoded document ID</div><div class="wf-label">Sync server URL</div><div class="wf-input">wss://sync.automerge.org</div><div class="wf-btn">Link Project Set</div></div></div>
+<div class="pain">Pure plumbing exposed: paste a bs58 document ID to see your own projects on a second machine</div></div>
+<div class="arr" style="margin-top:60px">&nbsp;</div>
+<div class="step"><div class="wf" style="border-style:dashed;background:#fafbfc"><div class="wf-bar"><span class="wf-dot"></span>PATH E — partially built (Aug ’26)</div><div class="wf-body"><div class="wf-p"><b>Now exists:</b> <span style="font-family:'Source Code Pro',monospace">q2 preview --ui editor</span> boots an ephemeral hub straight into the browser editor (no setup screens); <span style="font-family:'Source Code Pro',monospace">q2 provide-hub</span> attaches a live executor.</div><div class="wf-p" style="font-style:italic">Still missing: a bridge to persistent Hub — Positron/RStudio, quarto.org, “edit this page” from a published site</div></div></div>
+<div class="win">Ephemeral preview reuses the invite-first pattern: root created silently, zero prompts</div>
+<div class="pain">Preview sessions are throwaway — no “keep this on Quarto Hub” off-ramp into a real account</div></div>
+</div></div>
+
+</div></div>
+
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>P1 · Invite landing that shows the work — join first, identity later</div>
+<div class="dv-card" style="width:540px;padding:18px"><div class="flow">
+<div class="step"><div class="wf"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>…/join/team-docs</div><div class="wf-body"><div style="display:flex;gap:6px;align-items:center"><span class="avatar" style="background:#EE6331">CS</span><div class="wf-p" style="font-size:9px"><b>Carlos</b> invited you to</div></div><div class="wf-h">Team docs</div><div style="display:flex;gap:5px"><div class="thumb" style="flex:1"><span>report.qmd</span></div><div class="thumb" style="flex:1"><span>slides.qmd</span></div><div class="thumb" style="flex:1"><span>site</span></div></div><div style="display:flex;gap:3px;align-items:center"><span class="avatar" style="width:14px;height:14px;font-size:6px;line-height:14px">CS</span><span class="avatar" style="width:14px;height:14px;font-size:6px;line-height:14px;background:#9C27B0">JL</span><span class="wf-p" style="font-size:8px">Carlos + 2 others are working here</span></div><div class="wf-btn">Open Team docs</div><div class="wf-note">You’ll join as “Curious Capybara” — rename anytime.</div></div></div></div>
+<div class="arr">→</div>
+<div class="step"><div class="wf"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>…/p/…/report.qmd</div><div class="wf-body"><div style="background:#eef4f9;border:1.5px solid #447099;border-radius:4px;padding:5px 7px" class="wf-p">You’ve joined <b>Team docs</b>. Carlos suggested starting with <b>report.qmd</b> → &nbsp; <u>Set your name</u></div><div style="display:flex;gap:5px;flex:1"><div style="flex:1;border:1.5px dashed #c9d0d6;border-radius:3px"></div><div style="flex:1.4;border:1.5px solid #d5dbe0;border-radius:3px;background:repeating-linear-gradient(0deg,#fff,#fff 5px,#f2f4f6 5px,#f2f4f6 7px)"></div></div></div></div></div>
+</div>
+<div style="margin-top:12px;display:flex;flex-direction:column;gap:5px">
+<div class="win" style="max-width:none">Preview before commitment: doc thumbnails, names, live member facepile — the invite sells itself</div>
+<div class="win" style="max-width:none">Identity moves AFTER entry: auto-name, editable from a banner — one click from link to content</div>
+<div class="win" style="max-width:none">Invite can carry a “start here” file, so landing = the doc the inviter meant, not the home screen</div>
+</div></div></div>
+
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>P1 · Seeded first-run — never an empty room</div>
+<div class="dv-card" style="width:400px;padding:18px"><div class="wf" style="width:100%"><div class="wf-bar"><span class="wf-dot"></span><span class="wf-dot"></span>quartohub.com/#/ (first visit)</div><div class="wf-body"><div class="wf-h">Welcome — here’s a place to start</div><div class="wf-label">Samples · yours to edit or delete</div><div style="display:flex;gap:6px"><div style="flex:1.2;border:1.5px solid #447099;border-radius:4px;padding:6px"><div class="wf-p" style="font-weight:700;color:#404041">Start here ▸</div><div class="wf-p" style="font-size:8px">5-min tour you complete by editing it</div></div><div class="thumb" style="flex:1"><span>Article</span></div><div class="thumb" style="flex:1"><span>Slides</span></div><div class="thumb" style="flex:1"><span>Website</span></div></div><div style="display:flex;gap:6px;margin-top:4px"><span class="wf-btn">New project</span><span class="wf-btn ghost">Import from computer</span></div></div></div>
+<div style="margin-top:12px;display:flex;flex-direction:column;gap:5px">
+<div class="win" style="max-width:none">Seed 3 sample projects + a “Start here” tour project that teaches editing, preview, and sharing by doing</div>
+<div class="win" style="max-width:none">Samples live in a “Samples” collection — which also teaches what collections are, for free</div>
+<div class="win" style="max-width:none">Real scaffolds already exist in the codebase (blog scaffold with posts/welcome) — reuse them</div>
+</div></div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>P1 · Zero-setup + plain language — delete the setup screen</div>
+<div class="dv-card" style="width:420px;padding:18px">
+<table style="width:100%;border-collapse:collapse;font-size:10.5px">
+<tr><td style="padding:5px 8px;border-bottom:1px solid #e2e8ee;color:#B4461F;font-family:'Source Code Pro',monospace;font-size:9px">TODAY</td><td style="padding:5px 8px;border-bottom:1px solid #e2e8ee;color:#2f6d4f;font-family:'Source Code Pro',monospace;font-size:9px">INSTEAD</td></tr>
+<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8ee">“Create New Project Set” setup screen</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8ee"><b>Gone.</b> Auto-create silently on first visit — the invite path already does exactly this</td></tr>
+<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8ee">“Sync server URL” input on screen #2</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8ee">Hidden default; an Advanced setting for self-hosters</td></tr>
+<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8ee">“Project set”</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8ee">“Your projects”</td></tr>
+<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8ee">“Link to Existing Project Set” + bs58 ID paste</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8ee">“Use Quarto Hub on another device” → QR / magic link from settings, or implicit via sign-in</td></tr>
+<tr><td style="padding:6px 8px">“Sign in with Google to continue”</td><td style="padding:6px 8px">One line of value first: “Write and publish Quarto documents together, in the browser.”</td></tr>
+</table>
+<div style="margin-top:10px" class="win">Cheapest of all the fixes — copy + one deleted screen; auth account can also key the project set, making device-linking automatic</div>
+</div></div>
+
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>P2 · Legible, safer links — roles + revocation</div>
+<div class="dv-card" style="width:430px;padding:18px"><div class="flow">
+<div class="step"><div class="wf" style="width:190px"><div class="wf-bar"><span class="wf-dot"></span>Share “Quarterly report”</div><div class="wf-body"><div class="wf-label">Anyone with the link can…</div><div style="display:flex;gap:4px"><span class="wf-btn ghost" style="font-size:8px;padding:4px 6px">View</span><span class="wf-btn ghost" style="font-size:8px;padding:4px 6px">Comment</span><span class="wf-btn" style="font-size:8px;padding:4px 6px">Edit</span></div><div class="wf-input">quartohub.com/l/quarterly-rpt</div><div class="wf-btn">Copy link</div><div class="wf-note">Active links: “review link” (view) · created Tue · <u>revoke</u></div></div></div></div>
+<div class="step"><div class="wf" style="width:190px"><div class="wf-bar"><span class="wf-dot"></span>recipient lands</div><div class="wf-body"><div class="wf-p"><b>Carlos</b> shared <b>Quarterly report</b></div><div class="thumb"><span>preview</span></div><div class="wf-p" style="font-size:8.5px">You can <b>edit</b>. Your changes sync live.</div><div class="wf-btn">Open document</div></div></div></div>
+</div>
+<div style="margin-top:12px;display:flex;flex-direction:column;gap:5px">
+<div class="win" style="max-width:none">Replaces the “cannot be revoked” warning with named, revocable, role-scoped links — needs server-side link indirection (bigger lift, hence P2)</div>
+<div class="win" style="max-width:none">Recipient landing states who/what/which-role before the editor opens — fixes the Path C cold-open</div>
+</div></div></div>
+
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Priorities — impact vs. effort</div>
+<div class="dv-card" style="width:360px;padding:18px">
+<div style="display:flex;flex-direction:column;gap:8px;font-size:11px;line-height:1.45">
+<div><span class="path-tag" style="background:#EE6331">P1</span> &nbsp;<a href="#1d">1d</a> <b>Zero-setup + language</b> — days of work, removes the worst wall (Path A screen #2, Path D)</div>
+<div><span class="path-tag" style="background:#EE6331">P1</span> &nbsp;<a href="#1b">1b</a> <b>Invite landing shows the work</b> — the most common entry; preview + join-first-name-later + land on the intended doc</div>
+<div><span class="path-tag" style="background:#EE6331">P1</span> &nbsp;<a href="#1c">1c</a> <b>Seeded first-run</b> — fixes the empty room; scaffolds already exist</div>
+<div><span class="path-tag" style="background:#447099">P2</span> &nbsp;<a href="#1e">1e</a> <b>Role-scoped revocable links</b> — needs link indirection on the server</div>
+<div><span class="path-tag" style="background:#9aa4ad">P3</span> &nbsp;<b>New entry paths</b> — <span style="color:#717171">“quarto publish hub” from CLI/Positron; “edit on Hub” from published sites (Path E)</span></div>
+</div>
+<div class="wf-note" style="margin-top:10px">Sequencing logic: fix language + walls first (cheap), then the invite path (highest traffic), then trust, then growth loops.</div>
+</div></div>
+
+</div>
+<p class="dv-next">Try next: “go deeper on <a class="dv-oid" href="#1b">1b</a> — full invite flow screen by screen” · “design the <a class="dv-oid" href="#1c">1c</a> tour project’s content” · “riff 3 variants of the <a class="dv-oid" href="#1e">1e</a> share dialog”</p>
+</section>
+</x-dc>
+</body>
+</html>

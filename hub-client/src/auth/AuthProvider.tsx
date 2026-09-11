@@ -55,6 +55,12 @@ export interface SignInButtonProps {
    * registers with the IdP.
    */
   loginUri: string;
+  /**
+   * Button label variant. The invite landing (bd-fxdcxbpq) uses
+   * 'continue_with' ("Continue with Google"); the login screen keeps the
+   * default 'signin_with'. Providers map this onto their own button API.
+   */
+  text?: 'signin_with' | 'continue_with';
 }
 
 /**

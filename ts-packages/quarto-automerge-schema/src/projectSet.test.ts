@@ -81,6 +81,70 @@ describe('ProjectSetDocument schema helpers', () => {
       expect(result).toBe(false);
     });
 
+    it('preserves a cached peek summary on the new entry (bd-fxdcxbpq)', () => {
+      // "Add to collection" copies an entry that may carry the sender's
+      // cached summary; dropping it here left collection entries with no
+      // file counts until the project was next opened, producing invite
+      // previews like "0 files" for a populated project.
+      const doc = emptyDoc();
+      const summary = {
+        fileCount: 12,
+        topFiles: ['report.qmd', 'data.csv'],
+        contributors: [{ name: 'Carlos', color: '#E91E63' }],
+        asOf: '2026-01-15T00:00:00.000Z',
+      };
+      addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'My Project',
+        summary,
+      }, '2026-01-15T00:00:00.000Z');
+
+      expect(doc.projects['proj1'].summary).toEqual(summary);
+    });
+
+    it('adopts an incoming summary when the existing entry has none', () => {
+      const doc = emptyDoc();
+      addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'My Project',
+      }, '2026-01-15T00:00:00.000Z');
+
+      const summary = { fileCount: 3, topFiles: ['a.qmd'], contributors: [], asOf: '2026-01-16T00:00:00.000Z' };
+      const result = addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'My Project',
+        summary,
+      });
+
+      expect(result).toBe(true);
+      expect(doc.projects['proj1'].summary).toEqual(summary);
+    });
+
+    it('does not clobber an existing summary on re-add (freshness is owned by updateProjectSummaryInSet)', () => {
+      const doc = emptyDoc();
+      const fresh = { fileCount: 12, topFiles: ['report.qmd'], contributors: [], asOf: '2026-01-16T00:00:00.000Z' };
+      addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'My Project',
+        summary: fresh,
+      }, '2026-01-15T00:00:00.000Z');
+
+      const stale = { fileCount: 0, topFiles: [], contributors: [], asOf: '2026-01-01T00:00:00.000Z' };
+      const result = addProjectToSet(doc, {
+        indexDocId: 'automerge:proj1',
+        syncServer: 'wss://sync.example.com',
+        description: 'My Project',
+        summary: stale,
+      });
+
+      expect(result).toBe(false);
+      expect(doc.projects['proj1'].summary).toEqual(fresh);
+    });
+
     it('should update description if changed', () => {
       const doc = emptyDoc();
       addProjectToSet(doc, {
