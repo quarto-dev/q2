@@ -338,12 +338,15 @@ fn process_list_item(
             // the item contains a heading (e.g. `* # Section 1`). Flatten the
             // section's blocks into the item, mirroring `process_section`.
             PandocNativeIntermediate::IntermediateSection(section) => blocks.extend(section),
-            PandocNativeIntermediate::IntermediateMetadataString(text, _range) => {
+            PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
                 // for now we assume it's metadata and emit it as a rawblock
                 blocks.push(Block::RawBlock(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
-                    source_info: node_source_info_with_context(list_item_node, context),
+                    source_info: quarto_source_map::SourceInfo::from_range(
+                        context.current_file_id(),
+                        range,
+                    ),
                 }));
             }
             // Tokens with no AST-level meaning: tree-sitter ERROR nodes from
@@ -699,9 +702,21 @@ fn native_visitor<T: Write>(
         "fenced_div_note_id" => create_base_text_from_node_text(node, input_bytes),
         "document" => process_document(node, children, context),
         "metadata" => {
-            // Extract YAML frontmatter text
-            let text = node.utf8_text(input_bytes).unwrap().to_string();
-            PandocNativeIntermediate::IntermediateMetadataString(text, node_location(node))
+            // The grammar exposes the YAML between the `---` delimiters as
+            // the `body` field (a `yaml` node), so the text and range come
+            // straight from the parse — never re-derived from the node text,
+            // which is how a `---` inside a value once truncated the
+            // metadata (bd-mjo6ao32, GH #671). A `metadata` node without a
+            // body only arises from error recovery; the parse error is
+            // already reported, so treat it as an empty block.
+            let (text, range) = match node.child_by_field_name("body") {
+                Some(body) => (
+                    body.utf8_text(input_bytes).unwrap().to_string(),
+                    node_location(&body),
+                ),
+                None => (String::new(), node_location(node)),
+            };
+            PandocNativeIntermediate::IntermediateMetadataString(text, range)
         }
         "section" => process_section(node, children, context),
         "pandoc_paragraph" => process_paragraph(node, children, input_bytes, context),

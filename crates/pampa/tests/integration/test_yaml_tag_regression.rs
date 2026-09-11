@@ -15,12 +15,10 @@ use quarto_pandoc_types::ConfigValueKind;
 #[test]
 fn test_yaml_tags_preserved_in_new_api() {
     // Test YAML with tagged strings
-    let yaml_content = r#"---
-tagged_path: !path images/*.png
+    let yaml_content = r#"tagged_path: !path images/*.png
 tagged_glob: !glob posts/*/index.qmd
 tagged_str: !str _foo_.py
-regular: This has *emphasis*
----"#;
+regular: This has *emphasis*"#;
 
     let block = RawBlock {
         format: "quarto_minus_metadata".to_string(),
