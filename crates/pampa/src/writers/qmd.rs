@@ -1815,6 +1815,15 @@ fn escape_markdown(
                 }
             }
 
+            // A `&` that begins something the reader would lex as an
+            // `entity_reference` or `numeric_character_reference` must be
+            // escaped, or `Str "&copy;"` (from `\&copy;` in source) re-reads
+            // as `©` — and a literal `Str "&ZeroWidthSpace;"` would be
+            // indistinguishable from the reference the arm below emits for a
+            // real U+200B. Pandoc's markdown writer escapes the same way.
+            // Any other `&` (`AT&T`, `a & b`) is plain text (bd-i18zoy4n).
+            '&' if starts_character_reference(&chars[i..]) => result.push_str("\\&"),
+
             // Join controls (ZWNJ / ZWJ) are format characters too, but they
             // parse raw (bd-96fswwce), are ordinary content in Persian/Indic
             // text, and ZWJ is structural inside emoji sequences — an entity
@@ -1841,6 +1850,40 @@ fn escape_markdown(
         i += 1;
     }
     result
+}
+
+/// Would the qmd reader lex the text starting at `rest[0] == '&'` as a
+/// character reference? Mirrors the two grammar tokens in
+/// `crates/tree-sitter-qmd/tree-sitter-markdown/grammar.js`:
+///
+/// * `numeric_character_reference`: `&#([0-9]{1,7}|[xX][0-9a-fA-F]{1,6});`
+/// * `entity_reference`: `&<name>;` for every semicolon-terminated key of
+///   the WHATWG table (the same table the reader decodes with, so the lookup
+///   goes through `entity_table()` rather than a second copy of the names).
+fn starts_character_reference(rest: &[char]) -> bool {
+    debug_assert_eq!(rest.first(), Some(&'&'));
+    let body = &rest[1..];
+    if body.first() == Some(&'#') {
+        let (digits, max_len, is_digit): (&[char], usize, fn(&char) -> bool) = match body.get(1) {
+            Some('x' | 'X') => (&body[2..], 6, |c| c.is_ascii_hexdigit()),
+            _ => (&body[1..], 7, |c| c.is_ascii_digit()),
+        };
+        let n = digits.iter().take_while(|c| is_digit(c)).count();
+        return (1..=max_len).contains(&n) && digits.get(n) == Some(&';');
+    }
+    // WHATWG names are ASCII alphanumerics; the longest is 31 characters.
+    let n = body
+        .iter()
+        .take_while(|c| c.is_ascii_alphanumeric())
+        .count();
+    if n == 0 || body.get(n) != Some(&';') {
+        return false;
+    }
+    let candidate: String = std::iter::once('&')
+        .chain(body[..n].iter().copied())
+        .chain(std::iter::once(';'))
+        .collect();
+    crate::pandoc::treesitter_utils::entity_reference::entity_table().contains_key(&candidate)
 }
 
 fn write_str(
@@ -3400,5 +3443,72 @@ mod format_character_writer_tests {
             esc("a\u{2061}b \u{2061}c"),
             "a&ApplyFunction;b &ApplyFunction;c"
         );
+    }
+}
+
+#[cfg(test)]
+mod ampersand_escape_writer_tests {
+    //! A literal `&` that begins something the reader would lex as an
+    //! `entity_reference` or `numeric_character_reference` must be written as
+    //! `\&`, or `Str "&copy;"` (from `\&copy;` in source) re-reads as `©`
+    //! (bd-i18zoy4n). Pandoc's markdown writer escapes the same way.
+    use super::{LineStartEscapes, escape_markdown};
+
+    fn esc(text: &str) -> String {
+        escape_markdown(text, false, LineStartEscapes::Always)
+    }
+
+    /// Inline mode, mid-line: `#` is only heading syntax at line start, so it
+    /// stays raw here and the numeric-reference expectations show the `&`
+    /// escape on its own.
+    fn esc_inline(text: &str) -> String {
+        escape_markdown(
+            text,
+            false,
+            LineStartEscapes::WhereMeaningful { starts_line: false },
+        )
+    }
+
+    #[test]
+    fn escapes_ampersand_that_starts_a_named_reference() {
+        assert_eq!(esc("&copy;"), "\\&copy;");
+        assert_eq!(esc("a&nbsp;b"), "a\\&nbsp;b");
+        assert_eq!(esc("&ZeroWidthSpace;"), "\\&ZeroWidthSpace;");
+        assert_eq!(esc("&AMP;"), "\\&AMP;"); // legacy name, semicolon-terminated
+    }
+
+    #[test]
+    fn escapes_ampersand_that_starts_a_numeric_reference() {
+        assert_eq!(esc_inline("&#34;"), "\\&#34;");
+        assert_eq!(esc_inline("&#x200B;"), "\\&#x200B;");
+        assert_eq!(esc_inline("&#X41;"), "\\&#X41;");
+        assert_eq!(esc_inline("&#1114111;"), "\\&#1114111;"); // 7 decimal digits
+        assert_eq!(esc_inline("&#x10FFFF;"), "\\&#x10FFFF;"); // 6 hex digits
+        // Block mode escapes every `#` as well (pre-existing behaviour); the
+        // reader folds `\&\#34;` back to the same `Str "&#34;"`.
+        assert_eq!(esc("&#34;"), "\\&\\#34;");
+    }
+
+    #[test]
+    fn leaves_ampersands_that_are_not_references() {
+        assert_eq!(esc("AT&T"), "AT&T");
+        assert_eq!(esc("a & b"), "a & b");
+        assert_eq!(esc("&"), "&");
+        assert_eq!(esc("a&"), "a&");
+        assert_eq!(esc("&;"), "&;");
+        assert_eq!(esc("&amp"), "&amp"); // no terminating semicolon
+        assert_eq!(esc("&AM;"), "&AM;"); // not a WHATWG name (bd-v8qc9zyc)
+        assert_eq!(esc_inline("&#;"), "&#;");
+        assert_eq!(esc_inline("&#x;"), "&#x;");
+        assert_eq!(esc_inline("&#12345678;"), "&#12345678;"); // 8 digits: not lexed
+        assert_eq!(esc_inline("&#x1234567;"), "&#x1234567;"); // 7 hex digits: not lexed
+        assert_eq!(esc_inline("&#1a;"), "&#1a;");
+    }
+
+    #[test]
+    fn a_literal_reference_and_its_decoded_char_stay_distinct() {
+        // The whole point: these two Strs must not produce the same bytes.
+        assert_ne!(esc("&ZeroWidthSpace;"), esc("\u{200B}"));
+        assert_ne!(esc("&copy;"), esc("\u{00A9}"));
     }
 }

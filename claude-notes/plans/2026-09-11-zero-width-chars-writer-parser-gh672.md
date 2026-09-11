@@ -197,20 +197,26 @@ Pandoc does this (`[Str "&copy;"]` → `a\&copy;b`); we never escape `&`, so
 literal `Str "&ZeroWidthSpace;"` and a `Str "\u{200B}"` must not produce the
 same bytes.
 
-- [ ] **Tests first:** unit tests for `escape_markdown`: `"&copy;"` → `\&copy;`,
+- [x] **Tests first:** unit tests for `escape_markdown`: `"&copy;"` → `\&copy;`,
       `"&#34;"` → `\&#34;`, `"&#x200B;"` → `\&#x200B;`, `"AT&T"` → `AT&T`
       (unchanged), `"a & b"` → unchanged, `"&AM;"` → unchanged (not a
       semicolon-terminated WHATWG name), `"&amp"` (no `;`) → unchanged.
       Round-trip fixture `ampersand_escaped_entities.qmd` with `\&copy;`,
-      `\&#62;`, `\&ZeroWidthSpace;` and plain `AT&T` / `a & b`. Verify
-      failures pre-fix (AST differs after regeneration).
-- [ ] Implement: in `escape_markdown`, on `&` look ahead for
+      `\&#62;`, `\&ZeroWidthSpace;` and plain `AT&T` / `a & b`. Verified
+      2026-09-11: 3 escaping tests + the fixture fail pre-fix (AST differs
+      after regeneration); the stay-raw guard passes before and after.
+      Numeric-reference expectations use the inline `WhereMeaningful` mode,
+      because block mode already escapes every `#` (`\&\#34;`, also
+      asserted).
+- [x] Implement: in `escape_markdown`, on `&` look ahead for
       `&#[0-9]{1,7};`, `&#[xX][0-9a-fA-F]{1,6};` (the grammar's
       `numeric_character_reference` regex) or `&<name>;` where `&<name>;` is a
       key of the shared WHATWG table (`entity_table()` in
       `treesitter_utils/entity_reference.rs` — make it `pub(crate)` or expose
       a `is_entity_name` helper so writer and reader share one source of
-      truth). Emit `\&` in that case, `&` otherwise.
+      truth). Emit `\&` in that case, `&` otherwise. Done 2026-09-11:
+      `starts_character_reference` in `qmd.rs`, lookup via the reader's
+      `entity_table()` (made `pub(crate)`).
 - [ ] Expect snapshot / fixture churn wherever writer output contained a
       literal `&name;`; review each change is a *correct* re-escaping.
       Prefer landing 1b as its own commit for reviewability (user's call
@@ -230,6 +236,9 @@ same bytes.
       rows only, no state growth).
 
 ### Phase 3 — Verification + bookkeeping
+
+Phases 1a + 2 committed as `caa29d6c` after a green full `cargo xtask verify`
+(2026-09-11). Phase 1b is verified and committed separately below.
 
 - [ ] `cargo nextest run -p pampa -p tree-sitter-qmd`.
 - [ ] `cargo nextest run --workspace`.
