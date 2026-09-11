@@ -508,6 +508,9 @@ const REPLAY_FIXTURE_TIMESTAMP = (Date.now() - 42 * 60_000) / 1000;
  * ReplayDrawer.tsx.
  */
 function ReplayHarness() {
+  // Local stand-in for the persisted `previewEditing` preference so the
+  // Edit pill (bd-ew0vak6b) is interactive in the gallery.
+  const [previewEditing, setPreviewEditing] = useState(true);
   const state: ReplayState = {
     isActive: true,
     historyLength: 100,
@@ -575,6 +578,8 @@ function ReplayHarness() {
             state={state}
             controls={controls}
             identities={{ 'b3f7c2a1-remote': { name: 'Grace Hopper', color: '#E91E63' } }}
+            previewEditing={previewEditing}
+            onPreviewEditingChange={setPreviewEditing}
           />
         </div>
       </div>

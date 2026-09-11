@@ -337,6 +337,12 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Scroll sync state (persisted in localStorage)
   const [scrollSyncEnabled, setScrollSyncEnabled] = usePreference('scrollSyncEnabled');
 
+  // q2-preview block editing on/off (bd-ew0vak6b) — the Edit pill in the
+  // replay bar. Persisted; `ReactPreview` reads the same preference
+  // directly (like `richText`) and forwards it to the iframe as
+  // `editingDisabled`, so nothing is threaded through PreviewRouter.
+  const [previewEditing, setPreviewEditing] = usePreference('previewEditing');
+
   // Attribution overlay — session-only useState (not persisted).
   // Owned here, surfaced via the toggle in the replay bar, and
   // threaded into ReactPreview where `useAttribution` consumes it
@@ -1469,6 +1475,11 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onAttributionChange={setAttributionOn}
             commentsMode={commentsMode}
             onCommentsModeChange={setCommentsMode}
+            previewEditing={previewEditing}
+            onPreviewEditingChange={setPreviewEditing}
+            // Only q2-preview has a block-edit surface (q2-debug ignores
+            // editingDisabled; slides have no editor).
+            previewEditingDisabled={currentFormat !== 'q2-preview'}
             commentsCount={outstandingCommentCount}
             attributionGenerating={attributionGenerating}
             attributionDisabled={

@@ -4,7 +4,7 @@ import type { BulletListBlock, NodeArgs } from '../../framework';
 import { IncrementalContext } from '../IncrementalContext';
 import { PreviewContext } from '../PreviewContext';
 import { isLeadingBlockBorrowable } from './listBorrow';
-import { allTaskItems, makeTaskToggle, TaskItemBody, taskItemChecked } from './taskList';
+import { allTaskItems, makeTaskToggle, TaskItemBlocks, taskItemChecked } from './taskList';
 
 const NOOP = () => {};
 
@@ -39,7 +39,7 @@ export const BulletList = (args: NodeArgs<BulletListBlock>) => {
                             {checked !== null ? (
                                 // Incremental (reveal) surfaces are never edit-enabled:
                                 // render the checkbox, but inert.
-                                <TaskItemBody
+                                <TaskItemBlocks
                                     item={item}
                                     checked={checked}
                                     onNavigateToDocument={args.onNavigateToDocument}
@@ -86,7 +86,7 @@ export const BulletList = (args: NodeArgs<BulletListBlock>) => {
                 return (
                     <li key={i} {...itemAttrProps} {...liProps}>
                         {checked !== null ? (
-                            <TaskItemBody
+                            <TaskItemBlocks
                                 item={item}
                                 checked={checked}
                                 onToggle={makeTaskToggle(ctx, resolved, i)}

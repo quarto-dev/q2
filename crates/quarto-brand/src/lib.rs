@@ -22,10 +22,10 @@ pub use resolved::ResolvedBrand;
 pub use split::SplitBrand;
 pub use types::{
     Brand, BrandColor, BrandColorLightDark, BrandColorValue, BrandDefaults, BrandFont,
-    BrandFontFile, BrandFontFileEntry, BrandFontGoogle, BrandFontStyle, BrandFontSystem,
-    BrandFontWeight, BrandFontWeightAtom, BrandFontWeightRange, BrandLogo, BrandLogoExplicit,
-    BrandLogoResource, BrandMeta, BrandMetaLink, BrandMetaName, BrandRef, BrandTypography,
-    BrandTypographyOptions, LogoEntry, UnifiedBrand,
+    BrandFontFile, BrandFontFileEntry, BrandFontFileExplicit, BrandFontGoogle, BrandFontStyle,
+    BrandFontSystem, BrandFontWeight, BrandFontWeightAtom, BrandFontWeightRange, BrandLogo,
+    BrandLogoExplicit, BrandLogoResource, BrandMeta, BrandMetaLink, BrandMetaName, BrandRef,
+    BrandTypography, BrandTypographyOptions, LogoEntry, UnifiedBrand, published_font_name,
 };
 pub use validate::{BrandPath, BrandPathSegment, weight_name_to_number};
 

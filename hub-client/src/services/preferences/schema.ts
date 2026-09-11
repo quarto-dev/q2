@@ -38,6 +38,16 @@ export const UserPreferencesSchema = z.object({
    * keeps prefs written before this key existed parsing cleanly.
    */
   documentBranches: z.boolean().default(false),
+  /**
+   * bd-ew0vak6b: q2-preview block editing on/off (default-ON) — the Edit
+   * pill in the document bottom bar. When false the preview iframe runs
+   * read-only (`editingDisabled`), exactly like `q2 preview` without
+   * `--allow-edit`: no edit affordances, links are plain links. Persisted
+   * (unlike the session-only Authors/Comments toggles) because read mode
+   * is a way of working that should survive reloads. `.default(true)`
+   * keeps prefs written before this key existed parsing cleanly.
+   */
+  previewEditing: z.boolean().default(true),
 });
 
 // Infer TypeScript type from schema
@@ -55,6 +65,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   unlockNestingCursor: true,    // nesting-cursor ON by default (P3.2)
   richText: true,               // rich-text editor ON by default (bd-j1nto6eq)
   documentBranches: false,      // experimental branch bar OFF by default
+  previewEditing: true,         // q2-preview block editing ON by default (bd-ew0vak6b)
 };
 
 // Validation function - returns valid preferences or defaults

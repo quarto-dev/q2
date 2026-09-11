@@ -620,6 +620,32 @@ typography:
 
 Range ends are numbers from 100 to 900 with the smaller first; keywords are not accepted as range ends. A weight Quarto does not recognize stops the render with error `Q-14-8`, which names the offending value and its location.
 
+### Local font files {#local-font-files}
+
+A font with `source: file` ships its own files with the project instead of loading them from Google Fonts or Bunny Fonts:
+
+``` {.yaml filename="_brand.yml"}
+typography:
+  fonts:
+    - family: EB Garamond
+      source: file
+      files:
+        - path: fonts/EBGaramond-Regular.woff2
+          weight: 400
+        - path: fonts/EBGaramond-Italic.woff2
+          weight: 400
+          style: italic
+  base: EB Garamond
+```
+
+Each `files` entry is a path (or a map with `path`, `weight`, and `style`). Paths are relative to the **brand file's own directory**, so the example above expects a `fonts/` directory next to `_brand.yml`. A path that starts with `/` is relative to the project root instead.
+
+Quarto publishes the files for you: every local font is copied into a `fonts/` directory next to the compiled theme stylesheet (`site_libs/quarto/fonts/` in a website, `<document>_files/fonts/` for a standalone document), and the generated `@font-face` rule points there. You do not need to list font files under `resources`. The `format()` hint of the rule comes from the file's extension (`.woff2`, `.woff`, `.ttf`, or `.otf`).
+
+Because published fonts are named by their file name only, two different files in one project cannot share a name — `serif/Regular.woff2` and `sans/Regular.woff2` would collide. Quarto stops the render and names both files when that happens; rename one of them. A `files` entry that points at a file which does not exist produces a warning and the render continues without it. Remote fonts (`https://…` paths) are left for the browser to fetch.
+
+Per-file keys beyond `path`, `weight`, and `style` — such as `format` or `display` — are not part of the settled brand.yml specification. Quarto warns and ignores them.
+
 
 You can then refer to fonts by `family` in the remaining typography options:
 

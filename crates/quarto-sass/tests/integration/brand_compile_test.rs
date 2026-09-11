@@ -7,7 +7,7 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use quarto_brand::Brand;
 use quarto_sass::brand_to_layers;
@@ -61,7 +61,7 @@ fn assert_compiles(scss: &str) {
 #[test]
 fn kitchen_sink_brand_compiles() {
     let brand = load_brand("brand-yaml/kitchen-sink/_brand.yml");
-    let layers = brand_to_layers(&brand, Path::new("")).expect("brand_to_layers");
+    let layers = brand_to_layers(&brand).expect("brand_to_layers");
     let scss = flatten_layers(&layers);
     assert_compiles(&scss);
 }
@@ -69,7 +69,7 @@ fn kitchen_sink_brand_compiles() {
 #[test]
 fn monospace_colors_brand_compiles() {
     let brand = load_brand("brand-yaml/monospace-colors/_brand.yml");
-    let layers = brand_to_layers(&brand, Path::new("")).expect("brand_to_layers");
+    let layers = brand_to_layers(&brand).expect("brand_to_layers");
     let scss = flatten_layers(&layers);
     assert_compiles(&scss);
 }
@@ -77,7 +77,7 @@ fn monospace_colors_brand_compiles() {
 #[test]
 fn palette_colors_brand_compiles() {
     let brand = load_brand("brand-yaml/palette-colors/_brand.yml");
-    let layers = brand_to_layers(&brand, Path::new("")).expect("brand_to_layers");
+    let layers = brand_to_layers(&brand).expect("brand_to_layers");
     let scss = flatten_layers(&layers);
     assert_compiles(&scss);
 }
@@ -85,7 +85,7 @@ fn palette_colors_brand_compiles() {
 #[test]
 fn basic_brand_compiles() {
     let brand = load_brand("use-brand/basic-brand/_brand.yml");
-    let layers = brand_to_layers(&brand, Path::new("")).expect("brand_to_layers");
+    let layers = brand_to_layers(&brand).expect("brand_to_layers");
     let scss = flatten_layers(&layers);
     assert_compiles(&scss);
 }
@@ -93,7 +93,7 @@ fn basic_brand_compiles() {
 #[test]
 fn multi_file_brand_compiles() {
     let brand = load_brand("use-brand/multi-file-brand/_brand.yml");
-    let layers = brand_to_layers(&brand, Path::new("brand")).expect("brand_to_layers");
+    let layers = brand_to_layers(&brand).expect("brand_to_layers");
     let scss = flatten_layers(&layers);
     assert_compiles(&scss);
 }
@@ -101,7 +101,7 @@ fn multi_file_brand_compiles() {
 #[test]
 fn nested_brand_compiles() {
     let brand = load_brand("use-brand/nested-brand/_brand.yml");
-    let layers = brand_to_layers(&brand, Path::new("")).expect("brand_to_layers");
+    let layers = brand_to_layers(&brand).expect("brand_to_layers");
     let scss = flatten_layers(&layers);
     assert_compiles(&scss);
 }
@@ -137,7 +137,7 @@ fn weight_range_brand_compiles() {
          \x20   family: EB Garamond\n\
          \x20   weight: 600\n",
     );
-    let layers = brand_to_layers(&b, Path::new("")).unwrap();
+    let layers = brand_to_layers(&b).unwrap();
     let scss = flatten_layers(&layers);
     assert_compiles(&scss);
 }

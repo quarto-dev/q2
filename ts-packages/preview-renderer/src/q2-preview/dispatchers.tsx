@@ -1,4 +1,4 @@
-import React, { useContext, useState, useRef, useLayoutEffect } from 'react';
+import React, { useContext, useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { RegistryContext, AttributionWrap, renderChildren } from '../framework';
 import type {
     BlockNode,
@@ -330,6 +330,18 @@ function EditTextarea({
         ctx.commitTextEdit!(dest, newText);
         ctx.setEditTarget!(null);
     };
+
+    // bd-ew0vak6b: the host turned editing off mid-session (the Edit pill).
+    // The dispatcher's edit-target gate keeps this editor mounted, so close
+    // it the way a blur would — commit if dirty, else cancel — without a
+    // focus-restore (the tile is no longer focusable once editing is off).
+    // `commitIfDirty` is recreated every render, so the closure holds the
+    // draft of the render in which the flag flipped.
+    useEffect(() => {
+        if (!ctx.editingDisabled) return;
+        commitIfDirty(draft);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ctx.editingDisabled]);
 
     return (
         <textarea

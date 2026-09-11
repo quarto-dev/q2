@@ -14,6 +14,13 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Mirror the vite aliases (see vite.config.ts) for editor/tsc use */
+    "paths": {
+      "@quarto/preview-renderer": ["../../ts-packages/preview-renderer/src"],
+      "@quarto/preview-renderer/*": ["../../ts-packages/preview-renderer/src/*"],
+      "@quarto/preview-runtime": ["./src/stubs/preview-runtime.ts"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,

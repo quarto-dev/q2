@@ -317,6 +317,9 @@ website:
             - errors/theme/Q-14-6.qmd
             - errors/theme/Q-14-7.qmd
             - errors/theme/Q-14-8.qmd
+            - errors/theme/Q-14-9.qmd
+            - errors/theme/Q-14-10.qmd
+            - errors/theme/Q-14-11.qmd
         - section: "lua"
           contents:
             - errors/lua/Q-11-1.qmd

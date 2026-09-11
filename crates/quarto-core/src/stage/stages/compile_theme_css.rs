@@ -233,6 +233,12 @@ fn cache_key(
                 // absent here we still hash the marker — `compile_with_doc_vars`
                 // will fail downstream, and the failure path bypasses
                 // the cache.
+                //
+                // Deliberately NOT keyed on the document's location:
+                // a brand's `@font-face` URLs are the constant
+                // `fonts/<name>` (bd-ve916wr8), so the compiled CSS is
+                // the same for every page. The font *names* are part
+                // of the YAML, so renaming a file does invalidate.
                 if let Some(brand) = theme_context.brand() {
                     let yaml = serde_yaml::to_string(brand)
                         .map_err(|e| format!("serialize brand for cache key: {e}"))?;
@@ -346,18 +352,42 @@ impl PipelineStage for CompileThemeCssStage {
             // against the project dir, mirroring the HTML path. Reveal resolves
             // brand on its own because the Bootstrap `ThemeConfig` theme path
             // rejects reveal theme names.
-            let brand_layers = quarto_sass::resolve_brand_layers(
+            let brand_layers = match quarto_sass::resolve_brand(
                 &doc.ast.meta,
                 ctx.runtime.as_ref(),
                 &ctx.project.dir,
-                std::path::Path::new(""),
             )
             .map_err(|e| {
                 PipelineError::Structured(crate::theme_diagnostic::sass_error_to_parse_error(
                     &e,
                     &theme_error_candidates(ctx),
                 ))
-            })?;
+            })? {
+                Some(brand) => {
+                    // Reveal's theme CSS lives under `revealjs/`, so its
+                    // `source: file` fonts publish to `revealjs/fonts/`
+                    // (bd-ve916wr8) — same contract as the Bootstrap path.
+                    let runtime = ctx.runtime.clone();
+                    let warnings = crate::brand_fonts::publish_brand_fonts(
+                        &mut ctx.artifacts,
+                        runtime.as_ref(),
+                        &ctx.project.dir,
+                        &[&brand],
+                        REVEAL_THEME_ARTIFACT_DIR,
+                    )
+                    .map_err(PipelineError::Structured)?;
+                    ctx.add_diagnostics(warnings);
+                    quarto_sass::brand_to_layers(&brand.brand).map_err(|e| {
+                        PipelineError::Structured(
+                            crate::theme_diagnostic::sass_error_to_parse_error(
+                                &e,
+                                &theme_error_candidates(ctx),
+                            ),
+                        )
+                    })?
+                }
+                None => Vec::new(),
+            };
             resolution.layers.extend(brand_layers);
 
             // Compile Quarto's reveal theme (single unified SCSS pass, D1) and
@@ -511,10 +541,32 @@ impl PipelineStage for CompileThemeCssStage {
         // (not `ctx`) so `ctx` stays mutably borrowable inside
         // `variant_css`.
         let runtime = ctx.runtime.clone();
+        // Publish every `source: file` brand font beside the theme CSS
+        // (bd-ve916wr8): the SCSS layer references `fonts/<name>`, and
+        // these artifacts are what make that URL resolve. Light and
+        // dark brands both contribute; a same-name/different-bytes
+        // clash is a hard `Q-14-10` error, a missing file or an
+        // unsupported key only warns.
+        let brands: Vec<&quarto_brand::ResolvedBrand> = resolved
+            .light_brand
+            .iter()
+            .chain(resolved.dark_brand.iter())
+            .collect();
+        if !brands.is_empty() {
+            let warnings = crate::brand_fonts::publish_brand_fonts(
+                &mut ctx.artifacts,
+                runtime.as_ref(),
+                &ctx.project.dir,
+                &brands,
+                theme_artifact_dir(ctx.project.is_single_file),
+            )
+            .map_err(PipelineError::Structured)?;
+            ctx.add_diagnostics(warnings);
+        }
+
         let mut theme_context = ThemeContext::new(document_dir.clone(), runtime.as_ref());
         if let Some(rb) = resolved.light_brand.as_ref() {
-            let brand_dir = rb.dir.clone().unwrap_or_else(|| ctx.project.dir.clone());
-            theme_context = theme_context.with_brand(&rb.brand, brand_dir);
+            theme_context = theme_context.with_brand(&rb.brand);
         }
 
         let light_css = variant_css(
@@ -530,8 +582,7 @@ impl PipelineStage for CompileThemeCssStage {
         if let Some(dark_cfg) = theme_config.dark_variant() {
             let mut dark_context = ThemeContext::new(document_dir, runtime.as_ref());
             if let Some(rb) = resolved.dark_brand.as_ref() {
-                let brand_dir = rb.dir.clone().unwrap_or_else(|| ctx.project.dir.clone());
-                dark_context = dark_context.with_brand(&rb.brand, brand_dir);
+                dark_context = dark_context.with_brand(&rb.brand);
             }
             let dark_css = variant_css(
                 ctx,
@@ -890,10 +941,27 @@ fn theme_artifact_key_and_path(fingerprint: &str, single_doc: bool) -> (String, 
     let path = if single_doc {
         PathBuf::from("styles.css")
     } else {
-        PathBuf::from(format!("quarto/quarto-theme-{}.css", fingerprint))
+        PathBuf::from(format!(
+            "{}/quarto-theme-{}.css",
+            theme_artifact_dir(false),
+            fingerprint
+        ))
     };
     (key, path)
 }
+
+/// Directory (relative to the lib dir) the Bootstrap theme CSS is
+/// published in: the bare resource dir for a single document, `quarto/`
+/// for a project. Published brand fonts sit in `fonts/` under the same
+/// directory so the theme's `fonts/<name>` URLs resolve
+/// (`crate::brand_fonts`).
+fn theme_artifact_dir(single_doc: bool) -> &'static str {
+    if single_doc { "" } else { "quarto" }
+}
+
+/// The reveal counterpart of [`theme_artifact_dir`]: reveal assets are
+/// registered under `revealjs/` (`crate::revealjs::assemble`).
+const REVEAL_THEME_ARTIFACT_DIR: &str = "revealjs";
 
 /// Dark-variant analog of [`theme_artifact_key_and_path`]. The key
 /// prefix is `css:theme-dark:` — deliberately NOT an extension of

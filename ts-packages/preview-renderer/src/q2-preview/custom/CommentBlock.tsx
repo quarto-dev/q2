@@ -656,8 +656,24 @@ const CommentWrapper = ({
     const inlineInputRef = React.useRef<HTMLTextAreaElement>(null);
     const [isHovered, setIsHovered] = React.useState(false);
     // Hovering the bubble itself glows the block (mirror of the
-    // block-hover → bubble-glow effect).
+    // block-hover → bubble-glow effect). Derived on the WRAPPER's
+    // mousemove/mouseleave from pointer containment, never from the
+    // bubble's own enter/leave (bd-bpt089zw): a resolve re-renders the
+    // bubble under a stationary pointer, the browser re-evaluates :hover
+    // after layout without boundary events, and the next move's mouseout
+    // comes from the NEW hovered node — so a bubble onMouseLeave would
+    // never fire and the glow would stick. `bubbleHoveredRef` mirrors the
+    // state for the size-change re-check below; `lastPointerRef` is the
+    // last pointer position the wrapper saw (viewport px), null once the
+    // pointer has left it.
     const [bubbleHovered, setBubbleHovered] = React.useState(false);
+    const bubbleHoveredRef = React.useRef(false);
+    const lastPointerRef = React.useRef<{ x: number; y: number } | null>(null);
+    const updateBubbleHovered = (hovered: boolean) => {
+        if (bubbleHoveredRef.current === hovered) return;
+        bubbleHoveredRef.current = hovered;
+        setBubbleHovered(hovered);
+    };
     // Global 'expand' mode expands every commented bubble; a click
     // self-expands one bubble in any mode.
     const expanded = (mode === 'expand' && comments.length > 0) || selfExpanded;
@@ -708,6 +724,20 @@ const CommentWrapper = ({
             setCloseAtCount(null);
         }
     }, [comments.length, closeAtCount]);
+
+    // A bubble self-expanded to show its comments has nothing left to show
+    // once the last one is resolved (locally or by a collaborator):
+    // collapse it so the chrome falls back to the hover-only `+`
+    // affordance instead of rendering the expanded branch with zero rows
+    // (an empty pill — bd-bpt089zw). `showInlineInput` guards the one
+    // legitimate empty-and-expanded state: `+` just clicked, input open,
+    // no comment yet. A LAYOUT effect so the correction re-renders before
+    // paint — the zero-row pill is never on screen.
+    React.useLayoutEffect(() => {
+        if (comments.length === 0 && selfExpanded && !showInlineInput) {
+            setSelfExpanded(false);
+        }
+    }, [comments.length, selfExpanded, showInlineInput]);
 
     // Focus the inline input when it opens, cursor at the end. (The
     // block editors see `data-q2-owns-focus` on their blur
@@ -895,6 +925,23 @@ const CommentWrapper = ({
         // so the force layout re-measures.
     }, [chromeVisible, comments.length, expanded, showInlineInput]);
 
+    // The bubble just changed shape (same triggers as the re-register
+    // above) under a possibly STATIONARY pointer — e.g. the ✓ row that was
+    // under the cursor is gone, or the collapsed `+` now sits where the ✓
+    // was. No pointer event will arrive to say so, so re-derive the block
+    // glow from geometry, in both directions (bd-bpt089zw). The pointer
+    // position is only known while it is inside the wrapper subtree
+    // (recorded on mousemove, cleared on mouseleave), so "inside the
+    // re-measured bubble" is exactly "hovering the bubble".
+    React.useLayoutEffect(() => {
+        const pt = lastPointerRef.current;
+        const r = chromeVisible ? bubbleRef.current?.getBoundingClientRect() : undefined;
+        const inside =
+            !!pt && !!r && pt.x >= r.left && pt.x <= r.right && pt.y >= r.top && pt.y <= r.bottom;
+        updateBubbleHovered(inside);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chromeVisible, comments.length, expanded, showInlineInput]);
+
     // Rich content can grow the bubble asynchronously — an <img> in a
     // comment finishes loading after the force layout measured the
     // chip. `load` doesn't bubble, so listen in the CAPTURE phase on
@@ -946,8 +993,19 @@ const CommentWrapper = ({
             onMouseMove={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 setIsHovered(e.clientX >= rect.left + rect.width / 2);
+                // Moves over the bubble reach here too (the chrome stops
+                // pointer-down/up, mousedown, click and keydown — not
+                // mousemove), so containment is the whole truth.
+                lastPointerRef.current = { x: e.clientX, y: e.clientY };
+                updateBubbleHovered(!!bubbleRef.current?.contains(e.target as Node));
             }}
-            onMouseLeave={() => setIsHovered(false)}
+            // DOM-tree based, so a bubble poking outside the wrapper's box
+            // still counts as inside; a leave means both hovers are off.
+            onMouseLeave={() => {
+                setIsHovered(false);
+                lastPointerRef.current = null;
+                updateBubbleHovered(false);
+            }}
         >
             {/* Chrome renders BEFORE the content: mounting it as a
                 LAST sibling on hover would stop the content matching
@@ -1044,8 +1102,6 @@ const CommentWrapper = ({
                             if (!expanded) setSelfExpanded(true);
                             setShowInlineInput(true);
                         }}
-                        onMouseEnter={() => setBubbleHovered(true)}
-                        onMouseLeave={() => setBubbleHovered(false)}
                         title={`${comments.length} comment${comments.length !== 1 ? 's' : ''}`}
                     >
                         {comments.length === 0 && !expanded ? (

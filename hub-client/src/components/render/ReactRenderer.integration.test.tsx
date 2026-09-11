@@ -38,10 +38,18 @@ import { render } from '@testing-library/react';
 
 const capturedAstIframeProps: any[] = [];
 const capturedPreviewIframeProps: any[] = [];
+const capturedSandboxedIframeProps: any[] = [];
 
 vi.mock('./q2-debug/Q2DebugIframe', () => ({
   Q2DebugIframe: (props: any) => {
     capturedAstIframeProps.push(props);
+    return null;
+  },
+}));
+
+vi.mock('./q2-sandboxed-preview/Q2SandboxedPreviewIframe', () => ({
+  Q2SandboxedPreviewIframe: (props: any) => {
+    capturedSandboxedIframeProps.push(props);
     return null;
   },
 }));
@@ -186,10 +194,46 @@ describe('ReactRenderer (q2-debug render-components lookup)', () => {
   });
 });
 
+describe('ReactRenderer (q2-sandboxed-preview render-components lookup)', () => {
+  beforeEach(() => {
+    capturedSandboxedIframeProps.length = 0;
+  });
+
+  it('passes transpiled components to the sandboxed iframe (Phase 4 of the sandboxed-preview port)', () => {
+    const fileContents = new Map([
+      ['elliot/simple.tsx', 'export const Para = () => null;'],
+    ]);
+
+    render(
+      <ReactRenderer
+        astJson={astWithRenderComponents(['/elliot/simple.tsx'])}
+        currentFilePath="elliot/index.qmd"
+        files={[]}
+        fileContents={fileContents}
+        onNavigateToDocument={() => {}}
+        setAst={() => {}}
+        format="q2-sandboxed-preview"
+      />,
+    );
+
+    expect(capturedSandboxedIframeProps.at(-1)?.customComponentsCode).toEqual({
+      '/elliot/simple.tsx': 'JS:export const Para = () => null;',
+    });
+  });
+});
+
 describe('ReactRenderer format routing', () => {
   beforeEach(() => {
     capturedAstIframeProps.length = 0;
     capturedPreviewIframeProps.length = 0;
+    capturedSandboxedIframeProps.length = 0;
+  });
+
+  it('routes q2-sandboxed-preview through Q2SandboxedPreviewIframe only', () => {
+    mountForRouting('q2-sandboxed-preview');
+    expect(capturedSandboxedIframeProps.length).toBeGreaterThan(0);
+    expect(capturedPreviewIframeProps.length).toBe(0);
+    expect(capturedAstIframeProps.length).toBe(0);
   });
 
   it('routes q2-preview through Q2PreviewIframe (Plan 2A item 12)', () => {
@@ -260,6 +304,27 @@ describe('ReactRenderer format routing', () => {
       />,
     );
     expect(capturedPreviewIframeProps.at(-1)?.richText).toBe(true);
+  });
+
+  it('forwards editingDisabled to Q2PreviewIframe (bd-ew0vak6b)', () => {
+    // The bottom-bar Edit pill (via the previewEditing preference) reaches
+    // the iframe as `editingDisabled`; the renderer already honours it
+    // (bd-ov4gqk3m). Both values must pass through, and a rerender with the
+    // other value must reach the iframe too (the live toggle case).
+    const common = {
+      astJson: EMPTY_AST,
+      currentFilePath: '/project/index.qmd',
+      files: [],
+      fileContents: new Map<string, string>(),
+      onNavigateToDocument: () => {},
+      setAst: () => {},
+      format: 'q2-preview',
+    };
+    const { rerender } = render(<ReactRenderer {...common} editingDisabled={true} />);
+    expect(capturedPreviewIframeProps.at(-1)?.editingDisabled).toBe(true);
+
+    rerender(<ReactRenderer {...common} editingDisabled={false} />);
+    expect(capturedPreviewIframeProps.at(-1)?.editingDisabled).toBe(false);
   });
 
   it('does not route q2-slides through any AST iframe', () => {

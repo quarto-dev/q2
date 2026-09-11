@@ -37,7 +37,9 @@ More stuff.
               (attribute_id)))
           (block_continuation)
           (block_continuation)
-          (metadata)
+          (metadata
+            body: (yaml)
+            (block_continuation))
           (pandoc_paragraph
             (pandoc_str)
             (pandoc_space)

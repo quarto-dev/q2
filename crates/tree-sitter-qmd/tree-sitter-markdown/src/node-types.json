@@ -1029,6 +1029,32 @@
     "fields": {}
   },
   {
+    "type": "metadata",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "yaml",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "block_continuation",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "note_definition_fenced_block",
     "named": true,
     "fields": {},
@@ -2909,10 +2935,6 @@
     "named": true
   },
   {
-    "type": "metadata",
-    "named": true
-  },
-  {
     "type": "numeric_character_reference",
     "named": true
   },
@@ -2978,6 +3000,10 @@
   },
   {
     "type": "task_list_marker_unchecked",
+    "named": true
+  },
+  {
+    "type": "yaml",
     "named": true
   },
   {
