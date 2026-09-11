@@ -9,8 +9,10 @@ entity reference — folded into this PR, Phase 1b); bd-5rr4lgj1 (leading BOM
 not stripped — follow-up, out of scope)
 **GitHub:** https://github.com/quarto-dev/q2/issues/672
 **Checkout:** main @ `7ef59618` (investigated in place; no worktree yet)
-**Status:** Plan reviewed 2026-09-11; all scope decisions settled (see
-"Scope decisions"). Awaiting go-ahead to execute.
+**Status:** Implemented 2026-09-11 on branch
+`braid/bd-wuiu1of7-zero-width-entities` — `caa29d6c` (writer + grammar) and
+`b15868ed` (`&` escaping, bd-i18zoy4n). Full `cargo xtask verify` green for
+both commits; both strands closed. Not yet pushed.
 
 ## Problem
 
@@ -217,10 +219,12 @@ same bytes.
       truth). Emit `\&` in that case, `&` otherwise. Done 2026-09-11:
       `starts_character_reference` in `qmd.rs`, lookup via the reader's
       `entity_table()` (made `pub(crate)`).
-- [ ] Expect snapshot / fixture churn wherever writer output contained a
+- [x] Expect snapshot / fixture churn wherever writer output contained a
       literal `&name;`; review each change is a *correct* re-escaping.
       Prefer landing 1b as its own commit for reviewability (user's call
-      2026-09-11: not strict — judge at implementation time).
+      2026-09-11: not strict — judge at implementation time). Outcome: no
+      existing test or snapshot changed at all; landed as its own commit
+      `b15868ed`.
 
 ### Phase 2 — Parser
 
@@ -240,17 +244,32 @@ same bytes.
 Phases 1a + 2 committed as `caa29d6c` after a green full `cargo xtask verify`
 (2026-09-11). Phase 1b is verified and committed separately below.
 
-- [ ] `cargo nextest run -p pampa -p tree-sitter-qmd`.
-- [ ] `cargo nextest run --workspace`.
-- [ ] **Full `cargo xtask verify`** (not `--skip-hub-build`): the grammar
-      change flows into the WASM parser used by hub-client and `q2 preview`.
-- [ ] End-to-end (record invocation + output here): `cargo run --bin q2 --
-      render` of a fixture containing the quarto-web heading and a raw-U+200B
-      paragraph; inspect the HTML for the U+200B bytes inside `<sup>`; and the
-      `pampa -t qmd | pampa` pipe from the issue must print the AST instead
-      of a parse error.
-- [ ] Commit (Rust + regenerated `parser.c` + fixtures); close bd-wuiu1of7
-      with the commit hash; comment on GH #672.
+- [x] `cargo nextest run -p pampa -p tree-sitter-qmd` (4761 passed after 1b).
+- [x] `cargo nextest run --workspace` (inside verify, both commits).
+- [x] **Full `cargo xtask verify`** (not `--skip-hub-build`): green for
+      `caa29d6c` and again for `b15868ed`. (Needs fnm's Node 24 selected;
+      two clippy nits — `unreadable_literal`, `unnested_or_patterns` — were
+      caught by it and fixed before committing.)
+- [x] End-to-end, output inspected 2026-09-11 (`b15868ed`):
+
+      ```
+      $ cargo run --bin q2 -- render gh672.qmd      # quarto-web heading + raw U+200B/U+00AD + \&copy;
+      <h1 class="mt-1">Welcome to Quarto<sup>​<span class="trademark">®</span></sup></h1>
+      <p>Raw zero-width: a​b and soft hy­phen.</p>        # bytes e2 80 8b / c2 ad verified with od
+      <p>Literal reference kept as text: &amp;copy; and &amp;ZeroWidthSpace;.</p>
+
+      $ printf 'a&ZeroWidthSpace;b\n' | pampa -t qmd | pampa
+      [ Para [Str "a​b"] ]                                # was: Parse error
+
+      $ printf 'a&ZeroWidthSpace;b\n' | pampa -t qmd
+      a&ZeroWidthSpace;b                                       # was: raw U+200B
+      ```
+
+      And `pampa gh672.qmd` vs `pampa -t qmd gh672.qmd | pampa` produce
+      identical native ASTs.
+- [x] Commit (Rust + regenerated `parser.c` + fixtures); close bd-wuiu1of7
+      with the commit hash. GH #672 comment/close left for the PR (not pushed
+      yet).
 
 ## Scope decisions (settled with the user, 2026-09-11)
 
