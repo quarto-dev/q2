@@ -16,7 +16,7 @@ use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeInter
 /// (`tree_sitter_qmd::HTML_ENTITIES_JSON`), so both sides share one source of
 /// truth. The `characters` field is the pre-composed replacement string, which
 /// covers multi-codepoint entities (`&NotEqualTilde;` → U+2242 U+0338).
-fn entity_table() -> &'static HashMap<String, String> {
+pub(crate) fn entity_table() -> &'static HashMap<String, String> {
     static TABLE: OnceLock<HashMap<String, String>> = OnceLock::new();
     TABLE.get_or_init(|| {
         #[derive(serde::Deserialize)]

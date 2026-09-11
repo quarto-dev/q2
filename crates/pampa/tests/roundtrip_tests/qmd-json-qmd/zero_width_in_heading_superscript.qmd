@@ -1,0 +1,5 @@
+# Welcome to Quarto^&ZeroWidthSpace;[®]{.trademark}^ {.mt-1}
+
+::: {.hero-text}
+An open-source publishing system.
+:::
