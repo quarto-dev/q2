@@ -1,5 +1,12 @@
 /**
- * Login screen shown when authentication is required.
+ * The landing page at quarto-hub.com, and the sign-in screen.
+ *
+ * One component serves both because App renders it whenever auth is
+ * enabled and absent: a cold visitor, an expired session, and each of
+ * the hub's auth-error reasons all land here. It therefore leads with
+ * what Quarto Hub *is* (bd-g0uyp2v1) — a first-time visitor used to get
+ * a logo and a Google button — and keeps that intro in the error states,
+ * where "available by invite only" is the most useful line on the page.
  *
  * Renders the active AuthProvider's `SignInButton`. The flow shape
  * depends on the provider; for the default `googleAuthProvider`:
@@ -11,9 +18,11 @@
  * 4. useAuth() calls GET /auth/me on mount to populate auth state
  */
 
+import './LoginScreen.css';
 import { useAuthProvider } from '../../auth/AuthProvider';
 import { authErrorMessage } from '../../auth/authError';
 import { hubPath } from '../../utils/routing';
+import { landing, links } from '../../strings';
 
 /**
  * `errorReason` is the hub's coarse `auth_error` reason, not a flag —
@@ -24,26 +33,55 @@ export function LoginScreen({ errorReason, message }: { errorReason?: string; me
   const provider = useAuthProvider();
 
   return (
-    <div className="project-selector" style={{ alignItems: 'center' }}>
-      <div className="modal" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '48px 32px' }}>
-        <img src="/quarto-icon.svg" alt="Quarto" style={{ width: '48px', height: '48px', marginBottom: '8px' }} />
-        <h1 style={{ margin: 0 }}>Quarto Hub</h1>
+    <div className="ls-wrap">
+      <div className="ls-card" data-testid="login-screen">
+        <div className="ls-lockup">
+          <img className="ls-logo" src="/quarto-icon.svg" alt="" />
+          <span>{landing.product}</span>
+        </div>
+
+        {/* Two deliberate lines: the second sentence is the turn, and
+            letting it wrap mid-phrase buried it. */}
+        <h1 className="ls-tagline">
+          <span className="ls-tagline-line">{landing.taglineLead}</span>
+          <span className="ls-tagline-line">{landing.taglineFollow}</span>
+        </h1>
+        {/* Learn more runs on from the description rather than trailing
+            the invite-only line: it belongs with what the product *is*,
+            not with the caveat about who can get in. */}
+        <p className="ls-what">
+          {landing.what}{' '}
+          {/* New tab: following it in place abandons the sign-in the
+              visitor came here to complete. */}
+          <a
+            className="ls-learn-more"
+            href={links.quartoHub}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {landing.learnMore}
+          </a>
+        </p>
+
+        {/* Everything that qualifies the offer sits above the button, so
+            nothing competes with it for last word. */}
+        <p className="ls-footnote">{landing.inviteOnly}</p>
+
+        {/* Nothing in the default state: the provider's button already
+            says "Continue with Google", and a "Sign in with Google to
+            continue" line right above it said so twice. The slot exists
+            for the states that have something to report. */}
         {errorReason !== undefined ? (
-          <p style={{ color: 'var(--posit-red)', fontSize: '14px', margin: '0 0 16px' }}>
-            {authErrorMessage(errorReason)}
-          </p>
+          <p className="ls-error" role="alert">{authErrorMessage(errorReason)}</p>
         ) : message ? (
-          <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 16px' }}>
-            {message}
-          </p>
-        ) : (
-          <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 16px' }}>
-            Sign in with Google to continue
-          </p>
-        )}
-        <provider.SignInButton
-          loginUri={window.location.origin + hubPath('/auth/callback')}
-        />
+          <p className="ls-note">{message}</p>
+        ) : null}
+
+        <div className="ls-actions">
+          <provider.SignInButton
+            loginUri={window.location.origin + hubPath('/auth/callback')}
+          />
+        </div>
       </div>
     </div>
   );

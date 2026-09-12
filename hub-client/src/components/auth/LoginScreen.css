@@ -1,0 +1,135 @@
+/**
+ * The quarto-hub.com landing / sign-in screen (bd-g0uyp2v1).
+ *
+ * Colors come from theme.css's semantic layer, never the brand
+ * primitives — those do not flip with the theme. Surfaces are opaque in
+ * every theme (.claude/rules/hub-client-theme.md); the page surface and
+ * the divider are derived with opaque color-mix(), matching
+ * InviteLanding.css so the invite card and this page read as one family.
+ */
+
+.ls-wrap {
+  min-height: 100dvh;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background: var(--bg-page-recessed);
+}
+
+.ls-card {
+  /* Wide enough that neither sentence of the --text-xl headline wraps:
+     the two-line break is deliberate, and a third ragged line undoes
+     it. Pinned by e2e/landing-card.harness.spec.ts. */
+  width: 520px;
+  max-width: 100%;
+  background: var(--bg-modal);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: 34px 38px;
+  box-shadow: var(--shadow-3);
+}
+
+/* ---- header block: centered as one masthead ----
+
+   The card mixes alignments on purpose (pinned by
+   e2e/landing-alignment.harness.spec.ts): the masthead and the sign-in
+   affordance center so the page reads as a front door, while the two
+   prose blocks below stay left-aligned — centered body copy moves the
+   start of every line, and the description is the one thing here a
+   first-time visitor has to read. */
+
+.ls-lockup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin-bottom: 22px;
+}
+
+.ls-logo {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  filter: var(--logo-filter);
+}
+
+/* A flex column so the two sentences are separate lines rather than one
+   wrapping run; align-items centers each line independently, text-align
+   catches the case where a line is too long for the measure and wraps. */
+.ls-tagline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  font-size: var(--text-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
+  /* The headline is --text-xl and tightly leaded, so it needs more air
+     beneath it than its own line gap before the description starts. */
+  margin: 0 0 18px;
+}
+
+.ls-what {
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+  color: var(--text-secondary);
+  margin: 0 0 18px;
+}
+
+/* ---- status line, CTA, footnote ---- */
+
+/* Centered with the button it labels — the status line and the CTA are
+   one affordance, wherever the prose above them sits. */
+.ls-note,
+.ls-error {
+  text-align: center;
+  font-size: var(--text-sm);
+  margin: 0 0 14px;
+}
+
+.ls-note {
+  color: var(--text-secondary);
+}
+
+.ls-error {
+  color: var(--posit-red);
+}
+
+.ls-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ls-footnote {
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 50%, var(--bg-modal));
+  padding-top: 14px;
+  font-size: var(--text-2xs);
+  line-height: var(--leading-base);
+  color: var(--text-secondary);
+  /* Enough air below that the centered CTA reads as its own footer
+     group rather than an unexplained alignment change mid-block. */
+  margin: 0 0 22px;
+}
+
+/* The themed blue accent: --accent-primary is the brand orange, and the
+   global anchor color is nearly invisible against the dark card.
+
+   A block on its own line, inside .ls-what so it keeps the
+   description's size and leading. Running it on inline instead made
+   the layout a hostage to copy length: whether it landed on the last
+   line or dangled under a full one depended on how many characters the
+   paragraph happened to have, and it broke on all three copy revisions
+   this branch went through. */
+.ls-learn-more {
+  display: block;
+  margin-top: 4px;
+  color: var(--accent-secondary);
+  text-decoration: underline;
+}

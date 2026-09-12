@@ -20,13 +20,7 @@ import type { ReactNode } from 'react';
 import type { CollectionInvitePreview, ProjectInvitePreview, InvitePreview } from '../utils/invitePreview';
 import { generateColorFromId } from '../services/storage/utils';
 import { initialsFor } from '../utils/facepile';
-
-/**
- * Destination for the footnote's "Learn more". Provisional: quarto.org is
- * a sane landing spot until a Quarto Hub introduction page exists, which
- * bd-rh2n4d7q tracks swapping in.
- */
-const LEARN_MORE_URL = 'https://quarto.org';
+import { links } from '../strings';
 
 export interface InviteLandingProps {
   kind: 'collection' | 'project';
@@ -203,7 +197,14 @@ export default function InviteLanding(props: InviteLandingProps) {
         <div className="il-explainer">
           <span>
             New to Quarto Hub?{' '}
-            <a className="il-learn-more" href={LEARN_MORE_URL}>
+            {/* New tab: following it in place abandons the invite,
+                which a recipient may have no easy way back to. */}
+            <a
+              className="il-learn-more"
+              href={links.quartoHub}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               Learn more
             </a>
             .

@@ -110,6 +110,44 @@ export const sections = {
   about: 'ABOUT',
 } as const;
 
+/** Outbound links to Quarto's own sites. */
+export const links = {
+  /** The Quarto Hub project site — every "Learn more" leads here. */
+  quartoHub: 'https://quarto-dev.github.io/quarto-hub/',
+} as const;
+
+/**
+ * The landing page at quarto-hub.com — what anyone without a session
+ * sees, including someone arriving from an invite link (bd-g0uyp2v1).
+ *
+ * Wording is borrowed from the project site (links.quartoHub) so the two
+ * describe the product the same way. One claim there is deliberately not
+ * repeated: that a project link needs no account or Quarto install. That
+ * is the product's intent, but this deployment is allowlisted and the
+ * reader is looking at a sign-in button, so it would contradict the page
+ * it sits on.
+ */
+export const landing = {
+  product: 'Quarto Hub',
+  /** Rendered as two lines: the second sentence is the turn. */
+  taglineLead: 'Prose and code belong in one place.',
+  taglineFollow: 'So do the people.',
+  /**
+   * Three sentences, each ending on its own new idea (Gopen's stress
+   * position): live render, one .qmd, real-time collaboration. The
+   * third deliberately does *not* end "…on the same project in Quarto
+   * Hub" — the product name is the paragraph's own opening subject and
+   * the reader is already on the site, so putting it last spends the
+   * emphatic slot on the oldest information in the paragraph.
+   */
+  what:
+    'Quarto Hub is a Quarto editor in the browser that renders while you type. ' +
+    'Edit the markdown or the rendered page, and either way it is the same .qmd. ' +
+    'Share a link and your team can collaborate on the same project in real time.',
+  inviteOnly: 'quarto-hub.com is experimental and currently available by invite only.',
+  learnMore: 'Learn more about Quarto Hub',
+} as const;
+
 /** The three notification tiers (see components/notifications.css). */
 export const notifications = {
   autoSaved: 'Auto-saved',

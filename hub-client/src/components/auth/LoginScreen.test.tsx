@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 
 import { AuthProviderRoot } from '../../auth/AuthProvider';
 import { createMockAuthProvider, type MockAuthProvider } from '../../auth/MockAuthProvider';
+import { landing } from '../../strings';
 import { LoginScreen } from './LoginScreen';
 
 let mock: MockAuthProvider;
@@ -28,6 +29,131 @@ function withProvider(children: ReactNode) {
     <AuthProviderRoot provider={mock.provider}>{children}</AuthProviderRoot>
   );
 }
+
+/**
+ * The landing page at quarto-hub.com (bd-g0uyp2v1).
+ *
+ * This screen is what anyone without a session sees, including someone
+ * who followed an invite link, and it used to say only "Quarto Hub" and
+ * "Sign in with Google to continue" — nothing about what the product is.
+ * The intro is borrowed from the project's own site and must survive the
+ * error and expiry states, where the invite-only note is the most useful
+ * thing on the page.
+ */
+describe('LoginScreen intro', () => {
+  it('says what Quarto Hub is', () => {
+    render(withProvider(<LoginScreen />));
+    expect(screen.getByText(/Prose and code belong in one place/)).toBeTruthy();
+    expect(
+      screen.getByText(/a Quarto editor in the browser that renders while you type/),
+    ).toBeTruthy();
+  });
+
+  it('says the product is collaborative, not just a browser editor', () => {
+    const { container } = render(withProvider(<LoginScreen />));
+    const what = container.querySelector('.ls-what')!.textContent!;
+    // "So do the people" only gestures at it. If the description does
+    // not deliver it, the page describes a single-player editor and the
+    // tagline's second line has nothing behind it.
+    expect(what, 'the description never mentions sharing').toMatch(/\bshare\b/i);
+    expect(what, 'the description never mentions anyone else').toMatch(
+      /\b(team|teammates|collaborat\w*|colleagues|together)\b/i,
+    );
+  });
+
+  it('breaks the tagline after the first sentence', () => {
+    const { container } = render(withProvider(<LoginScreen />));
+    const lines = container.querySelectorAll('.ls-tagline-line');
+    expect(lines).toHaveLength(2);
+    expect(lines[0].textContent).toBe('Prose and code belong in one place.');
+    expect(lines[1].textContent).toBe('So do the people.');
+  });
+
+  it('no longer lists "what works today"', () => {
+    render(withProvider(<LoginScreen />));
+    for (const item of ['What works today', 'Websites and docs', 'Meeting notes', 'Agents']) {
+      expect(screen.queryByText(item), `"${item}" should be gone`).toBeNull();
+    }
+  });
+
+  /** Child class names of the card, in document order. */
+  function cardOrder(container: HTMLElement): string[] {
+    return [...container.querySelector('.ls-card')!.children].map((el) => el.className);
+  }
+
+  it('puts the invite-only line and Learn more above the sign-in button', () => {
+    const { container } = render(withProvider(<LoginScreen />));
+    const order = cardOrder(container);
+    const idx = (cls: string) => order.findIndex((c) => c.includes(cls));
+    expect(idx('ls-footnote')).toBeGreaterThan(-1);
+    expect(idx('ls-actions')).toBeGreaterThan(idx('ls-footnote'));
+    // Nothing below the button.
+    expect(idx('ls-actions')).toBe(order.length - 1);
+  });
+
+  it('slots a status line between the footnote and the button when there is one', () => {
+    const { container } = render(withProvider(<LoginScreen errorReason="denied" />));
+    const order = cardOrder(container);
+    const idx = (cls: string) => order.findIndex((c) => c.includes(cls));
+    expect(idx('ls-error')).toBeGreaterThan(idx('ls-footnote'));
+    expect(idx('ls-actions')).toBeGreaterThan(idx('ls-error'));
+    expect(idx('ls-actions')).toBe(order.length - 1);
+  });
+
+  it('carries Learn more inside the description, not the invite-only footnote', () => {
+    const { container } = render(withProvider(<LoginScreen />));
+    const link = screen.getByRole('link', { name: /Learn more/i });
+    const what = container.querySelector('.ls-what')!;
+    const footnote = container.querySelector('.ls-footnote')!;
+
+    expect(what.contains(link), 'Learn more should follow the description').toBe(true);
+    expect(footnote.contains(link), 'Learn more should not sit in the footnote').toBe(
+      false,
+    );
+    // An inline continuation of the sentence, so it takes the separating
+    // space that a block-level link had to omit.
+    expect(what.textContent).toBe(`${landing.what} ${landing.learnMore}`);
+    expect(footnote.textContent).toBe(landing.inviteOnly);
+  });
+
+  it('says the service is invite only, so a visitor who cannot get in learns why', () => {
+    render(withProvider(<LoginScreen />));
+    expect(screen.getByText(/invite only/i)).toBeTruthy();
+  });
+
+  it('links Learn more at the Quarto Hub site, in a new tab', () => {
+    render(withProvider(<LoginScreen />));
+    const link = screen.getByRole('link', { name: /Learn more/i });
+    expect(link.getAttribute('href')).toBe('https://quarto-dev.github.io/quarto-hub/');
+    // Leaving in the same tab abandons the sign-in a visitor came here
+    // to complete — and on an invite, the invite link with it.
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('does not claim an account is unnecessary while showing a sign-in wall', () => {
+    // The site says a project link needs no account or Quarto install.
+    // True of the product's intent, but this deployment is allowlisted
+    // and the visitor is looking at a sign-in button, so the claim would
+    // contradict its own page.
+    render(withProvider(<LoginScreen />));
+    expect(screen.queryByText(/don't need an account/i)).toBeNull();
+    expect(screen.queryByText(/no account/i)).toBeNull();
+  });
+
+  it('keeps the intro alongside an auth error', () => {
+    render(withProvider(<LoginScreen errorReason="denied" />));
+    expect(screen.getByText(/not authorized to access this hub/i)).toBeTruthy();
+    expect(screen.getByText(/Prose and code belong in one place/)).toBeTruthy();
+    expect(screen.getByText(/invite only/i)).toBeTruthy();
+  });
+
+  it('keeps the intro alongside a session-expiry message', () => {
+    render(withProvider(<LoginScreen message="Your session expired — please sign in again." />));
+    expect(screen.getByText(/session expired/i)).toBeTruthy();
+    expect(screen.getByText(/Prose and code belong in one place/)).toBeTruthy();
+  });
+});
 
 describe('LoginScreen', () => {
   it("renders the provider's SignInButton with loginUri = origin + /auth/callback", () => {
@@ -48,9 +174,14 @@ describe('LoginScreen', () => {
     expect(mock.lastLoginUri).toBe(window.location.origin + '/subpath/auth/callback');
   });
 
-  it('renders the default copy when no error reason is present', () => {
-    render(withProvider(<LoginScreen />));
-    expect(screen.getByText(/Sign in with Google to continue/i)).toBeTruthy();
+  it('leaves the status slot empty in the default state, rather than echoing the button', () => {
+    const { container } = render(withProvider(<LoginScreen />));
+    // The provider's button already says "Continue with Google"; a
+    // "Sign in with Google to continue" line directly above it said the
+    // same thing twice, which only got louder once both were centered.
+    expect(screen.queryByText(/sign in with google/i)).toBeNull();
+    expect(container.querySelector('.ls-note')).toBeNull();
+    expect(container.querySelector('.ls-error')).toBeNull();
     expect(screen.queryByText(/not authorized/i)).toBeNull();
     expect(screen.queryByText(/didn't complete/i)).toBeNull();
   });

@@ -70,7 +70,42 @@ const styleOf = (locator: Locator, prop: string): Promise<string> =>
  */
 const MAX_DIVIDER_CONTRAST = 2.5;
 
+/**
+ * A centered card needs to read as raised off the surface behind it.
+ * The quarto-hub.com landing derived its page surface as
+ * `color-mix(--border-color 14%, --bg-modal)`, which only works in
+ * light mode: in dark mode `--border-color` (--posit-blue-dark-1) is
+ * *lighter* than `--bg-modal` (--posit-blue-dark-2), so the page came
+ * out marginally lighter than the card it framed — elevation inverted,
+ * and at 1.06:1 the card was findable only by its border. It now takes
+ * the per-theme `--bg-page-recessed` instead.
+ *
+ * Both halves matter, and the direction is the one that caught the bug:
+ * 1.06 clears any sane magnitude floor.
+ *
+ * Scoped to the landing page on purpose. `.il-wrap` still derives its
+ * own surface the border-mix way and so still inverts in dark mode —
+ * a merged surface, deliberately left alone here.
+ */
+const MIN_CARD_SEPARATION = 1.05;
+
 for (const theme of THEMES) {
+  test(`landing page (${theme}): the card reads as raised off its page`, async ({ page }) => {
+    await bootHarness(page, 'landing', '.ls-card', theme);
+
+    const pageBg = await styleOf(page.locator('.ls-wrap'), 'background-color');
+    const cardBg = await styleOf(page.locator('.ls-card'), 'background-color');
+
+    expect(
+      luminance(cardBg),
+      `the page (${pageBg}) is lighter than the card (${cardBg}) — elevation is inverted`,
+    ).toBeGreaterThan(luminance(pageBg));
+    expect(
+      contrast(cardBg, pageBg),
+      `the card (${cardBg}) and its page (${pageBg}) are the same surface`,
+    ).toBeGreaterThan(MIN_CARD_SEPARATION);
+  });
+
   test(`invite landing (${theme}): payload dividers stay subtle against the card`, async ({
     page,
   }) => {
@@ -112,6 +147,23 @@ for (const theme of THEMES) {
         `${selector} paints a translucent surface (${bg})`,
       ).toBe(true);
     }
+  });
+
+  // The quarto-hub.com landing page (bd-g0uyp2v1) borrows this family's
+  // surfaces, so it inherits the same invariants.
+  test(`landing page (${theme}): surfaces opaque, divider subtle`, async ({ page }) => {
+    await bootHarness(page, 'landing', '.ls-card', theme);
+
+    const surface = await styleOf(page.locator('.ls-card'), 'background-color');
+    for (const selector of ['.ls-wrap', '.ls-card']) {
+      const bg = await styleOf(page.locator(selector), 'background-color');
+      expect(parseColor(bg).a, `${selector} paints a translucent surface (${bg})`).toBe(1);
+    }
+    const divider = await styleOf(page.locator('.ls-footnote'), 'border-top-color');
+    expect(
+      contrast(divider, surface),
+      `the footnote divider (${divider}) is too loud on the card (${surface})`,
+    ).toBeLessThan(MAX_DIVIDER_CONTRAST);
   });
 
   test(`welcome banner (${theme}): tint is opaque`, async ({ page }) => {

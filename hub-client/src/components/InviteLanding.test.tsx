@@ -106,7 +106,13 @@ describe('InviteLanding card anatomy', () => {
       renderLanding({ signedIn, signInCta: fakeSignInCta });
       expect(screen.getByText(/New to Quarto Hub\?/)).toBeTruthy();
       const link = screen.getByRole('link', { name: 'Learn more' });
-      expect(link.getAttribute('href')).toBeTruthy();
+      // Points at the real Quarto Hub site, not the quarto.org
+      // placeholder it shipped with (bd-rh2n4d7q), and opens in a new
+      // tab — following it in place abandons the invite, which a
+      // recipient may have no easy way back to.
+      expect(link.getAttribute('href')).toBe('https://quarto-dev.github.io/quarto-hub/');
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toBe('noopener noreferrer');
       cleanup();
     }
   });

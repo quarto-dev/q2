@@ -31,6 +31,8 @@ import DevTokensPage from './DevTokensPage';
 import DevGalleryPage from './DevGalleryPage';
 import InviteLanding from './InviteLanding';
 import EditorWelcomeBanner from './EditorWelcomeBanner';
+import { LoginScreen } from './auth/LoginScreen';
+import { AuthProviderRoot, type AuthProvider } from '../auth/AuthProvider';
 import type { CollectionInvitePreview, ProjectInvitePreview } from '../utils/invitePreview';
 import AboutTab from './tabs/AboutTab';
 import ReplayDrawer from './ReplayDrawer';
@@ -695,6 +697,12 @@ const FAKE_CONNECTION_STATUS: ConnectionStatusHarnessData = {
  * Visual stand-in for the GIS-rendered "Continue with Google" button (the
  * real one is an iframe that needs a Google client id + network).
  */
+/** Renders the Google stand-in in place of the GIS button. */
+const harnessAuthProvider: AuthProvider = {
+  SignInButton: () => <FakeGoogleCta />,
+  signOut: () => {},
+};
+
 const FakeGoogleCta = () => (
   <button type="button" className="qh-btn outline" style={{ width: '100%', padding: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
     <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
@@ -811,6 +819,24 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
       userName="Amy Mora"
       onRename={noop}
     />
+  ),
+  // The quarto-hub.com landing page (bd-g0uyp2v1). Wrapped in a provider
+  // that renders a stand-in for the GIS button, which needs a Google
+  // client id and network the harness has neither of.
+  'landing': () => (
+    <AuthProviderRoot provider={harnessAuthProvider}>
+      <LoginScreen />
+    </AuthProviderRoot>
+  ),
+  'landing-expired': () => (
+    <AuthProviderRoot provider={harnessAuthProvider}>
+      <LoginScreen message="Your session expired — please sign in again." />
+    </AuthProviderRoot>
+  ),
+  'landing-denied': () => (
+    <AuthProviderRoot provider={harnessAuthProvider}>
+      <LoginScreen errorReason="denied" />
+    </AuthProviderRoot>
   ),
   'setup-migration': () => (
     <ProjectSetSetup

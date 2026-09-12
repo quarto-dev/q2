@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-11
+
+- [`80a4e8c5`](https://github.com/quarto-dev/q2/commits/80a4e8c5): The quarto-hub.com landing page now says what Quarto Hub is instead of showing only a sign-in button, every "Learn more" points at the Quarto Hub site and opens in a new tab, and the card reads as raised off the page in dark mode again.
+
 ### 2026-09-10
 
 - [`14de97b62`](https://github.com/quarto-dev/q2/commits/14de97b62): The sandboxed preview now validates the sender of every cross-frame message, so other windows can't inject content into the preview or the document.
