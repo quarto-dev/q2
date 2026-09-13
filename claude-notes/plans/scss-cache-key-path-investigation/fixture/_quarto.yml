@@ -1,0 +1,7 @@
+project:
+  type: website
+  output-dir: _site
+
+format:
+  html:
+    theme: [theme.scss]
