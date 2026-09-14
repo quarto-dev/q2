@@ -36,16 +36,44 @@
 //! ## Concurrency
 //!
 //! The index is read, mutated, and re-written as a single logical operation
-//! but the underlying trait methods don't offer transactions. Under
-//! contention — two tabs writing simultaneously — one write can lose. LRU
-//! is only a hint, and eviction is self-healing (a wrongly-evicted hot
-//! entry is recompiled on next access), so lost index updates are benign.
+//! but the underlying trait methods don't offer transactions. Two layers
+//! keep it consistent (bd-ddahjqr1):
+//!
+//! 1. **In-process serialization.** Every index read-modify-write runs
+//!    under a process-wide async mutex ([`INDEX_LOCK`]). Pass 2 of a
+//!    project render calls these wrappers from ~16 rayon workers at once;
+//!    without the lock the last store won and a `cache_set_lru` whose
+//!    upsert lost left its value on disk *untracked and never evicted* —
+//!    one project's cache dir had grown to 315 files / 101 MB against a
+//!    10 MB budget. (Lost `accessed_ms` touches were merely a wrong
+//!    eviction order.) An async mutex rather than `std::sync::Mutex`
+//!    because the guard spans `.await`s and the futures run under
+//!    `pollster` per worker natively and a single-threaded executor on
+//!    wasm.
+//! 2. **Reconciliation on write.** The lock cannot cover another process
+//!    (two `q2 render`s, two tabs), nor a cache dir written before the
+//!    lock existed. So `cache_set_lru` first reconciles the index against
+//!    [`SystemRuntime::cache_list`] when the backend can enumerate: entries
+//!    on the backend but not in the index are adopted (size from the
+//!    backend, `accessed_ms` from its mtime), and index entries whose value
+//!    is gone are pruned. Adopted entries are ordinary — over budget they
+//!    are evicted like anything else, which is what shrinks a pre-fix cache
+//!    dir back to budget on its first write. Reads do not reconcile (hot
+//!    path; a hit refreshes `accessed_ms` only if the key is tracked).
+//!
 //! The target cache entry and its existence are tracked by the backend,
 //! not by the index.
 
 use crate::cache_versioning::CACHE_VERSION_KEY;
-use crate::traits::{RuntimeError, RuntimeResult, SystemRuntime};
+use crate::traits::{CacheEntryInfo, RuntimeError, RuntimeResult, SystemRuntime};
 use serde::{Deserialize, Serialize};
+
+/// Serializes every LRU index read-modify-write in this process (see the
+/// module docs, "Concurrency"). One lock for all namespaces: index
+/// traffic is a ~10 KB JSON round-trip per call and, after bd-79c4do6g,
+/// writes are rare (one per compiled variant), so contention is not a
+/// concern and one static is simpler than a per-namespace map.
+static INDEX_LOCK: async_lock::Mutex<()> = async_lock::Mutex::new(());
 
 /// Reserved key under which the LRU index is stored inside a namespace.
 pub const CACHE_LRU_INDEX_KEY: &str = "_lru_index";
@@ -130,6 +158,27 @@ impl LruIndex {
         evict
     }
 
+    /// Make the index agree with what the backend holds: adopt
+    /// untracked entries (keeping reserved keys out), drop entries whose
+    /// value is gone. Adopted entries take the backend's mtime as their
+    /// access time so a stale orphan sorts as old and a fresh one as
+    /// recent; without an mtime they count as accessed now.
+    fn reconcile(&mut self, backend: &[CacheEntryInfo]) {
+        self.entries
+            .retain(|e| backend.iter().any(|b| b.key == e.key));
+        let now = now_ms();
+        for b in backend {
+            if is_reserved(&b.key) || self.position(&b.key).is_some() {
+                continue;
+            }
+            self.entries.push(LruEntry {
+                key: b.key.clone(),
+                size: b.size,
+                accessed_ms: b.modified_ms.unwrap_or(now),
+            });
+        }
+    }
+
     fn remove(&mut self, key: &str) {
         if let Some(i) = self.position(key) {
             self.entries.swap_remove(i);
@@ -187,6 +236,7 @@ pub async fn cache_get_lru(
     reject_reserved(key)?;
     let value = runtime.cache_get(namespace, key).await?;
     if value.is_some() {
+        let _guard = INDEX_LOCK.lock().await;
         let mut index = load_index(runtime, namespace).await?;
         if index.position(key).is_some() {
             index.touch(key);
@@ -199,10 +249,11 @@ pub async fn cache_get_lru(
 
 /// LRU-aware `cache_set` with a per-namespace byte budget.
 ///
-/// Writes the value, refreshes its `accessed_ms` entry in the index, and
-/// evicts least-recently-used entries until the total tracked size is at
-/// or below `budget_bytes`. The just-written entry is never evicted in
-/// the same call.
+/// Writes the value, reconciles the index against the backend (see the
+/// module docs), refreshes the entry's `accessed_ms`, and evicts
+/// least-recently-used entries until the total tracked size is at or
+/// below `budget_bytes`. The just-written entry is never evicted in the
+/// same call.
 ///
 /// Reserved keys are rejected; use [`SystemRuntime::cache_set`] for those.
 pub async fn cache_set_lru(
@@ -218,7 +269,11 @@ pub async fn cache_set_lru(
     // pointing to something that isn't there.
     runtime.cache_set(namespace, key, value).await?;
 
+    let _guard = INDEX_LOCK.lock().await;
     let mut index = load_index(runtime, namespace).await?;
+    if let Some(backend) = runtime.cache_list(namespace).await? {
+        index.reconcile(&backend);
+    }
     index.upsert(key, value.len() as u64);
 
     if index.total_size() > budget_bytes {
@@ -394,5 +449,137 @@ mod tests {
             index.entries.iter().map(|e| &e.key).collect::<Vec<_>>(),
             vec![&"a".to_string()],
         );
+    }
+
+    // ── bd-ddahjqr1: index lost-update under parallel writers ──────────
+
+    /// Pass 2 calls `cache_set_lru` from ~16 rayon workers at once. The
+    /// index update is load → upsert → store with no lock, so concurrent
+    /// writers lose updates: their values are on disk but never tracked
+    /// and never evicted (315 files / 101 MB in one project's cache dir).
+    /// Every concurrent writer's key must land in the index.
+    #[test]
+    fn concurrent_set_lru_writers_all_land_in_index() {
+        let (rt, _tmp) = setup();
+        const WRITERS: usize = 32;
+        let barrier = std::sync::Barrier::new(WRITERS);
+        std::thread::scope(|scope| {
+            for i in 0..WRITERS {
+                let rt = &rt;
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    barrier.wait();
+                    pollster::block_on(cache_set_lru(
+                        rt,
+                        "sass",
+                        &format!("k{i}"),
+                        b"xxxx",
+                        1 << 20,
+                    ))
+                    .unwrap();
+                });
+            }
+        });
+        let index = load(&rt, "sass");
+        let mut keys: Vec<&str> = index.entries.iter().map(|e| e.key.as_str()).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys.len(),
+            WRITERS,
+            "every concurrent writer's key must be tracked; index has {keys:?}"
+        );
+    }
+
+    /// Reads race too: `cache_get_lru` touches `accessed_ms` with the
+    /// same unlocked load → store, and can clobber a concurrent
+    /// `cache_set_lru`'s upsert. Hits vastly outnumber writes in a warm
+    /// render, so this is the common interleaving.
+    #[test]
+    fn concurrent_get_and_set_lru_do_not_lose_the_set() {
+        let (rt, _tmp) = setup();
+        pollster::block_on(cache_set_lru(&rt, "sass", "hot", b"hhhh", 1 << 20)).unwrap();
+        const ROUNDS: usize = 64;
+        let barrier = std::sync::Barrier::new(2);
+        std::thread::scope(|scope| {
+            let rt = &rt;
+            let barrier = &barrier;
+            scope.spawn(move || {
+                barrier.wait();
+                for _ in 0..ROUNDS {
+                    pollster::block_on(cache_get_lru(rt, "sass", "hot")).unwrap();
+                }
+            });
+            scope.spawn(move || {
+                barrier.wait();
+                for i in 0..ROUNDS {
+                    pollster::block_on(cache_set_lru(
+                        rt,
+                        "sass",
+                        &format!("w{i}"),
+                        b"wwww",
+                        1 << 20,
+                    ))
+                    .unwrap();
+                }
+            });
+        });
+        let index = load(&rt, "sass");
+        assert_eq!(
+            index.entries.len(),
+            ROUNDS + 1,
+            "all {ROUNDS} writes plus the hot key must be tracked"
+        );
+    }
+
+    /// Self-healing: an entry the backend holds but the index does not
+    /// (a lost update from another process, or a cache dir from before
+    /// this fix) is adopted on the next write so it counts toward the
+    /// budget and can be evicted.
+    #[test]
+    fn set_lru_adopts_untracked_backend_entries() {
+        let (rt, _tmp) = setup();
+        // Raw write bypasses the index — an orphan.
+        pollster::block_on(rt.cache_set("sass", "orphan", b"oooooooo")).unwrap();
+        pollster::block_on(cache_set_lru(&rt, "sass", "a", b"aaaa", 1 << 20)).unwrap();
+
+        let index = load(&rt, "sass");
+        let mut keys: Vec<&str> = index.entries.iter().map(|e| e.key.as_str()).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, vec!["a", "orphan"]);
+        let orphan = &index.entries[index.position("orphan").unwrap()];
+        assert_eq!(orphan.size, 8, "adopted size comes from the backend");
+    }
+
+    /// The mirror image: an index entry whose backend value is gone
+    /// (deleted out from under us) must be dropped so `total_size`
+    /// stays honest and eviction does not chase ghosts.
+    #[test]
+    fn set_lru_prunes_index_entries_missing_from_backend() {
+        let (rt, _tmp) = setup();
+        pollster::block_on(cache_set_lru(&rt, "sass", "a", b"aaaa", 1 << 20)).unwrap();
+        pollster::block_on(rt.cache_delete("sass", "a")).unwrap();
+        pollster::block_on(cache_set_lru(&rt, "sass", "b", b"bbbb", 1 << 20)).unwrap();
+
+        let index = load(&rt, "sass");
+        let keys: Vec<&str> = index.entries.iter().map(|e| e.key.as_str()).collect();
+        assert_eq!(keys, vec!["b"]);
+    }
+
+    /// Adopted orphans are ordinary entries: over budget, they are
+    /// evicted like anything else (the just-written key is still
+    /// protected). This is what shrinks a pre-fix 101 MB cache dir back
+    /// to the budget on the first write.
+    #[test]
+    fn adopted_orphans_count_toward_budget_and_get_evicted() {
+        let (rt, _tmp) = setup();
+        pollster::block_on(rt.cache_set("sass", "orphan", b"oooooooo")).unwrap();
+        // Budget 10: orphan (8) + a (4) = 12 → the orphan must go.
+        pollster::block_on(cache_set_lru(&rt, "sass", "a", b"aaaa", 10)).unwrap();
+
+        assert!(get(&rt, "sass", "orphan").is_none(), "orphan evicted");
+        assert!(get(&rt, "sass", "a").is_some(), "fresh write preserved");
+        let index = load(&rt, "sass");
+        let keys: Vec<&str> = index.entries.iter().map(|e| e.key.as_str()).collect();
+        assert_eq!(keys, vec!["a"]);
     }
 }

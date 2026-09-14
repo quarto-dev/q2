@@ -500,6 +500,52 @@ impl SystemRuntime for NativeRuntime {
             ))),
         }
     }
+
+    async fn cache_list(
+        &self,
+        namespace: &str,
+    ) -> RuntimeResult<Option<Vec<crate::traits::CacheEntryInfo>>> {
+        let Some(cache_dir) = &self.cache_dir else {
+            return Ok(None);
+        };
+        crate::traits::validate_cache_namespace(namespace)?;
+        let ns_dir = cache_dir.join(namespace);
+        let read_dir = match fs::read_dir(&ns_dir) {
+            Ok(rd) => rd,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Some(Vec::new())),
+            Err(e) => {
+                return Err(RuntimeError::CacheError(format!(
+                    "failed to list cache namespace {namespace}: {e}"
+                )));
+            }
+        };
+        let mut entries = Vec::new();
+        for entry in read_dir {
+            let Ok(entry) = entry else { continue };
+            let name = entry.file_name();
+            let Some(key) = name.to_str() else { continue };
+            // `cache_set` writes through a `NamedTempFile` in the same
+            // directory; an in-flight one is not an entry.
+            if key.starts_with(".tmp") || crate::traits::validate_cache_key(key).is_err() {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else { continue };
+            if !meta.is_file() {
+                continue;
+            }
+            let modified_ms = meta.modified().ok().and_then(|t| {
+                t.duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .map(|d| d.as_millis() as u64)
+            });
+            entries.push(crate::traits::CacheEntryInfo {
+                key: key.to_string(),
+                size: meta.len(),
+                modified_ms,
+            });
+        }
+        Ok(Some(entries))
+    }
 }
 
 // Fallback for xdg_dir when dirs crate is not available
@@ -1014,6 +1060,42 @@ mod tests {
     fn test_native_runtime_new_has_no_cache_dir() {
         let rt = NativeRuntime::new();
         assert!(rt.cache_dir().is_none());
+    }
+
+    /// `cache_list` enumerates a namespace's entries with sizes and
+    /// mtimes, skips in-flight atomic-write temp files, reports an
+    /// absent namespace as empty, and reports "cannot enumerate" when
+    /// no cache dir is configured (bd-ddahjqr1).
+    #[test]
+    fn test_native_cache_list() {
+        use crate::traits::SystemRuntime;
+        let temp = tempfile::TempDir::new().unwrap();
+        let rt = NativeRuntime::with_cache_dir(temp.path().to_path_buf());
+
+        assert_eq!(
+            pollster::block_on(rt.cache_list("sass")).unwrap(),
+            Some(Vec::new()),
+            "absent namespace lists as empty"
+        );
+
+        pollster::block_on(rt.cache_set("sass", "a", b"aaaa")).unwrap();
+        pollster::block_on(rt.cache_set("sass", "bb", b"bbbbbbbb")).unwrap();
+        fs::write(temp.path().join("sass").join(".tmpXYZ"), b"in-flight").unwrap();
+
+        let mut listed = pollster::block_on(rt.cache_list("sass")).unwrap().unwrap();
+        listed.sort_by(|x, y| x.key.cmp(&y.key));
+        let summary: Vec<(&str, u64, bool)> = listed
+            .iter()
+            .map(|e| (e.key.as_str(), e.size, e.modified_ms.is_some()))
+            .collect();
+        assert_eq!(summary, vec![("a", 4, true), ("bb", 8, true)]);
+
+        let no_cache = NativeRuntime::new();
+        assert_eq!(
+            pollster::block_on(no_cache.cache_list("sass")).unwrap(),
+            None,
+            "no cache dir → cannot enumerate"
+        );
     }
 
     #[test]
