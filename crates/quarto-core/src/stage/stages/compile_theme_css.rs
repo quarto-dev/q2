@@ -227,7 +227,13 @@ impl Default for CompileThemeCssStage {
 /// The key is `SHA256(SCSS_RESOURCES_HASH + theme_identities +
 /// custom_file_contents + doc_vars + minified)`. Built-in themes contribute
 /// only their name (content is already covered by `SCSS_RESOURCES_HASH`).
-/// Custom themes contribute their resolved path and file contents.
+/// Custom themes contribute their resolved path and file contents. The
+/// path is the one `ThemeContext::resolve_path` returns — lexically
+/// normalized, so the per-document spellings the metadata merge
+/// produces for one file (`../theme.scss` vs `../../theme.scss`) share
+/// a key (bd-79c4do6g) — and it stays in the key because it is the
+/// proxy for the file's `@import` context: two files with identical
+/// text in different directories may import different partials.
 /// `doc_vars` contributes its serialized `defaults` string so two
 /// documents with different per-document variables (e.g. docked vs.
 /// floating sidebar → different `$sidebar-border`) get distinct keys
@@ -2331,18 +2337,54 @@ mod tests {
         assert_ne!(key1, key2);
     }
 
+    /// Two *different* files with identical contents must keep
+    /// distinct keys: the file's (normalized) path is the proxy for its
+    /// `@import` context — `a/theme.scss` and `b/theme.scss` can both
+    /// say `@import "_colors"` and mean different partials (the
+    /// partials themselves are not hashed; bd-m3hga05o). MockRuntime
+    /// returns empty bytes for every read, so only the path differs.
     #[test]
-    fn test_cache_key_custom_file_reads_content() {
-        // MockRuntime returns empty bytes for file_read, so two different
-        // custom paths with the same (empty) content but different paths
-        // should still differ.
+    fn test_cache_key_distinct_files_with_same_content_stay_distinct() {
         let runtime = MockRuntime;
-        let config_a = make_custom_config("theme_a.scss", true);
-        let config_b = make_custom_config("theme_b.scss", true);
+        let config_a = make_custom_config("a/theme.scss", true);
+        let config_b = make_custom_config("b/theme.scss", true);
         let ctx = ThemeContext::new(PathBuf::from("/project"), &runtime);
         let key_a = cache_key(&config_a, &ctx, &runtime, &SassLayer::default()).unwrap();
         let key_b = cache_key(&config_b, &ctx, &runtime, &SassLayer::default()).unwrap();
         assert_ne!(key_a, key_b);
+    }
+
+    /// bd-79c4do6g: the metadata merge rewrites a project-level
+    /// `theme: [theme.scss]` to a document-relative spelling per
+    /// document (`../theme.scss`, `../../theme.scss`, …), and the key
+    /// used to hash that spelling verbatim — one cache entry per
+    /// document directory for one file (97 % miss rate on the Connect
+    /// docs). The *same file* reached from different document dirs
+    /// must produce *one* key.
+    #[test]
+    fn test_cache_key_same_file_from_different_document_dirs() {
+        let runtime = MockRuntime;
+        let cases = [
+            ("/project", "theme.scss"),
+            ("/project/a", "../theme.scss"),
+            ("/project/a/b", "../../theme.scss"),
+            ("/project/a/b", "./../../theme.scss"),
+        ];
+        let keys: Vec<String> = cases
+            .iter()
+            .map(|(doc_dir, spelling)| {
+                let ctx = ThemeContext::new(PathBuf::from(doc_dir), &runtime);
+                let config = make_custom_config(spelling, true);
+                cache_key(&config, &ctx, &runtime, &SassLayer::default()).unwrap()
+            })
+            .collect();
+        for (i, key) in keys.iter().enumerate() {
+            assert_eq!(
+                key, &keys[0],
+                "spelling {:?} from {:?} must share the root spelling's key",
+                cases[i].1, cases[i].0
+            );
+        }
     }
 
     #[test]

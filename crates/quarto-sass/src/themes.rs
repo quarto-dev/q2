@@ -450,14 +450,23 @@ impl<'a> ThemeContext<'a> {
 
     /// Resolve a potentially relative path against the document directory.
     ///
-    /// - Absolute paths are returned as-is.
+    /// - Absolute paths are used as-is.
     /// - Relative paths are resolved relative to the document directory.
+    ///
+    /// The result is lexically normalized (`.` and `..` collapsed, no
+    /// filesystem access), so every document-relative spelling the
+    /// metadata merge produces for one theme file (`theme.scss`,
+    /// `../theme.scss`, `../../theme.scss`, …) resolves to the same
+    /// path. That path is the file's identity downstream: the
+    /// compiled-SCSS cache key, the `@import` load path, and the path
+    /// diagnostics print (bd-79c4do6g).
     pub fn resolve_path(&self, path: &Path) -> PathBuf {
-        if path.is_absolute() {
+        let joined = if path.is_absolute() {
             path.to_path_buf()
         } else {
             self.document_dir.join(path)
-        }
+        };
+        quarto_util::normalize_lexically(&joined)
     }
 }
 
@@ -1016,6 +1025,51 @@ mod tests {
         let context = ThemeContext::native(PathBuf::from("/project/doc"));
         let resolved = context.resolve_path(Path::new("/abs/path/theme.scss"));
         assert_eq!(resolved, PathBuf::from("/abs/path/theme.scss"));
+    }
+
+    /// bd-79c4do6g: the document-relative spelling of a theme path
+    /// (`../../theme.scss` from `a/b/`, `../theme.scss` from `a/`,
+    /// `theme.scss` from the root) must resolve to one path, because
+    /// it feeds the sass cache key, the `@import` load path and every
+    /// diagnostic. Normalization is lexical (no filesystem access).
+    #[test]
+    fn test_theme_context_resolve_path_normalizes_parent_dirs() {
+        let root = ThemeContext::native(PathBuf::from("/project"));
+        let depth1 = ThemeContext::native(PathBuf::from("/project/a"));
+        let depth2 = ThemeContext::native(PathBuf::from("/project/a/b"));
+        let expected = PathBuf::from("/project/theme.scss");
+        assert_eq!(root.resolve_path(Path::new("theme.scss")), expected);
+        assert_eq!(depth1.resolve_path(Path::new("../theme.scss")), expected);
+        assert_eq!(depth2.resolve_path(Path::new("../../theme.scss")), expected);
+        assert_eq!(root.resolve_path(Path::new("./theme.scss")), expected);
+        assert_eq!(depth1.resolve_path(Path::new("./../theme.scss")), expected);
+    }
+
+    /// `q2 render` hands the stage a *project-relative* document dir
+    /// (`admin/appendix/cli`), so normalization must work on relative
+    /// bases too — and must not invent components when `..` climbs
+    /// above the base.
+    #[test]
+    fn test_theme_context_resolve_path_normalizes_relative_base() {
+        let depth2 = ThemeContext::native(PathBuf::from("a/b"));
+        assert_eq!(
+            depth2.resolve_path(Path::new("../../theme.scss")),
+            PathBuf::from("theme.scss")
+        );
+        assert_eq!(
+            depth2.resolve_path(Path::new("../../../theme.scss")),
+            PathBuf::from("../theme.scss")
+        );
+        let dot = ThemeContext::native(PathBuf::from("."));
+        assert_eq!(
+            dot.resolve_path(Path::new("sub/../theme.scss")),
+            PathBuf::from("theme.scss")
+        );
+        // Absolute inputs are normalized too.
+        assert_eq!(
+            dot.resolve_path(Path::new("/x/y/../theme.scss")),
+            PathBuf::from("/x/theme.scss")
+        );
     }
 
     #[test]

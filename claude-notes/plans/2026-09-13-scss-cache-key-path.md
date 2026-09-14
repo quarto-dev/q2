@@ -3,7 +3,7 @@
 **Date:** 2026-09-13
 **Braid:** bd-79c4do6g (P1, bug, label `perf`)
 **Branch:** `braid/bd-79c4do6g-scss-cache-key-path` in the main checkout (based on `main` @ `35bc11415`; topic branch, no worktree, per user request)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design agreed 2026-09-14; implementing.
 
 ## Triage verdict
 
@@ -183,7 +183,60 @@ Skeleton only — actual phase contents wait on the design discussion.
   currently says "Custom themes contribute their resolved path and
   file contents"); no user-facing docs change.
 
-## Open design questions for the user
+## Decisions (2026-09-14, with user)
+
+1. **Identity:** (a) — lexically normalize the resolved path (collapse
+   `.`/`..` via `components()`), hash that. (c) is bd-m3hga05o, worked
+   by a separate agent in parallel.
+2. **Where:** normalize inside `ThemeContext::resolve_path` itself, so
+   load paths and diagnostics also read `_extensions/…/theme.scss`
+   instead of `admin/…/../../../_extensions/…`. Snapshot churn accepted.
+3. **Gauge:** the room-5 branch had **no commits** — the gauge was an
+   uncommitted 3-file diff. Applied here as its own commit
+   (`aab25a7e1`, "Add perf.sass gauge"), code only; the research note
+   and profiles stay with bd-fq44dlnm. When that branch later commits
+   the same gauge, the merge is textually identical.
+4. **Sequencing:** this fix first, then bd-ddahjqr1 (LRU index race) as
+   a follow-up commit on the same branch → one PR, individually
+   reviewable commits.
+
+## Work items
+
+- [x] Bring the `perf.sass` gauge over (`aab25a7e1`).
+- [x] Phase 0 — failing tests: `resolve_path` normalization
+      (quarto-sass), one-key-for-many-spellings (`cache_key`),
+      keep-distinct restated, end-to-end fixture render → `compiles=1`.
+- [x] Phase 1 — normalize in `ThemeContext::resolve_path` (`quarto_util::normalize_lexically`). No snapshot churn materialized: no snapshot pinned a `../` theme path.
+- [ ] Phase 2 — measure on the Connect docs (cold serial): expect
+      `compiles≈4`, wall ≪ 42 s. Record here.
+- [x] Phase 3 — `cache_key` doc comment; plan + strand notes.
+- [ ] Follow-up commit: bd-ddahjqr1.
+
+## End-to-end verification (fixture, after the fix)
+
+Invocation, from the fixture dir, output inspected:
+
+```bash
+rm -rf .quarto/cache/sass _site
+QUARTO_JOBS=1 QUARTO_PERF_STATS=1 cargo run -q --bin q2 -- render .
+#   perf.sass hits=2 compiles=1 uncached=0        (before: hits=0 compiles=3)
+ls .quarto/cache/sass | grep -v -E '_lru_index|_version' | wc -l   # 1  (before: 3)
+QUARTO_PERF_STATS=1 cargo run -q --bin q2 -- render .              # warm: hits=3 compiles=0
+```
+
+Every page links the same `site_libs/quarto/quarto-theme-1dea42e453982763.css`,
+which still contains the fixture's `.repro{color:#123456}` rule.
+
+**Observation — cold parallel start is a thundering herd.** With the
+default job count the cold gauge reads `compiles=3 hits=0` even though
+only one entry lands in the cache: all three pages miss before the
+first compile finishes. On the Connect docs that bounds the cold cost
+at ~`jobs` compiles per variant (16 workers → ≤ 64 compiles, not 704),
+and every later page hits. Single-flighting the compile per key would
+close that; it is a natural companion to bd-ddahjqr1's in-process
+index and is noted there rather than done here.
+
+## Open design questions for the user (answered above; kept for the record)
 
 1. **What identity replaces the raw path string?** Three options, in
    increasing ambition:
