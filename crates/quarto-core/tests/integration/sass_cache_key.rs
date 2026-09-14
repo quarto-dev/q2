@@ -52,6 +52,12 @@ fn sass_cache_entries(cache_dir: &Path) -> Vec<String> {
 /// Render a website with one project-level custom theme and one
 /// document at each of depth 0, 1 and 2. Returns the cache dir.
 fn render_three_depth_site() -> (TempDir, PathBuf) {
+    render_site(1, "theme: [custom.scss]")
+}
+
+/// `theme:` value is spliced into `format.html`; `jobs` pins the
+/// Pass-2 worker count (`1` = serial).
+fn render_site(jobs: usize, theme_yaml: &str) -> (TempDir, PathBuf) {
     let temp = TempDir::new().unwrap();
     let project_dir = temp
         .path()
@@ -60,11 +66,17 @@ fn render_three_depth_site() -> (TempDir, PathBuf) {
 
     write(
         &project_dir.join("_quarto.yml"),
-        "project:\n  type: website\n  output-dir: _site\n\nformat:\n  html:\n    theme: [custom.scss]\n",
+        &format!(
+            "project:\n  type: website\n  output-dir: _site\n\nformat:\n  html:\n    {theme_yaml}\n"
+        ),
     );
     write(
         &project_dir.join("custom.scss"),
         "/*-- scss:defaults --*/\n$body-bg: #fefefe;\n\n/*-- scss:rules --*/\n.cache-key-guard { color: #123456; }\n",
+    );
+    write(
+        &project_dir.join("custom-dark.scss"),
+        "/*-- scss:defaults --*/\n$body-bg: #101010;\n\n/*-- scss:rules --*/\n.cache-key-guard { color: #abcdef; }\n",
     );
     for page in ["index.qmd", "a/index.qmd", "a/b/index.qmd"] {
         write(
@@ -86,7 +98,8 @@ fn render_three_depth_site() -> (TempDir, PathBuf) {
         "html",
         &options,
         runtime.clone(),
-    );
+    )
+    .with_jobs(jobs);
     let summary = pollster::block_on(pipeline.run()).expect("pipeline");
     assert!(
         summary.pass1_failures.is_empty() && summary.pass2_failures.is_empty(),
@@ -108,5 +121,45 @@ fn one_custom_theme_referenced_from_three_depths_is_cached_once() {
         1,
         "one theme file must occupy one sass cache entry regardless of \
          how many document directories reference it; got {entries:?}"
+    );
+}
+
+/// Keys the LRU index tracks in `<cache_dir>/sass`.
+fn indexed_sass_keys(cache_dir: &Path) -> Vec<String> {
+    let bytes = std::fs::read(cache_dir.join("sass").join("_lru_index"))
+        .expect("LRU index exists after a themed render");
+    let index: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let mut keys: Vec<String> = index["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["key"].as_str().unwrap().to_string())
+        .collect();
+    keys.sort();
+    keys
+}
+
+/// bd-ddahjqr1: with parallel Pass 2, several workers write distinct
+/// keys (here light + dark variants) at once, and the index's unlocked
+/// read-modify-write can lose an entry — the value stays on disk,
+/// untracked and never evicted. Every entry the render leaves in the
+/// cache must be in the index. (The deterministic proof of the race is
+/// `cache_lru`'s unit tests; this pins the end-to-end invariant.)
+#[test]
+fn parallel_render_leaves_no_untracked_sass_cache_entries() {
+    let (_temp, cache_dir) = render_site(
+        3,
+        "theme:\n      light: [custom.scss]\n      dark: [custom-dark.scss]",
+    );
+    let on_disk = sass_cache_entries(&cache_dir);
+    let indexed = indexed_sass_keys(&cache_dir);
+    assert_eq!(
+        on_disk.len(),
+        2,
+        "one light + one dark entry expected; got {on_disk:?}"
+    );
+    assert_eq!(
+        on_disk, indexed,
+        "every sass cache entry on disk must be tracked by the LRU index"
     );
 }

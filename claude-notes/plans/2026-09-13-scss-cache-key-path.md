@@ -207,10 +207,73 @@ Skeleton only — actual phase contents wait on the design discussion.
       (quarto-sass), one-key-for-many-spellings (`cache_key`),
       keep-distinct restated, end-to-end fixture render → `compiles=1`.
 - [x] Phase 1 — normalize in `ThemeContext::resolve_path` (`quarto_util::normalize_lexically`). No snapshot churn materialized: no snapshot pinned a `../` theme path.
-- [ ] Phase 2 — measure on the Connect docs (cold serial): expect
-      `compiles≈4`, wall ≪ 42 s. Record here.
+- [x] Phase 2 — measured on the Connect docs (see § Connect docs measurement).
 - [x] Phase 3 — `cache_key` doc comment; plan + strand notes.
-- [ ] Follow-up commit: bd-ddahjqr1.
+- [x] Follow-up commit: bd-ddahjqr1 (see § below) — implemented, full verify green.
+
+## Connect docs measurement (release `q2` @ `4a2d219fe`, 2026-09-14)
+
+Same project and procedure as the research note's "warm,
+`QUARTO_JOBS=1`, sass cache cleared first" row (352 docs, posit-docs
+extension theme, light + dark). Script:
+`connect-measure.sh` (cold = `rm -rf .quarto/cache/sass` first). Output
+inspected.
+
+| run                         | before (note)              | after                        |
+|-----------------------------|----------------------------|------------------------------|
+| cold serial, wall           | 42.0 s                     | **6.68 s**                   |
+| cold serial, `perf.sass`    | hits=22 compiles=682       | **hits=702 compiles=2**      |
+| cold serial, peak RSS       | 2.5 GB                     | 1.08 GB                      |
+| warm serial, wall           | ~30 s (orphan-assisted)    | 6.22 s (hits=704 compiles=0) |
+| cold parallel (16), wall    | 4.55 s                     | 2.33 s                       |
+| cold parallel, `perf.sass`  | —                          | hits=672 compiles=32         |
+| sass cache entries          | 315 files / 101 MB (pre-existing) | 2 files              |
+
+`compiles=2` rather than the note's expected 4: the second output per
+variant it observed came from the pre-existing orphan population, not
+from a live `doc_vars` split. Parallel cold `compiles=32` = 16 workers
+× 2 variants is the thundering herd noted above; it costs ~1.5 s of CPU
+spread across workers and is not on the critical path.
+
+## Follow-up: bd-ddahjqr1 — LRU index lost-update (same branch, own commit)
+
+**Mechanism.** `cache_set_lru` and `cache_get_lru` both do
+load-index → mutate → store-index with no lock. Pass 2 calls them from
+~16 rayon workers (each `pollster::block_on` on its own thread), so
+concurrent calls interleave and the last store wins: a set whose
+upsert loses leaves its value on disk **untracked and never evicted**
+(orphan); a get whose touch loses is benign. `cache_get_lru` looks the
+value up by key on the backend, so orphans still serve hits — which
+hid ~30 % of bd-79c4do6g.
+
+**Fix, two layers:**
+
+1. **Serialize the index RMW in-process** — a process-wide async mutex
+   (`async_lock::Mutex<()>`, executor-agnostic, wasm-safe; new small
+   dependency of `quarto-system-runtime`) held across the load/store in
+   both wrappers. This makes a single `q2 render` exact; contention is
+   negligible (the index is ~10 KB JSON and writes are now rare —
+   `compiles ≈ variants` after bd-79c4do6g). A `std::sync::Mutex` guard
+   across `.await` would trip `clippy::await_holding_lock` and can
+   deadlock a single-threaded wasm executor; an async mutex has neither
+   problem.
+2. **Reconcile the index against the backend on every write** — new
+   trait method `SystemRuntime::cache_list(namespace) ->
+   Option<Vec<CacheEntryInfo{key,size,modified_ms}>>` (default `None`
+   = backend cannot enumerate; native = `read_dir`, skipping the
+   atomic-write temp files and reserved keys). `cache_set_lru` adopts
+   untracked entries (size from the backend, `accessed_ms` from mtime)
+   and prunes index entries whose value is gone, *then* evicts. This
+   heals cross-process races, and shrinks a pre-fix 101 MB cache dir to
+   the budget on the first write. Reads don't reconcile (hot path).
+
+**Tests (written first, in `cache_lru.rs` and
+`tests/integration/sass_cache_key.rs`):** 32 barrier-synchronized
+writers all land in the index; a get/set race doesn't lose the set;
+orphans are adopted with their real size; ghosts are pruned; adopted
+orphans are budget-evictable; a parallel light+dark render leaves no
+entry on disk that the index doesn't track.
+
 
 ## End-to-end verification (fixture, after the fix)
 
@@ -293,3 +356,28 @@ index and is noted there rather than done here.
   two legitimately distinct outputs per variant (navbar/footer layer
   driven); those keys must stay distinct, and the fix doesn't touch
   `doc_vars` hashing. Expect `compiles≈4`, not `2`, on the Connect docs.
+
+**End-to-end (fixture, debug `q2`, output inspected):**
+
+```bash
+rm -rf .quarto _site
+QUARTO_PERF_STATS=1 cargo run -q --bin q2 -- render .        # cold, parallel
+ls .quarto/cache/sass | grep -v -E '_lru_index|_version'      # db1768f5…
+jq -r '.entries[].key' .quarto/cache/sass/_lru_index          # db1768f5…  ← tracked
+# plant an 11 MB untracked file (the pre-fix leak shape), force a compile
+dd if=/dev/zero of=.quarto/cache/sass/orphan00…00 bs=1m count=11
+printf '\n/* touched */\n' >> theme.scss
+QUARTO_JOBS=1 QUARTO_PERF_STATS=1 cargo run -q --bin q2 -- render .   # hits=2 compiles=1
+ls .quarto/cache/sass | grep -v -E '_lru_index|_version'      # 6245bc6b… only
+du -sh .quarto/cache/sass                                     # 336K (was 11M)
+```
+
+The orphan was adopted (mtime as access time), then evicted with the
+stale pre-edit entry to bring the namespace under the 10 MB budget;
+the fresh compile is the only survivor and the index agrees with the
+directory. Unit tests in `cache_lru.rs` (`concurrent_*`, `*_adopts_*`,
+`*_prunes_*`, `adopted_orphans_*`) and `native.rs`
+(`test_native_cache_list`) all failed before the change (the native one
+did not compile) and pass after. Reads deliberately do not reconcile,
+so a pre-fix cache dir is healed on its first *compile*, not its first
+hit.
