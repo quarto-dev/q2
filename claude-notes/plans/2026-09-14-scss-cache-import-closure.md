@@ -3,7 +3,7 @@
 **Date:** 2026-09-14
 **Braid:** bd-m3hga05o (P2, bug, label `perf`)
 **Branch:** `braid/bd-m3hga05o-scss-cache-import-closure` in the room-2 main checkout (based on `main` @ `35bc11415`; topic branch, no worktree, per user request)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design agreed (option R, 2026-09-14). Awaiting go-ahead on the base-branch and remaining recommendations before Phase 0.
 
 ## Triage verdict
 
@@ -164,121 +164,196 @@ theme-stage output cleanup, not this strand.
 The "users must `rm -rf .quarto/cache/sass`" workaround from the strand
 holds: with the cache dir removed the first render emits `#abcdef`.
 
-## Design options (for Q1)
+## Decision (2026-09-14, with user): record the closure — option (R)
 
-The closure can only be known two ways: **predict** it before compiling,
-or **record** it while compiling.
+The closure of files a compile actually loaded is **recorded as a
+by-product of the compile** and **validated on the next lookup**. No
+separate "resolve dependencies" entry point exists in grass or
+dart-sass, and none is needed: the dependency list is a cached artifact
+of the previous compile, the make/ninja depfile pattern.
 
-- **(P) Predict in `cache_key`.** Re-implement grass's `find_import`
-  walk (and dart-sass's, which differs in details — `.import.*`
-  variants, `index` files, `@use` namespaces, `url()` and `http:`
-  skipping, `meta.load-css`) over the runtime, recursively, before
-  every lookup. This is what the strand text proposes. Cost: a second
-  SCSS import resolver that must track two upstream compilers; every
-  lookup re-reads the whole closure even on a hit (cheap for a few
-  partials, but it's per document per variant); still cannot see
-  files a *built-in* layer imports (fine — those are covered by
-  `SCSS_RESOURCES_HASH`). Benefit: the key stays a pure function of
-  inputs, so the cache stays a flat `key → css` map and nothing else
-  changes.
-- **(R) Record during compile, validate on lookup.** Extend
-  `compile_sass` to return `{ css, loaded_files }` (native: recorded
-  by `RuntimeFs::read`; WASM: `loadedUrls` mapped back to VFS paths;
-  embedded `/__quarto_resources__/…` reads filtered out on both). Store
-  beside the CSS a manifest of `(path, sha256(contents))` for the
-  closure. On lookup: compute the top-level key as today (minus the
-  path spelling, per bd-79c4do6g), fetch the manifest, re-hash the
-  listed files through the runtime, hit only if all match. This is the
-  make/ninja depfile pattern and what sass-loader / dart-sass `--watch`
-  do. Cost: a cache-entry format change (see Q2), a trait-signature
-  change, and the first render after an edit still pays one compile
-  (unavoidable). Benefit: exactly correct for both compilers by
-  construction, no resolver to maintain, and hits cost one small read
-  per closure file.
+The lookup becomes two-level, and the two levels must stay separate:
 
-Both fix the strand's bug. (R) is the one I'd recommend; (P) is what
-the strand literally asked for, hence the question.
+1. **Key** — computed exactly as today from inputs known *before*
+   compiling: `SCSS_RESOURCES_HASH`, theme identities, the top-level
+   custom file's contents and (normalized, after PR #679) path,
+   `doc_vars`, highlight style, minified and title-block flags. Closure
+   contents are deliberately **not** in the key; putting them there
+   would require knowing the closure before the compile that discovers
+   it.
+2. **Value** under that key — `(manifest, css)`, where the manifest is
+   the list of `(path, sha256(contents))` pairs the compile that
+   produced `css` reported loading, embedded `/__quarto_resources__/…`
+   reads excluded (those are covered by `SCSS_RESOURCES_HASH` in the
+   key).
+3. **Lookup** — fetch the value, re-read every manifest path through
+   the runtime, hash, compare. All match → hit. Any mismatch, missing
+   file, or undecodable value → miss: compile (which yields the fresh
+   closure) and overwrite the entry.
 
-## Proposed phases (draft)
+Why trusting the *previous* closure is sound: imports are declared
+inside the files being hashed, so the closure can only change if some
+file already in it changes, and that change fails validation. The gap
+is negative dependencies (a new file that would now shadow an existing
+import path, with no listed file changing); documented, not solved in
+v1 — see Risks.
 
-Skeleton only — contents wait on the design discussion.
+### What PR #679 (bd-79c4do6g + bd-ddahjqr1) changes for this work
 
-- **Phase 0 — Test plan (TDD).**
-  - Unit test in `compile_theme_css.rs`: a custom theme whose file
-    imports a partial; change the partial's contents through the test
-    runtime; the second lookup must **miss**. Must fail at HEAD.
-  - Under (R): a `sass_native` test that `compile_scss` reports the
-    partial it loaded and *not* the embedded Bootstrap files; a
-    `sass.test.ts` case asserting the bridge surfaces `loadedUrls`.
-  - Under (P): resolver tests for `_` prefix, `.scss`/`.sass`/`.css`,
-    nested import, load-path fallback, `url()`/`http:` skipped, cycle
-    termination; keep `test_cache_key_builtin_no_file_reads` green.
-  - End-to-end: the fixture's two-render sequence via `q2 render`,
-    asserting the emitted CSS carries the edited colour.
-- **Phase 1 — Core change** (per Q1/Q2).
-- **Phase 2 — Fold in bd-79c4do6g** if the user chooses (R): drop the
-  path string from the key (the closure now discriminates divergent
-  imports), invert `test_cache_key_custom_file_reads_content`'s
-  intent, and re-run its 3-document fixture expecting one entry.
-  Otherwise leave that strand's normalization fix as is.
-- **Phase 3 — Measure.** Connect docs, cleared cache, `perf.sass` once
-  it lands (or entry counting): closure validation must not
-  measurably cost more than the hit it protects.
-- **Phase 4 — Notes.** Update the `cache_key` doc comment and, if the
-  entry format changes, the LRU/versioning notes in `cache_lru.rs`.
+Inspected 2026-09-14: `bugfix/bd-79c4do6g-scss-cache-key-path`, open
+against `main`, four commits, full verify green per its description.
 
-## Open design questions for the user
+- **The path stays in the key** (lexically normalized via the new
+  `quarto_util::normalize_lexically`, inside `ThemeContext::resolve_path`).
+  Its `test_cache_key_distinct_files_with_same_content_stay_distinct`
+  pins that and cites this strand as the reason partials are not
+  hashed. With the manifest in place the path is redundant for
+  correctness, but it is harmless, it partially covers the
+  negative-dependency gap (two directories never alias), and removing
+  it would widen this diff for nothing. **Decision: leave the key
+  alone; the manifest is purely additive.** Update that test's comment
+  to say so.
+- **`cache_lru.rs` now serializes every index RMW under a process-wide
+  `async_lock::Mutex` and reconciles the index against
+  `SystemRuntime::cache_list` on every write.** Consequence for Q2: a
+  sibling `<key>.deps` entry (option B) would be adopted by reconcile
+  as an independent LRU entry and could be evicted separately from its
+  CSS, leaving half a pair; and every extra write now costs a
+  `read_dir`. That settles **Q2 = (A), bundle the manifest into the
+  value.**
+- **The `perf.sass hits/compiles/uncached` gauge exists** in
+  `compile_theme_css.rs` (`sass_perf`, printed by
+  `print_sass_stats_if_enabled` from `q2 render`). This strand's
+  end-to-end checks use it: an edited partial must show `compiles=1`
+  on the next render, an unedited one `compiles=0`. A fourth counter,
+  `stale` (hit on key, manifest mismatch), is worth adding so the two
+  kinds of miss are distinguishable.
+- **`SystemRuntime` grew a defaulted `cache_list` method in the same
+  PR**, so extending the trait again here (Q4) is in keeping with the
+  branch's direction.
+- **Base branch.** This work touches the same lines PR #679 touches
+  (`cache_key` docs and tests, `variant_css`, `cache_lru.rs`,
+  `traits.rs`). Rebase this branch onto
+  `origin/bugfix/bd-79c4do6g-scss-cache-key-path` before Phase 0, and
+  open the PR against `main` once #679 merges (or stacked, if it does
+  not merge first). Do **not** re-implement any of #679 here.
 
-1. **Predict or record?** (P) re-implements import resolution in
-   `cache_key`; (R) has the compilers report the files they loaded and
-   validates a manifest on lookup. My recommendation is **(R)** — it is
-   correct for grass *and* dart-sass without us owning a resolver, and
-   the instrumentation points (`RuntimeFs::read`, `result.loadedUrls`)
-   already exist. Agree, or do you want the key to stay a pure
-   pre-compile function?
-2. **If (R), where does the manifest live?** (A) Bundle it into the
-   cache value — a small header (JSON manifest + separator) before the
-   CSS bytes, one entry per key, one LRU slot, one write; needs a
-   format tag and a `CSS_BUILD_ID`-style purge of old entries. (B) A
-   sibling entry `<key>.deps` — leaves CSS bytes untouched but doubles
-   writes through the LRU index (bd-ddahjqr1's race) and can orphan
-   half a pair on eviction. I lean **(A)**.
-3. **Fold bd-79c4do6g into this branch?** With (R) the path string in
-   the key is pure noise, so dropping it is a one-line side effect
-   here, and its 3-doc fixture becomes a second end-to-end test. That
-   makes bd-79c4do6g a duplicate to close when this lands. With (P)
-   the two stay separate and its normalization fix should land first.
-   Your call on sequencing, given that one is P1 and this is P2.
-4. **Is the trait change acceptable?** `compile_sass` returning a
-   struct instead of `String` touches `traits.rs`, `native.rs`,
-   `wasm.rs`, `sass.js`/`sass.d.ts`, and every caller in `quarto-sass`
-   (`compile.rs` has ~6). Alternative: a new `compile_sass_tracked`
-   method with a default that calls the old one and reports an empty
-   closure (which must then be treated as "unknown → never cache",
-   not "no deps"). Prefer the honest signature change or the additive
-   method?
-5. **Should a hit re-hash the closure files, or compare mtimes?** The
-   runtime has no mtime API that works on the WASM VFS, and partials
-   are small; I'd hash contents (what the top-level file already
-   does). Flagging in case you want an mtime fast path on native.
+### Remaining decisions (recommendations; confirm or override)
 
-## Risks / tradeoffs (draft)
+- **Q2 — manifest location: (A).** One value per key: a small header
+  (format tag, JSON manifest, separator) followed by the CSS bytes.
+  Apply the envelope uniformly to *every* entry in the `sass`
+  namespace, including the default no-theme entries (their manifest is
+  empty), so there is exactly one encode/decode pair. Old-format
+  entries fail to decode and read as misses; additionally bump the
+  namespace version stamp (append a format tag to what
+  `ensure_sass_cache_ready` stores) so the generational purge clears
+  them in one go instead of one by one.
+- **Q4 — trait change: honest signature.** `compile_sass` returns a
+  `SassOutput { css: String, loaded_files: Vec<PathBuf> }`. Three
+  runtime sites (`traits.rs` default, `native.rs`, `wasm.rs`), the JS
+  bridge (`sass.js` returns `{css, loadedUrls}` instead of a string;
+  `sass.d.ts` follows), and the `quarto-sass` callers in `compile.rs`
+  that must propagate the list (`compile_with_doc_vars_via_runtime`
+  chain) versus discard it (`compile_default_css`, tests). An additive
+  `compile_sass_tracked` with an "unknown closure" default would force
+  every caller to reason about "unknown ≠ empty"; the honest change is
+  smaller to get right.
+- **Q5 — validate by content hash**, not mtime: the runtime has no
+  mtime API on the WASM VFS, partials are small, and the top-level file
+  is already hashed by content. An in-process memo `(path → hash)` for
+  the duration of one render bounds the cost on large closures; add it
+  only if Phase 3 shows it matters.
+- **Native recording point: `RuntimeFs::read`'s runtime-fallback
+  branch only** (`sass_native.rs`), via a `RefCell<Vec<PathBuf>>` on
+  the adapter. Embedded hits are not recorded. Paths are whatever grass
+  asked for — `theme_dir.join(import)` — which after #679 is the
+  normalized project-relative form `file_read` accepts.
+- **WASM recording point: `result.loadedUrls`** in `sass.js`, filtered
+  to the `vfs:` scheme and mapped back to the `/project/…` path the
+  VFS importer resolved; the embedded-resource prefix filtered out on
+  the Rust side with the same predicate native uses.
 
-- **Negative dependencies.** Neither (P) nor (R) as sketched notices a
-  *new* file that would now shadow a lookup (e.g. adding
-  `theme-dir/_colors.scss` when the import previously resolved via a
-  later load path). grass probes with `is_file` before `read`;
-  recording the probed-but-missing paths would close this, at the cost
-  of a longer manifest. Rare enough to document rather than solve in v1.
-- **WASM path mapping.** `loadedUrls` come back as `vfs:` URLs with the
-  `/project/` prefix; the manifest must store the same path form the
-  runtime's `file_read` accepts, or every hub-client hit would miss.
-- **Cache format change** (Q2-A) invalidates every existing entry once;
-  the generational purge already exists for exactly this.
-- **Cost on hit.** One `file_read` + hash per closure file per document
-  per variant. For posit-docs that is one partial; for a theme that
-  imports a vendored library it could be dozens. Phase 3 measures it;
-  an in-process memo of `(path → hash)` per render would bound it.
-- **Cross-platform.** Manifest paths must be stored with forward
-  slashes (`to_forward_slashes` convention) and compared as `Path`s,
-  never as strings.
+## Work items
+
+### Phase 0 — tests first (each must fail before its fix)
+
+- [ ] Rebase onto `origin/bugfix/bd-79c4do6g-scss-cache-key-path`;
+      verify green at the new base.
+- [ ] `sass_native.rs`: `compile_scss` reports the partial it loaded
+      through the runtime and does **not** report embedded Bootstrap
+      files (fixture: theme importing `_colors` from a temp dir, with
+      `@import "bootstrap/…"` alongside).
+- [ ] `sass.test.ts` (`ts-packages/wasm-js-bridge`): the bridge result
+      carries the VFS files dart-sass loaded, mapped to `/project/…`
+      paths; embedded resource URLs excluded.
+- [ ] `compile_theme_css.rs` unit: envelope encode/decode round-trip;
+      an undecodable (legacy) value reads as a miss.
+- [ ] `compile_theme_css.rs` unit, the bug: custom theme importing a
+      partial through a mock runtime; second lookup with the partial's
+      contents changed must miss; unchanged must hit; a *removed*
+      partial must miss.
+- [ ] `tests/integration/sass_cache_key.rs` (extend #679's file):
+      three-depth site whose theme imports a partial — render, edit the
+      partial, render again; the emitted theme CSS carries the new
+      colour and `perf.sass` shows `compiles=1 stale=1`; a third render
+      with nothing edited shows `compiles=0`.
+- [ ] Update the comment on
+      `test_cache_key_distinct_files_with_same_content_stay_distinct`.
+
+### Phase 1 — core change
+
+- [ ] `SassOutput` type + `compile_sass` signature change across
+      `traits.rs`, `native.rs`, `wasm.rs`; `RuntimeFs` records reads.
+- [ ] `sass.js` / `sass.d.ts`: return `{css, loadedUrls}`; `wasm.rs`
+      unpacks and maps URLs to VFS paths.
+- [ ] `quarto-sass/compile.rs`: propagate `loaded_files` through the
+      `compile_with_doc_vars` chain; other callers take `.css`.
+- [ ] `compile_theme_css.rs`: envelope encode on `cache_set_lru`,
+      decode + manifest validation on `cache_get_lru`; `stale` counter;
+      namespace version stamp gains a format tag; `cache_key` doc
+      comment describes the two levels.
+
+### Phase 2 — measure
+
+- [ ] Fixture: the three-render sequence above via `q2 render`, output
+      inspected, recorded here.
+- [ ] Connect docs (posit-docs theme imports one partial): cold and
+      warm serial with `QUARTO_PERF_STATS=1`; warm wall must not
+      regress measurably against #679's 6.22 s (one extra small read +
+      hash per document per variant).
+- [ ] hub-client: edit an imported partial in a project with a custom
+      theme and confirm the preview updates (browser session, or say
+      explicitly that it was not verified).
+
+### Phase 3 — notes
+
+- [ ] `cache_lru.rs` module docs: values in the `sass` namespace are
+      enveloped; `cache_versioning` note on the format tag.
+- [ ] Strand comment + close; note the negative-dependency gap as a
+      follow-up strand if the user wants it tracked.
+
+## Risks / tradeoffs
+
+- **Negative dependencies.** A newly created file that would shadow an
+  existing import path is not detected until some listed file changes
+  or the top-level key changes. grass probes with `is_file` before
+  `read`; recording probed-but-missing paths would close this at the
+  cost of a longer manifest. Documented for v1; the path-in-key from
+  #679 already prevents the cross-directory variant.
+- **WASM path mapping.** `loadedUrls` come back as `vfs:` URLs carrying
+  the `/project/` prefix; the manifest must store the exact path form
+  the runtime's `file_read` accepts, or every hub-client hit misses
+  (a silent perf regression, not a correctness one — make the
+  `sass.test.ts` case assert the mapped form).
+- **Envelope format change** invalidates every existing entry once;
+  the version-stamp bump makes that a single purge.
+- **Cost on hit.** One `file_read` + hash per manifest entry per
+  document per variant. One partial on posit-docs; a theme importing a
+  vendored library could list dozens. Phase 2 measures; the per-render
+  memo is the fallback.
+- **Thundering herd on cold start** (noted in #679) is unchanged by
+  this work and remains a separate follow-up.
+- **Cross-platform.** Manifest paths are stored with forward slashes
+  (`to_forward_slashes` convention) and compared as `Path`s. Windows
+  CRLF does not affect content hashing since files are read as bytes.
