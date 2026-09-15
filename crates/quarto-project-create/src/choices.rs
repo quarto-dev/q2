@@ -16,6 +16,17 @@
  * template applied. This allows for a richer set of choices without
  * creating separate project types for each variation.
  *
+ * # Surfaces
+ *
+ * `available_choices()` is the single registry, but not every entry
+ * is offered everywhere: each choice lists the `Surface`s it appears
+ * on, and a consumer asks for its own surface with `choices_for`
+ * (the CLI asks for `Surface::Cli`, the hub client's WASM entry point
+ * for `Surface::Hub`). A hub-only template (bd-d147nkqx) is a
+ * registry entry marked `.hub_only()`; `q2 create project` neither
+ * lists nor accepts it, while the hub's "New project" menu does.
+ * Scaffolding is surface-agnostic — the gate is the consumer's job.
+ *
  * # Architecture
  *
  * ```text
@@ -23,6 +34,7 @@
  *     ├── id: "blog"
  *     ├── name: "Blog"
  *     ├── description: "A blog using the Quarto blog template"
+ *     ├── surfaces: [Cli, Hub]
  *     └── ProjectTypeWithTemplate
  *           ├── project_type: Website
  *           └── template: Some("blog")

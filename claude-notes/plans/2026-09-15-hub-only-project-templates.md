@@ -1,7 +1,7 @@
 # Hub-only project templates (surface-gated `ProjectChoice`)
 
 **Strand:** bd-d147nkqx
-**Status:** in progress — Phases 1–3 implemented, pending workspace suite + e2e (branch `braid/bd-d147nkqx-hub-only-project-templates`)
+**Status:** Phases 1–4 complete and verified; Phase 5 hand-off to Carlos (replace `hub-placeholder`, then PR). Branch `braid/bd-d147nkqx-hub-only-project-templates`.
 **Related:** `claude-notes/plans/2026-01-12-hub-client-create-project.md` (original
 create-project port), `claude-notes/plans/2026-06-12-project-create-doctemplate-migration.md`
 
@@ -173,18 +173,23 @@ run after the WASM rebuild, so it was not observed red.
 - [x] CLI: `cargo run --bin q2 -- create --list` and
       `cargo run --bin q2 -- create project <hub-only-id> /tmp/x` — record
       invocation and observed stderr in this file.
-- [ ] Hub: `cd hub-client && npm run build:wasm`, run the dev server, open
+- [x] Hub: `cd hub-client && npm run build:wasm`, run the dev server, open
       "New project", confirm the hub-only choice appears and creates a project
       whose files open in the editor. Record what was inspected here.
-- [ ] `cargo xtask verify` (full, since `wasm-quarto-hub-client` is touched).
+- [x] `cargo xtask verify` (full, since `wasm-quarto-hub-client` is touched).
+      Passed 2026-09-15 (all 14 steps, exit 0). Two local-environment stalls on
+      the way, neither from this change: a `q2-preview-spa/dist` from Aug 9
+      predating the asset manifest (fixed by `cargo xtask build-q2-preview-spa`),
+      and `node_modules/@quarto/` missing the `api`/`types` workspace links
+      (fixed by `npm install` from the repo root).
 
 ### Phase 5 — Wrap-up
 
-- [ ] Rewrite the module doc at the top of `choices.rs` ("Both CLI and UI
+- [x] Rewrite the module doc at the top of `choices.rs` ("Both CLI and UI
       should consume this list") to describe surfaces.
-- [ ] `hub-client/changelog.md` entry **only if** any file under `hub-client/`
+- [x] `hub-client/changelog.md` entry **only if** any file under `hub-client/`
       changed (expected: only the wasm test file → still counts, follow the
-      two-commit workflow).
+      two-commit workflow). Done: 8b8090f13 (entry for cf934b07d).
 - [ ] **Carlos:** replace `hub-placeholder` with the real hub-only template
       (resources, `templates.rs`, `get_scaffold` arm, registry id/name/description,
       and the shared test constant) before opening the PR.
@@ -225,6 +230,35 @@ exit=0
 `hub-placeholder` appears nowhere in `--list`, is refused by id and by colon
 form with the hub-specific wording, and neither refusal creates a directory.
 
-### Hub client
+### Hub client (2026-09-15, real browser via Chrome DevTools MCP; output inspected)
 
-_(pending — Phase 4 browser session)_
+Setup: `npm run build:wasm` (fresh WASM from the committed Rust), local hub
+`cargo run --bin hub -- --data-dir <scratch> --port 3000`, dev server
+`VITE_DEFAULT_SYNC_SERVER=/ws npx vite --port 5173`, isolated browser context.
+
+1. Landing page → "＋ New project". The menu (`role=menu "New project"`)
+   listed four items, in registry order:
+   `Default`, `Website`, `Blog`, **`Hub placeholder — A placeholder for the
+   first hub-only project template`**. The CLI's `--list` above shows three.
+2. Chose "Hub placeholder", named the project `Hub E2E Check`, clicked Create.
+   Navigated to `#/p/<id>/file/index.qmd`.
+3. File tree: exactly `_quarto.yml` and `index.qmd`. Preview iframe rendered
+   an `h1 "Hub E2E Check"` followed by the placeholder paragraph ("This
+   project was created from the hub placeholder template. …").
+4. Opened `_quarto.yml`; editor text read back through the DOM:
+
+   ```yaml
+   project:
+     type: website
+   website:
+     title: "Hub E2E Check"
+   format:
+     html:
+       theme: cosmo
+       toc: true
+   ```
+
+Console errors: one `401` from the auth probe against a hub started without
+`--allow-insecure-auth` (the sync badge read "Offline — not synced yet";
+unrelated to this change), and a pre-existing React key warning in
+`FileSidebar` (file untouched by this work). Nothing from the create path.
